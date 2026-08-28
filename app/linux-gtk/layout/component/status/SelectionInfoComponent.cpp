@@ -7,7 +7,6 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/ViewService.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -39,8 +38,9 @@ namespace ao::gtk::layout
                                       rt::ViewService& views,
                                       i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::StatusSelectionInfo),
-                               [&views, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                               { return std::make_unique<SelectionInfoComponent>(views, textCatalog); });
+    registry.registerSharedComponent(
+      "status.selectionInfo",
+      [&views, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<SelectionInfoComponent>(views, textCatalog); });
   }
 } // namespace ao::gtk::layout

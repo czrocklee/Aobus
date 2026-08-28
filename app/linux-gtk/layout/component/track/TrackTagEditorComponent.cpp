@@ -20,10 +20,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/property/TagEdit.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
@@ -190,9 +190,9 @@ namespace ao::gtk::layout
                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "track.tagEditor",
+      {.id = "track.tagEditor",
        .displayName = "Tag Editor",
-       .category = LayoutComponentCategory::Track,
+       .category = ComponentCategory::Track,
        .minChildren = 0,
        .optMaxChildren = 0},
       [&runtime, tagEditController, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)

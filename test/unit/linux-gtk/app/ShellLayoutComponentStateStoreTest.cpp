@@ -4,9 +4,8 @@
 #include "app/ShellLayoutComponentStateStore.h"
 
 #include "test/unit/TestFixtureSupport.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -48,12 +47,11 @@ namespace ao::gtk::test
       return doc;
     }
 
-    uimodel::LayoutComponentCatalog persistentStateCatalog()
+    uimodel::LayoutSchema persistentStateSchema()
     {
-      auto catalog = uimodel::LayoutComponentCatalog{};
-      catalog.registerComponentDescriptor(
-        uimodel::sharedComponentDescriptor(uimodel::SharedLayoutComponentType::Split));
-      return catalog;
+      auto schema = uimodel::LayoutSchema{};
+      REQUIRE(schema.addSharedComponent("split"));
+      return schema;
     }
   } // namespace
 
@@ -131,9 +129,9 @@ namespace ao::gtk::test
       layoutDoc.root.children = {liveNode, uimodel::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
       auto const preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
-      auto const catalog = persistentStateCatalog();
+      auto const schema = persistentStateSchema();
 
-      store.prune("classic", *preparedRes, catalog);
+      store.prune("classic", *preparedRes, schema);
 
       auto const optLoaded = store.load("classic");
       REQUIRE(optLoaded);
@@ -165,14 +163,14 @@ namespace ao::gtk::test
       layoutDoc.root.children = {node};
       auto preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
-      auto const catalog = persistentStateCatalog();
+      auto const schema = persistentStateSchema();
 
-      CHECK_FALSE(store.prune("classic", *preparedRes, catalog));
+      CHECK_FALSE(store.prune("classic", *preparedRes, schema));
 
       layoutDoc.root.children.clear();
       preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
-      CHECK(store.prune("classic", *preparedRes, catalog));
+      CHECK(store.prune("classic", *preparedRes, schema));
     }
 
     SECTION("saved state file is readable only by owner")

@@ -20,7 +20,7 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
@@ -331,7 +331,7 @@ namespace ao::rt
     }
 
     {
-      auto reader = _library.reader();
+      auto reader = _library.snapshot();
       auto const currentExists = reader.containsTrack(loaded.currentTrackId);
       auto const sourceExists = loaded.sourceListId == kAllTracksListId || reader.listNode(loaded.sourceListId);
 

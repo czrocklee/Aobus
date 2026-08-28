@@ -43,8 +43,8 @@ Each component entry is:
 | `split` | `positionPercent` number. | `orientation`, `initialPositionPercent`, `position`, `resizeStart`, `resizeEnd`, `shrinkStart`, `shrinkEnd`. | Writes clamped `initialPositionPercent`; removes authored `position` and runtime `positionPercent`. |
 | `collapsibleSplit` | `size` integer and `revealed` boolean. | `orientation`, `collapseSide`, `initialPositionPercent`, `position`, `revealed`. | Writes `position` with minimum `50`; removes authored `initialPositionPercent` and runtime `size`; retains `revealed`. |
 
-A component persists runtime state when its `LayoutComponentDescriptor::persistentState` is true.
-The shared `split` descriptor sets that field; GTK's `collapsibleSplit` sets it at registration.
+A component persists runtime state when its `ComponentSchema::persistentState` is true.
+The shared `split` schema entry sets that field; GTK's `collapsibleSplit` sets it at registration.
 
 ## Example
 

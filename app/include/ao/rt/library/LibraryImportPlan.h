@@ -9,7 +9,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class LibraryJobs;
 
   /**
    * One-shot import authorization bound to one validated source snapshot and
@@ -34,6 +34,6 @@ namespace ao::rt
 
     std::unique_ptr<Impl> _implPtr;
 
-    friend class LibraryTaskService;
+    friend class LibraryJobs;
   };
 } // namespace ao::rt

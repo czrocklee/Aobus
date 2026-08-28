@@ -3,21 +3,19 @@
 
 #include <ao/rt/library/Library.h>
 
-#include "LibraryMutationService.h"
+#include "LibraryWriteLane.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
-#include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryTaskService.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 
 #include <expected>
 #include <filesystem>
@@ -32,9 +30,9 @@ namespace ao::rt
   {
     library::MusicLibrary& storage;
     LibraryChanges& changeBus;
-    LibraryMutationService mutationService;
-    LibraryWriter writer;
-    LibraryTaskService taskService;
+    LibraryWriteLane writeLane;
+    LibraryCommands commands;
+    LibraryJobs jobs;
 
     Impl(async::Runtime& asyncRuntime,
          library::MusicLibrary& libraryStorage,
@@ -43,9 +41,9 @@ namespace ao::rt
          std::filesystem::path cacheDirectory)
       : storage{libraryStorage}
       , changeBus{changes}
-      , mutationService{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
-      , writer{libraryStorage, mutationService, asyncRuntime}
-      , taskService{asyncRuntime, libraryStorage, mutationService, std::move(cacheDirectory)}
+      , writeLane{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
+      , commands{libraryStorage, writeLane, asyncRuntime}
+      , jobs{asyncRuntime, libraryStorage, writeLane, std::move(cacheDirectory)}
     {
     }
   };
@@ -79,12 +77,12 @@ namespace ao::rt
 
   void Library::beginClosing() noexcept
   {
-    _implPtr->mutationService.beginClosing();
+    _implPtr->writeLane.beginClosing();
   }
 
-  LibraryReader Library::reader() const
+  LibrarySnapshot Library::snapshot() const
   {
-    return LibraryReader{_implPtr->storage};
+    return LibrarySnapshot{_implPtr->storage};
   }
 
   LibraryStorageCapacity Library::storageCapacity() const
@@ -98,72 +96,40 @@ namespace ao::rt
     return _implPtr->changeBus;
   }
 
-  LibraryWriter& Library::writer() noexcept
+  LibraryCommands& Library::commands() noexcept
   {
-    return _implPtr->writer;
+    return _implPtr->commands;
   }
 
-  LibraryTaskService& Library::taskService() noexcept
+  LibraryJobs& Library::jobs() noexcept
   {
-    return _implPtr->taskService;
-  }
-
-  async::Task<Result<ListId>> Library::createList(ListDraft draft)
-  {
-    return _implPtr->writer.createList(std::move(draft));
-  }
-
-  async::Task<Result<UpdateListReply>> Library::updateList(ListDraft draft)
-  {
-    return _implPtr->writer.updateList(std::move(draft));
-  }
-
-  async::Task<Result<DeleteListReply>> Library::deleteList(ListId const listId, DeleteListOptions const options)
-  {
-    return _implPtr->writer.deleteList(listId, options);
-  }
-
-  async::Task<Result<DeleteListReply>> Library::previewDeleteList(ListId const listId, DeleteListOptions const options)
-  {
-    return _implPtr->writer.previewDeleteList(listId, options);
-  }
-
-  async::Task<Result<DeleteListSubtreeReply>> Library::deleteListAndDescendants(ListId const listId,
-                                                                                DeleteListOptions const options)
-  {
-    return _implPtr->writer.deleteListAndDescendants(listId, options);
-  }
-
-  async::Task<Result<DeleteListSubtreeReply>> Library::previewDeleteListAndDescendants(ListId const listId,
-                                                                                       DeleteListOptions const options)
-  {
-    return _implPtr->writer.previewDeleteListAndDescendants(listId, options);
+    return _implPtr->jobs;
   }
 
   LibraryAuthoringAvailability Library::authoringAvailability() const
   {
-    return _implPtr->mutationService.availability();
+    return _implPtr->writeLane.availability();
   }
 
   async::Subscription Library::onAuthoringAvailabilityChanged(
     compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const
   {
-    return _implPtr->mutationService.onAvailabilityChanged(std::move(handler));
+    return _implPtr->writeLane.onAvailabilityChanged(std::move(handler));
   }
 
   Result<BoundTrackTargets> Library::bindTrackTargets(std::span<TrackId const> trackIds) const
   {
-    return _implPtr->mutationService.bindTrackTargets(trackIds);
+    return _implPtr->writeLane.bindTrackTargets(trackIds);
   }
 
   Result<BoundListOrder> Library::bindListOrder(ListId const listId,
                                                 std::span<TrackId const> const effectiveTrackIds) const
   {
-    return _implPtr->mutationService.bindListOrder(listId, effectiveTrackIds);
+    return _implPtr->writeLane.bindListOrder(listId, effectiveTrackIds);
   }
 
   Result<BoundListOrder> Library::bindListOrder(ListId const listId, std::vector<TrackId>&& effectiveTrackIds) const
   {
-    return _implPtr->mutationService.bindListOrder(listId, std::move(effectiveTrackIds));
+    return _implPtr->writeLane.bindListOrder(listId, std::move(effectiveTrackIds));
   }
 } // namespace ao::rt

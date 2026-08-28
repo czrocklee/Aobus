@@ -19,7 +19,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/utility/Uuid.h>
@@ -62,8 +62,7 @@ namespace ao::rt::test
     {
       auto runtime = async::Runtime{executor};
       auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, library, changes));
-      auto planRes =
-        runQueuedTask(runtime, executor, runtimeLibraryPtr->taskService().prepareLibraryImportAsync(path, mode));
+      auto planRes = runQueuedTask(runtime, executor, runtimeLibraryPtr->jobs().prepareLibraryImportAsync(path, mode));
 
       if (!planRes)
       {
@@ -71,7 +70,7 @@ namespace ao::rt::test
       }
 
       return runQueuedTask(
-        runtime, executor, runtimeLibraryPtr->taskService().applyLibraryImportPlanAsync(std::move(*planRes)));
+        runtime, executor, runtimeLibraryPtr->jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
     }
   } // namespace
 

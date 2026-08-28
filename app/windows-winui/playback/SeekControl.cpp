@@ -6,8 +6,8 @@
 #include "platform/ScopedBooleanFlag.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>

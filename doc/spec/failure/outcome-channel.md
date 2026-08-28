@@ -182,7 +182,7 @@ It is not converted into generic presentation followed by continued execution.
 - The check-owned `aobus_guardrails` target in [`CMakeLists.txt`](../../../CMakeLists.txt) rejects production C assertions, raw gsl-lite contract spellings, unconditional false AO contracts, and production `std::unreachable()` at every completion gate.
 - [`AsyncRuntimeTest.cpp`](../../../test/unit/runtime/AsyncRuntimeTest.cpp) protects future single ownership, non-default-constructible value transport, and cancellation exclusion.
 - [`LifetimeScopeTest.cpp`](../../../test/unit/runtime/LifetimeScopeTest.cpp) plus runtime fatal subprocess scenarios protect task retirement before fatal entry.
-- [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.
+- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) protects callback-affine failure cleanup before exception propagation.
 - [`LogTest.cpp`](../../../test/unit/runtime/LogTest.cpp) protects the registered fatal logging adapter.
 - Subsystem tests under [`test/unit/audio/`](../../../test/unit/audio), [`test/unit/library/`](../../../test/unit/library), [`test/unit/query/`](../../../test/unit/query), and [`test/unit/runtime/`](../../../test/unit/runtime) protect boundary-specific return and translation behavior.
 

@@ -14,8 +14,8 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -185,8 +185,7 @@ namespace ao::uimodel::test
     CHECK(notifications.feed().entries.front().id == secondId);
   }
 
-  TEST_CASE("ActivityStatusViewModel - projects events from LibraryTaskService",
-            "[uimodel][regression][status][activity]")
+  TEST_CASE("ActivityStatusViewModel - projects events from LibraryJobs", "[uimodel][regression][status][activity]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
@@ -194,7 +193,7 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeLibraryChanges(executor);
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto runtimeLibraryPtr = ao::test::requireValue(rt::Library::create(runtime, libraryFixture.library(), changes));
-    auto& taskService = runtimeLibraryPtr->taskService();
+    auto& jobs = runtimeLibraryPtr->jobs();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{
@@ -205,7 +204,7 @@ namespace ao::uimodel::test
         latest = view;
         rendered.push_back(view);
       },
-      ActivityStatusViewModelOptions{.libraryTasks = &taskService},
+      ActivityStatusViewModelOptions{.libraryJobs = &jobs},
     };
 
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -214,7 +213,7 @@ namespace ao::uimodel::test
     auto plan = rt::LibraryScan{libraryFixture.library()}.buildPlan().value();
     std::filesystem::remove(targetFile);
 
-    auto const result = rt::test::runQueuedTask(runtime, executor, taskService.applyScanPlanAsync(std::move(plan)));
+    auto const result = rt::test::runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
 
     REQUIRE(result);
     CHECK(result->failureCount == 1);

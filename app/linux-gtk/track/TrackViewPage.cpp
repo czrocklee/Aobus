@@ -35,12 +35,12 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderSession.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
@@ -271,7 +271,7 @@ namespace ao::gtk
 
   TrackViewPage::TrackViewPage(ListId listId,
                                Glib::RefPtr<TrackListModel> modelPtr,
-                               uimodel::TrackColumnLayoutStore& layoutStore,
+                               uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
                                rt::AppRuntime& runtime,
                                ResourceImageLoader& thumbnailLoader,
@@ -282,15 +282,15 @@ namespace ao::gtk
     , _viewId{viewId}
     , _modelPtr{std::move(modelPtr)}
 
-    , _layoutStore{layoutStore}
+    , _columnLayouts{columnLayouts}
     , _textCatalog{std::move(textCatalog)}
     , _runtime{runtime}
     , _thumbnailLoader{thumbnailLoader}
     , _selectionModelPtr{Gtk::MultiSelection::create(_modelPtr)}
     , _viewHostPtr{
-        std::make_unique<TrackColumnViewHost>(_modelPtr, _layoutStore, _textCatalog, _selectionModelPtr, listId)}
+        std::make_unique<TrackColumnViewHost>(_modelPtr, _columnLayouts, _textCatalog, _selectionModelPtr, listId)}
   {
-    _layoutStore.setActiveListId(_listId);
+    _columnLayouts.setActiveListId(_listId);
     _viewHostPtr->configureSelectionActivation();
 
     _themeRefreshConnection = GtkStyleRuntime::instance().signalRefreshed().connect(
@@ -349,7 +349,7 @@ namespace ao::gtk
   void TrackViewPage::on_map()
   {
     Gtk::Box::on_map();
-    _layoutStore.setActiveListId(_listId);
+    _columnLayouts.setActiveListId(_listId);
 
     Glib::signal_idle().connect_once(sigc::track_object(
       [this]
@@ -533,7 +533,7 @@ namespace ao::gtk
     _scrolledWindow.unset_child();
 
     // 2. Create a new generation off-tree.
-    auto& newView = _viewHostPtr->rebuild(_modelPtr, _layoutStore, _selectionModelPtr, factoryProvider, _listId);
+    auto& newView = _viewHostPtr->rebuild(_modelPtr, _columnLayouts, _selectionModelPtr, factoryProvider, _listId);
 
     // 3. Configure structural properties before attaching model (Safe)
     applyColumnViewStyles(newView);

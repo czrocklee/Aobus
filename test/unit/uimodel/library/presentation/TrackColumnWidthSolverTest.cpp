@@ -4,7 +4,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <catch2/catch_test_macros.hpp>
 

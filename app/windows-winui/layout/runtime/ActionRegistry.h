@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -19,13 +19,13 @@ namespace ao::winui::layout
   struct ActionContext final
   {
     winrt::Microsoft::UI::Xaml::FrameworkElement anchor{nullptr};
-    uimodel::LayoutActionSlot slot = uimodel::LayoutActionSlot::PrimaryClick;
+    uimodel::ActionSlot slot = uimodel::ActionSlot::PrimaryClick;
   };
 
   using ActionHandler = std::function<void(ActionContext const&)>;
 
   /**
-   * @brief Shell-lifetime map from a catalog action id to its native handler.
+   * @brief Shell-lifetime map from a schema action id to its native handler.
    *
    * An action names a shell capability, not a widget, so the registry outlives
    * every view generation. Components reference only ids, which is what lets a

@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -115,24 +115,24 @@ namespace ao::gtk::layout::editor
     Gtk::Widget* renderIdSection(uimodel::LayoutNode* node);
     void addSectionTitle(std::string_view text);
     Gtk::Widget* renderBoolEditor(uimodel::LayoutNode* node,
-                                  uimodel::LayoutPropertyDescriptor const& prop,
+                                  uimodel::PropertySchema const& prop,
                                   uimodel::LayoutValue const& currentVal,
                                   bool isLayoutProp);
     Gtk::Widget* renderIntEditor(uimodel::LayoutNode* node,
-                                 uimodel::LayoutPropertyDescriptor const& prop,
+                                 uimodel::PropertySchema const& prop,
                                  uimodel::LayoutValue const& currentVal,
                                  bool isLayoutProp);
     Gtk::Widget* renderEnumEditor(uimodel::LayoutNode* node,
-                                  uimodel::LayoutPropertyDescriptor const& prop,
+                                  uimodel::PropertySchema const& prop,
                                   uimodel::LayoutValue const& currentVal,
                                   bool isLayoutProp);
     void populateActionComboBox(Gtk::ComboBoxText* combo);
     Gtk::Widget* renderStringEditor(uimodel::LayoutNode* node,
-                                    uimodel::LayoutPropertyDescriptor const& prop,
+                                    uimodel::PropertySchema const& prop,
                                     uimodel::LayoutValue const& currentVal,
                                     bool isLayoutProp);
     Gtk::Widget* renderPropertyEditor(uimodel::LayoutNode* node,
-                                      uimodel::LayoutPropertyDescriptor const& prop,
+                                      uimodel::PropertySchema const& prop,
                                       bool isLayoutProp);
 
     void addComponent(std::string type);

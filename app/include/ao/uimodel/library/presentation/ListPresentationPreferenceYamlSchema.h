@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ListPresentationPreferenceStore.h"
+#include "ListPresentations.h"
 #include <ao/Error.h>
 
 #include <ryml.hpp>
@@ -30,14 +30,14 @@ namespace ao::uimodel
   };
 
   Result<ListPresentationPreferenceDocument> toListPresentationPreferenceDocument(
-    ListPresentationPreferenceState const& state);
-  Result<ListPresentationPreferenceState> listPresentationPreferenceStateFromDocument(
+    ListPresentations::Snapshot const& state);
+  Result<ListPresentations::Snapshot> listPresentationPreferenceStateFromDocument(
     ListPresentationPreferenceDocument const& document);
 
   struct ListPresentationPreferenceYamlSchema final
   {
-    Result<> serialize(ryml::NodeRef node, ListPresentationPreferenceState const& state) const;
-    Result<ListPresentationPreferenceState> deserialize(ryml::ConstNodeRef node,
-                                                        ListPresentationPreferenceState const& seed) const;
+    Result<> serialize(ryml::NodeRef node, ListPresentations::Snapshot const& state) const;
+    Result<ListPresentations::Snapshot> deserialize(ryml::ConstNodeRef node,
+                                                    ListPresentations::Snapshot const& seed) const;
   };
 } // namespace ao::uimodel

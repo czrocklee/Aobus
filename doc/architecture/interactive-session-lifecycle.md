@@ -294,7 +294,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
-  and [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+  and [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   own the shared GTK, TUI, and WinUI selector projection, exact requested-intent
   callback, and pure restore policy.
 - [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
@@ -314,7 +314,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
-- [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+- [`OutputSelectionTest.cpp`](../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protects catalog-aware admission and pure preferred/fallback resolution.
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
   protects Windows startup resolution and in-memory preference updates before the next checkpoint.

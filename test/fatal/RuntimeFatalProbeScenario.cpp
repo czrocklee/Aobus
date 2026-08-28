@@ -5,7 +5,7 @@
 
 #include "lib/audio/NullBackend.h"
 #include "lib/library/PhysicalStoreAccess.h"
-#include "runtime/library/LibraryMutationService.h"
+#include "runtime/library/LibraryWriteLane.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -499,7 +499,7 @@ namespace ao::rt::test
       auto changes =
         LibraryChanges{executor, musicLibrary.libraryRevision(transaction), utility::pathToUtf8(databasePath)};
       auto asyncRuntime = async::Runtime{executor, 1};
-      auto mutationService = LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
+      auto writeLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
       auto replicaBinding = changes.bindReplica("ProbeReplica",
                                                 [phase](LibraryChangeSet const&)
                                                 {
@@ -516,7 +516,7 @@ namespace ao::rt::test
             throw std::runtime_error{"probe publication observer exception"};
           }
         });
-      auto availabilitySubscription = mutationService.onAvailabilityChanged(
+      auto availabilitySubscription = writeLane.onAvailabilityChanged(
         [phase](LibraryAuthoringAvailability const&)
         {
           if (phase == PublicationFailurePhase::Completion)
@@ -524,10 +524,10 @@ namespace ao::rt::test
             throw std::runtime_error{"probe publication completion exception"};
           }
         });
-      auto submission = mutationService.captureSubmission();
-      auto task = [](LibraryMutationService::Submission submission) -> async::Task<void>
+      auto submission = writeLane.captureSubmission();
+      auto task = [](LibraryWriteLane::Submission submission) -> async::Task<void>
       {
-        auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
+        auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
         if (!mutationRes)
         {
@@ -578,11 +578,11 @@ namespace ao::rt::test
       auto transaction = libraryRes->readTransaction();
       auto changes = LibraryChanges{executor, libraryRes->libraryRevision(transaction), "mutation-execute-probe"};
       auto asyncRuntime = async::Runtime{executor, 1};
-      auto mutationService = LibraryMutationService{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
-      auto submission = mutationService.captureSubmission();
-      auto task = [](LibraryMutationService::Submission submission, bool const applyFirst) -> async::Task<void>
+      auto writeLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
+      auto submission = writeLane.captureSubmission();
+      auto task = [](LibraryWriteLane::Submission submission, bool const applyFirst) -> async::Task<void>
       {
-        auto mutationRes = co_await LibraryMutationService::beginInteractiveMutationAsync(std::move(submission));
+        auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
         if (!mutationRes)
         {
@@ -648,10 +648,10 @@ namespace ao::rt::test
       auto changes = LibraryChanges{executor, libraryRes->libraryRevision(transaction), "control-delivery-close-probe"};
       auto asyncRuntime = async::Runtime{executor, 1};
       auto probeRuntime = async::Runtime{executor, 1};
-      auto servicePtr =
-        std::make_unique<LibraryMutationService>(asyncRuntime.callbackExecutor(), std::move(*writableRes), changes);
-      auto* const service = servicePtr.get();
-      auto backgroundTaskRes = service->beginBackgroundTask(LibraryMutationService::BackgroundTaskKind::Import);
+      auto lanePtr =
+        std::make_unique<LibraryWriteLane>(asyncRuntime.callbackExecutor(), std::move(*writableRes), changes);
+      auto* const lane = lanePtr.get();
+      auto backgroundTaskRes = lane->beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::Import);
 
       if (!backgroundTaskRes)
       {
@@ -659,19 +659,19 @@ namespace ao::rt::test
       }
 
       auto backgroundTask = std::move(*backgroundTaskRes);
-      auto const probeSubmission = service->captureSubmission();
+      auto const probeSubmission = lane->captureSubmission();
       constexpr std::size_t kProbeAttemptCount = 32;
       bool closingObserved = false;
 
-      auto task = [](LibraryMutationService::Submission submission) -> async::Task<void>
+      auto task = [](LibraryWriteLane::Submission submission) -> async::Task<void>
       {
-        auto guardRes = co_await LibraryMutationService::beginMaintenanceAsync(std::move(submission));
+        auto guardRes = co_await LibraryWriteLane::beginMaintenanceAsync(std::move(submission));
 
         if (guardRes)
         {
           co_await guardRes->finishAsync();
         }
-      }(service->captureSubmission());
+      }(lane->captureSubmission());
       auto future = asyncRuntime.spawn(std::move(task));
 
       if (!executor.waitUntilDispatchStarted())
@@ -686,8 +686,8 @@ namespace ao::rt::test
           {
             for (std::size_t attempt = 0; attempt < kProbeAttemptCount; ++attempt)
             {
-              auto probeFuture = probeRuntime.spawn(
-                LibraryMutationService::beginBackgroundMutationAsync(probeSubmission, backgroundTask));
+              auto probeFuture =
+                probeRuntime.spawn(LibraryWriteLane::beginBackgroundMutationAsync(probeSubmission, backgroundTask));
 
               if (auto probeRes = probeFuture.get(); !probeRes && probeRes.error().message.contains("while closing"))
               {
@@ -701,7 +701,7 @@ namespace ao::rt::test
             executor.releaseRejection();
           }};
 
-        servicePtr.reset();
+        lanePtr.reset();
       }
 
       bool cancelled = false;
@@ -715,7 +715,7 @@ namespace ao::rt::test
         cancelled = true;
       }
 
-      return closingObserved && cancelled && servicePtr == nullptr ? 0 : 3;
+      return closingObserved && cancelled && lanePtr == nullptr ? 0 : 3;
     }
 
     std::int32_t runEmptyExceptionRethrow()

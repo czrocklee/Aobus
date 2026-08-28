@@ -12,7 +12,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <map>
@@ -57,7 +57,7 @@ namespace ao::gtk
                   rt::AppRuntime& runtime,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
-                  uimodel::TrackColumnLayoutStore& layoutStore,
+                  uimodel::TrackColumnLayouts& columnLayouts,
                   i18n::MessageCatalog textCatalog,
                   rt::ResourceByteLoader& byteLoader);
     ~TrackPageHost();
@@ -69,7 +69,7 @@ namespace ao::gtk
     TrackPageHost& operator=(TrackPageHost&&) = delete;
 
     Gtk::Stack& stack() { return _stack; }
-    uimodel::TrackColumnLayoutStore& layoutStore() { return _layoutStore; }
+    uimodel::TrackColumnLayouts& columnLayouts() { return _columnLayouts; }
 
     void clear();
     void rebuild(TrackRowCache& dataProvider);
@@ -105,7 +105,7 @@ namespace ao::gtk
     i18n::MessageCatalog _textCatalog;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
-    uimodel::TrackColumnLayoutStore& _layoutStore;
+    uimodel::TrackColumnLayouts& _columnLayouts;
     async::Subscription _revealSub;
     async::Subscription _snapshotSub;
     async::Subscription _focusSub;

@@ -13,12 +13,12 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/utility/String.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
@@ -162,7 +162,7 @@ namespace ao::winui
       buildFieldModel();
       auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
       _snapshot = projectionPtr->snapshot();
-      _originalTags = _library.reader().selectionTags(_trackIds);
+      _originalTags = _library.snapshot().selectionTags(_trackIds);
       _currentTags = _originalTags;
       return std::unexpected{sessionRes.error()};
     }
@@ -171,7 +171,7 @@ namespace ao::winui
     _sessionInvalidatedSub = _sessionPtr->onInvalidated([this] { handleSessionInvalidated(); });
     auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
     _snapshot = projectionPtr->snapshot();
-    _originalTags = _library.reader().selectionTags(_trackIds);
+    _originalTags = _library.snapshot().selectionTags(_trackIds);
     _currentTags = _originalTags;
     buildFieldModel();
     return {};
@@ -192,7 +192,7 @@ namespace ao::winui
       _formModel.addField(row.field, false);
     }
 
-    auto reader = _library.reader();
+    auto reader = _library.snapshot();
     bool firstTrack = true;
 
     for (auto const trackId : _trackIds)

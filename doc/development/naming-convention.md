@@ -412,10 +412,14 @@ Nuance beyond the table:
 
 - Production file names normally match the primary public type. A file that
   exposes a free-function role may still use a role noun such as
-  `TrackFilterResolver.h`, but do not create a wrapper class just to satisfy a
+  `TrackFilter.h`, but do not create a wrapper class just to satisfy a
   filename.
 - When a file holds multiple public declarations, the filename must name the
   shared domain concept rather than a storage shape or a vague grouping word.
+- A cohesive feature may use narrow interface partitions such as
+  `TrackAuthoring.h` and `TrackAuthoringSessions.h` when one umbrella would increase
+  transitive include weight or rebuild fan-out. The filenames must still name
+  the shared feature and the partition's concrete responsibility.
 - A `*Model.h` file should expose a matching primary model type. Avoid leaf
   files named exactly `Model.h`; they usually hide schema records, presentation
   structs, or formatter functions that deserve a concrete concept name.

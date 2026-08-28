@@ -5,8 +5,8 @@
 
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/refptr.h>

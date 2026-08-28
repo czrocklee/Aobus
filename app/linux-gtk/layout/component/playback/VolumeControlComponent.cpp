@@ -7,8 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/VolumeControlWidget.h"
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -53,15 +52,14 @@ namespace ao::gtk::layout
                                       i18n::MessageCatalog const& textCatalog)
   {
     // GTK can stand the slider on end, which no other shell offers yet, and
-    // which the descriptor has to admit for a document to reach the code below.
-    registry.registerComponent(
-      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackVolumeControl),
-                          {{.name = std::string{kOrientationProp},
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Orientation",
-                            .defaultValue = LayoutValue{"horizontal"},
-                            .enumValues = {"horizontal", "vertical"}}}),
-      [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-      { return std::make_unique<VolumeControlComponent>(playback, textCatalog, node); });
+    // which the schema entry has to admit for a document to reach the code below.
+    registry.registerSharedComponent("playback.volumeControl",
+                                     {.properties = {{.name = std::string{kOrientationProp},
+                                                      .kind = PropertyKind::Enum,
+                                                      .label = "Orientation",
+                                                      .defaultValue = LayoutValue{"horizontal"},
+                                                      .enumValues = {"horizontal", "vertical"}}}},
+                                     [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+                                     { return std::make_unique<VolumeControlComponent>(playback, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

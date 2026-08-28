@@ -10,10 +10,7 @@
 #include "playback/TransportButton.h"
 #include <ao/Contract.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
@@ -30,17 +27,15 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    using uimodel::LayoutComponentActionPolicy;
-    using uimodel::slotBit;
+    using uimodel::actionSlotBit;
 
     constexpr double kDefaultStrokeWidth = uimodel::kAobusSoulGeometry.baseStrokeWidth;
 
-    uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* playbackCommandSurface)
+    uimodel::PlaybackActions& requirePlaybackActions(uimodel::PlaybackActions* playbackActions)
     {
-      AO_EXPECTS(
-        playbackCommandSurface != nullptr, "SoulTransportButtonComponent: playback command surface is not bound");
+      AO_EXPECTS(playbackActions != nullptr, "SoulTransportButtonComponent: playback actions are not bound");
 
-      return *playbackCommandSurface;
+      return *playbackActions;
     }
 
     /**
@@ -50,12 +45,12 @@ namespace ao::gtk::layout
     {
     public:
       SoulTransportButtonComponent(rt::PlaybackService& playback,
-                                   uimodel::PlaybackCommandSurface* playbackCommands,
+                                   uimodel::PlaybackActions* playbackActions,
                                    i18n::MessageCatalog const& textCatalog,
                                    LayoutNode const& node)
         : _hasComplexTooltip{node.optTooltip.has_value()}
         , _transportViewModel{playback,
-                              commandSurface(playbackCommands),
+                              requirePlaybackActions(playbackActions),
                               textCatalog,
                               TransportButton::Action::PlayPause,
                               false,
@@ -130,28 +125,26 @@ namespace ao::gtk::layout
 
   void registerSoulTransportButtonComponent(ComponentRegistry& registry,
                                             rt::PlaybackService& playback,
-                                            uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                            uimodel::PlaybackActions* playbackActions,
                                             i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "playback.soulPlayPauseButton",
+      {.id = "playback.soulPlayPauseButton",
        .displayName = "Soul Play/Pause Button",
-       .category = LayoutComponentCategory::Playback,
-       .props = {{.name = std::string{kStrokeWidthProp},
-                  .kind = LayoutPropertyKind::Double,
-                  .label = "Stroke Width",
-                  .defaultValue = LayoutValue{kDefaultStrokeWidth}},
-                 {.name = std::string{kGlyphScaleProp},
-                  .kind = LayoutPropertyKind::Double,
-                  .label = "Glyph Scale",
-                  .defaultValue = LayoutValue{1.0}}},
+       .category = ComponentCategory::Playback,
+       .properties = {{.name = std::string{kStrokeWidthProp},
+                       .kind = PropertyKind::Double,
+                       .label = "Stroke Width",
+                       .defaultValue = LayoutValue{kDefaultStrokeWidth}},
+                      {.name = std::string{kGlyphScaleProp},
+                       .kind = PropertyKind::Double,
+                       .label = "Glyph Scale",
+                       .defaultValue = LayoutValue{1.0}}},
        .minChildren = 0,
        .optMaxChildren = 0,
-       .actionPolicy =
-         LayoutComponentActionPolicy{
-           .slotMask = slotBit(LayoutActionSlot::SecondaryClick) | slotBit(LayoutActionSlot::SecondaryLongPress),
-           .defaultActionIds = {{LayoutActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
-      [&playback, playbackCommandSurface, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-      { return std::make_unique<SoulTransportButtonComponent>(playback, playbackCommandSurface, textCatalog, node); });
+       .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress),
+       .defaultActions = {{.slot = ActionSlot::SecondaryLongPress, .actionId = "shell.showSoul"}}},
+      [&playback, playbackActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<SoulTransportButtonComponent>(playback, playbackActions, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

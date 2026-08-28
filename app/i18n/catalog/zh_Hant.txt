@@ -692,8 +692,6 @@ zh_Hant:table {
     gtk_layout_validation_preset { "預設 ''{preset}'' 驗證失敗：\n\n{detail}" }
     gtk_layout_invalid_component_ids { "無效的版面配置元件 ID" }
     gtk_layout_validation_component { "預設 ''{preset}'' 元件 ''{component}'' 型別 ''{type}'' 驗證失敗：\n\n{detail}" }
-    gtk_layout_invalid_actions { "無效的版面配置操作" }
-    gtk_layout_validation_action { "預設 ''{preset}'' 元件 ''{component}'' 屬性 ''{property}'' 驗證失敗：\n\n{detail}" }
     gtk_common_ok { "確定" }
     gtk_common_add { "新增" }
     gtk_common_undo { "撤銷" }

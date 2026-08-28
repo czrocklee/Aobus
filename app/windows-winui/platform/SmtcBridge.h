@@ -28,7 +28,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
 }
 
 namespace ao::winui
@@ -40,7 +40,7 @@ namespace ao::winui
     SmtcBridge(HWND window,
                winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                rt::AppRuntime& runtime,
-               uimodel::PlaybackCommandSurface& commands,
+               uimodel::PlaybackActions& actions,
                rt::ResourceByteLoader& resourceBytes);
     ~SmtcBridge();
 

@@ -6,7 +6,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
@@ -156,28 +156,29 @@ namespace ao::gtk::layout
 
   void registerResponsiveClassComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "responsiveClass",
-                                .displayName = "Responsive Class",
-                                .category = LayoutComponentCategory::Decorator,
-                                .props = {{.name = "axis",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Axis",
-                                           .defaultValue = LayoutValue{"width"},
-                                           .enumValues = {"width", "height"}},
-                                          {.name = "compactMax",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Compact Max",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCompactMax)}},
-                                          {.name = "regularMax",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Regular Max",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultRegularMax)}},
-                                          {.name = "classPrefix",
-                                           .kind = LayoutPropertyKind::String,
-                                           .label = "Class Prefix",
-                                           .defaultValue = LayoutValue{"ao-width"}}},
-                                .minChildren = 1,
-                                .optMaxChildren = 1},
-                               createResponsiveClass);
+    registry.registerComponent(
+      {.id = "responsiveClass",
+       .displayName = "Responsive Class",
+       .category = ComponentCategory::Decorator,
+       .properties = {{.name = "axis",
+                       .kind = PropertyKind::Enum,
+                       .label = "Axis",
+                       .defaultValue = LayoutValue{"width"},
+                       .enumValues = {"width", "height"}},
+                      {.name = "compactMax",
+                       .kind = PropertyKind::Int,
+                       .label = "Compact Max",
+                       .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCompactMax)}},
+                      {.name = "regularMax",
+                       .kind = PropertyKind::Int,
+                       .label = "Regular Max",
+                       .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultRegularMax)}},
+                      {.name = "classPrefix",
+                       .kind = PropertyKind::String,
+                       .label = "Class Prefix",
+                       .defaultValue = LayoutValue{"ao-width"}}},
+       .minChildren = 1,
+       .optMaxChildren = 1},
+      createResponsiveClass);
   }
 } // namespace ao::gtk::layout

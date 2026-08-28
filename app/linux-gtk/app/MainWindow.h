@@ -11,7 +11,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/input/KeyRepeatGuard.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gtkmm/applicationwindow.h>
@@ -98,7 +98,7 @@ namespace ao::gtk
     void applyKeymap(uimodel::KeymapModel const& keymap);
     void applyTheme(uimodel::ThemePreset theme);
     rt::PlaybackService& playback();
-    uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
+    uimodel::LayoutSchema const& layoutSchema() const;
 
   protected:
     void on_hide() override;

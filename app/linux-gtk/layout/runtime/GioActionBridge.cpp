@@ -5,7 +5,7 @@
 
 #include "ActionRegistry.h"
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
@@ -53,37 +53,37 @@ namespace ao::gtk::layout
                                                                          ActionContextProvider& contextProvider)
   {
     auto exportedActionIds = std::vector<std::string>{};
-    auto const& descriptors = registry.descriptors();
+    auto const actionSchemas = registry.actions();
 
-    for (auto const& desc : descriptors)
+    for (auto const& actionSchema : actionSchemas)
     {
       // Phase 3c: support anchored or menu-presenting actions only when a context provider can supply the needed
       // parent/anchor safely.
-      if (!contextProvider.canProvideSafeAnchor(desc) &&
-          (desc.capabilities.has(uimodel::LayoutActionCapability::RequiresAnchor) ||
-           desc.capabilities.has(uimodel::LayoutActionCapability::PresentsMenu)))
+      if (!contextProvider.canProvideSafeAnchor(actionSchema) &&
+          (actionSchema.supports(uimodel::ActionCapability::RequiresAnchor) ||
+           actionSchema.supports(uimodel::ActionCapability::PresentsMenu)))
       {
-        APP_LOG_DEBUG("GioActionBridge: Skipping action {} due to missing context capabilities", desc.id);
+        APP_LOG_DEBUG("GioActionBridge: Skipping action {} due to missing context capabilities", actionSchema.id);
         continue;
       }
 
-      auto actionPtr = Gio::SimpleAction::create(desc.id);
+      auto actionPtr = Gio::SimpleAction::create(actionSchema.id);
 
       // Initialize the state based on the current context
-      auto ctx = contextProvider.actionContext(desc.id);
-      auto const initialState = registry.state(desc.id, ctx);
+      auto ctx = contextProvider.actionContext(actionSchema.id);
+      auto const initialState = registry.state(actionSchema.id, ctx);
       actionPtr->set_enabled(initialState.enabled);
 
       actionPtr->signal_activate().connect(
-        [&registry, &contextProvider, id = desc.id](Glib::VariantBase const& /*parameter*/)
+        [&registry, &contextProvider, id = actionSchema.id](Glib::VariantBase const& /*parameter*/)
         {
           auto ctx = contextProvider.actionContext(id);
           registry.activate(id, ctx);
         });
 
       actionMap.add_action(actionPtr);
-      exportedActionIds.push_back(desc.id);
-      APP_LOG_DEBUG("GioActionBridge: Exported action {}", desc.id);
+      exportedActionIds.push_back(actionSchema.id);
+      APP_LOG_DEBUG("GioActionBridge: Exported action {}", actionSchema.id);
     }
 
     return std::make_unique<GioActionBridgeSession>(registry, actionMap, contextProvider, std::move(exportedActionIds));

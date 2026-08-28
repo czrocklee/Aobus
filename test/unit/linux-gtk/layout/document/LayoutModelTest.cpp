@@ -2,8 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "layout/document/LayoutPresets.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
@@ -26,13 +25,13 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    LayoutComponentCatalog persistentLayoutCatalog()
+    LayoutSchema persistentLayoutSchema()
     {
-      auto catalog = LayoutComponentCatalog{};
-      catalog.registerComponentDescriptor(sharedComponentDescriptor(SharedLayoutComponentType::Split));
-      catalog.registerComponentDescriptor(
-        {.type = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true});
-      return catalog;
+      auto schema = LayoutSchema{};
+      REQUIRE(schema.addSharedComponent("split"));
+      REQUIRE(
+        schema.addComponent({.id = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true}));
+      return schema;
     }
   } // namespace
 
@@ -111,19 +110,19 @@ namespace ao::gtk::layout::test
 
         REQUIRE(preparedRes);
 
-        auto const catalog = persistentLayoutCatalog();
+        auto const schema = persistentLayoutSchema();
         visitLayoutDocumentNodes(doc,
                                  [&](LayoutNode const& node)
                                  {
-                                   if (auto const optDescriptor = catalog.descriptor(node.type);
-                                       optDescriptor && optDescriptor->persistentState && node.id.empty())
+                                   if (auto const optComponentSchema = schema.component(node.type);
+                                       optComponentSchema && optComponentSchema->persistentState && node.id.empty())
                                    {
                                      missingStatefulIds.push_back(node.type);
                                    }
                                  });
 
         CHECK(missingStatefulIds.empty());
-        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*preparedRes, catalog)));
+        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*preparedRes, schema)));
       }
     }
 

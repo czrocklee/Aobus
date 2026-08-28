@@ -34,8 +34,8 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -222,7 +222,7 @@ namespace ao::rt::test
     CHECK(appPtr->databasePath() == databasePath);
 
     // Verify accessors
-    [[maybe_unused]] auto& commands = appPtr->library().writer();
+    [[maybe_unused]] auto& commands = appPtr->library().commands();
     [[maybe_unused]] auto& notifications = appPtr->notifications();
 
     appPtr->addAudioProvider(
@@ -272,8 +272,8 @@ namespace ao::rt::test
                                                                  tempDir.path() / "cache",
                                                                  library::test::kTestMusicLibraryMapBytes));
 
-    [[maybe_unused]] auto future =
-      runtimePtr->async().spawn(runtimePtr->library().createList(ListDraft{.name = "Committed before close"}));
+    [[maybe_unused]] auto future = runtimePtr->async().spawn(
+      runtimePtr->library().commands().createList(ListDraft{.name = "Committed before close"}));
     REQUIRE(executor->waitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
 
@@ -315,7 +315,7 @@ namespace ao::rt::test
                       [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
     auto const listId = ao::test::requireValue(runRuntimeTask(*appPtr,
-                                                              appPtr->library().writer().createList(ListDraft{
+                                                              appPtr->library().commands().createList(ListDraft{
                                                                 .name = "Teardown order",
                                                               })));
     auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));

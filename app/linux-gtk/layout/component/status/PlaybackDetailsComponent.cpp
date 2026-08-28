@@ -7,7 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/PlaybackDetailsWidget.h"
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -38,9 +38,11 @@ namespace ao::gtk::layout
                                         rt::PlaybackService& playback,
                                         i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent({.type = "status.playbackDetails",
+    registry.registerComponent({.id = "status.playbackDetails",
                                 .displayName = "Playback Details",
-                                .category = LayoutComponentCategory::Status},
+                                .category = ComponentCategory::Status,
+                                .minChildren = 0,
+                                .optMaxChildren = 0},
                                [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
                                { return std::make_unique<PlaybackDetailsComponent>(playback, textCatalog); });
   }

@@ -12,7 +12,6 @@
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
 #include <filesystem>
 #include <stop_token>

@@ -17,7 +17,7 @@ namespace ao::gtk::layout
                                rt::AppRuntime& runtime,
                                TrackPageHost* trackPageHost,
                                uimodel::TrackPresentationCatalog* presentationCatalog,
-                               uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                               uimodel::ListPresentations* listPresentations,
                                ThemeCoordinator* themeCoordinator,
                                std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
                                i18n::MessageCatalog const& textCatalog)
@@ -25,7 +25,7 @@ namespace ao::gtk::layout
     registerTrackQuickFilterComponent(
       registry, runtime, trackPageHost, std::move(createSmartListFromExpression), textCatalog);
     registerTrackPresentationButtonComponent(
-      registry, runtime, presentationCatalog, presentationPreferences, themeCoordinator, textCatalog);
+      registry, runtime, presentationCatalog, listPresentations, themeCoordinator, textCatalog);
   }
 
   void registerTrackDetailComponents(ComponentRegistry& registry,

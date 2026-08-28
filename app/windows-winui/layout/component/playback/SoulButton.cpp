@@ -11,10 +11,7 @@
 #include "playback/AudioPipelineToolTip.h"
 #include "playback/SoulTransportButton.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -41,13 +38,19 @@ namespace ao::winui::layout
      *
      * The soul is a single visual with two jobs. It always renders what playback
      * is doing, and it runs play/pause when the document has not spent its
-     * primary click on a shell action; the component asks the catalog which of
+     * primary click on a shell action; the component asks the schema which of
      * those it is rather than inferring it from what the disc draws.
      */
     class SoulButtonComponent final : public LayoutComponent
     {
     public:
-      SoulButtonComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node, bool const activatesOnClick)
+      SoulButtonComponent(LayoutBuildContext& ctx,
+                          uimodel::LayoutNode const& node,
+                          bool const activatesOnClick,
+                          rt::PlaybackService& playback,
+                          uimodel::PlaybackActions& playbackActions,
+                          i18n::MessageCatalog const& textCatalog,
+                          async::Signal<WindowActivityState>& windowActivityChanged)
       {
         // The soul draws its own disc edge to edge, so the button contributes
         // nothing but the hit region and the gesture.
@@ -73,7 +76,7 @@ namespace ao::winui::layout
         _transportPtr = std::make_unique<SoulTransportButton>(SoulTransportButtonConfig{
           .button = _button,
           .soul = _soul.as<winrt::Microsoft::UI::Xaml::Controls::ContentControl>(),
-          .textCatalog = ctx.textCatalog,
+          .textCatalog = textCatalog,
           // The pipeline explanation occupies the tooltip in every shell, so the
           // transport never writes its own.
           .hasComplexTooltip = true,
@@ -83,12 +86,12 @@ namespace ao::winui::layout
           .activatesOnClick = activatesOnClick,
         });
         _toolTipPtr = std::make_unique<AudioPipelineToolTip>(
-          AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = ctx.textCatalog});
+          AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = textCatalog});
 
-        _transportPtr->bind(ctx.playback, ctx.playbackCommands);
-        _toolTipPtr->bind(ctx.playback);
+        _transportPtr->bind(playback, playbackActions);
+        _toolTipPtr->bind(playback);
         applyWindowActivity(ctx.windowActivity);
-        _windowActivitySub = subscribeUiUpdate(ctx.windowActivityChanged,
+        _windowActivitySub = subscribeUiUpdate(windowActivityChanged,
                                                "SoulButtonComponent",
                                                [this](WindowActivityState const state) { applyWindowActivity(state); });
       }
@@ -110,20 +113,18 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeSoulButton(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+  Result<std::unique_ptr<LayoutComponent>> makeSoulButton(LayoutBuildContext& ctx,
+                                                          uimodel::LayoutNode const& node,
+                                                          uimodel::ComponentSchema const& schema,
+                                                          rt::PlaybackService& playback,
+                                                          uimodel::PlaybackActions& playbackActions,
+                                                          i18n::MessageCatalog const& textCatalog,
+                                                          async::Signal<WindowActivityState>& windowActivityChanged)
   {
-    auto const optDescriptor = ctx.catalog.descriptor(node.type);
-
-    if (!optDescriptor)
-    {
-      return makeError(
-        Error::Code::NotSupported, std::format("Node '{}' has no descriptor for '{}'", node.id, node.type));
-    }
-
     // A bound primary click belongs to the shell action, and the soul must not
     // answer the same gesture twice.
-    auto const activatesOnClick =
-      !uimodel::isActionSlotBound(optDescriptor->actionPolicy, node, uimodel::LayoutActionSlot::PrimaryClick);
-    return std::make_unique<SoulButtonComponent>(ctx, node, activatesOnClick);
+    auto const activatesOnClick = !schema.actionId(node, uimodel::ActionSlot::PrimaryClick);
+    return std::make_unique<SoulButtonComponent>(
+      ctx, node, activatesOnClick, playback, playbackActions, textCatalog, windowActivityChanged);
   }
 } // namespace ao::winui::layout

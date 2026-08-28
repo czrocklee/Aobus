@@ -19,7 +19,7 @@ GTK implementations under `app/linux-gtk/layout/component/track/`, `app/linux-gt
 
 The detail scope owns a projection subscription and one undo controller for its descendant components.
 The field grid and tag editor borrow that scope and create UIModel authoring sessions from its exact selected ids when an edit begins.
-They do not construct storage, call `LibraryWriter`, or create a competing detail snapshot.
+They do not construct storage, call `LibraryCommands`, or create a competing detail snapshot.
 
 ## Terminology
 
@@ -125,7 +125,7 @@ The detail cover slot is a deterministic responsive square capped by its target 
 - [`TrackDetailScope.cpp`](../../../app/linux-gtk/layout/component/track/TrackDetailScope.cpp) owns snapshot and undo scope.
 - [`TrackFieldGridComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackFieldGridComponent.cpp) owns field-grid composition and commands.
 - [`TrackDetailUndo.cpp`](../../../app/linux-gtk/layout/component/track/TrackDetailUndo.cpp) owns pending undo and timeout.
-- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns the target/revision binding used by GTK editors and undo.
+- [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns the target/revision binding used by GTK editors and undo.
 - [`TagEditor.cpp`](../../../app/linux-gtk/tag/TagEditor.cpp) owns chip flow and add/search interaction.
 - [`TrackTagEditorComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackTagEditorComponent.cpp) binds tag editor to detail scope.
 - [`TrackCoverArtComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackCoverArtComponent.cpp) owns cover-slot adaptation.
@@ -146,4 +146,4 @@ The detail cover slot is a deterministic responsive square capped by its target 
 - [Metadata-editing specification](../presentation/metadata-editing.md)
 - [Shell layout adaptation](../shell/layout-adaptation.md)
 - [Cover-art resource delivery](../resource/cover-art-delivery.md)
-- [Layout catalog reference](../../reference/shell/layout-catalog.md)
+- [GTK layout schema reference](../../reference/shell/layout-schema.md)

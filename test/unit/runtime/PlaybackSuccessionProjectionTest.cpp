@@ -13,7 +13,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -64,8 +64,8 @@ namespace ao::rt::test
     fixture.secondTrackId = fixture.addPlayableTrack("Second", 2000);
     fixture.thirdTrackId = fixture.addPlayableTrack("Third", 2010);
     fixture.sources.reloadAllTracks();
-    fixture.listId = ao::test::requireValue(fixture.writerFixture.runTask(
-      fixture.writer().createList(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
+    fixture.listId = ao::test::requireValue(fixture.commandsFixture.runTask(
+      fixture.commands().createList(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
     fixture.viewId = ao::test::requireValue(fixture.workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = fixture.listId,
       .optPresentation =
@@ -84,7 +84,7 @@ namespace ao::rt::test
     std::uint32_t changedCount = 0;
     auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
 
-    REQUIRE(fixture.writerFixture.updateMetadata(
+    REQUIRE(fixture.commandsFixture.updateMetadata(
       std::array{fixture.firstTrackId}, MetadataPatch{.optYear = std::uint16_t{2005}}));
     auto const afterAddition = succession.state();
     CHECK(afterAddition.currentTrackId == fixture.secondTrackId);
@@ -93,7 +93,7 @@ namespace ao::rt::test
     CHECK(changedCount == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
 
-    REQUIRE(fixture.writerFixture.updateMetadata(
+    REQUIRE(fixture.commandsFixture.updateMetadata(
       std::array{fixture.secondTrackId}, MetadataPatch{.optYear = std::uint16_t{1990}}));
     auto const currentRemoved = succession.state();
     CHECK(currentRemoved.sourceState == PlaybackSuccessionSourceState::Live);
@@ -122,7 +122,7 @@ namespace ao::rt::test
     CHECK(emptyLive.optResolvedSuccessor == fixture.firstTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
     auto const invalidated = succession.state();
     CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
     CHECK_FALSE(invalidated.hasNext);

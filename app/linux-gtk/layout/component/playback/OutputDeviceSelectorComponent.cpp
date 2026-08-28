@@ -9,7 +9,6 @@
 #include "playback/OutputDevicePopover.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -88,8 +87,8 @@ namespace ao::gtk::layout
                                              i18n::MessageCatalog const& textCatalog,
                                              uimodel::OutputDeviceIntent const& outputDeviceIntent)
   {
-    registry.registerComponent(
-      sharedComponentDescriptor(SharedLayoutComponentType::PlaybackOutputDeviceSelector),
+    registry.registerSharedComponent(
+      "playback.outputDeviceSelector",
       [&playback, textCatalog, intent = outputDeviceIntent](
         LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
       { return std::make_unique<OutputDeviceSelectorComponent>(playback, textCatalog, intent); });

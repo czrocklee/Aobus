@@ -19,7 +19,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <cstdint>
@@ -47,7 +47,7 @@ namespace ao::rt::test::playback_succession
     PlaybackSuccessionFixture(PlaybackSuccessionFixture&&) = delete;
     PlaybackSuccessionFixture& operator=(PlaybackSuccessionFixture&&) = delete;
 
-    LibraryWriter& writer();
+    LibraryCommands& commands();
     TrackId addPlayableTrack(std::string title, std::uint16_t year = 2020);
     void removePlayableFile(TrackId trackId);
     void openManualView(std::span<TrackId const> trackIds, TrackListViewConfig config = {});
@@ -62,7 +62,7 @@ namespace ao::rt::test::playback_succession
     QueuedExecutor executor;
     async::Runtime asyncRuntime;
     LibraryChanges changes;
-    LibraryWriterFixture writerFixture;
+    LibraryCommandsFixture commandsFixture;
     TrackSourceCache sources;
     ViewService views;
     WorkspaceService workspace;

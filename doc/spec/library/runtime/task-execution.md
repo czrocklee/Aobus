@@ -9,13 +9,13 @@ summary: Defines executor affinity, mutation serialization, progress finalizatio
 
 ## Scope
 
-This specification defines the common behavior of `LibraryTaskService` operations: YAML import/export, scan planning/application, and audio-identity backfill.
+This specification defines the common behavior of `LibraryJobs` operations: YAML import/export, scan planning/application, and audio-identity backfill.
 Operation-specific data semantics remain in their owning specifications.
 
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md) and refines the process-wide [runtime execution architecture](../../../architecture/runtime-execution.md).
-`LibraryTaskService` is public under `app/include/ao/rt/library/`, implemented in `app/runtime/library/`, and coordinates `ao::async::Runtime` plus core library facilities without making the worker pool a second state owner.
+`LibraryJobs` is public under `app/include/ao/rt/library/`, implemented in `app/runtime/library/`, and coordinates `ao::async::Runtime` plus core library facilities without making the worker pool a second state owner.
 
 ## Invariants
 
@@ -57,7 +57,7 @@ Scan and backfill return to the callback executor for workflow finalization, rel
 
 ## Progress and outcome
 
-Task progress uses owner-local operational channels on `LibraryTaskService`.
+Task progress uses owner-local operational channels on `LibraryJobs`.
 Progress is best effort and does not constitute a committed state transition.
 Each operation keeps at most one progress-delivery callback queued; while that callback is pending, a newer update replaces the pending value for the same phase.
 Phase transitions remain ordered, so consumers observe each entered phase and the newest accepted state within that phase without per-file event flooding.
@@ -113,14 +113,14 @@ If one throws, required cleanup completes before that exception propagates and r
 
 ## Implementation map
 
-- [`LibraryTaskService.h`](../../../../app/include/ao/rt/library/LibraryTaskService.h) defines the async task surface.
-- [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns executor hops, coordinator composition, and notification adaptation.
-- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns background-task exclusion, the command lane, Maintenance control commands, revision settlement, and Closing.
+- [`LibraryJobs.h`](../../../../app/include/ao/rt/library/LibraryJobs.h) defines the async task surface.
+- [`LibraryJobs.cpp`](../../../../app/runtime/library/LibraryJobs.cpp) owns executor hops, coordinator composition, and notification adaptation.
+- [`LibraryWriteLane.h`](../../../../app/runtime/library/LibraryWriteLane.h) owns background-task exclusion, the command lane, Maintenance control commands, revision settlement, and Closing.
 - [`LibraryTaskEvents.h`](../../../../app/include/ao/rt/library/LibraryTaskEvents.h) defines the progress payload independently of the task-operation surface.
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
+- [`LibraryJobsTest.cpp`](../../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves worker/callback affinity, bounded progress coalescing and terminal ordering, paired progress identities, transfer phase/file-name publication, background-task exclusion, interactive authoring during scan preparation and after background commit, maintenance admission, errors, status-free progress finalization, pre-admission silence, callback exception propagation, cancellation cleanup, and the mandatory post-commit barrier.
 - [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves that finishing one overlapping read-only task immediately restores another task's active progress instead of clearing the status surface.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves non-terminal contention behind a background command, worker-side execution, Maintenance ordering, active pre-transaction Closing cancellation, and later admission after release.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.

@@ -27,7 +27,7 @@ Neutral values and policy live under `app/include/ao/uimodel/input/` and `app/ui
 
 ## Invariants
 
-- Stable layout action ids are the join key across catalogs, keymaps, Gio actions, and GTK accelerators.
+- Stable layout action ids are the join key across the layout schema, keymaps, Gio actions, and GTK accelerators.
 - Neutral chords contain no GDK or platform key-symbol value.
 - Applying overrides always derives a new effective map from defaults; it does not merge into the previous effective state.
 - An absent override retains defaults; a present empty override means explicitly unbound.
@@ -50,7 +50,7 @@ GTK application accelerator state is a platform projection of the current effect
 `resetToDefault()` removes the action's delta, and `resetAllToDefault()` restores the shipped map.
 `toOverrides()` emits only actions whose effective bindings differ from defaults.
 
-The preferences keyboard page enumerates eligible actions from `LayoutActionCatalog` and edits live.
+The preferences keyboard page enumerates eligible actions from `LayoutSchema` and edits live.
 When a requested chord belongs to another action, the GTK editor names the current owner and asks for Reassign or Cancel.
 Reassign removes the old binding and adds the new one; cancel changes neither action.
 Every accepted add, remove, reset, or reassignment reapplies accelerators immediately and requests persistence of the delta.
@@ -63,7 +63,7 @@ This reconciliation prevents removed or reset shortcuts from remaining active un
 The owner-local persistence schema rejects a non-mapping group, duplicate or empty action id, non-sequence binding, or null/non-scalar sequence element as one failed candidate; the existing effective map remains unchanged.
 After that structural boundary accepts the group, invalid chord strings are skipped and diagnosed while valid siblings still apply.
 Neutral keys that cannot map to GTK accelerators are skipped with a warning.
-Unknown action ids remain valid mapping keys but do not become catalog-backed editor rows.
+Unknown action ids remain valid mapping keys but do not become schema-backed editor rows.
 
 The editor never silently steals a conflicting binding.
 The grouped store makes each requested save a fail-closed complete-document replacement, but the application wrapper reports failure only through logging.
@@ -86,8 +86,8 @@ Renaming an action requires an explicit override migration or deliberate rejecti
 
 ## Frontend observations
 
-The GTK preferences page groups actions by locale-selected catalog category, shows effective chords, captures a complete non-modifier key combination, surfaces localized conflict and editing copy, and applies accepted changes live.
-Action ids and neutral chord strings remain the untranslated identities; localized descriptor labels and categories are presentation only.
+The GTK preferences page groups actions by locale-selected schema category, shows effective chords, captures a complete non-modifier key combination, surfaces localized conflict and editing copy, and applies accepted changes live.
+Action ids and neutral chord strings remain the untranslated identities; localized schema labels and categories are presentation only.
 Standalone modifier presses do not complete capture.
 
 App-scoped `Ctrl+,` and context-sensitive bindings such as bare Space are outside the current layout-action keymap.
@@ -110,7 +110,7 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 ## Related documents
 
 - [Application shell architecture](../../architecture/application-shell.md)
-- [Layout catalog and action reference](../../reference/shell/layout-catalog.md)
+- [GTK layout schema and action reference](../../reference/shell/layout-schema.md)
 - [Keyboard map reference](../../reference/shell/keymap.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Shell layout lifecycle](layout-lifecycle.md)

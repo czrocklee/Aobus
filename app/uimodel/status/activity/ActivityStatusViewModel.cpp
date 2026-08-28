@@ -9,8 +9,8 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -75,11 +75,11 @@ namespace ao::uimodel
           publish();
         });
 
-      if (options.libraryTasks != nullptr)
+      if (options.libraryJobs != nullptr)
       {
-        libraryProgressSub = options.libraryTasks->onProgress([this](rt::LibraryTaskProgressUpdated const& event)
-                                                              { handleLibraryTaskProgress(event); });
-        libraryProgressFinishedSub = options.libraryTasks->onProgressFinished(
+        libraryProgressSub = options.libraryJobs->onProgress([this](rt::LibraryTaskProgressUpdated const& event)
+                                                             { handleLibraryTaskProgress(event); });
+        libraryProgressFinishedSub = options.libraryJobs->onProgressFinished(
           [this](rt::LibraryTaskProgressFinished const& event) { handleLibraryProgressFinished(event); });
       }
 

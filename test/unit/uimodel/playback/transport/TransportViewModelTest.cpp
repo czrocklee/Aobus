@@ -10,8 +10,8 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,13 +26,13 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
 
     SECTION("Play action uses play icon and disabled command state")
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
-                                   commands,
+                                   actions,
                                    ao::test::englishMessageCatalog(),
                                    PlaybackCommand::Play,
                                    false,
@@ -48,7 +48,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
-                                   commands,
+                                   actions,
                                    ao::test::englishMessageCatalog(),
                                    PlaybackCommand::PlayPause,
                                    true,
@@ -69,13 +69,13 @@ namespace ao::uimodel::test
       auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
       auto repeatLog = ao::test::RenderLog<TransportViewState>{};
       auto shuffleVm = TransportViewModel{playback,
-                                          commands,
+                                          actions,
                                           ao::test::englishMessageCatalog(),
                                           PlaybackCommand::ToggleShuffle,
                                           true,
                                           [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
       auto repeatVm = TransportViewModel{playback,
-                                         commands,
+                                         actions,
                                          ao::test::englishMessageCatalog(),
                                          PlaybackCommand::CycleRepeat,
                                          true,
@@ -96,19 +96,19 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("First");
     fixture.addPlayableTrack("Second");
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
     REQUIRE(fixture.playFromView(firstTrack));
 
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
     auto previousLog = ao::test::RenderLog<TransportViewState>{};
     auto nextVm = TransportViewModel{playback,
-                                     commands,
+                                     actions,
                                      ao::test::englishMessageCatalog(),
                                      PlaybackCommand::Next,
                                      false,
                                      [&nextLog](auto const& v) { nextLog.render(v); }};
     auto previousVm = TransportViewModel{playback,
-                                         commands,
+                                         actions,
                                          ao::test::englishMessageCatalog(),
                                          PlaybackCommand::Previous,
                                          false,
@@ -123,18 +123,18 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
     auto playVm = TransportViewModel{playback,
-                                     commands,
+                                     actions,
                                      ao::test::englishMessageCatalog(),
                                      PlaybackCommand::Play,
                                      false,
                                      [&playLog](auto const& v) { playLog.render(v); }};
     auto shuffleVm = TransportViewModel{playback,
-                                        commands,
+                                        actions,
                                         ao::test::englishMessageCatalog(),
                                         PlaybackCommand::ToggleShuffle,
                                         false,
@@ -157,7 +157,7 @@ namespace ao::uimodel::test
     auto const firstTrack = fixture.addPlayableTrack("First");
     auto const secondTrack = fixture.addPlayableTrack("Second");
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
 
     SECTION("PlayPause resumes paused playback")
     {
@@ -166,7 +166,7 @@ namespace ao::uimodel::test
 
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
-                                   commands,
+                                   actions,
                                    ao::test::englishMessageCatalog(),
                                    PlaybackCommand::PlayPause,
                                    false,
@@ -183,7 +183,7 @@ namespace ao::uimodel::test
       REQUIRE(fixture.playFromView(firstTrack));
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
-                                   commands,
+                                   actions,
                                    ao::test::englishMessageCatalog(),
                                    PlaybackCommand::Next,
                                    false,
@@ -198,7 +198,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{playback,
-                                   commands,
+                                   actions,
                                    ao::test::englishMessageCatalog(),
                                    PlaybackCommand::ToggleShuffle,
                                    false,
@@ -216,11 +216,11 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(playback,
-                                                             commands,
+                                                             actions,
                                                              ao::test::englishMessageCatalog(),
                                                              PlaybackCommand::ToggleShuffle,
                                                              false,
@@ -244,11 +244,11 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
-    auto commands = PlaybackCommandSurface{playback, [] {}};
+    auto actions = PlaybackActions{playback, [] {}};
     auto catalog = ao::test::messageCatalog("de-DE");
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModel = TransportViewModel{
-      playback, commands, catalog, PlaybackCommand::Next, true, [&log](auto const& view) { log.render(view); }};
+      playback, actions, catalog, PlaybackCommand::Next, true, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
     CHECK(log.last().tooltip == "Nächster Titel");

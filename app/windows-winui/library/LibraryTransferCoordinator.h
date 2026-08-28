@@ -20,7 +20,7 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -31,7 +31,7 @@ namespace ao::winui
     std::function<winrt::Microsoft::UI::Xaml::XamlRoot()> xamlRoot;
     winrt::Microsoft::UI::WindowId windowId{};
     async::Runtime& asyncRuntime;
-    rt::LibraryTaskService& taskService;
+    rt::LibraryJobs& jobs;
     rt::NotificationService& notifications;
     i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;

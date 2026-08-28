@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "TrackColumnLayoutStore.h"
 #include <ao/Error.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <ryml.hpp>
 
@@ -37,12 +37,13 @@ namespace ao::uimodel
     std::vector<StoredTrackColumnLayout> layouts{};
   };
 
-  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayoutState const& state);
-  Result<TrackColumnLayoutState> trackColumnLayoutStateFromDocument(TrackColumnLayoutDocument const& document);
+  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayouts::Snapshot const& state);
+  Result<TrackColumnLayouts::Snapshot> trackColumnLayoutsFromDocument(TrackColumnLayoutDocument const& document);
 
   struct TrackColumnLayoutYamlSchema final
   {
-    Result<> serialize(ryml::NodeRef node, TrackColumnLayoutState const& state) const;
-    Result<TrackColumnLayoutState> deserialize(ryml::ConstNodeRef node, TrackColumnLayoutState const& seed) const;
+    Result<> serialize(ryml::NodeRef node, TrackColumnLayouts::Snapshot const& state) const;
+    Result<TrackColumnLayouts::Snapshot> deserialize(ryml::ConstNodeRef node,
+                                                     TrackColumnLayouts::Snapshot const& seed) const;
   };
 } // namespace ao::uimodel

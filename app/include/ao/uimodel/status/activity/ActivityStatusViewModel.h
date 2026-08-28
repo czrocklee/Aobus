@@ -12,7 +12,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -27,7 +27,7 @@ namespace ao::uimodel
 
   struct ActivityStatusViewModelOptions final
   {
-    rt::LibraryTaskService const* libraryTasks = nullptr;
+    rt::LibraryJobs const* libraryJobs = nullptr;
     ActivityStatusClock clock{};
     bool emitInitialState = true;
   };

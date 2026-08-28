@@ -19,11 +19,11 @@
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -259,7 +259,7 @@ namespace ao::gtk
       return;
     }
 
-    auto scope = _library.reader();
+    auto scope = _library.snapshot();
 
     bool first = true;
 
@@ -282,7 +282,7 @@ namespace ao::gtk
     }
   }
 
-  void TrackPropertiesDialog::loadFirstTrack(rt::LibraryReader const& scope, TrackId trackId)
+  void TrackPropertiesDialog::loadFirstTrack(rt::LibrarySnapshot const& scope, TrackId trackId)
   {
     for (auto& editor : _editors)
     {
@@ -301,7 +301,7 @@ namespace ao::gtk
     updateSaveEnabled();
   }
 
-  void TrackPropertiesDialog::loadSubsequentTrack(rt::LibraryReader const& scope, TrackId trackId)
+  void TrackPropertiesDialog::loadSubsequentTrack(rt::LibrarySnapshot const& scope, TrackId trackId)
   {
     for (auto& editor : _editors)
     {

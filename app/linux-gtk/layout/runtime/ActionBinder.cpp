@@ -4,6 +4,7 @@
 #include "ActionBinder.h"
 
 #include "ActionRegistry.h"
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -20,17 +21,18 @@ namespace ao::gtk::layout
   }
 
   std::function<void()> ActionBinder::bind(uimodel::LayoutNode const& node,
-                                           std::string_view propName,
-                                           std::string_view defaultActionId,
+                                           uimodel::ComponentSchema const& schema,
+                                           uimodel::ActionSlot const slot,
                                            Gtk::Widget& anchorWidget) const
   {
-    auto const actionId = node.propertyOr<std::string>(std::string{propName}, std::string{defaultActionId});
+    auto const optActionId = schema.actionId(node, slot);
 
-    if (actionId.empty() || actionId == "none" || !_registry.descriptor(actionId))
+    if (!optActionId || !_registry.action(*optActionId))
     {
       return {};
     }
 
+    auto const actionId = std::string{*optActionId};
     // Capture pointers to the dependencies to ensure the lambda uses the actual objects,
     // as the ActionBinder instance itself is typically short-lived (local to component ctor).
     return [registry = &_registry, parentWindow = &_parentWindow, actionId, anchor = &anchorWidget, nodeId = node.id]

@@ -75,7 +75,7 @@ Changing hierarchy or rank-overlay persistence semantics remains a storage compa
 ## Test authority
 
 - List builder, layout, store, and view tests under [`test/unit/library/`](../../../../test/unit/library/) lock the persisted surface.
-- [`LibraryWriterListOrderTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListOrderTest.cpp) and [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) lock rank and tag-backed editing semantics.
+- [`LibraryCommandsListOrderTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListOrderTest.cpp) and [`LibraryCommandsListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListMembershipTest.cpp) lock rank and tag-backed editing semantics.
 - [`ListOrderSourceTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceTest.cpp), [`ListOrderSourceObserverTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp), and predicate-source tests lock effective membership and ordering.
 
 ## Related documents

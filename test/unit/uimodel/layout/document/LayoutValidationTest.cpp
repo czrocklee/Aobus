@@ -3,8 +3,7 @@
 
 #include <ao/uimodel/layout/document/LayoutValidation.h>
 
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutDialect.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -26,44 +25,48 @@ namespace ao::uimodel::test
   namespace
   {
     /**
-     * @brief A catalog with no frontend behind it.
+     * @brief A schema with no frontend behind it.
      *
-     * The shared traversal is supposed to work off the catalog and the dialect
+     * The shared traversal is supposed to work off the schema and the dialect
      * alone. Testing it against an invented vocabulary is what shows that: a
-     * rule that only holds for the real Windows catalog would not survive here.
+     * rule that only holds for the real Windows schema would not survive here.
      */
-    LayoutComponentCatalog fakeCatalog()
+    LayoutSchema fakeSchema()
     {
-      auto catalog = LayoutComponentCatalog{};
-      catalog.registerComponentDescriptor(LayoutComponentDescriptor{
-        .type = "frame",
+      auto schema = LayoutSchema{};
+      schema.addComponent(ComponentSchema{
+        .id = "frame",
         .displayName = "Frame",
-        .category = LayoutComponentCategory::Container,
-        .props = {LayoutPropertyDescriptor{.name = "mode", .kind = LayoutPropertyKind::String, .label = "Mode"}},
-        .layoutProps = {LayoutPropertyDescriptor{
-          .name = "weight", .kind = LayoutPropertyKind::Double, .label = "Weight"}},
+        .category = ComponentCategory::Container,
+        .properties = {PropertySchema{
+          .name = "mode", .kind = PropertyKind::Enum, .label = "Mode", .enumValues = {"row", "leaf"}}},
+        .layoutProperties = {PropertySchema{.name = "weight", .kind = PropertyKind::Double, .label = "Weight"}},
         .minChildren = 1,
         .optMaxChildren = 2,
       });
-      catalog.registerComponentDescriptor(LayoutComponentDescriptor{
-        .type = "readout",
+      schema.addComponent(ComponentSchema{
+        .id = "readout",
         .displayName = "Readout",
-        .category = LayoutComponentCategory::Status,
-        .props = {LayoutPropertyDescriptor{.name = "caption", .kind = LayoutPropertyKind::String, .label = "Caption"}},
+        .category = ComponentCategory::Status,
+        .properties = {PropertySchema{.name = "caption", .kind = PropertyKind::String, .label = "Caption"}},
         .surfaces = static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main) |
                     static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip),
       });
-      return catalog;
-    }
-
-    LayoutActionCatalog fakeActions()
-    {
-      return {};
+      schema.addComponent(ComponentSchema{
+        .id = "trigger",
+        .displayName = "Trigger",
+        .category = ComponentCategory::Generic,
+        .optMaxChildren = 0,
+        .actionSlots = actionSlotBit(ActionSlot::PrimaryClick),
+        .defaultActions = {{ActionSlot::PrimaryClick, "valid.action"}},
+      });
+      schema.addAction({.id = "valid.action", .label = "Valid", .category = "Test"});
+      return schema;
     }
 
     /// A field only this dialect knows, so a shared rule cannot be what accepts it.
     constexpr auto kPaintProp = std::string_view{"paint"};
-    /// A field this dialect refuses even though the descriptor never mentions it.
+    /// A field this dialect refuses even though the schema entry never mentions it.
     constexpr auto kRivalProp = std::string_view{"rivalStyling"};
 
     LayoutFieldVerdict fakeLayoutField(LayoutNode const& /*node*/,
@@ -121,7 +124,7 @@ namespace ao::uimodel::test
       auto const document = LayoutDocument{.root = std::move(root)};
       auto const preparedRes = prepareLayout(document);
       REQUIRE(preparedRes.has_value());
-      return validateLayout(*preparedRes, fakeCatalog(), fakeActions(), dialect);
+      return validateLayout(*preparedRes, fakeSchema(), dialect);
     }
 
     LayoutRejection rejectionOf(LayoutNode root, LayoutDialect const& dialect)
@@ -141,7 +144,69 @@ namespace ao::uimodel::test
     auto const unknown = rejectionOf(LayoutNode{.type = "nosuchtype"}, fakeDialect());
     CHECK(unknown.reason == LayoutRejectionReason::UnknownComponentType);
     // The rejection names the dialect rather than any one frontend.
-    CHECK(describeLayoutRejection(fakeDialect(), unknown).contains("Fake catalog"));
+    CHECK(describeLayoutRejection(fakeDialect(), unknown).contains("Fake schema"));
+  }
+
+  TEST_CASE("validateLayout - component child bounds hold without a dialect override",
+            "[uimodel][unit][layout][validation]")
+  {
+    auto const bare = LayoutDialect{.name = "Bare"};
+
+    auto const belowMinimum = rejectionOf(LayoutNode{.type = "frame"}, bare);
+    CHECK(belowMinimum.reason == LayoutRejectionReason::ChildCountBelowMinimum);
+
+    auto const aboveMaximum =
+      rejectionOf(LayoutNode{.type = "frame", .children = {readout("a"), readout("b"), readout("c")}}, bare);
+    CHECK(aboveMaximum.reason == LayoutRejectionReason::ChildCountAboveMaximum);
+  }
+
+  TEST_CASE("validateLayout - enum properties reject values outside their schema",
+            "[uimodel][unit][layout][validation]")
+  {
+    auto const invalid = rejectionOf(
+      LayoutNode{
+        .type = "frame", .props = {{"mode", LayoutValue{std::string{"super-large"}}}}, .children = {readout("a")}},
+      LayoutDialect{.name = "Bare"});
+
+    CHECK(invalid.reason == LayoutRejectionReason::InvalidPropertyValue);
+    CHECK(invalid.detail == "mode");
+  }
+
+  TEST_CASE("validateLayout - action bindings use the document validator's single error channel",
+            "[uimodel][unit][layout][validation]")
+  {
+    auto node = LayoutNode{.type = "trigger"};
+    node.props[std::string{kPrimaryActionProp}] = LayoutValue{std::string{"valid.action"}};
+    CHECK_FALSE(validate(node, LayoutDialect{.name = "Bare"}));
+
+    node.props[std::string{kPrimaryActionProp}] = LayoutValue{std::string{"missing.action"}};
+    CHECK(rejectionOf(node, LayoutDialect{.name = "Bare"}).reason == LayoutRejectionReason::UnknownAction);
+
+    node.props[std::string{kPrimaryActionProp}] = LayoutValue{std::int64_t{42}};
+    CHECK(rejectionOf(node, LayoutDialect{.name = "Bare"}).reason == LayoutRejectionReason::InvalidPropertyValue);
+
+    node.props.erase(std::string{kPrimaryActionProp});
+    node.props[std::string{kSecondaryActionProp}] = LayoutValue{std::string{"valid.action"}};
+    CHECK(rejectionOf(node, LayoutDialect{.name = "Bare"}).reason == LayoutRejectionReason::UnsupportedActionSlot);
+  }
+
+  TEST_CASE("validateLayout - component defaults must resolve to a registered action",
+            "[uimodel][unit][layout][validation]")
+  {
+    auto schema = fakeSchema();
+    REQUIRE(schema.addComponent(ComponentSchema{
+      .id = "bad-default",
+      .displayName = "Bad Default",
+      .optMaxChildren = 0,
+      .actionSlots = actionSlotBit(ActionSlot::PrimaryClick),
+      .defaultActions = {{ActionSlot::PrimaryClick, "missing.action"}},
+    }));
+    auto const preparedRes = prepareLayout(LayoutDocument{.root = LayoutNode{.type = "bad-default"}});
+    REQUIRE(preparedRes);
+
+    auto const optRejection = validateLayout(*preparedRes, schema, LayoutDialect{.name = "Bare"});
+    REQUIRE(optRejection);
+    CHECK(optRejection->reason == LayoutRejectionReason::UnknownAction);
   }
 
   TEST_CASE("validateLayout - a parent layout field is accepted on its direct child",
@@ -163,7 +228,7 @@ namespace ao::uimodel::test
     CHECK(rejection.detail == "weight");
   }
 
-  TEST_CASE("validateLayout - a dialect rules on a layout field before the descriptor does",
+  TEST_CASE("validateLayout - a dialect rules on a layout field before the schema entry does",
             "[uimodel][unit][layout][validation]")
   {
     auto const optClaimed = validate(LayoutNode{.type = "frame",
@@ -177,7 +242,7 @@ namespace ao::uimodel::test
       fakeDialect());
     CHECK(malformed.reason == LayoutRejectionReason::InvalidLayoutFieldValue);
 
-    // A field the descriptor never declares is rejected as the dialect's defect,
+    // A field the schema entry never declares is rejected as the dialect's defect,
     // not as an unsupported field, which is what running first buys.
     auto const rival = rejectionOf(LayoutNode{.type = "frame",
                                               .layout = {{std::string{kRivalProp}, LayoutValue{std::string{"x"}}}},

@@ -11,7 +11,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -267,7 +267,7 @@ namespace ao::rt::test
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     REQUIRE(runtime.workspace().closeView(viewA));
-    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.firstListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.firstListId)));
     auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goBack();
@@ -290,7 +290,7 @@ namespace ao::rt::test
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     requireBackNavigation(runtime);
     REQUIRE(runtime.workspace().closeView(viewB));
-    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.secondListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.secondListId)));
     auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goForward();

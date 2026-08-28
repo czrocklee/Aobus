@@ -5,8 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/button.h>
@@ -83,19 +82,19 @@ namespace ao::gtk::layout
 
   void registerActionButtonComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(
-      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::ActionButton),
-                          {{.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
-                           {.name = "size",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Size",
-                            .defaultValue = LayoutValue{"normal"},
-                            .enumValues = {"small", "normal", "large"}},
-                           {.name = "style",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Style",
-                            .defaultValue = LayoutValue{"flat"},
-                            .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}}),
+    registry.registerSharedComponent(
+      "actionButton",
+      {.properties = {{.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
+                      {.name = "size",
+                       .kind = PropertyKind::Enum,
+                       .label = "Size",
+                       .defaultValue = LayoutValue{"normal"},
+                       .enumValues = {"small", "normal", "large"}},
+                      {.name = "style",
+                       .kind = PropertyKind::Enum,
+                       .label = "Style",
+                       .defaultValue = LayoutValue{"flat"},
+                       .enumValues = {"flat", "raised", "circular", "suggested", "destructive"}}}},
       createActionButton);
   }
 } // namespace ao::gtk::layout

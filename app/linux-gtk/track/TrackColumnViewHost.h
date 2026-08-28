@@ -7,7 +7,7 @@
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/cssprovider.h>
@@ -31,7 +31,7 @@ namespace ao::gtk
     using FactoryProvider = TrackColumnController::FactoryProvider;
 
     TrackColumnViewHost(Glib::RefPtr<TrackListModel> modelPtr,
-                        uimodel::TrackColumnLayoutStore& layoutStore,
+                        uimodel::TrackColumnLayouts& columnLayouts,
                         i18n::MessageCatalog textCatalog,
                         Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                         ListId listId);
@@ -66,7 +66,7 @@ namespace ao::gtk
     // Build a new ColumnView generation off-tree and return it.
     // The old generation is retired. Caller swaps the scrolled-window child.
     Gtk::ColumnView& rebuild(Glib::RefPtr<TrackListModel> modelPtr,
-                             uimodel::TrackColumnLayoutStore& layoutStore,
+                             uimodel::TrackColumnLayouts& columnLayouts,
                              Glib::RefPtr<Gtk::MultiSelection> const& selectionModelPtr,
                              FactoryProvider const& factoryProvider,
                              ListId listId);

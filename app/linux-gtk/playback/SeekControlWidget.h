@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
@@ -57,7 +56,7 @@ namespace ao::gtk
 
     Gtk::Scale _scale;
     uimodel::PlaybackPositionInterpolator _interpolator;
-    uimodel::SeekSliderInteractionModel _interaction;
+    uimodel::SeekInteraction _interaction;
 
     bool _updatingScale = false;
     bool _isMapped = false;

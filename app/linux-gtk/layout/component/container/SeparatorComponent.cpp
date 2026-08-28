@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -52,14 +52,14 @@ namespace ao::gtk::layout
 
   void registerSeparatorComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "separator",
+    registry.registerComponent({.id = "separator",
                                 .displayName = "Separator",
-                                .category = LayoutComponentCategory::Container,
-                                .props = {{.name = "orientation",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Orientation",
-                                           .defaultValue = LayoutValue{"horizontal"},
-                                           .enumValues = {"horizontal", "vertical"}}},
+                                .category = ComponentCategory::Container,
+                                .properties = {{.name = "orientation",
+                                                .kind = PropertyKind::Enum,
+                                                .label = "Orientation",
+                                                .defaultValue = LayoutValue{"horizontal"},
+                                                .enumValues = {"horizontal", "vertical"}}},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createSeparator);

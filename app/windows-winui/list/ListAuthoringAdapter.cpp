@@ -8,8 +8,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include <map>
 #include <string_view>
@@ -21,12 +20,11 @@ namespace ao::winui
     return changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty();
   }
 
-  rt::TrackPresentationSpec resolveListAuthoringPresentation(
-    uimodel::ListPresentationPreferenceStore const& preferences,
-    ListId const listId,
-    std::string_view const localExpression)
+  rt::TrackPresentationSpec resolveListAuthoringPresentation(uimodel::ListPresentations const& listPresentations,
+                                                             ListId const listId,
+                                                             std::string_view const localExpression)
   {
-    return preferences.presentationForList(uimodel::ListPresentationContext{
+    return listPresentations.presentationForList(uimodel::ListPresentationContext{
       .listId = listId,
       .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
       .listExpression = localExpression,

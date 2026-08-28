@@ -6,9 +6,7 @@
 #include "layout/runtime/ActionBinder.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gdk/gdk.h>
@@ -35,16 +33,16 @@ namespace ao::gtk::layout
   void ComponentInteractionController::attach(LayoutBuildContext& ctx,
                                               uimodel::LayoutNode const& node,
                                               Gtk::Widget& target,
-                                              uimodel::LayoutComponentActionPolicy const policy)
+                                              uimodel::ComponentSchema const& schema)
   {
     detach();
     _target = &target;
     auto const binder = ActionBinder{ctx.actionRegistry, ctx.parentWindow};
 
-    attachPrimaryClick(node, target, policy, binder);
-    attachSecondaryClick(node, target, policy, binder);
-    attachPrimaryLongPress(node, target, policy, binder);
-    attachSecondaryLongPress(node, target, policy, binder);
+    attachPrimaryClick(node, target, schema, binder);
+    attachSecondaryClick(node, target, schema, binder);
+    attachPrimaryLongPress(node, target, schema, binder);
+    attachSecondaryLongPress(node, target, schema, binder);
   }
 
   void ComponentInteractionController::detach()
@@ -86,16 +84,15 @@ namespace ao::gtk::layout
 
   void ComponentInteractionController::attachPrimaryClick(uimodel::LayoutNode const& node,
                                                           Gtk::Widget& target,
-                                                          uimodel::LayoutComponentActionPolicy const& policy,
+                                                          uimodel::ComponentSchema const& schema,
                                                           ActionBinder const& binder)
   {
-    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryClick))
+    if (!schema.allows(uimodel::ActionSlot::PrimaryClick))
     {
       return;
     }
 
-    _primaryClick = binder.bind(
-      node, uimodel::kPrimaryActionProp, policy.defaultAction(uimodel::LayoutActionSlot::PrimaryClick), target);
+    _primaryClick = binder.bind(node, schema, uimodel::ActionSlot::PrimaryClick, target);
 
     if (!_primaryClick)
     {
@@ -124,16 +121,15 @@ namespace ao::gtk::layout
 
   void ComponentInteractionController::attachSecondaryClick(uimodel::LayoutNode const& node,
                                                             Gtk::Widget& target,
-                                                            uimodel::LayoutComponentActionPolicy const& policy,
+                                                            uimodel::ComponentSchema const& schema,
                                                             ActionBinder const& binder)
   {
-    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryClick))
+    if (!schema.allows(uimodel::ActionSlot::SecondaryClick))
     {
       return;
     }
 
-    _secondaryClick = binder.bind(
-      node, uimodel::kSecondaryActionProp, policy.defaultAction(uimodel::LayoutActionSlot::SecondaryClick), target);
+    _secondaryClick = binder.bind(node, schema, uimodel::ActionSlot::SecondaryClick, target);
 
     if (!_secondaryClick)
     {
@@ -162,18 +158,15 @@ namespace ao::gtk::layout
 
   void ComponentInteractionController::attachPrimaryLongPress(uimodel::LayoutNode const& node,
                                                               Gtk::Widget& target,
-                                                              uimodel::LayoutComponentActionPolicy const& policy,
+                                                              uimodel::ComponentSchema const& schema,
                                                               ActionBinder const& binder)
   {
-    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::PrimaryLongPress))
+    if (!schema.allows(uimodel::ActionSlot::PrimaryLongPress))
     {
       return;
     }
 
-    _primaryLongPress = binder.bind(node,
-                                    uimodel::kPrimaryLongPressActionProp,
-                                    policy.defaultAction(uimodel::LayoutActionSlot::PrimaryLongPress),
-                                    target);
+    _primaryLongPress = binder.bind(node, schema, uimodel::ActionSlot::PrimaryLongPress, target);
 
     if (!_primaryLongPress)
     {
@@ -199,18 +192,15 @@ namespace ao::gtk::layout
 
   void ComponentInteractionController::attachSecondaryLongPress(uimodel::LayoutNode const& node,
                                                                 Gtk::Widget& target,
-                                                                uimodel::LayoutComponentActionPolicy const& policy,
+                                                                uimodel::ComponentSchema const& schema,
                                                                 ActionBinder const& binder)
   {
-    if (!policy.isSlotAllowed(uimodel::LayoutActionSlot::SecondaryLongPress))
+    if (!schema.allows(uimodel::ActionSlot::SecondaryLongPress))
     {
       return;
     }
 
-    _secondaryLongPress = binder.bind(node,
-                                      uimodel::kSecondaryLongPressActionProp,
-                                      policy.defaultAction(uimodel::LayoutActionSlot::SecondaryLongPress),
-                                      target);
+    _secondaryLongPress = binder.bind(node, schema, uimodel::ActionSlot::SecondaryLongPress, target);
 
     if (!_secondaryLongPress)
     {

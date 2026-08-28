@@ -13,8 +13,8 @@
 #include <ao/rt/AppState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
+#include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
@@ -200,7 +200,7 @@ namespace ao::gtk
   {
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    _layoutPresetCombo.append(std::string{uimodel::ShellLayoutSessionModel::kDefaultPresetId},
+    _layoutPresetCombo.append(std::string{uimodel::LayoutSession::kDefaultPresetId},
                               gtkText(_textCatalog, MessageId::GtkPreferencesLayoutPresetClassic));
     _layoutPresetCombo.append(std::string{layout::presetIdToString(layout::LayoutPresetId::Modern)},
                               gtkText(_textCatalog, MessageId::GtkPreferencesLayoutPresetModern));
@@ -258,13 +258,13 @@ namespace ao::gtk
     _layoutPage.append(*actionsBox);
   }
 
-  void PreferencesWindow::refreshKeyboardPage(uimodel::LayoutActionCatalog const& catalog,
+  void PreferencesWindow::refreshKeyboardPage(uimodel::LayoutSchema const& schema,
                                               uimodel::KeymapModel keymap,
                                               ShortcutEditorWidget::ChangedCallback onChanged)
   {
     clearKeyboardPage();
     _shortcutEditorPtr =
-      std::make_unique<ShortcutEditorWidget>(_textCatalog, catalog, std::move(keymap), std::move(onChanged), *this);
+      std::make_unique<ShortcutEditorWidget>(_textCatalog, schema, std::move(keymap), std::move(onChanged), *this);
     _shortcutEditorPtr->set_hexpand(true);
     _shortcutEditorPtr->set_vexpand(true);
     _keyboardPage.append(*_shortcutEditorPtr);

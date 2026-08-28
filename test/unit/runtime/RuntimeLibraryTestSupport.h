@@ -13,7 +13,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -88,21 +88,21 @@ namespace ao::rt::test
                                   library::test::TrackSpec const& spec,
                                   async::Executor& executor = stateOnlyLibraryExecutor());
 
-  class LibraryWriterFixture final
+  class LibraryCommandsFixture final
   {
   public:
-    LibraryWriterFixture(library::MusicLibrary& storage,
-                         LibraryChanges& changes,
-                         async::Executor& executor = stateOnlyLibraryExecutor());
-    ~LibraryWriterFixture();
+    LibraryCommandsFixture(library::MusicLibrary& storage,
+                           LibraryChanges& changes,
+                           async::Executor& executor = stateOnlyLibraryExecutor());
+    ~LibraryCommandsFixture();
 
-    LibraryWriterFixture(LibraryWriterFixture const&) = delete;
-    LibraryWriterFixture& operator=(LibraryWriterFixture const&) = delete;
-    LibraryWriterFixture(LibraryWriterFixture&&) = delete;
-    LibraryWriterFixture& operator=(LibraryWriterFixture&&) = delete;
+    LibraryCommandsFixture(LibraryCommandsFixture const&) = delete;
+    LibraryCommandsFixture& operator=(LibraryCommandsFixture const&) = delete;
+    LibraryCommandsFixture(LibraryCommandsFixture&&) = delete;
+    LibraryCommandsFixture& operator=(LibraryCommandsFixture&&) = delete;
 
     Library& library();
-    LibraryWriter& writer();
+    LibraryCommands& commands();
     async::Runtime& runtime();
 
     template<typename T>

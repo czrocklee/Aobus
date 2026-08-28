@@ -35,7 +35,7 @@ namespace ao::uimodel
   /// What a dialect says about a layout field beyond the common vocabulary.
   enum class LayoutFieldRuling : std::uint8_t
   {
-    /// The dialect does not name the field; the component descriptor decides.
+    /// The dialect does not name the field; the component schema entry decides.
     Unclaimed,
     /// The dialect owns the field and the authored value is well formed.
     Accepted,
@@ -61,8 +61,8 @@ namespace ao::uimodel
   /**
    * @brief What one frontend adds to the shared document rules.
    *
-   * The document, the common layout fields, the component catalog, and the
-   * action catalog are the same wherever a shell is built, so the traversal that
+   * The document, the common layout fields, the component schema, and the
+   * action schema are the same wherever a shell is built, so the traversal that
    * checks them is written once. What differs is narrow and named here: the
    * styling vocabulary a frontend understands, whether it hosts authored
    * tooltips, and the few component types whose authored presentation tightens
@@ -79,8 +79,8 @@ namespace ao::uimodel
     /**
      * @brief Verdict for a layout field the common vocabulary does not name.
      *
-     * Consulted before the component descriptor, so a dialect can reject
-     * another frontend's styling field even where a descriptor would accept it.
+     * Consulted before the component schema entry, so a dialect can reject
+     * another frontend's styling field even where a schema entry would accept it.
      */
     LayoutFieldVerdict (*layoutField)(LayoutNode const& node,
                                       std::string_view name,
@@ -90,7 +90,7 @@ namespace ao::uimodel
      * @brief Exact child count @p node's authored presentation requires, if any.
      *
      * A presentation that swaps the constructed element also decides whether the
-     * component hosts a content region, which the descriptor's child range alone
+     * component hosts a content region, which the schema entry's child range alone
      * cannot express.
      */
     std::optional<std::size_t> (*presentationChildCount)(LayoutNode const& node) = nullptr;

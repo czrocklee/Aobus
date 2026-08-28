@@ -31,14 +31,13 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
-#include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
-#include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/detail/TrackFieldGrid.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>
@@ -50,6 +49,7 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 #include <sigc++/adaptors/track_obj.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -1346,7 +1346,7 @@ namespace ao::gtk::layout
       ColumnWidthAnchor _keyColumnWidthAnchor{"ao-key-column-width-anchor"};
       ColumnWidthAnchor _valueColumnWidthAnchor{"ao-value-column-width-anchor"};
 
-      sigc::connection _scopeConn;
+      sigc::scoped_connection _scopeConn;
 
       ConstrainedGridBox _wrapper;
       async::LifetimeScope _tasks;
@@ -1358,10 +1358,10 @@ namespace ao::gtk::layout
                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "track.fieldGrid",
+      {.id = "track.fieldGrid",
        .displayName = "Field Grid",
-       .category = LayoutComponentCategory::Track,
-       .props = {{.name = "categories", .kind = LayoutPropertyKind::StringList, .label = "Categories"}},
+       .category = ComponentCategory::Track,
+       .properties = {{.name = "categories", .kind = PropertyKind::StringList, .label = "Categories"}},
        .minChildren = 0,
        .optMaxChildren = 0},
       [&runtime, textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)

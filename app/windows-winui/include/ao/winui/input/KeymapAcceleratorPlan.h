@@ -13,7 +13,7 @@
 namespace ao::uimodel
 {
   class KeymapModel;
-  class LayoutActionCatalog;
+  class LayoutSchema;
 } // namespace ao::uimodel
 
 namespace ao::winui
@@ -40,7 +40,7 @@ namespace ao::winui
    *
    * A binding is dropped when:
    * - @p isOffered says this shell has no handler for the action;
-   * - @p catalog says the action presents from an anchor, which a keystroke
+   * - @p schema says the action presents from an anchor, which a keystroke
    *   does not have, so running it from the keyboard has nowhere to present;
    * - @p resolveCharacter says the active keyboard layout cannot reach the
    *   character with Shift alone, so no accelerator can express it;
@@ -55,7 +55,7 @@ namespace ao::winui
    * accelerator for the same key on the same action would never be reached.
    */
   std::vector<KeymapAcceleratorPlan> planKeymapAccelerators(uimodel::KeymapModel const& keymap,
-                                                            uimodel::LayoutActionCatalog const& catalog,
+                                                            uimodel::LayoutSchema const& schema,
                                                             KeymapActionAvailability const& isOffered,
                                                             CharacterKeyResolver const& resolveCharacter = {});
 } // namespace ao::winui

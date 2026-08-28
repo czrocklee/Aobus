@@ -26,7 +26,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
 }
 
 namespace ao::gtk::platform
@@ -61,9 +61,9 @@ namespace ao::gtk::platform
       std::int64_t lengthUs = 0;
     };
 
-    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands, Callbacks callbacks);
+    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackActions& actions, Callbacks callbacks);
     MprisBridge(rt::PlaybackService& playback,
-                uimodel::PlaybackCommandSurface& commands,
+                uimodel::PlaybackActions& actions,
                 Callbacks callbacks,
                 PlaybackSource playbackSource);
     ~MprisBridge();

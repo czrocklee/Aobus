@@ -44,7 +44,7 @@ namespace ao::winui
   /**
    * @brief Lookup @p node asks for, or nullopt when it authors no usable `styleKey`.
    *
-   * Assumes the field already passed catalog validation, which rejects a
+   * Assumes the field already passed schema validation, which rejects a
    * non-string or empty key before any element is constructed.
    */
   std::optional<StyleLookupPlan> planStyleLookup(uimodel::LayoutNode const& node, ElementKind elementKind);

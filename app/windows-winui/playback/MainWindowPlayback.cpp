@@ -77,7 +77,7 @@ namespace winrt::Aobus::implementation
     unbindPlayback();
     auto& runtime = _session->runtime();
     auto& playback = runtime.playback();
-    auto& commands = _session->playbackCommands();
+    auto& commands = _session->playbackActions();
 
     if (_shellOutputDevicePtr)
     {

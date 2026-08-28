@@ -17,8 +17,8 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderSession.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdkmm/contentprovider.h>

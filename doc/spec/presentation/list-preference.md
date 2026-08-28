@@ -42,7 +42,7 @@ Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map
 
 ## State model
 
-`ListPresentationPreferenceStore` retains a map from valid `ListId` to non-empty presentation id.
+`ListPresentations` retains a map from valid `ListId` to non-empty presentation id.
 It also borrows the presentation catalog used to resolve built-in and custom ids.
 
 Setting an empty id clears that list's preference.
@@ -89,7 +89,7 @@ Playback restoration submits the same `NewViewDefault` request as ordinary GTK n
 Changing the presentation through a normal user-selection path installs the new runtime spec and may update the base list's saved preference.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 
-WinUI retains one `ListPresentationPreferenceStore` for the active library session and resolves every saved id through `presentationForList()` before applying it to a newly bound or navigated view.
+WinUI retains one `ListPresentations` for the active library session and resolves every saved id through `presentationForList()` before applying it to a newly bound or navigated view.
 An unavailable id therefore applies the source-aware recommendation without deleting or rewriting the opaque saved id.
 If applying the resolved `TrackPresentationSpec` returns an Error, WinUI presents the Error and retains both the current active presentation and the saved preference.
 Its presentation menu uses the shared picker model and catalog, including restored custom presets, and checkpoints a changed preference only after the runtime accepts the complete specification.
@@ -135,20 +135,19 @@ Quick-filter controls and List editors may display the current presentation, but
 
 ## Implementation map
 
-- [`ListPresentationPreferenceStore`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceStore.h) owns the map and resolution order.
-- [`ListPresentationPreferenceLifecycle`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h) owns shared cleanup from `listsDeleted`.
+- [`ListPresentations`](../../../app/include/ao/uimodel/library/presentation/ListPresentations.h) owns the map, resolution order, and cleanup from `listsDeleted`.
 - [`ListPresentationPreferenceYamlSchema`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) owns explicit YAML mapping, the versioned document, and semantic conversion.
-- [`TrackPresentationRecommender`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationRecommender.h) owns source-aware fallback policy.
+- [`recommendListPresentation`](../../../app/include/ao/uimodel/library/presentation/ListPresentations.h) owns source-aware fallback policy.
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
 - [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) owns view navigation snapshots and replay under the [workspace navigation specification](../workspace/navigation.md).
-- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackRegistry.cpp) adapts the shared picker model.
+- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) adapts the shared picker model.
 
 ## Test map
 
-- [`ListPresentationPreferenceStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
+- [`ListPresentationsTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationsTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
-- [`TrackPresentationRecommenderTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp) proves source-aware recommendations.
+- [`ListPresentationRecommendationTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationRecommendationTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) proves per-library persistence.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime/) prove snapshot replay semantics.

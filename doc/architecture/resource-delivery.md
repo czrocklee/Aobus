@@ -28,7 +28,7 @@ media file reading or YAML import
   -> ResourceStore descriptor (digest + length) + ResourceId
        |-> ordered Track cover references
        |    -> primary ResourceId in runtime rows/detail/playback state
-       |         `-> LibraryTaskService materialization
+       |         `-> LibraryJobs materialization
        |              |-> derived cover cache (digest-keyed, verified)
        |              |-> carrier media file named by the reverse index
        |              `-> ResourceByteLoader / ResourceBytes
@@ -61,7 +61,7 @@ The library model owns cover ordering and reference integrity; resource delivery
 
 ### Runtime materialization and identity flow
 
-`LibraryTaskService::loadResourceAsync()` is the only materialization boundary, for interactive delivery and for CLI export alike: it enters on the callback executor, resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, walks the derived cover cache and then each carrier file, applies the ceiling the caller named, and returns owned bytes on the callback executor.
+`LibraryJobs::loadResourceAsync()` is the only materialization boundary, for interactive delivery and for CLI export alike: it enters on the callback executor, resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, walks the derived cover cache and then each carrier file, applies the ceiling the caller named, and returns owned bytes on the callback executor.
 The two callers differ in policy, not in path: an interactive caller passes the 32 MiB ceiling and CLI export passes none, which is the administrative exemption.
 YAML export still reads `ResourceStore` directly under its own scoped transaction, because a document carries descriptors rather than content.
 Runtime track rows, list/detail projections, and playback state carry only `ResourceId`, not decoded images or URLs.
@@ -73,7 +73,7 @@ The derived cover cache is a digest-keyed directory outside the library, supplie
 Entries are verified against the digest on read, installed after a carrier answers, converged toward a byte budget, and evicted least-recently-used.
 A cache that is absent, unwritable, or destroyed costs re-extraction and never a failed request.
 
-The task service owns the derived cover cache above and nothing else: it holds no in-memory or decoded resource state, publishes no maintenance progress, and introduces no resource-state owner.
+`LibraryJobs` owns the derived cover cache above and nothing else: it holds no in-memory or decoded resource state, publishes no maintenance progress, and introduces no resource-state owner.
 Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a loader-lifetime byte cache bounded by both entry count and aggregate bytes, and delivers immutable copyable `ResourceBytes` values through its constructor-selected runtime's callback executor.
 `ResourceBytes` shares owned storage across callbacks and remains valid after loader destruction or cache eviction.
 The loader constructor selects one asynchronous byte-source port for its whole life, whether the default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
@@ -222,7 +222,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 ## Implementation map
 
 - [`ResourceStore`](../../include/ao/library/ResourceStore.h), [`ResourceStore.cpp`](../../lib/library/ResourceStore.cpp), [`ResourceLayout.h`](../../include/ao/library/ResourceLayout.h), [`Sha256.h`](../../include/ao/utility/Sha256.h), and [`CoverArt.h`](../../include/ao/library/CoverArt.h) own Core identities and references.
-- [`LibraryTaskService::loadResourceAsync`](../../app/runtime/library/LibraryTaskService.cpp) owns materialization for every caller; [`ResourceMaterialization.cpp`](../../app/runtime/library/ResourceMaterialization.cpp) owns the walk, [`ResourceCarrierIndex.cpp`](../../app/runtime/library/ResourceCarrierIndex.cpp) the reverse index, and [`ResourceDiskCache.cpp`](../../app/runtime/resource/ResourceDiskCache.cpp) the derived cover cache; [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) reads descriptors directly under its own transaction.
+- [`LibraryJobs::loadResourceAsync`](../../app/runtime/library/LibraryJobs.cpp) owns materialization for every caller; [`ResourceMaterialization.cpp`](../../app/runtime/library/ResourceMaterialization.cpp) owns the walk, [`ResourceCarrierIndex.cpp`](../../app/runtime/library/ResourceCarrierIndex.cpp) the reverse index, and [`ResourceDiskCache.cpp`](../../app/runtime/resource/ResourceDiskCache.cpp) the derived cover cache; [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) reads descriptors directly under its own transaction.
 - [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../app/include/ao/rt/resource/ResourceByteCache.h) own frontend-scoped encoded-byte coalescing, immutable ownership, caching, cancellation, and callback-executor delivery.
 - [`RequestCoalescer`](../../include/ao/async/RequestCoalescer.h) owns platform-neutral equal-key flight sharing, callback-interest cancellation, exact-flight dependency retention, and completion generation fencing.
 - [`TrackRow.h`](../../app/include/ao/rt/TrackRow.h), [`TrackListProjection.h`](../../app/include/ao/rt/projection/TrackListProjection.h), [`TrackDetailProjection.h`](../../app/include/ao/rt/projection/TrackDetailProjection.h), and [`PlaybackState.h`](../../app/include/ao/rt/PlaybackState.h) carry identities.

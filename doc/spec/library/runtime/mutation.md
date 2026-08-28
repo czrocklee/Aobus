@@ -9,7 +9,7 @@ summary: Defines coherent runtime reads and one-operation track and list mutatio
 
 ## Scope
 
-This specification defines `ao::rt::LibraryReader` snapshot reads, sequencer admission, and `ao::rt::LibraryWriter` asynchronous commands.
+This specification defines `ao::rt::LibrarySnapshot` snapshot reads, sequencer admission, and `ao::rt::LibraryCommands` asynchronous commands.
 It owns transaction scope, previews, no-op behavior, authoring bindings, validation, atomicity, and the semantics of track and list mutations.
 
 `ao::library::MusicLibrary` is the physical storage facade: it opens transactions and exposes specialized stores.
@@ -21,13 +21,13 @@ Change delivery belongs to [library change publication](change-publication.md), 
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-Its public boundary is `app/include/ao/rt/library/LibraryReader.h`, `LibraryWriter.h`, and `LibraryAuthoring.h`; its implementation is `app/runtime/library/`.
-The private `LibraryMutationService` owns the one core writable capability and exposes no LMDB transaction or transaction-bound view to normal application consumers.
+Its public boundary is `app/include/ao/rt/library/LibrarySnapshot.h`, `LibraryCommands.h`, and `LibraryAuthoring.h`; its implementation is `app/runtime/library/`.
+The private `LibraryWriteLane` owns the one core writable capability and exposes no LMDB transaction or transaction-bound view to normal application consumers.
 
 ## Terminology
 
-- **Read batch** is the lifetime of one `LibraryReader` and its one `ReadTransaction`, which owns one native LMDB read snapshot.
-- **Command** is one owning `LibraryWriter` mutation or exact-preview Task submitted to the private live-runtime sequencer.
+- **Read batch** is the lifetime of one `LibrarySnapshot` and its one `ReadTransaction`, which owns one native LMDB read snapshot.
+- **Command** is one owning `LibraryCommands` mutation or exact-preview Task submitted to the private live-runtime sequencer.
 - **Command lane** is the per-library FIFO authority that grants one active runtime transaction or control transition at a time.
 - **Effective change** means serialized library state differs after applying a valid command.
 - **Preview** executes the command path but leaves its write transaction uncommitted and publishes nothing.
@@ -37,7 +37,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - **Interactive admission** accepts a command only while authoring is `Available`, no Maintenance transition is pending, and the bounded interactive/background slots permit it.
 - **Revision settlement** is completion of replica and changed-observer delivery plus the committed revision's applicable availability delivery; a committing command retains its lane turn through this point.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
-- **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, either `LibraryMutationService::Mutation::apply()` or `Mutation::executeAsync()`; it owns rollback before a failed body can return or throw outward.
+- **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, either `LibraryWriteLane::Mutation::apply()` or `Mutation::executeAsync()`; it owns rollback before a failed body can return or throw outward.
 - **Operation outcome** is the runtime-private `Unchanged<Value>` or `Changed<Value>` classification returned inside `Result`; `Changed` carries the exact owning `LibraryChangeSet` that the coordinator commits and publishes.
 - **Write operation context** is the callback-scoped `LibraryWrite` passed by that boundary; it exposes logical mutation ports but cannot commit or abort the transaction.
 - **Logical mutation ports** are `LibraryWrite::tracks()` and `LibraryWrite::lists()`; runtime code composes user-facing behavior through them and never pairs physical Store writes itself.
@@ -47,7 +47,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 
 - One reader observes one coherent committed snapshot for its complete lifetime.
 - Read and write capabilities are accepted only by stores from the same `MusicLibrary`; cross-library use fails before native database access.
-- One `LibraryMutationService` exclusively owns live-runtime write authority; public runtime consumers cannot create a committing transaction.
+- One `LibraryWriteLane` exclusively owns live-runtime write authority; public runtime consumers cannot create a committing transaction.
 - One sequencer command is active at a time, and no later command enters its transaction phase until the prior command aborts, fails, completes a preview/no-op, or reaches revision settlement.
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
@@ -101,7 +101,7 @@ Track commands use `TrackAuthoringResult<Reply>` because an effective commit als
 
 ## Read model
 
-`Library::reader()` creates a movable `LibraryReader` with one read transaction.
+`Library::snapshot()` creates a movable `LibrarySnapshot` with one read transaction.
 Its track, dictionary, list, resource, and tag queries use that same snapshot.
 The runtime retains the library wrapper rather than a native LMDB type; transaction-bound store views cannot escape through its public result types.
 
@@ -258,11 +258,11 @@ Exact records and identifier allocation belong to the [library database referenc
 ## Implementation map
 
 - [`Library.h`](../../../../app/include/ao/rt/library/Library.h) composes the runtime roles.
-- [`LibraryReader.h`](../../../../app/include/ao/rt/library/LibraryReader.h) defines the scoped read surface.
-- [`LibraryWriter.h`](../../../../app/include/ao/rt/library/LibraryWriter.h) defines commands and reply values.
-- [`LibraryWriter.cpp`](../../../../app/runtime/library/LibraryWriter.cpp) owns command validation and transaction orchestration.
+- [`LibrarySnapshot.h`](../../../../app/include/ao/rt/library/LibrarySnapshot.h) defines the scoped read surface.
+- [`LibraryCommands.h`](../../../../app/include/ao/rt/library/LibraryCommands.h) defines commands and reply values.
+- [`LibraryCommands.cpp`](../../../../app/runtime/library/LibraryCommands.cpp) owns command validation and transaction orchestration.
 - [`LibraryAuthoring.h`](../../../../app/include/ao/rt/library/LibraryAuthoring.h) defines availability, target bindings, and typed outcomes.
-- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns live-runtime admission, root-body execution, terminalization, commit, and publication completion.
+- [`LibraryWriteLane.h`](../../../../app/runtime/library/LibraryWriteLane.h) owns live-runtime admission, root-body execution, terminalization, commit, and publication completion.
 - [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) defines read-snapshot ownership and the store-read capability.
 - [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) defines coherent native-write and dictionary-overlay ownership plus the non-nested root execution boundary.
@@ -271,15 +271,15 @@ Exact records and identifier allocation belong to the [library database referenc
 
 ## Test map
 
-- [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
+- [`LibrarySnapshotTest.cpp`](../../../../test/unit/runtime/library/LibrarySnapshotTest.cpp) proves coherent runtime values.
 - [`WriteTransactionTest.cpp`](../../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
-- `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
-- [`LibraryWriterTrackPropertiesTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterTrackPropertiesTest.cpp) proves combined metadata/tag publication and whole-command rollback after a later tag failure.
-- [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
+- `LibraryCommands*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) proves combined metadata/tag publication and whole-command rollback after a later tag failure.
+- [`LibraryCommandsListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
 - [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves `executeAsync()` transitions, injected native commit failure, exact operation-owned publication, signal-before-await settlement, revision return, rollback, lane release, and Closing retirement.
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves scan cancellation and no-committable-work outcomes leave storage, revision, and publication unchanged.
+- [`LibraryJobsTest.cpp`](../../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves scan cancellation and no-committable-work outcomes leave storage, revision, and publication unchanged.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that `executeAsync()` after `apply()` and a pre-stamped operation changeset fail at the invariant boundary.
 
 ## Related documents

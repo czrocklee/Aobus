@@ -19,7 +19,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class LibraryJobs;
   class NotificationService;
 }
 
@@ -57,7 +57,7 @@ namespace ao::winui
     ActivityStatusControl(ActivityStatusControl&&) = delete;
     ActivityStatusControl& operator=(ActivityStatusControl&&) = delete;
 
-    void bind(rt::NotificationService& notifications, rt::LibraryTaskService& libraryTasks);
+    void bind(rt::NotificationService& notifications, rt::LibraryJobs& libraryJobs);
     void unbind() noexcept;
 
   private:
@@ -87,7 +87,7 @@ namespace ao::winui
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _detailDismissRevokers;
     i18n::MessageCatalog _textCatalog;
     rt::NotificationService* _notifications = nullptr;
-    rt::LibraryTaskService* _libraryTasks = nullptr;
+    rt::LibraryJobs* _libraryJobs = nullptr;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;
     std::optional<uimodel::ActivityCompactState> _optScheduledCompact;
     std::uint64_t _autoDismissGeneration = 0;

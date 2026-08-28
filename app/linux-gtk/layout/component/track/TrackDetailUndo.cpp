@@ -9,7 +9,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <glibmm/main.h>
 #include <sigc++/functors/slot.h>

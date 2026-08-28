@@ -4,7 +4,7 @@
 #include "app/linux-gtk/track/TrackFieldUi.h"
 
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

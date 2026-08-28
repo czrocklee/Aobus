@@ -693,8 +693,6 @@ zh_Hans:table {
     gtk_layout_validation_preset { "预设 ''{preset}'' 验证失败：\n\n{detail}" }
     gtk_layout_invalid_component_ids { "无效的布局组件 ID" }
     gtk_layout_validation_component { "预设 ''{preset}'' 组件 ''{component}'' 类型 ''{type}'' 验证失败：\n\n{detail}" }
-    gtk_layout_invalid_actions { "无效的布局操作" }
-    gtk_layout_validation_action { "预设 ''{preset}'' 组件 ''{component}'' 属性 ''{property}'' 验证失败：\n\n{detail}" }
     gtk_common_ok { "确定" }
     gtk_common_add { "添加" }
     gtk_common_undo { "撤销" }

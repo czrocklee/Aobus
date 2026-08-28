@@ -3,12 +3,12 @@
 //
 // Review evidence only: no machine-dependent pass/fail thresholds.
 
-#include "runtime/library/LibraryMutationService.h"
+#include "runtime/library/LibraryWriteLane.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "test/unit/runtime/library/LibraryMutationTestSupport.h"
+#include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/i18n/IcuCompletionAliases.h>
@@ -27,7 +27,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/String.h>
 #include <ao/utility/StringArena.h>
@@ -147,9 +147,9 @@ namespace ao::rt::test
         : asyncRuntime{executor}
         , changes{makeLibraryChanges(executor, libraryFixture.library())}
         , service{libraryFixture.library(), changes, nullptr, aliasPolicy}
-        , mutationService{asyncRuntime.callbackExecutor(),
-                          library::test::requireWritableLibrary(libraryFixture.library()),
-                          changes}
+        , writeLane{asyncRuntime.callbackExecutor(),
+                    library::test::requireWritableLibrary(libraryFixture.library()),
+                    changes}
         , completer{service}
       {
       }
@@ -158,7 +158,7 @@ namespace ao::rt::test
       async::Runtime asyncRuntime;
       LibraryChanges changes;
       CompletionService service;
-      LibraryMutationService mutationService;
+      LibraryWriteLane writeLane;
       uimodel::TrackFilterCompleter completer;
     };
 
@@ -698,7 +698,7 @@ namespace ao::rt::test
         runLoopTask(harness.asyncRuntime,
                     harness.executor,
                     executeInteractiveMutation(
-                      harness.mutationService.captureSubmission(),
+                      harness.writeLane.captureSubmission(),
                       [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
                       { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
 

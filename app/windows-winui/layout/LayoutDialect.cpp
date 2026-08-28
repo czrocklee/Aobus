@@ -5,8 +5,8 @@
 
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/winui/layout/ElementKind.h>
-#include <ao/winui/layout/LayoutCatalog.h>
 #include <ao/winui/layout/LayoutDialect.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ThemeSurface.h>
 
 #include <format>
@@ -23,7 +23,7 @@ namespace ao::winui
      * GTK styles its widgets through CSS classes. This shell resolves appearance
      * through XAML resources, so an authored `cssClasses` field is a document
      * defect rather than an ignorable field. Named here rather than in the
-     * catalog because rejecting it is all this shell has to say about it.
+     * schema because rejecting it is all this shell has to say about it.
      */
     constexpr auto kGtkCssClassesLayoutProp = std::string_view{"cssClasses"};
 

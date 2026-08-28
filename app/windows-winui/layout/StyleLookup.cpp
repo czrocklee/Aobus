@@ -5,7 +5,7 @@
 
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/winui/layout/ElementKind.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 
 #include <optional>
 #include <string>

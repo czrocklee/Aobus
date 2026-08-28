@@ -29,6 +29,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/library/list/ListAuthoring.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
@@ -63,11 +64,17 @@ namespace ao::gtk::test
                       std::string expression = {})
     {
       return ao::test::requireValue(runGtkTask(runtime,
-                                               runtime.library().createList(rt::ListDraft{
-                                                 .parentId = parentId,
-                                                 .name = name,
-                                                 .expression = std::move(expression),
-                                               })));
+                                               uimodel::saveList(&runtime.library(),
+                                                                 rt::ListDraft{
+                                                                   .parentId = parentId,
+                                                                   .name = name,
+                                                                   .expression = std::move(expression),
+                                                                 })));
+    }
+
+    void deleteList(rt::AppRuntime& runtime, ListId const listId)
+    {
+      REQUIRE(runGtkTask(runtime, uimodel::deleteList(&runtime.library(), listId, false)));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -544,7 +551,7 @@ namespace ao::gtk::test
       REQUIRE(dialog != nullptr);
       REQUIRE(dialog->get_visible());
       CHECK(dialog->draft().name == "Draft to Preserve");
-      REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
+      deleteList(fixture.runtime(), listId);
 
       dialog->response(Gtk::ResponseType::OK);
 
@@ -678,7 +685,7 @@ namespace ao::gtk::test
       controller.select(listId);
       drainGtkEvents();
       REQUIRE(selectedId == listId);
-      REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
+      deleteList(fixture.runtime(), listId);
 
       deleteActionPtr->activate();
 
@@ -816,7 +823,7 @@ namespace ao::gtk::test
     host.drain();
     CHECK(visibleSeparatorCount() == 1);
 
-    REQUIRE(runGtkTask(fixture.runtime(), fixture.runtime().library().deleteList(listId)));
+    deleteList(fixture.runtime(), listId);
     panel.rebuildTree(fixture.runtime().library());
     host.drain();
     CHECK(visibleSeparatorCount() == 0);

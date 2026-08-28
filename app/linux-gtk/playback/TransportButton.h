@@ -14,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
 }
 
 namespace ao::rt
@@ -30,7 +30,7 @@ namespace ao::gtk
     using Action = uimodel::PlaybackCommand;
 
     TransportButton(rt::PlaybackService& playback,
-                    uimodel::PlaybackCommandSurface& commands,
+                    uimodel::PlaybackActions& actions,
                     i18n::MessageCatalog const& textCatalog,
                     Action action,
                     bool showLabel = false,

@@ -17,8 +17,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -26,6 +25,7 @@
 #include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <array>
@@ -239,7 +239,7 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
       uimodel::CoverArtPlaceholderStyle _placeholderStyle{
         uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector)};
-      sigc::connection _scopeConn;
+      sigc::scoped_connection _scopeConn;
     };
   } // namespace
 
@@ -247,20 +247,19 @@ namespace ao::gtk::layout
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      withShellLayoutProperties(
-        withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::TrackCoverArt),
-                            {{.name = "targetSize",
-                              .kind = LayoutPropertyKind::Int,
-                              .label = "Target Size",
-                              .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCoverArtTargetSize)}},
-                             {.name = "forceSquare",
-                              .kind = LayoutPropertyKind::Bool,
-                              .label = "Force Square",
-                              .defaultValue = LayoutValue{true}}}),
-        {{.name = "widthRequest", .kind = LayoutPropertyKind::Int, .label = "Width Request"},
-         {.name = "heightRequest", .kind = LayoutPropertyKind::Int, .label = "Height Request"},
-         {.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}}),
+    registry.registerSharedComponent(
+      "track.coverArt",
+      {.properties = {{.name = "targetSize",
+                       .kind = PropertyKind::Int,
+                       .label = "Target Size",
+                       .defaultValue = LayoutValue{static_cast<std::int64_t>(kDefaultCoverArtTargetSize)}},
+                      {.name = "forceSquare",
+                       .kind = PropertyKind::Bool,
+                       .label = "Force Square",
+                       .defaultValue = LayoutValue{true}}},
+       .layoutProperties = {{.name = "widthRequest", .kind = PropertyKind::Int, .label = "Width Request"},
+                            {.name = "heightRequest", .kind = PropertyKind::Int, .label = "Height Request"},
+                            {.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}}},
       [imageLoader, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
       { return std::make_unique<TrackCoverArtComponent>(imageLoader, textCatalog, ctx, node); });
   }

@@ -15,7 +15,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryImportPlan.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/winui/WinUiErrorBoundary.h>
@@ -96,7 +96,7 @@ namespace ao::winui
       : xamlRoot{std::move(config.xamlRoot)}
       , windowId{config.windowId}
       , asyncRuntime{config.asyncRuntime}
-      , taskService{config.taskService}
+      , jobs{config.jobs}
       , notifications{config.notifications}
       , textCatalog{std::move(config.textCatalog)}
       , reportStatus{std::move(config.reportStatus)}
@@ -395,7 +395,7 @@ namespace ao::winui
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
-         service = &taskService,
+         service = &jobs,
          weakLifetimePtr,
          path = std::move(path),
          mode,
@@ -416,7 +416,7 @@ namespace ao::winui
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
-         service = &taskService,
+         service = &jobs,
          weakLifetimePtr,
          path = std::move(path),
          mode,
@@ -509,7 +509,7 @@ namespace ao::winui
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
-         service = &taskService,
+         service = &jobs,
          weakLifetimePtr,
          plan = std::move(plan),
          finish = [this](Result<rt::ImportReport> result)
@@ -640,7 +640,7 @@ namespace ao::winui
     std::function<XamlRoot()> xamlRoot;
     winrt::Microsoft::UI::WindowId windowId{};
     async::Runtime& asyncRuntime;
-    rt::LibraryTaskService& taskService;
+    rt::LibraryJobs& jobs;
     rt::NotificationService& notifications;
     i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;

@@ -9,8 +9,8 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <chrono>
 #include <cmath>
@@ -21,9 +21,9 @@
 namespace ao::gtk::platform
 {
   MprisPlaybackEndpoint::MprisPlaybackEndpoint(rt::PlaybackService& playback,
-                                               uimodel::PlaybackCommandSurface& commands,
+                                               uimodel::PlaybackActions& actions,
                                                MprisBridge::Callbacks& callbacks)
-    : _playback{playback}, _playbackCommands{playback.commands()}, _commands{commands}, _callbacks{callbacks}
+    : _playback{playback}, _playbackCommands{playback.commands()}, _actions{actions}, _callbacks{callbacks}
   {
   }
 
@@ -36,7 +36,7 @@ namespace ao::gtk::platform
       return false;
     }
 
-    _commands.execute(*optCommand);
+    _actions.execute(*optCommand);
     return true;
   }
 
@@ -66,7 +66,7 @@ namespace ao::gtk::platform
 
     if (isRelativeSeekPastEnd(state, offsetUs))
     {
-      _commands.execute(uimodel::PlaybackCommand::Next);
+      _actions.execute(uimodel::PlaybackCommand::Next);
       return true;
     }
 
@@ -114,7 +114,7 @@ namespace ao::gtk::platform
 
     if (rate == 0.0)
     {
-      _commands.execute(uimodel::PlaybackCommand::Pause);
+      _actions.execute(uimodel::PlaybackCommand::Pause);
     }
 
     return true;
@@ -147,22 +147,22 @@ namespace ao::gtk::platform
   {
     if (propertyName == "CanGoNext")
     {
-      return _commands.isCapable(uimodel::PlaybackCommand::Next);
+      return _actions.isCapable(uimodel::PlaybackCommand::Next);
     }
 
     if (propertyName == "CanGoPrevious")
     {
-      return _commands.isCapable(uimodel::PlaybackCommand::Previous);
+      return _actions.isCapable(uimodel::PlaybackCommand::Previous);
     }
 
     if (propertyName == "CanPlay")
     {
-      return _commands.isCapable(uimodel::PlaybackCommand::Play);
+      return _actions.isCapable(uimodel::PlaybackCommand::Play);
     }
 
     if (propertyName == "CanPause")
     {
-      return _commands.isCapable(uimodel::PlaybackCommand::Pause);
+      return _actions.isCapable(uimodel::PlaybackCommand::Pause);
     }
 
     if (propertyName == "CanControl")

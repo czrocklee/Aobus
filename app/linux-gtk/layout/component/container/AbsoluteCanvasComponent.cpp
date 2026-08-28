@@ -6,7 +6,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/layout/component/AbsoluteCanvasGeometry.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gdk/gdk.h>
@@ -539,8 +539,8 @@ namespace ao::gtk::layout
     {
     public:
       AbsoluteCanvasComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-        : _canvas{ctx.buildState.isEditMode(),
-                  ctx.buildState.onNodeMoved(),
+        : _canvas{ctx.buildSnapshot.isEditMode(),
+                  ctx.buildSnapshot.onNodeMoved(),
                   node.propertyOr<bool>("snapToGrid", true),
                   static_cast<std::int32_t>(node.propertyOr<std::int64_t>("gridSize", 8))}
       {
@@ -583,17 +583,17 @@ namespace ao::gtk::layout
 
   void registerAbsoluteCanvasComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "absoluteCanvas",
+    registry.registerComponent({.id = "absoluteCanvas",
                                 .displayName = "Absolute Canvas",
-                                .category = uimodel::LayoutComponentCategory::Container,
-                                .props = {{.name = "snapToGrid",
-                                           .kind = uimodel::LayoutPropertyKind::Bool,
-                                           .label = "Snap To Grid",
-                                           .defaultValue = uimodel::LayoutValue{true}},
-                                          {.name = "gridSize",
-                                           .kind = uimodel::LayoutPropertyKind::Int,
-                                           .label = "Grid Size",
-                                           .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
+                                .category = uimodel::ComponentCategory::Container,
+                                .properties = {{.name = "snapToGrid",
+                                                .kind = uimodel::PropertyKind::Bool,
+                                                .label = "Snap To Grid",
+                                                .defaultValue = uimodel::LayoutValue{true}},
+                                               {.name = "gridSize",
+                                                .kind = uimodel::PropertyKind::Int,
+                                                .label = "Grid Size",
+                                                .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
                                 .minChildren = 0,
                                 .optMaxChildren = std::nullopt},
                                createAbsoluteCanvas);

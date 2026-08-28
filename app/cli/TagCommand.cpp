@@ -14,8 +14,8 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
@@ -105,7 +105,7 @@ namespace ao::cli
         return queryMatchingTrackIds(cli.musicLibrary(), filter);
       }
 
-      auto reader = cli.library().reader();
+      auto reader = cli.library().snapshot();
       return requireTrackIds(reader, rawIds);
     }
 
@@ -146,7 +146,7 @@ namespace ao::cli
 
     void printSelectedTags(CliRuntime& cli, std::vector<std::uint32_t> const& rawIds)
     {
-      auto reader = cli.library().reader();
+      auto reader = cli.library().snapshot();
       auto const trackIds = requireTrackIds(reader, rawIds);
       auto const tags = reader.selectionTags(trackIds);
       printTags(trackIds, tags, cli.options().format, cli.io().out);
@@ -201,8 +201,8 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyRes = cli.runTask(add ? cli.library().writer().previewEditTags(trackIds, tags, {})
-                                              : cli.library().writer().previewEditTags(trackIds, {}, tags));
+        auto const replyRes = cli.runTask(add ? cli.library().commands().previewEditTags(trackIds, tags, {})
+                                              : cli.library().commands().previewEditTags(trackIds, {}, tags));
 
         if (!replyRes)
         {
@@ -220,8 +220,8 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(add ? cli.library().writer().editTags(*bindingRes, tags, {})
-                                            : cli.library().writer().editTags(*bindingRes, {}, tags));
+      auto const replyRes = cli.runTask(add ? cli.library().commands().editTags(*bindingRes, tags, {})
+                                            : cli.library().commands().editTags(*bindingRes, {}, tags));
 
       if (!replyRes)
       {
@@ -244,7 +244,7 @@ namespace ao::cli
 
     void listTags(CliRuntime& cli)
     {
-      auto const tags = cli.library().reader().allTagsByFrequency();
+      auto const tags = cli.library().snapshot().allTagsByFrequency();
 
       if (cli.options().format != OutputFormat::Plain)
       {

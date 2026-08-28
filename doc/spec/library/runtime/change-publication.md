@@ -36,7 +36,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 - The revision is bumped inside the same write transaction as its content mutation.
 - An aborted or preview transaction does not advance the revision.
 - A producer submits a changeset only after the corresponding transaction commits.
-- Only `LibraryMutationService` can submit committed content changes; ordinary consumers receive a const observation surface.
+- Only `LibraryWriteLane` can submit committed content changes; ordinary consumers receive a const observation surface.
 - A live operation supplies its complete zero-revision changeset inside `Changed`; `Mutation::executeAsync()` stamps and publishes that exact moved value, so a caller cannot choose a different post-operation payload.
 - The coordinator submits exactly the expected successor revision and retains its one command-lane turn until publication settlement, so a second live commit cannot begin.
 - The coordinator constructs every actor-owned state required for settlement and Closing retirement before native commit; after commit it moves only already-prepared handoff state into the non-throwing publication owner boundary.
@@ -141,7 +141,7 @@ Changesets are in-process values and have no persisted or compatibility format.
 - [`LibraryChanges.cpp`](../../../../app/runtime/library/LibraryChanges.cpp) owns strict successor admission, one pending publication, executor delivery, the pinned replica, and phase-specific post-commit fatal context.
 - [`Signal.h`](../../../../include/ao/async/Signal.h) carries the owning non-throwing notification boundary phase two uses.
 - [`TrackSourceCache.cpp`](../../../../app/runtime/source/TrackSourceCache.cpp) applies revisions to the runtime's derived source state.
-- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns sequencer submission, one-shot settlement events, availability acknowledgement, and Closing state.
+- [`LibraryWriteLane.h`](../../../../app/runtime/library/LibraryWriteLane.h) owns sequencer submission, one-shot settlement events, availability acknowledgement, and Closing state.
 - [`MusicLibrary`](../../../../include/ao/library/MusicLibrary.h) exposes admitted snapshot and candidate revision values without a public physical metadata Store.
 - [`WriteTransaction`](../../../../include/ao/library/WriteTransaction.h) derives the candidate from its durable writer snapshot, persists it at commit, and completes dictionary and metadata publication before the producer can submit a changeset.
 

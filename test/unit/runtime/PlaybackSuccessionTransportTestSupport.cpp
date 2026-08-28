@@ -22,7 +22,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -187,7 +187,7 @@ namespace ao::rt::test::playback_succession
                                                    std::move(config.finalOpenFailureFileName))}
     , asyncRuntime{transport.executor, 1, &sleeper}
     , changes{transport.executor, 0, "test-library"}
-    , writerFixture{transport.libraryFixture.library(), changes, transport.executor}
+    , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}
     , sources{transport.libraryFixture.library(), changes}
     , views{transport.executor, transport.libraryFixture.library(), sources, changes}
     , workspace{transport.executor, views, changes}
@@ -198,9 +198,9 @@ namespace ao::rt::test::playback_succession
 
   PlaybackSuccessionTransportFixture::~PlaybackSuccessionTransportFixture() = default;
 
-  LibraryWriter& PlaybackSuccessionTransportFixture::writer()
+  LibraryCommands& PlaybackSuccessionTransportFixture::commands()
   {
-    return writerFixture.writer();
+    return commandsFixture.commands();
   }
 
   TrackId PlaybackSuccessionTransportFixture::addPlayableTrack(std::string title)
@@ -209,9 +209,9 @@ namespace ao::rt::test::playback_succession
     auto const fixtureUri =
       audio::test::installAudioFixture(transport.libraryFixture.root(), "basic_metadata.flac", libraryUri);
     auto const created = ao::test::requireValue(
-      writerFixture.runTask(writer().createTrackFromFile(transport.libraryFixture.root() / fixtureUri)));
+      commandsFixture.runTask(commands().createTrackFromFile(transport.libraryFixture.root() / fixtureUri)));
     transport.executor.drain();
-    REQUIRE(writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
+    REQUIRE(commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
     transport.executor.drain();
     auto const trackId = created.trackId;
     auto const path = transport.libraryFixture.root() / fixtureUri;
@@ -223,9 +223,9 @@ namespace ao::rt::test::playback_succession
   void PlaybackSuccessionTransportFixture::openManualView(std::span<TrackId const> const trackIds)
   {
     auto const membershipTag = std::array{std::string{"transportorder"}};
-    REQUIRE(writerFixture.editTags(trackIds, membershipTag, {}));
+    REQUIRE(commandsFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(writerFixture.runTask(writer().createList(ListDraft{
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createList(ListDraft{
       .name = "Transport order",
       .expression = "#transportorder",
     })));

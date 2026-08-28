@@ -62,11 +62,11 @@ It does not denote nested mappings.
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
-| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
-| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
+| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
 | Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
-| Windows desktop settings | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
-| Windows desktop settings | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
 | Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | UIModel `LayoutComponentStateYamlSchema`. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
@@ -138,7 +138,7 @@ An empty sequence explicitly unbinds it; an absent action id retains its current
 Saving writes only bindings whose effective chord sequence differs from the defaults supplied to `KeymapModel`.
 
 Action ids are plain strings in this payload.
-Persistence accepts arbitrary action ids; the editor derives shortcut eligibility from the layout action catalog.
+Persistence accepts arbitrary action ids; the editor derives shortcut eligibility from the layout schema.
 Loading the group itself does not reject an unknown action id.
 Chord values use the canonical `KeyChord::toString()` representation; the exact chord tokens, aliases, and shipped default bindings belong to the [keyboard map reference](../shell/keymap.md).
 The schema rejects an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.
@@ -152,8 +152,8 @@ The registry fixes the group-to-type association, but these domain owners define
 |---|---|
 | `PlaybackSessionState` | [Playback session persistence specification](../../spec/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h). |
 | `WorkspaceSessionDocument` / `WorkspaceSessionState` | [Workspace session state](../workspace/session-state.md). |
-| `TrackColumnLayoutDocument` / `TrackColumnLayoutState` | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h). |
-| `ListPresentationPreferenceDocument` / `ListPresentationPreferenceState` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../spec/presentation/list-preference.md), and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h). |
+| `TrackColumnLayoutDocument` / `TrackColumnLayouts::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h). |
+| `ListPresentationPreferenceDocument` / `ListPresentations::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../spec/presentation/list-preference.md), and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h). |
 | `LayoutDocument` | [Shell layout document](../shell/layout-document.md) and its model-specific YAML schema. |
 | `LayoutComponentStateDocument` | [Shell layout component state](../shell/layout-state.md) and its model-specific YAML schema. |
 

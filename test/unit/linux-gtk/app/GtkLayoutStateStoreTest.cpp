@@ -6,8 +6,8 @@
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,25 +25,24 @@ namespace ao::gtk::test
     SECTION("Load non-existent config returns default")
     {
       auto const store = GtkLayoutStateStore{libraryPath};
-      auto newState = uimodel::TrackColumnLayoutState{};
-      auto newPrefState = uimodel::ListPresentationPreferenceState{};
+      auto newState = uimodel::TrackColumnLayouts::Snapshot{};
+      auto newPrefState = uimodel::ListPresentations::Snapshot{};
       store.load(newState, newPrefState);
       // Not found should not modify
-      CHECK(newState.listLayouts.empty());
-      CHECK(newPrefState.presentations.empty());
+      CHECK(newState.empty());
+      CHECK(newPrefState.empty());
     }
 
     SECTION("Save and load layout state")
     {
       {
         auto store = GtkLayoutStateStore{libraryPath};
-        auto state = uimodel::TrackColumnLayoutState{};
-        auto prefState = uimodel::ListPresentationPreferenceState{};
-        state.listLayouts[ListId{10}] = {
-          uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75}};
-        state.listLayouts[ListId{20}] = {
+        auto state = uimodel::TrackColumnLayouts::Snapshot{};
+        auto prefState = uimodel::ListPresentations::Snapshot{};
+        state[ListId{10}] = {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 1.75}};
+        state[ListId{20}] = {
           uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0}};
-        prefState.presentations[ListId{10}] = "albums";
+        prefState[ListId{10}] = "albums";
         store.save(state, prefState);
 
         auto const serialized = ao::test::readFile(libraryPath / "gtk_layout.yaml");
@@ -71,16 +70,16 @@ namespace ao::gtk::test
 
       {
         auto const store = GtkLayoutStateStore{libraryPath};
-        auto state = uimodel::TrackColumnLayoutState{};
-        auto prefState = uimodel::ListPresentationPreferenceState{};
+        auto state = uimodel::TrackColumnLayouts::Snapshot{};
+        auto prefState = uimodel::ListPresentations::Snapshot{};
         store.load(state, prefState);
-        REQUIRE(state.listLayouts.size() == 2);
-        CHECK(state.listLayouts[ListId{10}][0].field == rt::TrackField::Artist);
-        CHECK(state.listLayouts[ListId{10}][0].weight == 1.75);
-        CHECK(state.listLayouts[ListId{20}][0].field == rt::TrackField::Duration);
-        CHECK(state.listLayouts[ListId{20}][0].width == 200);
-        REQUIRE(prefState.presentations.size() == 1);
-        CHECK(prefState.presentations[ListId{10}] == "albums");
+        REQUIRE(state.size() == 2);
+        CHECK(state[ListId{10}][0].field == rt::TrackField::Artist);
+        CHECK(state[ListId{10}][0].weight == 1.75);
+        CHECK(state[ListId{20}][0].field == rt::TrackField::Duration);
+        CHECK(state[ListId{20}][0].width == 200);
+        REQUIRE(prefState.size() == 1);
+        CHECK(prefState[ListId{10}] == "albums");
       }
     }
 
@@ -96,18 +95,18 @@ namespace ao::gtk::test
       output.close();
 
       auto const store = GtkLayoutStateStore{libraryPath};
-      auto state = uimodel::TrackColumnLayoutState{};
-      state.listLayouts[ListId{7}] = {
+      auto state = uimodel::TrackColumnLayouts::Snapshot{};
+      state[ListId{7}] = {
         uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123},
       };
-      auto prefState = uimodel::ListPresentationPreferenceState{};
+      auto prefState = uimodel::ListPresentations::Snapshot{};
       store.load(state, prefState);
 
-      REQUIRE(state.listLayouts.size() == 1);
-      REQUIRE(state.listLayouts.contains(ListId{7}));
-      REQUIRE(state.listLayouts[ListId{7}].size() == 1);
-      CHECK(state.listLayouts[ListId{7}][0].field == rt::TrackField::Artist);
-      CHECK(state.listLayouts[ListId{7}][0].width == 123);
+      REQUIRE(state.size() == 1);
+      REQUIRE(state.contains(ListId{7}));
+      REQUIRE(state[ListId{7}].size() == 1);
+      CHECK(state[ListId{7}][0].field == rt::TrackField::Artist);
+      CHECK(state[ListId{7}][0].width == 123);
     }
 
     SECTION("Reject unversioned presentation preferences without changing seeded state")
@@ -120,13 +119,13 @@ namespace ao::gtk::test
       output.close();
 
       auto const store = GtkLayoutStateStore{libraryPath};
-      auto state = uimodel::TrackColumnLayoutState{};
-      auto prefState = uimodel::ListPresentationPreferenceState{};
-      prefState.presentations[ListId{7}] = "artists";
+      auto state = uimodel::TrackColumnLayouts::Snapshot{};
+      auto prefState = uimodel::ListPresentations::Snapshot{};
+      prefState[ListId{7}] = "artists";
       store.load(state, prefState);
 
-      REQUIRE(prefState.presentations.size() == 1);
-      CHECK(prefState.presentations.at(ListId{7}) == "artists");
+      REQUIRE(prefState.size() == 1);
+      CHECK(prefState.at(ListId{7}) == "artists");
     }
 
     SECTION("Load a valid sibling group when the column layout group is unsupported")
@@ -143,18 +142,18 @@ namespace ao::gtk::test
       std::ofstream{libraryPath / "gtk_layout.yaml"} << stored;
 
       auto const store = GtkLayoutStateStore{libraryPath};
-      auto state = uimodel::TrackColumnLayoutState{};
-      state.listLayouts[ListId{7}] = {
+      auto state = uimodel::TrackColumnLayouts::Snapshot{};
+      state[ListId{7}] = {
         uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123},
       };
-      auto prefState = uimodel::ListPresentationPreferenceState{};
-      prefState.presentations[ListId{7}] = "artists";
+      auto prefState = uimodel::ListPresentations::Snapshot{};
+      prefState[ListId{7}] = "artists";
       store.load(state, prefState);
 
-      REQUIRE(state.listLayouts.size() == 1);
-      CHECK(state.listLayouts.contains(ListId{7}));
-      REQUIRE(prefState.presentations.size() == 1);
-      CHECK(prefState.presentations.at(ListId{42}) == "albums");
+      REQUIRE(state.size() == 1);
+      CHECK(state.contains(ListId{7}));
+      REQUIRE(prefState.size() == 1);
+      CHECK(prefState.at(ListId{42}) == "albums");
       // Reading a group this build cannot understand must not cost the user the
       // document a later build can: loading never rewrites the file.
       CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == stored);
@@ -163,17 +162,17 @@ namespace ao::gtk::test
     SECTION("Serialization failure leaves both durable groups unchanged")
     {
       auto store = GtkLayoutStateStore{libraryPath};
-      auto state = uimodel::TrackColumnLayoutState{};
-      state.listLayouts[ListId{10}] = {
+      auto state = uimodel::TrackColumnLayouts::Snapshot{};
+      state[ListId{10}] = {
         uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123},
       };
-      auto prefState = uimodel::ListPresentationPreferenceState{};
-      prefState.presentations[ListId{10}] = "albums";
+      auto prefState = uimodel::ListPresentations::Snapshot{};
+      prefState[ListId{10}] = "albums";
       store.save(state, prefState);
       auto const before = ao::test::readFile(libraryPath / "gtk_layout.yaml");
 
-      state.listLayouts[ListId{10}][0].width = 456;
-      prefState.presentations[kInvalidListId] = "invalid";
+      state[ListId{10}][0].width = 456;
+      prefState[kInvalidListId] = "invalid";
       store.save(state, prefState);
 
       CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == before);

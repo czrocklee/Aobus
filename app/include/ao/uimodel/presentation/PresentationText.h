@@ -30,12 +30,6 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  enum class ListMembershipOperation : std::uint8_t
-  {
-    Add,
-    Remove,
-  };
-
   struct TrackPresentationText final
   {
     std::string_view label{};
@@ -99,13 +93,6 @@ namespace ao::uimodel
                                      std::size_t count,
                                      bool isAllTracks,
                                      bool localEmpty);
-  std::string formatListMembershipMessage(i18n::MessageCatalog const& catalog,
-                                          rt::AuthoringStatus status,
-                                          ListMembershipOperation operation,
-                                          std::string_view listName,
-                                          std::string_view tagExpression,
-                                          std::size_t changedTrackCount,
-                                          std::size_t forgottenPositionCount);
   std::string trackChannelText(i18n::MessageCatalog const& catalog, std::uint8_t channels);
   std::string_view transportControlLabel(i18n::MessageCatalog const& catalog, PlaybackCommand command) noexcept;
   std::string_view playbackActionLabel(i18n::MessageCatalog const& catalog, PlaybackCommand command) noexcept;

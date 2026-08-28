@@ -7,16 +7,11 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
-#include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
-#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -41,13 +36,13 @@ namespace ao::gtk::layout::test
 
     SECTION("actionButton builds from YAML and binds actions")
     {
-      auto actionRegistry = ActionRegistry{};
-      auto runtimeState = uimodel::LayoutRuntimeState{};
+      auto actionRegistry = ActionRegistry{registry.schema()};
+      auto buildSnapshot = activateBuildSnapshot(fixture.session());
       auto actionCtx = LayoutBuildContext{.registry = registry,
                                           .actionRegistry = actionRegistry,
                                           .parentWindow = fixture.window(),
-                                          .runtimeState = runtimeState,
-                                          .buildState = uimodel::LayoutBuildStateView{runtimeState}};
+                                          .session = fixture.session(),
+                                          .buildSnapshot = std::move(buildSnapshot)};
       auto const* const yaml = R"(
       type: actionButton
       props:
@@ -66,17 +61,13 @@ namespace ao::gtk::layout::test
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
 
-      actionRegistry.registerAction(LayoutActionDescriptor{.id = "shell.showSystemMenu",
-                                                           .label = "System Menu",
-                                                           .category = "Shell",
-                                                           .capabilities = LayoutActionCapability::None},
-                                    [&](ActionActivationContext&) { primaryFired++; });
+      actionRegistry.registerAction(
+        ActionSchema{.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell", .capabilities = 0},
+        [&](ActionActivationContext&) { primaryFired++; });
 
-      actionRegistry.registerAction(LayoutActionDescriptor{.id = "shell.showSoul",
-                                                           .label = "Show Soul",
-                                                           .category = "Shell",
-                                                           .capabilities = LayoutActionCapability::None},
-                                    [&](ActionActivationContext&) { longPressFired++; });
+      actionRegistry.registerAction(
+        ActionSchema{.id = "shell.showSoul", .label = "Show Soul", .category = "Shell", .capabilities = 0},
+        [&](ActionActivationContext&) { longPressFired++; });
 
       auto const compPtr = registry.create(actionCtx, layoutNode);
       REQUIRE(compPtr != nullptr);
@@ -94,16 +85,17 @@ namespace ao::gtk::layout::test
 
     SECTION("actionButton exposes enum properties for editor")
     {
-      auto const optDesc = registry.descriptor("actionButton");
-      REQUIRE(optDesc);
+      auto const optComponentSchema = registry.schema().component("actionButton");
+      REQUIRE(optComponentSchema);
 
-      auto const it = std::find_if(
-        optDesc->props.begin(), optDesc->props.end(), [](auto const& p) { return p.name == "primaryAction"; });
-      REQUIRE(it != optDesc->props.end());
-      CHECK(it->kind == LayoutPropertyKind::Enum);
+      auto const it = std::find_if(optComponentSchema->properties.begin(),
+                                   optComponentSchema->properties.end(),
+                                   [](auto const& p) { return p.name == "primaryAction"; });
+      REQUIRE(it != optComponentSchema->properties.end());
+      CHECK(it->kind == PropertyKind::Enum);
       CHECK(it->enumValues.empty());
-      REQUIRE(it->optActionBinding);
-      CHECK(it->optActionBinding->slot == LayoutActionSlot::PrimaryClick);
+      REQUIRE(it->optActionSlot);
+      CHECK(*it->optActionSlot == ActionSlot::PrimaryClick);
     }
 
     SECTION("custom playback row YAML builds without errors")

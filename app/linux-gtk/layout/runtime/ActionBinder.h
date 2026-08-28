@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <functional>
-#include <string_view>
 
 namespace Gtk
 {
@@ -27,15 +27,15 @@ namespace ao::gtk::layout
     /**
      * @brief Binds a layout action to a property.
      * @param node The layout node.
-     * @param propName The property name containing the action ID.
-     * @param defaultActionId The default action ID if the property is missing.
+     * @param schema The component schema that owns the action slot.
+     * @param slot The interaction slot to resolve.
      * @param anchorWidget The anchor widget for the action context.
      *                     NOTE: The caller must ensure 'anchorWidget' outlives the returned function.
      * @return A function that activates the action.
      */
     std::function<void()> bind(uimodel::LayoutNode const& node,
-                               std::string_view propName,
-                               std::string_view defaultActionId,
+                               uimodel::ComponentSchema const& schema,
+                               uimodel::ActionSlot slot,
                                Gtk::Widget& anchorWidget) const;
 
   private:

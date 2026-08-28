@@ -22,11 +22,10 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/property/TagEdit.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/menu.h>
@@ -303,7 +302,7 @@ namespace ao::gtk
                 presentPropertiesDialog();
               });
 
-    auto const lists = _runtime.library().reader().lists();
+    auto const lists = _runtime.library().snapshot().lists();
     auto const targets = uimodel::writableTagListTargets(lists, _runtime.textOrderingPolicy());
     auto addToListMenuPtr = Gio::Menu::create();
     std::size_t addTargetCount = 0;
@@ -473,8 +472,8 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(
-      _runtime.library(), _optActiveSelection->selectedIds, _textCatalog);
+    auto sessionRes =
+      uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), _optActiveSelection->selectedIds);
 
     if (!sessionRes)
     {
@@ -499,11 +498,13 @@ namespace ao::gtk
                     return;
                   }
 
+                  auto const notificationText =
+                    uimodel::formatListMembershipEditNotification(owner->_textCatalog, *result);
+
                   if (result->status == rt::AuthoringStatus::Busy)
                   {
-                    owner->_runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                                         result->notificationText,
-                                                         rt::NotificationLifetime::transient());
+                    owner->_runtime.notifications().post(
+                      rt::NotificationSeverity::Warning, notificationText, rt::NotificationLifetime::transient());
                     return;
                   }
 
@@ -511,7 +512,7 @@ namespace ao::gtk
                     result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable;
                   owner->_runtime.notifications().post(
                     failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
-                    result->notificationText,
+                    notificationText,
                     failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
 
                   if (result->status == rt::AuthoringStatus::Applied && owner->_callbacks.onTagsMutated)

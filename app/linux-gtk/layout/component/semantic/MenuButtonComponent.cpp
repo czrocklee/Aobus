@@ -8,8 +8,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <giomm/menumodel.h>
@@ -69,14 +68,14 @@ namespace ao::gtk::layout
                                    Glib::RefPtr<Gio::MenuModel> const& menuModelPtr,
                                    i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::MenuButton),
-                          {{.name = "icon", .kind = LayoutPropertyKind::String, .label = "Icon (Symbolic)"},
-                           {.name = "style",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Style",
-                            .defaultValue = LayoutValue{"flat"},
-                            .enumValues = {"flat", "raised"}}}),
+    registry.registerSharedComponent(
+      "menuButton",
+      {.properties = {{.name = "icon", .kind = PropertyKind::String, .label = "Icon (Symbolic)"},
+                      {.name = "style",
+                       .kind = PropertyKind::Enum,
+                       .label = "Style",
+                       .defaultValue = LayoutValue{"flat"},
+                       .enumValues = {"flat", "raised"}}}},
       [menuModelPtr, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       { return std::make_unique<MenuButtonComponent>(menuModelPtr, textCatalog, node); });
   }

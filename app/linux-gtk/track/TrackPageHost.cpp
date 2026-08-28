@@ -20,10 +20,10 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -46,7 +46,7 @@ namespace ao::gtk
                                rt::AppRuntime& runtime,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
-                               uimodel::TrackColumnLayoutStore& layoutStore,
+                               uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
                                rt::ResourceByteLoader& byteLoader)
     : _stack{stack}
@@ -54,7 +54,7 @@ namespace ao::gtk
     , _textCatalog{std::move(textCatalog)}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
-    , _layoutStore{layoutStore}
+    , _columnLayouts{columnLayouts}
     , _thumbnailLoader{byteLoader, _thumbnailCache, _runtime.async()}
   {
     _revealSub =
@@ -369,7 +369,7 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr = std::make_unique<TrackViewPage>(
-      listId, modelPtr, _layoutStore, _textCatalog, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
+      listId, modelPtr, _columnLayouts, _textCatalog, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
@@ -377,7 +377,7 @@ namespace ao::gtk
 
     if (!rt::isVirtualListId(listId))
     {
-      auto scope = _runtime.library().reader();
+      auto scope = _runtime.library().snapshot();
 
       if (auto optNode = scope.listNode(listId); optNode)
       {

@@ -7,13 +7,15 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "layout/runtime/ShellLibraryAccess.h"
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
-#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -168,6 +170,7 @@ namespace ao::winui::layout
 
     Result<> build(ShellPreset preset);
     void registerActions();
+    void registerComponents();
     void installKeyboardAccelerators();
     PaneSettingsAccess paneSettings();
     MenuComposer menus();
@@ -179,13 +182,9 @@ namespace ao::winui::layout
 
     LibrarySession& _session;
     ShellBuilderConfig _config;
-    ComponentRegistry _registry;
+    uimodel::LayoutSchema _schema;
     ActionRegistry _actions;
-    /// Narrow session operations retained for generation components.
-    ShellLibraryAccess _libraryAccess;
-    /// Component runtime state, kept across generations so a rebuild restores it.
-    uimodel::LayoutRuntimeState _runtimeState;
-
+    ComponentRegistry _registry;
     // These sources outlive the host so every component subscription disconnects
     // before the signal it observes is destroyed.
     ShellState _shellState = ShellStatePolicy::resolve(ShellMode::Modern, ShellStatePolicy::kWideWidth, std::nullopt);

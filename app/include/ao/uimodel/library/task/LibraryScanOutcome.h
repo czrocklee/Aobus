@@ -4,16 +4,38 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <optional>
+#include <stop_token>
+
+namespace ao::rt
+{
+  class LibraryJobs;
+}
 
 namespace ao::uimodel
 {
+  enum class LibraryScanMode : std::uint8_t
+  {
+    Eager,
+    FastBootstrap
+  };
+
+  struct LibraryScanPlanSummary final
+  {
+    std::size_t newCount = 0;
+    std::size_t changedCount = 0;
+    std::size_t movedCount = 0;
+    std::size_t missingCount = 0;
+    std::size_t errorCount = 0;
+
+    friend bool operator==(LibraryScanPlanSummary const&, LibraryScanPlanSummary const&) = default;
+  };
+
   /// What a finished scan amounts to for the person who asked for it.
   enum class LibraryScanVerdict : std::uint8_t
   {
@@ -67,15 +89,8 @@ namespace ao::uimodel
    */
   rt::NotificationLifetime libraryScanLifetime(LibraryScanVerdict verdict) noexcept;
 
-  /**
-   * @brief What @p result means, and the diagnostics that go with it.
-   *
-   * Also writes the plan summary and any failure to the log, and the unreadable
-   * files when nothing was applied. Reading a scan and recording what it saw is
-   * one pass over the same data, and splitting them is how one shell ends up
-   * with diagnostics the other silently lacks. An applied plan reports its own
-   * failed items as it reaches them, so those are not repeated here.
-   */
-  LibraryScanOutcome decideLibraryScanOutcome(
-    std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure> const& result);
+  /** Run a scan and reduce every internal planning/apply state to one shell-facing outcome. */
+  async::Task<LibraryScanOutcome> runLibraryScan(rt::LibraryJobs* jobs,
+                                                 LibraryScanMode mode,
+                                                 std::stop_token stopToken = {});
 } // namespace ao::uimodel

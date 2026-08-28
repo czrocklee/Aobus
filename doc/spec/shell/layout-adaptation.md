@@ -11,7 +11,7 @@ summary: Defines GTK allocation-driven responsiveness, raster targets, responsiv
 
 This specification owns GTK-specific adaptation of declarative shell structure to live widget allocation.
 It defines logical sizing, responsive CSS buckets, image render targets, fixed-slot guidance, and the collapsible split interaction.
-Exact component property names and defaults belong to the [layout catalog reference](../../reference/shell/layout-catalog.md).
+Exact component property names and defaults belong to the [GTK layout schema reference](../../reference/shell/layout-schema.md).
 
 ## Code boundary
 
@@ -115,4 +115,4 @@ Compressible custom children may request zero minimum along an axis so labels or
 - [Shell layout lifecycle](layout-lifecycle.md)
 - [Layout document reference](../../reference/shell/layout-document.md)
 - [Layout component-state reference](../../reference/shell/layout-state.md)
-- [Layout catalog reference](../../reference/shell/layout-catalog.md)
+- [GTK layout schema reference](../../reference/shell/layout-schema.md)

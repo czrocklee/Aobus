@@ -8,6 +8,8 @@
 #   -DROOTS="<semicolon-separated list of source directories>"
 #   -DFORBIDDEN_REGEX="<regex>"
 #   -DFORBIDDEN_REGEX_FILE="<path>"
+#   -DALLOWED_REGEX="<regex>"
+#   -DALLOWED_REGEX_FILE="<path>"
 #   -DEXCLUDE_REGEX="<regex>"
 #   -DEXCLUDE_REGEX_FILE="<path>"
 #   -DMODE="<report|enforce>"
@@ -35,6 +37,13 @@ if(FORBIDDEN_REGEX_FILE)
   file(READ "${FORBIDDEN_REGEX_FILE}" _regex)
 elseif(FORBIDDEN_REGEX)
   set(_regex "${FORBIDDEN_REGEX}")
+endif()
+
+set(_allowed_regex "")
+if(ALLOWED_REGEX_FILE)
+  file(READ "${ALLOWED_REGEX_FILE}" _allowed_regex)
+elseif(ALLOWED_REGEX)
+  set(_allowed_regex "${ALLOWED_REGEX}")
 endif()
 
 set(_exclude_regex "")
@@ -73,10 +82,15 @@ foreach(root IN LISTS ROOTS)
     endif()
 
     file(READ "${source}" content)
+    set(scanned_content "${content}")
 
-    if(content MATCHES "${_regex}")
+    if(_allowed_regex)
+      string(REGEX REPLACE "${_allowed_regex}" "" scanned_content "${scanned_content}")
+    endif()
+
+    if(scanned_content MATCHES "${_regex}")
       # Extract the matched text for a helpful message.
-      string(REGEX MATCH "${_regex}" matched_line "${content}")
+      string(REGEX MATCH "${_regex}" matched_line "${scanned_content}")
       set(_finding "Forbidden dependency in ${source}: '${matched_line}'")
       list(APPEND _findings "${_finding}")
       math(EXPR _finding_count "${_finding_count} + 1")

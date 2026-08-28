@@ -233,8 +233,8 @@ add_library(ao_app_runtime STATIC
     runtime/CoreRuntime.cpp
     runtime/library/Library.cpp
     runtime/library/LibraryPaths.cpp
-    runtime/library/LibraryMutationService.cpp
-    runtime/library/LibraryReader.cpp
+    runtime/library/LibraryWriteLane.cpp
+    runtime/library/LibrarySnapshot.cpp
     runtime/library/LibraryChanges.cpp
     runtime/library/MediaTrack.cpp
     runtime/library/TrackBuilderSnapshot.cpp
@@ -260,7 +260,7 @@ add_library(ao_app_runtime STATIC
     runtime/playback/PreparedNextRegistry.cpp
     runtime/playback/ProjectionAnchor.cpp
     runtime/playback/ShuffleHistory.cpp
-    runtime/library/LibraryWriter.cpp
+    runtime/library/LibraryCommands.cpp
     runtime/library/AudioIdentityBatchWriter.cpp
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
@@ -268,7 +268,7 @@ add_library(ao_app_runtime STATIC
     runtime/library/ScanApplyOperation.cpp
     runtime/library/ResourceCarrierIndex.cpp
     runtime/library/ResourceMaterialization.cpp
-    runtime/library/LibraryTaskService.cpp
+    runtime/library/LibraryJobs.cpp
     runtime/resource/ResourceByteCache.cpp
     runtime/resource/ResourceByteLoader.cpp
     runtime/resource/ResourceDiskCache.cpp
@@ -305,8 +305,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
   set_property(
     SOURCE
-      runtime/library/LibraryTaskService.cpp
-      runtime/library/LibraryWriter.cpp
+      runtime/library/LibraryJobs.cpp
+      runtime/library/LibraryCommands.cpp
     APPEND PROPERTY COMPILE_OPTIONS -Wno-mismatched-new-delete)
 endif()
 
@@ -332,16 +332,11 @@ endif()
 add_library(ao_app_uimodel STATIC
     uimodel/presentation/CoverArtPlaceholder.cpp
     uimodel/presentation/PresentationText.cpp
-    uimodel/layout/action/LayoutActionCatalog.cpp
-    uimodel/layout/action/LayoutActionSlotResolution.cpp
-    uimodel/layout/action/LayoutActionValidator.cpp
+    uimodel/layout/component/LayoutSchema.cpp
+    uimodel/layout/shell/LayoutSession.cpp
     uimodel/layout/component/AbsoluteCanvasGeometry.cpp
-    uimodel/layout/component/LayoutComponentActionPolicy.cpp
-    uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
-    uimodel/layout/component/SharedLayoutComponentType.cpp
-    uimodel/layout/component/StatefulComponentState.cpp
     uimodel/layout/document/LayoutDocument.cpp
     uimodel/layout/document/LayoutDocumentLoader.cpp
     uimodel/layout/document/LayoutNodeId.cpp
@@ -349,66 +344,60 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/document/LayoutPreparation.cpp
     uimodel/layout/document/LayoutValidation.cpp
     uimodel/layout/document/LayoutValue.cpp
-    uimodel/layout/shell/LayoutBuildStateView.cpp
     uimodel/layout/shell/ShellGenerationSequence.cpp
-    uimodel/layout/shell/ShellLayoutSessionModel.cpp
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeyRepeatGuard.cpp
     uimodel/input/KeymapStore.cpp
     uimodel/preference/PreferencesEditorModel.cpp
-    uimodel/field/TrackFieldEditCodec.cpp
-    uimodel/field/TrackFieldEditPolicy.cpp
     uimodel/field/TrackFieldFormatter.cpp
     uimodel/library/detail/TrackCustomMetadata.cpp
-    uimodel/library/detail/TrackFieldGridSchema.cpp
-    uimodel/library/list/ListActionPolicy.cpp
-    uimodel/library/list/ListMembershipAuthoringSession.cpp
+    uimodel/library/detail/TrackFieldGrid.cpp
+    uimodel/library/list/ListActions.cpp
+    uimodel/library/list/ListAuthoring.cpp
     uimodel/library/list/ListOrderAuthoringSession.cpp
-    uimodel/library/list/ListOrderPolicy.cpp
+    uimodel/library/list/ListOrder.cpp
     uimodel/library/list/ListTreeProjection.cpp
-    uimodel/library/list/SmartListEditorModel.cpp
-    uimodel/library/list/SmartListTrackPresentationResolver.cpp
-    uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
+    uimodel/library/list/SmartListEditing.cpp
     uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp
-    uimodel/library/presentation/TrackColumnLayoutStore.cpp
+    uimodel/library/presentation/TrackColumnLayouts.cpp
     uimodel/library/presentation/TrackColumnWidthSolver.cpp
     uimodel/library/presentation/CustomPresentationEditorModel.cpp
     uimodel/library/presentation/TrackGroupHeadingPresentation.cpp
-    uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
+    uimodel/library/presentation/TrackColumnDefaults.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp
     uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp
-    uimodel/library/presentation/ListPresentationPreferenceLifecycle.cpp
-    uimodel/library/presentation/ListPresentationPreferenceStore.cpp
-    uimodel/library/presentation/TrackPresentationRecommender.cpp
+    uimodel/library/presentation/ListPresentations.cpp
+    uimodel/library/presentation/ListPresentationRecommendation.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp
     uimodel/library/property/TagEdit.cpp
-    uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
     uimodel/library/task/LibraryScanOutcome.cpp
     uimodel/library/task/LibraryScanWorkflow.cpp
+    uimodel/library/track/ListMembershipAuthoringSession.cpp
+    uimodel/library/track/TrackAuthoring.cpp
+    uimodel/library/track/TrackAuthoringSession.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
     uimodel/library/track/TrackFilterPolicy.cpp
     uimodel/library/track/TrackFilterCompleter.cpp
-    uimodel/library/track/TrackFilterResolver.cpp
+    uimodel/library/track/TrackFilter.cpp
     uimodel/library/track/TrackFilterViewModel.cpp
     uimodel/library/track/TrackPageRoute.cpp
     uimodel/library/track/IndexedTrackRowCache.cpp
     uimodel/library/track/TrackDisplayIndex.cpp
     uimodel/playback/command/PlaybackCommand.cpp
-    uimodel/playback/command/PlaybackCommandSurface.cpp
+    uimodel/playback/command/PlaybackActions.cpp
     uimodel/playback/now-playing/NowPlayingViewModel.cpp
     uimodel/playback/output/OutputDeviceIntent.cpp
-    uimodel/playback/output/OutputDeviceSelectionPolicy.cpp
+    uimodel/playback/output/OutputSelection.cpp
     uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
-    uimodel/playback/seek/PlaybackClockChangeFilter.cpp
     uimodel/playback/seek/PlaybackPositionInterpolator.cpp
-    uimodel/playback/seek/PlaybackPositionViewModel.cpp
+    uimodel/playback/seek/PlaybackPosition.cpp
     uimodel/playback/seek/PlaybackTimeFormatter.cpp
-    uimodel/playback/seek/SeekSliderInteractionModel.cpp
+    uimodel/playback/seek/SeekInteraction.cpp
     uimodel/playback/soul/AobusSoulViewModel.cpp
     uimodel/playback/transport/TransportViewModel.cpp
     uimodel/status/activity/ActivityStatusFeedProjection.cpp
@@ -444,7 +433,7 @@ add_custom_target(ao_uimodel_organization_guardrail
 
 # A frontend's own vocabulary is not a shared model, however portable its code
 # is. The guardrail names the frontends rather than a spelling of "platform"
-# because a frontend-owned LayoutCatalog.h passes every include check there is:
+# because a frontend-owned LayoutSchema.h passes every include check there is:
 # it has no platform includes to find.
 add_custom_target(ao_uimodel_frontend_vocabulary_guardrail
   COMMAND ${CMAKE_COMMAND}
@@ -463,7 +452,7 @@ set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|Backe
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
 set(AO_RUNTIME_WRITE_TRANSACTION_REGEX "(^|[^A-Za-z0-9_])writeTransaction[ \t\r\n]*\\(")
 set(AO_RUNTIME_WRITE_TRANSACTION_OWNER_REGEX
-  "/app/runtime/library/(LibraryMutationService|LibraryYamlImporter|ScanApplyOperation)[.]cpp$")
+  "/app/runtime/library/(LibraryWriteLane|LibraryYamlImporter|ScanApplyOperation)[.]cpp$")
 set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
 # CMake regexes have no word-boundary escape, so delimit the exact legacy
 # vocabulary without rejecting adjacent type or namespace names.
@@ -522,7 +511,45 @@ set(AO_FORBIDDEN_CLI_LOCALIZATION_REGEX
   "#[ \t]*include[ \t]*[<\"]ao/i18n/")
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
-set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
+# Reject every commands() accessor in a frontend after removing calls whose
+# receiver is explicitly Playback-shaped. This also catches a Library hidden
+# behind an auto alias, while preserving PlaybackService::commands().
+set(AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX
+  "(\\.|->)[ \t\r\n]*commands[ \t\r\n]*\\(")
+set(AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX
+  "[A-Za-z0-9_]*[Pp]layback[A-Za-z0-9_]*[ \t\r\n]*(\\([ \t\r\n]*\\))?[ \t\r\n]*(\\.|->)[ \t\r\n]*commands[ \t\r\n]*\\(")
+foreach(AO_FRONTEND_LIBRARY_COMMANDS_SPELLING IN ITEMS
+    "runtime.library().commands()"
+    "_library.commands()"
+    "libraryPtr->commands()"
+    "lib.commands()")
+  set(AO_FILTERED_FRONTEND_COMMANDS_SPELLING "${AO_FRONTEND_LIBRARY_COMMANDS_SPELLING}")
+  string(REGEX REPLACE
+    "${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX}"
+    ""
+    AO_FILTERED_FRONTEND_COMMANDS_SPELLING
+    "${AO_FILTERED_FRONTEND_COMMANDS_SPELLING}"
+  )
+  if(NOT "${AO_FILTERED_FRONTEND_COMMANDS_SPELLING}" MATCHES "${AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX}")
+    message(FATAL_ERROR "Library command guardrail does not reject '${AO_FRONTEND_LIBRARY_COMMANDS_SPELLING}'")
+  endif()
+endforeach()
+foreach(AO_FRONTEND_PLAYBACK_COMMANDS_SPELLING IN ITEMS
+    "runtime.playback().commands()"
+    "_playback.commands()"
+    "playbackPtr->commands()")
+  set(AO_FILTERED_FRONTEND_COMMANDS_SPELLING "${AO_FRONTEND_PLAYBACK_COMMANDS_SPELLING}")
+  string(REGEX REPLACE
+    "${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX}"
+    ""
+    AO_FILTERED_FRONTEND_COMMANDS_SPELLING
+    "${AO_FILTERED_FRONTEND_COMMANDS_SPELLING}"
+  )
+  if("${AO_FILTERED_FRONTEND_COMMANDS_SPELLING}" MATCHES "${AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX}")
+    message(FATAL_ERROR "Library command guardrail rejects '${AO_FRONTEND_PLAYBACK_COMMANDS_SPELLING}'")
+  endif()
+endforeach()
+set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${AO_FORBIDDEN_FRONTEND_LIBRARY_COMMANDS_REGEX}")
 set(AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX
   "ao/yaml/Reflect[.]h|namespace[ \t\r\n]+ao::yaml")
 set(AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX
@@ -546,6 +573,11 @@ ao_write_guardrail_regex(
   "${AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX}"
 )
 ao_write_guardrail_regex(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE "frontend-core" "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
+ao_write_guardrail_regex(
+  AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX_FILE
+  "frontend-playback-commands"
+  "${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX}"
+)
 ao_write_guardrail_regex(
   AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE
   "frontend-library-path"
@@ -746,6 +778,7 @@ if(AOBUS_BUILD_GTK)
     COMMAND ${CMAKE_COMMAND}
             "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk"
             "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+            "-DALLOWED_REGEX_FILE=${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX_FILE}"
             -DMODE=enforce
             -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
     COMMENT "Checking direct storage/library includes in linux-gtk"
@@ -758,6 +791,7 @@ if(AOBUS_BUILD_TUI)
     COMMAND ${CMAKE_COMMAND}
             "-DROOTS=${CMAKE_SOURCE_DIR}/app/tui"
             "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+            "-DALLOWED_REGEX_FILE=${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX_FILE}"
             -DMODE=enforce
             -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
     COMMENT "Checking direct storage/library dependencies in the TUI"
@@ -769,6 +803,7 @@ add_custom_target(ao_windows_winui_core_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/windows-winui"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+          "-DALLOWED_REGEX_FILE=${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking direct storage/library dependencies in the WinUI frontend"
@@ -779,6 +814,7 @@ add_custom_target(ao_app_desktop_core_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/desktop;${CMAKE_SOURCE_DIR}/app/desktop"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+          "-DALLOWED_REGEX_FILE=${AO_ALLOWED_FRONTEND_PLAYBACK_COMMANDS_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking direct storage/library dependencies in ao_app_desktop"

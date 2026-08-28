@@ -21,7 +21,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -41,7 +41,7 @@ namespace ao::rt::test::playback_succession
   PlaybackSuccessionSeekFixture::PlaybackSuccessionSeekFixture(audio::test::StagedFailureGate* const failureGate)
     : asyncRuntime{executor}
     , changes{executor, 0, "test-library"}
-    , writerFixture{libraryFixture.library(), changes, executor}
+    , commandsFixture{libraryFixture.library(), changes, executor}
     , sources{libraryFixture.library(), changes}
     , views{executor, libraryFixture.library(), sources, changes}
     , workspace{executor, views, changes}
@@ -87,19 +87,19 @@ namespace ao::rt::test::playback_succession
 
   PlaybackSuccessionSeekFixture::~PlaybackSuccessionSeekFixture() = default;
 
-  LibraryWriter& PlaybackSuccessionSeekFixture::writer()
+  LibraryCommands& PlaybackSuccessionSeekFixture::commands()
   {
-    return writerFixture.writer();
+    return commandsFixture.commands();
   }
 
   TrackId PlaybackSuccessionSeekFixture::addPlayableTrack(std::string title)
   {
     auto const playableUri = std::format("seek-playable-{}.flac", nextPlayableFile++);
     audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
-    auto const created =
-      ao::test::requireValue(writerFixture.runTask(writer().createTrackFromFile(libraryFixture.root() / playableUri)));
+    auto const created = ao::test::requireValue(
+      commandsFixture.runTask(commands().createTrackFromFile(libraryFixture.root() / playableUri)));
     executor.drain();
-    REQUIRE(writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
+    REQUIRE(commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
     executor.drain();
     return created.trackId;
   }
@@ -110,7 +110,7 @@ namespace ao::rt::test::playback_succession
     secondTrackId = addPlayableTrack("Second");
     thirdTrackId = addPlayableTrack("Third");
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(writerFixture.runTask(writer().createList(ListDraft{
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createList(ListDraft{
       .name = "Long playback order",
     })));
     viewId = ao::test::requireValue(workspace.navigate({.target = listId}));
@@ -122,7 +122,7 @@ namespace ao::rt::test::playback_succession
   {
     firstTrackId = addPlayableTrack("Failing current");
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(writerFixture.runTask(writer().createList(ListDraft{
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createList(ListDraft{
       .name = "Failing playback order",
     })));
     viewId = ao::test::requireValue(workspace.navigate({.target = listId}));

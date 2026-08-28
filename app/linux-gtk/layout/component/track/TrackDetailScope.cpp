@@ -13,7 +13,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/adjustment.h>
@@ -159,10 +159,10 @@ namespace ao::gtk::layout
   void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
   {
     registry.registerComponent(
-      {.type = "track.detailScope",
+      {.id = "track.detailScope",
        .displayName = "Detail Scope",
-       .category = LayoutComponentCategory::Track,
-       .layoutProps = {{.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},
+       .category = ComponentCategory::Track,
+       .layoutProperties = {{.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1},
       [&runtime](LayoutBuildContext& ctx, LayoutNode const& node)
       { return std::make_unique<TrackDetailScopeComponent>(runtime, ctx, node); });

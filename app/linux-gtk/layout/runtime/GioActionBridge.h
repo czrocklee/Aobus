@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ActionRegistry.h"
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <giomm/actionmap.h>
 #include <glibmm/refptr.h>
@@ -36,10 +36,10 @@ namespace ao::gtk::layout
 
     /**
      * @brief Checks if this context provider can supply a safe anchor widget for a specific action.
-     * @param desc The descriptor of the action being checked.
+     * @param actionSchema The action schema entry of the action being checked.
      * @return true if a safe anchor can be guaranteed for the action's semantics.
      */
-    virtual bool canProvideSafeAnchor([[maybe_unused]] uimodel::LayoutActionDescriptor const& desc) const
+    virtual bool canProvideSafeAnchor([[maybe_unused]] uimodel::ActionSchema const& actionSchema) const
     {
       return false;
     }

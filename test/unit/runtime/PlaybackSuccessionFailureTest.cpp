@@ -136,7 +136,7 @@ namespace ao::rt::test
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     REQUIRE(failureGate.waitForRead());
 
-    REQUIRE(fixture.writerFixture.runTask(fixture.writer().deleteList(fixture.listId)));
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
     REQUIRE(fixture.executor.drainUntil(
       [&] { return fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Invalidated; }));
     releaseGuard.release();

@@ -12,6 +12,23 @@ namespace ao::uimodel
 {
   struct LayoutNode;
 }
+namespace ao::rt
+{
+  class ResourceByteLoader;
+  class WorkspaceService;
+}
+namespace ao::async
+{
+  class Runtime;
+}
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+namespace ao::winui
+{
+  class ThemeCoordinator;
+}
 
 namespace ao::winui::layout
 {
@@ -26,5 +43,11 @@ namespace ao::winui::layout
    * its own, though - the frame gives it a width, and it keeps itself square
    * inside whatever it is given.
    */
-  Result<std::unique_ptr<LayoutComponent>> makeTrackCoverArt(LayoutBuildContext& ctx, uimodel::LayoutNode const& node);
+  Result<std::unique_ptr<LayoutComponent>> makeTrackCoverArt(LayoutBuildContext& ctx,
+                                                             uimodel::LayoutNode const& node,
+                                                             async::Runtime& asyncRuntime,
+                                                             rt::WorkspaceService& workspace,
+                                                             rt::ResourceByteLoader& resourceBytes,
+                                                             ThemeCoordinator& theme,
+                                                             i18n::MessageCatalog textCatalog);
 } // namespace ao::winui::layout

@@ -7,8 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "status/ActivityStatusWidget.h"
 #include <ao/rt/library/Library.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -69,13 +68,13 @@ namespace ao::gtk::layout
     {
     public:
       ActivityStatusComponent(rt::NotificationService& notifications,
-                              rt::LibraryTaskService& libraryTasks,
+                              rt::LibraryJobs& libraryJobs,
                               i18n::MessageCatalog const& textCatalog,
                               LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
             .notifications = notifications,
             .textCatalog = textCatalog,
-            .libraryTasks = &libraryTasks,
+            .libraryJobs = &libraryJobs,
             .options = optionsFromNode(node),
           }}
       {
@@ -90,26 +89,26 @@ namespace ao::gtk::layout
 
   void registerActivityStatusComponent(ComponentRegistry& registry,
                                        rt::NotificationService& notifications,
-                                       rt::LibraryTaskService& libraryTasks,
+                                       rt::LibraryJobs& libraryJobs,
                                        i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(
-      withShellProperties(sharedComponentDescriptor(SharedLayoutComponentType::StatusActivity),
-                          {{.name = "variant",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Variant",
-                            .defaultValue = LayoutValue{"ambient"},
-                            .enumValues = {"ambient", "classicInline"}},
-                           {.name = "idleBehavior",
-                            .kind = LayoutPropertyKind::Enum,
-                            .label = "Idle Behavior",
-                            .defaultValue = LayoutValue{""},
-                            .enumValues = {"", "hidden", "reserve"}},
-                           {.name = "maxTextChars",
-                            .kind = LayoutPropertyKind::Int,
-                            .label = "Max Text Chars",
-                            .defaultValue = LayoutValue{kDefaultMaxTextChars}}}),
-      [&notifications, &libraryTasks, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
-      { return std::make_unique<ActivityStatusComponent>(notifications, libraryTasks, textCatalog, node); });
+    registry.registerSharedComponent(
+      "status.activity",
+      {.properties = {{.name = "variant",
+                       .kind = PropertyKind::Enum,
+                       .label = "Variant",
+                       .defaultValue = LayoutValue{"ambient"},
+                       .enumValues = {"ambient", "classicInline"}},
+                      {.name = "idleBehavior",
+                       .kind = PropertyKind::Enum,
+                       .label = "Idle Behavior",
+                       .defaultValue = LayoutValue{""},
+                       .enumValues = {"", "hidden", "reserve"}},
+                      {.name = "maxTextChars",
+                       .kind = PropertyKind::Int,
+                       .label = "Max Text Chars",
+                       .defaultValue = LayoutValue{kDefaultMaxTextChars}}}},
+      [&notifications, &libraryJobs, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
+      { return std::make_unique<ActivityStatusComponent>(notifications, libraryJobs, textCatalog, node); });
   }
 } // namespace ao::gtk::layout

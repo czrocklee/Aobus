@@ -434,7 +434,7 @@ namespace
     auto prefs = rt::AppPrefsState{};
     appConfigStorePtr->loadAppPrefs(prefs);
     preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playback(), targetWindow);
-    preferencesWindowPtr->refreshKeyboardPage(targetWindow->layoutActionCatalog(),
+    preferencesWindowPtr->refreshKeyboardPage(targetWindow->layoutSchema(),
                                               appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()),
                                               [appPtr](uimodel::KeymapModel const& keymap)
                                               {

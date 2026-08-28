@@ -19,7 +19,7 @@ namespace ao::rt
 namespace ao::uimodel
 {
   enum class PlaybackCommand : std::uint8_t;
-  class PlaybackCommandSurface;
+  class PlaybackActions;
 }
 
 namespace ao::gtk::platform
@@ -28,7 +28,7 @@ namespace ao::gtk::platform
   {
   public:
     MprisPlaybackEndpoint(rt::PlaybackService& playback,
-                          uimodel::PlaybackCommandSurface& commands,
+                          uimodel::PlaybackActions& actions,
                           MprisBridge::Callbacks& callbacks);
 
     bool dispatchPlayerMethod(std::string_view methodName) const;
@@ -47,7 +47,7 @@ namespace ao::gtk::platform
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _playbackCommands;
-    uimodel::PlaybackCommandSurface& _commands;
+    uimodel::PlaybackActions& _actions;
     MprisBridge::Callbacks& _callbacks;
   };
 } // namespace ao::gtk::platform

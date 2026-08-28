@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,8 +15,8 @@ namespace ao::uimodel::test
   TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves opaque presentation ids",
             "[uimodel][unit][presentation-preference]")
   {
-    auto state = ListPresentationPreferenceState{};
-    state.presentations[ListId{10}] = "plugin-preset";
+    auto state = ListPresentations::Snapshot{};
+    state[ListId{10}] = "plugin-preset";
 
     auto const documentRes = toListPresentationPreferenceDocument(state);
 
@@ -29,8 +29,8 @@ namespace ao::uimodel::test
     auto const decodedRes = listPresentationPreferenceStateFromDocument(*documentRes);
 
     REQUIRE(decodedRes);
-    REQUIRE(decodedRes->presentations.size() == 1);
-    CHECK(decodedRes->presentations.at(ListId{10}) == "plugin-preset");
+    REQUIRE((*decodedRes).size() == 1);
+    CHECK((*decodedRes).at(ListId{10}) == "plugin-preset");
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects an invalid document as one object",
@@ -83,8 +83,8 @@ namespace ao::uimodel::test
   TEST_CASE("ListPresentationPreferenceYamlSchema - owns the exact YAML mapping",
             "[uimodel][unit][presentation-preference][yaml]")
   {
-    auto state = ListPresentationPreferenceState{};
-    state.presentations[ListId{10}] = "plugin-preset";
+    auto state = ListPresentations::Snapshot{};
+    state[ListId{10}] = "plugin-preset";
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(ListPresentationPreferenceYamlSchema{}.serialize(tree.rootref(), state));
@@ -93,9 +93,9 @@ namespace ao::uimodel::test
     CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "plugin-preset");
 
     auto const decodedRes =
-      ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
+      ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
     REQUIRE(decodedRes);
-    CHECK(decodedRes->presentations == state.presentations);
+    CHECK((*decodedRes) == state);
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates",
@@ -107,7 +107,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::NotSupported);
@@ -119,7 +119,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -132,7 +132,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -150,7 +150,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentationPreferenceState{});
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);

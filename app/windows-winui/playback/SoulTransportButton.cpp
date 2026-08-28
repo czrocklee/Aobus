@@ -34,14 +34,14 @@ namespace ao::winui
     unbind();
   }
 
-  void SoulTransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackCommandSurface& commands)
+  void SoulTransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackActions& actions)
   {
     unbind();
     resetPresentation();
     auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
     winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->bind(playback);
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
-                                                                  commands,
+                                                                  actions,
                                                                   _textCatalog,
                                                                   uimodel::PlaybackCommand::PlayPause,
                                                                   false,

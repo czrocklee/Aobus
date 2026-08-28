@@ -57,7 +57,7 @@ namespace ao::rt
     bool operator==(LibraryChangeSet const&) const = default;
   };
 
-  class LibraryMutationService;
+  class LibraryWriteLane;
 
   class [[nodiscard]] LibraryChanges final
   {
@@ -94,7 +94,7 @@ namespace ao::rt
     async::Subscription onChanged(compat::MoveOnlyFunction<void(LibraryChangeSet const&)> handler) const;
 
   private:
-    friend class LibraryMutationService;
+    friend class LibraryWriteLane;
 
     void publishFromCoordinator(LibraryChangeSet changeSet,
                                 compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,

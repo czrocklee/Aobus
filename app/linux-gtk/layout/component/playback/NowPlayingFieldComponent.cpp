@@ -8,7 +8,7 @@
 #include "playback/NowPlayingFieldLabel.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -68,28 +68,28 @@ namespace ao::gtk::layout
                                         i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "playback.currentTitleLabel",
+      {.id = "playback.currentTitleLabel",
        .displayName = "Current Title Label",
-       .category = LayoutComponentCategory::Playback,
-       .props = {{.name = "action",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Action",
-                  .defaultValue = LayoutValue{"none"},
-                  .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
+       .category = ComponentCategory::Playback,
+       .properties = {{.name = "action",
+                       .kind = PropertyKind::Enum,
+                       .label = "Action",
+                       .defaultValue = LayoutValue{"none"},
+                       .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
        .minChildren = 0,
        .optMaxChildren = 0},
       [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)
       { return std::make_unique<NowPlayingFieldComponent>(runtime, textCatalog, node, rt::TrackField::Title); });
 
     registry.registerComponent(
-      {.type = "playback.currentArtistLabel",
+      {.id = "playback.currentArtistLabel",
        .displayName = "Current Artist Label",
-       .category = LayoutComponentCategory::Playback,
-       .props = {{.name = "action",
-                  .kind = LayoutPropertyKind::Enum,
-                  .label = "Action",
-                  .defaultValue = LayoutValue{"none"},
-                  .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
+       .category = ComponentCategory::Playback,
+       .properties = {{.name = "action",
+                       .kind = PropertyKind::Enum,
+                       .label = "Action",
+                       .defaultValue = LayoutValue{"none"},
+                       .enumValues = {"none", "reveal", "playPause", "filterByField"}}},
        .minChildren = 0,
        .optMaxChildren = 0},
       [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& node)

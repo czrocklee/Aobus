@@ -4,7 +4,7 @@
 # Keeps one frontend's vocabulary out of the shared UI model.
 #
 # The include guardrails cannot see this class of defect. A frontend-owned
-# LayoutCatalog.h can hold a WinUI component catalog, a WinUI element lattice,
+# LayoutSchema.h can hold a WinUI component catalog, a WinUI element lattice,
 # and WinUI style rules, yet include nothing platform-specific at all, because
 # deciding what a shell accepts is portable C++. What gives it away is its
 # ownership: a file inside ao_app_uimodel that serves one frontend is by that

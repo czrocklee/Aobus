@@ -9,9 +9,9 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/CompletionText.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <algorithm>
 #include <cstddef>

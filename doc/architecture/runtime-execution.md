@@ -80,7 +80,7 @@ The first task in a pending burst owns the wake request, and drain completion re
 
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
 Library scans, import/export, identity indexing, delayed checkpoints, and other potentially blocking work run there and explicitly resume on the callback executor before touching executor-affine state or returning UI-facing completion.
-Interactive resource delivery follows the same boundary without entering library maintenance: `LibraryTaskService` copies bounded immutable bytes under a worker-side read transaction, then GTK, TUI, and MPRIS perform their platform transforms or file work on workers and return through the frontend callback executor.
+Interactive resource delivery follows the same boundary without entering library maintenance: `LibraryJobs` copies bounded immutable bytes under a worker-side read transaction, then GTK, TUI, and MPRIS perform their platform transforms or file work on workers and return through the frontend callback executor.
 Those consumers carry copied values across suspension and revalidate owner lifetime plus current resource identity before publication.
 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
@@ -142,7 +142,7 @@ After logging initialization, the application registers one Core fatal sink back
 - `ao_async` invokes that Core facility directly and has no application logging callback or second terminal-reporting seam.
 - Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, and transaction ordering remain with those owners.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
-- Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
+- Runtime library code cannot bypass `LibraryWriteLane` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A live library transaction runs only in the sequencer's worker-side synchronous kernel and never spans `co_await`.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
 - Notification feed reads, commands, and subscription registration require the callback executor; foreign producers return through their runtime owner instead of using a cross-thread convenience post.
@@ -286,7 +286,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
 - [`TaskFuture`](../../include/ao/async/TaskFuture.h) owns explicit future result and exception transport without default-constructing domain values.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
-- [`LibraryMutationService.cpp`](../../app/runtime/library/LibraryMutationService.cpp) owns the per-library command lane, worker-side transaction kernel, publication events, Maintenance control delivery, and Closing quiescence.
+- [`LibraryWriteLane.cpp`](../../app/runtime/library/LibraryWriteLane.cpp) owns the per-library command lane, worker-side transaction kernel, publication events, Maintenance control delivery, and Closing quiescence.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
 - [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
 - [`Contract.h`](../../include/ao/Contract.h) and [`Fatal.cpp`](../../lib/utility/Fatal.cpp) define the application-independent fatal registration and abort boundary used by that adapter.
@@ -309,7 +309,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackSuccessionLaunchTest.cpp`](../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp), [`PlaybackSuccessionAdvanceTest.cpp`](../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp), and [`PlaybackSuccessionFailureTest.cpp`](../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) exercise the public playback service and executor-affine internal succession owner.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
-- [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects task leases, interactive authoring during scan preparation, publication-before-finalization ordering, and cancellation cleanup.
+- [`LibraryJobsTest.cpp`](../../test/unit/runtime/library/LibraryJobsTest.cpp) protects task leases, interactive authoring during scan preparation, publication-before-finalization ordering, and cancellation cleanup.
 - [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) and [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protect lane contention, worker affinity, settlement ordering, Maintenance control delivery, and Closing retirement.
 
 ## Related documents

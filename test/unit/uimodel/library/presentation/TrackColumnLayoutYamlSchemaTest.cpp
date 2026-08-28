@@ -6,7 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,8 +15,8 @@ namespace ao::uimodel::test
 {
   TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids", "[uimodel][unit][track-column-layout]")
   {
-    auto state = TrackColumnLayoutState{};
-    state.listLayouts[ListId{10}] = {
+    auto state = TrackColumnLayouts::Snapshot{};
+    state[ListId{10}] = {
       TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.75},
       TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .visible = false},
     };
@@ -32,13 +32,13 @@ namespace ao::uimodel::test
     CHECK(documentRes->layouts[0].columns[1].field == "duration");
     CHECK_FALSE(documentRes->layouts[0].columns[1].visible);
 
-    auto const decodedRes = trackColumnLayoutStateFromDocument(*documentRes);
+    auto const decodedRes = trackColumnLayoutsFromDocument(*documentRes);
 
     REQUIRE(decodedRes);
-    REQUIRE(decodedRes->listLayouts.size() == 1);
-    REQUIRE(decodedRes->listLayouts.at(ListId{10}).size() == 2);
-    CHECK(decodedRes->listLayouts.at(ListId{10})[0] == state.listLayouts.at(ListId{10})[0]);
-    CHECK(decodedRes->listLayouts.at(ListId{10})[1] == state.listLayouts.at(ListId{10})[1]);
+    REQUIRE((*decodedRes).size() == 1);
+    REQUIRE((*decodedRes).at(ListId{10}).size() == 2);
+    CHECK((*decodedRes).at(ListId{10})[0] == state.at(ListId{10})[0]);
+    CHECK((*decodedRes).at(ListId{10})[1] == state.at(ListId{10})[1]);
   }
 
   TEST_CASE("TrackColumnLayoutYamlSchema - rejects an invalid document as one object",
@@ -57,7 +57,7 @@ namespace ao::uimodel::test
     SECTION("Unsupported version")
     {
       document.version = 3;
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
@@ -66,7 +66,7 @@ namespace ao::uimodel::test
     SECTION("Unknown field")
     {
       document.layouts[0].columns[0].field = "future-field";
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -75,7 +75,7 @@ namespace ao::uimodel::test
     SECTION("Duplicate field")
     {
       document.layouts[0].columns.push_back(document.layouts[0].columns[0]);
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     SECTION("Invalid width and weight")
     {
       document.layouts[0].columns[0].width = 200;
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -93,7 +93,7 @@ namespace ao::uimodel::test
     SECTION("Flexible field uses fixed form")
     {
       document.layouts[0].columns[0] = StoredTrackColumn{.field = "title", .width = 200};
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -102,7 +102,7 @@ namespace ao::uimodel::test
     SECTION("Fixed field uses flexible form")
     {
       document.layouts[0].columns[0] = StoredTrackColumn{.field = "duration", .weight = 1.0};
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
     SECTION("Invalid list id")
     {
       document.layouts[0].listId = kInvalidListId.raw();
-      auto const result = trackColumnLayoutStateFromDocument(document);
+      auto const result = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -120,8 +120,8 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackColumnLayoutYamlSchema - owns the exact YAML mapping", "[uimodel][unit][track-column-layout][yaml]")
   {
-    auto state = TrackColumnLayoutState{};
-    state.listLayouts[ListId{10}] = {
+    auto state = TrackColumnLayouts::Snapshot{};
+    state[ListId{10}] = {
       TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.75},
     };
     auto tree = ryml::Tree{yaml::callbacks()};
@@ -132,9 +132,9 @@ namespace ao::uimodel::test
     CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["field"]) == "artist");
     CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["visible"]) == "true");
 
-    auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+    auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
     REQUIRE(decodedRes);
-    CHECK(decodedRes->listLayouts == state.listLayouts);
+    CHECK((*decodedRes) == state);
   }
 
   TEST_CASE("TrackColumnLayoutYamlSchema - rejects invalid YAML candidates",
@@ -145,7 +145,7 @@ namespace ao::uimodel::test
       auto const* source = "version: 99\nlayouts: malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::NotSupported);
@@ -156,7 +156,7 @@ namespace ao::uimodel::test
       auto const* source = "version: 2\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -168,7 +168,7 @@ namespace ao::uimodel::test
       auto const* source = "version: 2\nlayouts: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -189,7 +189,7 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -209,7 +209,7 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);

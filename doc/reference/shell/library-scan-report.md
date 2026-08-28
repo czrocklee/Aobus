@@ -11,7 +11,7 @@ summary: Enumerates the verdicts a finished library scan reduces to, the severit
 
 This reference owns what a finished library scan is reported as: the verdict it reduces to, how loudly that verdict is said, how long the report stays reachable, and the sentence itself.
 
-It does not own how the scan runs. Planning, applying, and the deferred audio-identity pass belong to the [scan and identity spec](../../spec/library/runtime/scan-and-identity.md); this reference begins where `runLibraryScanWorkflow` returns.
+It does not own how the scan runs. Planning, applying, and the deferred audio-identity pass belong to the [scan and identity spec](../../spec/library/runtime/scan-and-identity.md); this reference begins where `runLibraryScan` returns.
 
 The report carries no version of its own. It is an in-process decision, never serialized, so a verdict may be added or a sentence reworded without a compatibility step.
 
@@ -19,7 +19,7 @@ The report carries no version of its own. It is an in-process decision, never se
 
 The report belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md).
 
-`uimodel::decideLibraryScanOutcome` reduces the workflow result to a `LibraryScanOutcome`, `uimodel::libraryScanSeverity` and `uimodel::libraryScanLifetime` decide how it is presented, and `uimodel::formatLibraryScanMessage` writes the sentence.
+`uimodel::runLibraryScan` reduces the private workflow state to a `LibraryScanOutcome`, `uimodel::libraryScanSeverity` and `uimodel::libraryScanLifetime` decide how it is presented, and `uimodel::formatLibraryScanMessage` writes the sentence.
 
 A shell posts the result. It does not decide it.
 A scan that lost twelve files is the same event whichever window reports it, and a shell that reaches its own verdict is how two windows come to describe one scan differently.
@@ -69,9 +69,8 @@ The GTK shell bootstraps this way at startup and starts the backfill. The Window
 
 ## Implementation authority
 
-- [`LibraryScanOutcome.h`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h) and [`LibraryScanOutcome.cpp`](../../../app/uimodel/library/task/LibraryScanOutcome.cpp) own the verdicts, the severity and lifetime mapping, and the diagnostics.
+- [`LibraryScanOutcome.h`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h) and [`LibraryScanOutcome.cpp`](../../../app/uimodel/library/task/LibraryScanOutcome.cpp) own `runLibraryScan`, the verdicts, the severity and lifetime mapping, and the diagnostics.
 - [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) owns `formatLibraryScanMessage`.
-- [`LibraryScanWorkflow.h`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h) owns the result this reduces.
 - [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) post the decision in their shells.
 
 ## Test authority

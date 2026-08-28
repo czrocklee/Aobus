@@ -5,7 +5,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
@@ -46,6 +46,6 @@ namespace ao::gtk::layout
 
   void registerLabelComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::Label), createLabel);
+    registry.registerSharedComponent("label", createLabel);
   }
 } // namespace ao::gtk::layout

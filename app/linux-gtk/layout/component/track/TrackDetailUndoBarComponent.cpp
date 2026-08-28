@@ -14,7 +14,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/box.h>
@@ -154,9 +154,9 @@ namespace ao::gtk::layout
                                            i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "track.detailUndoBar",
+      {.id = "track.detailUndoBar",
        .displayName = "Detail Undo Bar",
-       .category = LayoutComponentCategory::Track,
+       .category = ComponentCategory::Track,
        .minChildren = 0,
        .optMaxChildren = 0},
       [&runtime, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)

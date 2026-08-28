@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <span>
 #include <string>

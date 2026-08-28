@@ -30,7 +30,7 @@ namespace ao::gtk::layout
     registerContainerComponents(registry, collaborators.textCatalog);
     registerPlaybackComponents(registry,
                                runtime,
-                               collaborators.playbackCommandSurface,
+                               collaborators.playbackActions,
                                collaborators.imageLoader,
                                collaborators.textCatalog,
                                collaborators.outputDeviceIntent);
@@ -45,7 +45,7 @@ namespace ao::gtk::layout
                             runtime,
                             collaborators.trackPageHost,
                             collaborators.trackPresentationCatalog,
-                            collaborators.trackPresentationPreferences,
+                            collaborators.listPresentations,
                             collaborators.themeCoordinator,
                             collaborators.createSmartListFromExpression,
                             collaborators.textCatalog);

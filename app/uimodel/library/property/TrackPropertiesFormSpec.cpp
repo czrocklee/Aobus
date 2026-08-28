@@ -5,7 +5,7 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 namespace ao::uimodel

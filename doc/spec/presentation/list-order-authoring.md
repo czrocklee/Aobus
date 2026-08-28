@@ -140,7 +140,7 @@ Its capture-phase guard keys by physical keycode and consumes repeated press eve
 Window deactivation and keymap replacement reset the guard.
 Holding a key therefore moves once; another committed step requires release and a new press.
 
-WinUI registers the four movement action handlers outside its layout-action catalog, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
+WinUI registers the four movement action handlers outside its layout schema, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
 
 Reset and Forget Hidden Positions remain menu/action commands without shipped global shortcuts.
 
@@ -180,8 +180,8 @@ Both frontends preserve stable-ID operands, complete-sequence semantics, revisio
 
 ## Implementation map
 
-- [`ListOrderPolicy.h`](../../../app/include/ao/uimodel/library/list/ListOrderPolicy.h) defines capability and gap/selection normalization.
-- [`ListOrderAuthoringSession.h`](../../../app/include/ao/uimodel/library/list/ListOrderAuthoringSession.h) defines binding and invalidation ownership.
+- [`ListOrder.h`](../../../app/include/ao/uimodel/library/list/ListOrder.h) defines capability and gap/selection normalization.
+- [`ListOrderSession.h`](../../../app/include/ao/uimodel/library/list/ListOrderSession.h) defines binding and invalidation ownership.
 - [`KeyRepeatGuard.h`](../../../app/include/ao/uimodel/input/KeyRepeatGuard.h) defines one-press-per-physical-key-cycle policy.
 - [`TrackOrderDragController.cpp`](../../../app/linux-gtk/track/TrackOrderDragController.cpp) owns the GTK generation-local DnD surface.
 - [`TrackViewPage.cpp`](../../../app/linux-gtk/track/TrackViewPage.cpp) adapts capabilities and order commands.
@@ -190,7 +190,7 @@ Both frontends preserve stable-ID operands, complete-sequence semantics, revisio
 
 ## Test map
 
-- [`ListOrderPolicyTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderPolicyTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, and selection/gap normalization.
+- [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, and selection/gap normalization.
 - [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, movement, and invalidation.
 - [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
 - [`KeyRepeatGuardTest.cpp`](../../../test/unit/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.

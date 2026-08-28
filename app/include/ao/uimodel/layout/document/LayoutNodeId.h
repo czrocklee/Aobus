@@ -13,7 +13,7 @@ namespace ao::uimodel
 {
   struct LayoutDocument;
   struct LayoutNode;
-  class LayoutComponentCatalog;
+  class LayoutSchema;
   class PreparedLayout;
   enum class LayoutNodeIdDiagnosticSeverity : std::uint8_t
   {
@@ -35,7 +35,7 @@ namespace ao::uimodel
   void visitExpandedLayoutNodes(PreparedLayout const& layout, LayoutNodeVisitor const& visitor);
 
   std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout,
-                                                                    LayoutComponentCatalog const& catalog);
+                                                                    LayoutSchema const& schema);
   bool hasLayoutNodeIdErrors(std::vector<LayoutNodeIdDiagnostic> const& diagnostics);
 
   std::string makeUniqueLayoutNodeId(LayoutDocument const& doc, std::string_view componentType, std::string_view role);

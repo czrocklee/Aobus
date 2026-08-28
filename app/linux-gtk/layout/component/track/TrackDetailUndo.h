@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>

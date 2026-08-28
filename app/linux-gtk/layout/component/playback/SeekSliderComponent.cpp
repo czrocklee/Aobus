@@ -7,7 +7,6 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/SeekControlWidget.h"
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -39,8 +38,8 @@ namespace ao::gtk::layout
 
   void registerSeekSliderComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::PlaybackSeekSlider),
-                               [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                               { return std::make_unique<SeekSliderComponent>(playback); });
+    registry.registerSharedComponent("playback.seekSlider",
+                                     [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                                     { return std::make_unique<SeekSliderComponent>(playback); });
   }
 } // namespace ao::gtk::layout

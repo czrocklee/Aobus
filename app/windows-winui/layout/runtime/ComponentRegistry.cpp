@@ -4,15 +4,15 @@
 #include "layout/runtime/ComponentRegistry.h"
 
 #include "layout/runtime/ActionBinder.h"
+#include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/CommonLayoutProps.h"
-#include "layout/runtime/ComponentRegistrations.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "pch.h"
 #include <ao/Error.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/PlacementPlan.h>
 
 #include <expected>
@@ -25,14 +25,9 @@
 
 namespace ao::winui::layout
 {
-  ComponentRegistry::ComponentRegistry()
+  ComponentRegistry::ComponentRegistry(uimodel::LayoutSchema const& schema, ActionRegistry const& actions)
+    : _schema{schema}, _actions{actions}
   {
-    registerContainerComponents(*this);
-    registerGenericComponents(*this);
-    registerPlaybackComponents(*this);
-    registerShellComponents(*this);
-    registerStatusComponents(*this);
-    registerTrackComponents(*this);
   }
 
   void ComponentRegistry::registerComponent(std::string_view const type, ComponentFactory factory)
@@ -43,10 +38,10 @@ namespace ao::winui::layout
   Result<PlacedChild> ComponentRegistry::build(LayoutBuildContext& ctx, uimodel::LayoutNode const& node) const
   {
     auto const optKind = winui::componentElementKind(node);
-    auto const optDescriptor = ctx.catalog.descriptor(node.type);
+    auto const optComponentSchema = _schema.component(node.type);
     auto const it = _factories.find(node.type);
 
-    if (!optKind || !optDescriptor || it == _factories.end())
+    if (!optKind || !optComponentSchema || it == _factories.end())
     {
       return makeError(
         Error::Code::NotSupported, std::format("No Windows component construction is registered for '{}'", node.type));
@@ -101,9 +96,9 @@ namespace ao::winui::layout
       return std::unexpected{appliedRes.error()};
     }
 
-    // Interaction is bound centrally because the slot policy is a catalog fact:
+    // Interaction is bound centrally because the slot policy is a schema fact:
     // a component decides what it presents, never which gestures it accepts.
-    auto boundRes = bindActions(ctx, node, optDescriptor->actionPolicy, element);
+    auto boundRes = bindActions(ctx, _actions, node, *optComponentSchema, element);
 
     if (!boundRes)
     {

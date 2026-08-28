@@ -34,11 +34,11 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/Raii.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -133,9 +133,9 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
 
-    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, textCatalog, runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, columnLayouts, textCatalog, runtime, thumbnailLoader};
     window.set_child(page);
 
     SECTION("initial state")
@@ -248,9 +248,9 @@ namespace ao::gtk::test
 
     auto materializedRowsForPage = [&]
     {
-      auto layoutStore = uimodel::TrackColumnLayoutStore{};
+      auto columnLayouts = uimodel::TrackColumnLayouts{};
       auto page = TrackViewPage{
-        rt::kAllTracksListId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+        rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
       auto window = Gtk::Window{};
       window.set_child(page);
       window.set_default_size(600, 320);
@@ -285,7 +285,7 @@ namespace ao::gtk::test
                                      { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
@@ -300,12 +300,18 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
-    auto page = TrackViewPage{
-      listId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader, manual->spec, viewId};
+    auto page = TrackViewPage{listId,
+                              modelPtr,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime,
+                              thumbnailLoader,
+                              manual->spec,
+                              viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);
     windowFixture.present();
@@ -349,7 +355,7 @@ namespace ao::gtk::test
                                      }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
@@ -368,12 +374,18 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
-    auto page = TrackViewPage{
-      listId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader, manual->spec, viewId};
+    auto page = TrackViewPage{listId,
+                              modelPtr,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime,
+                              thumbnailLoader,
+                              manual->spec,
+                              viewId};
     auto windowFixture = GtkWindowFixture{};
     windowFixture.mount(page);
     windowFixture.present();
@@ -461,12 +473,12 @@ namespace ao::gtk::test
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
-    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
     auto page = TrackViewPage{
-      rt::kAllTracksListId, modelPtr, layoutStore, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+      rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);
     window.set_default_size(720, 320);
@@ -492,7 +504,7 @@ namespace ao::gtk::test
     titleStack->set_visible_child("edit");
     REQUIRE(emitFocusEnter(*entry));
     entry->set_text("After");
-    REQUIRE(runGtkTask(runtime, runtime.library().writer().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(pumpGtkEventsUntil([titleStack] { return titleStack->get_visible_child_name() == "display"; }));
 
     CHECK(titleStack->get_visible_child_name() == "display");

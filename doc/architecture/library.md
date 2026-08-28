@@ -25,7 +25,7 @@ ao::library::MusicLibrary
             |
             v
 ao::rt::Library
-  reader | writer | task service | changes
+  snapshot | commands | jobs | changes
             |
             v
 TrackSourceCache + TrackSource implementations
@@ -156,17 +156,17 @@ This narrows path races but is not an adversarial filesystem sandbox: the music 
 `ao::rt::Library` is the application access boundary over `MusicLibrary`.
 It exposes four cooperating roles and owns one private mutation coordinator:
 
-- `LibraryReader` owns one read transaction for a coherent point-in-time read batch.
-- `LibraryWriter` owns asynchronous semantic commands and exact previews; every effective command commits and publishes through the coordinator.
-- `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill, including best-effort progress and its status-free presentation finalization pulse.
+- `LibrarySnapshot` owns one read transaction for a coherent point-in-time read batch.
+- `LibraryCommands` owns asynchronous semantic commands and exact previews; every effective command commits and publishes through the coordinator.
+- `LibraryJobs` owns long-running asynchronous operations such as scan, import/export, and identity backfill, including best-effort progress and its status-free presentation finalization pulse.
 - `LibraryChanges` is the read-only committed-revision observation boundary.
-- `LibraryMutationService` exclusively owns the writable core capability and the one live-runtime command lane, including interactive/background/Maintenance admission, commit revision checks, publication settlement, and Closing quiescence.
+- `LibraryWriteLane` exclusively owns the writable core capability and the one live-runtime command lane, including interactive/background/Maintenance admission, commit revision checks, publication settlement, and Closing quiescence.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
 
 Library import has a prepared capability boundary rather than a path-based commit command.
-`LibraryTaskService` produces a move-only `LibraryImportPlan` after strict parsing and an uncommitted preview, binding it to exact source bytes plus the target runtime, library identity, and committed revision.
+`LibraryJobs` produces a move-only `LibraryImportPlan` after strict parsing and an uncommitted preview, binding it to exact source bytes plus the target runtime, library identity, and committed revision.
 Applying consumes that plan once and revalidates every binding before opening the committing mutation.
 Frontends may present the report or drop the plan, but cannot manufacture or retarget commit evidence.
 
@@ -235,7 +235,7 @@ UIModel and frontends consume runtime snapshots and commands rather than opening
 
 `CoreRuntime::musicLibrary()` is const and supports read-only CLI inspection and narrow runtime evaluator composition.
 It cannot create a library write transaction.
-The check-owned `aobus_guardrails` target rejects write-transaction, writable-capability, and direct `LibraryWriter` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
+The check-owned `aobus_guardrails` target rejects write-transaction, writable-capability, and direct `LibraryCommands` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
 
 `CoreRuntime::create()` and `AppRuntime::create()` are the recoverable composition boundaries.
 They return typed errors from `MusicLibrary::open()` and writable-facade acquisition without a throwing compatibility constructor.
@@ -247,8 +247,8 @@ An asynchronous live mutation follows this path:
 
 ```text
 callback/CLI command captures owning inputs
-  -> LibraryWriter Task
-  -> LibraryMutationService FIFO admission
+  -> LibraryCommands Task
+  -> LibraryWriteLane FIFO admission
   -> active worker turn
   -> synchronous WriteTransaction + transaction-local dictionary overlay
   -> root execute boundary + callback-scoped LibraryWrite ports
@@ -267,10 +267,10 @@ callback/CLI command captures owning inputs
 `Unchanged`, preview, and pre-commit failure paths abort the native transaction and release the lane without publication.
 The caller continuation is not part of lane ownership.
 
-An asynchronous mutating task acquires its task-level exclusion before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without transaction ownership, and submits a coordinator command only for preview or apply/commit.
+An asynchronous mutating task acquires its task-level exclusion before it leaves the callback executor, performs slow preparation through `LibraryJobs` on the async worker pool without transaction ownership, and submits a coordinator command only for preview or apply/commit.
 Import uses exclusive maintenance plus the background-task lease; scan apply and identity backfill use only the lease and therefore permit unrelated interactive authoring during preparation.
 Export and scan-plan construction remain independent read snapshots.
-After successful cancellable callback-owner admission, best-effort progress and a status-free finished pulse return through `LibraryTaskService`, while the awaited task owns its outcome and committed content changes use `LibraryChangeSet` exclusively; the [task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation boundary.
+After successful cancellable callback-owner admission, best-effort progress and a status-free finished pulse return through `LibraryJobs`, while the awaited task owns its outcome and committed content changes use `LibraryChangeSet` exclusively; the [task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation boundary.
 
 A library transfer follows a two-operation path:
 
@@ -289,7 +289,7 @@ Unrelated revisions do not invalidate a plan; stale ordinary items are counted s
 Scan apply crosses one coordinator mutation boundary; the [scan specification](../spec/library/runtime/scan-and-identity.md#plan-application) owns its item admission and atomicity behavior.
 Explicit relink is a constrained plan derivation that preserves the same source evidence rather than a separate caller-authored mutation description.
 
-A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
+A read-oriented workflow obtains one `LibrarySnapshot`, performs the related reads under its single transaction snapshot, and releases the snapshot before retaining application values.
 
 Metadata, tag, and combined Properties authoring first binds the exact targets to one runtime instance and one available committed revision.
 Commit rechecks runtime identity, availability, revision, and every target inside the command's active transaction turn.
@@ -364,14 +364,14 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 
 Synchronous readers finish their snapshot scope before returning application values.
 Asynchronous writers run their transaction scope entirely inside one worker-side synchronous kernel and return only after the command has aborted or reached revision settlement.
-`LibraryTaskService` owns the worker/callback transition for long-running operations and accepts cooperative stop tokens.
+`LibraryJobs` owns the worker/callback transition for long-running operations and accepts cooperative stop tokens.
 Executor hops honor cancellation, while only operations with explicit synchronous checkpoints can stop during their core work; [library task execution](../spec/library/runtime/task-execution.md#cancellation) owns the operation matrix.
 Cancellation never reinterprets an already committed transaction as uncommitted.
 
 Failure before commit returns through the operation's typed error channel and leaves the prior availability intact.
 LMDB mutation faults may use a private `lmdb::detail::TransactionFailure` as short-range unwind control below the library wrapper.
 `WriteTransaction::apply()` and `commit()` are the exact lower containment owners: they explicitly abort and terminalize the root before translating the carried `Error` to `Result`, and no runtime writer, task, scan, or importer catches the marker.
-`LibraryMutationService::Mutation::apply()` and `executeAsync()` additionally terminalize the live mutation and release its sequencer turn before returning an error or rethrowing an unexpected exception.
+`LibraryWriteLane::Mutation::apply()` and `executeAsync()` additionally terminalize the live mutation and release its sequencer turn before returning an error or rethrowing an unexpected exception.
 `executeAsync()` is the only live commit boundary; `Unchanged` and preview `apply()` paths explicitly abort and cannot publish.
 No failed root can be continued or committed, even while its C++ wrapper remains alive.
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
@@ -411,9 +411,9 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
-- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns the live-runtime FIFO command lane, task admission, revision validation, commit, publication settlement, Maintenance, and Closing.
-- [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped reads and owning asynchronous mutation commands.
-- [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations, best-effort progress, and status-free progress finalization.
+- [`LibraryWriteLane`](../../app/runtime/library/LibraryWriteLane.h) owns the live-runtime FIFO command lane, task admission, revision validation, commit, publication settlement, Maintenance, and Closing.
+- [`LibrarySnapshot`](../../app/include/ao/rt/library/LibrarySnapshot.h) and [`LibraryCommands`](../../app/include/ao/rt/library/LibraryCommands.h) define scoped reads and owning asynchronous mutation commands.
+- [`LibraryJobs`](../../app/include/ao/rt/library/LibraryJobs.h) defines asynchronous library operations, best-effort progress, and status-free progress finalization.
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned committed changes.
 - [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) owns reusable sources and their dependency graph.
@@ -436,10 +436,10 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects NFC identity, malformed-input rejection, overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
-- [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
+- [`LibrarySnapshotTest.cpp`](../../test/unit/runtime/library/LibrarySnapshotTest.cpp) and [`LibraryCommandsTest.cpp`](../../test/unit/runtime/library/LibraryCommandsTest.cpp) protect runtime access roles.
 - [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering, callback publication, signal-before-await settlement, Maintenance workflow ordering, and Closing retirement.
 - [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, non-terminal contention, all-or-none authoring, pre-transaction Closing cancellation, and reentrant publication closure.
-- [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.
+- [`LibraryJobsTest.cpp`](../../test/unit/runtime/library/LibraryJobsTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
 - [`ListOrderSourceTest.cpp`](../../test/unit/runtime/source/ListOrderSourceTest.cpp) and [`ListOrderSourceObserverTest.cpp`](../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp) protect rank derivation, hidden ranks, parent changes, and delta translation.
 - [`TrackListProjectionLifecycleTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionLifecycleTest.cpp) and [`TrackListProjectionDeltaContractTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp) protect the source-to-projection boundary.

@@ -692,8 +692,6 @@ ja:table {
     gtk_layout_validation_preset { "プリセット ''{preset}'' の検証に失敗しました:\n\n{detail}" }
     gtk_layout_invalid_component_ids { "無効なレイアウトコンポーネント ID" }
     gtk_layout_validation_component { "プリセット ''{preset}''、コンポーネント ''{component}''、タイプ ''{type}'' の検証に失敗しました:\n\n{detail}" }
-    gtk_layout_invalid_actions { "無効なレイアウトアクション" }
-    gtk_layout_validation_action { "プリセット ''{preset}''、コンポーネント ''{component}''、プロパティ ''{property}'' の検証に失敗しました:\n\n{detail}" }
     gtk_common_ok { "OK" }
     gtk_common_add { "追加" }
     gtk_common_undo { "元に戻す" }

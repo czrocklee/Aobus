@@ -7,7 +7,6 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/SharedLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/enums.h>
@@ -44,8 +43,8 @@ namespace ao::gtk::layout
 
   void registerStatusMessageLabelComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerComponent(sharedComponentDescriptor(SharedLayoutComponentType::StatusMessage),
-                               [textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                               { return std::make_unique<StatusMessageLabelComponent>(textCatalog); });
+    registry.registerSharedComponent("status.message",
+                                     [textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+                                     { return std::make_unique<StatusMessageLabelComponent>(textCatalog); });
   }
 } // namespace ao::gtk::layout

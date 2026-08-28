@@ -10,12 +10,28 @@
 
 namespace ao::uimodel
 {
+  struct ComponentSchema;
   struct LayoutNode;
+  class PlaybackActions;
+}
+namespace ao::rt
+{
+  class PlaybackService;
+}
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
+namespace ao::async
+{
+  template<typename... Args>
+  class Signal;
 }
 
 namespace ao::winui::layout
 {
   struct LayoutBuildContext;
+  struct WindowActivityState;
 
   /**
    * @brief Build the soul: the animated disc every shell puts at its centre.
@@ -25,5 +41,11 @@ namespace ao::winui::layout
    * the audio pipeline explanation, because that belongs to the soul rather than
    * to the shell that placed it.
    */
-  Result<std::unique_ptr<LayoutComponent>> makeSoulButton(LayoutBuildContext& ctx, uimodel::LayoutNode const& node);
+  Result<std::unique_ptr<LayoutComponent>> makeSoulButton(LayoutBuildContext& ctx,
+                                                          uimodel::LayoutNode const& node,
+                                                          uimodel::ComponentSchema const& schema,
+                                                          rt::PlaybackService& playback,
+                                                          uimodel::PlaybackActions& playbackActions,
+                                                          i18n::MessageCatalog const& textCatalog,
+                                                          async::Signal<WindowActivityState>& windowActivityChanged);
 } // namespace ao::winui::layout

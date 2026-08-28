@@ -9,12 +9,13 @@
 
 namespace ao::uimodel
 {
-  struct LayoutComponentActionPolicy;
+  struct ComponentSchema;
   struct LayoutNode;
 } // namespace ao::uimodel
 
 namespace ao::winui::layout
 {
+  class ActionRegistry;
   struct LayoutBuildContext;
 
   /**
@@ -31,7 +32,8 @@ namespace ao::winui::layout
    * artifact defect, not something to discover when the user clicks.
    */
   Result<> bindActions(LayoutBuildContext& ctx,
+                       ActionRegistry const& actions,
                        uimodel::LayoutNode const& node,
-                       uimodel::LayoutComponentActionPolicy const& policy,
+                       uimodel::ComponentSchema const& schema,
                        winrt::Microsoft::UI::Xaml::FrameworkElement const& element);
 } // namespace ao::winui::layout

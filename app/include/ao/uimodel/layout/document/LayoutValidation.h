@@ -11,8 +11,7 @@
 
 namespace ao::uimodel
 {
-  class LayoutActionCatalog;
-  class LayoutComponentCatalog;
+  class LayoutSchema;
   class PreparedLayout;
 
   /// The first defect found in document order.
@@ -27,7 +26,7 @@ namespace ao::uimodel
   };
 
   /**
-   * @brief Validates a prepared document against a catalog pair and one frontend's dialect.
+   * @brief Validates a prepared document against one schema and a frontend dialect.
    *
    * A built-in document is one candidate: the first defect in document order
    * rejects it entirely, so callers never render per-node diagnostic
@@ -37,15 +36,11 @@ namespace ao::uimodel
    * @return The rejection, or nullopt when the whole candidate is acceptable.
    */
   std::optional<LayoutRejection> validateLayout(PreparedLayout const& layout,
-                                                LayoutComponentCatalog const& components,
-                                                LayoutActionCatalog const& actions,
+                                                LayoutSchema const& schema,
                                                 LayoutDialect const& dialect);
 
   /// The same validation, expressed as the error a rejected candidate reports.
-  Result<> requireValidLayout(PreparedLayout const& layout,
-                              LayoutComponentCatalog const& components,
-                              LayoutActionCatalog const& actions,
-                              LayoutDialect const& dialect);
+  Result<> requireValidLayout(PreparedLayout const& layout, LayoutSchema const& schema, LayoutDialect const& dialect);
 
   std::string describeLayoutRejection(LayoutDialect const& dialect, LayoutRejection const& rejection);
 } // namespace ao::uimodel

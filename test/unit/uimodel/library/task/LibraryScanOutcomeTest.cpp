@@ -3,11 +3,11 @@
 
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
+#include "app/uimodel/library/task/LibraryScanWorkflow.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/Error.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>

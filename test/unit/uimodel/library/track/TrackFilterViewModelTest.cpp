@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
-
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -23,6 +21,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/library/track/TrackFilterView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -222,7 +221,7 @@ namespace ao::uimodel::test
       return libraryFixture.library().libraryRevision(transaction);
     }();
     auto changes = LibraryChanges{executor, revision, "test-library"};
-    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes, executor};
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     auto views = ViewService{executor, libraryFixture.library(), sources, changes};
     auto workspace = WorkspaceService{executor, views, changes};
@@ -240,7 +239,7 @@ namespace ao::uimodel::test
     REQUIRE(renderLog.last().hasError);
     CHECK(renderLog.last().tooltip.contains("Filter error"));
 
-    REQUIRE(writerFixture.runTask(writerFixture.writer().updateList(ListDraft{
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().updateList(ListDraft{
       .listId = listId,
       .name = "Repaired source",
       .expression = "true",

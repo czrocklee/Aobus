@@ -22,7 +22,7 @@
 
 namespace ao::uimodel
 {
-  class LayoutActionCatalog;
+  class LayoutSchema;
 }
 
 namespace ao::gtk
@@ -30,7 +30,7 @@ namespace ao::gtk
   /**
    * @brief Reusable editor widget for customizing keyboard shortcuts.
    *
-   * Lists the shortcut-eligible actions from the @c LayoutActionCatalog and lets the user add,
+   * Lists the shortcut-eligible actions from the @c LayoutSchema and lets the user add,
    * remove, or reset the key chords bound to each. The model held here is the single source
    * of truth for the edit session; every mutation re-renders the list and invokes the
    * supplied changed-callback so the caller can persist the delta and re-apply accelerators.
@@ -55,7 +55,7 @@ namespace ao::gtk
       void(std::string const& ownerLabel, std::string const& chordText, std::function<void(bool)> respond)>;
 
     ShortcutEditorWidget(i18n::MessageCatalog textCatalog,
-                         uimodel::LayoutActionCatalog const& catalog,
+                         uimodel::LayoutSchema const& schema,
                          uimodel::KeymapModel keymap,
                          ChangedCallback onChanged,
                          Gtk::Window& hostForDialogs);

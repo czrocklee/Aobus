@@ -6,6 +6,8 @@
 #include "app/linux-gtk/layout/component/track/TrackDetailScope.h"
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/shell/LayoutSession.h>
 
 #include <sigc++/signal.h>
 
@@ -32,6 +34,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  class LayoutComponentStateStore;
   struct LayoutDocument;
   struct LayoutNode;
   class PreparedLayout;
@@ -49,6 +52,13 @@ namespace ao::gtk::layout
 namespace ao::gtk::layout::test
 {
   uimodel::PreparedLayout preparedLayout(uimodel::LayoutDocument const& document);
+
+  /** Commit one test build generation and return the snapshot components should retain. */
+  uimodel::LayoutBuildSnapshot activateBuildSnapshot(uimodel::LayoutSession& session,
+                                                     std::string_view presetId = {},
+                                                     uimodel::LayoutComponentStateDocument const& componentState = {},
+                                                     bool editMode = false,
+                                                     uimodel::LayoutNodeMovedFn onNodeMoved = {});
 
   class [[nodiscard]] FakeTrackDetailScope final : public TrackDetailScope
   {
@@ -78,7 +88,8 @@ namespace ao::gtk::layout::test
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
                                   compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
                                   std::string_view locale = "en",
-                                  rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
+                                  rt::TextOrderingPolicy const* textOrderingPolicy = nullptr,
+                                  uimodel::LayoutComponentStateStore* componentStateStore = nullptr);
     ~LayoutRuntimeFixture() noexcept;
 
     LayoutRuntimeFixture(LayoutRuntimeFixture const&) = delete;
@@ -96,6 +107,12 @@ namespace ao::gtk::layout::test
     ComponentRegistry& components();
     ActionRegistry const& actions() const;
     LayoutBuildContext& context();
+    uimodel::LayoutSession& session();
+    void setComponentState(std::string_view presetId,
+                           uimodel::LayoutComponentStateDocument const& componentState,
+                           bool editMode = false,
+                           uimodel::LayoutNodeMovedFn onNodeMoved = {});
+    void advanceGeneration();
     LayoutRuntime& layoutRuntime();
 
     FakeTrackDetailScope& attachTrackDetailScope(rt::TrackDetailSnapshot snap = {});

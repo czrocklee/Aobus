@@ -15,8 +15,8 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <glibmm/refptr.h>
@@ -68,7 +68,7 @@ namespace ao::gtk
 
     explicit TrackViewPage(ListId listId,
                            Glib::RefPtr<TrackListModel> modelPtr,
-                           uimodel::TrackColumnLayoutStore& layoutStore,
+                           uimodel::TrackColumnLayouts& columnLayouts,
                            i18n::MessageCatalog textCatalog,
                            rt::AppRuntime& runtime,
                            ResourceImageLoader& thumbnailLoader,
@@ -143,7 +143,7 @@ namespace ao::gtk
     ListId _listId;
     rt::ViewId _viewId;
     Glib::RefPtr<TrackListModel> _modelPtr;
-    uimodel::TrackColumnLayoutStore& _layoutStore;
+    uimodel::TrackColumnLayouts& _columnLayouts;
     i18n::MessageCatalog _textCatalog;
     rt::AppRuntime& _runtime;
     ResourceImageLoader& _thumbnailLoader;

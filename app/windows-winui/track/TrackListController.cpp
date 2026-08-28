@@ -21,12 +21,11 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
@@ -88,7 +87,7 @@ namespace ao::winui
                         return std::nullopt;
                       }
 
-                      return runtime->library().reader().trackRow(projection->trackIdAt(index));
+                      return runtime->library().snapshot().trackRow(projection->trackIdAt(index));
                     });
       }
 
@@ -198,11 +197,11 @@ namespace ao::winui
   } // namespace
 
   TrackListController::TrackListController(rt::AppRuntime& runtime,
-                                           uimodel::TrackColumnLayoutState& columnLayouts,
+                                           uimodel::TrackColumnLayouts& columnLayouts,
                                            i18n::MessageCatalog textCatalog)
-    : _runtime{&runtime}
+    : _textCatalog{std::move(textCatalog)}
+    , _runtime{&runtime}
     , _columnLayouts{&columnLayouts}
-    , _textCatalog{std::move(textCatalog)}
     , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
   {
@@ -399,18 +398,8 @@ namespace ao::winui
 
     auto const state = _runtime->views().trackListState(_viewId);
     auto const listId = state.listId;
-    auto const* stored = static_cast<std::vector<uimodel::TrackColumnState> const*>(nullptr);
-
-    if (_columnLayouts != nullptr)
-    {
-      if (auto const it = _columnLayouts->listLayouts.find(listId); it != _columnLayouts->listLayouts.end())
-      {
-        stored = &it->second;
-      }
-    }
-
     auto const empty = std::vector<uimodel::TrackColumnState>{};
-    auto const& storedLayout = stored != nullptr ? *stored : empty;
+    auto const& storedLayout = _columnLayouts != nullptr ? _columnLayouts->layoutForList(listId) : empty;
     auto const fields = uimodel::visibleTrackFieldsInStoredLayout(state.presentation.visibleFields, storedLayout);
     auto const specs = uimodel::pixelTrackColumnSpecs(fields, storedLayout);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
@@ -420,7 +409,7 @@ namespace ao::winui
     {
       auto const field = fields[index];
       auto const width = index < widths.size() ? static_cast<double>(widths[index])
-                                               : static_cast<double>(uimodel::defaultTrackFieldColumnWidth(field));
+                                               : static_cast<double>(uimodel::trackColumnDefaults(field).width);
       _columns.push_back({.field = field, .width = width});
 
       auto const* definition = rt::trackFieldDefinition(field);
@@ -466,7 +455,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    auto& stored = _columnLayouts->listLayouts[listId];
+    auto stored = _columnLayouts->layoutForList(listId);
     auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
     visibleLayout.reserve(specs.size());
 
@@ -483,7 +472,7 @@ namespace ao::winui
       visibleLayout.push_back(state);
     }
 
-    stored = uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout);
+    _columnLayouts->updateLayout(listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
     refreshRows();
     return {};
   }
@@ -512,7 +501,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    auto const& stored = _columnLayouts->listLayouts[listId];
+    auto const& stored = _columnLayouts->layoutForList(listId);
     auto const specs = uimodel::pixelTrackColumnSpecs(fields, stored);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
     auto const it = std::ranges::find(fields, *optField);
@@ -568,7 +557,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
 
-    auto const& stored = _columnLayouts->listLayouts[listId];
+    auto const& stored = _columnLayouts->layoutForList(listId);
     return storeColumnSpecs(uimodel::pixelTrackColumnSpecs(fields, stored));
   }
 
@@ -582,15 +571,7 @@ namespace ao::winui
     }
 
     auto const state = _runtime->views().trackListState(_viewId);
-    auto const* stored = static_cast<std::vector<uimodel::TrackColumnState> const*>(nullptr);
-
-    if (_columnLayouts != nullptr)
-    {
-      if (auto const it = _columnLayouts->listLayouts.find(state.listId); it != _columnLayouts->listLayouts.end())
-      {
-        stored = &it->second;
-      }
-    }
+    auto const& stored = _columnLayouts->layoutForList(state.listId);
 
     choices.reserve(state.presentation.visibleFields.size());
 
@@ -598,12 +579,9 @@ namespace ao::winui
     {
       bool visible = true;
 
-      if (stored != nullptr)
+      if (auto const it = std::ranges::find(stored, field, &uimodel::TrackColumnState::field); it != stored.end())
       {
-        if (auto const it = std::ranges::find(*stored, field, &uimodel::TrackColumnState::field); it != stored->end())
-        {
-          visible = it->visible;
-        }
+        visible = it->visible;
       }
 
       choices.push_back({.field = field, .visible = visible});
@@ -623,12 +601,17 @@ namespace ao::winui
 
     auto const state = _runtime->views().trackListState(_viewId);
 
+    if (state.listId == kInvalidListId)
+    {
+      return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
+    }
+
     if (!std::ranges::contains(state.presentation.visibleFields, *optField))
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnOutsidePresentation"));
     }
 
-    auto& stored = _columnLayouts->listLayouts[state.listId];
+    auto stored = _columnLayouts->layoutForList(state.listId);
     auto existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
     auto const currentlyVisible = existing == stored.end() || existing->visible;
 
@@ -668,6 +651,7 @@ namespace ao::winui
     }
 
     existing->visible = visible;
+    _columnLayouts->updateLayout(state.listId, stored);
     refreshRows();
     return {};
   }

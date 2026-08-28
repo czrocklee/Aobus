@@ -4,12 +4,10 @@
 #include <ao/winui/layout/ShellDocument.h>
 
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ThemeSurface.h>
 
 #include <catch2/catch_message.hpp>
@@ -117,7 +115,7 @@ namespace ao::winui::test
     }
 
     /// Whether @p node runs play/pause when the user clicks it.
-    bool isPlayPauseControl(uimodel::LayoutComponentCatalog const& catalog, LayoutNode const& node)
+    bool isPlayPauseControl(uimodel::LayoutSchema const& schema, LayoutNode const& node)
     {
       if (node.type == "playback.transportButton")
       {
@@ -131,18 +129,17 @@ namespace ao::winui::test
 
       // The soul plays and pauses on its own unless the document spends that
       // gesture on an action, which is the only thing that can take it away.
-      auto const optDescriptor = catalog.descriptor(node.type);
-      return optDescriptor &&
-             !isActionSlotBound(optDescriptor->actionPolicy, node, uimodel::LayoutActionSlot::PrimaryClick);
+      auto const optComponent = schema.component(node.type);
+      return optComponent && !optComponent->actionId(node, uimodel::ActionSlot::PrimaryClick);
     }
 
-    std::size_t countPlayPauseControls(uimodel::LayoutComponentCatalog const& catalog, LayoutNode const& node)
+    std::size_t countPlayPauseControls(uimodel::LayoutSchema const& schema, LayoutNode const& node)
     {
-      auto total = isPlayPauseControl(catalog, node) ? std::size_t{1} : std::size_t{0};
+      auto total = isPlayPauseControl(schema, node) ? std::size_t{1} : std::size_t{0};
 
       for (auto const& child : node.children)
       {
-        total += countPlayPauseControls(catalog, child);
+        total += countPlayPauseControls(schema, child);
       }
 
       return total;
@@ -162,33 +159,31 @@ namespace ao::winui::test
     }
 
     /// Every action id the shipped document actually binds, defaults included.
-    void collectBoundActions(uimodel::LayoutComponentCatalog const& catalog,
+    void collectBoundActions(uimodel::LayoutSchema const& schema,
                              LayoutNode const& node,
                              std::vector<std::string>& actions)
     {
-      if (auto const optDescriptor = catalog.descriptor(node.type); optDescriptor)
+      if (auto const optComponent = schema.component(node.type); optComponent)
       {
-        for (auto const slot : {uimodel::LayoutActionSlot::PrimaryClick,
-                                uimodel::LayoutActionSlot::PrimaryLongPress,
-                                uimodel::LayoutActionSlot::SecondaryClick,
-                                uimodel::LayoutActionSlot::SecondaryLongPress})
+        for (auto const slot : {uimodel::ActionSlot::PrimaryClick,
+                                uimodel::ActionSlot::PrimaryLongPress,
+                                uimodel::ActionSlot::SecondaryClick,
+                                uimodel::ActionSlot::SecondaryLongPress})
         {
-          if (!isActionSlotBound(optDescriptor->actionPolicy, node, slot))
+          auto const optActionId = optComponent->actionId(node, slot);
+
+          if (!optActionId)
           {
             continue;
           }
 
-          auto const it = node.props.find(actionPropForSlot(slot));
-          auto const* const authored = it == node.props.end() ? nullptr : it->second.getIf<std::string>();
-          actions.emplace_back(authored != nullptr && !authored->empty()
-                                 ? *authored
-                                 : std::string{optDescriptor->actionPolicy.defaultAction(slot)});
+          actions.emplace_back(*optActionId);
         }
       }
 
       for (auto const& child : node.children)
       {
-        collectBoundActions(catalog, child, actions);
+        collectBoundActions(schema, child, actions);
       }
     }
 
@@ -238,7 +233,7 @@ namespace ao::winui::test
     // candidate, which on the shipped path means a window with no shell in it.
     // Nothing but starting the app would otherwise say so.
     auto const builder = readShellBuilderSource();
-    auto const& catalog = layoutCatalog();
+    auto const schema = layoutSchema();
 
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
@@ -249,7 +244,7 @@ namespace ao::winui::test
       REQUIRE(preparedRes.has_value());
 
       auto actions = std::vector<std::string>{};
-      collectBoundActions(catalog, preparedRes->effectiveRoot(), actions);
+      collectBoundActions(schema, preparedRes->effectiveRoot(), actions);
       CHECK_FALSE(actions.empty());
 
       for (auto const& action : actions)
@@ -274,7 +269,7 @@ namespace ao::winui::test
     REQUIRE(preparedRes.has_value());
 
     auto actions = std::vector<std::string>{};
-    collectBoundActions(layoutCatalog(), preparedRes->effectiveRoot(), actions);
+    collectBoundActions(layoutSchema(), preparedRes->effectiveRoot(), actions);
     CHECK(contains(actions, "shell.toggleInspector"));
 
     auto const builder = readShellBuilderSource();
@@ -441,7 +436,7 @@ namespace ao::winui::test
     // which. Counting the ways a preset reaches play/pause catches both
     // mistakes: a shell that lost the gesture, and one where two controls
     // compete for the same click.
-    auto const catalog = layoutCatalog();
+    auto const schema = layoutSchema();
 
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
@@ -451,22 +446,22 @@ namespace ao::winui::test
       auto const preparedRes = prepareShellPresetDocument(readShippedDocument(preset), resource);
       REQUIRE(preparedRes.has_value());
 
-      CHECK(countPlayPauseControls(catalog, preparedRes->effectiveRoot()) == 1);
+      CHECK(countPlayPauseControls(schema, preparedRes->effectiveRoot()) == 1);
 
       auto souls = std::vector<LayoutNode const*>{};
       collectByType(preparedRes->effectiveRoot(), "playback.soulButton", souls);
       CHECK_FALSE(souls.empty());
 
-      auto const optDescriptor = catalog.descriptor("playback.soulButton");
-      REQUIRE(optDescriptor);
+      auto const optComponent = schema.component("playback.soulButton");
+      REQUIRE(optComponent);
 
       for (auto const* const soul : souls)
       {
         INFO("soul " << soul->id);
         // The gestures that compete with nothing the soul does are the shell's
         // everywhere, so no preset has to remember to author them.
-        CHECK(isActionSlotBound(optDescriptor->actionPolicy, *soul, uimodel::LayoutActionSlot::SecondaryClick));
-        CHECK(isActionSlotBound(optDescriptor->actionPolicy, *soul, uimodel::LayoutActionSlot::PrimaryLongPress));
+        CHECK(optComponent->actionId(*soul, uimodel::ActionSlot::SecondaryClick));
+        CHECK(optComponent->actionId(*soul, uimodel::ActionSlot::PrimaryLongPress));
       }
     }
   }
@@ -509,7 +504,7 @@ namespace ao::winui::test
       CHECK(preparedRes.error().code == Error::Code::NotSupported);
     }
 
-    SECTION("a component the Windows catalog does not register")
+    SECTION("a component the Windows schema does not register")
     {
       auto const preparedRes = prepareShellPresetDocument("version: 1\nroot:\n  id: root\n  type: tabs\n", "gtk.yaml");
 

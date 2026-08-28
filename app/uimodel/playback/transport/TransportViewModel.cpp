@@ -8,8 +8,8 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <functional>
@@ -101,32 +101,32 @@ namespace ao::uimodel
   } // namespace
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
-                                         PlaybackCommandSurface& commands,
+                                         PlaybackActions& actions,
                                          i18n::MessageCatalog textCatalog,
                                          PlaybackCommand command,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
     : _playback{playback}
-    , _commands{commands}
+    , _actions{actions}
     , _textCatalog{std::move(textCatalog)}
     , _command{command}
     , _showLabel{showLabel}
     , _onRender{std::move(onRender)}
   {
-    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] { refresh(); });
+    _availabilitySub = _actions.onAvailabilityChanged(_command, [this] { refresh(); });
     refresh();
   }
 
   void TransportViewModel::handleClick()
   {
-    _commands.execute(_command);
+    _actions.execute(_command);
   }
 
   void TransportViewModel::refresh()
   {
     auto const& snapshot = _playback.snapshot();
     auto const view = describeTransportButton(
-      _command, _textCatalog, snapshot.transport, snapshot.succession, _commands.isEnabled(_command), _showLabel);
+      _command, _textCatalog, snapshot.transport, snapshot.succession, _actions.isEnabled(_command), _showLabel);
 
     if (_onRender)
     {

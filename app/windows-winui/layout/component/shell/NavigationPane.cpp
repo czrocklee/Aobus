@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/component/shell/NavigationPane.h"
-
 #include "layout/component/shell/PaneSplitter.h"
+#include "layout/runtime/ComponentRegistrations.h"
+#include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/UiSubscription.h"
@@ -22,7 +22,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
-#include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
@@ -167,18 +167,28 @@ namespace ao::winui::layout
     class NavigationBinding final
     {
     public:
-      explicit NavigationBinding(LayoutBuildContext& ctx)
-        : _trackList{ctx.trackList}
-        , _workspace{ctx.workspace}
-        , _listTreeProjection{ctx.library.listTreeProjection}
-        , _subscribeListTreeChanged{ctx.library.subscribeListTreeChanged}
-        , _preferredPresentation{ctx.library.preferredPresentation}
-        , _createList{ctx.library.createList}
-        , _editList{ctx.library.editList}
-        , _deleteList{ctx.library.deleteList}
-        , _textCatalog{ctx.textCatalog}
-        , _gatePtr{ctx.gatePtr}
-        , _reportStatus{ctx.reportStatus}
+      NavigationBinding(TrackListController& trackList,
+                        rt::WorkspaceService& workspace,
+                        std::function<uimodel::ListTreeProjection()> listTreeProjection,
+                        std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> subscribeListTreeChanged,
+                        std::function<std::optional<rt::TrackPresentationSpec>(ListId)> preferredPresentation,
+                        std::function<void(ListId, std::string)> createList,
+                        std::function<void(ListId)> editList,
+                        std::function<void(ListId, bool)> deleteList,
+                        i18n::MessageCatalog textCatalog,
+                        std::weak_ptr<uimodel::ShellGenerationGate> gatePtr,
+                        std::function<void(std::string)> reportStatus)
+        : _trackList{trackList}
+        , _workspace{workspace}
+        , _listTreeProjection{std::move(listTreeProjection)}
+        , _subscribeListTreeChanged{std::move(subscribeListTreeChanged)}
+        , _preferredPresentation{std::move(preferredPresentation)}
+        , _createList{std::move(createList)}
+        , _editList{std::move(editList)}
+        , _deleteList{std::move(deleteList)}
+        , _textCatalog{std::move(textCatalog)}
+        , _gatePtr{std::move(gatePtr)}
+        , _reportStatus{std::move(reportStatus)}
       {
       }
 
@@ -353,9 +363,13 @@ namespace ao::winui::layout
     class NavigationViewPaneComponent final : public LayoutContainer
     {
     public:
-      explicit NavigationViewPaneComponent(LayoutBuildContext& ctx)
-        : _binding{ctx}
-        , _width{ctx.paneSettings, ctx.gatePtr}
+      NavigationViewPaneComponent(LayoutBuildContext& ctx,
+                                  NavigationBinding binding,
+                                  rt::WorkspaceService& workspace,
+                                  PaneSettingsAccess paneSettings,
+                                  async::Signal<ShellState>& shellStateChanged)
+        : _binding{std::move(binding)}
+        , _width{std::move(paneSettings), ctx.gatePtr}
         , _splitter{PaneEdge::Trailing,
                     [this](double const change)
                     {
@@ -381,10 +395,9 @@ namespace ao::winui::layout
         applyWidth();
         rebuild();
         applyShellState(ctx.shellState);
-        _shellStateSub = subscribeUiUpdate(ctx.shellStateChanged,
-                                           "NavigationViewPaneComponent",
-                                           [this](ShellState const state) { applyShellState(state); });
-        _workspaceSub = ctx.workspace.onChanged(
+        _shellStateSub = subscribeUiUpdate(
+          shellStateChanged, "NavigationViewPaneComponent", [this](ShellState const state) { applyShellState(state); });
+        _workspaceSub = workspace.onChanged(
           [this](rt::WorkspaceChanged const&)
           {
             applyUiUpdate("NavigationViewPaneComponent",
@@ -567,9 +580,14 @@ namespace ao::winui::layout
     class NavigationTreePaneComponent final : public LayoutComponent
     {
     public:
-      NavigationTreePaneComponent(LayoutBuildContext& ctx, winrt::Microsoft::UI::Xaml::DataTemplate const& nodeTemplate)
-        : _binding{ctx}
-        , _width{ctx.paneSettings, ctx.gatePtr}
+      NavigationTreePaneComponent(LayoutBuildContext& ctx,
+                                  winrt::Microsoft::UI::Xaml::DataTemplate const& nodeTemplate,
+                                  NavigationBinding binding,
+                                  rt::WorkspaceService& workspace,
+                                  PaneSettingsAccess paneSettings,
+                                  async::Signal<ShellState>& shellStateChanged)
+        : _binding{std::move(binding)}
+        , _width{std::move(paneSettings), ctx.gatePtr}
         , _splitter{PaneEdge::Trailing,
                     [this](double const change)
                     {
@@ -593,10 +611,9 @@ namespace ao::winui::layout
         applyWidth();
         rebuild();
         applyShellState(ctx.shellState);
-        _shellStateSub = subscribeUiUpdate(ctx.shellStateChanged,
-                                           "NavigationTreePaneComponent",
-                                           [this](ShellState const state) { applyShellState(state); });
-        _workspaceSub = ctx.workspace.onChanged(
+        _shellStateSub = subscribeUiUpdate(
+          shellStateChanged, "NavigationTreePaneComponent", [this](ShellState const state) { applyShellState(state); });
+        _workspaceSub = workspace.onChanged(
           [this](rt::WorkspaceChanged const&)
           {
             applyUiUpdate("NavigationTreePaneComponent",
@@ -731,26 +748,70 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeNavigationPane(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+  void registerNavigationPaneComponent(
+    ComponentRegistry& registry,
+    TrackListController& trackList,
+    rt::WorkspaceService& workspace,
+    std::function<uimodel::ListTreeProjection()> listTreeProjection,
+    std::function<async::Subscription(compat::MoveOnlyFunction<void()>)> subscribeListTreeChanged,
+    std::function<std::optional<rt::TrackPresentationSpec>(ListId)> preferredPresentation,
+    std::function<void(ListId, std::string)> createList,
+    std::function<void(ListId)> editList,
+    std::function<void(ListId, bool)> deleteList,
+    i18n::MessageCatalog textCatalog,
+    PaneSettingsAccess paneSettings,
+    async::Signal<ShellState>& shellStateChanged,
+    std::function<void(std::string)> reportStatus)
   {
-    if (node.propertyOr<std::string>("presentation", {}) != kTreePresentation)
-    {
-      return std::make_unique<NavigationViewPaneComponent>(ctx);
-    }
+    registry.registerComponent(
+      "windows.navigationPane",
+      [&trackList,
+       &workspace,
+       listTreeProjection = std::move(listTreeProjection),
+       subscribeListTreeChanged = std::move(subscribeListTreeChanged),
+       preferredPresentation = std::move(preferredPresentation),
+       createList = std::move(createList),
+       editList = std::move(editList),
+       deleteList = std::move(deleteList),
+       textCatalog = std::move(textCatalog),
+       paneSettings = std::move(paneSettings),
+       &shellStateChanged,
+       reportStatus = std::move(reportStatus)](
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        auto binding = NavigationBinding{trackList,
+                                         workspace,
+                                         listTreeProjection,
+                                         subscribeListTreeChanged,
+                                         preferredPresentation,
+                                         createList,
+                                         editList,
+                                         deleteList,
+                                         textCatalog,
+                                         ctx.gatePtr,
+                                         reportStatus};
 
-    auto const boxedKey = winrt::box_value(winrt::to_hstring(kTreeNodeTemplateKey));
-    auto const nodeTemplate = ctx.resources && ctx.resources.HasKey(boxedKey)
-                                ? ctx.resources.Lookup(boxedKey).try_as<winrt::Microsoft::UI::Xaml::DataTemplate>()
-                                : nullptr;
+        if (node.propertyOr<std::string>("presentation", {}) != kTreePresentation)
+        {
+          return std::make_unique<NavigationViewPaneComponent>(
+            ctx, std::move(binding), workspace, paneSettings, shellStateChanged);
+        }
 
-    if (!nodeTemplate)
-    {
-      return makeError(
-        Error::Code::NotFound,
-        std::format(
-          "Node '{}' needs the window resource '{}', which the frame does not declare", node.id, kTreeNodeTemplateKey));
-    }
+        auto const boxedKey = winrt::box_value(winrt::to_hstring(kTreeNodeTemplateKey));
+        auto const nodeTemplate = ctx.resources && ctx.resources.HasKey(boxedKey)
+                                    ? ctx.resources.Lookup(boxedKey).try_as<winrt::Microsoft::UI::Xaml::DataTemplate>()
+                                    : nullptr;
 
-    return std::make_unique<NavigationTreePaneComponent>(ctx, nodeTemplate);
+        if (!nodeTemplate)
+        {
+          return makeError(Error::Code::NotFound,
+                           std::format("Node '{}' needs the window resource '{}', which the frame does not declare",
+                                       node.id,
+                                       kTreeNodeTemplateKey));
+        }
+
+        return std::make_unique<NavigationTreePaneComponent>(
+          ctx, nodeTemplate, std::move(binding), workspace, paneSettings, shellStateChanged);
+      });
   }
 } // namespace ao::winui::layout

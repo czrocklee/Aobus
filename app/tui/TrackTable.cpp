@@ -17,8 +17,8 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -61,7 +61,7 @@ namespace ao::tui
 
     std::int32_t terminalColumnWidth(rt::TrackField const field)
     {
-      auto const policyWidth = uimodel::defaultTrackFieldColumnWidth(field);
+      auto const policyWidth = uimodel::trackColumnDefaults(field).width;
 
       if (policyWidth <= 0)
       {
@@ -74,7 +74,7 @@ namespace ao::tui
 
     std::int32_t terminalMinimumColumnWidth(rt::TrackField const field)
     {
-      return std::clamp(uimodel::minimumTrackFieldColumnWidth(field) / kPresentationPixelToTerminalColumnRatio,
+      return std::clamp(uimodel::trackColumnDefaults(field).minimumWidth / kPresentationPixelToTerminalColumnRatio,
                         kMinimumTrackColumnWidthColumns,
                         kMaximumFieldColumns);
     }
@@ -224,7 +224,7 @@ namespace ao::tui
       for (auto const field : normalized.visibleFields)
       {
         auto spec = uimodel::TrackColumnSolveSpec{.field = field,
-                                                  .weight = uimodel::defaultTrackFieldColumnWeight(field),
+                                                  .weight = uimodel::trackColumnDefaults(field).weight,
                                                   .fixedWidth = -1,
                                                   .defaultWidth = terminalColumnWidth(field),
                                                   .minimumWidth = terminalMinimumColumnWidth(field)};
@@ -244,11 +244,11 @@ namespace ao::tui
       {
         auto const field = normalized.visibleFields[index];
         auto const width = index < widths.size() ? widths[index] : terminalColumnWidth(field);
-        columns.push_back(
-          TrackColumn{.field = field,
-                      .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, field)},
-                      .width = width,
-                      .rightAligned = uimodel::trackFieldColumnAlignment(field) == uimodel::TrackColumnAlignment::End});
+        columns.push_back(TrackColumn{
+          .field = field,
+          .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, field)},
+          .width = width,
+          .rightAligned = uimodel::trackColumnDefaults(field).alignment == uimodel::TrackColumnAlignment::End});
       }
 
       return columns;

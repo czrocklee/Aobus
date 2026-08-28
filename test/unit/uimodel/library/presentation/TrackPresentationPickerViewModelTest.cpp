@@ -9,7 +9,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -37,7 +37,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
@@ -49,7 +49,7 @@ namespace ao::uimodel::test
     CHECK(rendered[0].activeViewId == rt::kInvalidViewId);
     CHECK(rendered[0].label == "Presentation");
     CHECK_FALSE(optCommand);
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - selecting a presentation captures the spec without persisting",
@@ -61,7 +61,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
@@ -75,7 +75,7 @@ namespace ao::uimodel::test
     CHECK(optCommand->targetViewId == fixture.workspace.snapshot().activeViewId);
     CHECK(optCommand->targetListId == rt::kAllTracksListId);
     CHECK(optCommand->spec.id == "albums");
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - All Tracks exposes Manual Order as disabled with its reason",
@@ -87,7 +87,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
     CHECK(item->disabledReason ==
           "All Tracks has no saved order. Create a saved List to arrange the full library manually.");
     CHECK_FALSE(workflow.selectPresentation(rt::kListOrderTrackPresentationId));
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - completing an applied selection persists the list preference",
@@ -113,7 +113,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
@@ -123,8 +123,8 @@ namespace ao::uimodel::test
     REQUIRE(fixture.viewService.setPresentation(optCommand->targetViewId, optCommand->spec));
     workflow.completeSelection(*optCommand);
 
-    REQUIRE(fixture.preferences.presentationIdForList(rt::kAllTracksListId));
-    CHECK(*fixture.preferences.presentationIdForList(rt::kAllTracksListId) == "albums");
+    REQUIRE(fixture.listPresentations.presentationIdForList(rt::kAllTracksListId));
+    CHECK(*fixture.listPresentations.presentationIdForList(rt::kAllTracksListId) == "albums");
     REQUIRE_FALSE(rendered.empty());
     CHECK(rendered.back().label == fixture.catalog.labelForId("albums"));
   }
@@ -140,7 +140,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
 
@@ -148,7 +148,7 @@ namespace ao::uimodel::test
 
     workflow.refresh();
 
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
     REQUIRE_FALSE(rendered.empty());
     CHECK(rendered.back().label == fixture.catalog.labelForId(rt::kDefaultTrackPresentationId));
   }
@@ -162,7 +162,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;
@@ -173,7 +173,7 @@ namespace ao::uimodel::test
 
     CHECK_FALSE(optCommand);
     CHECK(rendered.empty());
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - ignores unknown selections without changing preferences",
@@ -184,14 +184,14 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [](auto const&) {}};
 
     auto const optCommand = workflow.selectPresentation("not-a-presentation");
 
     CHECK_FALSE(optCommand);
-    CHECK(fixture.preferences.listPresentations().empty());
+    CHECK(fixture.listPresentations.snapshot().empty());
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - active view presentation changes refresh picker state",
@@ -203,7 +203,7 @@ namespace ao::uimodel::test
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
                                                      fixture.catalog,
-                                                     fixture.preferences,
+                                                     fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;

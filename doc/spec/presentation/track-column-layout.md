@@ -65,7 +65,7 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 `TrackColumnSolveSpec` is the pure solver input.
 `TrackColumnState` is the canonical UI-local order, sizing, and visibility state
 for a field.
-`TrackColumnLayoutStore` maps `ListId` to an ordered vector of column states and emits the affected list id after a real change.
+`TrackColumnLayouts` maps `ListId` to an ordered vector of column states and emits the affected list id after a real change.
 
 The active list id is used only to expose the active field order.
 It is not a second owner of the runtime view or list selection.
@@ -151,22 +151,21 @@ A manually overridden TUI column is treated as fixed for the current solve while
 
 ## Implementation map
 
-- [`TrackFieldPresentationPolicy.cpp`](../../../app/uimodel/library/presentation/TrackFieldPresentationPolicy.cpp) classifies field alignment and sizing and supplies defaults and minimums.
+- [`TrackColumnDefaults.cpp`](../../../app/uimodel/library/presentation/TrackColumnDefaults.cpp) classifies field alignment and sizing and supplies defaults and minimums.
 - [`TrackColumnWidthSolver.cpp`](../../../app/uimodel/library/presentation/TrackColumnWidthSolver.cpp) implements allocation, conversion, resize, and canonicalization.
-- [`TrackColumnLayoutStore.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutStore.cpp) owns per-list UI-local state and change signals.
+- [`TrackColumnLayouts.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayouts.cpp) owns per-list UI-local state, change signals, and stored-layout merging.
 - [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) owns explicit YAML mapping, versioned persistence conversion, and validation.
-- [`TrackColumnLayoutPolicy.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutPolicy.cpp) derives the active visible order while preserving stored hidden fields.
 - [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) adapts GTK viewport and drag events.
 - [`TrackListController.cpp`](../../../app/windows-winui/track/TrackListController.cpp) adapts WinUI headers, rows, viewport, reordering, and visibility.
 - [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) adapts the solver to terminal geometry.
 
 ## Test map
 
-- [`TrackFieldPresentationPolicyTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
+- [`TrackColumnDefaultsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
 - [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow, convergence, resize, and canonical state.
-- [`TrackColumnLayoutStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp) protects per-list state and notification behavior.
+- [`TrackColumnLayoutsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state and notification behavior.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
-- [`TrackColumnLayoutPolicyTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutPolicyTest.cpp) protects stored visibility and presentation-field filtering.
+- [`TrackColumnLayoutMergingTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
 - [`TrackColumnControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) and [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protect terminal layout and resize gestures.
 

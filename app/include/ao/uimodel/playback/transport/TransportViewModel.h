@@ -18,7 +18,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
 
   enum class TransportIcon : std::uint8_t
   {
@@ -47,7 +47,7 @@ namespace ao::uimodel
   {
   public:
     TransportViewModel(rt::PlaybackService& playback,
-                       PlaybackCommandSurface& commands,
+                       PlaybackActions& actions,
                        i18n::MessageCatalog textCatalog,
                        PlaybackCommand command,
                        bool showLabel,
@@ -65,7 +65,7 @@ namespace ao::uimodel
 
   private:
     rt::PlaybackService& _playback;
-    PlaybackCommandSurface& _commands;
+    PlaybackActions& _actions;
     i18n::MessageCatalog _textCatalog;
     PlaybackCommand _command;
     bool _showLabel;

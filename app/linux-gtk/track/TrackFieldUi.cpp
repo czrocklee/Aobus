@@ -5,9 +5,8 @@
 
 #include "track/TrackRowObject.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <array>
 #include <cstddef>

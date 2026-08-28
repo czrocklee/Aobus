@@ -80,7 +80,7 @@ namespace ao::gtk
                                _textCatalog,
                                [this](uimodel::ActivityStatusViewState const&) { render(); },
                                uimodel::ActivityStatusViewModelOptions{
-                                 .libraryTasks = dependencies.libraryTasks,
+                                 .libraryJobs = dependencies.libraryJobs,
                                  .emitInitialState = false,
                                }}
   {

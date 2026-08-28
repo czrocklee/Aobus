@@ -316,7 +316,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`AppState`](../../app/include/ao/rt/AppState.h) owns the `runtime` and `session` group names, their schemas, and their optional-over-seed compatibility rule, for every frontend that keeps application-global state.
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary and the GTK-only `window` group; it delegates the shared groups to the `AppState` API.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
-- [`OutputDeviceSelectionPolicy`](../../app/include/ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h)
+- [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   owns shared route-intent validation and fallback resolution without issuing a
   runtime command or owning a persistence location.
 - [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
@@ -340,7 +340,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppStateTest.cpp`](../../test/unit/runtime/AppStateTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect the GTK file boundary and delta-from-default keymaps.
-- [`OutputDeviceSelectionPolicyTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceSelectionPolicyTest.cpp)
+- [`OutputSelectionTest.cpp`](../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protects the shared persisted-route admission rule.
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
   protects the WinUI startup and deferred-checkpoint adaptation.

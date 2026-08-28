@@ -11,7 +11,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <functional>
@@ -42,13 +42,13 @@ namespace ao::uimodel
     rt::ViewService& views,
     rt::WorkspaceService& workspace,
     TrackPresentationCatalog& catalog,
-    ListPresentationPreferenceStore& preferences,
+    ListPresentations& listPresentations,
     i18n::MessageCatalog textCatalog,
     std::function<void(TrackPresentationPickerState const&)> onRender)
     : _views{views}
     , _workspace{workspace}
     , _catalog{catalog}
-    , _preferences{preferences}
+    , _listPresentations{listPresentations}
     , _textCatalog{std::move(textCatalog)}
     , _onRender{std::move(onRender)}
   {
@@ -170,6 +170,6 @@ namespace ao::uimodel
       return;
     }
 
-    _preferences.setPresentationIdForList(selection.targetListId, selection.spec.id);
+    _listPresentations.setPresentationIdForList(selection.targetListId, selection.spec.id);
   }
 } // namespace ao::uimodel

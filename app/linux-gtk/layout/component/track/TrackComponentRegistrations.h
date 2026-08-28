@@ -15,7 +15,7 @@ namespace ao::rt
 namespace ao::uimodel
 {
   class TrackPresentationCatalog;
-  class ListPresentationPreferenceStore;
+  class ListPresentations;
 }
 namespace ao::gtk
 {
@@ -41,7 +41,7 @@ namespace ao::gtk::layout
   void registerTrackPresentationButtonComponent(ComponentRegistry& registry,
                                                 rt::AppRuntime& runtime,
                                                 uimodel::TrackPresentationCatalog* presentationCatalog,
-                                                uimodel::ListPresentationPreferenceStore* presentationPreferences,
+                                                uimodel::ListPresentations* listPresentations,
                                                 ThemeCoordinator* themeCoordinator,
                                                 i18n::MessageCatalog const& textCatalog);
 

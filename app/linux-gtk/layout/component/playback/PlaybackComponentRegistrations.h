@@ -10,7 +10,7 @@ namespace ao::rt
 }
 namespace ao::uimodel
 {
-  class PlaybackCommandSurface;
+  class PlaybackActions;
   class OutputDeviceIntent;
 }
 namespace ao::i18n
@@ -36,12 +36,12 @@ namespace ao::gtk::layout
                                       i18n::MessageCatalog const& textCatalog);
   void registerSoulTransportButtonComponent(ComponentRegistry& registry,
                                             rt::PlaybackService& playback,
-                                            uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                            uimodel::PlaybackActions* playbackActions,
                                             i18n::MessageCatalog const& textCatalog);
   void registerSoulButtonComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
   void registerTransportButtonComponent(ComponentRegistry& registry,
                                         rt::PlaybackService& playback,
-                                        uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                        uimodel::PlaybackActions* playbackActions,
                                         i18n::MessageCatalog const& textCatalog);
   void registerVolumeControlComponent(ComponentRegistry& registry,
                                       rt::PlaybackService& playback,

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutRuntime.h"
 #include <ao/Error.h>
@@ -16,14 +17,11 @@
 namespace ao::uimodel
 {
   class PreparedLayout;
-  struct LayoutRuntimeState;
 } // namespace ao::uimodel
 
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
-  struct LayoutBuildContext;
-
   /**
    * @brief A GTK widget that hosts a dynamic layout.
    */
@@ -39,18 +37,23 @@ namespace ao::gtk::layout
       PreparedTree& operator=(PreparedTree&&) noexcept = default;
       ~PreparedTree() = default;
 
-      std::uint64_t componentStateGeneration() const noexcept { return _componentStateGeneration; }
+      std::uint64_t generation() const noexcept { return _generation; }
 
     private:
-      PreparedTree(std::unique_ptr<LayoutComponent> rootComponentPtr, std::uint64_t componentStateGeneration)
-        : _rootComponentPtr{std::move(rootComponentPtr)}, _componentStateGeneration{componentStateGeneration}
+      PreparedTree(std::unique_ptr<LayoutComponent> rootComponentPtr,
+                   std::unique_ptr<SharedWidgetHandoff> sharedWidgetHandoffPtr,
+                   std::uint64_t generation)
+        : _sharedWidgetHandoffPtr{std::move(sharedWidgetHandoffPtr)}
+        , _rootComponentPtr{std::move(rootComponentPtr)}
+        , _generation{generation}
       {
       }
 
       friend class LayoutHost;
 
+      std::unique_ptr<SharedWidgetHandoff> _sharedWidgetHandoffPtr;
       std::unique_ptr<LayoutComponent> _rootComponentPtr;
-      std::uint64_t _componentStateGeneration = 0;
+      std::uint64_t _generation = 0;
     };
 
     explicit LayoutHost(ComponentRegistry const& registry);
@@ -63,13 +66,13 @@ namespace ao::gtk::layout
     /**
      * @brief Invalidate the previous generation and install a prepared tree as one host replacement.
      */
-    void commit(uimodel::LayoutRuntimeState& runtimeState, PreparedTree prepared);
+    void commit(PreparedTree prepared);
 
     /**
      * @brief Destroy the active layout tree without invalidating its final state writes.
      *
-     * Owners use this during teardown while the runtime state and dependencies
-     * borrowed by components are still alive.
+     * Owners use this during teardown while the component-state store and other
+     * dependencies borrowed by components are still alive.
      */
     void clearLayout();
 

@@ -7,8 +7,8 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
-#include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
+#include <ao/uimodel/library/track/TrackFilterView.h>
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

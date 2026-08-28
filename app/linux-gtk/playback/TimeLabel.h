@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>

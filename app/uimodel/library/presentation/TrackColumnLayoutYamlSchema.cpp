@@ -7,8 +7,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -107,7 +107,7 @@ namespace ao::uimodel
     {
       auto const fixed = column.width > 0 && column.weight == -1.0;
       auto const flexible = column.width == -1 && column.weight > 0.0 && std::isfinite(column.weight);
-      return trackFieldColumnSizing(column.field) == TrackColumnSizing::Fixed ? fixed : flexible;
+      return trackColumnDefaults(column.field).sizing == TrackColumnSizing::Fixed ? fixed : flexible;
     }
 
     Result<> validateColumn(TrackColumnState const& column, Error::Code code)
@@ -126,12 +126,12 @@ namespace ao::uimodel
     }
   } // namespace
 
-  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayoutState const& state)
+  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayouts::Snapshot const& state)
   {
     auto document = TrackColumnLayoutDocument{};
-    document.layouts.reserve(state.listLayouts.size());
+    document.layouts.reserve(state.size());
 
-    for (auto const& [listId, columns] : state.listLayouts)
+    for (auto const& [listId, columns] : state)
     {
       AO_EXPECTS(listId != kInvalidListId, "Cannot persist a track column layout for the invalid list id");
 
@@ -164,7 +164,7 @@ namespace ao::uimodel
     return document;
   }
 
-  Result<TrackColumnLayoutState> trackColumnLayoutStateFromDocument(TrackColumnLayoutDocument const& document)
+  Result<TrackColumnLayouts::Snapshot> trackColumnLayoutsFromDocument(TrackColumnLayoutDocument const& document)
   {
     if (document.version != kTrackColumnLayoutVersion)
     {
@@ -172,7 +172,7 @@ namespace ao::uimodel
         Error::Code::NotSupported, std::format("Unsupported track column layout version {}", document.version));
     }
 
-    auto state = TrackColumnLayoutState{};
+    auto state = TrackColumnLayouts::Snapshot{};
 
     for (auto const& stored : document.layouts)
     {
@@ -183,7 +183,7 @@ namespace ao::uimodel
         return makeError(Error::Code::FormatRejected, "Track column layout uses the invalid list id");
       }
 
-      if (state.listLayouts.contains(listId))
+      if (state.contains(listId))
       {
         return makeError(
           Error::Code::FormatRejected, std::format("Track column layout repeats list id {}", stored.listId));
@@ -221,13 +221,13 @@ namespace ao::uimodel
         columns.push_back(columnState);
       }
 
-      state.listLayouts.emplace(listId, std::move(columns));
+      state.emplace(listId, std::move(columns));
     }
 
     return state;
   }
 
-  Result<> TrackColumnLayoutYamlSchema::serialize(ryml::NodeRef node, TrackColumnLayoutState const& state) const
+  Result<> TrackColumnLayoutYamlSchema::serialize(ryml::NodeRef node, TrackColumnLayouts::Snapshot const& state) const
   {
     auto documentRes = toTrackColumnLayoutDocument(state);
 
@@ -239,8 +239,9 @@ namespace ao::uimodel
     return writeDocument(node, *documentRes);
   }
 
-  Result<TrackColumnLayoutState> TrackColumnLayoutYamlSchema::deserialize(ryml::ConstNodeRef node,
-                                                                          TrackColumnLayoutState const& /*seed*/) const
+  Result<TrackColumnLayouts::Snapshot> TrackColumnLayoutYamlSchema::deserialize(
+    ryml::ConstNodeRef node,
+    TrackColumnLayouts::Snapshot const& /*seed*/) const
   {
     auto documentRes = readDocument(node);
 
@@ -249,6 +250,6 @@ namespace ao::uimodel
       return std::unexpected{documentRes.error()};
     }
 
-    return trackColumnLayoutStateFromDocument(*documentRes);
+    return trackColumnLayoutsFromDocument(*documentRes);
   }
 } // namespace ao::uimodel

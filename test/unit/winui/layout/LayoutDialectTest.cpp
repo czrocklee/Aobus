@@ -9,7 +9,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutValidation.h>
-#include <ao/winui/layout/LayoutCatalog.h>
+#include <ao/winui/layout/LayoutSchema.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -44,7 +44,7 @@ namespace ao::winui::test
       auto const document = uimodel::LayoutDocument{.root = std::move(root)};
       auto const preparedRes = uimodel::prepareLayout(document);
       REQUIRE(preparedRes.has_value());
-      return uimodel::validateLayout(*preparedRes, layoutCatalog(), layoutActionCatalog(), layoutDialect());
+      return uimodel::validateLayout(*preparedRes, layoutSchema(), layoutDialect());
     }
 
     uimodel::LayoutRejection rejectionOf(LayoutNode root)
@@ -63,7 +63,8 @@ namespace ao::winui::test
        LayoutNode{.id = "status", .type = "windows.statusBar"},
        LayoutNode{.type = "playback.transportButton", .props = {{"command", LayoutValue{std::string{"stop"}}}}}});
 
-    CHECK_FALSE(validate(std::move(root)).has_value());
+    auto const optRejection = validate(std::move(root));
+    CHECK_FALSE(optRejection);
   }
 
   TEST_CASE("validateLayout under the Windows dialect - an unregistered component type rejects the candidate",
@@ -255,7 +256,8 @@ namespace ao::winui::test
                                         .props = {{"presentation", LayoutValue{std::string{"navigationView"}}}},
                                         .children = {trackTable()}}});
 
-      CHECK_FALSE(validate(std::move(root)).has_value());
+      auto const optRejection = validate(std::move(root));
+      CHECK_FALSE(optRejection);
     }
   }
 
@@ -284,7 +286,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - action bindings honor the policy and the catalog",
+  TEST_CASE("validateLayout under the Windows dialect - action bindings honor the policy and the schema",
             "[winui][unit][layout]")
   {
     SECTION("a component without an action policy rejects a bound slot")
@@ -312,7 +314,8 @@ namespace ao::winui::test
       auto root = shellRoot({LayoutNode{
         .id = "command", .type = "actionButton", .props = {{"primaryAction", LayoutValue{std::string{"none"}}}}}});
 
-      CHECK_FALSE(validate(std::move(root)).has_value());
+      auto const optRejection = validate(std::move(root));
+      CHECK_FALSE(optRejection);
     }
   }
 
@@ -335,8 +338,7 @@ namespace ao::winui::test
     auto const preparedRes = uimodel::prepareLayout(document);
     REQUIRE(preparedRes.has_value());
 
-    auto const validatedRes =
-      uimodel::requireValidLayout(*preparedRes, layoutCatalog(), layoutActionCatalog(), layoutDialect());
+    auto const validatedRes = uimodel::requireValidLayout(*preparedRes, layoutSchema(), layoutDialect());
 
     REQUIRE_FALSE(validatedRes.has_value());
     CHECK(validatedRes.error().code == Error::Code::FormatRejected);

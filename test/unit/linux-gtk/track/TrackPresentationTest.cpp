@@ -4,8 +4,8 @@
 #include "app/linux-gtk/app/GtkLayoutStateStore.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,12 +21,12 @@ namespace ao::gtk::test
     auto const& configDir = tempDir.path();
     auto const configPath = configDir / "gtk_layout.yaml";
 
-    auto state = uimodel::TrackColumnLayoutState{};
-    auto prefState = uimodel::ListPresentationPreferenceState{};
+    auto state = uimodel::TrackColumnLayouts::Snapshot{};
+    auto prefState = uimodel::ListPresentations::Snapshot{};
     auto layout =
       std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = -1, .weight = 1.25},
                   uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 222, .weight = -1.0}};
-    state.listLayouts.emplace(ListId{42}, layout);
+    state.emplace(ListId{42}, layout);
 
     {
       auto store = GtkLayoutStateStore{configDir};
@@ -35,13 +35,13 @@ namespace ao::gtk::test
 
     REQUIRE(std::filesystem::exists(configPath));
 
-    auto loaded = uimodel::TrackColumnLayoutState{};
-    auto loadedPref = uimodel::ListPresentationPreferenceState{};
+    auto loaded = uimodel::TrackColumnLayouts::Snapshot{};
+    auto loadedPref = uimodel::ListPresentations::Snapshot{};
     auto store = GtkLayoutStateStore{configDir};
     store.load(loaded, loadedPref);
 
-    REQUIRE(loaded.listLayouts.contains(ListId{42}));
-    auto const& loadedLayout = loaded.listLayouts.at(ListId{42});
+    REQUIRE(loaded.contains(ListId{42}));
+    auto const& loadedLayout = loaded.at(ListId{42});
     REQUIRE(loadedLayout.size() == 2);
     CHECK(loadedLayout[0].field == rt::TrackField::Title);
     CHECK(loadedLayout[0].width == -1);

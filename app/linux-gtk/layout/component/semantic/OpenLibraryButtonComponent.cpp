@@ -9,7 +9,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportActions.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/button.h>
@@ -56,9 +56,9 @@ namespace ao::gtk::layout
                                           i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
-      {.type = "library.openLibraryButton",
+      {.id = "library.openLibraryButton",
        .displayName = "Open Library Button",
-       .category = LayoutComponentCategory::Library,
+       .category = ComponentCategory::Library,
        .minChildren = 0,
        .optMaxChildren = 0},
       [importExportActions, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)

@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,25 +40,21 @@ namespace ao::gtk::layout
   class ActionRegistry final
   {
   public:
-    ActionRegistry();
-    ~ActionRegistry();
+    explicit ActionRegistry(uimodel::LayoutSchema& schema);
+    ~ActionRegistry() = default;
 
     ActionRegistry(ActionRegistry const&) = delete;
     ActionRegistry& operator=(ActionRegistry const&) = delete;
     ActionRegistry(ActionRegistry&&) = delete;
     ActionRegistry& operator=(ActionRegistry&&) = delete;
 
-    bool registerAction(uimodel::LayoutActionDescriptor descriptor,
-                        ActionHandler handler,
-                        ActionStateProvider stateProvider = {});
+    bool registerAction(uimodel::ActionSchema schema, ActionHandler handler, ActionStateProvider stateProvider = {});
 
-    std::optional<uimodel::LayoutActionDescriptor> descriptor(std::string_view id) const;
-    std::vector<uimodel::LayoutActionDescriptor> descriptors() const;
+    std::optional<uimodel::ActionSchema> action(std::string_view id) const;
+    std::span<uimodel::ActionSchema const> actions() const;
 
     ActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
     bool activate(std::string_view id, ActionActivationContext& ctx) const;
-
-    uimodel::LayoutActionCatalog const& catalog() const noexcept;
 
   private:
     struct Entry final
@@ -68,7 +64,7 @@ namespace ao::gtk::layout
       ActionStateProvider stateProvider;
     };
 
-    uimodel::LayoutActionCatalog _catalog;
+    uimodel::LayoutSchema& _schema;
     std::vector<Entry> _entries;
   };
 } // namespace ao::gtk::layout

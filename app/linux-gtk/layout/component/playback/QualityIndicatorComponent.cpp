@@ -8,9 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
-#include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -23,8 +21,7 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    using uimodel::LayoutComponentActionPolicy;
-    using uimodel::slotBit;
+    using uimodel::actionSlotBit;
 
     /**
      * @brief playback.qualityIndicator
@@ -55,15 +52,13 @@ namespace ao::gtk::layout
   void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
   {
     registry.registerComponent(
-      {.type = "playback.qualityIndicator",
+      {.id = "playback.qualityIndicator",
        .displayName = "Quality Indicator",
-       .category = LayoutComponentCategory::Playback,
+       .category = ComponentCategory::Playback,
        .minChildren = 0,
        .optMaxChildren = 0,
-       .actionPolicy =
-         LayoutComponentActionPolicy{
-           .slotMask = slotBit(LayoutActionSlot::SecondaryClick) | slotBit(LayoutActionSlot::SecondaryLongPress),
-           .defaultActionIds = {{LayoutActionSlot::SecondaryLongPress, "shell.showSoul"}}}},
+       .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress),
+       .defaultActions = {{.slot = ActionSlot::SecondaryLongPress, .actionId = "shell.showSoul"}}},
       [&runtime](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
       { return std::make_unique<QualityIndicatorComponent>(runtime); });
   }

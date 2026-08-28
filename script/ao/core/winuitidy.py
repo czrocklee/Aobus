@@ -265,6 +265,7 @@ def find_header_companions(
     source_root = absolute_path(winui_root)
     include_roots = (
         source_root,
+        source_root / "include",
         root / "app" / "include",
         root / "include",
         root,

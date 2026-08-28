@@ -10,8 +10,8 @@
 #include <ao/async/Subscription.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
-#include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -101,7 +101,7 @@ namespace ao::gtk
 
     void configureTrackCellLabel(Gtk::Label& label, rt::TrackField field)
     {
-      if (uimodel::trackFieldColumnAlignment(field) == uimodel::TrackColumnAlignment::End)
+      if (uimodel::trackColumnDefaults(field).alignment == uimodel::TrackColumnAlignment::End)
       {
         label.set_halign(Gtk::Align::END);
         label.set_xalign(1.0F);

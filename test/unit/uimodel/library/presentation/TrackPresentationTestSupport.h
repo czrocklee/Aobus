@@ -11,7 +11,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/TrackSourceCache.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 namespace ao::uimodel::test
@@ -26,6 +26,6 @@ namespace ao::uimodel::test
     rt::WorkspaceService workspace{executor, viewService, changes};
     i18n::MessageCatalog textCatalog{ao::test::englishMessageCatalog()};
     TrackPresentationCatalog catalog{workspace, textCatalog};
-    ListPresentationPreferenceStore preferences{catalog};
+    ListPresentations listPresentations{catalog};
   };
 } // namespace ao::uimodel::test

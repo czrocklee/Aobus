@@ -26,8 +26,8 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
 
@@ -101,7 +101,7 @@ namespace ao::cli
     }
 
     std::vector<TrackId> resolveUpdateTargets(library::MusicLibrary const& ml,
-                                              rt::LibraryReader& reader,
+                                              rt::LibrarySnapshot& snapshot,
                                               std::vector<std::uint32_t> const& rawIds,
                                               std::string const& filter)
     {
@@ -120,11 +120,11 @@ namespace ao::cli
         return queryMatchingTrackIds(ml, filter);
       }
 
-      return requireTrackIds(reader, rawIds);
+      return requireTrackIds(snapshot, rawIds);
     }
 
     std::vector<TrackId> resolveShowTargets(library::MusicLibrary const& ml,
-                                            rt::LibraryReader& reader,
+                                            rt::LibrarySnapshot& snapshot,
                                             std::vector<std::uint32_t> const& rawIds,
                                             std::string const& filter)
     {
@@ -135,7 +135,7 @@ namespace ao::cli
 
       if (!rawIds.empty())
       {
-        return requireTrackIds(reader, rawIds);
+        return requireTrackIds(snapshot, rawIds);
       }
 
       return queryMatchingTrackIds(ml, filter);
@@ -276,12 +276,12 @@ namespace ao::cli
                       bool dryRun)
     {
       auto const& ml = cli.musicLibrary();
-      auto reader = cli.library().reader();
-      auto const targetIds = resolveUpdateTargets(ml, reader, rawIds, filter);
+      auto snapshot = cli.library().snapshot();
+      auto const targetIds = resolveUpdateTargets(ml, snapshot, rawIds, filter);
 
       if (dryRun)
       {
-        auto const replyRes = cli.runTask(cli.library().writer().previewUpdateMetadata(targetIds, patch));
+        auto const replyRes = cli.runTask(cli.library().commands().previewUpdateMetadata(targetIds, patch));
 
         if (!replyRes)
         {
@@ -300,7 +300,7 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(cli.library().writer().updateMetadata(*bindingRes, patch));
+      auto const replyRes = cli.runTask(cli.library().commands().updateMetadata(*bindingRes, patch));
 
       if (!replyRes)
       {
@@ -962,10 +962,10 @@ namespace ao::cli
       showCmd->callback(
         [&cli, ids, filter, limit, offset, formatExpression]
         {
-          auto reader = cli.library().reader();
+          auto snapshot = cli.library().snapshot();
           auto const rawIds = ids->count() > 0 ? ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
           auto const targetIds = resolveShowTargets(
-            cli.musicLibrary(), reader, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
+            cli.musicLibrary(), snapshot, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
           show(cli.musicLibrary(),
                targetIds,
                cli.options().format,
@@ -989,7 +989,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const trackRes = cli.runTask(cli.library().writer().previewCreateTrackFromFile(trackPath));
+            auto const trackRes = cli.runTask(cli.library().commands().previewCreateTrackFromFile(trackPath));
 
             if (!trackRes)
             {
@@ -1002,7 +1002,7 @@ namespace ao::cli
             return;
           }
 
-          auto const trackRes = cli.runTask(cli.library().writer().createTrackFromFile(trackPath));
+          auto const trackRes = cli.runTask(cli.library().commands().createTrackFromFile(trackPath));
 
           if (trackRes)
           {
@@ -1164,7 +1164,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const deleteRes = cli.runTask(cli.library().writer().previewDeleteTrack(trackId));
+            auto const deleteRes = cli.runTask(cli.library().commands().previewDeleteTrack(trackId));
 
             if (!deleteRes)
             {
@@ -1175,7 +1175,7 @@ namespace ao::cli
             return;
           }
 
-          auto const deleteRes = cli.runTask(cli.library().writer().deleteTrack(trackId));
+          auto const deleteRes = cli.runTask(cli.library().commands().deleteTrack(trackId));
 
           if (deleteRes)
           {

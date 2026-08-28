@@ -17,7 +17,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -118,7 +118,7 @@ namespace ao::rt::test
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
 
-    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(listId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(listId)));
 
     auto layout = runtime.workspace().snapshot();
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
@@ -136,7 +136,7 @@ namespace ao::rt::test
     auto const sub =
       runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
 
-    REQUIRE(runRuntimeTask(runtime, runtime.library().writer().deleteList(fixture.firstListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.firstListId)));
 
     REQUIRE(changes.size() == 1);
     CHECK(changes.front().cause == WorkspaceChangeCause::ListDeletion);
@@ -323,10 +323,10 @@ namespace ao::rt::test
     auto* const executor = executorPtr.get();
     auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
     auto const firstListId = ao::test::requireValue(
-      runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "First observed"})));
+      runRuntimeTask(*runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "First observed"})));
     executor->drain();
     auto const secondListId = ao::test::requireValue(
-      runRuntimeTask(*runtimePtr, runtimePtr->library().writer().createList(ListDraft{.name = "Second observed"})));
+      runRuntimeTask(*runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "Second observed"})));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;

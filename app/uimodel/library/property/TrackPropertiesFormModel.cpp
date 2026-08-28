@@ -7,9 +7,8 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
-#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <algorithm>
 #include <cstdint>

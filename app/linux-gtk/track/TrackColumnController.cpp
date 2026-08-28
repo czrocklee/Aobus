@@ -8,10 +8,9 @@
 #include <ao/compat/Enumerate.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
-#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/presentation/PresentationText.h>
 
 #include <giomm/listmodel.h>
@@ -40,10 +39,10 @@
 namespace ao::gtk
 {
   TrackColumnController::TrackColumnController(Gtk::ColumnView& columnView,
-                                               uimodel::TrackColumnLayoutStore& layoutStore,
+                                               uimodel::TrackColumnLayouts& columnLayouts,
                                                i18n::MessageCatalog textCatalog,
                                                ao::ListId listId)
-    : _listId{listId}, _columnView{columnView}, _layoutStore{layoutStore}, _textCatalog{std::move(textCatalog)}
+    : _listId{listId}, _columnView{columnView}, _columnLayouts{columnLayouts}, _textCatalog{std::move(textCatalog)}
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
@@ -103,7 +102,7 @@ namespace ao::gtk
 
       columnPtr->set_resizable(true);
 
-      columnPtr->set_fixed_width(uimodel::defaultTrackFieldColumnWidth(rtDef.field));
+      columnPtr->set_fixed_width(uimodel::trackColumnDefaults(rtDef.field).width);
 
       _columnNotifyConnections.emplace_back(columnPtr->property_fixed_width().signal_changed().connect(
         [this, field = rtDef.field, columnPtr]
@@ -167,7 +166,7 @@ namespace ao::gtk
 
     updateColumnVisibility(visibleFields);
 
-    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _layoutStore.layoutForList(_listId));
+    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _columnLayouts.layoutForList(_listId));
     applySolvedColumnWidths(specs);
 
     _syncingColumnLayout = wasSyncingColumnLayout;
@@ -258,7 +257,7 @@ namespace ao::gtk
     }
 
     auto const visibleFields = visibleFieldsInColumnOrder();
-    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _layoutStore.layoutForList(_listId));
+    auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _columnLayouts.layoutForList(_listId));
     applySolvedColumnWidths(specs);
     updateTitlePositionVariable();
 
@@ -304,7 +303,7 @@ namespace ao::gtk
   void TrackColumnController::updateSharedColumnLayout()
   {
     auto const visibleFields = visibleFieldsInColumnOrder();
-    auto const priorSpecs = uimodel::pixelTrackColumnSpecs(visibleFields, _layoutStore.layoutForList(_listId));
+    auto const priorSpecs = uimodel::pixelTrackColumnSpecs(visibleFields, _columnLayouts.layoutForList(_listId));
     std::int32_t const viewportWidth = resolvedViewportWidth();
     auto specs = std::vector<uimodel::TrackColumnSolveSpec>{};
 
@@ -320,7 +319,7 @@ namespace ao::gtk
       _optPendingUserResize.reset();
     }
 
-    auto const& stored = _layoutStore.layoutForList(_listId);
+    auto const& stored = _columnLayouts.layoutForList(_listId);
     auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
     visibleLayout.reserve(specs.size());
 
@@ -329,7 +328,7 @@ namespace ao::gtk
       visibleLayout.push_back(uimodel::canonicalTrackColumnState(spec));
     }
 
-    _layoutStore.updateLayout(_listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
+    _columnLayouts.updateLayout(_listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
 
     if (viewportWidth > 0)
     {
@@ -467,7 +466,7 @@ namespace ao::gtk
   std::vector<rt::TrackField> TrackColumnController::visibleFieldsInStoredOrder(
     std::span<rt::TrackField const> visibleFields) const
   {
-    return uimodel::visibleTrackFieldsInStoredLayout(visibleFields, _layoutStore.layoutForList(_listId));
+    return uimodel::visibleTrackFieldsInStoredLayout(visibleFields, _columnLayouts.layoutForList(_listId));
   }
 
   void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)

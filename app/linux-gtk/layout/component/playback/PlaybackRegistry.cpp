@@ -11,16 +11,16 @@ namespace ao::gtk::layout
 {
   void registerPlaybackComponents(ComponentRegistry& registry,
                                   rt::AppRuntime& runtime,
-                                  uimodel::PlaybackCommandSurface* playbackCommandSurface,
+                                  uimodel::PlaybackActions* playbackActions,
                                   ResourceImageLoader* imageLoader,
                                   i18n::MessageCatalog const& textCatalog,
                                   uimodel::OutputDeviceIntent const& outputDeviceIntent)
   {
     registerOutputDeviceSelectorComponent(registry, runtime.playback(), textCatalog, outputDeviceIntent);
     registerPlaybackImageComponent(registry, runtime, imageLoader, textCatalog);
-    registerSoulTransportButtonComponent(registry, runtime.playback(), playbackCommandSurface, textCatalog);
+    registerSoulTransportButtonComponent(registry, runtime.playback(), playbackActions, textCatalog);
     registerSoulButtonComponent(registry, runtime.playback());
-    registerTransportButtonComponent(registry, runtime.playback(), playbackCommandSurface, textCatalog);
+    registerTransportButtonComponent(registry, runtime.playback(), playbackActions, textCatalog);
     registerVolumeControlComponent(registry, runtime.playback(), textCatalog);
     registerNowPlayingFieldComponent(registry, runtime, textCatalog);
     registerSeekSliderComponent(registry, runtime.playback());

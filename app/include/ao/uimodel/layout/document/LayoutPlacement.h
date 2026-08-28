@@ -72,7 +72,7 @@ namespace ao::uimodel
   std::optional<LayoutAlignment> layoutAlignmentFromString(std::string_view name) noexcept;
 
   /**
-   * @brief Placement for @p node, assuming its layout fields already passed catalog validation.
+   * @brief Placement for @p node, assuming its layout fields already passed schema validation.
    *
    * Malformed values cannot reach a constructed element: validation rejects the
    * whole candidate first, so this mapping ignores anything it cannot interpret.

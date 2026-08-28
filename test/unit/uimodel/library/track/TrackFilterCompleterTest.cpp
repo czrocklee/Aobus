@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
-
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/i18n/IcuCompletionAliases.h>
@@ -12,7 +10,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/uimodel/library/track/TrackFilterResolver.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -165,7 +163,7 @@ namespace ao::uimodel::test
     auto const completed = applyFirst("C:", *optResult);
     CHECK(completed == query::serialize(query::ConstantExpression{value}));
 
-    auto const resolved = resolveTrackFilterExpression(completed);
+    auto const resolved = resolveTrackFilter(completed);
     CHECK(resolved.mode == TrackFilterMode::Quick);
     CHECK(resolved.expression.contains(query::serialize(query::ConstantExpression{value})));
     CHECK(query::parse(resolved.expression).has_value());
@@ -186,13 +184,13 @@ namespace ao::uimodel::test
     auto const values = displayTexts(*optResult);
     REQUIRE_FALSE(values.empty());
     CHECK(values.front() == "P!nk");
-    CHECK(resolveTrackFilterExpression("P!nk").mode == TrackFilterMode::Quick);
+    CHECK(resolveTrackFilter("P!nk").mode == TrackFilterMode::Quick);
 
     optResult = completer.complete("$ar", 3);
     REQUIRE(optResult);
     REQUIRE_FALSE(optResult->items.empty());
     CHECK(optResult->items.front().insertText == "$artist");
-    CHECK(resolveTrackFilterExpression("$artist = \"P!nk\"").mode == TrackFilterMode::Expression);
+    CHECK(resolveTrackFilter("$artist = \"P!nk\"").mode == TrackFilterMode::Expression);
 
     CHECK_FALSE(completer.complete("", 0));
     CHECK_FALSE(completer.complete("road ", 5));
@@ -214,9 +212,9 @@ namespace ao::uimodel::test
     CHECK(displayTexts(*optResult) == std::vector<std::string>{"周杰倫"});
     auto const completed = applyFirst("zhoujielun", *optResult);
     CHECK(completed == query::serialize(query::ConstantExpression{"周杰倫"}));
-    CHECK(query::parse(resolveTrackFilterExpression(completed).expression).has_value());
+    CHECK(query::parse(resolveTrackFilter(completed).expression).has_value());
 
-    auto const unresolved = resolveTrackFilterExpression("zhoujielun");
+    auto const unresolved = resolveTrackFilter("zhoujielun");
     CHECK(unresolved.mode == TrackFilterMode::Quick);
     CHECK_FALSE(unresolved.expression.contains("周杰倫"));
     CHECK_FALSE(completer.complete("周abc", std::string_view{"周abc"}.size()));

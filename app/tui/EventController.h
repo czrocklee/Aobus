@@ -13,11 +13,11 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
 #include <ftxui/component/event.hpp>
@@ -145,7 +145,7 @@ namespace ao::tui
     LibraryController& _library;
     async::Runtime& _asyncRuntime;
     rt::PlaybackService& _playback;
-    uimodel::PlaybackCommandSurface _playbackCommands;
+    uimodel::PlaybackActions _playbackActions;
     uimodel::PlaybackPositionViewModel _seekViewModel;
     uimodel::VolumeViewModel _volumeViewModel;
     OutputDeviceController* _outputDevices = nullptr;
@@ -154,7 +154,7 @@ namespace ao::tui
     std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
     std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
     std::optional<SeekRailDrag> _optSeekRailDrag{};
-    uimodel::SeekSliderInteractionModel _seekSlider{};
+    uimodel::SeekInteraction _seekSlider{};
     uimodel::ActivityStatusViewModel* _activityStatusViewModel = nullptr;
     rt::NotificationService* _notifications = nullptr;
     InputCompletionCallback _commandCompletionCallback{};

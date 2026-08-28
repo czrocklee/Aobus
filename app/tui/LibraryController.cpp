@@ -23,9 +23,9 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/library/track/TrackFilterResolver.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -371,7 +371,7 @@ namespace ao::tui
       return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoActiveTrackView);
     }
 
-    auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
+    auto const resolved = uimodel::resolveTrackFilter(_filterDraft);
     auto filterRes = _runtime.views().setFilter(_activeViewId, resolved.expression);
 
     if (!filterRes)
@@ -401,7 +401,7 @@ namespace ao::tui
 
   std::vector<LibraryNavEntry> LibraryController::loadLibraryNavigation()
   {
-    auto const reader = _runtime.library().reader();
+    auto const reader = _runtime.library().snapshot();
     return makeLibraryNavigation(_textCatalog, reader.lists());
   }
 
@@ -460,7 +460,7 @@ namespace ao::tui
 
     auto const& projectionPtr = *foundProjectionRes;
 
-    auto const reader = _runtime.library().reader();
+    auto const reader = _runtime.library().snapshot();
     auto snapshot = TrackItemsSnapshot{};
     snapshot.tracks.reserve(projectionPtr->size());
     snapshot.sections.reserve(projectionPtr->groupCount());

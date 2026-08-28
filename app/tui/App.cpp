@@ -48,9 +48,9 @@
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/uimodel/playback/output/OutputDeviceSelectionPolicy.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
+#include <ao/uimodel/playback/output/OutputSelection.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -796,7 +796,7 @@ namespace ao::tui
         activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
         requestRefresh();
       },
-      uimodel::ActivityStatusViewModelOptions{.libraryTasks = &runtime.library().taskService()}};
+      uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()}};
     runtime.notifications().post(rt::NotificationSeverity::Info,
                                  tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryReady),
                                  rt::NotificationLifetime::transient());

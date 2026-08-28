@@ -159,8 +159,10 @@ namespace ao::gtk::layout::test
       doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
       auto host = LayoutHost{registry};
+      ctx.buildSnapshot = fixture.session().buildSnapshot().value();
       auto pending = ao::test::requireValue(host.prepare(ctx, preparedLayout(doc)));
-      host.commit(ctx.runtimeState, std::move(pending));
+      fixture.session().advanceGeneration(pending.generation());
+      host.commit(std::move(pending));
 
       auto* const activeRoot = host.get_first_child();
       REQUIRE(activeRoot != nullptr);

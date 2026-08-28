@@ -296,7 +296,7 @@ The six list-mutation forwarding methods are deleted, and the frontend path beco
 That path already exists for two thirds of authoring: `TrackAuthoringSession`, `ListOrderAuthoringSession`, and `ListMembershipAuthoringSession` in `app/uimodel/library/` use `LibraryWriter` directly, and the UIModel guardrail regex does not ban it.
 Only list creation, update, and deletion lack a UIModel owner.
 
-This means the forwarding removal is blocked on a new UIModel `ListEditor`, not on the runtime work, and it must land in the same change that retargets `AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX`.
+This means the forwarding removal is blocked on a new UIModel `ListAuthoring` free-function module, not on the runtime work, and it must land in the same change that retargets `AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX`.
 Deleting the forwarders while that regex still bans `.writer(` under `app/linux-gtk` would break the GTK build.
 
 `LibraryTaskService` becomes `LibraryJobs` and narrows to scan, import, export, and identity backfill with their progress feed.
@@ -516,14 +516,14 @@ A capsule is a module, not a class.
 Merging every session in a feature domain into one object would replace one failure mode, a class per pure function, with a worse one, a god object per feature domain.
 `TrackAuthoringSession` and `ListMembershipAuthoringSession` are therefore **not** merged: they share `BoundTrackTargets` but not a lifetime.
 The first owns a draft-editing conversation with `isCurrent()` and `onInvalidated()`; the second has no invalidation observation and is a short command scope.
-Question 1 of the survival test separates them, and both keep their own type inside one `TrackEditing` module header.
+Question 1 of the survival test separates them, and both keep their own type in the `TrackAuthoring` module's narrow session partition.
 
 | Consolidation | Effect |
 |---|---|
 | `ListMembershipEditResult::notificationText` -> presentation function | The result stops carrying localized text, and `ListMembershipAuthoringSession::begin` stops taking a `PresentationTextCatalog`. This is independent of any merge. |
 | `ListOrderPolicy` + `ListOrderAuthoringSession` -> `ListOrder` module | Capability description, drag selection, and gap anchoring are free functions beside the session, not a `Policy` concept. This module shape is the model for the others. |
 | `TrackFilterResolver` + `TrackFilterCompleter` + `TrackFilterViewModel` -> `TrackFilter` module | `resolveTrackFilter()` is a pure function; one module header replaces three public roles. |
-| `TrackFieldEditCodec` + `TrackFieldEditPolicy` -> `TrackEditing` module | Parsing, writable-field classification, patch application, and mixed-value protection join the existing edit sessions as free functions and values rather than creating another role. |
+| `TrackFieldEditCodec` + `TrackFieldEditPolicy` -> `TrackAuthoring` module | Parsing, writable-field classification, patch application, and mixed-value protection join the existing authoring sessions as free functions and values rather than creating another role. |
 | `TrackFieldGridSchema` + `TrackFieldGridPolicy` -> `TrackFieldGrid` module | GTK and WinUI share one schema and the same visibility decisions; five `should*` functions do not require a `Policy` role or a second public header. |
 | `ListActionPolicy` -> `ListActions` module | The public value and `describeListActions()` stay; the strategy-shaped suffix and standalone role disappear. |
 | `SmartListTrackPresentationResolver` -> `SmartListEditing` module | Its two functions serve only the smart-list editing flow and delegate the actual recommendation to list presentation. |
@@ -631,7 +631,7 @@ std::string requiredFormat(i18n::MessageCatalog const& catalog,
                            std::span<i18n::MessageArgument const> arguments);
 ```
 
-4. Keep semantic mapping as feature-local functions such as `formatLibraryScanMessage`, `formatListMembershipMessage`, `trackFieldLabel`, and `audioBackendPresentation`, without repackaging them as five `*TextCatalog` classes.
+4. Keep semantic mapping as feature-local functions such as `formatLibraryScanMessage`, `formatListMembershipEditNotification`, `trackFieldLabel`, and `audioBackendPresentation`, without repackaging them as five `*TextCatalog` classes.
 
 Until Phase 3 distributes those declarations into feature capsules, the neutral `PresentationText.h` umbrella may collect them; the deleted class name does not survive as a header name.
 
@@ -676,9 +676,9 @@ So most boundary regexes stay and become regression insurance behind a stronger 
 Exactly one rule is proposed for promotion: the live-runtime write-transaction owner, where a private header plus access structure can carry the boundary and the regex demotes to insurance.
 
 **Rule.** The `LibraryWriter` clause is **retargeted, never deleted**.
-An earlier draft of this analysis proposed removing it once the UIModel `ListEditor` existed, on the reasoning that the rule would have nothing left to forbid.
+An earlier draft of this analysis proposed removing it once the UIModel `ListAuthoring` module existed, on the reasoning that the rule would have nothing left to forbid.
 That is wrong.
-`ListEditor` removes the six forwarding methods, but it does not make a direct frontend call to the command surface impossible, and this proposal has already conceded that target visibility cannot express the boundary while `ao_app_runtime` is one archive.
+`ListAuthoring` removes the six forwarding methods without inventing an editor object, but it does not make a direct frontend call to the command surface impossible, and this proposal has already conceded that target visibility cannot express the boundary while `ao_app_runtime` is one archive.
 Deleting the clause would trade six methods for the loss of all regression protection on the rule they were a symptom of.
 
 `app/CMakeLists.txt:525` is therefore updated in the same change: `LibraryWriter` and `.writer(` become `LibraryCommands` and `.commands(`.
@@ -740,7 +740,7 @@ In the phase table, `Rule` is mandatory and requires an RFC amendment to change,
 | 1b | Introduce public `MessageInventory.def`, add governed include-fragment discovery for `.def`, derive `MessageId` and its key table from it, delete `GtkTextId` and `TuiTextId`, and delete the `PresentationTextCatalog` class in favor of `requiredText`/`requiredFormat` plus feature formatters | Design | Phase 0 |
 | 1c | Adjudicated no-lifetime candidates from the repo-wide survey: constructor-close pure initial projection, remove remaining test-only production API, privatize test-only runtime counters and single-consumer utilities, inline duplicate audio bootstrap, absorb single-owner pure rules, and consolidate registration-only headers without merging implementation units | Candidate per item; transitive includes and behavior coverage gate each change | Phase 0 |
 | 2 | Constructor-bind `ResourceByteLoader`, WinUI `TrackListController`, and `SmtcBridge`; delete `GtkUiDependencies` and move to registration-time capture; collapse the WinUI and GTK owner layers with their retirement protocols intact | Design | Phases 1a and 1b |
-| 3 | UIModel feature capsules, including `ListPresentations` absorbing its lifecycle and recommender, and the new `ListEditor` that lets `rt::Library`'s forwarding methods be deleted and the frontend guardrail clause retargeted in one change | Design | Phase 2 |
+| 3 | UIModel feature capsules, including `ListPresentations` absorbing its lifecycle and recommender, and the new `ListAuthoring` functions that let `rt::Library`'s forwarding methods be deleted and the frontend guardrail clause retargeted in one change | Design | Phase 2 |
 | 4 | Layout and shell: schema table, action and component schema merge, `LayoutSession`, registration-time capture in the build path | Design | Phase 2 |
 | 5 | Runtime composition: `AppRuntime` owns `CoreRuntime` and forwards the audited application face, GTK preview construction moves behind `TrackSourceCache` and `ViewService`, virtual shutdown and protected initialization are removed, and resource loading moves out of `LibraryJobs` | Design | Phase 3 |
 | 6 | One architecture audit, `app/CMakeLists.txt` split, target consolidation, naming and organization document reductions, and finally any architecture-document merges that lose their independent graph | Design | Phases 3-5 |
@@ -794,7 +794,7 @@ Internal source compatibility is deliberately not preserved; the project carries
 
 Five ordering constraints are hard.
 
-1. `rt::Library`'s list-mutation forwarders may only be deleted in the same change that introduces the UIModel `ListEditor` and retargets `AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX` from `LibraryWriter`/`.writer(` to `LibraryCommands`/`.commands(`. Any other order either breaks the GTK build or drops the boundary.
+1. `rt::Library`'s list-mutation forwarders may only be deleted in the same change that introduces the UIModel `ListAuthoring` functions and retargets `AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX` from `LibraryWriter`/`.writer(` to `LibraryCommands`/`.commands(`. Any other order either breaks the GTK build or drops the boundary.
 2. The layout build path may only lose its dependency aggregate after the aggregate itself is deleted in Phase 2.
 3. The canonical `MessageId` inventory and `.def` source-discovery support must land before or with the `PresentationTextCatalog` deletion so that no intermediate state has two frontend id spaces and no catalog wrapper, and no canonical inventory is invisible to guardrails or changed-file hygiene.
 4. The complete `AppRuntime` forwarding face must land in the same change that removes the inheritance: both `library()` overloads, `async()`, `sources()`, `notifications()`, `completion()`, `textOrderingPolicy()`, and `musicRoot()`. The same change must remove the two GTK `musicLibrary()` calls by moving preview evaluation and projection construction behind their existing runtime owners. It must also migrate the broader test-fixture surface: path assertions use `musicRoot()`, storage checks use an explicit `CoreRuntime`/`MusicLibrary` fixture or the existing runtime owner, and projection tests enter through `TrackSourceCache` and `ViewService` or a runtime-private fixture. Tests must not preserve `AppRuntime` as a `MusicLibrary` entry through a test-only forwarder or a `core()` escape hatch. `musicLibrary()` and `databasePath()` are not forwarded; without all sides of the change, Phase 5 either becomes an accidental whole-application rewrite or preserves the raw-storage leak it exists to close.

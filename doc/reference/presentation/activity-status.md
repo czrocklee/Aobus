@@ -55,12 +55,12 @@ It applies to temporary UIModel compact presentation, not runtime `Transient` li
 
 | `ActivityStatusViewModelOptions` field | Type | Default |
 |---|---|---|
-| `libraryTasks` | `rt::LibraryTaskService const*` | `nullptr` |
+| `libraryJobs` | `rt::LibraryJobs const*` | `nullptr` |
 | `clock` | `ActivityStatusClock` | empty; replaced with `steady_clock::now` |
 | `emitInitialState` | `bool` | `true` |
 
 The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatusViewState const&)` callback, and optional options.
-When `libraryTasks` is present, it subscribes to that service's task progress and status-free finished pulse.
+When `libraryJobs` is present, it subscribes to that job owner's task progress and status-free finished pulse.
 
 ## View-model members
 

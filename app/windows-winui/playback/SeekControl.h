@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
-#include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -101,7 +100,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Slider::Unloaded_revoker _unloadedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _finalSeekTickRevoker{};
     winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering_revoker _renderingRevoker{};
-    uimodel::SeekSliderInteractionModel _interaction;
+    uimodel::SeekInteraction _interaction;
     uimodel::PlaybackPositionInterpolator _interpolator;
     uimodel::PlaybackPositionViewState _state{};
     std::unique_ptr<uimodel::PlaybackPositionViewModel> _viewModelPtr;

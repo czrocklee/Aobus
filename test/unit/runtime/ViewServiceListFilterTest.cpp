@@ -154,7 +154,7 @@ namespace ao::rt::test
 
     auto executor = async::LoopExecutor{};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes, executor};
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     auto service = ViewService{executor, libraryFixture.library(), sources, changes};
     auto workspace = WorkspaceService{executor, service, changes};
@@ -173,8 +173,8 @@ namespace ao::rt::test
     auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
     auto subscription = service.onFilterErrorChanged([&changedErrors](ViewService::FilterErrorChanged const& changed)
                                                      { changedErrors.push_back(changed); });
-    REQUIRE(writerFixture.runTask(
-      writerFixture.writer().updateList(ListDraft{.listId = parentId, .name = "Parent", .expression = "true"})));
+    REQUIRE(commandsFixture.runTask(
+      commandsFixture.commands().updateList(ListDraft{.listId = parentId, .name = "Parent", .expression = "true"})));
 
     state = service.trackListState(viewId);
     CHECK_FALSE(state.optFilterError);

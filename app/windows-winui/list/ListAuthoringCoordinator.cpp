@@ -16,15 +16,16 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
-#include <ao/uimodel/library/list/SmartListEditorModel.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/library/list/ListAuthoring.h>
+#include <ao/uimodel/library/list/ListOrder.h>
+#include <ao/uimodel/library/list/ListOrderSession.h>
+#include <ao/uimodel/library/list/SmartListEditing.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
@@ -111,7 +112,7 @@ namespace ao::winui
     , _sources{config.sources}
     , _trackList{config.trackList}
     , _presentationCatalog{config.presentationCatalog}
-    , _presentationPreferences{config.presentationPreferences}
+    , _listPresentations{config.listPresentations}
     , _textOrderingPolicy{config.textOrderingPolicy}
     , _textCatalog{std::move(config.textCatalog)}
     , _reportStatus{std::move(config.reportStatus)}
@@ -141,7 +142,7 @@ namespace ao::winui
       return;
     }
 
-    auto const optNode = _library.reader().listNode(listId);
+    auto const optNode = _library.snapshot().listNode(listId);
 
     if (!optNode)
     {
@@ -166,7 +167,7 @@ namespace ao::winui
 
     if (!rt::isVirtualListId(parentListId))
     {
-      if (auto const optParent = _library.reader().listNode(parentListId); optParent)
+      if (auto const optParent = _library.snapshot().listNode(parentListId); optParent)
       {
         _inheritedExpression = optParent->expression;
       }
@@ -179,7 +180,7 @@ namespace ao::winui
 
     std::int32_t selectedPresentationIndex = 0;
 
-    if (auto const optId = _presentationPreferences.presentationIdForList(editListId); optId)
+    if (auto const optId = _listPresentations.presentationIdForList(editListId); optId)
     {
       auto const selected = std::ranges::find(_presentationIds, *optId);
 
@@ -396,7 +397,7 @@ namespace ao::winui
                                              winrt::to_string(_nameInput.Text()),
                                              winrt::to_string(_descriptionInput.Text()),
                                              winrt::to_string(_filterInput.Text()));
-    auto submission = writeListDraft(&_library, std::move(draft));
+    auto submission = uimodel::saveList(&_library, std::move(draft));
     auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
     _asyncRuntime.spawnWithLifetime(
       *_dialogTasksPtr,
@@ -414,23 +415,6 @@ namespace ao::winui
       "Windows List save");
   }
 
-  async::Task<Result<ListId>> ListAuthoringCoordinator::writeListDraft(rt::Library* const library, rt::ListDraft draft)
-  {
-    if (draft.listId == kInvalidListId)
-    {
-      co_return co_await library->createList(std::move(draft));
-    }
-
-    auto const listId = draft.listId;
-
-    if (auto result = co_await library->updateList(std::move(draft)); !result)
-    {
-      co_return std::unexpected{result.error()};
-    }
-
-    co_return listId;
-  }
-
   void ListAuthoringCoordinator::finishEditorSave(Result<ListId> result)
   {
     _submitting = false;
@@ -446,16 +430,16 @@ namespace ao::winui
 
     if (selected > 0 && static_cast<std::size_t>(selected) < _presentationIds.size())
     {
-      _presentationPreferences.setPresentationIdForList(*result, _presentationIds[static_cast<std::size_t>(selected)]);
+      _listPresentations.setPresentationIdForList(*result, _presentationIds[static_cast<std::size_t>(selected)]);
     }
     else
     {
-      _presentationPreferences.clearPresentationForList(*result);
+      _listPresentations.clearPresentationForList(*result);
     }
 
     auto const name = _nameInput ? winrt::to_string(_nameInput.Text()) : std::string{};
     auto const expression = _filterInput ? winrt::to_string(_filterInput.Text()) : std::string{};
-    auto const presentation = resolveListAuthoringPresentation(_presentationPreferences, *result, expression);
+    auto const presentation = resolveListAuthoringPresentation(_listPresentations, *result, expression);
 
     if (auto const navigatedRes = _trackList.navigateTo(*result); !navigatedRes)
     {
@@ -496,7 +480,7 @@ namespace ao::winui
     beginDialogWorkflow();
     _dialogActive = true;
     _dialogLifetimePtr = std::make_shared<std::monostate>();
-    auto submission = previewDelete(&_library, listId, includeDescendants);
+    auto submission = uimodel::previewListDeletion(&_library, listId, includeDescendants);
     auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
     _asyncRuntime.spawnWithLifetime(
       *_dialogTasksPtr,
@@ -517,25 +501,6 @@ namespace ao::winui
           stopToken);
       },
       "Windows List deletion preview");
-  }
-
-  async::Task<Result<rt::DeleteListSubtreeReply>> ListAuthoringCoordinator::previewDelete(rt::Library* const library,
-                                                                                          ListId const listId,
-                                                                                          bool const includeDescendants)
-  {
-    if (includeDescendants)
-    {
-      co_return co_await library->previewDeleteListAndDescendants(listId);
-    }
-
-    auto result = co_await library->previewDeleteList(listId);
-
-    if (!result)
-    {
-      co_return std::unexpected{result.error()};
-    }
-
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*result)}};
   }
 
   void ListAuthoringCoordinator::finishDeletePreview(ListId const listId,
@@ -658,7 +623,7 @@ namespace ao::winui
     _submitting = true;
     _dialog.IsPrimaryButtonEnabled(false);
     auto const removeTag = _removeTagCheck && _removeTagCheck.IsChecked().GetBoolean();
-    auto submission = commitDelete(
+    auto submission = uimodel::deleteList(
       &_library, _deleteListId, _deleteDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag});
     auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
     _asyncRuntime.spawnWithLifetime(
@@ -676,27 +641,6 @@ namespace ao::winui
           stopToken);
       },
       "Windows List deletion");
-  }
-
-  async::Task<Result<rt::DeleteListSubtreeReply>> ListAuthoringCoordinator::commitDelete(
-    rt::Library* const library,
-    ListId const listId,
-    bool const includeDescendants,
-    rt::DeleteListOptions const options)
-  {
-    if (includeDescendants)
-    {
-      co_return co_await library->deleteListAndDescendants(listId, options);
-    }
-
-    auto result = co_await library->deleteList(listId, options);
-
-    if (!result)
-    {
-      co_return std::unexpected{result.error()};
-    }
-
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*result)}};
   }
 
   void ListAuthoringCoordinator::finishDeleteCommit(Result<rt::DeleteListSubtreeReply> result)
@@ -727,7 +671,7 @@ namespace ao::winui
 
   std::vector<uimodel::WritableTagListTarget> ListAuthoringCoordinator::membershipTargets() const
   {
-    return uimodel::writableTagListTargets(_library.reader().lists(), _textOrderingPolicy);
+    return uimodel::writableTagListTargets(_library.snapshot().lists(), _textOrderingPolicy);
   }
 
   void ListAuthoringCoordinator::editMembership(ListId const listId, bool const add)
@@ -744,7 +688,7 @@ namespace ao::winui
       return;
     }
 
-    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, stateRes->selection, _textCatalog);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, stateRes->selection);
 
     if (!sessionRes)
     {
@@ -794,7 +738,7 @@ namespace ao::winui
       return;
     }
 
-    _reportStatus(result->notificationText);
+    _reportStatus(uimodel::formatListMembershipEditNotification(_textCatalog, *result));
   }
 
   uimodel::ListOrderCapabilityState ListAuthoringCoordinator::orderCapabilities() const
