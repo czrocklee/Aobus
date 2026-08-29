@@ -16,7 +16,7 @@
 #include <ao/utility/Path.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/WinUiErrorBoundary.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <errhandlingapi.h>
 #include <microsoft.ui.xaml.window.h>

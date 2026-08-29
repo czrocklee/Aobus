@@ -3,6 +3,7 @@
 
 #include <ao/rt/source/SmartListEvaluator.h>
 
+#include "runtime/RuntimeOperationProbe.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
@@ -235,7 +236,7 @@ namespace ao::rt
   void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
   {
     bucket.upstreamTracks.assign(snapshotSource(*bucket.source));
-    ++_operationCounts.upstreamIndexRebuilds;
+    ++_upstreamIndexRebuildCount;
     rebuildLists(bucket, bucket.lists);
   }
 
@@ -551,7 +552,7 @@ namespace ao::rt
       if (work.active)
       {
         work.list->replaceMembers(std::move(work.members));
-        ++_operationCounts.membershipIndexRebuilds;
+        ++_membershipIndexRebuildCount;
       }
     }
 
@@ -580,7 +581,7 @@ namespace ao::rt
 
     auto upstreamTracks = bucket.upstreamTracks;
     upstreamTracks.applyScript(script);
-    ++_operationCounts.upstreamIndexRebuilds;
+    ++_upstreamIndexRebuildCount;
     AO_INVARIANT(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
 
     auto works = buildDerivedWorks(bucket);
@@ -687,7 +688,7 @@ namespace ao::rt
     {
       previousSizes.push_back(lists[index]->_members.size());
       lists[index]->replaceMembers(std::move(nextMembers[index]));
-      ++_operationCounts.membershipIndexRebuilds;
+      ++_membershipIndexRebuildCount;
     }
 
     for (std::size_t index = 0; index < lists.size(); ++index)
@@ -737,4 +738,13 @@ namespace ao::rt
 
     return query::AccessProfile::NoTrackData;
   }
+
+  namespace detail
+  {
+    SmartListEvaluatorOperationCounts RuntimeOperationProbe::counts(SmartListEvaluator const& evaluator) noexcept
+    {
+      return {.upstreamIndexRebuilds = evaluator._upstreamIndexRebuildCount,
+              .membershipIndexRebuilds = evaluator._membershipIndexRebuildCount};
+    }
+  } // namespace detail
 } // namespace ao::rt

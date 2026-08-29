@@ -7,7 +7,7 @@
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>

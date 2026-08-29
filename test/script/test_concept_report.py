@@ -1,4 +1,4 @@
-"""Fixture tests for the RFC 0002 concept-report denominator."""
+"""Fixture tests for the public concept-report denominator."""
 
 from __future__ import annotations
 
@@ -672,6 +672,7 @@ class ConceptMetricTest(unittest.TestCase):
             "\n".join(
                 [
                     "ao_alpha_check: phony",
+                    "ao_application_architecture_audit: phony",
                     "ao_beta_guardrail: phony",
                     "ao_gamma_boundary_report: phony",
                     "aobus_guardrails: phony",
@@ -681,7 +682,15 @@ class ConceptMetricTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(targets, ["ao_alpha_check", "ao_beta_guardrail", "ao_gamma_boundary_report"])
+        self.assertEqual(
+            targets,
+            [
+                "ao_alpha_check",
+                "ao_application_architecture_audit",
+                "ao_beta_guardrail",
+                "ao_gamma_boundary_report",
+            ],
+        )
 
     def test_source_aggregate_inventory_covers_collaborator_bags_and_skips_forwards(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -5,13 +5,8 @@
 
 #include "CliRuntime.h"
 #include "CommandError.h"
-#include "InitCommand.h"
-#include "LibCommand.h"
-#include "ListCommand.h"
+#include "CommandRegistrations.h"
 #include "Output.h"
-#include "ScanCommand.h"
-#include "TagCommand.h"
-#include "TrackCommand.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
 

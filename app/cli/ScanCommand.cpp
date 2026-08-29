@@ -5,6 +5,7 @@
 
 #include "CliRuntime.h"
 #include "CommandError.h"
+#include "CommandRegistrations.h"
 #include "Output.h"
 #include "ScanOutput.h"
 #include <ao/rt/library/Library.h>

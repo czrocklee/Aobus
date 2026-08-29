@@ -4,11 +4,7 @@
 #include "layout/runtime/LayoutRuntime.h"
 
 #include "app/ShellLayoutCollaborators.h"
-#include "layout/component/container/ContainerRegistry.h"
-#include "layout/component/playback/PlaybackRegistry.h"
-#include "layout/component/semantic/SemanticRegistry.h"
-#include "layout/component/status/StatusRegistry.h"
-#include "layout/component/track/TrackRegistry.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"

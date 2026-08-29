@@ -6,7 +6,6 @@
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -72,9 +71,6 @@ namespace ao::uimodel
   {
   public:
     ShellGenerationId activeId() const noexcept { return _activeId; }
-
-    /// Number of candidates staged but not yet published or discarded.
-    std::size_t stagedCount() const noexcept { return _stagedGatePtrs.size(); }
 
     /// Begin an inactive candidate whose gate stays closed until it is published.
     std::shared_ptr<ShellGenerationGate> stage();

@@ -3,6 +3,7 @@
 
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include "runtime/RuntimeOperationProbe.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -1025,13 +1026,14 @@ namespace ao::rt::test
         cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year = 1999"}));
     }
 
-    auto const before = cache.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(cache);
     auto live = ao::test::requireValue(
       cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
     auto sameLive = ao::test::requireValue(
       cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
 
-    CHECK(cache.operationCounts().expiredAdHocSourcesPruned == before.expiredAdHocSourcesPruned + 1);
+    CHECK(::ao::rt::detail::RuntimeOperationProbe::counts(cache).expiredAdHocSourcesPruned ==
+          before.expiredAdHocSourcesPruned + 1);
     CHECK(&live.source() == &sameLive.source());
   }
 

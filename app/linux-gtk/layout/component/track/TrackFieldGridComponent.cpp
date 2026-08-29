@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackComponentRegistrations.h"
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkTextCatalog.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"

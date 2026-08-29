@@ -18,6 +18,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -647,5 +648,16 @@ namespace ao::tui::test
 
     CHECK_FALSE(text.contains("very_long_identifier"));
     CHECK(text.contains("o toggle"));
+  }
+
+  TEST_CASE("QualityPanel - indicators use the Soul quality colors", "[tui][unit][quality]")
+  {
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Medal) == uimodel::kAobusSoulRadiant);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Positive) == uimodel::kAobusSoulFlowing);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Diagnostic) == uimodel::kAobusSoulTurbulent);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Warning) == uimodel::kAobusSoulTurbulent);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Informational) == uimodel::kAobusSoulVeiled);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Unknown) == uimodel::kAobusSoulVeiled);
+    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Clipped) == uimodel::kAobusSoulBurning);
   }
 } // namespace ao::tui::test

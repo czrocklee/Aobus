@@ -68,7 +68,7 @@ vcpkg state on macOS. Platform suite groups and available frontends differ;
 ./ao analyze                  # Clang Static Analyzer, report-only
 ./ao coverage "rt::Foo"       # gcov coverage for a test subset
 ./ao deps report|verify       # governed dependency report / verification
-./ao deps report --concepts   # RFC 0002 concept baseline into concept-report.json
+./ao deps report --concepts   # public concept baseline into concept-report.json
 ./ao docs check               # documentation metadata, links, anchors, and reachability
 ./ao format                   # clang-format + ruff format (gate fixes / explicit request only)
 ```

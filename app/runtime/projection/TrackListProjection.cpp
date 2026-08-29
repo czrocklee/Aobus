@@ -3,6 +3,8 @@
 
 #include <ao/rt/projection/TrackListProjection.h>
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/projection/StringArena.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
@@ -25,7 +27,6 @@
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/String.h>
-#include <ao/utility/StringArena.h>
 #include <ao/utility/UnicodeText.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -476,7 +477,7 @@ namespace ao::rt
     using DictionaryTextCache = boost::unordered_flat_map<DictionaryId, CachedDictionaryText, std::hash<DictionaryId>>;
 
     CachedDictionaryText dictionaryTextCached(DictionaryTextCache& textCache,
-                                              utility::StringArena& arena,
+                                              detail::StringArena& arena,
                                               std::string& scratch,
                                               library::DictionaryStore const& dictionary,
                                               DictionaryId id,
@@ -514,7 +515,7 @@ namespace ao::rt
                      library::DictionaryStore const& dictionary,
                      TrackSortField const field,
                      DictionaryTextCache& textCache,
-                     utility::StringArena& arena,
+                     detail::StringArena& arena,
                      std::string& scratch,
                      TextOrderingPolicy const* textOrderingPolicy)
     {
@@ -550,7 +551,7 @@ namespace ao::rt
                       std::span<TrackSortTerm const> const sortBy,
                       TrackGroupKey const groupBy,
                       DictionaryTextCache& textCache,
-                      utility::StringArena& arena,
+                      detail::StringArena& arena,
                       std::string& scratch,
                       TextOrderingPolicy const* textOrderingPolicy)
     {
@@ -568,7 +569,7 @@ namespace ao::rt
       }
     }
 
-    std::string_view internPaddedYearKey(utility::StringArena& arena, std::uint16_t year)
+    std::string_view internPaddedYearKey(detail::StringArena& arena, std::uint16_t year)
     {
       auto buf = std::array<char, kYearStrLen>{};
       auto const res = std::format_to_n(buf.data(), buf.size(), "{:05}", year);
@@ -580,7 +581,7 @@ namespace ao::rt
                            library::DictionaryStore const& dictionary,
                            TrackGroupKey groupBy,
                            DictionaryTextCache& textCache,
-                           utility::StringArena& arena,
+                           detail::StringArena& arena,
                            std::string& scratch,
                            TextOrderingPolicy const* textOrderingPolicy)
     {
@@ -738,7 +739,7 @@ namespace ao::rt
     // the arena (bump-allocated and content-deduplicated), so it is declared first to outlive
     // them. Raw cache views borrow the library dictionary, which outlives this projection.
     // normScratch is a reused buffer that keeps the per-track normalization path allocation-free.
-    utility::StringArena stringArena;
+    detail::StringArena stringArena;
     std::string normScratch;
     DictionaryTextCache dictionaryTextCache;
 
@@ -750,7 +751,7 @@ namespace ao::rt
     // valid only because the arena bytes never move).
     boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> rowIndexByTrackId;
     std::vector<GroupSection> sections;
-    TrackListProjectionOperationCounts operationCounts;
+    detail::TrackListProjectionOperationCounts operationCounts;
     std::size_t rowsTouchedSinceRebuild = 0;
     std::size_t arenaRebaseThresholdBytes = kMinimumArenaRebaseBytes;
     async::Signal<TrackListProjectionDeltaBatch const&> changedSignal;
@@ -1623,11 +1624,6 @@ namespace ao::rt
     return std::nullopt;
   }
 
-  TrackListProjectionOperationCounts TrackListProjection::operationCounts() const noexcept
-  {
-    return _implPtr->operationCounts;
-  }
-
   TrackPresentationSpec TrackListProjection::presentation() const
   {
     return TrackPresentationSpec{
@@ -1701,4 +1697,12 @@ namespace ao::rt
 
     return subscription;
   }
+
+  namespace detail
+  {
+    TrackListProjectionOperationCounts RuntimeOperationProbe::counts(TrackListProjection const& projection) noexcept
+    {
+      return projection._implPtr->operationCounts;
+    }
+  } // namespace detail
 } // namespace ao::rt

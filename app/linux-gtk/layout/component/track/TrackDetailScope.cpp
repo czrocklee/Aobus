@@ -3,7 +3,7 @@
 
 #include "TrackDetailScope.h"
 
-#include "TrackComponentRegistrations.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"

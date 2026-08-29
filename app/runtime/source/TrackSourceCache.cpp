@@ -3,6 +3,7 @@
 
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include "runtime/RuntimeOperationProbe.h"
 #include "runtime/source/CachedListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -209,7 +210,7 @@ namespace ao::rt
       }
 
       _adHocSources.erase(cached);
-      ++_operationCounts.expiredAdHocSourcesPruned;
+      ++_expiredAdHocSourcePruneCount;
     }
 
     for (auto it = _adHocSources.begin(); it != _adHocSources.end();)
@@ -219,7 +220,7 @@ namespace ao::rt
       if (sourcePtr == nullptr || sourcePtr->state() != TrackSourceState::Live)
       {
         it = _adHocSources.erase(it);
-        ++_operationCounts.expiredAdHocSourcesPruned;
+        ++_expiredAdHocSourcePruneCount;
       }
       else
       {
@@ -498,4 +499,12 @@ namespace ao::rt
 
     listIds.push_back(listId);
   }
+
+  namespace detail
+  {
+    TrackSourceCacheOperationCounts RuntimeOperationProbe::counts(TrackSourceCache const& cache) noexcept
+    {
+      return {.expiredAdHocSourcesPruned = cache._expiredAdHocSourcePruneCount};
+    }
+  } // namespace detail
 } // namespace ao::rt

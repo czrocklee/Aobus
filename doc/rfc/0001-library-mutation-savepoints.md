@@ -12,7 +12,7 @@ depends-on: none
 
 The current [library architecture](../architecture/library.md), [outcome channel specification](../spec/failure/outcome-channel.md), and [runtime mutation specification](../spec/library/runtime/mutation.md) already define a non-nested root execution boundary.
 `WriteTransaction::apply()` accepts a `Result<T>`-returning body, aborts the complete root on an error or private native transaction marker, and aborts before rethrowing an unrelated exception.
-For live commits, `LibraryMutationService::Mutation::executeAsync()` accepts one operation-owned `Changed` or `Unchanged` outcome, commits and publishes only `Changed`, and releases the sequencer turn on every terminal path.
+For live commits, `LibraryWriteLane::Mutation::executeAsync()` accepts one operation-owned `Changed` or `Unchanged` outcome, commits and publishes only `Changed`, and releases the sequencer turn on every terminal path.
 `Mutation::apply()` is the noncommitting preview boundary, and offline scan/import owners use the same core `WriteTransaction::apply()` containment.
 No runtime writer, task, scan, or importer catches `lmdb::detail::TransactionFailure`.
 Root construction is deliberately outside that recoverable operation channel: native begin and candidate-revision construction occur before the wrapper is exposed, and failure unwinds writer ownership before aborting through the fatal facility.
@@ -51,13 +51,13 @@ The remaining proposal asks whether nested savepoints can preserve a usable pare
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0002](0002-application-concept-debloat.md).
+- Integration: None.
 
 Any implementation must preserve the synchronous root/preview kernel and sole live-runtime transaction owner established by [Decision 0015](../decision/0015-sequence-live-runtime-library-writes.md).
 
-RFC 0002 renames `LibraryMutationService` to `LibraryWriteLane` and makes it an implementation type, and renames `LibraryWriter` to `LibraryCommands`.
-This proposal names both types throughout its design.
-Contract alignment is mutual: whichever lands second adopts the other's surviving names, and neither may rename these types independently.
+The implemented application runtime names the source-private sequencer
+`LibraryWriteLane` and the public command surface `LibraryCommands`.
+This proposal uses those current names throughout its design.
 
 ## Goals
 
@@ -389,7 +389,7 @@ The existing type-level `[[nodiscard]]` contract remains, and tests or lint rule
 A child commit changes only the root's uncommitted native and dictionary state.
 It does not advance the library revision, publish `LibraryChanges`, update sources or projections, or release the command lane.
 
-After the root mutation body succeeds, the existing `LibraryMutationService` commit path validates the revision, commits the root, completes dictionary publication, and submits exactly one matching `LibraryChangeSet`.
+After the root mutation body succeeds, the existing `LibraryWriteLane` commit path validates the revision, commits the root, completes dictionary publication, and submits exactly one matching `LibraryChangeSet`.
 A failed, skipped, previewed, or child-only operation publishes no application change.
 
 Once native root commit succeeds, mandatory revision or publication failure remains an infrastructure fault under the current library architecture.
@@ -603,6 +603,6 @@ If accepted and implemented, this RFC updates the following current authorities:
 
 Acceptance also creates a decision record for the durable rationale behind nested savepoints and the chain-wide Dictionary journal, including rejection of gapped IDs, content-derived IDs, a persistent reverse index, and child-overlay adoption.
 
-Implementation and test maps in the promoted documents will link the final `WriteTransaction`, `LibraryWrite`, `DictionaryWriteSession`, `LibraryMutationService`, LMDB transaction, and focused test symbols.
+Implementation and test maps in the promoted documents will link the final `WriteTransaction`, `LibraryWrite`, `DictionaryWriteSession`, `LibraryWriteLane`, LMDB transaction, and focused test symbols.
 No user guide is expected because the proposal changes no user task or visible command surface.
 After implementation or rejection, every retained fact and inbound link moves to its authoritative current document or decision record, the RFC index is updated, and this RFC is deleted.

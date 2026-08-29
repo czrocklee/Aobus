@@ -27,17 +27,12 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class TextOrderingPolicy;
-
-  struct TrackListProjectionOperationCounts final
+  namespace detail
   {
-    std::uint64_t fullProjectionRebuilds = 0;
-    std::uint64_t incrementalProjectionUpdates = 0;
-    std::uint64_t arenaRebases = 0;
-    std::uint64_t rowIndexRebuilds = 0;
+    class RuntimeOperationProbe;
+  }
 
-    bool operator==(TrackListProjectionOperationCounts const&) const = default;
-  };
+  class TextOrderingPolicy;
 
   struct TrackRowRange final
   {
@@ -149,7 +144,6 @@ namespace ao::rt
     TrackId trackIdAt(std::size_t index) const;
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
-    TrackListProjectionOperationCounts operationCounts() const noexcept;
     void setPresentation(TrackPresentationSpec const& presentation);
 
     async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler);
@@ -157,5 +151,7 @@ namespace ao::rt
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class detail::RuntimeOperationProbe;
   };
 } // namespace ao::rt

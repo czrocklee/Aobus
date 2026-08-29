@@ -1184,7 +1184,7 @@ def _guardrail_targets(build_dir: Path) -> list[str]:
 
 
 def _guardrail_targets_from_ninja(output: str) -> list[str]:
-    suffixes = ("_check", "_guardrail", "_boundary_report")
+    suffixes = ("_audit", "_check", "_guardrail", "_boundary_report")
     targets = {
         raw_line.partition(":")[0].strip()
         for raw_line in output.splitlines()

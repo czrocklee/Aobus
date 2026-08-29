@@ -14,7 +14,7 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/utility/Path.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

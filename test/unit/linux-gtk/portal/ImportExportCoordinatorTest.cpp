@@ -6,7 +6,6 @@
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
-#include "portal/ImportExportCoordinatorPolicy.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -24,21 +23,21 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImportExportCoordinator - policy maps dialog choices", "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - maps every export dialog choice", "[gtk][unit][portal][import-export]")
   {
-    CHECK(portal::exportModeForSelection(0U) == rt::ExportMode::Delta);
-    CHECK(portal::exportModeForSelection(1U) == rt::ExportMode::Metadata);
-    CHECK(portal::exportModeForSelection(2U) == rt::ExportMode::Full);
-    CHECK(portal::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
-    CHECK(portal::exportModeForSelection(99U) == rt::ExportMode::Metadata);
+    CHECK(portal::detail::exportModeForSelection(0U) == rt::ExportMode::Delta);
+    CHECK(portal::detail::exportModeForSelection(1U) == rt::ExportMode::Metadata);
+    CHECK(portal::detail::exportModeForSelection(2U) == rt::ExportMode::Full);
+    CHECK(portal::detail::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
+    CHECK(portal::detail::exportModeForSelection(99U) == rt::ExportMode::Metadata);
   }
 
-  TEST_CASE("ImportExportCoordinator - native chooser policy reports failures but not cancellation",
+  TEST_CASE("ImportExportCoordinator - suppresses native chooser cancellation only",
             "[gtk][unit][portal][import-export]")
   {
-    CHECK_FALSE(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
-    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
-    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
+    CHECK_FALSE(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
+    CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
+    CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
   }
 
   TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][unit][portal][import-export]")

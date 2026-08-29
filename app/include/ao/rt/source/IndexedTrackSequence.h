@@ -16,11 +16,10 @@
 
 namespace ao::rt
 {
-  struct IndexedTrackSequenceOperationCounts final
+  namespace detail
   {
-    std::size_t indexRebuilds = 0;
-    std::size_t incrementalScriptApplications = 0;
-  };
+    class RuntimeOperationProbe;
+  }
 
   class IndexedTrackSequence final
   {
@@ -39,7 +38,6 @@ namespace ao::rt
     TrackId at(std::size_t index) const { return _trackIds.at(index); }
     bool contains(TrackId trackId) const { return _indexByTrackId.contains(trackId); }
     std::optional<std::size_t> indexOf(TrackId trackId) const;
-    IndexedTrackSequenceOperationCounts operationCounts() const noexcept { return _operationCounts; }
 
   private:
     void replace(std::vector<TrackId> trackIds);
@@ -47,6 +45,9 @@ namespace ao::rt
 
     std::vector<TrackId> _trackIds;
     boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>> _indexByTrackId;
-    IndexedTrackSequenceOperationCounts _operationCounts;
+    std::size_t _indexRebuildCount = 0;
+    std::size_t _incrementalScriptApplicationCount = 0;
+
+    friend class detail::RuntimeOperationProbe;
   };
 } // namespace ao::rt

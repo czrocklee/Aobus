@@ -524,7 +524,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"
             build_dir = Path(temp_dir) / "build"
-            native = root / "app" / "tui" / "AudioBackendBootstrap.cpp"
+            native = root / "app" / "tui" / "PlatformConditional.cpp"
             header = root / "include" / "ao" / "audio" / "WasapiProvider.h"
             for path in (native, header):
                 path.parent.mkdir(parents=True, exist_ok=True)

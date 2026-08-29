@@ -222,7 +222,7 @@ Consumers must not infer severity from enum declaration order or duplicate a fin
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) locks transport-aware Soul aura and motion mappings.
 - [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp) and [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp) lock exact-frame pause and live paused-aura adaptation.
 - [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) locks GTK pipeline/category consumption.
-- [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) locks TUI category colors and raw conclusion labels.
+- [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp) locks TUI category colors and raw conclusion labels.
 
 ## Related documents
 

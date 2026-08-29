@@ -4,6 +4,7 @@
 #include "lib/audio/OpusDecoderSession.h"
 
 #include "DecoderTestSupport.h"
+#include "lib/media/ogg/PageLayout.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/ogg/TestOgg.h"
@@ -11,7 +12,6 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/media/ogg/Demuxer.h>
-#include <ao/media/ogg/PageLayout.h>
 #include <ao/media/opus/Header.h>
 #include <ao/utility/ByteView.h>
 

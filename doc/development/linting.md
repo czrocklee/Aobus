@@ -94,8 +94,8 @@ diagnostic context, and abort behavior remain project-owned and consistent.
 Compile-time `static_assert` and third-party or test-source assertions are not
 part of this guardrail.
 
-CMake automatically adds `ao_` custom targets ending in `_check`, `_guardrail`,
-or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
+CMake automatically adds `ao_` custom targets ending in `_audit`, `_check`,
+`_guardrail`, or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
 completion guardrail; conditional frontend targets are discovered only when
 their owning frontend is enabled.
 

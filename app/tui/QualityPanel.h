@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <cstdint>
 #include <memory>
@@ -19,8 +20,15 @@ namespace ao::rt
   struct PlaybackTransportSnapshot;
 } // namespace ao::rt
 
+namespace ao::uimodel
+{
+  enum class AudioQualityCategory : std::uint8_t;
+}
+
 namespace ao::tui
 {
+  uimodel::AobusSoulRgb qualityIndicatorColor(uimodel::AudioQualityCategory category);
+
   std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
                                    std::int32_t terminalColumns);

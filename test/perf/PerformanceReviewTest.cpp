@@ -4,6 +4,7 @@
 // Review evidence only: no machine-dependent pass/fail thresholds.
 
 #include "runtime/library/LibraryWriteLane.h"
+#include "runtime/projection/StringArena.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
@@ -30,7 +31,6 @@
 #include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/String.h>
-#include <ao/utility/StringArena.h>
 #include <ao/utility/UnicodeText.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -105,7 +105,7 @@ namespace ao::rt::test
 
     struct PreparedOrder final
     {
-      std::unique_ptr<utility::StringArena> arenaPtr = std::make_unique<utility::StringArena>();
+      std::unique_ptr<rt::detail::StringArena> arenaPtr = std::make_unique<rt::detail::StringArena>();
       std::vector<OrderEntry> entries;
       std::size_t generatedKeyBytes = 0;
     };
@@ -236,7 +236,7 @@ namespace ao::rt::test
       requireSortKeyInto(*optPolicy, output, orderingText);
     }
 
-    std::string_view internCounted(utility::StringArena& arena,
+    std::string_view internCounted(rt::detail::StringArena& arena,
                                    std::string_view const value,
                                    std::size_t& generatedKeyBytes)
     {
@@ -251,7 +251,7 @@ namespace ao::rt::test
       return interned;
     }
 
-    std::string_view deriveIdentityKey(utility::StringArena& arena,
+    std::string_view deriveIdentityKey(rt::detail::StringArena& arena,
                                        std::string& scratch,
                                        std::string_view const text,
                                        TextOrderingPolicy const* const optPolicy,
@@ -428,7 +428,7 @@ namespace ao::rt::test
     }
 
     CachedDictionaryText dictionaryTextCached(boost::unordered_flat_map<std::size_t, CachedDictionaryText>& cache,
-                                              utility::StringArena& arena,
+                                              rt::detail::StringArena& arena,
                                               std::string& scratch,
                                               Dataset const& dataset,
                                               std::size_t const dictionaryIndex,

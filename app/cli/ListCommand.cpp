@@ -5,6 +5,7 @@
 
 #include "CliRuntime.h"
 #include "CommandError.h"
+#include "CommandRegistrations.h"
 #include "DryRunFlag.h"
 #include "DumpOutput.h"
 #include "Output.h"

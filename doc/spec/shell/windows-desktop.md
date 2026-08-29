@@ -15,7 +15,7 @@ It does not redefine the [shared desktop library lifecycle](../application/deskt
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../../architecture/application-shell.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in `ao_app_desktop`; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
+The [system architecture](../../architecture/system-overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../../architecture/application-shell.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in `ao_desktop_launch`; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
 
 ## Terminology
 
@@ -271,11 +271,11 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
 - [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
 - [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using shared [`runLibraryScan`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h).
-- [`ao_app_desktop`](../../../app/desktop/) owns common root, startup, protocol,
+- [`ao_desktop_launch`](../../../app/desktop/) owns common root, startup, protocol,
   and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   owns real Win32 argument extraction and exact-executable discovery before
   delegating process creation.
-- [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines the window frame, its resources, and the single region a shell is built into; [`WindowInteractionPolicy`](../../../app/windows-winui/include/ao/winui/WindowInteractionPolicy.h) classifies its modal owners, [`ShellStatePolicy`](../../../app/windows-winui/include/ao/winui/layout/ShellStatePolicy.h) resolves its Windows-only responsive state, and the two shipped preset documents under [`app/windows-winui/layout/`](../../../app/windows-winui/layout/) define both native shells.
+- [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines the window frame, its resources, its modal-owner admission rule, and the single region a shell is built into; [`ShellState`](../../../app/windows-winui/include/ao/winui/layout/ShellState.h) resolves its Windows-only responsive state, and the two shipped preset documents under [`app/windows-winui/layout/`](../../../app/windows-winui/layout/) define both native shells.
 - [`MainWindowShell.cpp`](../../../app/windows-winui/shell/MainWindowShell.cpp), [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp), and [`MainWindowPlayback.cpp`](../../../app/windows-winui/playback/MainWindowPlayback.cpp) partition code-behind behavior by owner; XAML and generated code-behind declarations remain at the target root because WinUI generated-file association requires them.
 - [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table, selection reveal, and display/source index boundary.
 - [`NavigationPane`](../../../app/windows-winui/layout/component/shell/NavigationPane.cpp) adapts the shared navigation tree and workspace history availability; [`MainWindow.xaml.cpp`](../../../app/windows-winui/MainWindow.xaml.cpp) adapts playback reveal events to the window's own track list.
@@ -299,7 +299,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 ## Test map
 
-- [`ShellStatePolicyTest.cpp`](../../../test/unit/winui/layout/ShellStatePolicyTest.cpp) protects Windows breakpoints and shell-mode policy.
+- [`ShellStateTest.cpp`](../../../test/unit/winui/layout/ShellStateTest.cpp) protects Windows breakpoints and shell-mode behavior.
 - [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
 - [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) protects the scan decision shared by GTK and WinUI.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
@@ -309,7 +309,6 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   protects Windows startup resolution and the deferred-checkpoint preference update.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
-- [`WindowInteractionPolicyTest.cpp`](../../../test/unit/winui/WindowInteractionPolicyTest.cpp) protects the window-modal classification used by history and dialog admission.
 - [`ListAuthoringAdapterTest.cpp`](../../../test/unit/winui/list/ListAuthoringAdapterTest.cpp) protects post-save presentation resolution, committed tree invalidation, expansion restoration, active-ancestor reveal, and deterministic fallback; shared List editor, membership, and order-session tests protect the semantic workflows.
 - [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) protects all export/import selector mappings, restore-only confirmation, and report-complete native preview text; shared task-service and YAML-transfer tests protect execution and data semantics.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the native-only saved-order handlers without expanding the layout-action schema.

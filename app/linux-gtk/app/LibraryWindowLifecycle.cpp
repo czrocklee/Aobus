@@ -8,8 +8,8 @@
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
-#include "platform/AudioBackendBootstrap.h"
 #include <ao/Error.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
@@ -66,7 +66,10 @@ namespace ao::gtk
 
     auto appRuntimePtr = std::move(*runtimeRes);
 
-    registerPlatformAudioBackends(*appRuntimePtr);
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      appRuntimePtr->addAudioProvider(std::move(providerPtr));
+    }
 
     auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
       new MainWindow{*appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr});

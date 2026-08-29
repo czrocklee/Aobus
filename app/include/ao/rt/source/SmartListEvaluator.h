@@ -30,11 +30,10 @@ namespace ao::query
 
 namespace ao::rt
 {
-  struct SmartListEvaluatorOperationCounts final
+  namespace detail
   {
-    std::size_t upstreamIndexRebuilds = 0;
-    std::size_t membershipIndexRebuilds = 0;
-  };
+    class RuntimeOperationProbe;
+  }
 
   class SmartListSource;
   class TrackSource;
@@ -60,8 +59,6 @@ namespace ao::rt
     SmartListEvaluator& operator=(SmartListEvaluator&&) = delete;
 
     bool isAlive() const noexcept { return _alive; }
-    SmartListEvaluatorOperationCounts operationCounts() const noexcept { return _operationCounts; }
-
     void registerList(SmartListSource& list);
     void unregisterList(SmartListSource& list);
     void rebuild(SmartListSource& list);
@@ -119,8 +116,10 @@ namespace ao::rt
     library::MusicLibrary const& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
-    SmartListEvaluatorOperationCounts _operationCounts;
+    std::size_t _upstreamIndexRebuildCount = 0;
+    std::size_t _membershipIndexRebuildCount = 0;
 
     friend class SmartListSource;
+    friend class detail::RuntimeOperationProbe;
   };
 } // namespace ao::rt

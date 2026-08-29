@@ -40,7 +40,6 @@ namespace ao::uimodel::test
     auto const candidatePtr = sequence.stage();
 
     CHECK(sequence.activeId() == ShellGenerationId::None);
-    CHECK(sequence.stagedCount() == 1);
     CHECK_FALSE(candidatePtr->isActive());
 
     auto const retiredRes = sequence.publish(candidatePtr->id(), succeeds);
@@ -48,7 +47,6 @@ namespace ao::uimodel::test
     REQUIRE(retiredRes.has_value());
     CHECK(*retiredRes == ShellGenerationId::None);
     CHECK(sequence.activeId() == candidatePtr->id());
-    CHECK(sequence.stagedCount() == 0);
     CHECK(candidatePtr->isActive());
   }
 
@@ -88,7 +86,9 @@ namespace ao::uimodel::test
     CHECK(sequence.activeId() == firstPtr->id());
     CHECK(firstPtr->isActive());
     CHECK_FALSE(candidatePtr->isActive());
-    CHECK(sequence.stagedCount() == 0);
+    auto const republishedRes = sequence.publish(candidatePtr->id(), succeeds);
+    REQUIRE_FALSE(republishedRes.has_value());
+    CHECK(republishedRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("ShellGenerationSequence - a throwing attachment restores the previous generation",
@@ -103,7 +103,9 @@ namespace ao::uimodel::test
     CHECK(sequence.activeId() == firstPtr->id());
     CHECK(firstPtr->isActive());
     CHECK_FALSE(candidatePtr->isActive());
-    CHECK(sequence.stagedCount() == 0);
+    auto const republishedRes = sequence.publish(candidatePtr->id(), succeeds);
+    REQUIRE_FALSE(republishedRes.has_value());
+    CHECK(republishedRes.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("ShellGenerationSequence - a discarded candidate can never be published", "[uimodel][unit][layout][shell]")
@@ -112,7 +114,6 @@ namespace ao::uimodel::test
     auto const candidatePtr = sequence.stage();
     sequence.discard(candidatePtr->id());
 
-    CHECK(sequence.stagedCount() == 0);
     CHECK_FALSE(candidatePtr->isActive());
 
     auto const publishedRes = sequence.publish(candidatePtr->id(), succeeds);

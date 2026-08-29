@@ -46,7 +46,7 @@ WinUI follows a parallel native composition:
 ```text
 App owns dispatcher + one LibraryWindowSession
   -> one process owns one LibrarySession + MainWindow for its lifetime
-  -> aobus-winui-lib owns ShellStatePolicy + settings/theme schemas
+  -> aobus-winui-lib owns shell-state rules + settings/theme schemas
   -> MainWindow owns the XAML frame, its resources, and one layout host
      -> session callbacks, TrackListController, theme coordinator
         -> cover-art presenters borrow the runtime-owned loader and window-owned theme
@@ -77,14 +77,14 @@ The GTK Layout Editor likewise retains component types, property names, enum val
 [Decision 0004](../decision/0004-adopt-layout-documents-for-winui-shell-composition.md) makes the version 1 layout language the Windows shell composition language while leaving construction with the frontend.
 That boundary has two halves, and the split is by who decides rather than by what compiles.
 UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a schema and a dialect, the parse-expand-validate step, the `ShellGenerationSequence` that keeps exactly one view generation live, and the canonical component entries whose meaning both shells share.
-The Windows-only `aobus-winui-lib` owns what is this shell's own: which shared entries it imports and extends, the types and actions only Windows has, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
+The Windows-only `aobus-winui-lib` owns what is this shell's own: which shared entries it imports and extends, the types and actions only Windows has, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and the shell-state rules for native-window breakpoints and pane modes.
 The two built-in preset documents ship under `app/windows-winui/layout/`.
 The [Windows layout schema reference](../reference/windows/layout-schema.md) owns those exact surfaces.
 
 Both halves name XAML type and resource-scope identities as values rather than as C++/WinRT types, so the pure rules remain testable without constructing a XAML host.
 Being portable at the source level is not what makes something shared: a schema builder that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib`.
 Where it is gated is a separate question from who owns it. The Windows schema carries no WinRT, and what it has to get right - that a type both shells present keeps one meaning - is exactly what a change made on Linux can break unseen, so it is built and tested on every host.
-Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::ShellStatePolicy` width boundaries, and `winui::DesktopSettings` pane persistence.
+Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::classifyShellWidth()` boundaries, and `winui::DesktopSettings` pane persistence.
 
 The WinUI window builds its shell from the selected preset. `MainWindow.xaml` keeps the window frame, the single layout host, `RootGrid.Resources`, styles, and compiled `DataTemplate` resources; it composes no shell of its own.
 
@@ -218,7 +218,7 @@ Panel-size promotion moves eligible splitter size values into authored defaults 
 
 ```text
 mode + width + inspector request
-  -> winui::ShellStatePolicy resolves the target state
+  -> winui::resolveShellState() resolves the target state
   -> build and publish a candidate first when the preset changes
   -> ShellBuilder commits and emits only a changed state
   -> each live component applies the state through its scoped subscription
@@ -311,7 +311,7 @@ The selected root is persisted only after successor activation; its initial scan
 - Playback leaves bind directly to `PlaybackService` and, when required, `PlaybackActions`; [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) prevents generation components and leaf adapters from regaining session/runtime composition authority.
 - [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) owns WinUI shell composition, [`ShellPresetSource`](../../app/windows-winui/layout/ShellPresetSource.h) reads the packaged presets, and [`LayoutHost`](../../app/windows-winui/layout/runtime/LayoutHost.h) keeps exactly one generation attached to the frame.
 - [`TransportButton`](../../app/windows-winui/playback/TransportButton.h), [`SoulTransportButton`](../../app/windows-winui/playback/SoulTransportButton.h), [`OutputDeviceControl`](../../app/windows-winui/playback/OutputDeviceControl.h), [`SeekControl`](../../app/windows-winui/playback/SeekControl.h), [`PlaybackTimeControl`](../../app/windows-winui/playback/PlaybackTimeControl.h), and [`VolumeControl`](../../app/windows-winui/playback/VolumeControl.h) own playback leaf adaptation; a document's playback components compose them.
-- [`ShellStatePolicy`](../../app/windows-winui/include/ao/winui/layout/ShellStatePolicy.h) owns the Windows-only shell-state decision, while [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) owns shared Soul policy.
+- [`ShellState`](../../app/windows-winui/include/ao/winui/layout/ShellState.h) owns the Windows-only shell-state values and decisions, while [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) owns shared Soul behavior.
 
 ## Test map
 

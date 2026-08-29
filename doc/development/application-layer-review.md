@@ -16,13 +16,21 @@ Architectural authority remains in the [system](../architecture/system-overview.
 
 Physical target direction is necessary but insufficient: behavior must also be owned by the correct layer.
 
-Use these questions in order:
+For every proposed public role, ask three questions:
 
-1. Is the state authoritative across frontends? Runtime owns it.
-2. Is it deterministic, platform-neutral display or interaction policy? UIModel owns it.
-3. Is it widget, terminal, command-parser, native-resource, or event-loop behavior? The frontend owns it.
-4. Does one service coordinate storage, audio, executors, or another runtime service? Runtime composition owns that coordination.
-5. Is a callback observational? Subscriber presence and return values cannot change runtime policy.
+1. What does it own?
+2. What does it guarantee beyond the types it contains?
+3. Which correctness contract is lost if it is deleted?
+
+If none has an answer, absorb the role into its real owner or use a function.
+These questions are not a score.
+
+Then place the surviving behavior by authority: cross-frontend source-of-truth
+state and service coordination belong to runtime; deterministic
+platform-neutral presentation and interaction policy belongs to UIModel; and
+widget, terminal, command-parser, native-resource, or event-loop adaptation
+belongs to the frontend. Observational callbacks never let subscriber presence
+or return values choose runtime policy.
 
 Runtime commands update their authoritative snapshot and revision before publishing the corresponding observation.
 A no-op or rejected command does not manufacture a revision.
@@ -58,7 +66,7 @@ Known direct-library migration seams are documented in the [presentation archite
 ## Validation
 
 Run the narrow tests for the changed owner and adapter, then the repository validation required by [validation and review](test/validation-and-review.md).
-The completion `./ao check` gate explicitly builds `aobus_guardrails`, which owns the include and UIModel organization checks declared in `app/CMakeLists.txt`.
+The completion `./ao check` gate explicitly builds `aobus_guardrails`, which owns the application architecture audit declared in [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake).
 Ordinary application builds leave those repository-wide scans to that gate.
 
 Review evidence should identify:

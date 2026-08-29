@@ -3,13 +3,12 @@ add_library(aobus-cli-lib STATIC
     CliRuntime.h
     CommandError.cpp
     CommandError.h
+    CommandRegistrations.h
     DryRunFlag.h
     DumpOutput.cpp
     DumpOutput.h
     InitCommand.cpp
-    InitCommand.h
     LibCommand.cpp
-    LibCommand.h
     ListCommand.cpp
     ListCommand.h
     Output.cpp
@@ -23,9 +22,7 @@ add_library(aobus-cli-lib STATIC
     ScanOutput.cpp
     ScanOutput.h
     TagCommand.cpp
-    TagCommand.h
     TrackCommand.cpp
-    TrackCommand.h
     TrackSelection.cpp
     TrackSelection.h
 )

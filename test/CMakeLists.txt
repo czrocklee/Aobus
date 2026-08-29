@@ -193,7 +193,7 @@ add_executable(ao_core_test
     unit/utility/PlatformDirectoriesTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringTest.cpp
-    unit/utility/StringArenaTest.cpp
+    unit/runtime/projection/StringArenaTest.cpp
     unit/utility/UnicodeTextTest.cpp
     unit/utility/StrongTypeTest.cpp
     unit/utility/UuidTest.cpp
@@ -586,7 +586,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
-    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellStatePolicy.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellState.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/StyleLookup.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
@@ -599,7 +599,6 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/list/ListAuthoringAdapter.cpp
     unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/ThemeTest.cpp
-    unit/winui/WindowInteractionPolicyTest.cpp
     unit/winui/app/DesktopOutputSelectionTest.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
     unit/winui/app/DispatcherQueueAdmissionTest.cpp
@@ -612,7 +611,7 @@ add_executable(ao_core_test
     unit/winui/layout/LayoutDialectTest.cpp
     unit/winui/layout/PlacementPlanTest.cpp
     unit/winui/layout/ShellDocumentTest.cpp
-    unit/winui/layout/ShellStatePolicyTest.cpp
+    unit/winui/layout/ShellStateTest.cpp
     unit/winui/layout/StyleLookupTest.cpp
     unit/winui/layout/ThemeSurfaceTest.cpp
     unit/winui/track/QuickFilterCompletionAdapterTest.cpp
@@ -635,7 +634,7 @@ target_compile_definitions(ao_core_test PRIVATE
 
 target_link_libraries(ao_core_test PRIVATE
     ao_fatal_probe_support
-    ao_app_desktop
+    ao_desktop_launch
     ao_app_uimodel
     ao_app_i18n
     ao_app_i18n_completion
@@ -695,7 +694,7 @@ if(WIN32)
 
     # Windows shell rules that need native types are tested only here.
     # Cross-desktop startup/protocol/launcher rules are supplied by
-    # ao_app_desktop above, and the WinRT-free desktop policy is gated on every
+    # ao_desktop_launch above, and the WinRT-free desktop policy is gated on every
     # host with the portable sources.
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
     unit/winui/FrameResourceTest.cpp
@@ -723,10 +722,8 @@ add_executable(ao_tui_test
     unit/tui/ExecutorTest.cpp
     unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
-    unit/tui/ListNavigationTest.cpp
     unit/tui/LibraryNavigationTest.cpp
     unit/tui/PlaybackStatusFormatterTest.cpp
-    unit/tui/QualityIndicatorStyleTest.cpp
     unit/tui/SelectionNavigationTest.cpp
     unit/tui/SignalExitWatcherTest.cpp
     unit/tui/TrackDetailLinesTest.cpp
@@ -734,7 +731,6 @@ add_executable(ao_tui_test
     unit/tui/TrackPresentationNavigationTest.cpp
     unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
-    unit/tui/PlaybackActionsTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
     unit/tui/ShellInteractionModelTest.cpp
@@ -756,13 +752,6 @@ target_link_libraries(ao_tui_test PRIVATE
     FakeIt::FakeIt-catch
 )
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
-
-if(APPLE)
-  target_sources(ao_tui_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/app/tui/AudioBackendBootstrap.cpp"
-    unit/tui/CoreAudioBackendBootstrapTest.cpp
-  )
-endif()
 
 # ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
 # it is never built by the gate -- it links mimalloc to mirror the shipping
@@ -854,11 +843,10 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp
     unit/linux-gtk/app/MenuControllerTest.cpp
-    unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
     unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
-    unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
+    unit/linux-gtk/app/WindowInputTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
     unit/linux-gtk/app/GtkMainContextExecutorTest.cpp
@@ -889,7 +877,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/status/ActivityStatusWidgetTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
-    unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp
     unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp
     unit/linux-gtk/platform/MprisBridgeTest.cpp
     unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp

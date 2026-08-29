@@ -5,7 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <ryml.hpp>
 

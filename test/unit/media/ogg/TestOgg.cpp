@@ -3,7 +3,7 @@
 
 #include "test/unit/media/ogg/TestOgg.h"
 
-#include <ao/media/ogg/PageLayout.h>
+#include "lib/media/ogg/PageLayout.h"
 
 #include <cstddef>
 #include <cstdint>

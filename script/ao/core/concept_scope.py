@@ -1,7 +1,7 @@
 """Frozen concept-report scope: roots, exclusions, overload treatment, and hop chains.
 
-RFC 0002 Phase 0 measures public declarations from one configured debug build.
-This module is the denominator contract: changing a field here is a measurement
+The report measures public declarations from one configured debug build. This
+module is the denominator contract: changing a field here is a measurement
 change, not a silent implementation detail.
 """
 
@@ -81,7 +81,7 @@ class ConstructionChain:
         return len(self.steps)
 
 
-# Seeded from RFC 0002 examples so later phases compare the same leaves.
+# Keep these named leaves stable so structural changes compare the same paths.
 # hops is the number of API boundaries after the leaf's translation unit.
 CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
     ConstructionChain(

@@ -9,7 +9,6 @@
 #include "i18n/GtkTextCatalog.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
-#include "portal/ImportExportCoordinatorPolicy.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
@@ -43,6 +42,26 @@
 
 namespace ao::gtk::portal
 {
+  namespace detail
+  {
+    bool isExpectedNativeChooserCancellation(Gtk::DialogError::Code const code) noexcept
+    {
+      return code == Gtk::DialogError::CANCELLED || code == Gtk::DialogError::DISMISSED;
+    }
+
+    rt::ExportMode exportModeForSelection(std::uint32_t const selectedIndex) noexcept
+    {
+      switch (selectedIndex)
+      {
+        case 0U: return rt::ExportMode::Delta;
+        case 1U: return rt::ExportMode::Metadata;
+        case 2U: return rt::ExportMode::Full;
+        case 3U: return rt::ExportMode::ListOnly;
+        default: return rt::ExportMode::Metadata;
+      }
+    }
+  } // namespace detail
+
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    i18n::MessageCatalog textCatalog,
@@ -83,7 +102,7 @@ namespace ao::gtk::portal
           }
           catch (Gtk::DialogError const& e)
           {
-            if (!isExpectedNativeChooserCancellation(e.code()))
+            if (!detail::isExpectedNativeChooserCancellation(e.code()))
             {
               APP_LOG_ERROR("Error selecting folder: {}", e.what());
               presentFileDialogError(
@@ -167,7 +186,7 @@ namespace ao::gtk::portal
       return;
     }
 
-    auto const mode = exportModeForSelection(modeCombo->get_selected());
+    auto const mode = detail::exportModeForSelection(modeCombo->get_selected());
 
     dialog->close();
 
@@ -202,7 +221,7 @@ namespace ao::gtk::portal
     }
     catch (Gtk::DialogError const& e)
     {
-      if (!isExpectedNativeChooserCancellation(e.code()))
+      if (!detail::isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting export file: {}", e.what());
         presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectExportFile), e.what());
@@ -281,7 +300,7 @@ namespace ao::gtk::portal
     }
     catch (Gtk::DialogError const& e)
     {
-      if (!isExpectedNativeChooserCancellation(e.code()))
+      if (!detail::isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting import file: {}", e.what());
         presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectBackup), e.what());

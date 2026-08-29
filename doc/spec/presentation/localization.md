@@ -143,7 +143,7 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates assets and generates pseudo and WinUI resources.
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h) declares the narrow positional and XAML-property projection set.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.
-- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) owns ICU compilation, common-data packaging, embedding, and the CLI dependency guard.
+- [`app/i18n/CMakeLists.txt`](../../../app/i18n/CMakeLists.txt) owns ICU compilation, common-data packaging, and embedding; [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) owns the CLI link-closure check.
 
 ## Test map
 

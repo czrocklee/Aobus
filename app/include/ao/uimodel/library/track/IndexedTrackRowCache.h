@@ -26,7 +26,6 @@ namespace ao::uimodel
     rt::TrackRow const* rowAt(std::size_t index);
 
     std::size_t sourceSize() const noexcept { return _sourceSize; }
-    std::size_t cachedCount() const noexcept { return _entries.size(); }
     std::size_t maximumEntries() const noexcept { return _maximumEntries; }
     bool contains(std::size_t index) const noexcept { return _entries.contains(index); }
 

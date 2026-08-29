@@ -3,6 +3,7 @@
 
 #include <ao/rt/source/IndexedTrackSequence.h>
 
+#include "runtime/RuntimeOperationProbe.h"
 #include <ao/rt/TrackEditScript.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,7 +17,7 @@ namespace ao::rt::test
             "[runtime][unit][source][indexed-track-sequence]")
   {
     auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    auto const before = sequence.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
     auto script = delta::RegularTrackEditScript{
       .edits =
         {
@@ -33,15 +34,16 @@ namespace ao::rt::test
     CHECK(sequence.indexOf(TrackId{3}) == 1);
     CHECK(sequence.indexOf(TrackId{2}) == 2);
     CHECK(sequence.indexOf(TrackId{4}) == 3);
-    CHECK(sequence.operationCounts().indexRebuilds == before.indexRebuilds);
-    CHECK(sequence.operationCounts().incrementalScriptApplications == before.incrementalScriptApplications + 1);
+    auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
+    CHECK(after.indexRebuilds == before.indexRebuilds);
+    CHECK(after.incrementalScriptApplications == before.incrementalScriptApplications + 1);
   }
 
   TEST_CASE("IndexedTrackSequence - multi-range batch rebuilds its index once",
             "[runtime][unit][source][indexed-track-sequence]")
   {
     auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    auto const before = sequence.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
     auto script = delta::RegularTrackEditScript{
       .edits =
         {
@@ -58,7 +60,8 @@ namespace ao::rt::test
     CHECK(sequence.indexOf(TrackId{2}) == 0);
     CHECK(sequence.indexOf(TrackId{6}) == 2);
     CHECK_FALSE(sequence.contains(TrackId{1}));
-    CHECK(sequence.operationCounts().indexRebuilds == before.indexRebuilds + 1);
-    CHECK(sequence.operationCounts().incrementalScriptApplications == before.incrementalScriptApplications);
+    auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
+    CHECK(after.indexRebuilds == before.indexRebuilds + 1);
+    CHECK(after.incrementalScriptApplications == before.incrementalScriptApplications);
   }
 } // namespace ao::rt::test

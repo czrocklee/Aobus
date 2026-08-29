@@ -14,7 +14,7 @@ That logical lane was represented indirectly by a physical writer mutex, a condi
 The model preserved serializability, but a callback-executor caller could still pass its state check immediately before a background writer acquired the mutex and then block behind an unbounded scan transaction.
 Workers could likewise occupy threads while waiting for writer or publication admission, and coordinated Closing had to reconcile several independent gates.
 
-Review of RFC 0002 compared a complete sequencer with two smaller alternatives: callback-side `try_lock`, and `try_lock` plus coroutine-based Maintenance entry and exit.
+The application-concept-debloat review compared a complete sequencer with two smaller alternatives: callback-side `try_lock`, and `try_lock` plus coroutine-based Maintenance entry and exit.
 The smaller approaches could contain the immediate UI stall at much lower implementation cost.
 The accepted reason for the larger change was therefore not higher LMDB concurrency, throughput, or fewer source lines.
 It was to make the already-serialized runtime write lifecycle one structural protocol: one transaction opener, visible FIFO ordering, suspension instead of executor-thread blocking, and one Closing quiescence point.

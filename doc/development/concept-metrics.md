@@ -3,14 +3,13 @@ id: development.concept-metrics
 type: development
 status: current
 domain: development
-summary: Defines how contributors measure public concepts, construction hops, and include fan-out for RFC 0002.
+summary: Defines how contributors measure public concepts, construction hops, and include fan-out.
 ---
 # Concept metrics
 
 ## Scope
 
-This guide owns the contributor procedure for the concept baseline introduced by
-[RFC 0002](../rfc/0002-application-concept-debloat.md).
+This guide owns the contributor procedure for the repository's public concept baseline.
 It does not own layer maps, naming policy, or product behavior.
 
 The report answers four primary questions from one configured debug build:
@@ -89,7 +88,6 @@ concept-debloat phase still requires the full gate in
 
 ## Related documents
 
-- [RFC 0002: Application concept debloat](../rfc/0002-application-concept-debloat.md) owns the proposal, protected structure, and phase order.
 - [Dependency governance](dependency-governance.md) owns `./ao deps verify` and governed package identity.
 - [Naming convention](naming-convention.md) owns role vocabulary; this report only counts it.
-- [Application-layer review](application-layer-review.md) owns the contributor review workflow that later consumes the RFC's three questions.
+- [Application-layer review](application-layer-review.md) owns the contributor review workflow and public-role questions.

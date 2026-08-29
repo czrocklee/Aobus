@@ -15,6 +15,7 @@
 #include <giomm/asyncresult.h>
 #include <giomm/cancellable.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/error.h>
 #include <gtkmm/filedialog.h>
 #include <gtkmm/window.h>
 
@@ -45,6 +46,12 @@ namespace ao::gtk
 
 namespace ao::gtk::portal
 {
+  namespace detail
+  {
+    bool isExpectedNativeChooserCancellation(Gtk::DialogError::Code code) noexcept;
+    rt::ExportMode exportModeForSelection(std::uint32_t selectedIndex) noexcept;
+  } // namespace detail
+
   /**
    * ImportExportCoordinator owns the file/folder/mode chooser dialogs for library import/export and, once a
    * concrete path (and export mode) is resolved, delegates the background work to LibraryImportExportWorkflow.

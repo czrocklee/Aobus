@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackComponentRegistrations.h"
 #include "i18n/GtkTextCatalog.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/runtime/ComponentRegistry.h"

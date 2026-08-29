@@ -34,7 +34,6 @@ namespace ao::uimodel::test
     REQUIRE(cache.rowAt(0) != nullptr);
     REQUIRE(cache.rowAt(2) != nullptr);
 
-    CHECK(cache.cachedCount() == 2);
     CHECK(cache.contains(0));
     CHECK_FALSE(cache.contains(1));
     CHECK(cache.contains(2));
@@ -61,7 +60,7 @@ namespace ao::uimodel::test
                   return rt::TrackRow{.id = TrackId{8}, .title = "after"};
                 });
 
-    CHECK(cache.cachedCount() == 0);
+    CHECK_FALSE(cache.contains(0));
     CHECK(cache.rowAt(1) == nullptr);
     CHECK(loadCount == 1);
     REQUIRE(cache.rowAt(0) != nullptr);

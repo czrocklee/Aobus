@@ -14,7 +14,6 @@ add_library(ao_utility STATIC
     Serialization.cpp
     Sha256.cpp
     String.cpp
-    StringArena.cpp
     ThreadName.cpp
     Uuid.cpp
     Xxh3.cpp

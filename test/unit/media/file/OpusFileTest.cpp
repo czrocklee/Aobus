@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/media/ogg/PageLayout.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/file/TestFile.h"
@@ -9,7 +10,6 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/media/file/Visitor.h>
-#include <ao/media/ogg/PageLayout.h>
 #include <ao/media/opus/Header.h>
 #include <ao/utility/ByteView.h>
 

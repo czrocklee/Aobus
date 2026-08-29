@@ -7,7 +7,7 @@
 #include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>

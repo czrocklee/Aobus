@@ -4,7 +4,7 @@
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <ao/Error.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/Serialization.h>
 
 #include <array>
