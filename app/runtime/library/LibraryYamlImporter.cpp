@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include "runtime/library/LibraryYamlImporter.h"
 
 #include "LibraryYamlImportOperation.h"
 #include "MediaTrack.h"
@@ -29,7 +29,7 @@
 #include <ao/query/QueryCompilation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -791,12 +791,14 @@ namespace ao::rt
     library::MusicLibrary& ml;
   };
 
-  LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& ml)
-    : _implPtr{std::make_unique<Impl>(ml)}
+  LibraryYamlImporter::LibraryYamlImporter(library::MusicLibrary& library)
+    : _implPtr{std::make_unique<Impl>(library)}
   {
   }
 
   LibraryYamlImporter::~LibraryYamlImporter() = default;
+  LibraryYamlImporter::LibraryYamlImporter(LibraryYamlImporter&&) noexcept = default;
+  LibraryYamlImporter& LibraryYamlImporter::operator=(LibraryYamlImporter&&) noexcept = default;
 
   LibraryYamlImportOperation::PreparedImport::PreparedImport(std::unique_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}

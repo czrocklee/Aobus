@@ -85,9 +85,4 @@ namespace ao::rt
   {
     return _points.size();
   }
-
-  std::optional<std::size_t> NavigationHistory::currentIndex() const noexcept
-  {
-    return _optCurrentIndex;
-  }
 } // namespace ao::rt

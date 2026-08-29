@@ -21,6 +21,11 @@ namespace ao::async
 
 namespace ao::rt
 {
+  namespace test
+  {
+    struct LibraryChangesAccess;
+  }
+
   namespace detail
   {
     enum class LibraryPublicationTerminal : std::uint8_t
@@ -58,6 +63,7 @@ namespace ao::rt
   };
 
   class LibraryWriteLane;
+  class TrackSourceCache;
 
   class [[nodiscard]] LibraryChanges final
   {
@@ -72,21 +78,6 @@ namespace ao::rt
     LibraryChanges(LibraryChanges&&) = delete;
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
-    // Publication runs in two phases (doc/spec/library/runtime/change-publication.md).
-    // Both phases run synchronously on the callback executor without
-    // coordinator mutex ownership. Callables must defer runtime shutdown or
-    // owner destruction to a later executor turn.
-    //
-    // Phase one delivers the revision to the single bound replica -- the one
-    // consumer that keeps derived state the rest of the runtime reads from.
-    // An escaping apply exception is diagnosed and aborted by the publication
-    // boundary; it is not a recoverable publication result. At most one replica may be bound;
-    // the returned handle unbinds. A new binding is rejected while publication
-    // is active. Unbinding does not interrupt a replica already pinned for the
-    // current delivery; it only prevents later deliveries.
-    async::Subscription bindReplica(std::string replicaName,
-                                    compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply) const;
-
     // Phase two announces an applied revision. Reaching an observer means
     // the replica applied the revision and the library is readable at it.
     // Escaping observer exceptions are diagnosed by this publication boundary
@@ -95,6 +86,13 @@ namespace ao::rt
 
   private:
     friend class LibraryWriteLane;
+    friend class TrackSourceCache;
+    friend struct test::LibraryChangesAccess;
+
+    // Publication phase one belongs to the runtime's single derived-state
+    // replica. Ordinary library observers only see phase two through onChanged().
+    async::Subscription bindReplica(std::string replicaName,
+                                    compat::MoveOnlyFunction<void(LibraryChangeSet const&)> apply) const;
 
     void publishFromCoordinator(LibraryChangeSet changeSet,
                                 compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,

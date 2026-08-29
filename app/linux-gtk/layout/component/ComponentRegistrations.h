@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <giomm/menumodel.h>
 #include <glibmm/refptr.h>
@@ -11,14 +12,24 @@
 #include <functional>
 #include <string>
 
+namespace ao::async
+{
+  class Runtime;
+} // namespace ao::async
+
 namespace ao::rt
 {
   class AppRuntime;
+  class CompletionService;
   class LibraryJobs;
+  class Library;
   class NotificationService;
   class PlaybackService;
+  class TrackSourceCache;
+  class TextOrderingPolicy;
   class ViewService;
-}
+  class WorkspaceService;
+} // namespace ao::rt
 
 namespace ao::uimodel
 {
@@ -104,7 +115,9 @@ namespace ao::gtk::layout
                                              i18n::MessageCatalog const& textCatalog,
                                              uimodel::OutputDeviceIntent const& outputDeviceIntent);
   void registerPlaybackImageComponent(ComponentRegistry& registry,
-                                      rt::AppRuntime& runtime,
+                                      rt::PlaybackService& playback,
+                                      rt::Library& library,
+                                      std::function<Result<>(TrackId)> jumpToAlbum,
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog);
   void registerSoulTransportButtonComponent(ComponentRegistry& registry,
@@ -120,11 +133,12 @@ namespace ao::gtk::layout
                                       rt::PlaybackService& playback,
                                       i18n::MessageCatalog const& textCatalog);
   void registerNowPlayingFieldComponent(ComponentRegistry& registry,
-                                        rt::AppRuntime& runtime,
+                                        rt::PlaybackService& playback,
+                                        rt::WorkspaceService& workspace,
                                         i18n::MessageCatalog const& textCatalog);
   void registerSeekSliderComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
   void registerTimeLabelComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
-  void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::AppRuntime& runtime);
+  void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
   void registerAudioPipelinePanelComponent(ComponentRegistry& registry,
                                            rt::PlaybackService& playback,
                                            i18n::MessageCatalog const& textCatalog);
@@ -160,34 +174,44 @@ namespace ao::gtk::layout
                                       rt::ViewService& views,
                                       i18n::MessageCatalog const& textCatalog);
   void registerLibraryTrackCountComponent(ComponentRegistry& registry,
-                                          rt::AppRuntime& runtime,
+                                          rt::TrackSourceCache& sources,
                                           i18n::MessageCatalog const& textCatalog);
   void registerStatusMessageLabelComponent(ComponentRegistry& registry, i18n::MessageCatalog const& textCatalog);
 
   void registerTrackQuickFilterComponent(ComponentRegistry& registry,
-                                         rt::AppRuntime& runtime,
+                                         rt::CompletionService& completion,
+                                         rt::ViewService& views,
+                                         rt::WorkspaceService& workspace,
                                          TrackPageHost* trackPageHost,
                                          std::function<void(ListId, std::string)> createSmartListFromExpression,
                                          i18n::MessageCatalog const& textCatalog);
   void registerTrackPresentationButtonComponent(ComponentRegistry& registry,
-                                                rt::AppRuntime& runtime,
+                                                rt::ViewService& views,
+                                                rt::WorkspaceService& workspace,
                                                 uimodel::TrackPresentationCatalog* presentationCatalog,
                                                 uimodel::ListPresentations* listPresentations,
                                                 ThemeCoordinator* themeCoordinator,
                                                 i18n::MessageCatalog const& textCatalog);
-  void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::AppRuntime& runtime);
+  void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::WorkspaceService& workspace);
   void registerTrackSelectionRegionComponent(ComponentRegistry& registry);
   void registerTrackCoverArtComponent(ComponentRegistry& registry,
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog);
   void registerTrackFieldGridComponent(ComponentRegistry& registry,
-                                       rt::AppRuntime& runtime,
+                                       async::Runtime& asyncRuntime,
+                                       rt::Library& library,
+                                       rt::CompletionService& completion,
+                                       rt::NotificationService& notifications,
                                        i18n::MessageCatalog const& textCatalog);
   void registerTrackDetailUndoBarComponent(ComponentRegistry& registry,
-                                           rt::AppRuntime& runtime,
+                                           async::Runtime& asyncRuntime,
+                                           rt::NotificationService& notifications,
                                            i18n::MessageCatalog const& textCatalog);
   void registerTrackTagEditorComponent(ComponentRegistry& registry,
-                                       rt::AppRuntime& runtime,
+                                       async::Runtime& asyncRuntime,
+                                       rt::Library& library,
+                                       rt::NotificationService& notifications,
+                                       rt::TextOrderingPolicy const* textOrderingPolicy,
                                        TagEditController* tagEditController,
                                        i18n::MessageCatalog const& textCatalog);
 } // namespace ao::gtk::layout

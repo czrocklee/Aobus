@@ -37,8 +37,8 @@ drive-by lint sweep.
   discarded return values, designated
   initializers for positional expected-data tables, cognitive complexity,
   identifier length, magic numbers, C arrays, C varargs, and test-only casts.
-- `test/main.cpp` and non-fixture files under `test/integration/lint/` are
-  ignored by normal tidy runs.
+- Non-fixture files under `test/integration/lint/` are ignored by normal tidy
+  runs.
 - Lint checker fixtures under `test/integration/lint/fixture/` are skipped in
   batch scans and checked only when named explicitly. The `./ao test --lint`
   suite owns fixture diagnostic and auto-fix coverage.

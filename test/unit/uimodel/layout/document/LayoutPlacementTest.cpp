@@ -75,17 +75,13 @@ namespace ao::uimodel::test
     CHECK_FALSE(absent.heightRequestAuthored);
   }
 
-  TEST_CASE("planLayoutPlacement - runtime state may hide an element but never reveals a hidden one",
-            "[uimodel][unit][layout][placement]")
+  TEST_CASE("planLayoutPlacement - authored visibility remains distinct", "[uimodel][unit][layout][placement]")
   {
     auto const shown = planLayoutPlacement(nodeWithLayout({{"visible", LayoutValue{true}}}));
     CHECK(shown.optAuthoredVisible == true);
-    CHECK(isPlacedElementVisible(shown, true));
-    CHECK_FALSE(isPlacedElementVisible(shown, false));
 
     auto const hidden = planLayoutPlacement(nodeWithLayout({{"visible", LayoutValue{false}}}));
     CHECK(hidden.optAuthoredVisible == false);
-    CHECK_FALSE(isPlacedElementVisible(hidden, true));
   }
 
   TEST_CASE("planLayoutPlacement - saying nothing about visibility is not saying visible",
@@ -96,9 +92,6 @@ namespace ao::uimodel::test
     // reveals a volume control with no volume and an undo bar with no undo.
     auto const unauthored = planLayoutPlacement(nodeWithLayout({}));
     CHECK_FALSE(unauthored.optAuthoredVisible);
-
-    // A frontend that has nothing else to consult still shows it.
-    CHECK(isPlacedElementVisible(unauthored, true));
   }
 
   TEST_CASE("isCommonLayoutProp - names exactly the version 1 fields every frontend interprets",

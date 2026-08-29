@@ -3,7 +3,7 @@
 
 #include "ShellInteractionModel.h"
 
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/utility/String.h>

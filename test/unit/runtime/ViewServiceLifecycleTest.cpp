@@ -147,7 +147,7 @@ namespace ao::rt::test
 
     SECTION("close releases the owned projection")
     {
-      auto projectionWeakPtr = std::weak_ptr<TrackListProjection>{};
+      auto projectionWeakPtr = std::weak_ptr<TrackListProjection const>{};
 
       {
         auto const projectionRes = service.findTrackListProjection(viewId);

@@ -136,8 +136,8 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 
 - [`MessageCatalog.h`](../../../app/include/ao/i18n/MessageCatalog.h) defines the typed facade and owned result.
 - [`MessageCatalog.cpp`](../../../app/i18n/MessageCatalog.cpp) owns admission, explicit fallback, immutable formatter construction, and formatting.
-- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) forwards direct typed ids and maps domain inputs only where message selection or fallback is semantic.
-- [`GtkTextCatalog.cpp`](../../../app/linux-gtk/i18n/GtkTextCatalog.cpp) and [`TuiTextCatalog.cpp`](../../../app/tui/TuiTextCatalog.cpp) own frontend-local copy helpers and argument binding.
+- [`TrackPresentationText.cpp`](../../../app/uimodel/library/presentation/TrackPresentationText.cpp), [`PlaybackCommandText.cpp`](../../../app/uimodel/playback/command/PlaybackCommandText.cpp), [`PlaybackOutputText.cpp`](../../../app/uimodel/playback/output/PlaybackOutputText.cpp), and [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp) map domain inputs only where message selection or fallback is semantic.
+- [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp) and [`TuiText.cpp`](../../../app/tui/TuiText.cpp) own frontend-local copy helpers and argument binding.
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation and structure-aware pseudo transformation.
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt) are the canonical authored catalogs.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates assets and generates pseudo and WinUI resources.
@@ -148,7 +148,7 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 ## Test map
 
 - [`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects fallback, formatting, pseudo output, invalid arguments, and concurrent use.
-- [`PresentationTextTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects the complete typed shared surface in English, German, fallback, and pseudo catalogs.
+- [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) protects the complete typed shared surface in English, German, fallback, and pseudo catalogs.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) protects the English baseline, localized complete messages, technical-number policy, and external-value pass-through.
 - [`MenuControllerTest.cpp`](../../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`PreferencesWindowTest.cpp`](../../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp), [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect frontend helper consumption in English, German, and pseudo-localized presentation.
 - [`TrackCustomViewDialogTest.cpp`](../../../test/unit/linux-gtk/track/TrackCustomViewDialogTest.cpp), [`TrackPresentationPickerViewModelTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp), and [`TrackPresentationNavigationTest.cpp`](../../../test/unit/tui/TrackPresentationNavigationTest.cpp) protect the localized presentation-editor and navigation slice.

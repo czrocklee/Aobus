@@ -135,7 +135,7 @@ namespace ao::rt::test
 
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
     {
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto request = NavigationRequest{
         .target =
           FilteredListTarget{
@@ -212,7 +212,7 @@ namespace ao::rt::test
       auto const& membershipRes = *membershipResultValueRes;
       REQUIRE((membershipRes.status == AuthoringStatus::Applied || membershipRes.status == AuthoringStatus::NoOp));
       executor.drain();
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto listRes = runRuntimeTask(runtime,
                                     runtime.library().commands().createList(ListDraft{
                                       .name = "Playback session order",
@@ -1087,7 +1087,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const trackId = addPlayableTrack(*runtimePtr, "Restored offset");
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
     auto session = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
@@ -1116,7 +1116,7 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
     auto payload = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
       .currentTrackId = trackId,
@@ -1199,7 +1199,7 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
     auto schemaLine = std::string_view{"  schemaVersion: 4\n"};
     auto sortBy = std::string_view{"[]"};
 
@@ -1241,7 +1241,7 @@ namespace ao::rt::test
     auto const first = addPlayableTrack(*runtimePtr, "First", 1990);
     auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
     std::ignore = addPlayableTrack(*runtimePtr, "Third", 2023);
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
 
     auto payload = PlaybackSessionState{
       .sourceListId = kAllTracksListId,
@@ -1318,7 +1318,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const current = addPlayableTrack(*runtimePtr, "Current", 1990);
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
     auto const sortBy = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
     storeSession(*runtimePtr,
                  PlaybackSessionState{
@@ -1356,7 +1356,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const current = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
     storeSession(*runtimePtr,
                  PlaybackSessionState{
                    .sourceListId = kAllTracksListId,
@@ -1382,7 +1382,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     runtimePtr->addAudioProvider(std::make_unique<PropertyFailProvider>(arm));
     auto const current = addPlayableTrack(*runtimePtr, "Current");
-    runtimePtr->reloadAllTracks();
+    runtimePtr->sources().reloadAllTracks();
 
     // Establish a baseline live volume/mute while the backend still accepts writes.
     runtimePtr->playback().commands().setVolume(0.25F);
@@ -1447,7 +1447,7 @@ namespace ao::rt::test
       addReadyAudioProvider(*runtimePtr);
       auto const first = addPlayableTrack(*runtimePtr, *executor, "First");
       addPlayableTrack(*runtimePtr, *executor, "Second");
-      runtimePtr->reloadAllTracks();
+      runtimePtr->sources().reloadAllTracks();
       auto const listId = ao::test::requireValue(runRuntimeTask(
         *runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "Temporary source"})));
       auto const viewRes = runtimePtr->workspace().navigate({.target = listId});

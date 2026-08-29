@@ -3,7 +3,7 @@
 
 #include "list/ListNavigationPanel.h"
 
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "list/ListTreeItem.h"
 #include "list/ListTreeModelBuilder.h"
 #include <ao/CoreIds.h>

@@ -70,7 +70,7 @@ The GTK shell bootstraps this way at startup and starts the backfill. The Window
 ## Implementation authority
 
 - [`LibraryScanOutcome.h`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h) and [`LibraryScanOutcome.cpp`](../../../app/uimodel/library/task/LibraryScanOutcome.cpp) own `runLibraryScan`, the verdicts, the severity and lifetime mapping, and the diagnostics.
-- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) owns `formatLibraryScanMessage`.
+- [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp) owns `formatLibraryScanMessage`.
 - [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) post the decision in their shells.
 
 ## Test authority

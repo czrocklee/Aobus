@@ -286,7 +286,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
 - [`PlaybackFailure`](../../app/include/ao/rt/PlaybackFailure.h), public [`PlaybackService.cpp`](../../app/runtime/playback/PlaybackService.cpp), internal [`PlaybackTransport.cpp`](../../app/runtime/playback/PlaybackTransport.cpp), and [`PlaybackSuccession.cpp`](../../app/runtime/playback/PlaybackSuccession.cpp) are the principal typed asynchronous failure, recovery, and summary-reporting path.
 - [`ActivityStatusViewModel`](../../app/include/ao/uimodel/status/activity/ActivityStatusViewModel.h) and [`ActivityStatusFeedProjection`](../../app/uimodel/status/activity/ActivityStatusFeedProjection.cpp) define the platform-neutral reporting projection.
-- [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h) owns shared report expansion and typed library-progress copy.
+- [`ActivityPresentationText.h`](../../app/include/ao/uimodel/status/activity/ActivityPresentationText.h) owns shared report expansion and typed library-progress copy.
 - GTK [`UiWorkflow`](../../app/linux-gtk/common/UiWorkflow.h), TUI [`Executor.cpp`](../../app/tui/Executor.cpp), and CLI [`CommandError`](../../app/cli/CommandError.h) plus [`Run.cpp`](../../app/cli/Run.cpp) define representative application-leaf containment and presentation boundaries.
 - [`Log.h`](../../app/include/ao/rt/Log.h) exposes the application logging surface used by runtime and frontend boundary adapters.
 - [`Log.cpp`](../../app/runtime/Log.cpp) also owns fatal-sink registration and bounded asynchronous fatal-log submission.

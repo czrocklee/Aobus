@@ -863,7 +863,7 @@ namespace ao::rt
       dictionaryTextCache.clear();
       stringArena.clear();
 
-      auto& source = sourceLease.source();
+      auto const& source = sourceLease.source();
       sourceOrder.reserve(source.size());
       orderIndex.reserve(source.size());
 
@@ -1678,7 +1678,7 @@ namespace ao::rt
   }
 
   async::Subscription TrackListProjection::subscribe(
-    compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler)
+    compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler) const
   {
     AO_EXPECTS(static_cast<bool>(handler), "Track-list projection subscription handler must not be empty");
 

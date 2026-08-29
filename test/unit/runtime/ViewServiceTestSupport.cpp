@@ -30,6 +30,8 @@ namespace ao::rt::test
   {
   }
 
+  ViewServiceFixture::~ViewServiceFixture() = default;
+
   LibraryCommands& ViewServiceFixture::commands()
   {
     return commandsFixture.commands();
@@ -86,7 +88,7 @@ namespace ao::rt::test
     return viewId;
   }
 
-  std::shared_ptr<TrackListProjection> ViewServiceFixture::requireProjection(ViewId const viewId)
+  std::shared_ptr<TrackListProjection const> ViewServiceFixture::requireProjection(ViewId const viewId) const
   {
     return ao::test::requireValue(service.findTrackListProjection(viewId));
   }

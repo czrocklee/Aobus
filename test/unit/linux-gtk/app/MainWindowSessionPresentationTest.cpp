@@ -23,6 +23,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
@@ -241,7 +242,7 @@ namespace ao::gtk::test
       auto runtimePtr = makeRuntime(tempDir);
       rt::test::addReadyAudioProvider(*runtimePtr);
       auto const trackId = addPlayableTrack(*runtimePtr, "Old library playback");
-      runtimePtr->reloadAllTracks();
+      runtimePtr->sources().reloadAllTracks();
       auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = rt::kAllTracksListId}));
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
       REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));

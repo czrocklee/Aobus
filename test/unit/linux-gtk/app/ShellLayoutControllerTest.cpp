@@ -26,6 +26,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -530,7 +531,7 @@ namespace ao::gtk::test
       rt::test::addReadyAudioProvider(runtime);
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(playback.commands().startFromView(*viewRes, trackId));

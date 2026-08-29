@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -10,8 +10,8 @@
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -37,13 +37,14 @@ namespace ao::gtk::layout
     class TrackDetailUndoBarComponent final : public LayoutComponent
     {
     public:
-      TrackDetailUndoBarComponent(rt::AppRuntime& runtime,
+      TrackDetailUndoBarComponent(async::Runtime& asyncRuntime,
+                                  rt::NotificationService& notifications,
                                   i18n::MessageCatalog textCatalog,
                                   LayoutBuildContext const& ctx,
                                   LayoutNode const& /*node*/)
         : _undoController{ctx.detailUndo}
-        , _runtime{runtime}
-        , _notifications{runtime.notifications()}
+        , _async{asyncRuntime}
+        , _notifications{notifications}
         , _textCatalog{std::move(textCatalog)}
       {
         _undoButton.set_label(gtkText(_textCatalog, i18n::MessageId::GtkCommonUndo));
@@ -67,7 +68,7 @@ namespace ao::gtk::layout
             if (_undoController != nullptr)
             {
               spawnUiTask(
-                _runtime.async(),
+                _async,
                 _tasks,
                 *this,
                 "metadata undo",
@@ -138,7 +139,7 @@ namespace ao::gtk::layout
       }
 
       TrackDetailUndoController* _undoController = nullptr;
-      rt::AppRuntime& _runtime;
+      async::Runtime& _async;
       rt::NotificationService& _notifications;
       i18n::MessageCatalog _textCatalog;
       Gtk::Box _bar{Gtk::Orientation::HORIZONTAL, 0};
@@ -150,7 +151,8 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerTrackDetailUndoBarComponent(ComponentRegistry& registry,
-                                           rt::AppRuntime& runtime,
+                                           async::Runtime& asyncRuntime,
+                                           rt::NotificationService& notifications,
                                            i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
@@ -159,7 +161,7 @@ namespace ao::gtk::layout
        .category = ComponentCategory::Track,
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&runtime, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
-      { return std::make_unique<TrackDetailUndoBarComponent>(runtime, textCatalog, ctx, node); });
+      [&asyncRuntime, &notifications, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackDetailUndoBarComponent>(asyncRuntime, notifications, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

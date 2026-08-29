@@ -7,7 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 

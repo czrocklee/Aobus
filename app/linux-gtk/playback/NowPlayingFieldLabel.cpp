@@ -4,7 +4,6 @@
 #include "playback/NowPlayingFieldLabel.h"
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
@@ -38,14 +37,16 @@ namespace ao::gtk
     }
   } // namespace
 
-  NowPlayingFieldLabel::NowPlayingFieldLabel(rt::AppRuntime& runtime,
+  NowPlayingFieldLabel::NowPlayingFieldLabel(rt::PlaybackService& playback,
+                                             rt::WorkspaceService& workspace,
                                              i18n::MessageCatalog const& textCatalog,
                                              rt::TrackField field,
                                              Action action)
-    : _runtime{runtime}
+    : _playback{playback}
+    , _workspace{workspace}
     , _field{field}
     , _action{action}
-    , _nowPlayingViewModel{_runtime.playback(),
+    , _nowPlayingViewModel{_playback,
                            textCatalog,
                            [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
@@ -82,7 +83,7 @@ namespace ao::gtk
 
     using Type = uimodel::NowPlayingActionCommand::Type;
 
-    switch (auto& commands = _runtime.playback().commands(); cmd.type)
+    switch (auto& commands = _playback.commands(); cmd.type)
     {
       case Type::Reveal: commands.revealPlayingTrack(); break;
 
@@ -92,7 +93,7 @@ namespace ao::gtk
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);
-        std::ignore = _runtime.workspace().navigate({
+        std::ignore = _workspace.navigate({
           .target =
             rt::FilteredListTarget{
               .listId = rt::kAllTracksListId,

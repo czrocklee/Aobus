@@ -68,6 +68,7 @@ namespace ao::winui::layout
                               async::Signal<ShellState>& shellStateChanged)
         : _coverArt{_coverImage,
                     _coverPlaceholder,
+                    asyncRuntime,
                     resourceBytes,
                     theme,
                     uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)}
@@ -115,7 +116,7 @@ namespace ao::winui::layout
         _root.Children().Append(coverFrame);
         _root.Children().Append(text);
 
-        follow(asyncRuntime, playback, textCatalog);
+        follow(playback, textCatalog);
         applyShellState(ctx.shellState);
         _shellStateSub = subscribeUiUpdate(
           shellStateChanged, "NowPlayingInfoComponent", [this](ShellState const state) { applyShellState(state); });
@@ -138,9 +139,8 @@ namespace ao::winui::layout
                                                                      : winrt::Microsoft::UI::Xaml::Visibility::Visible);
       }
 
-      void follow(async::Runtime& asyncRuntime, rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
+      void follow(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
       {
-        _coverArt.bind(asyncRuntime);
         _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(
           playback, textCatalog, [this](uimodel::NowPlayingViewState const& state) { applyState(state); });
       }

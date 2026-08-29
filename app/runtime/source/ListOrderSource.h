@@ -3,11 +3,13 @@
 
 #pragma once
 
-#include "IndexedTrackSequence.h"
-#include "TrackSource.h"
-#include "TrackSourceLease.h"
+#include "runtime/source/IndexedTrackSequence.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
+#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
 #include <optional>
@@ -16,6 +18,8 @@
 
 namespace ao::rt
 {
+  class CachedListSource;
+
   /**
    * Applies a persisted rank overlay to a filtered parent source.
    *
@@ -47,6 +51,7 @@ namespace ao::rt
     bool contains(TrackId id) const;
 
   private:
+    void invalidateFromOwner() noexcept { invalidate(); }
     void discardSnapshot() noexcept override;
     void ensureLive() const;
     void rebuildEffectiveTrackIds();
@@ -59,5 +64,7 @@ namespace ao::rt
     IndexedTrackSequence _orderTrackIds;
     IndexedTrackSequence _effectiveTrackIds;
     async::Subscription _filteredParentSubscription;
+
+    friend class CachedListSource;
   };
 } // namespace ao::rt

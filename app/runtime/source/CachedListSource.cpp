@@ -3,12 +3,12 @@
 
 #include "runtime/source/CachedListSource.h"
 
+#include "runtime/source/ListOrderSource.h"
+#include "runtime/source/SmartListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ListOrderSource.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/utility/StrongTypeFormatter.h>
@@ -144,7 +144,7 @@ namespace ao::rt
   void CachedListSource::discardSnapshot() noexcept
   {
     _implementationSubscription.reset();
-    _implementationPtr->invalidate();
+    _implementationPtr->invalidateFromOwner();
     _lastPublishedSize = 0;
   }
 

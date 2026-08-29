@@ -7,7 +7,7 @@
 #include "app/FormBuilder.h"
 #include "common/UiWorkflow.h"
 #include "completion/EntryCompletionController.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackRowCache.h"

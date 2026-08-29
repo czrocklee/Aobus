@@ -7,31 +7,27 @@ if(NOT ROOT)
   message(FATAL_ERROR "AssertWinUiLeafCapabilities: ROOT not specified")
 endif()
 
-file(GLOB_RECURSE _ao_component_files LIST_DIRECTORIES false
-     "${ROOT}/layout/component/*.h"
-     "${ROOT}/layout/component/*.cpp")
+set(_ao_files)
+foreach(_subdir IN ITEMS layout/component layout/runtime playback status track image)
+  file(GLOB_RECURSE _ao_subdir_files LIST_DIRECTORIES false
+       "${ROOT}/${_subdir}/*.h"
+       "${ROOT}/${_subdir}/*.cpp")
+  list(APPEND _ao_files ${_ao_subdir_files})
+endforeach()
 
-set(_ao_files
-    ${_ao_component_files}
-    "${ROOT}/layout/runtime/LayoutBuildContext.h"
-    "${ROOT}/playback/AudioPipelineToolTip.h"
-    "${ROOT}/playback/AudioPipelineToolTip.cpp"
-    "${ROOT}/playback/OutputDeviceControl.h"
-    "${ROOT}/playback/OutputDeviceControl.cpp"
-    "${ROOT}/playback/PlaybackTimeControl.h"
-    "${ROOT}/playback/PlaybackTimeControl.cpp"
-    "${ROOT}/playback/SeekControl.h"
-    "${ROOT}/playback/SeekControl.cpp"
-    "${ROOT}/playback/SoulTransportButton.h"
-    "${ROOT}/playback/SoulTransportButton.cpp"
-    "${ROOT}/playback/TransportButton.h"
-    "${ROOT}/playback/TransportButton.cpp"
-    "${ROOT}/playback/VolumeControl.h"
-    "${ROOT}/playback/VolumeControl.cpp"
-    "${ROOT}/status/ActivityStatusControl.h"
-    "${ROOT}/status/ActivityStatusControl.cpp"
-    "${ROOT}/track/TrackQuickFilterControl.h"
-    "${ROOT}/track/TrackQuickFilterControl.cpp")
+# These files are the explicit composition/coordinator roots for the scanned
+# subtrees. Everything else is a generation component or leaf adapter and must
+# receive exact capabilities.
+set(_ao_composition_root_files
+    "${ROOT}/layout/ShellBuilder.h"
+    "${ROOT}/layout/ShellBuilder.cpp"
+    "${ROOT}/playback/MainWindowPlayback.cpp"
+    "${ROOT}/track/MainWindowTrack.cpp"
+    "${ROOT}/track/TrackListController.h"
+    "${ROOT}/track/TrackListController.cpp")
+list(REMOVE_ITEM _ao_files ${_ao_composition_root_files})
+list(REMOVE_DUPLICATES _ao_files)
+list(SORT _ao_files)
 
 foreach(_file IN LISTS _ao_files)
   file(RELATIVE_PATH _rel "${ROOT}" "${_file}")

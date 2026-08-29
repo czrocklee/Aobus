@@ -11,7 +11,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>

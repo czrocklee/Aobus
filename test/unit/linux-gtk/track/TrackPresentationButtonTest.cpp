@@ -46,7 +46,7 @@ namespace ao::gtk::test
     auto listPresentations = uimodel::ListPresentations{catalog};
 
     auto window = Gtk::Window{};
-    auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
+    auto button = TrackPresentationButton{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
     button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
 
@@ -97,7 +97,7 @@ namespace ao::gtk::test
     auto const activeViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
-    auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
+    auto button = TrackPresentationButton{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
     button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
     drainGtkEvents();
@@ -136,7 +136,8 @@ namespace ao::gtk::test
     REQUIRE(activeViewId != rt::kInvalidViewId);
     REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
 
-    auto buttonPtr = std::make_unique<TrackPresentationButton>(runtime, ao::test::englishMessageCatalog());
+    auto buttonPtr = std::make_unique<TrackPresentationButton>(
+      runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog());
     buttonPtr->setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(*buttonPtr);
     drainGtkEvents();
@@ -170,7 +171,7 @@ namespace ao::gtk::test
 
     auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
-    auto button = TrackPresentationButton{runtime, ao::test::englishMessageCatalog()};
+    auto button = TrackPresentationButton{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
     button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
     window.present();

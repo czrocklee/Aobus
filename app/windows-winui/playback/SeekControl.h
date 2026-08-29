@@ -41,7 +41,7 @@ namespace ao::winui
   class SeekControl final
   {
   public:
-    explicit SeekControl(SeekControlConfig config);
+    SeekControl(SeekControlConfig config, rt::PlaybackService& playback);
     ~SeekControl();
 
     SeekControl(SeekControl const&) = delete;
@@ -49,15 +49,14 @@ namespace ao::winui
     SeekControl(SeekControl&&) = delete;
     SeekControl& operator=(SeekControl&&) = delete;
 
-    void bind(rt::PlaybackService& playback);
-    void unbind() noexcept;
     void setPresentationActive(bool active);
 
   private:
     struct PointerCallbackState;
 
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     void beginPointerInteraction();
     void endPointerInteraction();

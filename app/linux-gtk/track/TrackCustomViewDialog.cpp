@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>

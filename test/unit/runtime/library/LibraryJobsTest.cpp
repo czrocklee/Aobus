@@ -3,6 +3,7 @@
 
 #include <ao/rt/library/LibraryJobs.h>
 
+#include "runtime/library/LibraryYamlImporter.h"
 #include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -29,8 +30,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Path.h>
 

@@ -10,7 +10,7 @@
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryImportPlan.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
 #include <filesystem>
@@ -69,6 +69,8 @@ namespace ao::gtk::portal
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);
 
     rt::AppRuntime& _runtime;
+    // Borrowed so callback updates made by the owning coordinator remain visible
+    // to operations started after construction.
     ImportExportCallbacks const& _callbacks;
     i18n::MessageCatalog _textCatalog;
 

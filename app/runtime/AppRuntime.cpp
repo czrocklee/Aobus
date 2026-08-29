@@ -274,11 +274,6 @@ namespace ao::rt
     return _implPtr->playbackSessionPersistencePtr->retireForLibrarySwitch();
   }
 
-  void AppRuntime::reloadAllTracks()
-  {
-    sources().reloadAllTracks();
-  }
-
   Result<TrackId> AppRuntime::playSelectionInFocusedView()
   {
     auto const focus = _implPtr->workspaceService.snapshot();

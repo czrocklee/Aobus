@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/presentation/PresentationText.h>
-
 #include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -13,7 +11,11 @@
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandText.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

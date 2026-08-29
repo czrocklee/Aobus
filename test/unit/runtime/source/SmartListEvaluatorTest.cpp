@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/source/SmartListEvaluator.h>
+#include "runtime/source/SmartListEvaluator.h"
 
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -63,7 +63,7 @@ namespace ao::rt::test
     auto subscription =
       list.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
-    sourcePtr->invalidate();
+    TrackSourceAccess::invalidate(*sourcePtr);
 
     CHECK(list.state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 1);

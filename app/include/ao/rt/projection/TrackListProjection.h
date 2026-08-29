@@ -52,6 +52,8 @@ namespace ao::rt
     Work,
   };
 
+  constexpr auto kMissingTrackValueKindCount = static_cast<std::size_t>(MissingTrackValueKind::Work) + 1;
+
   using TrackGroupHeadingValue = std::variant<std::monostate, std::string, std::uint16_t, MissingTrackValueKind>;
 
   struct TrackGroupHeading final
@@ -146,7 +148,7 @@ namespace ao::rt
 
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler);
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler) const;
 
   private:
     struct Impl;

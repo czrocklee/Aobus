@@ -17,7 +17,7 @@
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
 #include "tui/TuiHitRegions.h"
-#include "tui/TuiTextCatalog.h"
+#include "tui/TuiText.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -26,7 +26,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_message.hpp>

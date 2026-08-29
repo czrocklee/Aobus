@@ -1,7 +1,10 @@
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
     presentation/CoverArtPlaceholder.cpp
-    presentation/PresentationText.cpp
+    library/presentation/TrackPresentationText.cpp
+    playback/command/PlaybackCommandText.cpp
+    playback/output/PlaybackOutputText.cpp
+    status/activity/ActivityPresentationText.cpp
     layout/component/LayoutSchema.cpp
     layout/shell/LayoutSession.cpp
     layout/component/AbsoluteCanvasGeometry.cpp

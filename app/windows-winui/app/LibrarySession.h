@@ -17,7 +17,6 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>

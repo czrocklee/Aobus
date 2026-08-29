@@ -29,7 +29,9 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class CompletionService;
+  class ViewService;
+  class WorkspaceService;
 }
 
 namespace ao::gtk
@@ -43,7 +45,9 @@ namespace ao::gtk
     using CreateSmartListSignal = sigc::signal<void(std::string)>;
     using DebounceScheduler = std::function<sigc::connection(std::chrono::milliseconds, sigc::slot<bool()>)>;
 
-    TrackQuickFilter(rt::AppRuntime& runtime,
+    TrackQuickFilter(rt::CompletionService& completion,
+                     rt::ViewService& views,
+                     rt::WorkspaceService& workspace,
                      i18n::MessageCatalog const& textCatalog,
                      DebounceScheduler debounceScheduler = {});
     ~TrackQuickFilter() override;
@@ -73,7 +77,6 @@ namespace ao::gtk
     void updateClearButton();
     void setActive(bool active);
 
-    rt::AppRuntime& _runtime;
     Gtk::Entry _entry;
     Gtk::Button _clearButton;
     Gtk::Button _createSmartListButton;

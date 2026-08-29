@@ -104,8 +104,6 @@ namespace ao::rt
     /** Removes persisted playback intent and permanently seals persistence for a library switch. */
     Result<> retirePlaybackSessionForLibrarySwitch();
 
-    void reloadAllTracks();
-
     Result<TrackId> playSelectionInFocusedView();
     Result<> jumpToAlbum(TrackId trackId);
     void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);

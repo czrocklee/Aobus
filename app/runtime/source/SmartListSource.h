@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "IndexedTrackSequence.h"
-#include "TrackSource.h"
-#include "TrackSourceLease.h"
+#include "runtime/source/IndexedTrackSequence.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
 #include <memory>
@@ -25,12 +25,7 @@ namespace ao::rt
 {
   class SmartListEvaluator;
 
-  /**
-   * SmartListSource - A reactive predicate source that filters another TrackSource.
-   *
-   * It holds its own members and relies on SmartListEvaluator to drive updates
-   * based on library changes.
-   */
+  /** Reactive predicate source owned by the runtime source pipeline. */
   class SmartListSource final : public TrackSource
   {
   public:
@@ -45,7 +40,6 @@ namespace ao::rt
     void setExpression(std::string expr);
     void reload();
 
-    // TrackSource interface
     std::size_t size() const override { return _members.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _members.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
@@ -53,7 +47,7 @@ namespace ao::rt
     bool hasError() const { return _current.optError.has_value(); }
     std::optional<Error> const& error() const { return _current.optError; }
     std::string const& expression() const { return _current.expression; }
-    TrackSource& source() const { return _sourceLease.source(); }
+    TrackSource const& source() const { return _sourceLease.source(); }
 
   private:
     friend class SmartListEvaluator;
@@ -66,6 +60,7 @@ namespace ao::rt
     };
 
     void applyPendingState();
+    void invalidateFromEvaluator() noexcept { invalidate(); }
     void replaceMembers(std::vector<TrackId> members);
     void discardSnapshot() noexcept override;
 

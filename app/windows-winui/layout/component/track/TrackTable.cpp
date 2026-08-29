@@ -19,7 +19,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <gsl-lite/gsl-lite.hpp>

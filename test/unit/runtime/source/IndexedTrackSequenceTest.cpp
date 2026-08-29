@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/source/IndexedTrackSequence.h>
+#include "runtime/source/IndexedTrackSequence.h"
 
 #include "runtime/RuntimeOperationProbe.h"
 #include <ao/rt/TrackEditScript.h>

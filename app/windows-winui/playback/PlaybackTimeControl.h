@@ -29,7 +29,7 @@ namespace ao::winui
   class PlaybackTimeControl final
   {
   public:
-    explicit PlaybackTimeControl(PlaybackTimeControlConfig config);
+    PlaybackTimeControl(PlaybackTimeControlConfig config, rt::PlaybackService& playback);
     ~PlaybackTimeControl();
 
     PlaybackTimeControl(PlaybackTimeControl const&) = delete;
@@ -37,13 +37,12 @@ namespace ao::winui
     PlaybackTimeControl(PlaybackTimeControl&&) = delete;
     PlaybackTimeControl& operator=(PlaybackTimeControl&&) = delete;
 
-    void bind(rt::PlaybackService& playback);
-    void unbind() noexcept;
     void setPresentationActive(bool active);
 
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     void applyState(uimodel::PlaybackPositionViewState const& state);
     void updateRenderingRegistration();

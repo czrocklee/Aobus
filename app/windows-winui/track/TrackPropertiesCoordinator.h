@@ -13,7 +13,6 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

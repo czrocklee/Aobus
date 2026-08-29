@@ -58,12 +58,12 @@ Labels and descriptions may evolve only with matching UIModel catalog tests and 
 
 - [`TrackPresentation.cpp`](../../../app/runtime/TrackPresentation.cpp) owns the exact catalog.
 - [`TrackPresentation.h`](../../../app/include/ao/rt/TrackPresentation.h) owns preset and spec shapes.
-- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp) owns built-in labels and descriptions.
+- [`TrackPresentationText.cpp`](../../../app/uimodel/library/presentation/TrackPresentationText.cpp) owns built-in labels and descriptions.
 
 ## Test authority
 
 - [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks the established catalog ids and most preset shapes; `classical-conductors` still needs its own focused shape assertion.
-- [`PresentationTextTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
+- [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
 
 ## Related documents
 

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/source/SmartListEvaluator.h>
+#include "runtime/source/SmartListEvaluator.h"
 
 #include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
@@ -14,7 +15,6 @@
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -140,7 +140,7 @@ namespace ao::rt
 
   void SmartListEvaluator::registerList(SmartListSource& list)
   {
-    auto& source = list.source();
+    auto const& source = list.source();
     auto [it, inserted] = _buckets.try_emplace(&source);
 
     if (inserted)
@@ -169,13 +169,13 @@ namespace ao::rt
 
     if (bucket.invalidated)
     {
-      list.invalidate();
+      list.invalidateFromEvaluator();
     }
   }
 
   void SmartListEvaluator::unregisterList(SmartListSource& list)
   {
-    auto* const source = &list.source();
+    auto const* const source = &list.source();
     auto const it = _buckets.find(source);
 
     if (it == _buckets.end())
@@ -209,7 +209,7 @@ namespace ao::rt
     evaluatePendingLists(*it->second);
   }
 
-  void SmartListEvaluator::handleSourceBatch(TrackSource& source, TrackSourceDelta const& batch)
+  void SmartListEvaluator::handleSourceBatch(TrackSource const& source, TrackSourceDelta const& batch)
   {
     auto const it = _buckets.find(&source);
 
@@ -604,7 +604,7 @@ namespace ao::rt
         continue;
       }
 
-      list->invalidate();
+      list->invalidateFromEvaluator();
     }
   }
 

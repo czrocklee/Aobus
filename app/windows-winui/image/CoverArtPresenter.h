@@ -25,6 +25,7 @@ namespace ao::winui
   public:
     CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
                       winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
+                      async::Runtime& runtime,
                       rt::ResourceByteMemoryCache& resources,
                       ThemeCoordinator& theme,
                       uimodel::CoverArtPlaceholderStyle style);
@@ -35,13 +36,12 @@ namespace ao::winui
     CoverArtPresenter(CoverArtPresenter&&) = delete;
     CoverArtPresenter& operator=(CoverArtPresenter&&) = delete;
 
-    void bind(async::Runtime& runtime);
-    void unbind() noexcept;
     void select(ResourceId resourceId, uimodel::CoverArtPlaceholderIdentity identity, bool hasEntity);
 
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model or resource snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     struct State;
 
@@ -53,10 +53,10 @@ namespace ao::winui
     static void display(State& state, std::uint64_t generation, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;
+    async::Runtime& _runtime;
     rt::ResourceByteMemoryCache& _resources;
     ThemeCoordinator& _theme;
     rt::ResourceByteMemoryCache::Request _request;
-    async::Runtime* _runtime = nullptr;
     async::TaskHandle _streamTask;
   };
 } // namespace ao::winui

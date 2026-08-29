@@ -15,7 +15,7 @@
 #include "app/WindowActionRegistry.h"
 #include "app/WindowInput.h"
 #include "app/WindowState.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "list/ListNavigationController.h"

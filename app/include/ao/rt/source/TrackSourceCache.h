@@ -3,27 +3,17 @@
 
 #pragma once
 
-#include "AllTracksSource.h"
-#include "SmartListEvaluator.h"
-#include "TrackSource.h"
 #include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Subscription.h>
-#include <ao/compat/MoveOnlyFunction.h>
-
-#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace ao::library
 {
-  class ListView;
   class MusicLibrary;
 }
 
@@ -48,15 +38,11 @@ namespace ao::rt
   };
 
   class LibraryChanges;
-  struct LibraryChangeSet;
-  class CachedListSource;
-  class ListOrderSource;
-
   class TrackSourceCache final
   {
   public:
     TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes);
-    ~TrackSourceCache() = default;
+    ~TrackSourceCache();
 
     TrackSourceCache(TrackSourceCache const&) = delete;
     TrackSourceCache& operator=(TrackSourceCache const&) = delete;
@@ -69,39 +55,8 @@ namespace ao::rt
     void reloadAllTracks();
 
   private:
-    Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
-    void handleLibraryChange(LibraryChangeSet const& event);
-    void handleLibraryReset();
-    void handleIncrementalLibraryChange(LibraryChangeSet const& event);
-    std::vector<ListId> applyListOrderChanges(LibraryChangeSet const& event);
-    void notifyMetadataUpdates(LibraryChangeSet const& event);
-    void refreshList(ListId listId);
-    void eraseList(ListId listId);
-    void applyListMutation(compat::MoveOnlyFunction<void()> mutation);
-    void drainPendingRefreshes();
-    void refreshListNow(ListId listId);
-    std::shared_ptr<CachedListSource> findSource(ListId listId);
-    std::unique_ptr<ListOrderSource> buildImplementation(library::ListView const& view,
-                                                         TrackSourceLease const& parentLease);
-    void linkGraph(ListId listId, ListId parentId);
-    void unlinkGraph(ListId listId);
-    void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;
-
-    library::MusicLibrary const& _library;
-    std::shared_ptr<AllTracksSource> _allTracksPtr;
-    SmartListEvaluator _smartEvaluator;
-
-    async::Subscription _replicaBinding;
-
-    std::size_t _listMutationDepth = 0;
-    bool _refreshDrainActive = false;
-    std::vector<ListId> _pendingRefreshListIds;
-
-    boost::unordered_flat_map<ListId, std::shared_ptr<CachedListSource>, std::hash<ListId>> _sources;
-    boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
-    boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
-    boost::unordered_flat_map<SourceSpec, std::weak_ptr<TrackSource>, SourceSpecHash> _adHocSources;
-    std::size_t _expiredAdHocSourcePruneCount = 0;
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
 
     friend class detail::RuntimeOperationProbe;
   };

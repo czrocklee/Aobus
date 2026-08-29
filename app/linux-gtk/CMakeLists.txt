@@ -45,7 +45,7 @@ add_library(aobus-gtk-lib STATIC
     platform/MprisPlaybackEndpoint.cpp
     platform/SuccessorProcessLauncher.cpp
 
-    i18n/GtkTextCatalog.cpp
+    i18n/GtkText.cpp
 
     preference/ShortcutEditorWidget.cpp
     preference/PreferencesWindow.cpp

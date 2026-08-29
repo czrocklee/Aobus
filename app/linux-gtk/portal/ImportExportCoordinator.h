@@ -5,12 +5,12 @@
 
 #include "app/ThemeCoordinator.h"
 #include "common/MainContextCallbackScope.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "portal/ImportExportActions.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/cancellable.h>

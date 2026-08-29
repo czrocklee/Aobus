@@ -20,7 +20,6 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -44,7 +43,7 @@ namespace ao::uimodel
          rt::ViewId const viewIdValue,
          rt::BoundListOrder orderValue,
          ListOrderCapabilityState capabilitiesValue,
-         std::shared_ptr<rt::TrackListProjection> projectionValuePtr,
+         std::shared_ptr<rt::TrackListProjection const> projectionValuePtr,
          i18n::MessageCatalog textCatalogValue)
       : library{libraryValue}
       , views{viewsValue}
@@ -312,7 +311,7 @@ namespace ao::uimodel
     rt::ViewId viewId = rt::kInvalidViewId;
     rt::BoundListOrder order;
     ListOrderCapabilityState capabilities;
-    std::shared_ptr<rt::TrackListProjection> projectionPtr;
+    std::shared_ptr<rt::TrackListProjection const> projectionPtr;
     i18n::MessageCatalog textCatalog;
     bool current = true;
     bool submitting = false;

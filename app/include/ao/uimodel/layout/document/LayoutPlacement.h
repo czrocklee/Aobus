@@ -78,15 +78,4 @@ namespace ao::uimodel
    * whole candidate first, so this mapping ignores anything it cannot interpret.
    */
   LayoutPlacement planLayoutPlacement(LayoutNode const& node);
-
-  /**
-   * @brief Whether an element is shown, given its placement and the owning controller's semantic state.
-   *
-   * An authored `visible: false` always collapses. Runtime state may additionally
-   * hide an authored-visible element, but never reveals one the document hid.
-   */
-  constexpr bool isPlacedElementVisible(LayoutPlacement const& placement, bool const runtimeVisible) noexcept
-  {
-    return placement.optAuthoredVisible.value_or(true) && runtimeVisible;
-  }
 } // namespace ao::uimodel

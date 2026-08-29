@@ -77,7 +77,7 @@ namespace ao::winui
     }
   } // namespace
 
-  SeekControl::SeekControl(SeekControlConfig config)
+  SeekControl::SeekControl(SeekControlConfig config, ao::rt::PlaybackService& playback)
     : _slider{std::move(config.slider)}
     , _thumbTemplate{std::move(config.thumbTemplate)}
     , _modernOverlay{config.modernOverlay}
@@ -205,13 +205,17 @@ namespace ao::winui
     {
       resolveTrackElement();
     }
+
+    resetPresentation();
+    _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
+      playback, [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
   }
 
   SeekControl::~SeekControl()
   {
     _pointerCallbackStatePtr->owner = nullptr;
     _pointerCallbackStatePtr.reset();
-    unbind();
+    stop();
 
     if (_slider)
     {
@@ -225,15 +229,7 @@ namespace ao::winui
     }
   }
 
-  void SeekControl::bind(ao::rt::PlaybackService& playback)
-  {
-    unbind();
-    resetPresentation();
-    _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
-      playback, [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
-  }
-
-  void SeekControl::unbind() noexcept
+  void SeekControl::stop() noexcept
   {
     _viewModelPtr.reset();
     cancelPendingFinalSeek();

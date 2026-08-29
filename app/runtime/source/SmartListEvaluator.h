@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "IndexedTrackSequence.h"
-#include "TrackSourceDelta.h"
+#include "runtime/source/IndexedTrackSequence.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
+#include <ao/rt/source/TrackSourceDelta.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -42,10 +42,8 @@ namespace ao::rt
    * Batches expression evaluation for every SmartListSource sharing an
    * upstream TrackSource.
    *
-   * Each source bucket owns an ordered mirror of the upstream IDs. A complete
-   * upstream delta batch is replayed into that mirror before any dependent
-   * notification is published, so every derived list emits at most one atomic
-   * batch and remains a stable subsequence of upstream order.
+   * This evaluator is a source-pipeline implementation detail; callers acquire
+   * the resulting TrackSource through TrackSourceCache.
    */
   class SmartListEvaluator final
   {
@@ -66,7 +64,7 @@ namespace ao::rt
   private:
     struct SourceBucket final
     {
-      TrackSource* source = nullptr;
+      TrackSource const* source = nullptr;
       IndexedTrackSequence upstreamTracks{};
       std::vector<SmartListSource*> lists{};
       async::Subscription subscription{};
@@ -84,7 +82,7 @@ namespace ao::rt
 
     using TrackMatches = boost::unordered_flat_map<TrackId, std::vector<bool>, std::hash<TrackId>>;
 
-    void handleSourceBatch(TrackSource& source, TrackSourceDelta const& batch);
+    void handleSourceBatch(TrackSource const& source, TrackSourceDelta const& batch);
     void handleSourceReset(SourceBucket& bucket);
     void handleRegularBatch(SourceBucket& bucket,
                             delta::RegularTrackEditScript const& script,
@@ -114,7 +112,7 @@ namespace ao::rt
     static query::AccessProfile unionAccessProfile(std::span<SmartListSource* const> lists);
 
     library::MusicLibrary const& _ml;
-    boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
+    boost::unordered_flat_map<TrackSource const*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
     std::size_t _upstreamIndexRebuildCount = 0;
     std::size_t _membershipIndexRebuildCount = 0;

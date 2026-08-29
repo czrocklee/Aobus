@@ -4,6 +4,7 @@
 #include "track/TrackDetailControl.h"
 
 #include "platform/StringResources.h"
+#include <ao/Contract.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -11,7 +12,7 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -219,7 +220,8 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackDetailControl::TrackDetailControl(TrackDetailControlConfig config)
+  TrackDetailControl::TrackDetailControl(TrackDetailControlConfig config,
+                                         std::shared_ptr<rt::TrackDetailProjection> projectionPtr)
     : _fieldScroll{std::move(config.fieldScroll)}
     , _detailContent{std::move(config.detailContent)}
     , _metadataHeaderButton{std::move(config.metadataHeaderButton)}
@@ -233,7 +235,10 @@ namespace ao::winui
     , _technicalRows{std::move(config.technicalRows)}
     , _textCatalog{std::move(config.textCatalog)}
     , _schema{uimodel::buildTrackFieldGridSchema()}
+    , _projectionPtr{std::move(projectionPtr)}
   {
+    AO_EXPECTS(_projectionPtr != nullptr, "Track detail control requires a projection");
+
     if (_metadataHeaderButton)
     {
       _metadataHeaderClickRevoker = _metadataHeaderButton.Click(
@@ -267,12 +272,14 @@ namespace ao::winui
         });
     }
 
-    renderSnapshot();
+    resetPresentation();
+    _subscription =
+      _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   TrackDetailControl::~TrackDetailControl()
   {
-    unbind();
+    stop();
 
     if (_technicalHeaderButton)
     {
@@ -290,25 +297,7 @@ namespace ao::winui
     }
   }
 
-  void TrackDetailControl::bind(TrackDetailBinding binding)
-  {
-    unbind();
-    resetPresentation();
-
-    try
-    {
-      _projectionPtr = std::move(binding.projectionPtr);
-      _subscription =
-        _projectionPtr->subscribe([this](rt::TrackDetailSnapshot const& snapshot) { handleSnapshot(snapshot); });
-    }
-    catch (...)
-    {
-      unbind();
-      throw;
-    }
-  }
-
-  void TrackDetailControl::unbind() noexcept
+  void TrackDetailControl::stop() noexcept
   {
     // TrackDetailProjection borrows services owned by this window's runtime.
     // Stop publication before destroying the projection.

@@ -10,6 +10,7 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryChangesTestAccess.h"
 #include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -193,8 +194,8 @@ namespace ao::rt::test
     auto subscription = changes.onChanged([&notifiedCount](LibraryChangeSet const&) noexcept { ++notifiedCount; });
 
     {
-      auto replicaBinding =
-        changes.bindReplica("CountingReplica", [&appliedCount](LibraryChangeSet const&) noexcept { ++appliedCount; });
+      auto replicaBinding = LibraryChangesAccess::bindReplica(
+        changes, "CountingReplica", [&appliedCount](LibraryChangeSet const&) noexcept { ++appliedCount; });
       REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Bound"}));
     }
 
@@ -345,9 +346,10 @@ namespace ao::rt::test
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto phases = std::array<std::string_view, 2>{};
     std::size_t phaseCount = 0;
-    auto replicaBinding = changes.bindReplica("OrderingReplica",
-                                              [&phases, &phaseCount](LibraryChangeSet const&) noexcept
-                                              { phases[phaseCount++] = "replica"; });
+    auto replicaBinding = LibraryChangesAccess::bindReplica(changes,
+                                                            "OrderingReplica",
+                                                            [&phases, &phaseCount](LibraryChangeSet const&) noexcept
+                                                            { phases[phaseCount++] = "replica"; });
     auto observerSubscription = changes.onChanged([&phases, &phaseCount](LibraryChangeSet const&) noexcept
                                                   { phases[phaseCount++] = "observer"; });
 
@@ -360,11 +362,12 @@ namespace ao::rt::test
   TEST_CASE("LibraryChanges - only one replica may be bound at a time", "[runtime][unit][library][changeset]")
   {
     auto changes = makeStateOnlyLibraryChanges();
-    auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
+    auto binding = LibraryChangesAccess::bindReplica(changes, "FirstReplica", [](LibraryChangeSet const&) noexcept {});
 
     binding.reset();
     auto rebinding = async::Subscription{};
-    CHECK_NOTHROW(rebinding = changes.bindReplica("SecondReplica", [](LibraryChangeSet const&) noexcept {}));
+    CHECK_NOTHROW(
+      rebinding = LibraryChangesAccess::bindReplica(changes, "SecondReplica", [](LibraryChangeSet const&) noexcept {}));
   }
 
   TEST_CASE("Library write sequencer - Closing retires an admitted publication and releases its command",

@@ -368,7 +368,7 @@ namespace ao::gtk::test
     spy.modelPtr = modelPtr;
     modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &SpyTrackListModelEvents::handleItemsChanged));
 
-    sourcePtr->invalidate();
+    rt::test::TrackSourceAccess::invalidate(*sourcePtr);
 
     REQUIRE(spy.events.size() == 1);
     CHECK(spy.events[0].position == 0);
@@ -381,7 +381,7 @@ namespace ao::gtk::test
     CHECK_FALSE(modelPtr->indexOf(firstTrackId));
     CHECK(modelPtr->get_object(0) == nullptr);
 
-    sourcePtr->invalidate();
+    rt::test::TrackSourceAccess::invalidate(*sourcePtr);
     CHECK(spy.events.size() == 1);
 
     auto const weakProjectionPtr = std::weak_ptr<rt::TrackListProjection>{projectionPtr};

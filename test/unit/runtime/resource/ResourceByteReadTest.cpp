@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/library/LibraryYamlExporter.h"
+#include "runtime/library/LibraryYamlImporter.h"
 #include "runtime/resource/ResourceByteDiskCache.h"
 #include "runtime/resource/ResourceByteReader.h"
 #include "runtime/resource/ResourceCarrierIndex.h"
@@ -22,8 +24,7 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>

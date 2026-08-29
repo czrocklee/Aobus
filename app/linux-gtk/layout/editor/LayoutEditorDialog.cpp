@@ -6,7 +6,7 @@
 #include "LayoutEditorText.h"
 #include "app/AppDialog.h"
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/document/LayoutDialect.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/runtime/ActionRegistry.h"

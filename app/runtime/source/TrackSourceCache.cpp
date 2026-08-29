@@ -4,10 +4,15 @@
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/AllTracksSource.h"
 #include "runtime/source/CachedListSource.h"
+#include "runtime/source/ListOrderSource.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
@@ -15,14 +20,12 @@
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/source/AllTracksSource.h>
-#include <ao/rt/source/ListOrderSource.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/container_hash/hash.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
 
 #include <algorithm>
 #include <concepts>
@@ -64,7 +67,80 @@ namespace ao::rt
     }
   } // namespace
 
+  struct TrackSourceCache::Impl final
+  {
+    Impl(library::MusicLibrary const& library, LibraryChanges const& changes);
+
+    Result<TrackSourceLease> acquire(ListId listId);
+    Result<TrackSourceLease> acquire(SourceSpec const& spec);
+    std::optional<Error> sourceError(TrackSourceLease const& lease) const;
+    void reloadAllTracks();
+
+  private:
+    Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
+    void handleLibraryChange(LibraryChangeSet const& event);
+    void handleLibraryReset();
+    void handleIncrementalLibraryChange(LibraryChangeSet const& event);
+    std::vector<ListId> applyListOrderChanges(LibraryChangeSet const& event);
+    void notifyMetadataUpdates(LibraryChangeSet const& event);
+    void refreshList(ListId listId);
+    void eraseList(ListId listId);
+    void applyListMutation(compat::MoveOnlyFunction<void()> mutation);
+    void drainPendingRefreshes();
+    void refreshListNow(ListId listId);
+    std::shared_ptr<CachedListSource> findSource(ListId listId);
+    std::unique_ptr<ListOrderSource> buildImplementation(library::ListView const& view,
+                                                         TrackSourceLease const& parentLease);
+    void linkGraph(ListId listId, ListId parentId);
+    void unlinkGraph(ListId listId);
+    void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;
+
+    library::MusicLibrary const& _library;
+    std::shared_ptr<AllTracksSource> _allTracksPtr;
+    SmartListEvaluator _smartEvaluator;
+    async::Subscription _replicaBinding;
+
+    std::size_t _listMutationDepth = 0;
+    bool _refreshDrainActive = false;
+    std::vector<ListId> _pendingRefreshListIds;
+
+    boost::unordered_flat_map<ListId, std::shared_ptr<CachedListSource>, std::hash<ListId>> _sources;
+    boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
+    boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
+    boost::unordered_flat_map<SourceSpec, std::weak_ptr<TrackSource>, SourceSpecHash> _adHocSources;
+    std::size_t _expiredAdHocSourcePruneCount = 0;
+
+    friend class detail::RuntimeOperationProbe;
+  };
+
   TrackSourceCache::TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes)
+    : _implPtr{std::make_unique<Impl>(library, changes)}
+  {
+  }
+
+  TrackSourceCache::~TrackSourceCache() = default;
+
+  Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
+  {
+    return _implPtr->acquire(listId);
+  }
+
+  Result<TrackSourceLease> TrackSourceCache::acquire(SourceSpec const& spec)
+  {
+    return _implPtr->acquire(spec);
+  }
+
+  std::optional<Error> TrackSourceCache::sourceError(TrackSourceLease const& lease) const
+  {
+    return _implPtr->sourceError(lease);
+  }
+
+  void TrackSourceCache::reloadAllTracks()
+  {
+    _implPtr->reloadAllTracks();
+  }
+
+  TrackSourceCache::Impl::Impl(library::MusicLibrary const& library, LibraryChanges const& changes)
     : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
     // The cache is the library's one replica: everything the runtime reads
@@ -74,7 +150,7 @@ namespace ao::rt
       changes.bindReplica("TrackSourceCache", [this](LibraryChangeSet const& event) { handleLibraryChange(event); });
   }
 
-  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event)
+  void TrackSourceCache::Impl::handleLibraryChange(LibraryChangeSet const& event)
   {
     if (event.libraryReset)
     {
@@ -85,16 +161,15 @@ namespace ao::rt
     applyListMutation([this, &event] { handleIncrementalLibraryChange(event); });
   }
 
-  void TrackSourceCache::handleLibraryReset()
+  void TrackSourceCache::Impl::handleLibraryReset()
   {
     reloadAllTracks();
     auto liveListIds = std::vector<ListId>{};
     liveListIds.reserve(_sources.size());
 
-    for (auto const& [listId, sourcePtr] : _sources)
+    for (auto const& source : _sources)
     {
-      std::ignore = sourcePtr;
-      liveListIds.push_back(listId);
+      liveListIds.push_back(source.first);
     }
 
     applyListMutation(
@@ -107,7 +182,7 @@ namespace ao::rt
       });
   }
 
-  void TrackSourceCache::handleIncrementalLibraryChange(LibraryChangeSet const& event)
+  void TrackSourceCache::Impl::handleIncrementalLibraryChange(LibraryChangeSet const& event)
   {
     for (auto const id : event.listsDeleted)
     {
@@ -130,7 +205,7 @@ namespace ao::rt
     }
   }
 
-  std::vector<ListId> TrackSourceCache::applyListOrderChanges(LibraryChangeSet const& event)
+  std::vector<ListId> TrackSourceCache::Impl::applyListOrderChanges(LibraryChangeSet const& event)
   {
     auto detailedListIds = std::vector<ListId>{};
     detailedListIds.reserve(event.listOrderChanges.size());
@@ -174,7 +249,7 @@ namespace ao::rt
     return detailedListIds;
   }
 
-  void TrackSourceCache::notifyMetadataUpdates(LibraryChangeSet const& event)
+  void TrackSourceCache::Impl::notifyMetadataUpdates(LibraryChangeSet const& event)
   {
     auto metadataTrackIds = std::vector<TrackId>{};
     metadataTrackIds.reserve(event.tracksMutated.size());
@@ -190,12 +265,12 @@ namespace ao::rt
     _allTracksPtr->applyMetadataChange(metadataTrackIds);
   }
 
-  Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
+  Result<TrackSourceLease> TrackSourceCache::Impl::acquire(ListId const listId)
   {
     return acquire(listId, {});
   }
 
-  Result<TrackSourceLease> TrackSourceCache::acquire(SourceSpec const& spec)
+  Result<TrackSourceLease> TrackSourceCache::Impl::acquire(SourceSpec const& spec)
   {
     if (spec.filterExpression.empty())
     {
@@ -243,18 +318,18 @@ namespace ao::rt
     return TrackSourceLease{std::move(basePtr)};
   }
 
-  std::optional<Error> TrackSourceCache::sourceError(TrackSourceLease const& lease) const
+  std::optional<Error> TrackSourceCache::Impl::sourceError(TrackSourceLease const& lease) const
   {
     return trackSourceError(lease.source());
   }
 
-  void TrackSourceCache::reloadAllTracks()
+  void TrackSourceCache::Impl::reloadAllTracks()
   {
     auto const transaction = _library.readTransaction();
     _allTracksPtr->reloadFromStore(transaction);
   }
 
-  void TrackSourceCache::refreshList(ListId const listId)
+  void TrackSourceCache::Impl::refreshList(ListId const listId)
   {
     if (listId == kInvalidListId)
     {
@@ -269,7 +344,7 @@ namespace ao::rt
     drainPendingRefreshes();
   }
 
-  void TrackSourceCache::refreshListNow(ListId const listId)
+  void TrackSourceCache::Impl::refreshListNow(ListId const listId)
   {
     auto sourcePtr = findSource(listId);
 
@@ -304,7 +379,7 @@ namespace ao::rt
     sourcePtr->rebind(std::move(definition), std::move(implementationPtr));
   }
 
-  void TrackSourceCache::applyListMutation(compat::MoveOnlyFunction<void()> mutation)
+  void TrackSourceCache::Impl::applyListMutation(compat::MoveOnlyFunction<void()> mutation)
   {
     ++_listMutationDepth;
     mutation();
@@ -316,7 +391,7 @@ namespace ao::rt
     }
   }
 
-  void TrackSourceCache::drainPendingRefreshes()
+  void TrackSourceCache::Impl::drainPendingRefreshes()
   {
     if (_listMutationDepth != 0 || _refreshDrainActive)
     {
@@ -338,7 +413,7 @@ namespace ao::rt
     _refreshDrainActive = false;
   }
 
-  void TrackSourceCache::eraseList(ListId const listId)
+  void TrackSourceCache::Impl::eraseList(ListId const listId)
   {
     if (isVirtualListId(listId))
     {
@@ -360,7 +435,7 @@ namespace ao::rt
     }
   }
 
-  Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId, std::vector<ListId> ancestry)
+  Result<TrackSourceLease> TrackSourceCache::Impl::acquire(ListId const listId, std::vector<ListId> ancestry)
   {
     if (listId == kAllTracksListId)
     {
@@ -417,7 +492,7 @@ namespace ao::rt
     return TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(sourcePtr))};
   }
 
-  std::shared_ptr<CachedListSource> TrackSourceCache::findSource(ListId const listId)
+  std::shared_ptr<CachedListSource> TrackSourceCache::Impl::findSource(ListId const listId)
   {
     if (auto const source = _sources.find(listId); source != _sources.end())
     {
@@ -427,8 +502,8 @@ namespace ao::rt
     return {};
   }
 
-  std::unique_ptr<ListOrderSource> TrackSourceCache::buildImplementation(library::ListView const& view,
-                                                                         TrackSourceLease const& parentLease)
+  std::unique_ptr<ListOrderSource> TrackSourceCache::Impl::buildImplementation(library::ListView const& view,
+                                                                               TrackSourceLease const& parentLease)
   {
     auto filterSourcePtr = std::make_shared<SmartListSource>(parentLease, _smartEvaluator);
     filterSourcePtr->setExpression(std::string{view.filter()});
@@ -439,7 +514,7 @@ namespace ao::rt
       std::span<TrackId const>{order.begin(), order.size()}, std::move(filterLease));
   }
 
-  void TrackSourceCache::linkGraph(ListId const listId, ListId const parentId)
+  void TrackSourceCache::Impl::linkGraph(ListId const listId, ListId const parentId)
   {
     if (auto const oldParent = _parentIds.find(listId); oldParent != _parentIds.end())
     {
@@ -465,7 +540,7 @@ namespace ao::rt
     }
   }
 
-  void TrackSourceCache::unlinkGraph(ListId const listId)
+  void TrackSourceCache::Impl::unlinkGraph(ListId const listId)
   {
     if (auto const parent = _parentIds.find(listId); parent != _parentIds.end())
     {
@@ -485,7 +560,7 @@ namespace ao::rt
     _childIds.erase(listId);
   }
 
-  void TrackSourceCache::collectDescendantsPostorder(ListId const listId, std::vector<ListId>& listIds) const
+  void TrackSourceCache::Impl::collectDescendantsPostorder(ListId const listId, std::vector<ListId>& listIds) const
   {
     if (auto const children = _childIds.find(listId); children != _childIds.end())
     {
@@ -504,7 +579,7 @@ namespace ao::rt
   {
     TrackSourceCacheOperationCounts RuntimeOperationProbe::counts(TrackSourceCache const& cache) noexcept
     {
-      return {.expiredAdHocSourcesPruned = cache._expiredAdHocSourcePruneCount};
+      return {.expiredAdHocSourcesPruned = cache._implPtr->_expiredAdHocSourcePruneCount};
     }
   } // namespace detail
 } // namespace ao::rt

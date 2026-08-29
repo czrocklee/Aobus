@@ -37,6 +37,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/utility/ByteView.h>
@@ -143,7 +144,7 @@ namespace ao::gtk::platform::test
 
     rt::ViewId prepareAllTracksView(rt::AppRuntime& runtime)
     {
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
       REQUIRE(listOrder != nullptr);
       auto const result = runtime.workspace().navigate({

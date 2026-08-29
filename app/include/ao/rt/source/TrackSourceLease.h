@@ -12,7 +12,7 @@ namespace ao::rt
   class TrackSourceLease final
   {
   public:
-    explicit TrackSourceLease(std::shared_ptr<TrackSource> sourcePtr);
+    explicit TrackSourceLease(std::shared_ptr<TrackSource const> sourcePtr);
 
     TrackSourceLease(TrackSourceLease const&) = default;
     TrackSourceLease& operator=(TrackSourceLease const&) = default;
@@ -20,11 +20,11 @@ namespace ao::rt
     TrackSourceLease& operator=(TrackSourceLease&&) noexcept = default;
     ~TrackSourceLease() = default;
 
-    TrackSource& source() const noexcept { return *_sourcePtr; }
-    TrackSource& operator*() const noexcept { return *_sourcePtr; }
-    TrackSource* operator->() const noexcept { return _sourcePtr.get(); }
+    TrackSource const& source() const noexcept { return *_sourcePtr; }
+    TrackSource const& operator*() const noexcept { return *_sourcePtr; }
+    TrackSource const* operator->() const noexcept { return _sourcePtr.get(); }
 
   private:
-    std::shared_ptr<TrackSource> _sourcePtr;
+    std::shared_ptr<TrackSource const> _sourcePtr;
   };
 } // namespace ao::rt

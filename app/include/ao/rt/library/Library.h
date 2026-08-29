@@ -9,7 +9,6 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
-#include <cstdint>
 #include <memory>
 #include <span>
 #include <vector>
@@ -30,22 +29,6 @@ namespace ao::rt
   class LibrarySnapshot;
   class LibraryJobs;
   class LibraryCommands;
-
-  /**
-   * @brief How much the open library may hold, and how far it has grown.
-   *
-   * `highWaterBytes` is the peak the storage has needed, not a measure of live
-   * data: deleting records returns their pages for reuse without lowering it.
-   * A decision about capacity reads the peak, because that is what a mutation
-   * runs out of.
-   */
-  struct LibraryStorageCapacity final
-  {
-    std::uint64_t mapBytes = 0;
-    std::uint64_t highWaterBytes = 0;
-
-    friend bool operator==(LibraryStorageCapacity const&, LibraryStorageCapacity const&) = default;
-  };
 
   // CQRS façade over the music library, exposing four cooperating roles:
   // snapshots (consistent point-in-time reads), commands (sequenced
@@ -68,8 +51,6 @@ namespace ao::rt
     Library& operator=(Library&&) = delete;
 
     LibrarySnapshot snapshot() const;
-    /// What the open storage may hold, for a caller deciding whether it is enough.
-    LibraryStorageCapacity storageCapacity() const;
     LibraryChanges const& changes() const noexcept;
     LibraryCommands& commands() noexcept;
     LibraryJobs& jobs() noexcept;

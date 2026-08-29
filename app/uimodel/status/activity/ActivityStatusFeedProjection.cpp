@@ -7,7 +7,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>

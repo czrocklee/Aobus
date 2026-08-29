@@ -28,7 +28,7 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendProvider.h>

@@ -28,8 +28,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryScan.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
@@ -213,7 +212,7 @@ namespace ao::cli
                    report.danglingReferencesIgnored);
     }
 
-    void exportLib(library::MusicLibrary const& ml,
+    void exportLib(CliRuntime& cli,
                    std::string const& path,
                    std::string const& modeStr,
                    OutputFormat format,
@@ -244,10 +243,9 @@ namespace ao::cli
                           modeStr);
       }
 
-      auto exporter = rt::LibraryYamlExporter{ml};
       auto const exportPath = utility::pathFromUtf8(path);
 
-      if (auto const result = exporter.exportToYaml(exportPath, mode); !result)
+      if (auto const result = cli.runTask(cli.library().jobs().exportLibraryAsync(exportPath, mode)); !result)
       {
         auto const& error = result.error();
         throwCommandError(error, "export failed: {}", error.message);
@@ -1478,11 +1476,8 @@ namespace ao::cli
     exportCmd->callback(
       [&cli, exportPath, exportMode]
       {
-        exportLib(cli.musicLibrary(),
-                  exportPath->as<std::string>(),
-                  exportMode->as<std::string>(),
-                  cli.options().format,
-                  cli.io().out);
+        exportLib(
+          cli, exportPath->as<std::string>(), exportMode->as<std::string>(), cli.options().format, cli.io().out);
       });
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");

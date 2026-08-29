@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"

@@ -23,7 +23,7 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  async::Subscription TrackSource::subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler)
+  async::Subscription TrackSource::subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler) const
   {
     AO_EXPECTS(static_cast<bool>(handler), "Track source subscription handler must not be empty");
 

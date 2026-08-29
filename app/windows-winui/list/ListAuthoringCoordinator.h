@@ -14,7 +14,6 @@
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>

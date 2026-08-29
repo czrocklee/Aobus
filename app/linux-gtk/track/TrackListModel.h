@@ -32,10 +32,10 @@ namespace ao::gtk
     static Glib::RefPtr<TrackListModel> create(TrackRowCache const& provider);
 
     void bindProjection(std::unique_ptr<rt::TrackListProjection> projectionPtr);
-    void bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
+    void bindProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     void clearProjection();
 
-    rt::TrackListProjection* projection() const noexcept { return _projectionPtr.get(); }
+    rt::TrackListProjection const* projection() const noexcept { return _projectionPtr.get(); }
 
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
@@ -74,7 +74,7 @@ namespace ao::gtk
     void notifyRemove(::guint position, ::guint count);
     void notifyUpdate(::guint position, ::guint count);
 
-    std::shared_ptr<rt::TrackListProjection> _projectionPtr;
+    std::shared_ptr<rt::TrackListProjection const> _projectionPtr;
     async::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
     TrackId _playingTrackId{kInvalidTrackId};

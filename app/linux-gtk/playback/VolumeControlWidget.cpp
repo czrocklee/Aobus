@@ -4,7 +4,7 @@
 #include "playback/VolumeControlWidget.h"
 
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>

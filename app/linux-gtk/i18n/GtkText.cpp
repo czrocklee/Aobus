@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <cstddef>
 #include <string>

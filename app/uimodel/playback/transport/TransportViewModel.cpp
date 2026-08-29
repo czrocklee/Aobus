@@ -10,7 +10,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/playback/command/PlaybackCommandText.h>
 
 #include <functional>
 #include <utility>

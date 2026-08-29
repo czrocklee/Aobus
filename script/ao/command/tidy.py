@@ -282,7 +282,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def classify(path: Path, explicit: bool) -> str:
-    """STRICT for production code, RELAXED for tests, IGNORE for lint fixtures and main."""
+    """STRICT for production code, RELAXED for tests, and IGNORE for lint fixtures."""
     try:
         rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
@@ -294,8 +294,6 @@ def classify(path: Path, explicit: bool) -> str:
         # Fixture files: check when explicitly requested, skip in batch scans.
         return "STRICT" if explicit else "IGNORE"
     if "/test/integration/lint/" in rel_slash:
-        return "IGNORE"
-    if rel.endswith("/test/main.cpp") or rel == "test/main.cpp":
         return "IGNORE"
     if "/tool/lint/" in rel_slash:
         return "STRICT"

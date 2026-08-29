@@ -145,9 +145,9 @@ Subscriptions release before their source or changes owner; source destruction d
 ## Implementation map
 
 - [`TrackSource.h`](../../../../app/include/ao/rt/source/TrackSource.h), [`TrackSourceDelta.h`](../../../../app/include/ao/rt/source/TrackSourceDelta.h), and [`TrackSourceLease.h`](../../../../app/include/ao/rt/source/TrackSourceLease.h) define source identity and batches.
-- [`TrackSourceCache.h`](../../../../app/include/ao/rt/source/TrackSourceCache.h) owns cache and dependency composition.
+- [`TrackSourceCache.h`](../../../../app/include/ao/rt/source/TrackSourceCache.h) exposes acquisition and error lookup while its PImpl owns cache and dependency composition.
 - [`CachedListSource.h`](../../../../app/runtime/source/CachedListSource.h) retains stable saved-List identity and resolves local or inherited source errors.
-- [`SmartListSource.h`](../../../../app/include/ao/rt/source/SmartListSource.h), [`ListOrderSource.h`](../../../../app/include/ao/rt/source/ListOrderSource.h), and their implementations own expression membership and rank-overlay behavior.
+- Source-private [`SmartListSource.h`](../../../../app/runtime/source/SmartListSource.h), [`SmartListEvaluator.h`](../../../../app/runtime/source/SmartListEvaluator.h), [`IndexedTrackSequence.h`](../../../../app/runtime/source/IndexedTrackSequence.h), and [`ListOrderSource.h`](../../../../app/runtime/source/ListOrderSource.h) own expression membership, indexed updates, and rank-overlay behavior.
 
 ## Test map
 

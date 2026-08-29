@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
@@ -10,8 +12,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>

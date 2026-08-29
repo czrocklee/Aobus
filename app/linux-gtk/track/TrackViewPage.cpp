@@ -5,7 +5,7 @@
 
 #include "app/GtkStyleRuntime.h"
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -42,7 +42,6 @@
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -290,7 +289,6 @@ namespace ao::gtk
     , _viewHostPtr{
         std::make_unique<TrackColumnViewHost>(_modelPtr, _columnLayouts, _textCatalog, _selectionModelPtr, listId)}
   {
-    _columnLayouts.setActiveListId(_listId);
     _viewHostPtr->configureSelectionActivation();
 
     _themeRefreshConnection = GtkStyleRuntime::instance().signalRefreshed().connect(
@@ -349,7 +347,6 @@ namespace ao::gtk
   void TrackViewPage::on_map()
   {
     Gtk::Box::on_map();
-    _columnLayouts.setActiveListId(_listId);
 
     Glib::signal_idle().connect_once(sigc::track_object(
       [this]
@@ -396,7 +393,7 @@ namespace ao::gtk
         auto snap = rt::TrackGroupSectionSnapshot{};
         bool hasSection = false;
 
-        if (auto* const proj = _modelPtr->projection(); proj != nullptr)
+        if (auto const* const proj = _modelPtr->projection(); proj != nullptr)
         {
           auto const start = headerPtr->get_start();
 
@@ -718,7 +715,7 @@ namespace ao::gtk
 
   void TrackViewPage::updateSectionHeaders()
   {
-    auto* const proj = _modelPtr->projection();
+    auto const* const proj = _modelPtr->projection();
     auto const groupBy = proj != nullptr ? proj->presentation().groupBy : rt::TrackGroupKey::None;
 
     if (groupBy == rt::TrackGroupKey::None)

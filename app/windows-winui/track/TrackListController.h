@@ -14,7 +14,6 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
@@ -103,12 +102,12 @@ namespace ao::winui
     void refreshColumns();
     void adoptWorkspaceView(rt::ViewId viewId);
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
-    void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
+    void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;
     rt::AppRuntime* _runtime = nullptr;
     uimodel::TrackColumnLayouts* _columnLayouts = nullptr;
     rt::ViewId _viewId{rt::kInvalidViewId};
-    std::shared_ptr<rt::TrackListProjection> _projectionPtr;
+    std::shared_ptr<rt::TrackListProjection const> _projectionPtr;
     std::shared_ptr<void> _bindingLifetimePtr;
     bool _projectionInvalidated = false;
     winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Foundation::IInspectable> _items{nullptr};

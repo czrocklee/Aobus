@@ -28,7 +28,7 @@ namespace ao::winui
     }
   } // namespace
 
-  PlaybackTimeControl::PlaybackTimeControl(PlaybackTimeControlConfig config)
+  PlaybackTimeControl::PlaybackTimeControl(PlaybackTimeControlConfig config, ao::rt::PlaybackService& playback)
     : _text{std::move(config.text)}
     , _mode{config.mode}
     , _loaded{_text.IsLoaded()}
@@ -49,22 +49,18 @@ namespace ao::winui
         _loaded = false;
         stopRendering();
       });
-  }
 
-  PlaybackTimeControl::~PlaybackTimeControl()
-  {
-    unbind();
-  }
-
-  void PlaybackTimeControl::bind(ao::rt::PlaybackService& playback)
-  {
-    unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
       playback, [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
   }
 
-  void PlaybackTimeControl::unbind() noexcept
+  PlaybackTimeControl::~PlaybackTimeControl()
+  {
+    stop();
+  }
+
+  void PlaybackTimeControl::stop() noexcept
   {
     _viewModelPtr.reset();
     stopRendering();

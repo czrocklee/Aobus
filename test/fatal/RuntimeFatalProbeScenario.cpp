@@ -6,7 +6,9 @@
 #include "lib/audio/NullBackend.h"
 #include "lib/library/PhysicalStoreAccess.h"
 #include "runtime/library/LibraryWriteLane.h"
+#include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/unit/runtime/library/LibraryChangesTestAccess.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -45,7 +47,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -500,14 +502,16 @@ namespace ao::rt::test
         LibraryChanges{executor, musicLibrary.libraryRevision(transaction), utility::pathToUtf8(databasePath)};
       auto asyncRuntime = async::Runtime{executor, 1};
       auto writeLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(*writableRes), changes};
-      auto replicaBinding = changes.bindReplica("ProbeReplica",
-                                                [phase](LibraryChangeSet const&)
-                                                {
-                                                  if (phase == PublicationFailurePhase::Replica)
-                                                  {
-                                                    throw std::runtime_error{"probe publication replica exception"};
-                                                  }
-                                                });
+      auto replicaBinding =
+        LibraryChangesAccess::bindReplica(changes,
+                                          "ProbeReplica",
+                                          [phase](LibraryChangeSet const&)
+                                          {
+                                            if (phase == PublicationFailurePhase::Replica)
+                                            {
+                                              throw std::runtime_error{"probe publication replica exception"};
+                                            }
+                                          });
       auto observerSubscription = changes.onChanged(
         [phase](LibraryChangeSet const&)
         {

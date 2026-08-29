@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"

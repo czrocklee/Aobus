@@ -396,7 +396,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
     unit/uimodel/layout/shell/ShellGenerationSequenceTest.cpp
     unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
-    unit/uimodel/presentation/PresentationTextTest.cpp
+    unit/uimodel/presentation/PresentationTextFeaturesTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
     unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp

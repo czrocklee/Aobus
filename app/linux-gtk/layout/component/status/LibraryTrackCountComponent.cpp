@@ -7,7 +7,6 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/LibraryTrackCountLabel.h"
 #include <ao/Contract.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -23,9 +22,9 @@ namespace ao::gtk::layout
   using namespace uimodel;
   namespace
   {
-    rt::TrackSourceLease acquireAllTracks(rt::AppRuntime& runtime)
+    rt::TrackSourceLease acquireAllTracks(rt::TrackSourceCache& sources)
     {
-      auto result = runtime.sources().acquire(rt::kAllTracksListId);
+      auto result = sources.acquire(rt::kAllTracksListId);
 
       AO_INVARIANT(result, "Failed to acquire All Tracks list");
 
@@ -35,8 +34,8 @@ namespace ao::gtk::layout
     class LibraryTrackCountComponent final : public LayoutComponent
     {
     public:
-      LibraryTrackCountComponent(rt::AppRuntime& runtime, i18n::MessageCatalog const& textCatalog)
-        : _widget{acquireAllTracks(runtime), textCatalog}
+      LibraryTrackCountComponent(rt::TrackSourceCache& sources, i18n::MessageCatalog const& textCatalog)
+        : _widget{acquireAllTracks(sources), textCatalog}
       {
       }
 
@@ -48,12 +47,12 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerLibraryTrackCountComponent(ComponentRegistry& registry,
-                                          rt::AppRuntime& runtime,
+                                          rt::TrackSourceCache& sources,
                                           i18n::MessageCatalog const& textCatalog)
   {
     registry.registerSharedComponent(
       "status.trackCount",
-      [&runtime, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-      { return std::make_unique<LibraryTrackCountComponent>(runtime, textCatalog); });
+      [&sources, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<LibraryTrackCountComponent>(sources, textCatalog); });
   }
 } // namespace ao::gtk::layout

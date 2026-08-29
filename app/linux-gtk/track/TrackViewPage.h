@@ -96,7 +96,7 @@ namespace ao::gtk
     TagEditRequestedSignal& signalTagEditRequested() noexcept { return _viewHostPtr->signalTagEditRequested(); }
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
-    rt::TrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
+    rt::TrackListProjection const* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
     bool hasOrderDragHandle() const noexcept { return _orderDragControllerPtr != nullptr; }
     uimodel::ListOrderCapabilityState orderCapabilities() const;
     void applyListOrderCommand(TrackOrderCommand command);

@@ -3,13 +3,13 @@
 
 #include "playback/AudioPipelinePanel.h"
 
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "playback/AudioQualityCss.h"
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/markup.h>
 #include <gtkmm/box.h>

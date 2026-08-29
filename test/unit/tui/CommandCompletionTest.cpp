@@ -11,8 +11,8 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 

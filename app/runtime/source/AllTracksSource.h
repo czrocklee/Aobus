@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include "TrackSource.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <cstddef>
 #include <optional>
@@ -20,10 +20,10 @@ namespace ao::library
 namespace ao::rt
 {
   /**
-   * AllTracksSource - Authoritative ordered list of all TrackIds in the library.
-   * Loaded from TrackStore and maintained in ascending TrackId order.
+   * Authoritative ordered source of every TrackId in the library.
    *
-   * All notifications are emitted AFTER DB commit to ensure consistency.
+   * This implementation detail is owned by TrackSourceCache. Notifications
+   * are emitted only after the corresponding database commit.
    */
   class AllTracksSource final : public TrackSource
   {
@@ -34,7 +34,6 @@ namespace ao::rt
     void applyCollectionChange(std::span<TrackId const> inserted, std::span<TrackId const> removed);
     void applyMetadataChange(std::span<TrackId const> trackIds);
 
-    // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;

@@ -10,7 +10,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/dialog.h>
@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 
 namespace ao::gtk::test
@@ -84,6 +85,54 @@ namespace ao::gtk::test
       CHECK(receivedPath == target);
       CHECK(receivedScanAfterOpen);
     }
+  }
+
+  TEST_CASE("ImportExportCoordinator - installs its restore confirmation callback before import",
+            "[gtk][regression][portal][import-export]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto parent = Gtk::Window{};
+    auto theme = ThemeCoordinator{};
+    auto coordinator = portal::ImportExportCoordinator{
+      parent, fixture.runtime(), ao::test::englishMessageCatalog(), portal::ImportExportCallbacks{}, theme};
+    auto const importPath = fixture.tempDir().path() / "restore.yaml";
+    {
+      auto yaml = std::ofstream{importPath};
+      yaml << R"(version: 5
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists: []
+)";
+    }
+
+    coordinator.importLibraryFrom(importPath);
+
+    AppDialog* confirmationDialog = nullptr;
+    REQUIRE(pumpGtkEventsUntil(
+      [&confirmationDialog]
+      {
+        for (auto* const window : Gtk::Window::list_toplevels())
+        {
+          if (auto* const dialog = dynamic_cast<AppDialog*>(window);
+              dialog != nullptr && dialog->get_title() == "Confirm Library Restore")
+          {
+            confirmationDialog = dialog;
+            return true;
+          }
+        }
+
+        return false;
+      }));
+
+    REQUIRE(confirmationDialog != nullptr);
+    REQUIRE(confirmationDialog->get_visible());
+    confirmationDialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
   }
 
   TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown",

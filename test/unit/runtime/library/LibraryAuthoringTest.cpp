@@ -11,6 +11,7 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryChangesTestAccess.h"
 #include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -236,8 +237,10 @@ namespace ao::rt::test
 
     auto order = std::vector<std::string>{};
     bool reboundFromAvailability = false;
-    auto replicaBinding = fixture.runtimeLibrary().changes().bindReplica(
-      "TestProjectionReplica", [&order](LibraryChangeSet const&) noexcept { order.emplace_back("replica"); });
+    auto replicaBinding =
+      LibraryChangesAccess::bindReplica(fixture.runtimeLibrary().changes(),
+                                        "TestProjectionReplica",
+                                        [&order](LibraryChangeSet const&) noexcept { order.emplace_back("replica"); });
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged([&order](LibraryChangeSet const&) noexcept
                                                                             { order.emplace_back("change"); });
     auto availabilitySubscription = fixture.runtimeLibrary().onAuthoringAvailabilityChanged(

@@ -40,7 +40,6 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     CHECK(h.size() == 0);
-    CHECK_FALSE(h.currentIndex().has_value());
     CHECK_FALSE(h.canGoBack());
     CHECK_FALSE(h.canGoForward());
     CHECK_FALSE(h.current().has_value());
@@ -70,7 +69,6 @@ namespace ao::rt::test
     CHECK(h.commit(point));
 
     CHECK(h.size() == 1);
-    CHECK(h.currentIndex() == 0);
     CHECK(h.current() == point);
     CHECK_FALSE(h.canGoBack());
     CHECK_FALSE(h.canGoForward());
@@ -84,7 +82,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{20}));
 
     CHECK(h.size() == 2);
-    CHECK(h.currentIndex() == 1);
     CHECK(h.current()->listId == ListId{20});
     CHECK(h.canGoBack());
     CHECK_FALSE(h.canGoForward());
@@ -99,7 +96,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{30}));
 
     CHECK(h.size() == 3);
-    CHECK(h.currentIndex() == 2);
     CHECK(h.current()->listId == ListId{30});
     CHECK(h.canGoBack());
     CHECK_FALSE(h.canGoForward());
@@ -113,7 +109,6 @@ namespace ao::rt::test
     CHECK_FALSE(h.commit(point));
 
     CHECK(h.size() == 1);
-    CHECK(h.currentIndex() == 0);
   }
 
   TEST_CASE("NavigationHistory - presentation changes create distinct points", "[runtime][unit][navigation][dedup]")
@@ -157,7 +152,6 @@ namespace ao::rt::test
     auto const optResult = h.back();
     REQUIRE(optResult);
     CHECK(*optResult == a);
-    CHECK(h.currentIndex() == 0);
     CHECK_FALSE(h.canGoBack());
     CHECK(h.canGoForward());
   }
@@ -173,7 +167,6 @@ namespace ao::rt::test
     auto const optResult = h.back();
     REQUIRE(optResult);
     CHECK(optResult->listId == ListId{20});
-    CHECK(h.currentIndex() == 1);
     CHECK(h.canGoBack());
     CHECK(h.canGoForward());
   }
@@ -186,7 +179,6 @@ namespace ao::rt::test
 
     auto const optResult = h.back();
     CHECK_FALSE(optResult);
-    CHECK(h.currentIndex() == 0);
   }
 
   TEST_CASE("NavigationHistory - back on empty history returns no point", "[runtime][unit][navigation][traversal]")
@@ -206,7 +198,6 @@ namespace ao::rt::test
     auto const optResult = h.forward();
     REQUIRE(optResult);
     CHECK(optResult->listId == ListId{30});
-    CHECK(h.currentIndex() == 2);
     CHECK_FALSE(h.canGoForward());
   }
 
@@ -217,7 +208,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{10}));
 
     CHECK_FALSE(h.forward().has_value());
-    CHECK(h.currentIndex() == 0);
   }
 
   TEST_CASE("NavigationHistory - forward on empty history returns no point", "[runtime][unit][navigation][traversal]")
@@ -270,7 +260,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 3);
-    CHECK(h.currentIndex() == 2);
     CHECK(h.current()->listId == ListId{40});
     // C is gone
     CHECK_FALSE(h.canGoForward());
@@ -289,7 +278,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 2); // A, D (B and C truncated)
-    CHECK(h.currentIndex() == 1);
     CHECK(h.current()->listId == ListId{40});
   }
 
@@ -302,7 +290,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 3);
-    CHECK(h.currentIndex() == 2);
     CHECK(h.current()->listId == ListId{40});
 
     auto const optFirstBack = h.back();
@@ -317,7 +304,6 @@ namespace ao::rt::test
     h.commit(makePoint(ListId{20}));
 
     CHECK(h.size() == 1);
-    CHECK(h.currentIndex() == 0);
     CHECK(h.current()->listId == ListId{20});
     CHECK_FALSE(h.canGoBack());
   }

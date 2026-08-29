@@ -4,7 +4,7 @@
 #include "list/SmartListDialog.h"
 
 #include "app/FormBuilder.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -26,7 +26,7 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <glibmm/main.h>

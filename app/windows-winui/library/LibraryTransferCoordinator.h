@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.h>

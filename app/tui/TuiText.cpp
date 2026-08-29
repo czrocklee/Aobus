@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 
 #include <ao/i18n/MessageCatalog.h>
 

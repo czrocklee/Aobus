@@ -212,7 +212,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
 - [`ResourceByteMemoryCache`](../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral read-through caching and independently owned encoded bytes shared by GTK, TUI, WinUI, and MPRIS consumers.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
-- [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) owns the declarative application-layer scan and composes the specialized UIModel and WinUI structural checks.
+- [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) owns the declarative application-layer scan and composes the specialized UIModel, GTK, and WinUI structural checks.
 
 ## Test map
 

@@ -7,7 +7,7 @@
 #include "StatusBar.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 

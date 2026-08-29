@@ -5,10 +5,9 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
@@ -35,8 +34,10 @@ namespace ao::gtk
 {
   using i18n::MessageId;
 
-  TrackPresentationButton::TrackPresentationButton(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog)
-    : _runtime{runtime}, _textCatalog{std::move(textCatalog)}
+  TrackPresentationButton::TrackPresentationButton(rt::ViewService& views,
+                                                   rt::WorkspaceService& workspace,
+                                                   i18n::MessageCatalog textCatalog)
+    : _views{views}, _workspace{workspace}, _textCatalog{std::move(textCatalog)}
   {
     set_valign(Gtk::Align::CENTER);
 
@@ -77,8 +78,8 @@ namespace ao::gtk
     }
 
     _viewModelPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
-      _runtime.views(),
-      _runtime.workspace(),
+      _views,
+      _workspace,
       *_catalog,
       *listPresentations,
       _textCatalog,
@@ -161,7 +162,7 @@ namespace ao::gtk
     _applyPresentationConn = Glib::signal_idle().connect(
       [this, selection = std::move(*optSelection)]
       {
-        if (_runtime.workspace().snapshot().activeViewId != selection.targetViewId)
+        if (_workspace.snapshot().activeViewId != selection.targetViewId)
         {
           auto const message = gtkText(_textCatalog, MessageId::GtkPresentationViewInactive);
           APP_LOG_ERROR("Failed to apply track presentation: {}", message);
@@ -169,7 +170,7 @@ namespace ao::gtk
           return false;
         }
 
-        if (auto const result = _runtime.workspace().setActivePresentation(selection.spec); !result)
+        if (auto const result = _workspace.setActivePresentation(selection.spec); !result)
         {
           APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
           showPresentationError(result.error().message);
@@ -227,7 +228,7 @@ namespace ao::gtk
 
     // _state is a cached render snapshot, so its view id can be stale by the
     // time the user clicks.
-    auto const foundRes = _runtime.views().findTrackListState(_state.activeViewId);
+    auto const foundRes = _views.findTrackListState(_state.activeViewId);
 
     if (!foundRes)
     {

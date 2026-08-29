@@ -16,7 +16,7 @@
 
 namespace ao::winui
 {
-  VolumeControl::VolumeControl(VolumeControlConfig config)
+  VolumeControl::VolumeControl(VolumeControlConfig config, ao::rt::PlaybackService& playback)
     : _slider{std::move(config.slider)}, _textCatalog{std::move(config.textCatalog)}
   {
     _valueChangedRevoker = _slider.ValueChanged(
@@ -29,25 +29,12 @@ namespace ao::winui
           _viewModelPtr->handleVolumeChanged(static_cast<float>(args.NewValue()));
         }
       });
-  }
-
-  VolumeControl::~VolumeControl()
-  {
-    unbind();
-  }
-
-  void VolumeControl::bind(ao::rt::PlaybackService& playback)
-  {
-    unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::VolumeViewModel>(
       playback, _textCatalog, [this](uimodel::VolumeViewState const& state) { applyState(state); });
   }
 
-  void VolumeControl::unbind() noexcept
-  {
-    _viewModelPtr.reset();
-  }
+  VolumeControl::~VolumeControl() = default;
 
   void VolumeControl::resetPresentation()
   {

@@ -15,6 +15,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
 #include <string>
@@ -47,7 +48,7 @@ namespace ao::rt::test
     auto const uri = audio::test::installAudioFixture(runtime().musicRoot(), "basic_metadata.flac", "ui-playable.flac");
     auto const trackId =
       addRuntimeTrack(runtime(), {.title = std::string{title}, .uri = uri}, [this] { executor->drain(); });
-    runtime().reloadAllTracks();
+    runtime().sources().reloadAllTracks();
     return trackId;
   }
 

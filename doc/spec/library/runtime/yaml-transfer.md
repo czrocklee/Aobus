@@ -266,8 +266,9 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 
 ## Implementation map
 
-- [`LibraryYamlExporter`](../../../../app/include/ao/rt/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
-- [`LibraryYamlImporter`](../../../../app/include/ao/rt/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
+- [`LibraryTransfer.h`](../../../../app/include/ao/rt/library/LibraryTransfer.h) defines the public transfer modes and reports.
+- Source-private [`LibraryYamlExporter`](../../../../app/runtime/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
+- Source-private [`LibraryYamlImporter`](../../../../app/runtime/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
 - [`LibraryImportPlan`](../../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryJobs`](../../../../app/include/ao/rt/library/LibraryJobs.h) define preview-bound application authorization.
 - [`LibraryWriteLane`](../../../../app/runtime/library/LibraryWriteLane.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.

@@ -14,9 +14,9 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <algorithm>
 #include <array>

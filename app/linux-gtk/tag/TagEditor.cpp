@@ -6,7 +6,7 @@
 #include "common/AccessibleLabel.h"
 #include "common/DismissController.h"
 #include "common/WidgetMeasure.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>

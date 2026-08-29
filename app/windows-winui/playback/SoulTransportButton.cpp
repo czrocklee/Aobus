@@ -13,7 +13,9 @@
 
 namespace ao::winui
 {
-  SoulTransportButton::SoulTransportButton(SoulTransportButtonConfig config)
+  SoulTransportButton::SoulTransportButton(SoulTransportButtonConfig config,
+                                           ao::rt::PlaybackService& playback,
+                                           ao::uimodel::PlaybackActions& actions)
     : _button{std::move(config.button)}
     , _soul{std::move(config.soul)}
     , _textCatalog{std::move(config.textCatalog)}
@@ -27,16 +29,7 @@ namespace ao::winui
                                     [this](winrt::Windows::Foundation::IInspectable const&,
                                            winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { activate(); });
     }
-  }
 
-  SoulTransportButton::~SoulTransportButton()
-  {
-    unbind();
-  }
-
-  void SoulTransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackActions& actions)
-  {
-    unbind();
     resetPresentation();
     auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
     winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->bind(playback);
@@ -49,7 +42,12 @@ namespace ao::winui
                                                                   { applyState(state); });
   }
 
-  void SoulTransportButton::unbind() noexcept
+  SoulTransportButton::~SoulTransportButton()
+  {
+    stop();
+  }
+
+  void SoulTransportButton::stop() noexcept
   {
     _viewModelPtr.reset();
 

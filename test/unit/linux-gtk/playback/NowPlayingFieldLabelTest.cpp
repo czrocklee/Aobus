@@ -20,6 +20,7 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -44,7 +45,7 @@ namespace ao::gtk::test
 
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
     {
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
@@ -62,7 +63,8 @@ namespace ao::gtk::test
 
     SECTION("title label binds idle and playing title text")
     {
-      auto titleLabel = NowPlayingFieldLabel{runtime, ao::test::englishMessageCatalog(), rt::TrackField::Title};
+      auto titleLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Title};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -79,7 +81,8 @@ namespace ao::gtk::test
 
     SECTION("artist label binds artist text and css")
     {
-      auto artistLabel = NowPlayingFieldLabel{runtime, ao::test::englishMessageCatalog(), rt::TrackField::Artist};
+      auto artistLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Artist};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&artistLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -94,7 +97,8 @@ namespace ao::gtk::test
 
     SECTION("unsupported field renders empty text without title or artist css")
     {
-      auto yearLabel = NowPlayingFieldLabel{runtime, ao::test::englishMessageCatalog(), rt::TrackField::Year};
+      auto yearLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Year};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&yearLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -119,7 +123,8 @@ namespace ao::gtk::test
 
     SECTION("filter action navigates to the now playing field query")
     {
-      auto titleLabel = NowPlayingFieldLabel{runtime,
+      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                             runtime.workspace(),
                                              ao::test::englishMessageCatalog(),
                                              rt::TrackField::Title,
                                              uimodel::NowPlayingFieldAction::FilterByField};
@@ -141,8 +146,11 @@ namespace ao::gtk::test
 
     SECTION("reveal action emits a reveal request for the current track")
     {
-      auto titleLabel = NowPlayingFieldLabel{
-        runtime, ao::test::englishMessageCatalog(), rt::TrackField::Title, uimodel::NowPlayingFieldAction::Reveal};
+      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                             runtime.workspace(),
+                                             ao::test::englishMessageCatalog(),
+                                             rt::TrackField::Title,
+                                             uimodel::NowPlayingFieldAction::Reveal};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 
@@ -163,8 +171,11 @@ namespace ao::gtk::test
 
     SECTION("play-pause action resumes when transport is not playing")
     {
-      auto titleLabel = NowPlayingFieldLabel{
-        runtime, ao::test::englishMessageCatalog(), rt::TrackField::Title, uimodel::NowPlayingFieldAction::PlayPause};
+      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                             runtime.workspace(),
+                                             ao::test::englishMessageCatalog(),
+                                             rt::TrackField::Title,
+                                             uimodel::NowPlayingFieldAction::PlayPause};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
 

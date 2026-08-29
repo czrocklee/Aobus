@@ -35,13 +35,9 @@ namespace ao::uimodel
     std::vector<TrackColumnState> const& layoutForList(ListId listId) const noexcept;
     void updateLayout(ListId listId, std::vector<TrackColumnState> const& layout);
 
-    void setActiveListId(ListId listId);
-    std::vector<rt::TrackField> activeFieldOrder() const;
-
     async::Signal<ListId>& signalChanged() noexcept { return _changed; }
 
   private:
-    ListId _activeListId = kInvalidListId;
     std::map<ListId, std::vector<TrackColumnState>> _listLayouts{};
     async::Signal<ListId> _changed;
   };

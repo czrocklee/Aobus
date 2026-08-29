@@ -118,7 +118,7 @@ Frontends cannot invent additional query fields or operators that the core compl
 - [`Completion.cpp`](../../../lib/query/Completion.cpp) owns tolerant analysis and core suggestions.
 - [`CompletionTokenizer.cpp`](../../../lib/query/detail/CompletionTokenizer.cpp) adapts shared lexical rules.
 - [`QueryExpressionCompleter.cpp`](../../../app/runtime/completion/QueryExpressionCompleter.cpp) composes core analysis with live vocabularies.
-- [`completionDetail`](../../../app/include/ao/uimodel/presentation/PresentationText.h) resolves semantic completion details into shared interactive copy.
+- [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves semantic completion details into shared interactive copy.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) composes expression completion into the interactive filter surface.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK adapter.
 - [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) is the TUI command adapter.

@@ -3,7 +3,7 @@
 
 #include "track/TrackPageHost.h"
 
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "track/TrackListModel.h"

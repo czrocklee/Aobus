@@ -14,6 +14,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
@@ -42,7 +43,7 @@ namespace ao::gtk::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(
       fixture.runtime(), library::test::TrackSpec{.title = "Song", .artist = "Artist", .uri = fixturePath});
-    fixture.runtime().reloadAllTracks();
+    fixture.runtime().sources().reloadAllTracks();
     auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(viewRes);
     REQUIRE(playback.commands().startFromView(*viewRes, trackId));

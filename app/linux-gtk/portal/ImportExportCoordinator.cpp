@@ -6,15 +6,14 @@
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "app/ThemeCoordinator.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Path.h>
 
 #include <giomm/asyncresult.h>

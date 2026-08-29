@@ -4,6 +4,7 @@
 #include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 
 #include <functional>
 #include <string>
@@ -20,10 +21,20 @@ namespace ao::gtk::layout
                                std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
                                i18n::MessageCatalog const& textCatalog)
   {
-    registerTrackQuickFilterComponent(
-      registry, runtime, trackPageHost, std::move(createSmartListFromExpression), textCatalog);
-    registerTrackPresentationButtonComponent(
-      registry, runtime, presentationCatalog, listPresentations, themeCoordinator, textCatalog);
+    registerTrackQuickFilterComponent(registry,
+                                      runtime.completion(),
+                                      runtime.views(),
+                                      runtime.workspace(),
+                                      trackPageHost,
+                                      std::move(createSmartListFromExpression),
+                                      textCatalog);
+    registerTrackPresentationButtonComponent(registry,
+                                             runtime.views(),
+                                             runtime.workspace(),
+                                             presentationCatalog,
+                                             listPresentations,
+                                             themeCoordinator,
+                                             textCatalog);
   }
 
   void registerTrackDetailComponents(ComponentRegistry& registry,
@@ -31,11 +42,12 @@ namespace ao::gtk::layout
                                      ResourceImageLoader* imageLoader,
                                      i18n::MessageCatalog const& textCatalog)
   {
-    registerTrackDetailScopeComponent(registry, runtime);
+    registerTrackDetailScopeComponent(registry, runtime.workspace());
     registerTrackSelectionRegionComponent(registry);
     registerTrackCoverArtComponent(registry, imageLoader, textCatalog);
-    registerTrackFieldGridComponent(registry, runtime, textCatalog);
-    registerTrackDetailUndoBarComponent(registry, runtime, textCatalog);
+    registerTrackFieldGridComponent(
+      registry, runtime.async(), runtime.library(), runtime.completion(), runtime.notifications(), textCatalog);
+    registerTrackDetailUndoBarComponent(registry, runtime.async(), runtime.notifications(), textCatalog);
   }
 
   void registerTrackEditorComponents(ComponentRegistry& registry,
@@ -43,6 +55,12 @@ namespace ao::gtk::layout
                                      TagEditController* tagEditController,
                                      i18n::MessageCatalog const& textCatalog)
   {
-    registerTrackTagEditorComponent(registry, runtime, tagEditController, textCatalog);
+    registerTrackTagEditorComponent(registry,
+                                    runtime.async(),
+                                    runtime.library(),
+                                    runtime.notifications(),
+                                    runtime.textOrderingPolicy(),
+                                    tagEditController,
+                                    textCatalog);
   }
 } // namespace ao::gtk::layout

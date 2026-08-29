@@ -30,12 +30,14 @@ namespace ao::gtk::layout
     class TrackQuickFilterComponent final : public LayoutComponent
     {
     public:
-      TrackQuickFilterComponent(rt::AppRuntime& runtime,
+      TrackQuickFilterComponent(rt::CompletionService& completion,
+                                rt::ViewService& views,
+                                rt::WorkspaceService& workspace,
                                 TrackPageHost* pageHost,
                                 std::function<void(ao::ListId, std::string)> const& createSmartListFromExpression,
                                 i18n::MessageCatalog const& textCatalog,
                                 LayoutBuildContext const& ctx)
-        : _widget{runtime, textCatalog, ctx.timeoutScheduler}
+        : _widget{completion, views, workspace, textCatalog, ctx.timeoutScheduler}
       {
         if (pageHost == nullptr || !createSmartListFromExpression)
         {
@@ -59,15 +61,23 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerTrackQuickFilterComponent(ComponentRegistry& registry,
-                                         rt::AppRuntime& runtime,
+                                         rt::CompletionService& completion,
+                                         rt::ViewService& views,
+                                         rt::WorkspaceService& workspace,
                                          TrackPageHost* trackPageHost,
                                          std::function<void(ao::ListId, std::string)> createSmartListFromExpression,
                                          i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerSharedComponent(
-      "track.quickFilter",
-      [&runtime, trackPageHost, createFn = std::move(createSmartListFromExpression), textCatalog](
-        LayoutBuildContext const& ctx, LayoutNode const& /*node*/)
-      { return std::make_unique<TrackQuickFilterComponent>(runtime, trackPageHost, createFn, textCatalog, ctx); });
+    registry.registerSharedComponent("track.quickFilter",
+                                     [&completion,
+                                      &views,
+                                      &workspace,
+                                      trackPageHost,
+                                      createFn = std::move(createSmartListFromExpression),
+                                      textCatalog](LayoutBuildContext const& ctx, LayoutNode const& /*node*/)
+                                     {
+                                       return std::make_unique<TrackQuickFilterComponent>(
+                                         completion, views, workspace, trackPageHost, createFn, textCatalog, ctx);
+                                     });
   }
 } // namespace ao::gtk::layout

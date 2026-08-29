@@ -143,7 +143,9 @@ namespace ao::winui
     }
   } // namespace
 
-  ActivityStatusControl::ActivityStatusControl(ActivityStatusControlConfig config)
+  ActivityStatusControl::ActivityStatusControl(ActivityStatusControlConfig config,
+                                               rt::NotificationService& notifications,
+                                               rt::LibraryJobs& libraryJobs)
     : _root{std::move(config.root)}
     , _detailButton{std::move(config.detailButton)}
     , _spinner{std::move(config.spinner)}
@@ -179,28 +181,9 @@ namespace ao::winui
 
     _autoDismissTimer.IsRepeating(false);
 
-    render(uimodel::ActivityStatusViewState{});
-  }
-
-  ActivityStatusControl::~ActivityStatusControl()
-  {
-    unbind();
-  }
-
-  void ActivityStatusControl::bind(rt::NotificationService& notifications, rt::LibraryJobs& libraryJobs)
-  {
-    if (_notifications == &notifications && _libraryJobs == &libraryJobs && _viewModelPtr)
-    {
-      return;
-    }
-
-    unbind();
-    resetPresentation();
-    _notifications = &notifications;
-    _libraryJobs = &libraryJobs;
-
     try
     {
+      resetPresentation();
       _viewModelPtr = std::make_unique<uimodel::ActivityStatusViewModel>(
         notifications,
         _textCatalog,
@@ -213,19 +196,18 @@ namespace ao::winui
     }
     catch (...)
     {
-      cancelAutoDismissTimer();
-      clearDetailRows();
-      _viewModelPtr.reset();
-      _notifications = nullptr;
-      _libraryJobs = nullptr;
+      stop();
       throw;
     }
   }
 
-  void ActivityStatusControl::unbind() noexcept
+  ActivityStatusControl::~ActivityStatusControl()
   {
-    _notifications = nullptr;
-    _libraryJobs = nullptr;
+    stop();
+  }
+
+  void ActivityStatusControl::stop() noexcept
+  {
     _viewModelPtr.reset();
     cancelAutoDismissTimer();
     clearDetailRows();

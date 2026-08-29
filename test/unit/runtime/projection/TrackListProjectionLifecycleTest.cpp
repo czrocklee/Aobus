@@ -3,6 +3,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
+#include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -129,7 +130,7 @@ namespace ao::rt::test
       proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
-    env.filteredPtr->invalidate();
+    TrackSourceAccess::invalidate(*env.filteredPtr);
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None,
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},

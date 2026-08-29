@@ -331,7 +331,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto sourcePtr = std::make_shared<QueryCountingTrackSource>(TrackId{99});
-    sourcePtr->invalidate();
+    TrackSourceAccess::invalidate(*sourcePtr);
 
     auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};

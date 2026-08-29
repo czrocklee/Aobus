@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationIds.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -49,7 +48,9 @@ namespace ao::winui
   class ActivityStatusControl final
   {
   public:
-    explicit ActivityStatusControl(ActivityStatusControlConfig config);
+    ActivityStatusControl(ActivityStatusControlConfig config,
+                          rt::NotificationService& notifications,
+                          rt::LibraryJobs& libraryJobs);
     ~ActivityStatusControl();
 
     ActivityStatusControl(ActivityStatusControl const&) = delete;
@@ -57,12 +58,10 @@ namespace ao::winui
     ActivityStatusControl(ActivityStatusControl&&) = delete;
     ActivityStatusControl& operator=(ActivityStatusControl&&) = delete;
 
-    void bind(rt::NotificationService& notifications, rt::LibraryJobs& libraryJobs);
-    void unbind() noexcept;
-
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     void render(uimodel::ActivityStatusViewState const& state);
     void renderDetail(uimodel::ActivityStatusViewState const& state);
@@ -86,8 +85,6 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _autoDismissTickRevoker{};
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _detailDismissRevokers;
     i18n::MessageCatalog _textCatalog;
-    rt::NotificationService* _notifications = nullptr;
-    rt::LibraryJobs* _libraryJobs = nullptr;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;
     std::optional<uimodel::ActivityCompactState> _optScheduledCompact;
     std::uint64_t _autoDismissGeneration = 0;

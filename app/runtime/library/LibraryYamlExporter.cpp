@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include "runtime/library/LibraryYamlExporter.h"
 
 #include "MediaTrack.h"
 #include <ao/AudioCodec.h>
@@ -23,6 +23,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
@@ -523,8 +524,8 @@ namespace ao::rt
     library::MusicLibrary const& ml;
   };
 
-  LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary const& ml)
-    : _implPtr{std::make_unique<Impl>(ml)}
+  LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary const& library)
+    : _implPtr{std::make_unique<Impl>(library)}
   {
   }
 

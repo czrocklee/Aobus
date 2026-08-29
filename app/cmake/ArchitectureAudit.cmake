@@ -26,6 +26,9 @@ function(aobus_add_architecture_audit)
     COMMAND ${CMAKE_COMMAND}
             "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"
             -P "${CMAKE_SOURCE_DIR}/cmake/AssertWinUiLeafCapabilities.cmake"
+    COMMAND ${CMAKE_COMMAND}
+            "-DROOT=${CMAKE_SOURCE_DIR}/app/linux-gtk"
+            -P "${CMAKE_SOURCE_DIR}/cmake/AssertGtkLeafCapabilities.cmake"
     COMMENT "Auditing application architecture boundaries"
     VERBATIM
   )
@@ -124,6 +127,8 @@ function(_aobus_architecture_audit_self_test)
   _aobus_adjudicate_architecture_rule(
     runtime_public "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
   _aobus_adjudicate_architecture_rule(
+    runtime_mechanism_surface "class SmartListEvaluator;" "class TrackSourceCache;")
+  _aobus_adjudicate_architecture_rule(
     uimodel_platform "#include <gtkmm/widget.h>" "#include <ao/uimodel/layout/LayoutSchema.h>")
   _aobus_adjudicate_architecture_rule(
     uimodel_core "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
@@ -134,7 +139,8 @@ function(_aobus_architecture_audit_self_test)
       "runtime.library().commands()"
       "_library.commands()"
       "libraryPtr->commands()"
-      "lib.commands()")
+      "lib.commands()"
+      "playbackLibrary.commands()")
     _aobus_assert_architecture_rejects(frontend_core "${_sample}")
   endforeach()
   foreach(_sample IN ITEMS
@@ -176,7 +182,7 @@ function(_aobus_run_architecture_audit)
     "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
   set(_forbidden_frontend_commands "(\\.|->)[ \t\r\n]*commands[ \t\r\n]*\\(")
   set(_allowed_playback_commands
-    "[A-Za-z0-9_]*[Pp]layback[A-Za-z0-9_]*[ \t\r\n]*(\\([ \t\r\n]*\\))?[ \t\r\n]*(\\.|->)[ \t\r\n]*commands[ \t\r\n]*\\(")
+    "((^|[^A-Za-z0-9_])(_?[Pp]layback|[Pp]laybackPtr)|[.>][ \t\r\n]*[Pp]layback[ \t\r\n]*\\([ \t\r\n]*\\))[ \t\r\n]*(\\.|->)[ \t\r\n]*commands[ \t\r\n]*\\(")
 
   _aobus_register_architecture_rule(application_signal
     ROOTS app test
@@ -194,8 +200,8 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
-      app/windows-winui
       app/tui
+      app/windows-winui
       app/cli
     FORBIDDEN "(^|[^A-Za-z0-9_])(PlaybackTransport|PlaybackSuccession)([^A-Za-z0-9_]|$)")
   _aobus_register_architecture_rule(lower_presentation_vocabulary
@@ -221,6 +227,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/tui
       app/windows-winui
     FORBIDDEN "ao/yaml/Reflect[.]h|namespace[ \t\r\n]+ao::yaml")
   _aobus_register_architecture_rule(core_yaml_domain
@@ -231,6 +238,10 @@ function(_aobus_run_architecture_audit)
     ROOTS app/include/ao/rt
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend[.]h|BackendProvider[.]h|Engine|NullBackend|backend/|detail/))))|${_forbidden_write_authority}")
+  _aobus_register_architecture_rule(runtime_mechanism_surface
+    ROOTS app/include/ao/rt
+    FORBIDDEN
+      "(^|[^A-Za-z0-9_])(AllTracksSource|IndexedTrackSequence|ListOrderSource|SmartListEvaluator|SmartListSource|LibraryYamlExporter|LibraryYamlImporter)([^A-Za-z0-9_]|$)")
   _aobus_register_architecture_rule(uimodel_platform
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
@@ -336,6 +347,30 @@ function(_aobus_run_architecture_audit)
       app/include/ao/rt/PlaybackSequenceService.h)
     if(EXISTS "${AOBUS_SOURCE_DIR}/${_legacy_path}")
       list(APPEND _findings "removed_surface: ${_legacy_path}: file must remain absent")
+    endif()
+  endforeach()
+
+  # Git discovery, format, naming, and changed-file hygiene share one governed
+  # first-party C++ suffix set: .cpp, .h, .hpp, plus .def include fragments.
+  # Reject alternate spellings before they can evade part of that toolchain.
+  foreach(_source_root IN ITEMS app include lib test tool)
+    if(IS_DIRECTORY "${AOBUS_SOURCE_DIR}/${_source_root}")
+      file(GLOB_RECURSE _unsupported_cpp_sources LIST_DIRECTORIES false
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.c"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.cc"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.cxx"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.c++"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.hh"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.hxx"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.inl"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.ipp")
+      foreach(_unsupported_source IN LISTS _unsupported_cpp_sources)
+        cmake_path(RELATIVE_PATH _unsupported_source
+          BASE_DIRECTORY "${AOBUS_SOURCE_DIR}"
+          OUTPUT_VARIABLE _unsupported_relative)
+        list(APPEND _findings
+          "unsupported_cpp_suffix: ${_unsupported_relative}: use .cpp, .h, .hpp, or .def")
+      endforeach()
     endif()
   endforeach()
 

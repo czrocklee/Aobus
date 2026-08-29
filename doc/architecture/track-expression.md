@@ -232,13 +232,13 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`FieldCatalog.h`](../../include/ao/query/FieldCatalog.h) defines typed variable descriptors and lookup.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) defines the application capability catalog and typed query bridge.
 - [`LibraryCommands.cpp`](../../app/runtime/library/LibraryCommands.cpp) validates persisted List definitions.
-- [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.
-- [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
+- Source-private [`SmartListSource`](../../app/runtime/source/SmartListSource.h) and [`SmartListEvaluator`](../../app/runtime/source/SmartListEvaluator.h), behind [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h), materialize predicate membership.
+- Source-private [`ListOrderSource`](../../app/runtime/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
 - [`CompletionAliasPolicy`](../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the ICU-free alias seam; [`IcuCompletionAliases`](../../app/include/ao/i18n/IcuCompletionAliases.h) supplies the interactive implementation.
 - [`resolveTrackFilter`](../../app/include/ao/uimodel/library/track/TrackFilter.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilter.h) own shared quick-filter authoring and completion policy.
-- [`completionDetail`](../../app/include/ao/uimodel/presentation/PresentationText.h) resolves completion roles and counts without changing query syntax.
+- [`completionDetail`](../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves completion roles and counts without changing query syntax.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.
 
 ## Test map

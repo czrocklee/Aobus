@@ -9,10 +9,10 @@
 #include "TextCell.h"
 #include "TrackDetailLines.h"
 #include "TrackListEntry.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>

@@ -91,7 +91,10 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackQuickFilterControl::TrackQuickFilterControl(TrackQuickFilterControlConfig config)
+  TrackQuickFilterControl::TrackQuickFilterControl(TrackQuickFilterControlConfig config,
+                                                   rt::ViewService& views,
+                                                   rt::WorkspaceService& workspace,
+                                                   rt::CompletionService& completion)
     : _input{std::move(config.input)}
     , _debounceTimer{_input.DispatcherQueue().CreateTimer()}
     , _onError{std::move(config.onError)}
@@ -129,25 +132,19 @@ namespace ao::winui
       _debounceTimer.Tick(winrt::auto_revoke,
                           [this](winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer const&,
                                  winrt::Windows::Foundation::IInspectable const&) { commitPendingText(); });
-  }
 
-  TrackQuickFilterControl::~TrackQuickFilterControl()
-  {
-    unbind();
-  }
-
-  void TrackQuickFilterControl::bind(rt::ViewService& views,
-                                     rt::WorkspaceService& workspace,
-                                     rt::CompletionService& completion)
-  {
-    unbind();
     resetPresentation();
     _completerPtr = std::make_unique<uimodel::TrackFilterCompleter>(completion);
     _viewModelPtr = std::make_unique<uimodel::TrackFilterViewModel>(
       views, workspace, _textCatalog, [this](uimodel::TrackFilterViewState const& state) { applyState(state); });
   }
 
-  void TrackQuickFilterControl::unbind() noexcept
+  TrackQuickFilterControl::~TrackQuickFilterControl()
+  {
+    stop();
+  }
+
+  void TrackQuickFilterControl::stop() noexcept
   {
     _commitPending = false;
     _selectionChangedRevoker.revoke();
