@@ -22,7 +22,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <expected>
@@ -34,7 +34,7 @@ namespace ao::rt
 {
   struct AppRuntime::Impl final
   {
-    ResourceByteLoader resourceByteLoader;
+    ResourceByteMemoryCache resourceByteCache;
     ViewService viewService;
     PlaybackTransport playbackTransport;
     PlaybackSuccession playbackSuccession;
@@ -47,10 +47,10 @@ namespace ao::rt
     bool stopped = false;
 
     Impl(CoreRuntime& core,
-         ResourceByteLoader::ReadBytes readResourceBytes,
+         ResourceByteMemoryCache::ReadBytes readResourceBytes,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
-      : resourceByteLoader{core.async(), std::move(readResourceBytes)}
+      : resourceByteCache{core.async(), std::move(readResourceBytes)}
       , viewService{core.async().callbackExecutor(),
                     core.musicLibrary(),
                     core.sources(),
@@ -141,8 +141,8 @@ namespace ao::rt
   {
     auto* const core = _corePtr.get();
     auto readResourceBytes =
-      ResourceByteLoader::ReadBytes{[core](ResourceId const resourceId, std::stop_token const stopToken)
-                                    { return core->loadInteractiveResourceBytesAsync(resourceId, stopToken); }};
+      ResourceByteMemoryCache::ReadBytes{[core](ResourceId const resourceId, std::stop_token const stopToken)
+                                         { return core->readInteractiveResourceBytesAsync(resourceId, stopToken); }};
     _implPtr = std::make_unique<Impl>(
       *core, std::move(readResourceBytes), std::move(workspaceConfigStorePtr), playbackSessionConfigStore);
   }
@@ -195,9 +195,9 @@ namespace ao::rt
     return _corePtr->musicRoot();
   }
 
-  ResourceByteLoader& AppRuntime::resourceBytes() noexcept
+  ResourceByteMemoryCache& AppRuntime::resourceBytes() noexcept
   {
-    return _implPtr->resourceByteLoader;
+    return _implPtr->resourceByteCache;
   }
 
   PlaybackService& AppRuntime::playback() noexcept

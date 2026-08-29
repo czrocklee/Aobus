@@ -15,6 +15,7 @@ The exact D-Bus names, methods, properties, mappings, and metadata keys belong t
 
 ## Code boundary
 
+The [system architecture](../../architecture/system-overview.md) places MPRIS in the GTK composition leaf.
 `ao::gtk::platform::MprisBridge` and `MprisPlaybackEndpoint` live entirely in `app/linux-gtk/platform/`.
 Core audio and runtime remain D-Bus-free.
 
@@ -67,6 +68,8 @@ Final runtime seeks emit `Seeked`; preview updates do not.
 
 When now-playing cover identity changes, the bridge cancels the old URL interest, clears its published URL, and emits current metadata immediately without `mpris:artUrl`.
 The cache validates or writes the derived file off the GTK thread.
+A write uses same-directory visibility-only atomic publication: clients opening the current URI observe the complete old file until its complete replacement is visible, while the discardable artifact pays no data or namespace durability barrier.
+The installed file remains owner-only (`0600` on POSIX and the current user plus Local System on Windows); MPRIS clients consume it within the same user session.
 A completion guarded by the current callback scope stores the URL and emits `Metadata` again; closing the old scope before request cancellation suppresses older and unregister-reentrant callbacks.
 
 ## Failure and cancellation
@@ -77,7 +80,7 @@ Unknown methods and unsupported writable properties return protocol errors.
 
 The bridge uses scoped cancellation for the current art URL interest and closes its callback scope before cancelling that interest.
 Its art interest, D-Bus registrations, and runtime subscriptions are cleared during stop/destruction before bridge state is released.
-The cache owns a lifetime scope for worker materialization and returns only through the GTK callback executor.
+The cache owns a lifetime scope for worker validation and file export and returns only through the GTK callback executor.
 D-Bus callbacks execute on the GTK main context and do not perform database reads, file validation, or file writes.
 
 ## Persistence and versioning

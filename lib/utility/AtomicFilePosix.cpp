@@ -112,7 +112,7 @@ namespace ao::utility
         return {};
       }
 
-      Result<> replaceTarget(std::filesystem::path const& targetPath)
+      Result<> replaceTarget(std::filesystem::path const& targetPath, detail::AtomicReplacementMode /*mode*/)
       {
         if (::rename(_path.data(), targetPath.c_str()) != 0)
         {
@@ -198,6 +198,12 @@ namespace ao::utility
   Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data)
   {
     auto operations = PosixAtomicFileOperations{};
-    return detail::runAtomicReplacement(operations, targetPath, data);
+    return detail::runAtomicReplacement(operations, targetPath, data, detail::AtomicReplacementMode::Durable);
+  }
+
+  Result<> publishAtomically(std::filesystem::path const& targetPath, std::string_view data)
+  {
+    auto operations = PosixAtomicFileOperations{};
+    return detail::runAtomicReplacement(operations, targetPath, data, detail::AtomicReplacementMode::VisibilityOnly);
   }
 } // namespace ao::utility

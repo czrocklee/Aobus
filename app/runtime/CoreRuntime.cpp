@@ -3,7 +3,7 @@
 
 #include <ao/rt/CoreRuntime.h>
 
-#include "resource/ResourceMaterializer.h"
+#include "resource/ResourceByteReader.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -50,7 +50,7 @@ namespace ao::rt
     CompletionService completionService;
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
-    ResourceMaterializer resourceMaterializer;
+    ResourceByteReader resourceByteReader;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
     bool stopped = false;
 
@@ -73,7 +73,7 @@ namespace ao::rt
       , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy, aliasPolicy}
       , trackSourceCache{*musicLibraryPtr, libraryChanges}
       , notificationService{asyncRuntime}
-      , resourceMaterializer{asyncRuntime, *musicLibraryPtr, std::move(cacheDirectory)}
+      , resourceByteReader{asyncRuntime, *musicLibraryPtr, cacheDirectory}
       , textOrderingPolicy{orderingPolicy}
     {
     }
@@ -214,17 +214,17 @@ namespace ao::rt
     return _implPtr->asyncRuntime;
   }
 
-  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::loadInteractiveResourceBytesAsync(
+  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::readResourceBytesForExportAsync(
     ResourceId const resourceId,
     std::stop_token const stopToken)
   {
-    return _implPtr->resourceMaterializer.loadInteractiveAsync(resourceId, stopToken);
+    return _implPtr->resourceByteReader.readForExportAsync(resourceId, stopToken);
   }
 
-  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::loadResourceBytesForExportAsync(
+  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::readInteractiveResourceBytesAsync(
     ResourceId const resourceId,
     std::stop_token const stopToken)
   {
-    return _implPtr->resourceMaterializer.loadAdministrativeAsync(resourceId, stopToken);
+    return _implPtr->resourceByteReader.readInteractiveAsync(resourceId, stopToken);
   }
 } // namespace ao::rt

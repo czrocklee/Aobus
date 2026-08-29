@@ -38,6 +38,14 @@ add_library(aobus-tui-lib STATIC
     CoverArtLoader.cpp
 )
 
+# stb_image consumes this as a configuration macro before its implementation
+# include. Supplying it through the one owning source keeps that C interface out
+# of the C++ source vocabulary and out of clang-tidy suppressions.
+set_source_files_properties(
+    CoverArt.cpp
+    PROPERTIES COMPILE_DEFINITIONS STBI_MAX_DIMENSIONS=::ao::tui::kMaximumCoverArtDimension
+)
+
 if(WIN32)
     target_sources(aobus-tui-lib PRIVATE SignalExitWatcherWindows.cpp TerminalCellMetricsWindows.cpp)
 else()

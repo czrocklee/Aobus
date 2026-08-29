@@ -258,7 +258,7 @@ Without a forwarding face, removing inheritance would force a runtime-wide colla
 
 The three prohibited outcomes are named explicitly.
 There is no `appRuntime.core()` returning the `CoreRuntime` owner or reference; only the composition root holds the `std::unique_ptr<CoreRuntime>`.
-There is no implicit derived-to-base conversion, which is what `ResourceByteLoader` relies on today and what WinUI currently explains with a comment at the call site.
+There is no implicit derived-to-base conversion, which is what the pre-Phase-5 `ResourceByteLoader` relies on and what WinUI currently explains with a comment at the call site.
 A leaf that needs one service takes that one service, and converting leaves from `AppRuntime&` to exact collaborators proceeds incrementally after the composition change, not inside it.
 
 `musicLibrary()` is deliberately not forwarded.
@@ -300,7 +300,7 @@ This means the forwarding removal is blocked on a new UIModel `ListAuthoring` fr
 Deleting the forwarders while that regex still bans `.writer(` under `app/linux-gtk` would break the GTK build.
 
 `LibraryTaskService` becomes `LibraryJobs` and narrows to scan, import, export, and identity backfill with their progress feed.
-`loadResourceAsync` is not republished as a `LibraryResourceService`; resource materialization stays in the runtime implementation, `ResourceByteLoader` receives a narrow `ReadBytes` callable at construction, and `AppRuntime` binds that callable to the internal materializer owned by its composed `CoreRuntime`.
+`loadResourceAsync` is not republished as a `LibraryResourceService`; resource-byte reading stays in the runtime implementation, `ResourceByteLoader` receives a narrow `ReadBytes` callable at construction, and `AppRuntime` binds that callable to the internal reader owned by its composed `CoreRuntime`.
 `resourceCarrierIndexBuildCount()` moves to a private test seam.
 This preserves every contract in the [cover-art delivery specification](../spec/resource/cover-art-delivery.md) and the [library task-execution specification](../spec/library/runtime/task-execution.md) while removing one public role.
 
@@ -325,7 +325,7 @@ No other extraction in this proposal is granted the same exception.
 
 Two further extractions are proposed as **not extracted by default**.
 
-`LruMap<Key, Value, Weight>` over `ResourceByteCache`, `IndexedTrackRowCache`, and the GTK `ImageCache` is rejected unless a field-by-field comparison first shows identical eviction semantics, and unless the result deletes three copies without introducing a virtual eviction policy, a policy-template forest, a generic loader, or a callback framework.
+`LruMap<Key, Value, Weight>` over the former `ResourceByteCache`, `IndexedTrackRowCache`, and the GTK `ImageCache` is rejected unless a field-by-field comparison first shows identical eviction semantics, and unless the result deletes three copies without introducing a virtual eviction policy, a policy-template forest, a generic loader, or a callback framework.
 A shared `GenerationGate` is rejected unless the shell generation, resource generation, and other callback gates have identical settle and retire semantics.
 
 Three fields spelled `generation`, or three containers described as caches, are not evidence.
@@ -743,7 +743,12 @@ In the phase table, `Rule` is mandatory and requires an RFC amendment to change,
 | 3 | UIModel feature capsules, including `ListPresentations` absorbing its lifecycle and recommender, and the new `ListAuthoring` functions that let `rt::Library`'s forwarding methods be deleted and the frontend guardrail clause retargeted in one change | Design | Phase 2 |
 | 4 | Layout and shell: schema table, action and component schema merge, `LayoutSession`, registration-time capture in the build path | Design | Phase 2 |
 | 5 | Runtime composition: `AppRuntime` owns `CoreRuntime` and forwards the audited application face, GTK preview construction moves behind `TrackSourceCache` and `ViewService`, virtual shutdown and protected initialization are removed, and resource loading moves out of `LibraryJobs` | Design | Phase 3 |
-| 6 | One architecture audit, `app/CMakeLists.txt` split, target consolidation, naming and organization document reductions, and finally any architecture-document merges that lose their independent graph | Design | Phases 3-5 |
+| 6 | One architecture audit; merge resource materialization into `ResourceByteReader` and the interactive loader/cache pair into `ResourceByteMemoryCache`; split `app/CMakeLists.txt`; consolidate targets; reduce naming and organization documents; finally merge any architecture documents that lose their independent graph | Design | Phases 3-5 |
+
+The Phase 6 resource item is one structural consolidation, not a rename sweep.
+The source-private `ResourceMaterializer` and `ResourceMaterialization` walk become one `ResourceByteReader` module; `ResourceByteLoader` absorbs its sole-production-consumer `ResourceByteCache` and becomes the read-through `ResourceByteMemoryCache`; the digest-keyed `ResourceByteDiskCache` moves to the reader's private source boundary.
+The reader owns descriptor/carrier/cache I/O, the memory cache owns bounded retention and equal-id request coalescing, and frontends retain decoding and export.
+This also removes the reader Pimpl, one public cache header, test-only cache counters, and heap wrappers around non-rebindable lifetime scopes.
 
 `TrackSourceLease` has been removed from Phase 1a; it is kept, per the survival-test discussion above.
 

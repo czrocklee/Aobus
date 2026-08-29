@@ -553,11 +553,10 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportListTest.cpp
     unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
-    unit/runtime/resource/ResourceByteCacheTest.cpp
-    unit/runtime/resource/ResourceDiskCacheTest.cpp
-    unit/runtime/resource/ResourceByteLoaderTest.cpp
-    unit/runtime/resource/ResourceMaterializationTest.cpp
-    unit/runtime/resource/ResourceMaterializerTest.cpp
+    unit/runtime/resource/ResourceByteDiskCacheTest.cpp
+    unit/runtime/resource/ResourceByteMemoryCacheTest.cpp
+    unit/runtime/resource/ResourceByteReadTest.cpp
+    unit/runtime/resource/ResourceByteReaderTest.cpp
     unit/desktop/DetachedProcessLauncherTest.cpp
     unit/desktop/DetachedProcessLauncherWindowsTest.cpp
     unit/desktop/LibraryStartupPlannerTest.cpp

@@ -3,12 +3,12 @@
 
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 
+#include "runtime/resource/ResourceByteDiskCache.h"
+#include "runtime/resource/ResourceByteReader.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/rt/resource/ResourceBytes.h>
-#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -67,7 +67,7 @@ namespace ao::gtk::test
 
   void installCoverCacheEntry(std::filesystem::path const& cacheDirectory, std::span<std::byte const> const bytes)
   {
-    auto const cache = rt::ResourceDiskCache{rt::ResourceDiskCache::Config{
+    auto const cache = rt::ResourceByteDiskCache{rt::ResourceByteDiskCache::Config{
       .directory = rt::coverCacheDirectory(cacheDirectory),
       .maximumEntryBytes = rt::kMaximumInteractiveResourceBytes,
     }};

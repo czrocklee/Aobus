@@ -37,7 +37,7 @@ Use the [reference template](../template/reference.md).
 
 ## Resource
 
-- [Resource descriptors](resource/blob.md) enumerates ids, digest-derived creation, collision probing, descriptor store operations, and the runtime materialization surface.
+- [Resource descriptors](resource/blob.md) enumerates ids, digest-derived creation, collision probing, descriptor store operations, and the runtime byte-read surface.
 
 ## Query
 

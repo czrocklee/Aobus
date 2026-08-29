@@ -100,7 +100,7 @@ namespace ao::gtk::layout::test
     rt::AppRuntime& runtime();
 
     /// Where this fixture's runtime keeps its derived caches, including the
-    /// cover cache a resource request materializes content through.
+    /// cover cache a resource request reads content through.
     std::filesystem::path cacheDirectory() const;
 
     Gtk::Window& window();

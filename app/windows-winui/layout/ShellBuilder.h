@@ -37,7 +37,7 @@ namespace ao::winui
 
 namespace ao::rt
 {
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
 }
 
 namespace ao::winui::layout
@@ -92,7 +92,7 @@ namespace ao::winui::layout
 
     /// Coordinator-owned collaborators borrowed by every shell generation.
     TrackListController& trackList;
-    rt::ResourceByteLoader& resourceBytes;
+    rt::ResourceByteMemoryCache& resourceBytes;
     ThemeCoordinator& theme;
 
     /// The loaded theme override, or nothing while the system theme is in force.

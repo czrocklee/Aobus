@@ -31,7 +31,7 @@ namespace ao::rt
   class Library;
   class NotificationService;
   class PlaybackService;
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
   class TextOrderingPolicy;
   class TrackSourceCache;
   class WorkspaceService;
@@ -86,7 +86,7 @@ namespace ao::rt
     CompletionService& completion() noexcept;
     TextOrderingPolicy const* textOrderingPolicy() const noexcept;
     std::filesystem::path const& musicRoot() const noexcept;
-    ResourceByteLoader& resourceBytes() noexcept;
+    ResourceByteMemoryCache& resourceBytes() noexcept;
 
     PlaybackService& playback() noexcept;
     WorkspaceService& workspace() noexcept;
@@ -116,7 +116,7 @@ namespace ao::rt
                std::unique_ptr<ConfigStore> workspaceConfigStorePtr,
                ConfigStore* playbackSessionConfigStore);
     // Reverse member destruction retires every interactive borrower, including
-    // ResourceByteLoader, before the CoreRuntime they call into.
+    // ResourceByteMemoryCache, before the CoreRuntime they call into.
     std::unique_ptr<CoreRuntime> _corePtr;
     std::unique_ptr<Impl> _implPtr;
   };

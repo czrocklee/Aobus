@@ -28,7 +28,7 @@ namespace ao::rt
   std::filesystem::path coverCacheDirectory(std::filesystem::path const& cacheDirectory);
 
   /**
-   * ResourceDiskCache - encoded cover bytes kept on disk, named by their digest.
+   * ResourceByteDiskCache - encoded cover bytes kept on disk, named by their digest.
    *
    * The cache is content-addressed, which is what makes it the cheap tier of one
    * store rather than a second mechanism: an entry is served because its bytes
@@ -54,7 +54,7 @@ namespace ao::rt
    * is a scheduling hint rather than a fact about the directory: losing an
    * update to it defers a pass, and never serves or drops an entry.
    */
-  class ResourceDiskCache final
+  class ResourceByteDiskCache final
   {
   public:
     static constexpr std::size_t kDefaultByteBudget = std::size_t{256U} * 1024U * 1024U;
@@ -96,7 +96,7 @@ namespace ao::rt
       std::size_t maximumEntryBytes = 0;
     };
 
-    explicit ResourceDiskCache(Config config);
+    explicit ResourceByteDiskCache(Config config);
 
     bool isEnabled() const noexcept { return !_config.directory.empty(); }
 

@@ -63,11 +63,11 @@ The derived cover cache follows that rule: each composition root resolves the ap
 Interactive-runtime-owned components may provide reusable application delivery behavior, such as coalesced and cached immutable resource-byte requests, without becoming `CoreRuntime` services.
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
-It owns storage, asynchronous execution, the library facade and change bus, source caching, resource materialization, completion, and notifications.
+It owns storage, asynchronous execution, the library facade and change bus, source caching, verified resource-byte reading, completion, and notifications.
 `CoreRuntime::create()` is a typed-result factory: it opens and validates storage, acquires the runtime library facade, and completes the initial All Tracks source reload before returning ownership.
 
 `AppRuntime` owns one `CoreRuntime` and adds the interactive application graph; it does not inherit from or expose the core owner.
-It adds view and workspace services, playback transport and succession, audio-player ownership, playback-session persistence, and one shared `ResourceByteLoader` exposed through `resourceBytes()`.
+It adds view and workspace services, playback transport and succession, audio-player ownership, playback-session persistence, and one shared read-through `ResourceByteMemoryCache` exposed through `resourceBytes()`.
 Its public application face explicitly forwards the core library, async runtime, sources, notifications, completion, ordering policy, and music root, but not raw `MusicLibrary` or database-path access.
 `AppRuntime::create()` is likewise the sole public construction boundary and returns no interactive graph until core initialization and the required workspace-store composition have succeeded.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
@@ -209,7 +209,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
-- [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral coalesced, cached, and independently owned encoded-byte delivery shared by GTK, TUI, WinUI, and MPRIS consumers.
+- [`ResourceByteMemoryCache`](../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral read-through caching and independently owned encoded bytes shared by GTK, TUI, WinUI, and MPRIS consumers.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
 - [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) and [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) enforce application-layer boundaries.
 
@@ -217,7 +217,7 @@ Subsystem-specific code families and translations belong to their focused specif
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
 - [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
-- [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protects constructor-bound resource-byte delivery, retry, callback affinity, cancellation, and destruction fencing.
+- [`ResourceByteMemoryCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects bounded retention, coalescing, retry, callback affinity, cancellation, and destruction fencing.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.

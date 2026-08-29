@@ -82,7 +82,7 @@ namespace ao::rt
 
     async::Runtime& async() noexcept;
     /// CLI-only raw export path; uses the same verified walk without the interactive ceiling.
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceBytesForExportAsync(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readResourceBytesForExportAsync(
       ResourceId resourceId,
       std::stop_token stopToken = {});
 
@@ -91,7 +91,7 @@ namespace ao::rt
 
     struct Impl;
     explicit CoreRuntime(std::unique_ptr<Impl> implPtr);
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadInteractiveResourceBytesAsync(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readInteractiveResourceBytesAsync(
       ResourceId resourceId,
       std::stop_token stopToken);
     std::unique_ptr<Impl> _implPtr;

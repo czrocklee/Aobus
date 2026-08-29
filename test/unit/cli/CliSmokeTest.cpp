@@ -3,6 +3,7 @@
 
 #include "CliTestSupport.h"
 #include "ListCommand.h"
+#include "runtime/resource/ResourceByteDiskCache.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
@@ -17,7 +18,6 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
@@ -608,7 +608,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - lib resource list and export materialize a cover by digest", "[cli][workflow][lib][resource]")
+  TEST_CASE("CLI - lib resource list and export read a cover by digest", "[cli][workflow][lib][resource]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("with_cover.flac", "cover.flac");
@@ -629,8 +629,8 @@ namespace ao::cli::test
     CHECK(contains(result.out, idText));
     CHECK(contains(result.out, sizeText));
 
-    // The row holds no bytes, so the export materializes them from the file that
-    // references the resource.
+    // The row holds no bytes, so export reads them from the file that references
+    // the resource.
     auto const outputPath = fixture.root() / "cover.bin";
     result = fixture.run({"lib", "resource", "export", idText, "--output", outputPath.string()});
     REQUIRE(result.status == 0);
@@ -649,11 +649,11 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, utility::sha256Hex(digest)));
 
-    // What the walk materialized it also installed, under the cache root this
+    // What the verified read returned it also installed, under the cache root this
     // invocation was given. Reading it back through the cache is how the test
     // states which directory that is: an entry in the machine's own cache would
     // both survive the fixture and evict a user's covers to hold its budget.
-    auto const cache = rt::ResourceDiskCache{rt::ResourceDiskCache::Config{
+    auto const cache = rt::ResourceByteDiskCache{rt::ResourceByteDiskCache::Config{
       .directory = rt::coverCacheDirectory(fixture.cacheDirectory()),
       .maximumEntryBytes = exported.size(),
     }};

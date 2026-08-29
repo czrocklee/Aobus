@@ -22,7 +22,7 @@ using HWND = HWND__*;
 namespace ao::rt
 {
   class AppRuntime;
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
   struct PlaybackSnapshot;
 }
 
@@ -41,7 +41,7 @@ namespace ao::winui
                winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                rt::AppRuntime& runtime,
                uimodel::PlaybackActions& actions,
-               rt::ResourceByteLoader& resourceBytes);
+               rt::ResourceByteMemoryCache& resourceBytes);
     ~SmtcBridge();
 
     SmtcBridge(SmtcBridge const&) = delete;
@@ -64,7 +64,7 @@ namespace ao::winui
 
     std::shared_ptr<State> _statePtr;
     rt::AppRuntime* _runtime = nullptr;
-    rt::ResourceByteLoader* _resourceBytes = nullptr;
+    rt::ResourceByteMemoryCache* _resourceBytes = nullptr;
     async::Subscription _snapshotSub;
     utility::ScopedRegistration _artworkRequest;
     async::TaskHandle _artworkTask;

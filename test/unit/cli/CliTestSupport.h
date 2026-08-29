@@ -39,7 +39,7 @@ namespace ao::cli::test
    * @brief Runs the CLI in this process.
    *
    * @param optCacheDirectory Where the invocation keeps derived caches. Supply
-   * one whenever the invocation may materialize a cover: the CLI otherwise
+   * one whenever the invocation may read a cover: the CLI otherwise
    * resolves the machine's own cache, where a test would both read entries it
    * did not write and evict the user's.
    */
@@ -53,8 +53,8 @@ namespace ao::cli::test
   public:
     std::filesystem::path const& root() const;
 
-    /// The cache root every `run` of this fixture uses, so a cover the CLI
-    /// materializes lands here rather than in the machine's own cache.
+    /// The cache root every `run` of this fixture uses, so cover bytes the CLI
+    /// reads land here rather than in the machine's own cache.
     std::filesystem::path cacheDirectory() const;
 
     void copyAudio(std::string_view sourceName, std::string_view targetName) const;

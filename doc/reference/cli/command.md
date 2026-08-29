@@ -14,6 +14,7 @@ The surface has no explicit schema version; behavioral guarantees belong to the 
 
 ## Code boundary
 
+The [system architecture](../../architecture/system-overview.md) places command parsing and output in the CLI frontend.
 Command registration and DTO authority live in `app/cli/`.
 CLI11 help is the executable syntax authority; this document is the durable repository lookup surface kept in sync by CLI smoke tests.
 
@@ -183,8 +184,8 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
 - `lib verify` fails only for Missing or Error, while still reporting Changed/Moved.
-- `lib resource list` reports each descriptor without materializing content; `lib dump --resources` additionally prints each digest.
-- `lib resource export` materializes content through the same source walk interactive delivery uses, with no size ceiling, so it can write a cover that exceeds the interactive limit.
+- `lib resource list` reports each descriptor without reading content; `lib dump --resources` additionally prints each digest.
+- `lib resource export` reads content through the same source walk interactive consumers use, with no size ceiling, so it can write a cover that exceeds the interactive limit.
 - `lib resource export` fails with `resource not found` for an id with no descriptor row, `resource not available` when no cache entry or referencing file could reproduce the content, and for file IO, which includes an output below a directory that does not exist; it writes nothing in every failure case, replaces an existing output only once the complete content is on hand, and creates no directory.
 - Create dry-runs omit transaction-allocated ids.
 - `lib import --mode restore --dry-run` validates and previews without requiring confirmation.

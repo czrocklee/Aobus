@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/resource/ResourceDiskCache.h>
+#include "ResourceByteDiskCache.h"
 
 #include <ao/Contract.h>
 #include <ao/utility/AtomicFile.h>
@@ -63,8 +63,8 @@ namespace ao::rt
 
       if (byteLength != 0)
       {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): byte buffer fill at the iostream boundary.
-        stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(byteLength));
+        auto* const data = utility::layout::viewMutable<char>(std::span{bytes});
+        stream.read(data, static_cast<std::streamsize>(byteLength));
 
         if (!stream || stream.gcount() != static_cast<std::streamsize>(byteLength))
         {
@@ -117,21 +117,14 @@ namespace ao::rt
     return cacheDirectory.empty() ? cacheDirectory : cacheDirectory / utility::pathFromUtf8(kCoverDirectoryName);
   }
 
-  ResourceDiskCache::ResourceDiskCache(Config config)
+  ResourceByteDiskCache::ResourceByteDiskCache(Config config)
     : _config{std::move(config)}, _unconvergedBytes{_config.byteBudget / kConvergeWriteShare}
   {
     AO_EXPECTS(
       _config.directory.empty() || _config.maximumEntryBytes > 0, "A cache holding entries needs a maximum entry size");
   }
 
-  std::filesystem::path ResourceDiskCache::entryPath(utility::Sha256Digest const& digest) const
-  {
-    AO_EXPECTS(isEnabled(), "A disabled cache has no entry paths");
-    auto const hex = utility::sha256Hex(digest);
-    return _config.directory / utility::pathFromUtf8(hex.substr(0, kShardNameLength)) / utility::pathFromUtf8(hex);
-  }
-
-  std::optional<std::vector<std::byte>> ResourceDiskCache::read(utility::Sha256Digest const& digest) const
+  std::optional<std::vector<std::byte>> ResourceByteDiskCache::read(utility::Sha256Digest const& digest) const
   {
     if (!isEnabled())
     {
@@ -141,8 +134,8 @@ namespace ao::rt
     auto const path = entryPath(digest);
     // Deliberately not bounded by `maximumEntryBytes`: that limit governs what
     // this cache installs, and a read that applied it would put a ceiling on the
-    // administrative delivery the specification exempts, which is served from
-    // this same tier. An entry longer than any caller may serve is refused by
+    // raw export path the specification exempts, which is served from this same
+    // tier. An entry longer than an interactive caller may serve is refused by
     // that caller, and one whose content does not match its name is discarded
     // below.
     auto optBytes = readFileBytes(path);
@@ -164,7 +157,7 @@ namespace ao::rt
     return optBytes;
   }
 
-  void ResourceDiskCache::store(utility::Sha256Digest const& digest, std::span<std::byte const> const bytes) const
+  void ResourceByteDiskCache::store(utility::Sha256Digest const& digest, std::span<std::byte const> const bytes) const
   {
     if (!isEnabled() || bytes.size() > _config.maximumEntryBytes)
     {
@@ -183,7 +176,7 @@ namespace ao::rt
     // Two processes may write one entry at once, which content addressing makes
     // harmless: both write identical bytes under identical names, so whichever
     // replacement lands last is the same file either way.
-    if (!utility::writeAtomically(path, utility::bytes::stringView(bytes)))
+    if (!utility::publishAtomically(path, utility::bytes::stringView(bytes)))
     {
       return;
     }
@@ -194,7 +187,14 @@ namespace ao::rt
     }
   }
 
-  bool ResourceDiskCache::accumulateWrite(std::size_t const byteLength) const
+  std::filesystem::path ResourceByteDiskCache::entryPath(utility::Sha256Digest const& digest) const
+  {
+    AO_EXPECTS(isEnabled(), "A disabled cache has no entry paths");
+    auto const hex = utility::sha256Hex(digest);
+    return _config.directory / utility::pathFromUtf8(hex.substr(0, kShardNameLength)) / utility::pathFromUtf8(hex);
+  }
+
+  bool ResourceByteDiskCache::accumulateWrite(std::size_t const byteLength) const
   {
     auto const share = _config.byteBudget / kConvergeWriteShare;
     auto const written = _unconvergedBytes.fetch_add(byteLength, std::memory_order_relaxed) + byteLength;
@@ -212,7 +212,7 @@ namespace ao::rt
     return true;
   }
 
-  void ResourceDiskCache::converge() const
+  void ResourceByteDiskCache::converge() const
   {
     auto errorCode = std::error_code{};
     auto entries = std::vector<CachedEntry>{};
@@ -280,7 +280,7 @@ namespace ao::rt
     }
   }
 
-  void ResourceDiskCache::touch(std::filesystem::path const& path) const
+  void ResourceByteDiskCache::touch(std::filesystem::path const& path) const
   {
     // Recency is the entry's own modification time, deliberately rather than a
     // sidecar index: an index would be more accurate and would make the cache a
@@ -303,7 +303,7 @@ namespace ao::rt
       return;
     }
 
-    // Where the touch fails, eviction degrades to oldest-materialized order,
+    // Where the touch fails, eviction degrades to oldest-written order,
     // which is the right answer for entries that all cost one file read.
     std::filesystem::last_write_time(path, now, errorCode);
   }

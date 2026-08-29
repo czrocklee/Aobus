@@ -15,7 +15,7 @@ namespace ao::uimodel
 namespace ao::rt
 {
   class PlaybackService;
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
 }
 namespace ao::i18n
 {
@@ -47,7 +47,7 @@ namespace ao::winui::layout
                                                               uimodel::LayoutNode const& node,
                                                               async::Runtime& asyncRuntime,
                                                               rt::PlaybackService& playback,
-                                                              rt::ResourceByteLoader& resourceBytes,
+                                                              rt::ResourceByteMemoryCache& resourceBytes,
                                                               ThemeCoordinator& theme,
                                                               i18n::MessageCatalog const& textCatalog,
                                                               async::Signal<ShellState>& shellStateChanged);

@@ -14,6 +14,7 @@ Behavioral ownership, failure, and lifetime belong to the [GTK MPRIS specificati
 
 ## Code boundary
 
+The [system architecture](../../architecture/system-overview.md) places the protocol adapter in the GTK frontend.
 The exact introspection authority is `app/linux-gtk/platform/MprisBridge.cpp`.
 Command mapping authority is `MprisPlaybackEndpoint.h`.
 No runtime or core header exports these protocol names.
@@ -108,13 +109,13 @@ Present non-empty values use:
 | `xesam:artist` | one-element artist string array |
 | `xesam:album` | current album string |
 | `mpris:length` | positive duration in microseconds |
-| `mpris:artUrl` | resolved non-empty local file URL; omitted while asynchronous materialization is pending |
+| `mpris:artUrl` | resolved non-empty local file URL; omitted while asynchronous cache-file export is pending |
 
 ### Signals
 
 The bridge emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields.
 It emits `org.mpris.MediaPlayer2.Player.Seeked(position)` in microseconds for non-preview runtime seek updates.
-For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful current-resource materialization emits a later `Metadata` change containing it.
+For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful current-resource file export emits a later `Metadata` change containing it.
 
 ## Validation rules
 

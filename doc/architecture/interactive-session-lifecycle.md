@@ -282,7 +282,7 @@ After successor activation, initial-scan or explicit-rescan planning and applica
 What a finished scan is reported as - its verdict, severity, retention, and sentence - is decided once in UIModel and enumerated by the [library scan report reference](../reference/shell/library-scan-report.md); a session posts that decision rather than reaching its own.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
-The window retires generation controllers and projections and destroys SMTC and artwork consumers before releasing its session; releasing that session destroys its unique `AppRuntime`, whose interactive implementation owns and destroys the shared resource loader before the composed `CoreRuntime`.
+The window retires generation controllers and projections and destroys SMTC and artwork consumers before releasing its session; releasing that session destroys its unique `AppRuntime`, whose interactive implementation owns and destroys the shared resource-byte memory cache before the composed `CoreRuntime`.
 The runtime destructor joins its worker tasks; no deferred runtime release or quarantine owner is used.
 
 ## Implementation map

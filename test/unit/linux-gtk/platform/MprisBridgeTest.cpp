@@ -36,9 +36,10 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -68,30 +69,37 @@ namespace ao::gtk::platform::test
 {
   namespace
   {
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadEmptyMprisResourceAfterOneFailure(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readEmptyMprisResourceAfterOneFailure(
       std::shared_ptr<std::atomic_bool> failNextPtr,
-      rt::test::AsyncTestState<std::size_t> loadCount,
+      rt::test::AsyncTestState<std::size_t> readCount,
       ResourceId /*resourceId*/,
       std::stop_token /*stopToken*/)
     {
-      loadCount.increment();
+      readCount.increment();
 
       if (failNextPtr->exchange(false))
       {
-        co_return makeError(Error::Code::IoError, "injected MPRIS resource load failure");
+        co_return makeError(Error::Code::IoError, "injected MPRIS resource read failure");
       }
 
       co_return std::optional<std::vector<std::byte>>{};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelMprisResourceLoad(
-      rt::test::AsyncTestState<std::size_t> loadCount,
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelMprisResourceRead(
+      rt::test::AsyncTestState<std::size_t> readCount,
       ResourceId /*resourceId*/,
       std::stop_token /*stopToken*/)
     {
-      loadCount.increment();
+      readCount.increment();
       async::throwOperationCancelled();
       co_return std::optional<std::vector<std::byte>>{};
+    }
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readMprisResource(std::vector<std::byte> bytes,
+                                                                                 ResourceId /*resourceId*/,
+                                                                                 std::stop_token /*stopToken*/)
+    {
+      co_return std::optional{std::move(bytes)};
     }
 
     ResourceId addResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
@@ -394,6 +402,9 @@ namespace ao::gtk::platform::test
     auto const exportedPath = pathFromFileUrl(url);
     CHECK(exportedPath.extension() == ".png");
     CHECK(std::filesystem::is_regular_file(exportedPath));
+    auto const permissions = std::filesystem::status(exportedPath).permissions();
+    CHECK((permissions & (std::filesystem::perms::group_all | std::filesystem::perms::others_all)) ==
+          std::filesystem::perms::none);
     CHECK_FALSE(std::filesystem::exists(stalePath));
     CHECK(fileBytesEqual(exportedPath, kPngBytes));
     auto cachedWriteTime = std::filesystem::file_time_type::clock::now() - std::chrono::hours{24};
@@ -431,7 +442,54 @@ namespace ao::gtk::platform::test
     CHECK(cancelledCallbackCount == 0);
   }
 
-  TEST_CASE("MprisArtUrlCache - failed resource loads terminate their request flight",
+  TEST_CASE("MprisArtUrlCache - failed replacement preserves the previously published URI",
+            "[gtk][unit][mpris][concurrency]")
+  {
+    constexpr auto kResourceId = ResourceId{51};
+    constexpr auto kPngBytes = std::array{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}};
+    auto const jpegBytes = std::vector{std::byte{0xFF}, std::byte{0xD8}, std::byte{0xFF}, std::byte{0xDB}};
+    auto tempDir = ao::test::TempDir{};
+    auto const cacheDir = tempDir.path() / "mpris-preserved-art";
+    auto const oldPath = cacheDir / (std::to_string(kResourceId.raw()) + ".png");
+    auto const replacementPath = cacheDir / (std::to_string(kResourceId.raw()) + ".jpg");
+    std::filesystem::create_directories(cacheDir);
+
+    {
+      auto output = std::ofstream{oldPath, std::ios::binary};
+      auto const oldBytes = std::span<std::byte const>{kPngBytes};
+      auto const byteView = utility::bytes::stringView(oldBytes);
+      output.write(byteView.data(), static_cast<std::streamsize>(byteView.size()));
+      REQUIRE(output);
+    }
+
+    // A directory at the replacement path makes the platform rename fail after
+    // the new payload is complete. The old extension must remain published.
+    std::filesystem::create_directory(replacementPath);
+
+    auto executor = rt::test::QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto byteCache = rt::ResourceByteMemoryCache{runtime, std::bind_front(readMprisResource, jpegBytes)};
+    auto cache = MprisArtUrlCache{byteCache, runtime, cacheDir};
+    auto url = std::string{};
+    bool completed = false;
+    auto request = cache.requestUrl(kResourceId,
+                                    [&](std::string resolvedUrl)
+                                    {
+                                      url = std::move(resolvedUrl);
+                                      completed = true;
+                                    });
+
+    REQUIRE(request);
+    REQUIRE(executor.drainUntil([&] { return completed; }));
+    CHECK(url.empty());
+    CHECK(fileBytesEqual(oldPath, kPngBytes));
+    CHECK(std::filesystem::is_directory(replacementPath));
+
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("MprisArtUrlCache - failed resource reads terminate their request flight",
             "[gtk][unit][mpris][concurrency]")
   {
     auto executor = rt::test::QueuedExecutor{};
@@ -442,12 +500,12 @@ namespace ao::gtk::platform::test
     SECTION("a Result failure completes empty and permits retry")
     {
       auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
-      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
       auto receivedNonEmptyUrl = rt::test::AsyncTestState<bool>::create(true);
       auto failNextPtr = std::make_shared<std::atomic_bool>(true);
-      auto byteLoader =
-        rt::ResourceByteLoader{runtime, std::bind_front(loadEmptyMprisResourceAfterOneFailure, failNextPtr, loadCount)};
-      auto cache = MprisArtUrlCache{byteLoader, runtime, tempDir.path() / "mpris-exceptional-load"};
+      auto byteCache = rt::ResourceByteMemoryCache{
+        runtime, std::bind_front(readEmptyMprisResourceAfterOneFailure, failNextPtr, readCount)};
+      auto cache = MprisArtUrlCache{byteCache, runtime, tempDir.path() / "mpris-exceptional-load"};
 
       auto request = cache.requestUrl(kMissingResourceId,
                                       [callbackCount, receivedNonEmptyUrl](std::string url)
@@ -468,7 +526,7 @@ namespace ao::gtk::platform::test
                                     });
       REQUIRE(retry);
       REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
-      CHECK(loadCount.load() == 2);
+      CHECK(readCount.load() == 2);
       CHECK_FALSE(retryReceivedNonEmptyUrl.load());
 
       runtime.requestStop();
@@ -478,13 +536,13 @@ namespace ao::gtk::platform::test
     SECTION("cancellation escapes without invoking the waiter")
     {
       auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
-      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
-      auto byteLoader = rt::ResourceByteLoader{runtime, std::bind_front(cancelMprisResourceLoad, loadCount)};
-      auto cache = MprisArtUrlCache{byteLoader, runtime, tempDir.path() / "mpris-cancelled-load"};
+      auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto byteCache = rt::ResourceByteMemoryCache{runtime, std::bind_front(cancelMprisResourceRead, readCount)};
+      auto cache = MprisArtUrlCache{byteCache, runtime, tempDir.path() / "mpris-cancelled-load"};
 
       auto request = cache.requestUrl(kMissingResourceId, [callbackCount](std::string) { callbackCount.increment(); });
       REQUIRE(request);
-      REQUIRE(executor.drainUntil([&] { return loadCount.load() == 1; }));
+      REQUIRE(executor.drainUntil([&] { return readCount.load() == 1; }));
 
       runtime.requestStop();
       runtime.join();

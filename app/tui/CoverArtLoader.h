@@ -7,7 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 
 #include <chrono>
@@ -20,7 +20,7 @@
 
 namespace ao::rt
 {
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
 }
 
 namespace ao::tui
@@ -38,7 +38,7 @@ namespace ao::tui
    * Detail follows the track table, so a held arrow key walks through covers
    * the user never sees. Each request therefore waits out
    * @ref kCoverArtSelectionSettleInterval before it reads anything: cancelling
-   * an interest does not unstart a read the shared loader has already begun,
+   * an interest does not unstart a read the shared memory cache has already begun,
    * and every skipped read is a cover re-extracted from a media file for
    * nothing.
    */
@@ -47,7 +47,7 @@ namespace ao::tui
   public:
     using RefreshCallback = std::function<void()>;
 
-    CoverArtLoader(rt::ResourceByteLoader& byteLoader,
+    CoverArtLoader(rt::ResourceByteMemoryCache& byteCache,
                    async::Runtime& runtime,
                    CoverArtDeliveryMode mode,
                    RefreshCallback refresh,
@@ -81,7 +81,7 @@ namespace ao::tui
                                   std::stop_token stopToken);
     void startByteRequest(ResourceId resourceId);
 
-    rt::ResourceByteLoader& _byteLoader;
+    rt::ResourceByteMemoryCache& _byteCache;
     async::Runtime& _runtime;
     CoverArtDeliveryMode _mode;
     RefreshCallback _refresh;
@@ -89,7 +89,7 @@ namespace ao::tui
     ResourceId _resourceId = kInvalidResourceId;
     std::optional<CoverArtRows> _optPreview;
     std::optional<std::vector<std::byte>> _optKittyPng;
-    rt::ResourceByteLoader::Request _byteRequest;
+    rt::ResourceByteMemoryCache::Request _byteRequest;
     // Declared last so teardown requests stop before any callback target dies.
     async::TaskHandle _settleTask;
     async::TaskHandle _task;

@@ -53,13 +53,13 @@ The [application config reference](application-config.md) owns what a store with
 | `<config>/user.css` | Optional user-authored GTK style override | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it |
 | `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state | `ShellLayoutComponentStateStore` |
 | `<cache>/aobus/logs/` | GTK operational logs | Runtime logging configured by the GTK composition root |
-| `<cache>/aobus/mpris-art/` | Exported cover-art files used by MPRIS file URLs | `MprisArtUrlCache` |
+| `<cache>/aobus/mpris-art/` | Owner-only derived cover-art files atomically published for same-user MPRIS file URLs | `MprisArtUrlCache` |
 
 ### Cross-frontend derived cache
 
 | Location | Class | Writer or reader |
 |---|---|---|
-| `<app-cache>/cover/` | Derived cover-art cache, shared by every library opened on the machine | `ResourceDiskCache`, constructed by the runtime from the directory its composition root supplied |
+| `<app-cache>/cover/` | Derived cover-art cache, shared by every library opened on the machine | `ResourceByteDiskCache`, constructed by the runtime from the directory its composition root supplied |
 
 Entries are named by content digest, so two libraries holding one cover share one entry and neither can serve the other a wrong image.
 The directory is discardable: deleting it changes no library fact and can change only what is displayed when every audio file carrying a cover is already gone.
@@ -128,6 +128,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) resolves global GTK config, layout, component-state, log, selected-root, and workspace locations.
 - [`GtkStyleRuntime.cpp`](../../../app/linux-gtk/app/GtkStyleRuntime.cpp) resolves `user.css`.
 - [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) resolves the MPRIS artwork cache.
+- [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) owns the shared derived cover-cache layout below the supplied runtime cache directory.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
 - [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store.

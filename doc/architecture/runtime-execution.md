@@ -80,7 +80,7 @@ The first task in a pending burst owns the wake request, and drain completion re
 
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
 Library scans, import/export, identity indexing, delayed checkpoints, and other potentially blocking work run there and explicitly resume on the callback executor before touching executor-affine state or returning UI-facing completion.
-Interactive resource delivery follows the same boundary without entering library maintenance: `ResourceMaterializer` copies descriptor and carrier evidence under a worker-side read transaction, materializes bounded owned bytes, and `ResourceByteLoader` delivers them through the runtime callback executor; GTK, TUI, WinUI, and MPRIS then perform their platform transforms or file work on workers and return through the frontend callback executor.
+Interactive resource reading follows the same boundary without entering library maintenance: `ResourceByteReader` copies descriptor and carrier evidence under a worker-side read transaction, reads verified bounded bytes after closing it, and `ResourceByteMemoryCache` completes requests through the runtime callback executor; GTK, TUI, WinUI, and MPRIS then perform their platform transforms or file work on workers and return through the frontend callback executor.
 Those consumers carry copied values across suspension and revalidate owner lifetime plus current resource identity before publication.
 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.

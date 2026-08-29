@@ -3,13 +3,13 @@ id: resource.cover-art-delivery
 type: spec
 status: current
 domain: resource
-summary: Defines descriptor creation, primary cover selection, content-addressed materialization, graphical placeholders, frontend transforms, and MPRIS export behavior.
+summary: Defines descriptor creation, primary cover selection, verified byte reading, graphical placeholders, frontend transforms, and MPRIS export behavior.
 ---
 # Cover-art resource delivery
 
 ## Scope
 
-This specification defines current behavior for describing cover content by digest, attaching ordered cover references, selecting a primary cover, materializing bytes through runtime from a derived cache or a carrier media file, and delivering cover art through GTK, WinUI, TUI, MPRIS, and CLI.
+This specification defines current behavior for describing cover content by digest, attaching ordered cover references, selecting a primary cover, reading verified bytes through runtime from a derived cache or a carrier media file, and delivering cover art through GTK, WinUI, TUI, MPRIS, and CLI.
 The [resource descriptor reference](../../reference/resource/blob.md) owns exact ids, descriptor fields, and store operations, while the [track model](../../reference/library/model/track.md) owns the exact cover and picture-type surface.
 
 ## Code boundary
@@ -22,7 +22,7 @@ Core owns descriptors and track references, runtime owns the source walk, encode
 - **Resource**: cover content identified by its SHA-256 digest, named inside one library by a nonzero `ResourceId` derived from that digest.
 - **Descriptor**: the persisted row for a resource: its 32-byte digest and the 32-bit byte length of the content it names. The library stores no cover bytes.
 - **Carrier**: an audio file a track references, whose embedded pictures may hold a resource's content.
-- **Derived cover cache**: a digest-keyed directory of materialized cover files outside the library, shared by every library on the machine.
+- **Derived cover cache**: a digest-keyed directory of verified cover payloads outside the library, shared by every library on the machine.
 - **Cover entry**: one ordered `(ResourceId, PictureType)` track value.
 - **Primary cover**: the first front cover, otherwise the first entry.
 - **Full-size GTK image**: a pixbuf decoded without thumbnail-size downscaling before `ImageWidget` rendering.
@@ -53,15 +53,15 @@ A track stores zero or more ordered references.
 Runtime rows, detail snapshots, and now-playing state hold one primary id or the invalid sentinel.
 
 Runtime holds one immutable `ResourceId`-to-carrier-URI snapshot per library revision, built lazily on the first cover request and republished when the revision moves.
-A materialization already holding a snapshot finishes against it.
+A read already holding a snapshot finishes against it.
 The derived cover cache lives under the composition root's application cache directory, in a `cover` subdirectory whose entries are named by digest; it is shared across libraries, converged toward a 256 MiB budget, and evicted least-recently-used.
 A composition root that supplies no cache directory leaves the cache inert, and every cover is then re-extracted on each in-process byte-cache miss; content whose carrier files have all gone is then not deliverable at all, because the cache is the only tier that could still hold it.
 
 GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
 A `ResourceImageController` maintains one optional active image interest, while `CoverArtView` distinguishes empty, no-cover placeholder, and decoded-image presentation and delegates decoded-image rendering to `ImageWidget`.
 
-Runtime shares coalesced encoded-byte loads and a cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers of one library runtime.
-Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or loader destruction.
+Runtime shares one read-through memory cache bounded to 128 entries and 128 MiB of aggregate encoded bytes among GTK, TUI, WinUI, and MPRIS consumers of one library runtime.
+Each delivered `ResourceBytes` value owns immutable shared storage and remains valid after cache eviction or destruction.
 Each presenter retains one generation-fenced selection.
 Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
 
@@ -82,19 +82,19 @@ Scan preparation converts embedded picture bytes into observed descriptors befor
 
 ### Runtime read and propagation
 
-The source-private `ResourceMaterializer` owned by `CoreRuntime` is the only runtime materialization implementation, interactive and administrative alike.
-It resolves the descriptor and the carrier snapshot under a short worker-side read transaction, closes that transaction, and then walks two tiers: the derived cover cache first, then each carrier URI the snapshot names, in a stable order.
+The source-private `ResourceByteReader` owned by `CoreRuntime` is the only runtime whole-payload reader, for interactive consumers and export alike.
+Its entry may begin on any executor; a valid request goes directly to a worker, resolves the descriptor and the carrier snapshot under a short read transaction, closes that transaction, and then walks two tiers: the derived cover cache first, then each carrier URI the snapshot names, in a stable order.
 A cache entry is served only when its content hashes to the digest; an entry that fails verification is discarded rather than served.
 A carrier is opened, its embedded pictures are hashed, and the first picture matching the digest answers; a carrier that cannot be read or carries no match advances to the next candidate.
-Content materialized from a carrier is installed in the cover cache when the cache is enabled and the content is within the cache's per-entry maximum.
+Content read from a carrier is installed through visibility-only atomic publication when the cache is enabled and the content is within the cache's per-entry maximum; the derived entry is owner-only and pays no durability barrier.
 The result is returned as owned bytes on the callback executor, and the read publishes no library task progress or maintenance state.
 
-Its interactive entry applies the 32 MiB encoded-byte limit below; its administrative entry applies none, which is the exemption CLI raw export keeps.
-An invalid id, an absent descriptor, or a walk that no source could satisfy returns an engaged result containing `nullopt`; materialized bytes above the caller's ceiling return `ValueTooLarge`; cancellation throws `OperationCancelled` and stops the walk between candidates.
+Its interactive entry applies the 32 MiB encoded-byte limit below; its export entry applies none.
+An invalid id, an absent descriptor, or a walk that no source could satisfy returns an engaged result containing `nullopt`; bytes above the caller's ceiling return `ValueTooLarge`; cancellation throws `OperationCancelled` and stops the walk between candidates.
 A stale reference that no source can satisfy is never rewritten by a read.
 
-`ResourceByteLoader` is constructed with one asynchronous byte source and one callback runtime for its whole life.
-`AppRuntime` owns one loader value and binds its source to the private interactive materializer in the owned `CoreRuntime`; the same `(async::Runtime&, ReadBytes)` constructor accepts an explicit controlled source in focused tests.
+`ResourceByteMemoryCache` is constructed with one asynchronous reader and one callback runtime for its whole life.
+`AppRuntime` owns one cache value and binds its miss path to the private interactive reader in the owned `CoreRuntime`; the same `(async::Runtime&, ReadBytes)` constructor accepts a controlled reader in focused tests.
 Interactive consumers borrow that value through `AppRuntime::resourceBytes()`.
 An invalid id rejects a request without invoking its callback.
 On a cache miss, equal ids share one source read and each active interest receives completion on the constructor-selected callback executor.
@@ -161,10 +161,10 @@ The requested physical size is at least `1` and is derived from logical size tim
 Cache lookup rejects a pixbuf whose largest decoded dimension is below that size.
 
 On a miss, an equal in-flight `(id, physical size)` request is shared.
-The shared loader reads through `ResourceByteLoader` and asks Gdk to decode at scale on a worker; callback-executor completion inserts a valid pixbuf into the cache before notifying active interests.
+The shared image loader requests bytes through `ResourceByteMemoryCache` and asks Gdk to decode at scale on a worker; callback-executor completion inserts a valid pixbuf into the image cache before notifying active interests.
 Resetting one request deactivates only its callback interest.
 Completion erases the flight before ordered callback fanout, so a callback may request the same key as new work.
-The same platform-neutral coalescer contract is used by runtime encoded-byte delivery and MPRIS file-URL materialization.
+The same platform-neutral coalescer contract is used by the runtime memory cache and MPRIS file-URL export.
 Each transform flight retains its exact upstream byte-request registration until completion or clear; a stale token rejects and releases a dependency instead of attaching it to a replacement flight.
 
 The widget controller cancels its old interest on every full-size or thumbnail load and clear, clears a recycled image on miss, and accepts completion only through its current interest.
@@ -175,11 +175,11 @@ Selecting no group or Inspector entity clears and hides both decoded image and p
 Now Playing instead selects its configured placeholder when there is no active track.
 Selecting an invalid id for an entity clears the decoded image and displays the slot's fixed no-cover placeholder.
 Selecting a valid id hides the placeholder before consulting the encoded-byte cache or starting an asynchronous runtime read.
-An `AppRuntime`-owned `ResourceByteLoader` coalesces equal resource requests and shares its bounded encoded-byte cache among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the loader.
+An `AppRuntime`-owned `ResourceByteMemoryCache` coalesces equal resource requests and shares retained encoded bytes among group-heading, Inspector, Now Playing, and SMTC presenters; the window destroys every presenter before releasing the session runtime that owns the cache.
 A current cached or loaded payload is copied into owning native memory on a worker; the callback executor wraps that memory as a random-access stream and replaces the image through the native XAML decoder without another application payload copy.
 Absent, over-budget, or undecodable valid resources leave both the decoded image and placeholder hidden.
 Selection replacement, reset, and teardown reject stale completion through generation and task lifetime.
-SMTC keeps its own active request interest and current resource id while consuming the same window-loader bytes; it does not introduce another byte cache or read workflow.
+SMTC keeps its own active request interest and current resource id while consuming the same runtime-cached bytes; it does not introduce another byte cache or read workflow.
 
 ### TUI
 
@@ -202,11 +202,11 @@ The settle window decides only whether a read is worth starting; the current-res
 ### MPRIS and CLI
 
 MPRIS invalid or absent resources produce no art URL.
-The cache validates a memoized file on a worker, or asynchronously reads the resource and writes original bytes there.
-It sniffs PNG, JPEG, GIF, and WebP signatures, otherwise uses `.img`; it writes `<resource-id><extension>`, removes stale known sibling extensions, and returns a file URI on the GTK callback executor.
+The cache validates a memoized file on a worker, or asynchronously reads the resource and publishes original bytes there through owner-only, same-directory atomic replacement.
+It sniffs PNG, JPEG, GIF, and WebP signatures, otherwise uses `.img`; it publishes `<resource-id><extension>` without durability barriers, removes stale known sibling extensions only after replacement succeeds, and returns a file URI on the GTK callback executor.
 Metadata for a new now-playing resource is first published without `mpris:artUrl`; the URL completion causes replacement metadata only if that resource is still current.
 
-CLI list reports each descriptor's id and described length, and export materializes through the same walk with no ceiling, writing the content or reporting absence and exiting nonzero.
+CLI list reports each descriptor's id and described length, and export reads through the same verified path with no ceiling, writing the content or reporting absence and exiting nonzero.
 Absence is reported as a row that does not exist or as a row no source could reproduce; the distinction is read after the walk, in its own transaction.
 
 ## Failure and cancellation
@@ -221,7 +221,7 @@ Deleting the cache directory changes no library fact, and can change only what i
 GTK decode catches `Glib::Error` and publishes an empty result.
 WinUI native decode catches `hresult_error`, logs the adapter diagnostic, and retains the empty valid-resource state.
 An unexpected non-cancellation failure in GTK, runtime resource-byte, or MPRIS shared loading is reported once, completes the flight with the owner's empty result, and leaves the key eligible for retry.
-GTK, MPRIS, and runtime resource-byte loader destruction cancel and destroy their lifetime scopes before clearing shared request flights; runtime resource-byte loader destruction also clears its byte cache before releasing the constructor-selected source and callback runtime.
+GTK image-loader, MPRIS cache, and runtime byte-cache destruction cancel their lifetime scopes before clearing shared request flights; runtime byte-cache destruction also clears retained bytes before releasing the constructor-selected reader and callback runtime.
 TUI destruction cancels its settle and transform tasks and its byte interest.
 Every owner access follows a cancellation-checked callback-executor transition.
 Individual GTK, runtime resource-byte, and MPRIS interests may be cancelled without discarding successful shared cache work.
@@ -236,15 +236,15 @@ Decode or file-export failure degrades to no image/URL and logs where the adapte
 
 | Boundary | Limit | Result when exceeded |
 | --- | ---: | --- |
-| Materialized resource bytes for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
-| Runtime encoded-byte cache per loader | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
+| Resource bytes read for GTK, WinUI, TUI, or MPRIS | 32 MiB | `ValueTooLarge`, adapted to no decoded image/URL |
+| Runtime encoded-byte memory cache | 128 entries and 128 MiB aggregate | least-recently-used entries are evicted |
 | GTK or TUI source width or height | 8192 pixels | no image |
 | GTK or TUI decoded source pixels | 32,000,000 | no image |
 | TUI generated Kitty PNG retained bytes | 8 MiB | no image |
 
-Limits are inclusive, and a ceiling applies to materialized bytes rather than to a descriptor's declared length.
-CLI raw resource export is administrative and is not constrained by these interactive limits.
-Content above the interactive ceiling is never installed in the cover cache, whichever caller materialized it.
+Limits are inclusive, and a ceiling applies to bytes actually read rather than to a descriptor's declared length.
+CLI raw resource export is not constrained by these interactive limits.
+Content above the interactive ceiling is never installed in the cover cache, whichever caller read it.
 
 ## Persistence and versioning
 
@@ -266,7 +266,7 @@ GTK displays the configured slot placeholder for an invalid id, keeps the Now Pl
 The GTK Now Playing cover tooltip appears only for a successfully decoded current image; under the [shell tooltip scheduling contract](../shell/layout-lifecycle.md#expand-and-build), an image that becomes available beneath a stationary pointer remains closed until the pointer leaves and re-enters.
 WinUI displays fixed `monogram`, `vinyl`, and `equalizer` placeholders in group heading, Inspector, and Now Playing respectively, derives the vinyl outer ring and center label from the current shared theme accent, keeps the Now Playing placeholder visible without an active track, and applies the same invalid-id/pending-valid distinction through generation-fenced presenters.
 TUI shows its no-cover placeholder while delivery is pending and when the resource is absent, over-budget, or undecodable; that placeholder is one compact line inside the detail frame rather than a reserved artwork panel.
-MPRIS omits `mpris:artUrl` while file materialization is pending and when no valid file URL can be produced.
+MPRIS omits `mpris:artUrl` while file export is pending and when no valid file URL can be produced.
 
 These degradation states do not remove or rewrite a track's cover reference.
 
@@ -274,9 +274,9 @@ These degradation states do not remove or rewrite a track's cover reference.
 
 - [`Sha256.cpp`](../../../lib/utility/Sha256.cpp) and [`ResourceLayout.cpp`](../../../lib/library/ResourceLayout.cpp) own the digest facility, the descriptor bytes, and id derivation.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp), [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp), and [`TrackView.cpp`](../../../lib/library/TrackView.cpp) own creation and primary selection.
-- [`LibrarySnapshot.cpp`](../../../app/runtime/library/LibrarySnapshot.cpp) owns synchronous cover identity reads; [`ResourceMaterializer.cpp`](../../../app/runtime/resource/ResourceMaterializer.cpp) owns the asynchronous read entry points and carrier-index slot.
-- [`ResourceMaterialization.cpp`](../../../app/runtime/resource/ResourceMaterialization.cpp) owns the two-tier walk, [`ResourceCarrierIndex.cpp`](../../../app/runtime/resource/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceDiskCache.cpp`](../../../app/runtime/resource/ResourceDiskCache.cpp) owns the derived cover cache.
-- [`ResourceByteLoader`](../../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../../app/include/ao/rt/resource/ResourceByteCache.h) own `AppRuntime`-scoped encoded-byte delivery and retention.
+- [`LibrarySnapshot.cpp`](../../../app/runtime/library/LibrarySnapshot.cpp) owns synchronous cover identity reads; [`ResourceByteReader.cpp`](../../../app/runtime/resource/ResourceByteReader.cpp) owns the asynchronous entry points, verified two-tier read, and carrier-index slot.
+- [`ResourceCarrierIndex.cpp`](../../../app/runtime/resource/ResourceCarrierIndex.cpp) owns the reverse index, and [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) owns the derived cover cache.
+- [`ResourceByteMemoryCache`](../../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../../app/include/ao/rt/resource/ResourceBytes.h) own `AppRuntime`-scoped encoded-byte coalescing, retention, and shared ownership.
 - [`RequestCoalescer`](../../../include/ao/async/RequestCoalescer.h) owns equal-key flight sharing, independently cancellable interests, retained upstream dependencies, and exact-flight completion fencing.
 - [`CoverArtPlaceholder.h`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h) owns platform-neutral placeholder policy.
 - GTK image delivery lives under [`app/linux-gtk/image/`](../../../app/linux-gtk/image/), including [`CoverArtView`](../../../app/linux-gtk/image/CoverArtView.h).
@@ -291,9 +291,9 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) and [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protect published digest vectors, descriptor bytes, and id derivation.
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior, including counted observed descriptors and a searched id collision resolved by the probe.
 - [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) protects scan-time conversion from borrowed picture bytes to observed descriptors.
-- [`ResourceMaterializationTest.cpp`](../../../test/unit/runtime/resource/ResourceMaterializationTest.cpp) protects the walk, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceMaterializerTest.cpp`](../../../test/unit/runtime/resource/ResourceMaterializerTest.cpp) protects callback affinity, absence, both limits, cancellation, lazy index construction, and one rebuild per stale revision across several workers; [`ResourceDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
+- [`ResourceByteReadTest.cpp`](../../../test/unit/runtime/resource/ResourceByteReadTest.cpp) protects the walk, carrier fallback, cancellation, and a restored library serving a cover with no rescan; [`ResourceByteReaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteReaderTest.cpp) protects callback affinity, absence, both limits, cancellation, lazy index construction, and one rebuild per stale revision across several workers; [`ResourceByteDiskCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteDiskCacheTest.cpp) protects verification, eviction, touch throttling, and unwritable-directory tolerance.
 - [`RequestCoalescerTest.cpp`](../../../test/unit/async/RequestCoalescerTest.cpp) protects shared flight, cancellation, fanout, retry, and clear-generation behavior across frontend adapters.
-- [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond loader destruction, application-runtime and controlled-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement loader.
+- [`ResourceByteMemoryCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond cache destruction, application-runtime and controlled-reader paths, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement cache.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
 - [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
@@ -301,7 +301,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, the selection-settle window and navigation-burst cost, supported decode, limits, block preview, PNG, and Kitty escapes.
 - [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects file extensions, rewriting, stale siblings, missing ids, and URL metadata.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
+- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
 
 ## Related documents
 

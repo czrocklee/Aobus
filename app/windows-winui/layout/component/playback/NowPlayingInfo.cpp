@@ -62,7 +62,7 @@ namespace ao::winui::layout
       NowPlayingInfoComponent(LayoutBuildContext& ctx,
                               async::Runtime& asyncRuntime,
                               rt::PlaybackService& playback,
-                              rt::ResourceByteLoader& resourceBytes,
+                              rt::ResourceByteMemoryCache& resourceBytes,
                               ThemeCoordinator& theme,
                               i18n::MessageCatalog const& textCatalog,
                               async::Signal<ShellState>& shellStateChanged)
@@ -167,7 +167,7 @@ namespace ao::winui::layout
                                                               uimodel::LayoutNode const& /*node*/,
                                                               async::Runtime& asyncRuntime,
                                                               rt::PlaybackService& playback,
-                                                              rt::ResourceByteLoader& resourceBytes,
+                                                              rt::ResourceByteMemoryCache& resourceBytes,
                                                               ThemeCoordinator& theme,
                                                               i18n::MessageCatalog const& textCatalog,
                                                               async::Signal<ShellState>& shellStateChanged)

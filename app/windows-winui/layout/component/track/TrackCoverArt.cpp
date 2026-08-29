@@ -69,7 +69,7 @@ namespace ao::winui::layout
                              uimodel::CoverArtPlaceholderStyle const style,
                              async::Runtime& asyncRuntime,
                              rt::WorkspaceService& workspace,
-                             rt::ResourceByteLoader& resourceBytes,
+                             rt::ResourceByteMemoryCache& resourceBytes,
                              ThemeCoordinator& theme,
                              i18n::MessageCatalog textCatalog)
         : _textCatalog{std::move(textCatalog)}
@@ -149,7 +149,7 @@ namespace ao::winui::layout
                                                              uimodel::LayoutNode const& node,
                                                              async::Runtime& asyncRuntime,
                                                              rt::WorkspaceService& workspace,
-                                                             rt::ResourceByteLoader& resourceBytes,
+                                                             rt::ResourceByteMemoryCache& resourceBytes,
                                                              ThemeCoordinator& theme,
                                                              i18n::MessageCatalog textCatalog)
   {

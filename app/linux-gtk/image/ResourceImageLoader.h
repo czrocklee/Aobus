@@ -6,6 +6,7 @@
 #include "image/ImageCache.h"
 #include "image/ImageRenderPolicy.h"
 #include <ao/CoreIds.h>
+#include <ao/async/LifetimeScope.h>
 #include <ao/async/RequestCoalescer.h>
 #include <ao/async/Task.h>
 #include <ao/rt/resource/ResourceBytes.h>
@@ -16,18 +17,16 @@
 
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <stop_token>
 
 namespace ao::rt
 {
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
 }
 
 namespace ao::async
 {
   class Runtime;
-  class LifetimeScope;
 }
 
 namespace ao::gtk
@@ -46,7 +45,7 @@ namespace ao::gtk
     using OnImageReady = std::function<void(Glib::RefPtr<Gdk::Pixbuf> const&)>;
     using Request = utility::ScopedRegistration;
 
-    ResourceImageLoader(rt::ResourceByteLoader& byteLoader, ImageCache& cache, async::Runtime& runtime);
+    ResourceImageLoader(rt::ResourceByteMemoryCache& byteCache, ImageCache& cache, async::Runtime& runtime);
     ~ResourceImageLoader();
 
     ResourceImageLoader(ResourceImageLoader const&) = delete;
@@ -86,10 +85,10 @@ namespace ao::gtk
                                     OnImageReady onReady,
                                     std::stop_token stopToken);
 
-    rt::ResourceByteLoader& _byteLoader;
+    rt::ResourceByteMemoryCache& _byteCache;
     ImageCache& _cache;
     async::Runtime& _runtime;
-    std::unique_ptr<async::LifetimeScope> _scopePtr;
+    async::LifetimeScope _scope;
     Requests _requests;
   };
 } // namespace ao::gtk
