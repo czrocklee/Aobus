@@ -14,7 +14,7 @@ namespace ao::uimodel
 }
 namespace ao::rt
 {
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
   class WorkspaceService;
 }
 namespace ao::async
@@ -47,7 +47,7 @@ namespace ao::winui::layout
                                                              uimodel::LayoutNode const& node,
                                                              async::Runtime& asyncRuntime,
                                                              rt::WorkspaceService& workspace,
-                                                             rt::ResourceByteLoader& resourceBytes,
+                                                             rt::ResourceByteMemoryCache& resourceBytes,
                                                              ThemeCoordinator& theme,
                                                              i18n::MessageCatalog textCatalog);
 } // namespace ao::winui::layout

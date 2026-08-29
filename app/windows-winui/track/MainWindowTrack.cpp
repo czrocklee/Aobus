@@ -173,8 +173,7 @@ namespace winrt::Aobus::implementation
 
     auto const row = tile.DataContext().try_as<ProjectedTrackRowItem>();
 
-    if (!row || !row.IsGroupHeader() || _resourceBytesPtr == nullptr || _themePtr == nullptr || _session == nullptr ||
-        tile.Children().Size() < 2)
+    if (!row || !row.IsGroupHeader() || _themePtr == nullptr || _session == nullptr || tile.Children().Size() < 2)
     {
       if (presenterIt != _groupCoverPresenters.end())
       {
@@ -204,7 +203,7 @@ namespace winrt::Aobus::implementation
       auto presenterPtr = std::make_unique<ao::winui::CoverArtPresenter>(
         image,
         placeholder,
-        *_resourceBytesPtr,
+        _session->runtime().resourceBytes(),
         *_themePtr,
         ao::uimodel::defaultCoverArtPlaceholderStyle(ao::uimodel::CoverArtPlaceholderSlot::GroupHeading));
       presenterPtr->bind(_session->runtime().async());

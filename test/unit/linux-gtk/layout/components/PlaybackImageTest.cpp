@@ -28,7 +28,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -191,8 +190,8 @@ namespace ao::gtk::layout::test
     ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), kCorruptCoverBytes);
 
     auto imageCachePtr = std::make_unique<ImageCache>(10);
-    auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
-    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
+      fixture.runtime().resourceBytes(), *imageCachePtr, fixture.runtime().async());
     auto& ctx = fixture.context();
     auto const textCatalog = ao::test::messageCatalog("en");
     registerPlaybackImageComponent(fixture.components(), fixture.runtime(), imageLoaderPtr.get(), textCatalog);

@@ -4,11 +4,11 @@
 #include "MprisArtUrlCache.h"
 
 #include <ao/CoreIds.h>
-#include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
+#include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Path.h>
 
@@ -19,9 +19,6 @@
 #include <array>
 #include <cstddef>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -37,24 +34,21 @@ namespace ao::gtk::platform
     constexpr auto kKnownExtensions = std::array<std::string_view, 5>{".png", ".jpg", ".gif", ".webp", ".img"};
   } // namespace
 
-  MprisArtUrlCache::MprisArtUrlCache(rt::ResourceByteLoader& byteLoader, async::Runtime& runtime)
-    : MprisArtUrlCache{byteLoader, runtime, defaultCacheDirectory()}
+  MprisArtUrlCache::MprisArtUrlCache(rt::ResourceByteMemoryCache& byteCache, async::Runtime& runtime)
+    : MprisArtUrlCache{byteCache, runtime, defaultCacheDirectory()}
   {
   }
 
-  MprisArtUrlCache::MprisArtUrlCache(rt::ResourceByteLoader& byteLoader,
+  MprisArtUrlCache::MprisArtUrlCache(rt::ResourceByteMemoryCache& byteCache,
                                      async::Runtime& runtime,
                                      std::filesystem::path cacheDir)
-    : _byteLoader{byteLoader}
-    , _runtime{runtime}
-    , _cacheDir{std::move(cacheDir)}
-    , _scopePtr{std::make_unique<async::LifetimeScope>()}
+    : _byteCache{byteCache}, _runtime{runtime}, _cacheDir{std::move(cacheDir)}
   {
   }
 
   MprisArtUrlCache::~MprisArtUrlCache()
   {
-    _scopePtr->cancelAll();
+    _scope.cancelAll();
     _requests.clear();
   }
 
@@ -88,7 +82,16 @@ namespace ao::gtk::platform
       resourceId,
       std::move(callback),
       [this, resourceId, optCachedEntry = std::move(optCachedEntry)](Requests::FlightToken token) mutable
-      { spawnMaterialization(resourceId, std::move(optCachedEntry), std::move(token)); });
+      {
+        if (optCachedEntry)
+        {
+          startEntryValidation(resourceId, std::move(*optCachedEntry), std::move(token));
+        }
+        else
+        {
+          requestBytes(resourceId, std::move(token));
+        }
+      });
   }
 
   std::filesystem::path MprisArtUrlCache::defaultCacheDirectory()
@@ -142,57 +145,30 @@ namespace ao::gtk::platform
     return ".img";
   }
 
-  void MprisArtUrlCache::spawnMaterialization(ResourceId const resourceId,
-                                              std::optional<CacheEntry> optCachedEntry,
+  void MprisArtUrlCache::startEntryValidation(ResourceId const resourceId,
+                                              CacheEntry cachedEntry,
                                               Requests::FlightToken token)
   {
     _runtime.spawnWithLifetime(
-      *_scopePtr,
-      [cache = this,
-       runtime = &_runtime,
-       resourceId,
-       optCachedEntry = std::move(optCachedEntry),
-       token = std::move(token)](std::stop_token const stopToken) mutable
-      { return validate(cache, runtime, resourceId, std::move(optCachedEntry), std::move(token), stopToken); },
+      _scope,
+      [cache = this, runtime = &_runtime, resourceId, cachedEntry = std::move(cachedEntry), token = std::move(token)](
+        std::stop_token const stopToken) mutable
+      { return validateEntry(cache, runtime, resourceId, std::move(cachedEntry), std::move(token), stopToken); },
       "MPRIS cover-art cache validation");
-  }
-
-  async::Task<void> MprisArtUrlCache::validate(MprisArtUrlCache* const cache,
-                                               async::Runtime* const runtime,
-                                               ResourceId const resourceId,
-                                               std::optional<CacheEntry> optCachedEntry,
-                                               Requests::FlightToken token,
-                                               std::stop_token const stopToken)
-  {
-    if (optCachedEntry)
-    {
-      co_await runtime->resumeOnWorker(stopToken);
-
-      if (isCacheEntryValid(*optCachedEntry))
-      {
-        co_await runtime->resumeOnCallbackExecutor(stopToken);
-        cache->_cache[resourceId] = *optCachedEntry;
-        cache->_requests.complete(token, optCachedEntry->url);
-        co_return;
-      }
-    }
-
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
-    cache->requestBytes(resourceId, std::move(token));
   }
 
   void MprisArtUrlCache::requestBytes(ResourceId const resourceId, Requests::FlightToken token)
   {
-    auto dependency = _byteLoader.request(resourceId,
-                                          [this, resourceId, token](rt::ResourceBytes bytes) mutable
-                                          { spawnExport(resourceId, std::move(token), std::move(bytes)); });
+    auto dependency = _byteCache.request(resourceId,
+                                         [this, resourceId, token](rt::ResourceBytes bytes) mutable
+                                         { spawnExport(resourceId, std::move(token), std::move(bytes)); });
     _requests.retainDependency(token, std::move(dependency));
   }
 
   void MprisArtUrlCache::spawnExport(ResourceId const resourceId, Requests::FlightToken token, rt::ResourceBytes bytes)
   {
     _runtime.spawnWithLifetime(
-      *_scopePtr,
+      _scope,
       [cache = this,
        runtime = &_runtime,
        cacheDir = _cacheDir,
@@ -204,6 +180,27 @@ namespace ao::gtk::platform
           cache, runtime, std::move(cacheDir), resourceId, std::move(token), std::move(bytes), stopToken);
       },
       "MPRIS cover-art export");
+  }
+
+  async::Task<void> MprisArtUrlCache::validateEntry(MprisArtUrlCache* const cache,
+                                                    async::Runtime* const runtime,
+                                                    ResourceId const resourceId,
+                                                    CacheEntry cachedEntry,
+                                                    Requests::FlightToken token,
+                                                    std::stop_token const stopToken)
+  {
+    co_await runtime->resumeOnWorker(stopToken);
+
+    if (isCacheEntryValid(cachedEntry))
+    {
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      cache->_cache[resourceId] = cachedEntry;
+      cache->_requests.complete(token, cachedEntry.url);
+      co_return;
+    }
+
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    cache->requestBytes(resourceId, std::move(token));
   }
 
   async::Task<void> MprisArtUrlCache::exportBytes(MprisArtUrlCache* const cache,
@@ -257,34 +254,15 @@ namespace ao::gtk::platform
 
     auto const path =
       cacheDir / utility::pathFromUtf8(std::to_string(resourceId.raw()) + std::string{extensionForBytes(bytes)});
+
+    if (!utility::publishAtomically(path, utility::bytes::stringView(bytes)))
+    {
+      return std::nullopt;
+    }
+
+    // Keep the previously published URI readable until the replacement is
+    // complete, including when a new payload changes the inferred extension.
     removeStaleResourceFiles(cacheDir, resourceId, path);
-
-    auto output = std::ofstream{path, std::ios::binary | std::ios::trunc};
-
-    if (!output)
-    {
-      return std::nullopt;
-    }
-
-    auto const byteView = utility::bytes::stringView(bytes);
-    output.write(byteView.data(), static_cast<std::streamsize>(byteView.size()));
-    output.flush();
-
-    if (!output)
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove(path, ec);
-      return std::nullopt;
-    }
-
-    output.close();
-
-    if (!output)
-    {
-      auto ec = std::error_code{};
-      std::filesystem::remove(path, ec);
-      return std::nullopt;
-    }
 
     auto url = fileUriForPath(path);
 

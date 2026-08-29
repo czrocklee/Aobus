@@ -17,6 +17,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -82,7 +83,6 @@ namespace ao::gtk::test
                             library::test::TrackSpec{
                               .title = "Test Title", .artist = "Test Artist", .duration = std::chrono::minutes{2}});
                         }};
-    auto const& library = fixture.runtime().musicLibrary();
     auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
 
     {
@@ -92,8 +92,8 @@ namespace ao::gtk::test
 
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(trackId);
-      auto projectionPtr =
-        std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+      auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+        fixture.runtime().views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
       auto modelPtr = TrackListModel::create(cache);
       modelPtr->bindProjection(projectionPtr);
 

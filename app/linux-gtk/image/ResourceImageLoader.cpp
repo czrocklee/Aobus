@@ -6,11 +6,11 @@
 #include "image/ImageCache.h"
 #include "image/ImageRenderPolicy.h"
 #include <ao/CoreIds.h>
-#include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
+#include <ao/utility/ByteView.h>
 
 #include <gdkmm/pixbuf.h>
 #include <gdkmm/pixbufloader.h>
@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <stop_token>
 #include <utility>
@@ -87,7 +86,7 @@ namespace ao::gtk
       {
         auto const chunkSize = std::min(kDecodeInputChunkBytes, bytes.size() - offset);
         // Gdk's C API consumes the same raw object representation as unsigned bytes.
-        auto const* chunk = reinterpret_cast<guint8 const*>(bytes.data() + offset); // NOLINT
+        auto const* chunk = utility::bytes::unsignedCharData(bytes.subspan(offset, chunkSize));
         loaderPtr->write(chunk, chunkSize);
         offset += chunkSize;
       }
@@ -108,16 +107,16 @@ namespace ao::gtk
     }
   } // namespace
 
-  ResourceImageLoader::ResourceImageLoader(rt::ResourceByteLoader& byteLoader,
+  ResourceImageLoader::ResourceImageLoader(rt::ResourceByteMemoryCache& byteCache,
                                            ImageCache& cache,
                                            async::Runtime& runtime)
-    : _byteLoader{byteLoader}, _cache{cache}, _runtime{runtime}, _scopePtr{std::make_unique<async::LifetimeScope>()}
+    : _byteCache{byteCache}, _cache{cache}, _runtime{runtime}
   {
   }
 
   ResourceImageLoader::~ResourceImageLoader()
   {
-    _scopePtr->cancelAll();
+    _scope.cancelAll();
     _requests.clear();
   }
 
@@ -243,9 +242,9 @@ namespace ao::gtk
 
   void ResourceImageLoader::requestBytes(ImageCacheKey const key, Requests::FlightToken token)
   {
-    auto dependency = _byteLoader.request(key.resourceId,
-                                          [this, key, token](rt::ResourceBytes bytes) mutable
-                                          { spawnDecode(key, std::move(token), std::move(bytes)); });
+    auto dependency = _byteCache.request(key.resourceId,
+                                         [this, key, token](rt::ResourceBytes bytes) mutable
+                                         { spawnDecode(key, std::move(token), std::move(bytes)); });
     _requests.retainDependency(token, std::move(dependency));
   }
 
@@ -254,7 +253,7 @@ namespace ao::gtk
     // Runtime and its task service outlive this loader. Loader-owned state is
     // touched only after the cancellation-checked callback-executor hop.
     _runtime.spawnWithLifetime(
-      *_scopePtr,
+      _scope,
       [loader = this, runtime = &_runtime, key, token = std::move(token), bytes = std::move(bytes)](
         std::stop_token const stopToken) mutable
       { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); },

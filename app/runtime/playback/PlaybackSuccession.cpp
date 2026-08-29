@@ -91,15 +91,13 @@ namespace ao::rt
          library::MusicLibrary const& library,
          PlaybackTransport& transport,
          NotificationService& notifications,
-         async::Runtime& asyncRuntime,
-         TextOrderingPolicy const* orderingPolicy)
+         async::Runtime& asyncRuntime)
       : executor{executor}
       , views{views}
       , sources{sources}
       , library{library}
       , transport{transport}
       , notifications{notifications}
-      , textOrderingPolicy{orderingPolicy}
       , restartDeadline{asyncRuntime,
                         [this] { return this->transport.elapsed(); },
                         [this](bool const available) { handleRestartAvailabilityChanged(available); }}
@@ -1039,7 +1037,6 @@ namespace ao::rt
     library::MusicLibrary const& library;
     PlaybackTransport& transport;
     NotificationService& notifications;
-    TextOrderingPolicy const* textOrderingPolicy = nullptr;
     PlaybackSuccessionState state{};
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
@@ -1079,10 +1076,8 @@ namespace ao::rt
                                          library::MusicLibrary const& library,
                                          PlaybackTransport& transport,
                                          NotificationService& notifications,
-                                         async::Runtime& asyncRuntime,
-                                         TextOrderingPolicy const* textOrderingPolicy)
-    : _implPtr{std::make_unique<
-        Impl>(executor, views, sources, library, transport, notifications, asyncRuntime, textOrderingPolicy)}
+                                         async::Runtime& asyncRuntime)
+    : _implPtr{std::make_unique<Impl>(executor, views, sources, library, transport, notifications, asyncRuntime)}
   {
     _implPtr->start();
   }
@@ -1105,11 +1100,10 @@ namespace ao::rt
     auto candidateSessionRes = PlaybackCursorSession::create(*launchSpecRes,
                                                              startTrackId,
                                                              impl->sources,
-                                                             impl->library,
+                                                             impl->views,
                                                              impl->repeatMode,
                                                              impl->shuffleMode,
-                                                             impl->makeCandidateChooser(),
-                                                             impl->textOrderingPolicy);
+                                                             impl->makeCandidateChooser());
 
     if (!candidateSessionRes)
     {
@@ -1324,11 +1318,10 @@ namespace ao::rt
                                                    currentTrackId,
                                                    anchorIndex,
                                                    impl->sources,
-                                                   impl->library,
+                                                   impl->views,
                                                    restoredRepeatMode,
                                                    restoredShuffleMode,
-                                                   impl->makeCandidateChooser(),
-                                                   impl->textOrderingPolicy);
+                                                   impl->makeCandidateChooser());
   }
 
   // Every accepted restore step is part of this noexcept commit.
@@ -1353,6 +1346,9 @@ namespace ao::rt
     impl->restartDeadline.replaceSession(elapsed, false);
     impl->reprepareNext(false);
     impl->synchronizeState();
+
+    // Restore enters while the service is active, but signal delivery is
+    // synchronous: a shuffle observer may close it before the second emission.
     impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode});
 
     if (!impl->isClosing())

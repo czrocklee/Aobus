@@ -278,7 +278,7 @@ Parent existence and parent-cycle checks are cross-row logical-writer rules and 
 
 A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the machine's own byte order.
 Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding; a database file is bound to the architecture that created it either way.
-The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../spec/resource/cover-art-delivery.md) owns how it is materialized.
+The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../spec/resource/cover-art-delivery.md) owns how it is read and verified.
 The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
 Rows a track no longer references are retained and remain valid.
 
@@ -438,7 +438,6 @@ Transaction-local dictionary publication does not change the row shape or librar
 ## Related documents
 
 - [Resource descriptors](../../resource/blob.md)
-
 - [Library architecture](../../../architecture/library.md)
 - [LMDB operation specification](../../../spec/storage/lmdb-operation.md)
 - [Library access and mutation](../../../spec/library/runtime/mutation.md)

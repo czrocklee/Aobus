@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "track/TrackListModel.h"
 
@@ -55,8 +55,17 @@ namespace ao::gtk
     return modelPtr;
   }
 
+  void TrackListModel::bindProjection(std::unique_ptr<rt::TrackListProjection> projectionPtr)
+  {
+    // The model may have to defer the last release until after an invalidation
+    // callback unwinds. Promote ownership at that boundary, not at callers that
+    // otherwise own a transient projection exclusively.
+    bindProjection(std::shared_ptr<rt::TrackListProjection>{std::move(projectionPtr)});
+  }
+
   void TrackListModel::bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
   {
+    AO_EXPECTS(projectionPtr != nullptr, "TrackListModel projection must not be null; use clearProjection()");
     _projectionSub.reset();
     _projectionPtr = std::move(projectionPtr);
     _projectionSub = _projectionPtr->subscribe(std::bind_front(&TrackListModel::applyDeltaBatch, this));
@@ -64,9 +73,15 @@ namespace ao::gtk
 
   void TrackListModel::clearProjection()
   {
+    auto const oldSize = static_cast<::guint>(_modelSize);
     _projectionSub.reset();
     _projectionPtr = nullptr;
     _modelSize = 0;
+
+    if (oldSize != 0)
+    {
+      notifyReset(oldSize, 0);
+    }
   }
 
   std::optional<std::size_t> TrackListModel::indexOf(TrackId trackId) const noexcept

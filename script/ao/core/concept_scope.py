@@ -94,9 +94,9 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
         ),
     ),
     ConstructionChain(
-        leaf="rt.ResourceByteLoader",
-        path="app/include/ao/rt/resource/ResourceByteLoader.h",
-        steps=("ResourceByteLoader(CoreRuntime&)",),
+        leaf="rt.ResourceByteMemoryCache",
+        path="app/include/ao/rt/resource/ResourceByteMemoryCache.h",
+        steps=("ResourceByteMemoryCache(async::Runtime&, ReadBytes)",),
     ),
     ConstructionChain(
         leaf="uimodel.ActivityStatusFeedProjection",
@@ -111,7 +111,7 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
     ConstructionChain(
         leaf="winui.SmtcBridge",
         path="app/windows-winui/platform/SmtcBridge.h",
-        steps=("SmtcBridge(HWND, DispatcherQueue, AppRuntime&, PlaybackActions&, ResourceByteLoader&)",),
+        steps=("SmtcBridge(HWND, DispatcherQueue, AppRuntime&, PlaybackActions&, ResourceByteMemoryCache&)",),
     ),
 )
 

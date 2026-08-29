@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "runtime/library/ResourceMaterialization.h"
-
-#include "runtime/library/ResourceCarrierIndex.h"
+#include "runtime/resource/ResourceByteDiskCache.h"
+#include "runtime/resource/ResourceByteReader.h"
+#include "runtime/resource/ResourceCarrierIndex.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -22,10 +22,8 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
-#include <ao/rt/resource/ResourceDiskCache.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -115,40 +113,40 @@ namespace ao::rt::test
       ResourceId resourceId = kInvalidResourceId;
     };
 
-    ResourceDiskCache makeCache(std::filesystem::path const& root)
+    ResourceByteDiskCache makeCache(std::filesystem::path const& root)
     {
-      return ResourceDiskCache{ResourceDiskCache::Config{
+      return ResourceByteDiskCache{ResourceByteDiskCache::Config{
         .directory = coverCacheDirectory(root),
-        .maximumEntryBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+        .maximumEntryBytes = kMaximumInteractiveResourceBytes,
       }};
     }
 
-    ResourceDiskCache makeDisabledCache()
+    ResourceByteDiskCache makeDisabledCache()
     {
-      return ResourceDiskCache{ResourceDiskCache::Config{}};
+      return ResourceByteDiskCache{ResourceByteDiskCache::Config{}};
     }
   } // namespace
 
-  TEST_CASE("materializeResource - a carrier that still holds the content answers", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a carrier that still holds the content answers", "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK(**result == fixture.pictureBytes);
   }
 
-  TEST_CASE("materializeResource - a track whose own file is gone is served from another carrier",
+  TEST_CASE("readResourceBytes - a track whose own file is gone is served from another carrier",
             "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{3};
@@ -157,23 +155,23 @@ namespace ao::rt::test
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     // A failed source is never a failed request: a missing file costs a failed
     // open and the walk advances.
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK(**result == fixture.pictureBytes);
   }
 
-  TEST_CASE("materializeResource - a carrier that carries no matching picture advances to the next",
+  TEST_CASE("readResourceBytes - a carrier that carries no matching picture advances to the next",
             "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{2};
@@ -186,67 +184,67 @@ namespace ao::rt::test
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK(**result == fixture.pictureBytes);
   }
 
-  TEST_CASE("materializeResource - no carrier and no cache entry is no image", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - no carrier and no cache entry is no image", "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     CHECK_FALSE(*result);
   }
 
-  TEST_CASE("materializeResource - a carrier hit is cached, and the next request opens no file",
+  TEST_CASE("readResourceBytes - a carrier hit is cached, and the next request opens no file",
             "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
     auto const cache = makeCache(fixture.temp.path() / "cache");
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    REQUIRE(materializeResource(context, {}));
+    REQUIRE(readResourceBytes(context, {}));
     REQUIRE(cache.read(fixture.digest));
 
     // Every carrier is gone, so a hit now proves the cache answered alone: a valid
     // entry keeps a cover displayable until it is evicted.
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK(**result == fixture.pictureBytes);
   }
 
-  TEST_CASE("materializeResource - a stale reference no file can satisfy is not rewritten",
+  TEST_CASE("readResourceBytes - a stale reference no file can satisfy is not rewritten",
             "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
@@ -256,15 +254,15 @@ namespace ao::rt::test
 
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     CHECK_FALSE(*result);
 
@@ -284,8 +282,7 @@ namespace ao::rt::test
     CHECK(fixture.library.resources().reader(transaction).get(fixture.resourceId));
   }
 
-  TEST_CASE("materializeResource - materialized bytes above the caller's ceiling are refused",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - bytes above the caller's ceiling are refused", "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -293,38 +290,37 @@ namespace ao::rt::test
 
     SECTION("an interactive ceiling refuses them")
     {
-      auto const context = ResourceMaterializationContext{
+      auto const context = ResourceByteReadContext{
         .descriptor = fixture.descriptor(),
         .candidateUris = index.carrierUris(fixture.resourceId),
         .musicRoot = fixture.library.rootPath(),
-        .cache = cache,
+        .diskCache = cache,
         .optMaximumBytes = fixture.pictureBytes.size() - 1,
       };
 
-      auto result = materializeResource(context, {});
+      auto result = readResourceBytes(context, {});
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
 
-    SECTION("an administrative request has none")
+    SECTION("an export request has none")
     {
-      auto const context = ResourceMaterializationContext{
+      auto const context = ResourceByteReadContext{
         .descriptor = fixture.descriptor(),
         .candidateUris = index.carrierUris(fixture.resourceId),
         .musicRoot = fixture.library.rootPath(),
-        .cache = cache,
+        .diskCache = cache,
         .optMaximumBytes = std::nullopt,
       };
 
-      auto result = materializeResource(context, {});
+      auto result = readResourceBytes(context, {});
       REQUIRE(result);
       REQUIRE(*result);
       CHECK((*result)->size() == fixture.pictureBytes.size());
     }
   }
 
-  TEST_CASE("materializeResource - a declared length far from the truth blocks nothing",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a declared length far from the truth blocks nothing", "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -334,37 +330,37 @@ namespace ao::rt::test
     // read cannot repair a row, so a wrong hint would hide the picture forever.
     auto descriptor = fixture.descriptor();
     descriptor.byteLength = 40U * 1024U * 1024U;
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = descriptor,
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK((*result)->size() == fixture.pictureBytes.size());
   }
 
-  TEST_CASE("materializeResource - cancellation stops the walk between candidates",
+  TEST_CASE("readResourceBytes - cancellation stops the walk between candidates",
             "[runtime][unit][resource-walk][concurrency]")
   {
     auto fixture = CarrierFixture{3};
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(fixture.resourceId),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
     auto stopSource = std::stop_source{};
     REQUIRE(stopSource.request_stop());
-    CHECK_THROWS_AS(std::ignore = materializeResource(context, stopSource.get_token()), async::OperationCancelled);
+    CHECK_THROWS_AS(std::ignore = readResourceBytes(context, stopSource.get_token()), async::OperationCancelled);
   }
 
   TEST_CASE("ResourceCarrierIndex - a snapshot answers every request no newer than its stamp",
@@ -430,7 +426,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("materializeResource - a restored library serves a cover with no rescan",
+  TEST_CASE("readResourceBytes - a restored library serves a cover with no rescan",
             "[runtime][unit][resource-walk][cover]")
   {
     auto source = CarrierFixture{1};
@@ -456,34 +452,34 @@ namespace ao::rt::test
     CHECK(optDescriptor->digest == source.digest);
 
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = *optDescriptor,
       .candidateUris = optIndex->carrierUris(resourceId),
       .musicRoot = restored.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     REQUIRE(*result);
     CHECK(**result == source.pictureBytes);
   }
 
-  TEST_CASE("materializeResource - a resource with no candidate at all is no image", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a resource with no candidate at all is no image", "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
     auto const cache = makeDisabledCache();
-    auto const context = ResourceMaterializationContext{
+    auto const context = ResourceByteReadContext{
       .descriptor = fixture.descriptor(),
       .candidateUris = index.carrierUris(ResourceId{424242}),
       .musicRoot = fixture.library.rootPath(),
-      .cache = cache,
-      .optMaximumBytes = LibraryJobs::kMaximumInteractiveResourceBytes,
+      .diskCache = cache,
+      .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = materializeResource(context, {});
+    auto result = readResourceBytes(context, {});
     REQUIRE(result);
     CHECK_FALSE(*result);
   }

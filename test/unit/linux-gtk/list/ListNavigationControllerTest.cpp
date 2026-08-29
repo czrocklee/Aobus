@@ -17,10 +17,7 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -29,6 +26,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -50,6 +48,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -82,24 +81,15 @@ namespace ao::gtk::test
       return std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap.lookup_action(name));
     }
 
-    std::optional<library::ListView> findList(library::MusicLibrary const& library, ListId listId)
+    std::optional<rt::ListNode> findList(rt::AppRuntime& runtime, ListId listId)
     {
-      auto transaction = library.readTransaction();
-      auto reader = library.lists().reader(transaction);
-      return reader.get(listId);
+      return runtime.library().snapshot().listNode(listId);
     }
 
-    std::size_t countListsNamed(library::MusicLibrary const& library, std::string_view const name)
+    std::size_t countListsNamed(rt::AppRuntime& runtime, std::string_view const name)
     {
-      auto transaction = library.readTransaction();
-      std::size_t count = 0;
-
-      for (auto const& item : library.lists().reader(transaction))
-      {
-        count += static_cast<std::size_t>(item.second.name() == name);
-      }
-
-      return count;
+      return std::ranges::count_if(
+        runtime.library().snapshot().lists(), [name](rt::ListNode const& node) { return node.name == name; });
     }
 
     Gtk::Entry* listNameEntry(SmartListDialog& dialog)
@@ -138,14 +128,10 @@ namespace ao::gtk::test
       return dynamic_cast<SmartListDialog*>(findAppDialog("New List"));
     }
 
-    bool trackHasTag(library::MusicLibrary const& library, TrackId const trackId, std::string_view const tag)
+    bool trackHasTag(rt::AppRuntime& runtime, TrackId const trackId, std::string_view const tag)
     {
-      auto transaction = library.readTransaction();
-      auto const optView =
-        library.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-      REQUIRE(optView);
-      auto builder = library::TrackBuilder::fromHotView(*optView, library.dictionary());
-      return std::ranges::contains(builder.tags().names(), tag);
+      auto const tags = runtime.library().snapshot().selectionTags(std::span{&trackId, std::size_t{1}});
+      return std::ranges::contains(tags, tag);
     }
 
     AppDialog* findAppDialog(std::string const& title)
@@ -343,7 +329,7 @@ namespace ao::gtk::test
       dialog->response(Gtk::ResponseType::OK);
 
       REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
-      CHECK(countListsNamed(fixture.runtime().musicLibrary(), "Single submission") == 1);
+      CHECK(countListsNamed(fixture.runtime(), "Single submission") == 1);
     }
 
     SECTION("presentation changes do not re-drive list selection")
@@ -521,9 +507,9 @@ namespace ao::gtk::test
       dialog->response(Gtk::ResponseType::OK);
       REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("Edit List") == nullptr; }));
 
-      auto const optList = findList(fixture.runtime().musicLibrary(), listId);
+      auto const optList = findList(fixture.runtime(), listId);
       REQUIRE(optList);
-      CHECK(optList->name() == "High Energy");
+      CHECK(optList->name == "High Energy");
       CHECK(savedPresentationListId == listId);
       CHECK(savedPresentationId == presentationId);
 
@@ -586,7 +572,7 @@ namespace ao::gtk::test
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
 
-      auto const& library = fixture.runtime().musicLibrary();
+      auto& runtime = fixture.runtime();
       auto const listId = createList(fixture.runtime(), "Delete Target");
 
       controller.rebuildTree(cache);
@@ -598,7 +584,7 @@ namespace ao::gtk::test
 
       deleteActionPtr->activate();
 
-      CHECK(findList(library, listId));
+      CHECK(findList(runtime, listId));
       AppDialog* confirmation = nullptr;
       REQUIRE(pumpGtkEventsUntil(
         [&confirmation]
@@ -608,9 +594,9 @@ namespace ao::gtk::test
         }));
       REQUIRE(confirmation != nullptr);
       confirmation->response(Gtk::ResponseType::YES);
-      REQUIRE(pumpGtkEventsUntil([&library, listId] { return !findList(library, listId); }));
+      REQUIRE(pumpGtkEventsUntil([&runtime, listId] { return !findList(runtime, listId); }));
 
-      CHECK(!findList(library, listId));
+      CHECK(!findList(runtime, listId));
 
       REQUIRE(pumpGtkEventsUntil(
         [&]
@@ -631,7 +617,7 @@ namespace ao::gtk::test
       REQUIRE(deleteActionPtr);
       REQUIRE(deleteSubtreeActionPtr);
 
-      auto const& library = fixture.runtime().musicLibrary();
+      auto& runtime = fixture.runtime();
       auto const parentId = createList(fixture.runtime(), "Delete Tree");
       auto const childId = createList(fixture.runtime(), "Delete Child", parentId);
       auto const grandchildId = createList(fixture.runtime(), "Delete Grandchild", childId);
@@ -665,12 +651,12 @@ namespace ao::gtk::test
       CHECK(previewText.contains("Delete Grandchild"));
       confirmation->response(Gtk::ResponseType::YES);
       REQUIRE(pumpGtkEventsUntil(
-        [&library, parentId, childId, grandchildId]
-        { return !findList(library, parentId) && !findList(library, childId) && !findList(library, grandchildId); }));
+        [&runtime, parentId, childId, grandchildId]
+        { return !findList(runtime, parentId) && !findList(runtime, childId) && !findList(runtime, grandchildId); }));
 
-      CHECK_FALSE(findList(library, parentId));
-      CHECK_FALSE(findList(library, childId));
-      CHECK_FALSE(findList(library, grandchildId));
+      CHECK_FALSE(findList(runtime, parentId));
+      CHECK_FALSE(findList(runtime, childId));
+      CHECK_FALSE(findList(runtime, grandchildId));
     }
 
     SECTION("failed delete shows a parent-bound dialog and keeps the selected tree row")
@@ -749,13 +735,10 @@ namespace ao::gtk::test
     confirmation->response(Gtk::ResponseType::YES);
     REQUIRE(pumpGtkEventsUntil(
       [&fixture, listId, trackId]
-      {
-        return !findList(fixture.runtime().musicLibrary(), listId) &&
-               !trackHasTag(fixture.runtime().musicLibrary(), trackId, "road-trip");
-      }));
+      { return !findList(fixture.runtime(), listId) && !trackHasTag(fixture.runtime(), trackId, "road-trip"); }));
 
-    CHECK_FALSE(findList(fixture.runtime().musicLibrary(), listId));
-    CHECK_FALSE(trackHasTag(fixture.runtime().musicLibrary(), trackId, "road-trip"));
+    CHECK_FALSE(findList(fixture.runtime(), listId));
+    CHECK_FALSE(trackHasTag(fixture.runtime(), trackId, "road-trip"));
   }
 
   TEST_CASE("ListNavigationPanel - retired selection model no longer drives callbacks", "[gtk][regression][list]")

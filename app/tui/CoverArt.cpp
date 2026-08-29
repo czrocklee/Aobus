@@ -4,6 +4,7 @@
 #include "CoverArt.h"
 
 #include <ao/utility/Base64.h>
+#include <ao/utility/ByteView.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -11,6 +12,9 @@
 // stb implementation lives in this translation unit (its only consumer).
 // Embedded cover art is not limited to PNG and JPEG, so retain stb's complete
 // set of supported image decoders here.
+#ifndef STBI_MAX_DIMENSIONS
+#error "CoverArt.cpp requires its source-scoped STBI_MAX_DIMENSIONS definition"
+#endif
 #ifdef _MSC_VER
 #pragma warning(push, 0)
 #endif
@@ -20,7 +24,6 @@
 #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 #define STB_IMAGE_IMPLEMENTATION
-#define STBI_MAX_DIMENSIONS 8192 // NOLINT(cppcoreguidelines-macro-usage): stb_image requires a configuration macro.
 #define STBI_NO_STDIO
 #include <stb_image.h>
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -47,6 +50,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+static_assert(STBI_MAX_DIMENSIONS == ao::tui::kMaximumCoverArtDimension);
 
 namespace ao::tui
 {
@@ -83,10 +88,10 @@ namespace ao::tui
       bool exceeded = false;
     };
 
-    stbi_uc const* asStbiBytes(std::byte const* encodedBytes) noexcept
+    stbi_uc const* asStbiBytes(std::span<std::byte const> const encodedBytes) noexcept
     {
       // stb's C API accepts an unsigned-byte view over the encoded byte buffer.
-      return reinterpret_cast<stbi_uc const*>(encodedBytes); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      return utility::bytes::unsignedCharData(encodedBytes);
     }
 
     bool dimensionsWithinLimits(std::int32_t const width, std::int32_t const height, CoverArtDecodeLimits const& limits)
@@ -113,14 +118,13 @@ namespace ao::tui
       int sourceChannels = 0;
 
       if (::stbi_info_from_memory(
-            asStbiBytes(bytes.data()), static_cast<std::int32_t>(bytes.size()), &width, &height, &sourceChannels) ==
-            0 ||
+            asStbiBytes(bytes), static_cast<std::int32_t>(bytes.size()), &width, &height, &sourceChannels) == 0 ||
           !dimensionsWithinLimits(width, height, limits))
       {
         return std::nullopt;
       }
 
-      auto pixelsPtr = StbiPixelsPtr{::stbi_load_from_memory(asStbiBytes(bytes.data()),
+      auto pixelsPtr = StbiPixelsPtr{::stbi_load_from_memory(asStbiBytes(bytes),
                                                              static_cast<std::int32_t>(bytes.size()),
                                                              &width,
                                                              &height,

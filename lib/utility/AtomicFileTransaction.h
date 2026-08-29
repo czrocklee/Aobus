@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <string_view>
@@ -12,6 +13,12 @@
 
 namespace ao::utility::detail
 {
+  enum class AtomicReplacementMode : std::uint8_t
+  {
+    Durable,
+    VisibilityOnly,
+  };
+
   /**
    * Runs the platform-independent atomic replacement state machine.
    *
@@ -20,7 +27,10 @@ namespace ao::utility::detail
    * succeeds, which keeps every pre-replacement return on one RAII path.
    */
   template<typename Operations>
-  Result<> runAtomicReplacement(Operations& operations, std::filesystem::path const& targetPath, std::string_view data)
+  Result<> runAtomicReplacement(Operations& operations,
+                                std::filesystem::path const& targetPath,
+                                std::string_view data,
+                                AtomicReplacementMode const mode)
   {
     auto normalizedTargetRes = operations.normalizeTargetPath(targetPath);
 
@@ -51,9 +61,12 @@ namespace ao::utility::detail
       return result;
     }
 
-    if (auto const result = temporaryFile.synchronizeData(); !result)
+    if (mode == AtomicReplacementMode::Durable)
     {
-      return result;
+      if (auto const result = temporaryFile.synchronizeData(); !result)
+      {
+        return result;
+      }
     }
 
     if (auto const result = temporaryFile.closeForReplacement(); !result)
@@ -61,13 +74,17 @@ namespace ao::utility::detail
       return result;
     }
 
-    if (auto const result = temporaryFile.replaceTarget(normalizedTarget); !result)
+    if (auto const result = temporaryFile.replaceTarget(normalizedTarget, mode); !result)
     {
       return result;
     }
 
-    static_assert(noexcept(operations.synchronizeParentDirectoryBestEffort(parentPath)));
-    operations.synchronizeParentDirectoryBestEffort(parentPath);
+    if (mode == AtomicReplacementMode::Durable)
+    {
+      static_assert(noexcept(operations.synchronizeParentDirectoryBestEffort(parentPath)));
+      operations.synchronizeParentDirectoryBestEffort(parentPath);
+    }
+
     return {};
   }
 } // namespace ao::utility::detail

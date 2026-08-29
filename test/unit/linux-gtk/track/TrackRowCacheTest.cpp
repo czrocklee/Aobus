@@ -185,7 +185,7 @@ namespace ao::gtk::test
       auto const rowPtr = provider.trackRow(helperId);
       REQUIRE(rowPtr);
 
-      auto const expected = Glib::ustring{(runtime.musicLibrary().rootPath() / "test.flac").string()};
+      auto const expected = Glib::ustring{(runtime.musicRoot() / "test.flac").string()};
       REQUIRE(rowPtr->stringField(rt::TrackField::FilePath) != nullptr);
       CHECK(*rowPtr->stringField(rt::TrackField::FilePath) == expected);
       CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == expected);

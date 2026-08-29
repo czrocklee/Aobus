@@ -29,7 +29,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -242,8 +241,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto page = TrackViewPage{
@@ -283,8 +281,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto page = TrackViewPage{
@@ -326,8 +323,7 @@ namespace ao::gtk::test
       runtime.library().commands().createList(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto allTracksPage = TrackViewPage{
@@ -403,8 +399,7 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto page = TrackViewPage{listId,
                               modelPtr,

@@ -23,4 +23,15 @@ namespace ao::utility
    * doc/spec/persistence/atomic-replacement.md for the exact boundary.
    */
   Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data);
+
+  /**
+   * @brief Publish complete data through same-directory atomic replacement.
+   *
+   * Uses the same private temporary-file and replacement boundary as
+   * writeAtomically(), but deliberately skips data and namespace durability
+   * barriers. Success guarantees old-or-new visibility to readers, not survival
+   * across sudden power loss. This is for reproducible derived artifacts whose
+   * publication must be complete but whose durability has no semantic value.
+   */
+  Result<> publishAtomically(std::filesystem::path const& targetPath, std::string_view data);
 } // namespace ao::utility

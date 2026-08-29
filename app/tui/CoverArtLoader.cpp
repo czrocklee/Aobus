@@ -6,9 +6,10 @@
 #include "CoverArt.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Task.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -23,12 +24,16 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtDimension = 512;
   } // namespace
 
-  CoverArtLoader::CoverArtLoader(rt::ResourceByteLoader& byteLoader,
+  CoverArtLoader::CoverArtLoader(rt::ResourceByteMemoryCache& byteCache,
                                  async::Runtime& runtime,
                                  CoverArtDeliveryMode const mode,
                                  RefreshCallback refresh,
                                  std::int32_t const columns)
-    : _byteLoader{byteLoader}, _runtime{runtime}, _mode{mode}, _refresh{std::move(refresh)}, _columns{columns}
+    : _byteCache{byteCache}
+    , _runtime{runtime}
+    , _mode{mode}
+    , _refresh{std::move(refresh)}
+    , _columns{std::max(0, columns)}
   {
   }
 
@@ -113,15 +118,15 @@ namespace ao::tui
 
   void CoverArtLoader::startByteRequest(ResourceId const resourceId)
   {
-    _byteRequest = _byteLoader.request(
-      resourceId,
-      [this, mode = _mode, columns = _columns](rt::ResourceBytes bytes)
-      {
-        _task = _runtime.spawnCancellable([loader = this, runtime = &_runtime, mode, columns, bytes = std::move(bytes)](
+    _byteRequest = _byteCache.request(resourceId,
+                                      [this, mode = _mode, columns = _columns](rt::ResourceBytes bytes)
+                                      {
+                                        _task = _runtime.spawnCancellable(
+                                          [loader = this, runtime = &_runtime, mode, columns, bytes = std::move(bytes)](
                                             std::stop_token const stopToken) mutable
                                           { return load(loader, runtime, mode, columns, std::move(bytes), stopToken); },
                                           "TUI cover-art decode workflow");
-      });
+                                      });
   }
 
   async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,

@@ -3,9 +3,12 @@
 
 #include <ao/rt/CoreRuntime.h>
 
+#include "resource/ResourceByteReader.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -14,11 +17,15 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/utility/Path.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <stop_token>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -43,12 +50,14 @@ namespace ao::rt
     CompletionService completionService;
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
+    ResourceByteReader resourceByteReader;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
     bool stopped = false;
 
     Impl(std::unique_ptr<async::Executor> execPtr,
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
+         std::filesystem::path cacheDirectory,
          std::unique_ptr<library::MusicLibrary> libraryPtr,
          async::Sleeper* sleeper,
          TextOrderingPolicy const* orderingPolicy,
@@ -64,6 +73,7 @@ namespace ao::rt
       , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy, aliasPolicy}
       , trackSourceCache{*musicLibraryPtr, libraryChanges}
       , notificationService{asyncRuntime}
+      , resourceByteReader{asyncRuntime, *musicLibraryPtr, cacheDirectory}
       , textOrderingPolicy{orderingPolicy}
     {
     }
@@ -102,34 +112,9 @@ namespace ao::rt
                                                            std::filesystem::path databasePath,
                                                            std::filesystem::path cacheDirectory,
                                                            std::uint64_t const musicLibraryPinnedMapBytes,
-                                                           async::Sleeper* const sleeper)
-  {
-    auto runtimePtr = std::unique_ptr<CoreRuntime>{new CoreRuntime{}};
-    auto result = runtimePtr->initialize(std::move(executorPtr),
-                                         std::move(musicRoot),
-                                         std::move(databasePath),
-                                         std::move(cacheDirectory),
-                                         musicLibraryPinnedMapBytes,
-                                         sleeper,
-                                         nullptr,
-                                         nullptr);
-
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return runtimePtr;
-  }
-
-  Result<> CoreRuntime::initialize(std::unique_ptr<async::Executor> executorPtr,
-                                   std::filesystem::path musicRoot,
-                                   std::filesystem::path databasePath,
-                                   std::filesystem::path cacheDirectory,
-                                   std::uint64_t const musicLibraryPinnedMapBytes,
-                                   async::Sleeper* const sleeper,
-                                   TextOrderingPolicy const* const textOrderingPolicy,
-                                   CompletionAliasPolicy const* const completionAliasPolicy)
+                                                           async::Sleeper* const sleeper,
+                                                           TextOrderingPolicy const* const textOrderingPolicy,
+                                                           CompletionAliasPolicy const* const completionAliasPolicy)
   {
     if (executorPtr == nullptr)
     {
@@ -148,12 +133,12 @@ namespace ao::rt
     auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
                                           std::move(musicRoot),
                                           std::move(databasePath),
+                                          std::move(cacheDirectory),
                                           std::move(storagePtr),
                                           sleeper,
                                           textOrderingPolicy,
                                           completionAliasPolicy);
-    auto libraryRes = Library::create(
-      implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges, std::move(cacheDirectory));
+    auto libraryRes = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
 
     if (!libraryRes)
     {
@@ -162,11 +147,13 @@ namespace ao::rt
 
     implPtr->libraryFacadePtr = std::move(*libraryRes);
     implPtr->trackSourceCache.reloadAllTracks();
-    _implPtr = std::move(implPtr);
-    return {};
+    return std::unique_ptr<CoreRuntime>{new CoreRuntime{std::move(implPtr)}};
   }
 
-  CoreRuntime::CoreRuntime() = default;
+  CoreRuntime::CoreRuntime(std::unique_ptr<Impl> implPtr)
+    : _implPtr{std::move(implPtr)}
+  {
+  }
   CoreRuntime::~CoreRuntime() = default;
 
   void CoreRuntime::shutdown() noexcept
@@ -225,5 +212,19 @@ namespace ao::rt
   async::Runtime& CoreRuntime::async() noexcept
   {
     return _implPtr->asyncRuntime;
+  }
+
+  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::readResourceBytesForExportAsync(
+    ResourceId const resourceId,
+    std::stop_token const stopToken)
+  {
+    return _implPtr->resourceByteReader.readForExportAsync(resourceId, stopToken);
+  }
+
+  async::Task<Result<std::optional<std::vector<std::byte>>>> CoreRuntime::readInteractiveResourceBytesAsync(
+    ResourceId const resourceId,
+    std::stop_token const stopToken)
+  {
+    return _implPtr->resourceByteReader.readInteractiveAsync(resourceId, stopToken);
   }
 } // namespace ao::rt

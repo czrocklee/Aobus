@@ -73,9 +73,9 @@ class ConceptScopeTest(unittest.TestCase):
         self.assertEqual(concept_scope.validate_construction_chains(), [])
 
     def test_construction_hops_are_crossed_api_boundaries(self):
-        loader = next(chain for chain in concept_scope.CONSTRUCTION_CHAINS if chain.leaf == "rt.ResourceByteLoader")
-        self.assertEqual(loader.hops, 1)
-        self.assertEqual(loader.steps, ("ResourceByteLoader(CoreRuntime&)",))
+        cache = next(chain for chain in concept_scope.CONSTRUCTION_CHAINS if chain.leaf == "rt.ResourceByteMemoryCache")
+        self.assertEqual(cache.hops, 1)
+        self.assertEqual(cache.steps, ("ResourceByteMemoryCache(async::Runtime&, ReadBytes)",))
         activity = next(
             chain for chain in concept_scope.CONSTRUCTION_CHAINS if chain.leaf == "uimodel.ActivityStatusFeedProjection"
         )

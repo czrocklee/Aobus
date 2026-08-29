@@ -3,7 +3,7 @@ id: resource.blob
 type: reference
 status: current
 domain: resource
-summary: Enumerates ResourceId derivation, the descriptor row, digest-keyed creation, collision probing, and the runtime materialization surface.
+summary: Enumerates ResourceId derivation, the descriptor row, digest-keyed creation, collision probing, and the runtime byte-read surface.
 ---
 # Resource descriptors
 
@@ -19,7 +19,7 @@ There is no independent resource schema version; compatibility follows the libra
 ## Code boundary
 
 `ResourceId`, `ResourceDescriptor`, `ObservedResourceDescriptor`, and `ResourceStore` belong to the **Core libraries** layer in the [system architecture](../../architecture/system-overview.md), under the [resource delivery](../../architecture/resource-delivery.md) and [library](../../architecture/library.md) architectures.
-The runtime reader exposes owned bytes materialized outside any transaction.
+The runtime reader exposes owned bytes after closing its read transaction.
 
 ## Identity surface
 
@@ -75,17 +75,17 @@ It carries no payload and has no distinct persisted representation; it lets prep
 Descriptors are append-only in practice: a rescan that replaces a track's covers leaves earlier rows in place, and a row displaced by a collision must stay reachable along its probe chain.
 Removing one row from the middle of a chain turns a later row's path into a hole, which the open gate rejects as corruption.
 
-`LibraryJobs::loadResourceAsync(id, sizeLimit, stopToken)` is the runtime owned-byte operation, used by interactive delivery and by administrative export:
+The `CoreRuntime`-owned `ResourceByteReader` is the runtime owned-byte operation used by interactive consumers and export:
 
 | Input/result | Exact behavior |
 | --- | --- |
 | `kInvalidResourceId` | successful `nullopt` |
 | missing descriptor | successful `nullopt` |
 | no cache entry and no carrier yielding the digest | successful `nullopt` |
-| materialized size within the caller's ceiling | successful owned byte vector |
-| materialized size above the caller's ceiling | `ValueTooLarge` |
-| `ResourceSizeLimit::Interactive` | ceiling of `33,554,432` bytes |
-| `ResourceSizeLimit::Administrative` | no ceiling |
+| bytes within the caller's ceiling | successful owned byte vector |
+| bytes above the caller's ceiling | `ValueTooLarge` |
+| `AppRuntime::resourceBytes()` interactive source | ceiling of `33,554,432` bytes |
+| `readResourceBytesForExportAsync()` export path | no ceiling |
 | cancellation at an executor transition or between candidates | throws `OperationCancelled` |
 | successful or error result affinity | callback executor |
 | library task progress/completion events | none |
@@ -126,9 +126,9 @@ If a `full` document declares length `1024` for a digest whose row already holds
 - [`ResourceLayout.h`](../../../include/ao/library/ResourceLayout.h) defines the descriptor, counted-evidence wrapper, persisted bytes, and id derivation.
 - [`ResourceStore.h`](../../../include/ao/library/ResourceStore.h) defines reader and writer operations.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) defines create, digest reuse, length evidence, and probing.
-- [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) defines the administrative scoped read used by export.
+- [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) defines the scoped descriptor read used by export.
 - [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp) defines CLI resource listing and export.
-- [`LibraryJobs.cpp`](../../../app/runtime/library/LibraryJobs.cpp) defines the runtime owned-byte read and the carrier snapshot it walks.
+- [`ResourceByteReader.cpp`](../../../app/runtime/resource/ResourceByteReader.cpp) defines the verified runtime read and carrier snapshot it walks; [`CoreRuntime.cpp`](../../../app/runtime/CoreRuntime.cpp) binds its interactive memory-cache reader and export entry.
 
 ## Test authority
 
@@ -136,8 +136,8 @@ If a `full` document declares length `1024` for a digest whose row already holds
 - [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protects descriptor size, alignment, byte order, and id derivation.
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
 - [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, export by materialization, and both absence reports.
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) protects interactive size, ownership, affinity, absence, event silence, cancellation, and carrier-index rebuild behavior.
+- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
+- [`ResourceByteReaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteReaderTest.cpp) protects interactive size, ownership, affinity, absence, cancellation, and carrier-index rebuild behavior.
 
 ## Related documents
 

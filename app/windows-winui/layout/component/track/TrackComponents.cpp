@@ -310,7 +310,7 @@ namespace ao::winui::layout
                                rt::ViewService& views,
                                rt::WorkspaceService& workspace,
                                rt::CompletionService& completion,
-                               rt::ResourceByteLoader& resourceBytes,
+                               rt::ResourceByteMemoryCache& resourceBytes,
                                ThemeCoordinator& theme,
                                TrackListController& trackList,
                                uimodel::TrackPresentationCatalog& presentationCatalog,

@@ -304,10 +304,16 @@ namespace ao::utility
         return {};
       }
 
-      Result<> replaceTarget(std::filesystem::path const& targetPath)
+      Result<> replaceTarget(std::filesystem::path const& targetPath, detail::AtomicReplacementMode const mode)
       {
-        if (::MoveFileExW(_path.c_str(), targetPath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) ==
-            FALSE)
+        DWORD flags = MOVEFILE_REPLACE_EXISTING;
+
+        if (mode == detail::AtomicReplacementMode::Durable)
+        {
+          flags |= MOVEFILE_WRITE_THROUGH;
+        }
+
+        if (::MoveFileExW(_path.c_str(), targetPath.c_str(), flags) == FALSE)
         {
           auto const errorCode = ::GetLastError();
           return makeError(
@@ -409,6 +415,12 @@ namespace ao::utility
   Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data)
   {
     auto operations = WindowsAtomicFileOperations{};
-    return detail::runAtomicReplacement(operations, targetPath, data);
+    return detail::runAtomicReplacement(operations, targetPath, data, detail::AtomicReplacementMode::Durable);
+  }
+
+  Result<> publishAtomically(std::filesystem::path const& targetPath, std::string_view data)
+  {
+    auto operations = WindowsAtomicFileOperations{};
+    return detail::runAtomicReplacement(operations, targetPath, data, detail::AtomicReplacementMode::VisibilityOnly);
   }
 } // namespace ao::utility

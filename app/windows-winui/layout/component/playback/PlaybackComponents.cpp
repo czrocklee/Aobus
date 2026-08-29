@@ -270,7 +270,7 @@ namespace ao::winui::layout
                                   async::Runtime& asyncRuntime,
                                   rt::PlaybackService& playback,
                                   uimodel::PlaybackActions& playbackActions,
-                                  rt::ResourceByteLoader& resourceBytes,
+                                  rt::ResourceByteMemoryCache& resourceBytes,
                                   ThemeCoordinator& theme,
                                   i18n::MessageCatalog textCatalog,
                                   async::Signal<ShellState>& shellStateChanged,

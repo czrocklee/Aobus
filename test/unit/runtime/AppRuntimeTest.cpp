@@ -46,10 +46,26 @@
 #include <cstddef>
 #include <memory>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace ao::rt::test
 {
+  template<typename Runtime>
+  concept ExposesCoreOwner = requires(Runtime& runtime) { runtime.core(); };
+
+  template<typename Runtime>
+  concept ExposesDatabasePath = requires(Runtime& runtime) { runtime.databasePath(); };
+
+  template<typename Runtime>
+  concept ExposesMusicLibrary = requires(Runtime& runtime) { runtime.musicLibrary(); };
+
+  static_assert(!std::is_base_of_v<CoreRuntime, AppRuntime>);
+  static_assert(std::is_final_v<CoreRuntime>);
+  static_assert(!ExposesCoreOwner<AppRuntime>);
+  static_assert(!ExposesDatabasePath<AppRuntime>);
+  static_assert(!ExposesMusicLibrary<AppRuntime>);
+
   using namespace ao::test;
 
   namespace
@@ -219,7 +235,6 @@ namespace ao::rt::test
     }));
 
     CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
-    CHECK(appPtr->databasePath() == databasePath);
 
     // Verify accessors
     [[maybe_unused]] auto& commands = appPtr->library().commands();
@@ -243,9 +258,6 @@ namespace ao::rt::test
     auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
     REQUIRE_FALSE(withoutSelectionRes);
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
-
-    // Cover polymorphic destruction of CoreRuntime
-    auto const corePtr = std::unique_ptr<CoreRuntime>{std::move(appPtr)};
   }
 
   TEST_CASE("CoreRuntime - a pinned map size is what the storage opens with", "[runtime][unit][core-runtime][capacity]")
@@ -304,7 +316,7 @@ namespace ao::rt::test
     executor->drain();
 
     auto const fixtureUri =
-      audio::test::installAudioFixture(appPtr->musicLibrary().rootPath(), "basic_metadata.flac", "playable.flac");
+      audio::test::installAudioFixture(appPtr->musicRoot(), "basic_metadata.flac", "playable.flac");
     auto const firstTrackId =
       addRuntimeTrack(*appPtr,
                       library::test::TrackSpec{.title = "First", .uri = fixtureUri, .codec = AudioCodec::Flac},

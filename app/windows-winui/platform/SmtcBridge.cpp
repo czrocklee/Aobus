@@ -11,7 +11,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -104,7 +104,7 @@ namespace ao::winui
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                          rt::AppRuntime& runtime,
                          uimodel::PlaybackActions& actions,
-                         rt::ResourceByteLoader& resourceBytes)
+                         rt::ResourceByteMemoryCache& resourceBytes)
     : _statePtr{std::make_shared<State>()}, _runtime{&runtime}, _resourceBytes{&resourceBytes}
   {
     _statePtr->dispatcher = std::move(dispatcher);
@@ -196,6 +196,7 @@ namespace ao::winui
     if (transport.nowPlaying.coverArtId == kInvalidResourceId)
     {
       _artworkRequest.reset();
+      _artworkTask.reset();
     }
     else
     {

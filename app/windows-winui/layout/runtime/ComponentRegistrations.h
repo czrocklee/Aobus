@@ -36,7 +36,7 @@ namespace ao::rt
   class LibraryJobs;
   class NotificationService;
   class PlaybackService;
-  class ResourceByteLoader;
+  class ResourceByteMemoryCache;
   class ViewService;
   class WorkspaceService;
 }
@@ -67,7 +67,7 @@ namespace ao::winui::layout
                                   async::Runtime& asyncRuntime,
                                   rt::PlaybackService& playback,
                                   uimodel::PlaybackActions& playbackActions,
-                                  rt::ResourceByteLoader& resourceBytes,
+                                  rt::ResourceByteMemoryCache& resourceBytes,
                                   ThemeCoordinator& theme,
                                   i18n::MessageCatalog textCatalog,
                                   async::Signal<ShellState>& shellStateChanged,
@@ -104,7 +104,7 @@ namespace ao::winui::layout
                                rt::ViewService& views,
                                rt::WorkspaceService& workspace,
                                rt::CompletionService& completion,
-                               rt::ResourceByteLoader& resourceBytes,
+                               rt::ResourceByteMemoryCache& resourceBytes,
                                ThemeCoordinator& theme,
                                TrackListController& trackList,
                                uimodel::TrackPresentationCatalog& presentationCatalog,

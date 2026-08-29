@@ -233,7 +233,8 @@ UIModel and frontends consume runtime snapshots and commands rather than opening
 - View, workspace, completion, and playback services consume sources/projections through runtime-owned boundaries.
 - UIModel and normal frontend adapters do not include LMDB or concrete library store/view headers and cannot name committing write authority.
 
-`CoreRuntime::musicLibrary()` is const and supports read-only CLI inspection and narrow runtime evaluator composition.
+`CoreRuntime::musicLibrary()` is const and supports read-only CLI inspection plus internal runtime composition.
+`AppRuntime` deliberately does not forward it, and frontend guardrails reject direct `CoreRuntime` dependencies.
 It cannot create a library write transaction.
 The check-owned `aobus_guardrails` target rejects write-transaction, writable-capability, and direct `LibraryCommands` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
 
@@ -387,7 +388,7 @@ Media rescan does not preserve database-only curation, and a damaged database ca
 
 `CoreRuntime::shutdown()` first seals library mutation and publication admission, then closes callback resumption, stops and joins worker tasks while library-backed collaborators still exist.
 A synchronous library observer must not run runtime shutdown or destroy the library on the same callback stack and must defer teardown to a later callback-executor turn.
-`AppRuntime::shutdown()` quiesces playback-session and audio callback producers before delegating to that core boundary.
+`AppRuntime::shutdown()` quiesces playback-session and audio callback producers before shutting down its owned core boundary.
 Subscriptions held by sources and projections release before the `LibraryChanges` owner they observe.
 Batch and projection dictionary caches are destroyed before the `MusicLibrary` that owns their borrowed raw views.
 

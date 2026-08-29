@@ -65,6 +65,7 @@ namespace ao::utility::test
       bool temporaryExists = false;
       bool cleanupFails = false;
       std::size_t cleanupAttempts = 0;
+      std::size_t dataSyncAttempts = 0;
       std::size_t parentSyncAttempts = 0;
     };
 
@@ -140,10 +141,14 @@ namespace ao::utility::test
         return scriptedResult(*_state, FailureStage::Write);
       }
 
-      Result<> synchronizeData() const { return scriptedResult(*_state, FailureStage::Synchronize); }
+      Result<> synchronizeData() const
+      {
+        ++_state->dataSyncAttempts;
+        return scriptedResult(*_state, FailureStage::Synchronize);
+      }
       Result<> closeForReplacement() const { return scriptedResult(*_state, FailureStage::Close); }
 
-      Result<> replaceTarget(std::filesystem::path const& /*targetPath*/)
+      Result<> replaceTarget(std::filesystem::path const& /*targetPath*/, detail::AtomicReplacementMode /*mode*/)
       {
         if (auto const result = scriptedResult(*_state, FailureStage::Replace); !result)
         {
@@ -230,7 +235,8 @@ namespace ao::utility::test
       auto state = ScriptedAtomicFileState{.failureStage = stage};
       auto operations = ScriptedAtomicFileOperations{state};
 
-      auto const result = detail::runAtomicReplacement(operations, "/state/config.yaml", "new contents");
+      auto const result = detail::runAtomicReplacement(
+        operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
       CHECK_FALSE(result);
       CHECK(state.targetContents == "old");
@@ -249,7 +255,8 @@ namespace ao::utility::test
     auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Write, .cleanupFails = true};
     auto operations = ScriptedAtomicFileOperations{state};
 
-    auto const result = detail::runAtomicReplacement(operations, "/state/config.yaml", "new contents");
+    auto const result = detail::runAtomicReplacement(
+      operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().message == "Write failure");
@@ -264,13 +271,32 @@ namespace ao::utility::test
     auto state = ScriptedAtomicFileState{};
     auto operations = ScriptedAtomicFileOperations{state};
 
-    auto const result = detail::runAtomicReplacement(operations, "/state/config.yaml", "new contents");
+    auto const result = detail::runAtomicReplacement(
+      operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
     REQUIRE(result);
     CHECK(state.targetContents == "new contents");
     CHECK_FALSE(state.temporaryExists);
     CHECK(state.cleanupAttempts == 0);
+    CHECK(state.dataSyncAttempts == 1);
     CHECK(state.parentSyncAttempts == 1);
+  }
+
+  TEST_CASE("AtomicFile transaction - visibility-only publication skips durability barriers",
+            "[utility][unit][atomicfile]")
+  {
+    auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Synchronize};
+    auto operations = ScriptedAtomicFileOperations{state};
+
+    auto const result = detail::runAtomicReplacement(
+      operations, "/cache/cover.png", "new contents", detail::AtomicReplacementMode::VisibilityOnly);
+
+    REQUIRE(result);
+    CHECK(state.targetContents == "new contents");
+    CHECK_FALSE(state.temporaryExists);
+    CHECK(state.cleanupAttempts == 0);
+    CHECK(state.dataSyncAttempts == 0);
+    CHECK(state.parentSyncAttempts == 0);
   }
 
   TEST_CASE("AtomicFile - writes data atomically with owner-only permissions", "[utility][unit][atomicfile]")
@@ -314,6 +340,18 @@ namespace ao::utility::test
     auto in = std::ifstream{targetPath};
     auto const content = std::string{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};
     CHECK(content == "new");
+  }
+
+  TEST_CASE("AtomicFile - visibility-only publication replaces complete private contents",
+            "[utility][unit][atomicfile]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const targetPath = std::filesystem::path{tempDir.path()} / "derived.bin";
+
+    REQUIRE(writeAtomically(targetPath, "old"));
+    REQUIRE(publishAtomically(targetPath, "new"));
+    CHECK(ao::test::readFile(targetPath) == "new");
+    CHECK(ao::test::hasPrivateManagedFileAccess(targetPath));
   }
 
   TEST_CASE("AtomicFile - fails when parent directory is not writable", "[utility][unit][atomicfile]")

@@ -3,13 +3,15 @@ id: persistence.atomic-replacement
 type: spec
 status: current
 domain: persistence
-summary: Defines private same-directory temporary writing, synchronization, atomic replacement, cleanup, and platform limits.
+summary: Defines private same-directory atomic publication, optional durability barriers, cleanup, and platform limits.
 ---
 # Atomic file replacement
 
 ## Scope
 
-This specification owns the current observable behavior of `ao::utility::writeAtomically`: parent-directory creation, private same-directory temporary files, complete synchronous writes, data synchronization, target replacement, recoverable failure, cleanup, and platform differences.
+This specification owns the current observable behavior of `ao::utility::writeAtomically` and `ao::utility::publishAtomically`: parent-directory creation, private same-directory temporary files, complete synchronous writes, target replacement, optional durability barriers, recoverable failure, cleanup, and platform differences.
+`writeAtomically` is the managed-state operation and requests the platform data and namespace barriers described below.
+`publishAtomically` is the derived-artifact operation: it guarantees complete old-or-new visibility but deliberately pays no durability barrier whose result could not change application truth.
 
 It does not own serialization, payload validation, path selection, semantic transactions, dirty-state acknowledgement, save scheduling, retries, reporting, backup generations, or recovery of corrupt targets and abandoned temporary files.
 Those policies remain with the store or semantic owner above this Core mechanism.
@@ -26,6 +28,7 @@ The public boundary is [`include/ao/utility/AtomicFile.h`](../../../include/ao/u
 
 ```cpp
 Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data);
+Result<> publishAtomically(std::filesystem::path const& targetPath, std::string_view data);
 ```
 
 [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) for non-Windows builds and [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) for Windows builds.
@@ -39,6 +42,8 @@ None of these mechanisms can depend on application runtime, UIModel, a frontend,
 - The **temporary file** is a newly and exclusively created private file in that same parent.
 - The **replacement point** is the POSIX `rename` or Windows `MoveFileExW` call that makes the temporary file the target.
 - **Atomic visibility** means the helper does not intentionally expose a partially written target: before the replacement point readers address the previous target or absence, and after it they address the replacement.
+- A **durable write** is a `writeAtomically` attempt, whose data barrier is mandatory and whose namespace barrier follows the platform contract.
+- A **visibility-only publication** is a `publishAtomically` attempt, which skips both barriers because the target is reproducible derived data.
 - A **data barrier** synchronizes the temporary file's contents before replacement.
 - A **namespace barrier** attempts to make the replaced directory entry survive a crash.
 - **Cleanup** is the no-throw, best-effort close and removal of an uncommitted temporary file.
@@ -49,7 +54,8 @@ None of these mechanisms can depend on application runtime, UIModel, a frontend,
 - Input is an opaque byte sequence; no text encoding, terminator, YAML rule, or schema is applied.
 - The temporary file is created in the target's parent, so the helper never intentionally performs a cross-filesystem replacement.
 - The temporary file is private to the current user before any payload byte is written.
-- Every input byte is written and the platform data barrier succeeds before the replacement point is attempted.
+- Every input byte is written before the replacement point is attempted.
+- A durable write reaches the replacement point only after the platform data barrier succeeds; a visibility-only publication deliberately skips that barrier.
 - Before the replacement point, the helper does not truncate or write through the target path.
 - Every returned `IoError` occurs before the replacement point; the helper has not deliberately changed the target through that attempt.
 - A successful return means the mandatory pre-replacement sequence and the operating-system replacement call reported success.
@@ -71,10 +77,10 @@ The implementation advances through one linear attempt:
 | Parent ready | Missing parent directories may have been created. | Existing target or absence. |
 | Temporary owned | A unique private same-directory path and handle have one RAII owner. | Existing target or absence. |
 | Data written | Every input byte has been handed to the temporary handle. | Existing target or absence. |
-| Data synchronized | The platform data barrier has succeeded. | Existing target or absence. |
+| Data synchronized | For a durable write, the platform data barrier has succeeded; visibility-only publication skips this state. | Existing target or absence. |
 | Temporary closed | The temporary handle has closed successfully. | Existing target or absence. |
 | Replaced | The operating-system replacement call has succeeded and temporary ownership is committed. | Complete new target. |
-| Returned success | Platform post-replacement best effort has finished. | Complete new target. |
+| Returned success | Any operation-specific post-replacement best effort has finished. | Complete new target. |
 
 Any ordinary failure before Replaced returns `IoError` and lets the temporary owner attempt cleanup.
 There is no reported-failure transition after Replaced: non-Windows parent-directory synchronization is best effort, and Windows has no separate post-replacement operation.
@@ -83,23 +89,23 @@ There is no reported-failure transition after Replaced: non-Windows parent-direc
 
 ### Common operation
 
-`writeAtomically(targetPath, data)` performs these steps:
+Both operations perform these steps:
 
 1. Resolve the target form required by the platform.
 2. Create missing parent directories.
 3. Exclusively create a private temporary file in the parent and transfer it to one RAII owner.
 4. Write the complete `data` range.
-5. Apply the required temporary-file data barrier.
+5. For `writeAtomically`, apply the required temporary-file data barrier; `publishAtomically` skips it.
 6. Close the temporary handle.
-7. Replace the target through one platform call and commit the temporary owner.
-8. Perform the platform's post-replacement best effort and return success.
+7. Replace the target through one platform call and commit the temporary owner. Windows requests write-through only for `writeAtomically`.
+8. For `writeAtomically`, perform the platform's post-replacement best effort; `publishAtomically` returns after replacement.
 
 An empty input installs a zero-length target.
 Embedded null bytes are ordinary bytes because both implementations use the explicit `string_view` size.
 An absent target is created on success, an existing regular file is replaced, and a directory target returns `IoError` when the platform rejects replacement.
 
 The public API has no permission selector.
-All current managed-state callers require private files, and exposing a platform-default option would weaken that invariant without an in-tree consumer.
+Current callers hold either user-specific managed state or user-specific derived content, and both require owner-only files; exposing a platform-default option would weaken that invariant without an in-tree consumer.
 
 ### Non-Windows implementation
 
@@ -109,12 +115,12 @@ The non-Windows implementation uses this sequence:
 2. `mkstemp` creates a `.temp.XXXXXX` file in that parent and opens it exclusively.
 3. `fchmod` establishes mode `0600` before payload writing.
 4. `write` loops until all bytes are written, retries `EINTR`, and rejects zero progress.
-5. `fsync` is the required temporary-file data barrier.
+5. `writeAtomically` requires `fsync` as the temporary-file data barrier; `publishAtomically` skips it.
 6. `close` is required before replacement; ownership is released before the call so an ambiguous close failure cannot close a later reused descriptor.
 7. POSIX `rename` replaces the target.
-8. The parent is opened as a directory and `fsync` is attempted as a best-effort namespace barrier; open, synchronization, and close outcomes are not returned.
+8. After `writeAtomically` replacement, the parent is opened as a directory and `fsync` is attempted as a best-effort namespace barrier; open, synchronization, and close outcomes are not returned. `publishAtomically` skips this step.
 
-Failure of the temporary-file barrier prevents replacement.
+Failure of the durable operation's temporary-file barrier prevents replacement.
 Failure of the parent-directory barrier cannot become an ordinary error because the replacement is already visible and `Result<>` errors mean not applied.
 
 ### Windows implementation
@@ -127,11 +133,11 @@ It then uses this sequence:
 3. `CreateFileW` with `CREATE_NEW`, no sharing, and those creation-time security attributes creates `.ao.tmp.<process>.<tick>.<counter>` in the parent.
 4. Name collisions retry through a process-local atomic counter and stop with `IoError` after 128 candidates.
 5. `WriteFile` writes chunks no larger than `0x7ffff000` bytes until complete and rejects zero progress.
-6. `FlushFileBuffers` is the required temporary-file data barrier.
+6. `writeAtomically` requires `FlushFileBuffers` as the temporary-file data barrier; `publishAtomically` skips it.
 7. `CloseHandle` is required before replacement.
-8. `MoveFileExW` uses `MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH` to replace the target.
+8. `MoveFileExW` always uses `MOVEFILE_REPLACE_EXISTING`; `writeAtomically` also uses `MOVEFILE_WRITE_THROUGH`, while `publishAtomically` does not.
 
-Windows performs no separate directory-handle flush after `MoveFileExW`.
+The durable Windows operation performs no separate directory-handle flush after `MoveFileExW`.
 The contract records successful completion of the documented API sequence and does not infer stronger filesystem behavior from the flag name.
 
 ### Private-file security
@@ -166,25 +172,25 @@ Runtime and frontend stores must assign one semantic writer per managed target.
 | Private security preparation, unique temporary creation, or collision exhaustion | `IoError`. | Unchanged. |
 | POSIX permission application | `IoError`; RAII cleanup attempted. | Unchanged. |
 | Write, interrupted-write retry exhaustion through another error, or zero progress | `IoError`; RAII cleanup attempted. | Unchanged. |
-| `fsync` or `FlushFileBuffers` | `IoError`; RAII cleanup attempted. | Unchanged. |
+| `fsync` or `FlushFileBuffers` during `writeAtomically` | `IoError`; RAII cleanup attempted. | Unchanged. |
 | Temporary-handle close | `IoError`; path removal attempted. | Unchanged. |
 | `rename` or `MoveFileExW` | `IoError`; path removal attempted. | The helper has not deliberately written the target. |
-| Non-Windows parent-directory open, `fsync`, or close after replacement | Ignored; operation returns success. | Complete new target is already visible. |
+| Non-Windows parent-directory open, `fsync`, or close after `writeAtomically` replacement | Ignored; operation returns success. | Complete new target is already visible. |
 
 The temporary owner closes any still-owned handle before attempting path removal.
 Cleanup deliberately does not replace the primary error with a removal error.
 A failed or ambiguous close can prevent removal on Windows, removal itself can fail on either platform, and termination can bypass destructors; therefore absence of abandoned artifacts is not guaranteed.
 The helper performs no sibling scan or scavenging because age or name alone does not prove that another process has abandoned a file.
 
-The function is not `noexcept` and does not broadly translate allocation, formatting, or other unrelated C++ exceptions.
+The functions are not `noexcept` and do not broadly translate allocation, formatting, or other unrelated C++ exceptions.
 All ordinary filesystem work is synchronous and exposes no cooperative cancellation point.
 
 ## Persistence and recovery boundary
 
 Atomic visibility and crash durability are distinct.
 
-On non-Windows platforms, successful temporary-file `fsync` precedes `rename`, but the later parent-directory `fsync` is best effort.
-On Windows, successful `FlushFileBuffers` precedes a successful `MoveFileExW` request with write-through, with no additional directory barrier.
+For `writeAtomically`, non-Windows temporary-file `fsync` precedes `rename`, but the later parent-directory `fsync` is best effort; on Windows, `FlushFileBuffers` precedes a successful `MoveFileExW` request with write-through, with no additional directory barrier.
+`publishAtomically` intentionally makes no durability request on either platform: its success means only that the complete replacement became visible through the platform replacement call.
 Filesystem, device, hypervisor, mount, and network-share behavior can weaken or reject those operations.
 
 The helper has no journal, write-ahead log, backup generation, checksum, startup repair, or recovery protocol.
@@ -198,20 +204,20 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 
 ## Implementation map
 
-- [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h) defines the two-argument public operation and private-file contract.
+- [`AtomicFile.h`](../../../include/ao/utility/AtomicFile.h) defines the durable-write and visibility-only publication operations and their shared private-file contract.
 - [`AtomicFileTransaction.h`](../../../lib/utility/AtomicFileTransaction.h) owns the private common state sequence.
 - [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) owns POSIX temporary-file RAII, mode, write, barriers, replacement, and parent synchronization.
 - [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) owns extended paths, protected DACL creation, Windows temporary-file RAII, barriers, and replacement.
 - [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects one platform implementation and links the Windows security API.
-- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) are the current production callers.
+- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp), [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) use durable writes; [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) and [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) use visibility-only publication for discardable artwork.
 
 ## Test map
 
-- [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target.
+- [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target, and visibility-only publication is locked to skip both barriers.
 - Real-filesystem sections protect creation, overwrite, empty and embedded-null payloads, POSIX mode `0600`, unwritable-parent failure, directory-target rejection, and successful temporary cleanup.
 - Native Windows sections protect the exact protected DACL, extended-length paths, distinct temporary names under concurrent different-target writes, final contents, and cleanup.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) proves that malformed YAML returns `FormatRejected`, preserves seeded objects, and cannot be overwritten by an ordinary group save.
-- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects integration through the other production caller.
+- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects frontend managed-state integration.
 
 The private failure seam proves state effects rather than platform error text.
 Native platform tests remain necessary because the seam does not emulate filesystem, ACL, or kernel replacement semantics.
@@ -222,4 +228,5 @@ Native platform tests remain necessary because the seam does not emulate filesys
 - [Grouped configuration store specification](config-store.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations reference](../../reference/persistence/location.md)
+- [GTK MPRIS specification](../linux-gtk/mpris.md)
 - [Outcome channel specification](../failure/outcome-channel.md)

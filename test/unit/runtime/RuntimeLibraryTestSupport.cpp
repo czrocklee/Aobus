@@ -21,10 +21,18 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/Path.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,6 +48,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -143,19 +152,85 @@ namespace ao::rt::test
     return trackId;
   }
 
+  std::vector<TrackId> runtimeTrackIds(AppRuntime& runtime)
+  {
+    auto sourceRes = runtime.sources().acquire(kAllTracksListId);
+    REQUIRE(sourceRes);
+    auto const& source = sourceRes->source();
+    auto trackIds = std::vector<TrackId>{};
+    trackIds.reserve(source.size());
+
+    for (std::size_t index = 0; index < source.size(); ++index)
+    {
+      trackIds.push_back(source.trackIdAt(index));
+    }
+
+    return trackIds;
+  }
+
+  library::test::TrackSpec runtimeTrackSpec(AppRuntime& runtime, TrackId const trackId)
+  {
+    auto projectionPtr = runtime.workspace().detailProjection(ExplicitSelectionTarget{.trackIds = {trackId}});
+    auto const detail = projectionPtr->snapshot();
+    REQUIRE(detail.selectionKind == SelectionKind::Single);
+
+    auto stringField = [&detail](TrackField const field)
+    {
+      auto const& aggregate = trackFieldArrayAt(detail.fields, field);
+      auto const* value = aggregate.optValue ? std::get_if<std::string>(&*aggregate.optValue) : nullptr;
+      return value != nullptr ? *value : std::string{};
+    };
+    auto numberField = [&detail](TrackField const field)
+    {
+      auto const& aggregate = trackFieldArrayAt(detail.fields, field);
+      auto const* value = aggregate.optValue ? std::get_if<std::uint16_t>(&*aggregate.optValue) : nullptr;
+      return value != nullptr ? *value : std::uint16_t{0};
+    };
+    auto spec = library::test::TrackSpec{
+      .title = stringField(TrackField::Title),
+      .artist = stringField(TrackField::Artist),
+      .album = stringField(TrackField::Album),
+      .albumArtist = stringField(TrackField::AlbumArtist),
+      .genre = stringField(TrackField::Genre),
+      .composer = stringField(TrackField::Composer),
+      .conductor = stringField(TrackField::Conductor),
+      .ensemble = stringField(TrackField::Ensemble),
+      .work = stringField(TrackField::Work),
+      .movement = stringField(TrackField::Movement),
+      .soloist = stringField(TrackField::Soloist),
+      .coverArtId = detail.singleCoverArtId,
+      .year = numberField(TrackField::Year),
+      .discNumber = numberField(TrackField::DiscNumber),
+      .discTotal = numberField(TrackField::DiscTotal),
+      .trackNumber = numberField(TrackField::TrackNumber),
+      .trackTotal = numberField(TrackField::TrackTotal),
+      .movementNumber = numberField(TrackField::MovementNumber),
+      .movementTotal = numberField(TrackField::MovementTotal),
+    };
+    auto snapshot = runtime.library().snapshot();
+
+    for (auto const tagId : detail.commonTagIds)
+    {
+      spec.tags.push_back(snapshot.resolve(tagId));
+    }
+
+    for (auto const& item : detail.customMetadata)
+    {
+      if (item.value.optValue)
+      {
+        spec.customMetadata.emplace_back(item.key, *item.value.optValue);
+      }
+    }
+
+    return spec;
+  }
+
   void updateRuntimeTrack(AppRuntime& runtime,
                           TrackId const trackId,
                           compat::MoveOnlyFunction<void(library::test::TrackSpec&)> updater,
                           compat::MoveOnlyFunction<void()> settlePublication)
   {
-    auto spec = library::test::TrackSpec{};
-    {
-      auto transaction = runtime.musicLibrary().readTransaction();
-      auto optView =
-        runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      spec = library::test::trackSpecFromView(runtime.musicLibrary(), *optView);
-    }
+    auto spec = runtimeTrackSpec(runtime, trackId);
 
     updater(spec);
     REQUIRE(spec.coverArtId == kInvalidResourceId);

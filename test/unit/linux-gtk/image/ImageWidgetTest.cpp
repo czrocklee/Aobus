@@ -16,7 +16,6 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -486,8 +485,7 @@ namespace ao::gtk::test
     installCoverCacheEntry(fixture.cacheDirectory(), fullCoverBytes);
     auto& runtime = fixture.runtime();
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto loader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto loader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
 
     SECTION("loads a cached resource into the widget")
     {
@@ -599,8 +597,7 @@ namespace ao::gtk::test
     installCoverCacheEntry(fixture.cacheDirectory(), thumbnailCoverBytes);
     auto& runtime = fixture.runtime();
     auto thumbnailCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto loader = ResourceImageLoader{byteLoader, thumbnailCache, runtime.async()};
+    auto loader = ResourceImageLoader{runtime.resourceBytes(), thumbnailCache, runtime.async()};
 
     constexpr std::int32_t kLogicalSize = 48;
 

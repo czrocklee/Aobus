@@ -80,7 +80,7 @@ The first task in a pending burst owns the wake request, and drain completion re
 
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
 Library scans, import/export, identity indexing, delayed checkpoints, and other potentially blocking work run there and explicitly resume on the callback executor before touching executor-affine state or returning UI-facing completion.
-Interactive resource delivery follows the same boundary without entering library maintenance: `LibraryJobs` copies bounded immutable bytes under a worker-side read transaction, then GTK, TUI, and MPRIS perform their platform transforms or file work on workers and return through the frontend callback executor.
+Interactive resource reading follows the same boundary without entering library maintenance: `ResourceByteReader` copies descriptor and carrier evidence under a worker-side read transaction, reads verified bounded bytes after closing it, and `ResourceByteMemoryCache` completes requests through the runtime callback executor; GTK, TUI, WinUI, and MPRIS then perform their platform transforms or file work on workers and return through the frontend callback executor.
 Those consumers carry copied values across suspension and revalidate owner lifetime plus current resource identity before publication.
 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
@@ -290,7 +290,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
 - [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
 - [`Contract.h`](../../include/ao/Contract.h) and [`Fatal.cpp`](../../lib/utility/Fatal.cpp) define the application-independent fatal registration and abort boundary used by that adapter.
-- [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
+- [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of its owned core-runtime teardown.
 - [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), [`CliRuntime`](../../app/cli/CliRuntime.cpp), and [`DispatcherQueueExecutor`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) adapt the frontend execution models.
 - [`Engine.cpp`](../../lib/audio/Engine.cpp) and [`StreamingSource.cpp`](../../lib/audio/StreamingSource.cpp) contain the principal dedicated audio-thread boundaries.
 

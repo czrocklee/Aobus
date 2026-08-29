@@ -69,7 +69,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::bindPlayback()
   {
-    if (_session == nullptr || !_resourceBytesPtr)
+    if (_session == nullptr)
     {
       return;
     }
@@ -104,7 +104,7 @@ namespace winrt::Aobus::implementation
                                                 Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread(),
                                                 runtime,
                                                 commands,
-                                                *_resourceBytesPtr);
+                                                runtime.resourceBytes());
     }
     catch (hresult_error const& error)
     {

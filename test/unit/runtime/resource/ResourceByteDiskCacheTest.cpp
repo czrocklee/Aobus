@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/resource/ResourceDiskCache.h>
+#include "runtime/resource/ResourceByteDiskCache.h"
 
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,10 +28,10 @@ namespace ao::rt::test
   {
     constexpr auto kEntryCeiling = std::size_t{1024} * 1024;
 
-    ResourceDiskCache makeCache(std::filesystem::path const& root,
-                                std::size_t const byteBudget = std::size_t{64} * 1024)
+    ResourceByteDiskCache makeCache(std::filesystem::path const& root,
+                                    std::size_t const byteBudget = std::size_t{64} * 1024)
     {
-      return ResourceDiskCache{ResourceDiskCache::Config{
+      return ResourceByteDiskCache{ResourceByteDiskCache::Config{
         .directory = coverCacheDirectory(root),
         .byteBudget = byteBudget,
         .maximumEntryBytes = kEntryCeiling,
@@ -46,7 +47,8 @@ namespace ao::rt::test
     {
       std::filesystem::create_directories(path.parent_path());
       auto stream = std::ofstream{path, std::ios::binary};
-      stream.write(reinterpret_cast<char const*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+      auto const byteView = utility::bytes::stringView(bytes);
+      stream.write(byteView.data(), static_cast<std::streamsize>(byteView.size()));
     }
 
     std::size_t entryCount(std::filesystem::path const& root)
@@ -66,7 +68,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ResourceDiskCache - stores and serves content by its digest", "[runtime][unit][resource-cache]")
+  TEST_CASE("ResourceByteDiskCache - stores and serves content by its digest", "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
     auto const cache = makeCache(temp.path());
@@ -92,7 +94,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ResourceDiskCache - an entry whose content does not match its key is discarded, not served",
+  TEST_CASE("ResourceByteDiskCache - an entry whose content does not match its key is discarded, not served",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
@@ -117,7 +119,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ResourceDiskCache - concurrent stores, reads, and evictions never serve the wrong content",
+  TEST_CASE("ResourceByteDiskCache - concurrent stores, reads, and evictions never serve the wrong content",
             "[runtime][unit][resource-cache][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
@@ -167,7 +169,8 @@ namespace ao::rt::test
     CHECK(entryCount(temp.path()) <= kBudgetEntries + kThreadCount);
   }
 
-  TEST_CASE("ResourceDiskCache - two libraries holding one cover share one entry", "[runtime][unit][resource-cache]")
+  TEST_CASE("ResourceByteDiskCache - two libraries holding one cover share one entry",
+            "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
     auto const firstCache = makeCache(temp.path());
@@ -179,11 +182,13 @@ namespace ao::rt::test
     secondCache.store(digest, bytes);
 
     CHECK(entryCount(temp.path()) == 1);
-    REQUIRE(secondCache.read(digest));
-    CHECK(*secondCache.read(digest) == bytes);
+    auto const optRead = secondCache.read(digest);
+    REQUIRE(optRead);
+    CHECK(*optRead == bytes);
   }
 
-  TEST_CASE("ResourceDiskCache - the byte budget is converged toward after a write", "[runtime][unit][resource-cache]")
+  TEST_CASE("ResourceByteDiskCache - the byte budget is converged toward after a write",
+            "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::size_t kEntryBytes = 4096;
@@ -203,14 +208,14 @@ namespace ao::rt::test
     CHECK(entryCount(temp.path()) == 3);
   }
 
-  TEST_CASE("ResourceDiskCache - convergence is amortized over writes rather than run on each one",
+  TEST_CASE("ResourceByteDiskCache - convergence is amortized over writes rather than run on each one",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
     constexpr std::size_t kEntryBytes = 1024;
-    constexpr auto kBudget = kEntryBytes * ResourceDiskCache::kConvergeWriteShare * 4;
+    constexpr auto kBudget = kEntryBytes * ResourceByteDiskCache::kConvergeWriteShare * 4;
     auto const cache = makeCache(temp.path(), kBudget);
-    auto const share = kBudget / ResourceDiskCache::kConvergeWriteShare;
+    auto const share = kBudget / ResourceByteDiskCache::kConvergeWriteShare;
 
     auto storeEntry = [&cache](std::size_t const index)
     {
@@ -248,7 +253,7 @@ namespace ao::rt::test
     CHECK_FALSE(std::filesystem::exists(stalePath));
   }
 
-  TEST_CASE("ResourceDiskCache - eviction is least-recently-used by modification time",
+  TEST_CASE("ResourceByteDiskCache - eviction is least-recently-used by modification time",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
@@ -278,7 +283,7 @@ namespace ao::rt::test
     CHECK(std::filesystem::exists(cache.entryPath(newestDigest)));
   }
 
-  TEST_CASE("ResourceDiskCache - a hit rewrites the modification time at most once a day",
+  TEST_CASE("ResourceByteDiskCache - a hit rewrites the modification time at most once a day",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
@@ -297,17 +302,18 @@ namespace ao::rt::test
 
     SECTION("an entry older than the interval is touched")
     {
-      auto const staleTime = std::filesystem::file_time_type::clock::now() - (ResourceDiskCache::kTouchInterval * 2);
+      auto const staleTime =
+        std::filesystem::file_time_type::clock::now() - (ResourceByteDiskCache::kTouchInterval * 2);
       std::filesystem::last_write_time(path, staleTime);
       REQUIRE(cache.read(digest));
       CHECK(std::filesystem::last_write_time(path) > staleTime);
     }
   }
 
-  TEST_CASE("ResourceDiskCache - an entry above the maximum is never written", "[runtime][unit][resource-cache]")
+  TEST_CASE("ResourceByteDiskCache - an entry above the maximum is never written", "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
-    auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
+    auto const cache = ResourceByteDiskCache{ResourceByteDiskCache::Config{
       .directory = coverCacheDirectory(temp.path()),
       .maximumEntryBytes = 1024,
     }};
@@ -321,11 +327,11 @@ namespace ao::rt::test
     CHECK(entryCount(temp.path()) == 0);
   }
 
-  TEST_CASE("ResourceDiskCache - an entry above the maximum is still served once it is there",
+  TEST_CASE("ResourceByteDiskCache - an entry above the maximum is still served once it is there",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
-    auto const cache = ResourceDiskCache{ResourceDiskCache::Config{
+    auto const cache = ResourceByteDiskCache{ResourceByteDiskCache::Config{
       .directory = coverCacheDirectory(temp.path()),
       .maximumEntryBytes = 1024,
     }};
@@ -333,18 +339,18 @@ namespace ao::rt::test
     auto const digest = utility::computeSha256(bytes);
 
     // The maximum governs what this cache installs, not what it may serve. A read
-    // that applied it would put a ceiling on administrative delivery, which the
-    // specification exempts and which is served from this same tier; deciding an
+    // that applied it would put a ceiling on raw export, which the specification
+    // exempts and which is served from this same tier; deciding an
     // entry's fate by its length would also make that decision here rather than
     // in the caller that knows its own limit.
     writeRaw(cache.entryPath(digest), bytes);
 
     auto const optRead = cache.read(digest);
     REQUIRE(optRead);
-    CHECK(optRead->size() == bytes.size());
+    CHECK(*optRead == bytes);
   }
 
-  TEST_CASE("ResourceDiskCache - a shard it cannot enumerate defers convergence rather than failing the write",
+  TEST_CASE("ResourceByteDiskCache - a shard it cannot enumerate defers convergence rather than failing the write",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
@@ -371,13 +377,15 @@ namespace ao::rt::test
     // permission or a removable mount looks like from inside `store`. The caller
     // already holds verified bytes, so the pass ends quietly and the entry stays.
     REQUIRE_NOTHROW(cache.store(storedDigest, stored));
-    CHECK(cache.read(storedDigest));
+    auto const optStored = cache.read(storedDigest);
+    REQUIRE(optStored);
+    CHECK(*optStored == stored);
   }
 
-  TEST_CASE("ResourceDiskCache - a cache with no directory is inert rather than broken",
+  TEST_CASE("ResourceByteDiskCache - a cache with no directory is inert rather than broken",
             "[runtime][unit][resource-cache]")
   {
-    auto const cache = ResourceDiskCache{ResourceDiskCache::Config{}};
+    auto const cache = ResourceByteDiskCache{ResourceByteDiskCache::Config{}};
     auto const bytes = filled(16, std::byte{0x55});
     auto const digest = utility::computeSha256(bytes);
 
@@ -386,7 +394,7 @@ namespace ao::rt::test
     CHECK_FALSE(cache.read(digest));
   }
 
-  TEST_CASE("ResourceDiskCache - an unwritable directory installs nothing and reports no failure",
+  TEST_CASE("ResourceByteDiskCache - an unwritable directory installs nothing and reports no failure",
             "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
@@ -407,20 +415,24 @@ namespace ao::rt::test
     CHECK_FALSE(cache.read(digest));
   }
 
-  TEST_CASE("ResourceDiskCache - deleting the directory loses only the cache", "[runtime][unit][resource-cache]")
+  TEST_CASE("ResourceByteDiskCache - deleting the directory loses only the cache", "[runtime][unit][resource-cache]")
   {
     auto const temp = ao::test::TempDir{};
     auto const cache = makeCache(temp.path());
     auto const bytes = filled(256, std::byte{0x77});
     auto const digest = utility::computeSha256(bytes);
     cache.store(digest, bytes);
-    REQUIRE(cache.read(digest));
+    auto const optBeforeDelete = cache.read(digest);
+    REQUIRE(optBeforeDelete);
+    CHECK(*optBeforeDelete == bytes);
 
     std::filesystem::remove_all(coverCacheDirectory(temp.path()));
 
     CHECK_FALSE(cache.read(digest));
     cache.store(digest, bytes);
-    CHECK(cache.read(digest));
+    auto const optAfterRecreate = cache.read(digest);
+    REQUIRE(optAfterRecreate);
+    CHECK(*optAfterRecreate == bytes);
   }
 
   TEST_CASE("coverCacheDirectory - an empty root stays empty", "[runtime][unit][resource-cache]")

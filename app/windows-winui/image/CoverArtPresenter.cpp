@@ -9,7 +9,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/winui/MemoryRandomAccessStream.h>
@@ -35,7 +35,7 @@ namespace ao::winui
 
   CoverArtPresenter::CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
                                        winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
-                                       rt::ResourceByteLoader& resources,
+                                       rt::ResourceByteMemoryCache& resources,
                                        ThemeCoordinator& theme,
                                        uimodel::CoverArtPlaceholderStyle const style)
     : _statePtr{std::make_shared<State>()}, _resources{resources}, _theme{theme}

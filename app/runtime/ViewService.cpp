@@ -512,6 +512,14 @@ namespace ao::rt
     return iter->second.projectionPtr;
   }
 
+  std::unique_ptr<TrackListProjection> ViewService::createTransientTrackListProjection(
+    TrackSourceLease sourceLease,
+    TrackOrderSpec const& order) const
+  {
+    return std::make_unique<TrackListProjection>(
+      kInvalidViewId, std::move(sourceLease), _implPtr->library, order, _implPtr->textOrderingPolicy);
+  }
+
   Result<TrackSourceState> ViewService::listSourceState(ViewId const viewId) const
   {
     auto const iter = _implPtr->views.find(viewId);

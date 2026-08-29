@@ -27,11 +27,6 @@ namespace ao::uimodel
   class TransportViewModel;
 }
 
-namespace ao::rt
-{
-  class ResourceByteLoader;
-}
-
 namespace ao::winui
 {
   class CoverArtPresenter;
@@ -169,7 +164,6 @@ namespace winrt::Aobus::implementation
      */
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     std::unique_ptr<ao::winui::ThemeCoordinator> _themePtr;
-    std::unique_ptr<ao::rt::ResourceByteLoader> _resourceBytesPtr;
     /// Routes the runtime's reveal requests to this window's track list.
     ao::async::Subscription _revealTrackSub;
     /// @}

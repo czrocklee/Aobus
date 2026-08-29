@@ -22,7 +22,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -48,14 +48,14 @@ namespace ao::gtk
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
-                               rt::ResourceByteLoader& byteLoader)
+                               rt::ResourceByteMemoryCache& byteCache)
     : _stack{stack}
     , _runtime{runtime}
     , _textCatalog{std::move(textCatalog)}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _columnLayouts{columnLayouts}
-    , _thumbnailLoader{byteLoader, _thumbnailCache, _runtime.async()}
+    , _thumbnailLoader{byteCache, _thumbnailCache, _runtime.async()}
   {
     _revealSub =
       _runtime.playback().events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));

@@ -14,18 +14,16 @@ namespace ao::rt
   /**
    * Immutable, independently owned encoded resource bytes.
    *
-   * Copies share the same storage and remain valid after the loader or cache
-   * that produced them is destroyed or evicts its entry.
+   * Copies share the same storage and remain valid after the memory cache that
+   * produced them is destroyed or evicts its entry.
    */
   class ResourceBytes final
   {
   public:
-    using Storage = std::vector<std::byte>;
-
     ResourceBytes() = default;
 
-    explicit ResourceBytes(Storage bytes)
-      : _storagePtr{bytes.empty() ? nullptr : std::make_shared<Storage const>(std::move(bytes))}
+    explicit ResourceBytes(std::vector<std::byte> bytes)
+      : _storagePtr{bytes.empty() ? nullptr : std::make_shared<std::vector<std::byte> const>(std::move(bytes))}
     {
     }
 
@@ -37,6 +35,6 @@ namespace ao::rt
     }
 
   private:
-    std::shared_ptr<Storage const> _storagePtr;
+    std::shared_ptr<std::vector<std::byte> const> _storagePtr;
   };
 } // namespace ao::rt

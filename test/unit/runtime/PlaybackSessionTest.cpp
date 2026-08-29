@@ -103,8 +103,8 @@ namespace ao::rt::test
                              std::uint16_t const year = 2020,
                              compat::MoveOnlyFunction<void()> settlePublication = {})
     {
-      auto const uri = audio::test::installAudioFixture(
-        runtime.musicLibrary().rootPath(), "basic_metadata.flac", "session-playable.flac");
+      auto const uri =
+        audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", "session-playable.flac");
       return addRuntimeTrack(runtime,
                              library::test::TrackSpec{
                                .title = std::move(title),
@@ -287,16 +287,15 @@ namespace ao::rt::test
       auto launchSpec = ao::test::requireValue(runtime.views().capturePlaybackLaunchSpec(viewId));
       auto const viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
       REQUIRE(viewProjectionPtr->size() > 0);
-      auto sessionPtr = ao::test::requireValue(PlaybackCursorSession::create(
-        std::move(launchSpec),
-        viewProjectionPtr->trackIdAt(0),
-        runtime.sources(),
-        runtime.musicLibrary(),
-        RepeatMode::Off,
-        ShuffleMode::Off,
-        [](std::span<TrackId const> const candidates)
-        { return candidates.empty() ? kInvalidTrackId : candidates.front(); },
-        runtime.textOrderingPolicy()));
+      auto sessionPtr = ao::test::requireValue(
+        PlaybackCursorSession::create(std::move(launchSpec),
+                                      viewProjectionPtr->trackIdAt(0),
+                                      runtime.sources(),
+                                      runtime.views(),
+                                      RepeatMode::Off,
+                                      ShuffleMode::Off,
+                                      [](std::span<TrackId const> const candidates)
+                                      { return candidates.empty() ? kInvalidTrackId : candidates.front(); }));
 
       auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(sessionPtr->projectionSize());
@@ -575,16 +574,12 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     sources.reloadAllTracks();
+    auto views = ViewService{stateOnlyLibraryExecutor(), libraryFixture.library(), sources, changes};
 
     SECTION("fresh launch")
     {
-      auto const result = PlaybackCursorSession::create(PlaybackLaunchSpec{.sourceListId = listId},
-                                                        trackId,
-                                                        sources,
-                                                        libraryFixture.library(),
-                                                        RepeatMode::Off,
-                                                        ShuffleMode::Off,
-                                                        {});
+      auto const result = PlaybackCursorSession::create(
+        PlaybackLaunchSpec{.sourceListId = listId}, trackId, sources, views, RepeatMode::Off, ShuffleMode::Off, {});
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -593,14 +588,8 @@ namespace ao::rt::test
 
     SECTION("restored cursor")
     {
-      auto const result = PlaybackCursorSession::createForRestore(PlaybackLaunchSpec{.sourceListId = listId},
-                                                                  trackId,
-                                                                  0,
-                                                                  sources,
-                                                                  libraryFixture.library(),
-                                                                  RepeatMode::Off,
-                                                                  ShuffleMode::Off,
-                                                                  {});
+      auto const result = PlaybackCursorSession::createForRestore(
+        PlaybackLaunchSpec{.sourceListId = listId}, trackId, 0, sources, views, RepeatMode::Off, ShuffleMode::Off, {});
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::FormatRejected);
@@ -617,11 +606,12 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     sources.reloadAllTracks();
+    auto views = ViewService{stateOnlyLibraryExecutor(), libraryFixture.library(), sources, changes};
     auto sessionPtr = ao::test::requireValue(
       PlaybackCursorSession::create(PlaybackLaunchSpec{.sourceListId = kAllTracksListId},
                                     firstTrackId,
                                     sources,
-                                    libraryFixture.library(),
+                                    views,
                                     RepeatMode::Off,
                                     ShuffleMode::Off,
                                     [](std::span<TrackId const> const candidates)

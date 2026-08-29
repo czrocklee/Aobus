@@ -1104,13 +1104,13 @@ namespace ao::cli
     /**
      * @brief Writes one resource's bytes to a file.
      *
-     * The row holds no bytes, so this materializes through the same source walk
-     * interactive delivery uses: the derived cache first, then any file that
+     * The row holds no bytes, so this reads through the same source walk used by
+     * interactive consumers: the derived cache first, then any file that
      * references the resource, accepting only content that hashes to the
      * descriptor's digest.
      *
-     * It passes no size ceiling, which keeps the administrative exemption the
-     * cover-art delivery specification grants raw export. Absence is reported and
+     * It passes no size ceiling, which keeps the exemption the cover-art
+     * delivery specification grants raw export. Absence is reported and
      * nothing is written, because a command asked for a specific file and no
      * source could reproduce it. The bytes are complete before the destination is
      * touched at all, so no failure here can leave a partial image or destroy a
@@ -1125,7 +1125,7 @@ namespace ao::cli
                         OutputFormat format,
                         std::ostream& os)
     {
-      auto result = cli.runTask(cli.library().jobs().loadResourceAsync(id, rt::ResourceSizeLimit::Administrative));
+      auto result = cli.runTask(cli.core().readResourceBytesForExportAsync(id));
 
       if (!result)
       {

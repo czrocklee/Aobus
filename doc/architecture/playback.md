@@ -17,7 +17,7 @@ Those behavioral and exact-surface facts remain in the linked specifications and
 
 ## System context
 
-Playback exists only in the interactive `AppRuntime` composition above `CoreRuntime`.
+Playback exists only in the interactive `AppRuntime` composition, which owns a `CoreRuntime` below its playback graph.
 Interactive frontends request the platform's audio providers from core audio and consume playback through runtime and UIModel boundaries; the CLI `CoreRuntime` composition has no interactive playback stack.
 
 The ownership graph is:

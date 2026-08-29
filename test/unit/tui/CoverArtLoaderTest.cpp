@@ -13,7 +13,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/ResourceLayout.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -35,7 +35,7 @@ namespace ao::tui::test
     /// The bytes a cover request resolves to, standing in for the runtime walk.
     using ResourceByteMap = std::unordered_map<ResourceId, std::vector<std::byte>>;
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> loadStoredResource(ResourceByteMap const* const source,
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readStoredResource(ResourceByteMap const* const source,
                                                                                   std::size_t* const readCount,
                                                                                   ResourceId const resourceId,
                                                                                   std::stop_token const stopToken)
@@ -56,13 +56,13 @@ namespace ao::tui::test
     {
       CoverArtLoaderFixture()
       {
-        _byteLoaderPtr = std::make_unique<rt::ResourceByteLoader>(
-          _runtime, std::bind_front(loadStoredResource, &_bytesById, &_readCount));
+        _byteCachePtr = std::make_unique<rt::ResourceByteMemoryCache>(
+          _runtime, std::bind_front(readStoredResource, &_bytesById, &_readCount));
       }
 
       ~CoverArtLoaderFixture()
       {
-        _byteLoaderPtr.reset();
+        _byteCachePtr.reset();
         _runtime.requestStop();
         _runtime.join();
       }
@@ -84,7 +84,7 @@ namespace ao::tui::test
 
       rt::test::QueuedExecutor& executor() noexcept { return _executor; }
       async::Runtime& runtimeAsync() noexcept { return _runtime; }
-      rt::ResourceByteLoader& byteLoader() const noexcept { return *_byteLoaderPtr; }
+      rt::ResourceByteMemoryCache& byteCache() const noexcept { return *_byteCachePtr; }
       rt::test::ControlledSleeper& sleeper() noexcept { return _sleeper; }
       /// How many resource reads the walk actually started.
       std::size_t readCount() const noexcept { return _readCount; }
@@ -103,7 +103,7 @@ namespace ao::tui::test
       rt::test::QueuedExecutor _executor{};
       rt::test::ControlledSleeper _sleeper{};
       async::Runtime _runtime{_executor, 1, &_sleeper};
-      std::unique_ptr<rt::ResourceByteLoader> _byteLoaderPtr;
+      std::unique_ptr<rt::ResourceByteMemoryCache> _byteCachePtr;
     };
   } // namespace
 
@@ -114,7 +114,7 @@ namespace ao::tui::test
     std::size_t refreshCount = 0;
     bool completionOnExecutor = false;
     CoverArtLoader* observedLoader = nullptr;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Blocks,
                                  [&]
@@ -155,7 +155,7 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     auto loader = CoverArtLoader{
-      fixture.byteLoader(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, kRequestedColumns};
+      fixture.byteCache(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, kRequestedColumns};
 
     CHECK(loader.columns() == kRequestedColumns);
 
@@ -167,12 +167,20 @@ namespace ao::tui::test
     CHECK(loader.preview()->front().size() == static_cast<std::size_t>(kRequestedColumns));
   }
 
+  TEST_CASE("CoverArtLoader - a negative measured width clamps to zero", "[tui][unit][cover-art]")
+  {
+    auto fixture = CoverArtLoaderFixture{};
+    auto loader = CoverArtLoader{fixture.byteCache(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, -1};
+
+    CHECK(loader.columns() == 0);
+  }
+
   TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output", "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Kitty,
                                  [&] { ++refreshCount; },
@@ -192,7 +200,7 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Off,
                                  [&] { ++refreshCount; },
@@ -218,7 +226,7 @@ namespace ao::tui::test
     auto const oldResourceId = fixture.addResource(support::onePixelRedPng());
     auto const missingResourceId = ResourceId{987654};
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Blocks,
                                  [&] { ++refreshCount; },
@@ -253,7 +261,7 @@ namespace ao::tui::test
     }
 
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Blocks,
                                  [&] { ++refreshCount; },
@@ -291,7 +299,7 @@ namespace ao::tui::test
     auto const firstResourceId = fixture.addResource(support::distinctPng(1));
     auto const secondResourceId = fixture.addResource(support::distinctPng(2));
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Blocks,
                                  [&] { ++refreshCount; },
@@ -314,7 +322,7 @@ namespace ao::tui::test
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
-    auto loader = CoverArtLoader{fixture.byteLoader(),
+    auto loader = CoverArtLoader{fixture.byteCache(),
                                  fixture.runtimeAsync(),
                                  CoverArtDeliveryMode::Blocks,
                                  [&] { ++refreshCount; },
@@ -341,7 +349,7 @@ namespace ao::tui::test
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
     auto loaderPtr = std::make_unique<CoverArtLoader>(
-      fixture.byteLoader(),
+      fixture.byteCache(),
       fixture.runtimeAsync(),
       CoverArtDeliveryMode::Blocks,
       [&] { ++refreshCount; },
@@ -365,7 +373,7 @@ namespace ao::tui::test
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
     std::size_t refreshCount = 0;
     auto loaderPtr = std::make_unique<CoverArtLoader>(
-      fixture.byteLoader(),
+      fixture.byteCache(),
       fixture.runtimeAsync(),
       CoverArtDeliveryMode::Blocks,
       [&] { ++refreshCount; },

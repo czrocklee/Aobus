@@ -12,18 +12,17 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/AudioIdentity.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -42,7 +41,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -83,13 +81,10 @@ namespace ao::gtk::test
     std::vector<std::string> trackTitles(GtkRuntimeFixture& fixture)
     {
       auto titles = std::vector<std::string>{};
-      auto transaction = fixture.runtime().musicLibrary().readTransaction();
-      auto reader = fixture.runtime().musicLibrary().tracks().reader(transaction);
 
-      for (auto const& [id, view] : reader)
+      for (auto const trackId : rt::test::runtimeTrackIds(fixture.runtime()))
       {
-        std::ignore = id;
-        titles.emplace_back(view.metadata().title());
+        titles.push_back(rt::test::runtimeTrackSpec(fixture.runtime(), trackId).title);
       }
 
       return titles;
@@ -101,24 +96,17 @@ namespace ao::gtk::test
       return std::ranges::any_of(titles, [&](std::string const& title) { return title == expectedTitle; });
     }
 
-    bool manifestHasAudioIdentity(GtkRuntimeFixture& fixture, std::string_view uri)
-    {
-      auto transaction = fixture.runtime().musicLibrary().readTransaction();
-      auto optManifest = fixture.runtime().musicLibrary().manifest().reader(transaction).get(uri);
-      REQUIRE(optManifest);
-      return library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature());
-    }
-
     std::vector<std::string> trackUris(GtkRuntimeFixture& fixture)
     {
       auto uris = std::vector<std::string>{};
-      auto transaction = fixture.runtime().musicLibrary().readTransaction();
-      auto reader = fixture.runtime().musicLibrary().tracks().reader(transaction);
+      auto snapshot = fixture.runtime().library().snapshot();
 
-      for (auto const& [id, view] : reader)
+      for (auto const trackId : rt::test::runtimeTrackIds(fixture.runtime()))
       {
-        std::ignore = id;
-        uris.emplace_back(view.property().uri());
+        auto const optRow = snapshot.trackRow(trackId);
+        REQUIRE(optRow);
+        REQUIRE(optRow->optUriPath);
+        uris.push_back(optRow->optUriPath->lexically_relative(fixture.runtime().musicRoot()).generic_string());
       }
 
       return uris;
@@ -218,7 +206,7 @@ namespace ao::gtk::test
     CHECK(progressEvents[0].fraction == 0.0);
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap scan backfills audio identity in background",
+  TEST_CASE("LibraryImportExportWorkflow - fast bootstrap background identity relinks a moved file",
             "[gtk][unit][workflow][scan]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -237,7 +225,15 @@ namespace ao::gtk::test
 
     CHECK(
       hasNotification(fixture, rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background"));
-    CHECK(manifestHasAudioIdentity(fixture, "song.flac"));
+    CHECK(trackUris(fixture) == std::vector<std::string>{"song.flac"});
+
+    std::filesystem::rename(
+      fixture.runtime().musicRoot() / "song.flac", fixture.runtime().musicRoot() / "renamed.flac");
+    workflow.scan();
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
+    CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports relinked moved files", "[gtk][unit][workflow][scan]")
@@ -545,31 +541,25 @@ library:
     }
 
     executor->runUntilIdle();
+    bool publishedReset = false;
+    auto changeSubscription = runtimePtr->library().changes().onChanged(
+      [&publishedReset](rt::LibraryChangeSet const& changeSet) noexcept { publishedReset = changeSet.libraryReset; });
     confirmation(true);
 
-    // The worker commits before it queues the mandatory callback hop. Leave
-    // that hop pending so destruction can invalidate the UI continuation.
-    bool committed = false;
-
-    while (!committed)
+    // Publication proves that the commit and runtime replica update completed.
+    // Leave the later frontend hop pending so destruction can invalidate it.
+    while (!publishedReset)
     {
       executor->checkQueued();
-      {
-        auto transaction = runtimePtr->musicLibrary().readTransaction();
-        auto reader = runtimePtr->musicLibrary().tracks().reader(transaction);
-
-        for (auto const& [trackId, view] : reader)
-        {
-          std::ignore = trackId;
-          committed = committed || view.metadata().title() == "Restored";
-        }
-      }
-
-      if (!committed)
-      {
-        REQUIRE(executor->runOne());
-      }
+      REQUIRE(executor->runOne());
     }
+
+    auto const trackIds = rt::test::runtimeTrackIds(*runtimePtr);
+    REQUIRE(trackIds.size() == 1);
+    auto snapshot = runtimePtr->library().snapshot();
+    auto const optRestoredRow = snapshot.trackRow(trackIds.front());
+    REQUIRE(optRestoredRow);
+    CHECK(optRestoredRow->title == "Restored");
 
     workflowPtr.reset();
     executor->runUntilIdle();

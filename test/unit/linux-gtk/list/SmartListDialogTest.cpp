@@ -4,11 +4,16 @@
 #include "list/SmartListDialog.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
@@ -17,12 +22,16 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/columnview.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
+#include <gtkmm/singleselection.h>
 #include <gtkmm/window.h>
 
 #include <cstddef>
 #include <functional>
+#include <memory>
+#include <string>
 
 namespace ao::gtk::test
 {
@@ -82,6 +91,103 @@ namespace ao::gtk::test
     }
 
     CHECK(visibleError);
+  }
+
+  TEST_CASE("SmartListDialog - valid expression filters the transient preview projection",
+            "[gtk][regression][smart-list][preview]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
+    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Haystack"});
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto dialog =
+      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+
+    drainGtkEvents();
+    dialog.setLocalExpression(R"($title = "Needle")");
+    drainGtkEvents();
+
+    auto const columnViews = collectAll<Gtk::ColumnView>(dialog);
+    REQUIRE(columnViews.size() == 1);
+    auto const selectionModelPtr = columnViews.front()->get_model();
+    REQUIRE(selectionModelPtr);
+    auto const singleSelectionPtr = std::dynamic_pointer_cast<Gtk::SingleSelection>(selectionModelPtr);
+    REQUIRE(singleSelectionPtr);
+    auto const previewModelPtr = singleSelectionPtr->get_model();
+    REQUIRE(previewModelPtr);
+    CHECK(previewModelPtr->get_n_items() == 1);
+    CHECK(findLabelByText(dialog, "Showing all 1 match") != nullptr);
+  }
+
+  TEST_CASE("SmartListDialog - invalid expression rejects the transient preview",
+            "[gtk][regression][smart-list][preview]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto dialog =
+      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+
+    drainGtkEvents();
+    dialog.setLocalExpression("(");
+    drainGtkEvents();
+
+    bool invalidEntry = false;
+    bool visibleFilterError = false;
+
+    for (auto* const entry : collectAll<Gtk::Entry>(dialog))
+    {
+      invalidEntry = invalidEntry || entry->has_css_class("ao-query-invalid");
+    }
+
+    for (auto* const label : collectAll<Gtk::Label>(dialog))
+    {
+      auto const text = label->get_text().raw();
+      visibleFilterError = visibleFilterError || (label->get_visible() && label->has_css_class("ao-layout-error") &&
+                                                  text.contains("Filter error:"));
+    }
+
+    CHECK(invalidEntry);
+    CHECK(visibleFilterError);
+  }
+
+  TEST_CASE("SmartListDialog - valid local expression surfaces a stored parent filter error",
+            "[gtk][regression][smart-list][preview]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto parentListId = kInvalidListId;
+    auto fixture =
+      GtkRuntimeFixture{[&parentListId](library::MusicLibrary& library)
+                        {
+                          auto transaction = library::test::writeTransaction(library);
+                          auto builder = library::ListBuilder::makeEmpty().name("Broken parent").filter("(");
+                          parentListId = ao::test::requireValue(transaction.apply(
+                            [&builder](library::LibraryWrite& write) { return write.lists().create(builder); }));
+                          REQUIRE(transaction.commit());
+                        }};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), parentListId, cache};
+
+    drainGtkEvents();
+    dialog.setLocalExpression("true");
+    drainGtkEvents();
+
+    bool visibleParentError = false;
+
+    for (auto* const label : collectAll<Gtk::Label>(dialog))
+    {
+      auto const text = label->get_text().raw();
+      visibleParentError =
+        visibleParentError || (label->get_visible() && label->has_css_class("ao-layout-error") &&
+                               text.contains("List " + std::to_string(parentListId.raw()) + " stored filter"));
+    }
+
+    CHECK(visibleParentError);
   }
 
   // The preview source is acquired from an idle task. Until it arrives the

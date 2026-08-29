@@ -35,8 +35,8 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/Raii.h>
@@ -128,8 +128,7 @@ namespace ao::gtk::test
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto cache = TrackRowCache{runtime.library(), textCatalog};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
@@ -160,8 +159,8 @@ namespace ao::gtk::test
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(albumTrackId);
 
-      auto projectionPtr = std::make_shared<rt::TrackListProjection>(
-        rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+      auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+        runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
       auto presentation = rt::TrackPresentationSpec{.groupBy = rt::TrackGroupKey::Album};
       projectionPtr->setPresentation(presentation);
       modelPtr->bindProjection(projectionPtr);
@@ -200,8 +199,8 @@ namespace ao::gtk::test
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(albumTrackId);
 
-      auto projectionPtr = std::make_shared<rt::TrackListProjection>(
-        rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+      auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+        runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
       auto presentation = rt::TrackPresentationSpec{
         .groupBy = rt::TrackGroupKey::Year,
         .sortBy = {{.field = rt::TrackSortField::Year}},
@@ -237,14 +236,13 @@ namespace ao::gtk::test
     REQUIRE(trackIds.size() == kTrackCount);
 
     auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);
-    auto projectionPtr = std::make_shared<rt::TrackListProjection>(
-      rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
 
     auto materializedRowsForPage = [&]
     {
@@ -302,8 +300,7 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{listId,
                               modelPtr,
                               columnLayouts,
@@ -376,8 +373,7 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{listId,
                               modelPtr,
                               columnLayouts,
@@ -468,15 +464,14 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId);
-    auto projectionPtr = std::make_shared<rt::TrackListProjection>(
-      rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto projectionPtr = std::shared_ptr<rt::TrackListProjection>{
+      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
     auto columnLayouts = uimodel::TrackColumnLayouts{};
     auto imageCache = ImageCache{200};
-    auto byteLoader = rt::ResourceByteLoader{runtime};
-    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{
       rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
@@ -511,11 +506,9 @@ namespace ao::gtk::test
     auto const rowPtr = rowCache.trackRow(trackId);
     REQUIRE(rowPtr);
     CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Before");
-    auto const transaction = runtime.musicLibrary().readTransaction();
-    auto const optView =
-      runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(optView);
-    CHECK(optView->metadata().title() == "Before");
+    auto const optTrack = runtime.library().snapshot().trackRow(trackId);
+    REQUIRE(optTrack);
+    CHECK(optTrack->title == "Before");
 
     window.close();
     drainGtkEvents();
