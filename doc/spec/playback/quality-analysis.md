@@ -199,7 +199,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) proves transport-aware aura and motion policy.
-- [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) prove frontend consumption of shared presentation state.
+- [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) prove frontend consumption of shared presentation state.
 
 ## Related documents
 

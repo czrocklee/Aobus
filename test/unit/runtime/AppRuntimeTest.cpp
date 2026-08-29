@@ -244,7 +244,7 @@ namespace ao::rt::test
       makeReadyAudioProvider(audio::BackendProvider::Status{.descriptor = {.id = audio::BackendId{"dummy"}}}));
 
     // reloadAllTracks
-    CHECK_NOTHROW(appPtr->reloadAllTracks());
+    CHECK_NOTHROW(appPtr->sources().reloadAllTracks());
 
     // playSelectionInFocusedView (with no focused view)
     auto const withoutFocusRes = appPtr->playSelectionInFocusedView();
@@ -258,18 +258,6 @@ namespace ao::rt::test
     auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
     REQUIRE_FALSE(withoutSelectionRes);
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
-  }
-
-  TEST_CASE("CoreRuntime - a pinned map size is what the storage opens with", "[runtime][unit][core-runtime][capacity]")
-  {
-    auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
-                                                                 tempDir.path(),
-                                                                 LibraryPaths{tempDir.path()}.databasePath(),
-                                                                 tempDir.path() / "cache",
-                                                                 library::test::kTestMusicLibraryMapBytes));
-
-    CHECK(runtimePtr->library().storageCapacity().mapBytes == library::test::kTestMusicLibraryMapBytes);
   }
 
   TEST_CASE("CoreRuntime - shutdown retires a queued library publication",

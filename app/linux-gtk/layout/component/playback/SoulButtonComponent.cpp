@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "common/AccessibleLabel.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>

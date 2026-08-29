@@ -7,7 +7,7 @@ from pathlib import Path
 from ..core import builddir, concept_report, dependency_policy, tidyengine
 from ..core.proc import die
 
-HELP = "Report or verify governed dependencies, or emit the RFC 0002 concept baseline"
+HELP = "Report or verify governed dependencies, or emit the public concept baseline"
 NAME = "deps"
 REQUIRES_BUILD_ENV = True
 

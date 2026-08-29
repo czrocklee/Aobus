@@ -15,9 +15,13 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
+
+namespace ao::rt
+{
+  class TrackSourceCache;
+}
 
 namespace ao::rt::test
 {
@@ -32,6 +36,12 @@ namespace ao::rt::test
     WorkspaceService workspace;
 
     ViewServiceFixture();
+    ~ViewServiceFixture();
+
+    ViewServiceFixture(ViewServiceFixture const&) = delete;
+    ViewServiceFixture& operator=(ViewServiceFixture const&) = delete;
+    ViewServiceFixture(ViewServiceFixture&&) = delete;
+    ViewServiceFixture& operator=(ViewServiceFixture&&) = delete;
 
     LibraryCommands& commands();
 
@@ -41,6 +51,6 @@ namespace ao::rt::test
 
     ViewId requireView(TrackListViewConfig const& config = {});
 
-    std::shared_ptr<TrackListProjection> requireProjection(ViewId viewId);
+    std::shared_ptr<TrackListProjection const> requireProjection(ViewId viewId) const;
   };
 } // namespace ao::rt::test

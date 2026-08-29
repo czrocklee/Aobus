@@ -8,11 +8,11 @@
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
 

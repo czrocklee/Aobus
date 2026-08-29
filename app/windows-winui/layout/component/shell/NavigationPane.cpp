@@ -24,9 +24,8 @@
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>

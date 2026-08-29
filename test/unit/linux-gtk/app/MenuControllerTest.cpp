@@ -4,7 +4,7 @@
 #include "app/MenuController.h"
 
 #include "app/WindowActionRegistry.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "portal/ImportExportActions.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"

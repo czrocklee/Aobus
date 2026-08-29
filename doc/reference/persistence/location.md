@@ -135,7 +135,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root and resolves the cache directory it passes to the runtime.
 - [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h), [`PlatformDirectoriesPosix.cpp`](../../../lib/utility/PlatformDirectoriesPosix.cpp), and [`PlatformDirectoriesWindows.cpp`](../../../lib/utility/PlatformDirectoriesWindows.cpp) own the config and cache resolvers.
 - [`LibraryWindowLifecycle.cpp`](../../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`app/tui/App.cpp`](../../../app/tui/App.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) resolve the same cache directory for their frontends.
-- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) rejects canonical `.aobus` and LMDB marker literals in frontend C++ source.
+- [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) rejects canonical `.aobus` and LMDB marker literals in frontend C++ source.
 
 ## Test authority
 

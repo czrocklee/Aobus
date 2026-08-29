@@ -500,7 +500,7 @@ namespace ao::rt
     return totalDuration;
   }
 
-  Result<std::shared_ptr<TrackListProjection>> ViewService::findTrackListProjection(ViewId const viewId)
+  Result<std::shared_ptr<TrackListProjection const>> ViewService::findTrackListProjection(ViewId const viewId) const
   {
     auto const iter = _implPtr->views.find(viewId);
 

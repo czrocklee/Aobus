@@ -415,12 +415,12 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackActions`](../../app/include/ao/uimodel/playback/command/PlaybackActions.h) is the reusable UIModel command boundary.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h),
   [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h),
-  and the feature functions in [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h)
+  and the feature functions in [`PlaybackOutputText.h`](../../app/include/ao/uimodel/playback/output/PlaybackOutputText.h)
   own shared output-device presentation, exact selection intent, and pure persisted-intent resolution.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary; [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp), [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp), and [`PlatformBackendProvidersMacos.cpp`](../../lib/audio/PlatformBackendProvidersMacos.cpp) own concrete construction and platform preference order.
-- [`AudioBackendBootstrap.cpp`](../../app/linux-gtk/platform/AudioBackendBootstrap.cpp), [`app/tui/AudioBackendBootstrap.cpp`](../../app/tui/AudioBackendBootstrap.cpp), and WinUI [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp) transfer the returned providers into their runtime composition.
+- GTK [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), TUI [`App.cpp`](../../app/tui/App.cpp), and WinUI [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp) transfer the returned providers into their runtime composition.
 
 ## Test map
 
@@ -437,7 +437,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`EngineTest.cpp`](../../test/unit/audio/EngineTest.cpp) protects explicit-start optimistic preparation, exact-mode reuse, and synchronous mismatch fallback.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.
 - [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, constant-time reset reuse, and teardown.
-- [`PlatformBackendProvidersTest.cpp`](../../test/unit/audio/PlatformBackendProvidersTest.cpp) protects the native provider set and preference order; [`AudioBackendBootstrapTest.cpp`](../../test/unit/linux-gtk/platform/AudioBackendBootstrapTest.cpp) and [`CoreAudioBackendBootstrapTest.cpp`](../../test/unit/tui/CoreAudioBackendBootstrapTest.cpp) protect transfer at the GTK and macOS TUI composition boundaries.
+- [`PlatformBackendProvidersTest.cpp`](../../test/unit/audio/PlatformBackendProvidersTest.cpp) protects the native provider set and preference order; frontend composition roots contain only the direct provider-transfer loop.
 
 ## Related documents
 

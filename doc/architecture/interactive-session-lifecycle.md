@@ -32,7 +32,7 @@ GTK, WinUI, or TUI composition root
 ```
 
 There is no frontend-neutral stateful lifecycle service. GTK and WinUI share
-the `ao_app_desktop` value/mechanism boundary for root identity, pure
+the `ao_desktop_launch` value/mechanism boundary for root identity, pure
 startup/switch plans, the private successor protocol, and Boost.Process-based
 detached creation. Each still keeps one library-bound graph per desktop process
 and opens a different root by destroying that graph before launching a

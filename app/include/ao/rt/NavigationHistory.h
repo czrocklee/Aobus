@@ -37,7 +37,6 @@ namespace ao::rt
     bool canGoBack() const noexcept;
     bool canGoForward() const noexcept;
     std::size_t size() const noexcept;
-    std::optional<std::size_t> currentIndex() const noexcept;
 
   private:
     std::deque<NavigationPoint> _points;

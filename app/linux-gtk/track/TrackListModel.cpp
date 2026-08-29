@@ -63,7 +63,7 @@ namespace ao::gtk
     bindProjection(std::shared_ptr<rt::TrackListProjection>{std::move(projectionPtr)});
   }
 
-  void TrackListModel::bindProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
+  void TrackListModel::bindProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr)
   {
     AO_EXPECTS(projectionPtr != nullptr, "TrackListModel projection must not be null; use clearProjection()");
     _projectionSub.reset();

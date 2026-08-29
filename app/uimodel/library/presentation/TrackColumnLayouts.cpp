@@ -53,30 +53,6 @@ namespace ao::uimodel
     _changed.emit(listId);
   }
 
-  void TrackColumnLayouts::setActiveListId(ListId listId)
-  {
-    if (_activeListId == listId)
-    {
-      return;
-    }
-
-    _activeListId = listId;
-  }
-
-  std::vector<rt::TrackField> TrackColumnLayouts::activeFieldOrder() const
-  {
-    auto const& layout = layoutForList(_activeListId);
-    auto order = std::vector<rt::TrackField>{};
-    order.reserve(layout.size());
-
-    for (auto const& col : layout)
-    {
-      order.push_back(col.field);
-    }
-
-    return order;
-  }
-
   std::vector<rt::TrackField> visibleTrackFieldsInStoredOrder(std::span<rt::TrackField const> const visibleFields,
                                                               std::span<rt::TrackField const> const storedOrder)
   {

@@ -5,7 +5,7 @@
 
 #include "app/ThemeCoordinator.h"
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"

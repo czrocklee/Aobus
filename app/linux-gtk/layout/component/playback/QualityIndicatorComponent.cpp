@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -29,9 +28,8 @@ namespace ao::gtk::layout
     class QualityIndicatorComponent final : public LayoutComponent
     {
     public:
-      explicit QualityIndicatorComponent(rt::AppRuntime& runtime)
-        : _runtime{runtime}
-        , _soulViewModel{_runtime.playback(),
+      explicit QualityIndicatorComponent(rt::PlaybackService& playback)
+        : _soulViewModel{playback,
                          [this](uimodel::AobusSoulViewState const& view)
                          {
                            _soul.setMotionMode(view.motionMode);
@@ -43,13 +41,12 @@ namespace ao::gtk::layout
       Gtk::Widget& widget() override { return _soul; }
 
     private:
-      rt::AppRuntime& _runtime;
       AobusSoul _soul{};
       uimodel::AobusSoulViewModel _soulViewModel;
     };
   } // namespace
 
-  void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
+  void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
   {
     registry.registerComponent(
       {.id = "playback.qualityIndicator",
@@ -59,7 +56,7 @@ namespace ao::gtk::layout
        .optMaxChildren = 0,
        .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress),
        .defaultActions = {{.slot = ActionSlot::SecondaryLongPress, .actionId = "shell.showSoul"}}},
-      [&runtime](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-      { return std::make_unique<QualityIndicatorComponent>(runtime); });
+      [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<QualityIndicatorComponent>(playback); });
   }
 } // namespace ao::gtk::layout

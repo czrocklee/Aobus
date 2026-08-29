@@ -35,7 +35,6 @@
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/WinUiErrorBoundary.h>
-#include <ao/winui/WindowInteractionPolicy.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -253,11 +252,9 @@ namespace winrt::Aobus::implementation
 
   bool MainWindow::modalWorkflowActive() const noexcept
   {
-    return ao::winui::hasActiveWindowModalWorkflow(ao::winui::WindowModalWorkflowState{
-      .listAuthoring = _listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->dialogActive(),
-      .libraryTransfer = _libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->active(),
-      .trackProperties = _trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->active(),
-    });
+    return (_listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->dialogActive()) ||
+           (_libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->active()) ||
+           (_trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->active());
   }
 
   void MainWindow::navigateHistory(bool const forward)

@@ -8,9 +8,9 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <cstdint>
 #include <functional>

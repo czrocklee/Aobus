@@ -18,7 +18,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 #include <ao/winui/layout/LayoutSchema.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -92,19 +93,6 @@ namespace ao::winui::layout
       ActivityStatusComponent(rt::NotificationService& notifications,
                               rt::LibraryJobs& libraryJobs,
                               i18n::MessageCatalog const& textCatalog)
-        : _control{ActivityStatusControlConfig{
-            .root = _root,
-            .detailButton = _detailButton,
-            .spinner = _spinner,
-            .statusIcon = _statusIcon,
-            .label = _label,
-            .progress = _progress,
-            .dismissButton = _dismissButton,
-            // The strip is the only place notifications can be reached from, so
-            // it keeps an affordance even when nothing is running.
-            .reserveIdle = true,
-            .textCatalog = textCatalog,
-          }}
       {
         for (std::int32_t index = 0; index < 2; ++index)
         {
@@ -115,15 +103,11 @@ namespace ao::winui::layout
 
         _root.ColumnSpacing(kActivitySpacing);
         _root.VerticalAlignment(VerticalAlignment::Center);
-        _root.Visibility(Visibility::Collapsed);
 
         _spinner.Width(kIndicatorSize);
         _spinner.Height(kIndicatorSize);
-        _spinner.IsActive(false);
-        _spinner.Visibility(Visibility::Collapsed);
 
         _statusIcon.FontSize(kStatusIconFontSize);
-        _statusIcon.Visibility(Visibility::Collapsed);
 
         _label.MaxWidth(kLabelMaximumWidth);
         _label.FontSize(kLabelFontSize);
@@ -134,7 +118,6 @@ namespace ao::winui::layout
         _progress.Height(kProgressHeight);
         _progress.Minimum(0.0);
         _progress.Maximum(1.0);
-        _progress.Visibility(Visibility::Collapsed);
         _progress.VerticalAlignment(VerticalAlignment::Center);
 
         auto content = StackPanel{};
@@ -151,7 +134,6 @@ namespace ao::winui::layout
         dismissGlyph.Glyph(winrt::hstring{kDismissGlyph});
         dismissGlyph.FontSize(kDismissGlyphFontSize);
         _dismissButton.Content(dismissGlyph);
-        _dismissButton.Visibility(Visibility::Collapsed);
         ToolTipService::SetToolTip(
           _dismissButton, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
         Grid::SetColumn(_dismissButton, 1);
@@ -159,7 +141,24 @@ namespace ao::winui::layout
         _root.Children().Append(_detailButton);
         _root.Children().Append(_dismissButton);
 
-        _control.bind(notifications, libraryJobs);
+        // Construct the observer only after the elements are configured: it
+        // renders the current state synchronously.
+        _control.emplace(
+          ActivityStatusControlConfig{
+            .root = _root,
+            .detailButton = _detailButton,
+            .spinner = _spinner,
+            .statusIcon = _statusIcon,
+            .label = _label,
+            .progress = _progress,
+            .dismissButton = _dismissButton,
+            // The strip is the only place notifications can be reached from, so
+            // it keeps an affordance even when nothing is running.
+            .reserveIdle = true,
+            .textCatalog = textCatalog,
+          },
+          notifications,
+          libraryJobs);
       }
 
       FrameworkElement element() const override { return _root; }
@@ -172,7 +171,7 @@ namespace ao::winui::layout
       TextBlock _label{};
       ProgressBar _progress{};
       Button _dismissButton{chromeLessButton()};
-      ActivityStatusControl _control;
+      std::optional<ActivityStatusControl> _control;
     };
 
     /**

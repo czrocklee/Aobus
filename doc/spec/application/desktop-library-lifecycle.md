@@ -22,7 +22,7 @@ subsystem owners linked below.
 
 ## Code boundary
 
-The shared pure rules and detached-launch mechanism form `ao_app_desktop`, an
+The shared pure rules and detached-launch mechanism form `ao_desktop_launch`, an
 application target under the [system architecture](../../architecture/system-overview.md)
 and [interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md).
 Its public surface is under `app/include/ao/desktop/` and its implementation is

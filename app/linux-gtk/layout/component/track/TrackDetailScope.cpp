@@ -3,13 +3,12 @@
 
 #include "TrackDetailScope.h"
 
-#include "TrackComponentRegistrations.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/async/Subscription.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -60,10 +59,10 @@ namespace ao::gtk::layout
       , public TrackDetailScope
     {
     public:
-      TrackDetailScopeComponent(rt::AppRuntime& runtime, LayoutBuildContext& ctx, LayoutNode const& node)
+      TrackDetailScopeComponent(rt::WorkspaceService& workspace, LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
         , _undoController{ctx.timeoutScheduler}
-        , _projectionPtr{runtime.workspace().detailProjection(rt::FocusedViewTarget{})}
+        , _projectionPtr{workspace.detailProjection(rt::FocusedViewTarget{})}
       {
         _currentSnap = _projectionPtr->snapshot();
 
@@ -156,7 +155,7 @@ namespace ao::gtk::layout
     };
   } // namespace
 
-  void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::AppRuntime& runtime)
+  void registerTrackDetailScopeComponent(ComponentRegistry& registry, rt::WorkspaceService& workspace)
   {
     registry.registerComponent(
       {.id = "track.detailScope",
@@ -164,7 +163,7 @@ namespace ao::gtk::layout
        .category = ComponentCategory::Track,
        .layoutProperties = {{.name = "cssClasses", .kind = PropertyKind::String, .label = "CSS Classes"}},
        .minChildren = 1},
-      [&runtime](LayoutBuildContext& ctx, LayoutNode const& node)
-      { return std::make_unique<TrackDetailScopeComponent>(runtime, ctx, node); });
+      [&workspace](LayoutBuildContext& ctx, LayoutNode const& node)
+      { return std::make_unique<TrackDetailScopeComponent>(workspace, ctx, node); });
   }
 } // namespace ao::gtk::layout

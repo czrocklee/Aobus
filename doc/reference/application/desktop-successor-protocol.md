@@ -19,11 +19,19 @@ version. The owning behavior is the
 
 ## Code boundary
 
-`ao_app_desktop` owns parsing and encoding through
+`ao_desktop_launch` owns parsing and encoding through
 [`LibrarySuccessorProtocol.h`](../../../app/include/ao/desktop/LibrarySuccessorProtocol.h).
 The [system architecture](../../architecture/system-overview.md) and
 [interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md)
 own its dependency and composition placement.
+
+The target deliberately keeps `LibraryPath`, `LibrarySwitch`,
+`LibraryStartupPlanner`, and `LibrarySuccessorProtocol` as separate headers.
+Path identity has narrower consumers than startup planning, while protocol
+parsing alone needs span, string, and argument-container vocabulary. Merging
+them would increase invalidation and transitive includes for those narrow
+consumers without removing a behavioral boundary; the public concept report
+is the regression gate for that split.
 
 ## Surface
 

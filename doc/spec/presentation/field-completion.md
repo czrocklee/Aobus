@@ -157,7 +157,7 @@ The runtime provider contains no GTK types.
 - [`CompletionService.cpp`](../../../app/runtime/completion/CompletionService.cpp) owns the shared scan, source frequencies, materialization, caching, and thread confinement.
 - [`MetadataValueCompleter.cpp`](../../../app/runtime/completion/MetadataValueCompleter.cpp) adapts one field to completion items.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) adapts an aggregate vocabulary according to Quick-filter policy.
-- [`completionDetail`](../../../app/include/ao/uimodel/presentation/PresentationText.h) resolves typed completion detail for interactive frontends.
+- [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves typed completion detail for interactive frontends.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK entry adapter.
 
 ## Test map

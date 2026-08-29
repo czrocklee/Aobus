@@ -90,7 +90,7 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 - [`Subscription.h`](../../../include/ao/async/Subscription.h) defines the shared async lifetime name over `utility::ScopedRegistration`.
 - [`ScopedRegistration.h`](../../../include/ao/utility/ScopedRegistration.h) implements reset, destruction, and move-assignment release behavior.
 - [`lib/async/CMakeLists.txt`](../../../lib/async/CMakeLists.txt) records the public `ao_async -> ao_utility` dependency.
-- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) prevents generic signal primitives from returning to application-owned headers and namespaces.
+- [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) prevents generic signal primitives from returning to application-owned headers and namespaces.
 
 ## Test map
 

@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,21 +74,7 @@ namespace ao::winui::layout
                            rt::CompletionService& completion,
                            i18n::MessageCatalog const& textCatalog,
                            std::function<void(std::string)> reportStatus)
-        : _createList{std::move(createList)}
-        , _trackList{trackList}
-        , _gatePtr{ctx.gatePtr}
-        , _control{TrackQuickFilterControlConfig{
-            .input = _input,
-            .onError = std::move(reportStatus),
-            .onState =
-              [this](uimodel::TrackFilterViewState const& state)
-            {
-              _resolvedExpression = state.resolvedExpression;
-              _createButton.Visibility(state.canCreateSmartList ? Visibility::Visible : Visibility::Collapsed);
-              _createButton.IsEnabled(state.canCreateSmartList);
-            },
-            .textCatalog = textCatalog,
-          }}
+        : _createList{std::move(createList)}, _trackList{trackList}, _gatePtr{ctx.gatePtr}
       {
         auto inputColumn = ColumnDefinition{};
         inputColumn.Width(winrt::Microsoft::UI::Xaml::GridLength{
@@ -121,7 +108,25 @@ namespace ao::winui::layout
           });
         Grid::SetColumn(_createButton, 1);
         _root.Children().Append(_createButton);
-        _control.bind(views, workspace, completion);
+
+        // Construction publishes the current filter state synchronously, so
+        // all native chrome must be in place first.
+        _control.emplace(
+          TrackQuickFilterControlConfig{
+            .input = _input,
+            .onError = std::move(reportStatus),
+            .onState =
+              [this](uimodel::TrackFilterViewState const& state)
+            {
+              _resolvedExpression = state.resolvedExpression;
+              _createButton.Visibility(state.canCreateSmartList ? Visibility::Visible : Visibility::Collapsed);
+              _createButton.IsEnabled(state.canCreateSmartList);
+            },
+            .textCatalog = textCatalog,
+          },
+          views,
+          workspace,
+          completion);
       }
 
       FrameworkElement element() const override { return _root; }
@@ -135,8 +140,8 @@ namespace ao::winui::layout
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::string _resolvedExpression;
       Button::Click_revoker _createClickRevoker{};
-      /// Declared last so it unbinds before the box it drives is released.
-      TrackQuickFilterControl _control;
+      /// Declared last so it stops before the box it drives is released.
+      std::optional<TrackQuickFilterControl> _control;
     };
 
     /**

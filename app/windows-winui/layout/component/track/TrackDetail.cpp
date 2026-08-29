@@ -175,36 +175,32 @@ namespace ao::winui::layout
         _scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
         _scroll.Content(_content);
 
+        // Cover art is `track.coverArt` wherever the document placed it, so this
+        // detail region reads the same shared projection and draws no artwork.
         // Built last, and only once every element it drives is arranged the way
         // this component wants it: the adapter renders as soon as it exists, and
         // section visibility is its decision from that moment on.
-        _controlPtr = std::make_unique<TrackDetailControl>(TrackDetailControlConfig{
-          .fieldScroll = _scroll,
-          .detailContent = _content,
-          .metadataHeaderButton = _metadata.headerButton,
-          .metadataHeader = _metadata.label,
-          .metadataChevron = _metadata.chevron,
-          .metadataRows = _metadata.rows,
-          .showEmptyButton = _showEmptyButton,
-          .technicalHeaderButton = _technical.headerButton,
-          .technicalHeader = _technical.label,
-          .technicalChevron = _technical.chevron,
-          .technicalRows = _technical.rows,
-          .textCatalog = textCatalog,
-        });
-        follow(workspace);
+        _controlPtr = std::make_unique<TrackDetailControl>(
+          TrackDetailControlConfig{
+            .fieldScroll = _scroll,
+            .detailContent = _content,
+            .metadataHeaderButton = _metadata.headerButton,
+            .metadataHeader = _metadata.label,
+            .metadataChevron = _metadata.chevron,
+            .metadataRows = _metadata.rows,
+            .showEmptyButton = _showEmptyButton,
+            .technicalHeaderButton = _technical.headerButton,
+            .technicalHeader = _technical.label,
+            .technicalChevron = _technical.chevron,
+            .technicalRows = _technical.rows,
+            .textCatalog = textCatalog,
+          },
+          _focusedDetailPtr->projection(workspace));
       }
 
       FrameworkElement element() const override { return _scroll; }
 
     private:
-      void follow(rt::WorkspaceService& workspace)
-      {
-        // The cover is `track.coverArt`, wherever the document put it, so the
-        // detail region reads the same shared projection and draws no artwork.
-        _controlPtr->bind({.projectionPtr = _focusedDetailPtr->projection(workspace)});
-      }
-
       ScrollViewer _scroll{};
       StackPanel _content{};
       DetailSection _metadata;

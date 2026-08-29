@@ -20,7 +20,7 @@ Public UIModel declarations use the flat `ao::uimodel` namespace.
 Folder paths express feature ownership and do not add public namespace components.
 The only permitted nested public namespace is `ao::uimodel::detail`; tests use `ao::uimodel::test`.
 
-Singular feature capsules are mirrored across:
+Top-level feature ownership is mirrored across:
 
 ```text
 app/include/ao/uimodel/<feature>/
@@ -29,31 +29,26 @@ test/unit/uimodel/<feature>/
 ```
 
 The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preference`, `presentation`, and `status`, plus deliberately reviewed root utilities.
-Nested capsules remain singular, such as `library/presentation`, `playback/now-playing`, and `status/activity`.
-Adding a feature path requires updating `cmake/AssertUimodelOrganization.cmake`.
+Nested feature paths remain singular, such as `library/presentation`, `playback/now-playing`, and `status/activity`.
+Adding a top-level feature path requires updating `cmake/AssertUimodelOrganization.cmake`.
+
+This is an ownership mirror, not a file-for-file rule.
+A cohesive public capsule may contain several related values and functions;
+implementations may be partitioned by algorithm, and tests are grouped by
+behavior. Do not create a public header or test file merely to mirror each
+implementation unit.
 
 Because folder context is not namespace context, public names carry enough feature meaning to remain unambiguous.
 Prefer `TrackColumnState`, `ActivityCompactState`, and `ComponentSchema` over `ColumnState`, `State`, or `Schema`.
 
 ### Role names
 
-| Suffix | Responsibility |
-| --- | --- |
-| `ViewModel` | Long-lived runtime/service observer that publishes view state and exposes user actions. |
-| `InteractionModel` | Transient gesture or input state with no runtime-service ownership. |
-| `EditorModel` / `FormModel` | Stateful draft, validation, option selection, and typed collection. |
-| `Workflow` | Stateless or short-lived user operation; not a subscription owner. |
-| `Store` | UI-local preference/session state and change publication; not implicit file persistence. |
-| `Catalog` | Available options, descriptors, and lookup; not application or navigation. |
-| `Policy` | Deterministic platform-free decisions. |
-| `Schema` | Static or definition-derived UI structure. |
-| `Projection` | Runtime/domain snapshot to UI-facing state or tree. |
-| `Formatter` | Values to display text. |
-| `Codec` | Edit text to typed value and back. |
-| `Resolver` | User/config reference to domain/runtime value. |
-| `Recommender` | Context to preferred default. |
-
-Use bare `Model` only when no narrower role is accurate.
+The [naming convention](naming-convention.md#choosing-a-role) owns the role
+decision tree and table. In UIModel, `ViewModel` means UI-facing state plus
+actions, `InteractionModel` means transient input state, and `EditorModel` or
+`FormModel` means a stateful draft with validation and collection. A frontend
+surface is not made shared by calling it a model, and a pure function group
+does not need a static-only role class.
 
 ### Dependency boundary
 
@@ -109,8 +104,9 @@ An open extension id must have an explicit fallback, while a closed enum lookup 
 When adding UIModel behavior:
 
 1. Select the existing feature capsule that owns the user concept.
-2. Choose the narrowest role suffix from the table.
-3. Mirror public header, implementation, and test paths.
+2. Apply the [role decision tree](naming-convention.md#choosing-a-role), choosing no suffix when a domain noun is sufficient.
+3. Keep the feature path consistent across public, implementation, and test
+   ownership; choose files by cohesive behavior rather than one-to-one mirroring.
 4. Keep platform mapping in the consuming frontend, and keep one frontend's vocabulary there too.
 5. Update the organization guardrail only when introducing a justified new capsule.
 6. For shared authored copy, add or extend a typed semantic input and lock its catalog coverage and fallback in focused tests.

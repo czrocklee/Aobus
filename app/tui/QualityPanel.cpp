@@ -3,7 +3,6 @@
 
 #include "QualityPanel.h"
 
-#include "QualityIndicatorStyle.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
@@ -11,6 +10,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
@@ -26,12 +26,28 @@
 
 namespace ao::tui
 {
+  uimodel::AobusSoulRgb qualityIndicatorColor(uimodel::AudioQualityCategory const category)
+  {
+    switch (category)
+    {
+      case uimodel::AudioQualityCategory::Medal: return uimodel::kAobusSoulRadiant;
+      case uimodel::AudioQualityCategory::Positive: return uimodel::kAobusSoulFlowing;
+      case uimodel::AudioQualityCategory::Diagnostic:
+      case uimodel::AudioQualityCategory::Warning: return uimodel::kAobusSoulTurbulent;
+      case uimodel::AudioQualityCategory::Clipped: return uimodel::kAobusSoulBurning;
+      case uimodel::AudioQualityCategory::Informational:
+      case uimodel::AudioQualityCategory::Unknown: return uimodel::kAobusSoulVeiled;
+    }
+
+    return uimodel::kAobusSoulVeiled;
+  }
+
   namespace
   {
     ftxui::Element qualityDot(uimodel::AudioQualityCategory const category)
     {
-      auto const style = qualityIndicatorStyle(category);
-      return ftxui::text("●") | ftxui::color(ftxui::Color::RGB(style.red, style.green, style.blue));
+      auto const color = qualityIndicatorColor(category);
+      return ftxui::text("●") | ftxui::color(ftxui::Color::RGB(color.red, color.green, color.blue));
     }
 
     std::string selectedDeviceName(rt::PlaybackTransportSnapshot const& state)

@@ -10,7 +10,7 @@
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>

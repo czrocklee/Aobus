@@ -18,6 +18,11 @@
 
 namespace ao::rt::test
 {
+  struct TrackSourceAccess final
+  {
+    static void invalidate(TrackSource& source) noexcept { source.invalidate(); }
+  };
+
   class MutableTrackSource final : public TrackSource
   {
   public:
@@ -65,7 +70,7 @@ namespace ao::rt::test
   class TrackSourceBatchSpy final
   {
   public:
-    explicit TrackSourceBatchSpy(TrackSource& source);
+    explicit TrackSourceBatchSpy(TrackSource const& source);
     ~TrackSourceBatchSpy();
 
     TrackSourceBatchSpy(TrackSourceBatchSpy const&) = delete;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
@@ -90,7 +91,7 @@ namespace ao::rt::test
     auto projection =
       TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library(), policyRes->get()};
     projection.setPresentation(presentation);
-    auto const before = projection.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(projection);
     auto random = std::mt19937{0xA0B05U}; // NOLINT(bugprone-random-generator-seed) -- deterministic replay.
     constexpr std::size_t kIterations = 120;
 
@@ -164,7 +165,7 @@ namespace ao::rt::test
       checkProjectionMatches(projection, oracle);
     }
 
-    auto const after = projection.operationCounts();
+    auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(projection);
     CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
     CHECK(after.incrementalProjectionUpdates - before.incrementalProjectionUpdates == kIterations);
     CHECK(after.arenaRebases == before.arenaRebases);
@@ -221,7 +222,7 @@ namespace ao::rt::test
       libraryFixture.library(),
       TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}},
     };
-    auto const before = projection.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(projection);
     constexpr std::size_t kUpdateCount = 520;
 
     for (std::size_t iteration = 0; iteration < kUpdateCount; ++iteration)
@@ -240,7 +241,7 @@ namespace ao::rt::test
     };
     checkProjectionMatches(projection, oracle);
 
-    auto const after = projection.operationCounts();
+    auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(projection);
     CHECK(after.incrementalProjectionUpdates - before.incrementalProjectionUpdates == kUpdateCount);
     CHECK(after.arenaRebases - before.arenaRebases == 2);
     CHECK(after.fullProjectionRebuilds - before.fullProjectionRebuilds == 2);

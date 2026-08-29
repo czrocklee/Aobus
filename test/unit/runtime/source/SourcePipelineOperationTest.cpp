@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
@@ -9,8 +12,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -57,8 +58,8 @@ namespace ao::rt::test
         TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
     }
 
-    auto const before = projections.front()->operationCounts();
-    auto const evaluatorBefore = evaluator.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(*projections.front());
+    auto const evaluatorBefore = ::ao::rt::detail::RuntimeOperationProbe::counts(evaluator);
     CHECK(before.fullProjectionRebuilds == 1);
     CHECK(before.incrementalProjectionUpdates == 0);
     CHECK(before.arenaRebases == 0);
@@ -73,7 +74,7 @@ namespace ao::rt::test
 
     sourcePtr->batchUpdate(updatedIds);
 
-    auto const evaluatorAfter = evaluator.operationCounts();
+    auto const evaluatorAfter = ::ao::rt::detail::RuntimeOperationProbe::counts(evaluator);
     CHECK(evaluatorAfter.upstreamIndexRebuilds == evaluatorBefore.upstreamIndexRebuilds);
     CHECK(evaluatorAfter.membershipIndexRebuilds == evaluatorBefore.membershipIndexRebuilds);
 
@@ -86,7 +87,7 @@ namespace ao::rt::test
         CHECK(projectionPtr->indexOf(trackId).has_value());
       }
 
-      auto const after = projectionPtr->operationCounts();
+      auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(*projectionPtr);
       CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
       CHECK(after.incrementalProjectionUpdates - before.incrementalProjectionUpdates == 1);
       CHECK(after.arenaRebases == before.arenaRebases);

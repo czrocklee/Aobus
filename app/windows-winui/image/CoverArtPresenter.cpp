@@ -35,34 +35,28 @@ namespace ao::winui
 
   CoverArtPresenter::CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
                                        winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
+                                       async::Runtime& runtime,
                                        rt::ResourceByteMemoryCache& resources,
                                        ThemeCoordinator& theme,
                                        uimodel::CoverArtPlaceholderStyle const style)
-    : _statePtr{std::make_shared<State>()}, _resources{resources}, _theme{theme}
+    : _statePtr{std::make_shared<State>()}, _runtime{runtime}, _resources{resources}, _theme{theme}
   {
     _statePtr->image = std::move(image);
     _statePtr->placeholder = std::move(placeholder);
     _statePtr->style = style;
+    _statePtr->active = true;
+    resetPresentation();
   }
 
   CoverArtPresenter::~CoverArtPresenter()
   {
-    unbind();
+    stop();
   }
 
-  void CoverArtPresenter::bind(async::Runtime& runtime)
-  {
-    unbind();
-    resetPresentation();
-    _runtime = &runtime;
-    _statePtr->active = true;
-  }
-
-  void CoverArtPresenter::unbind() noexcept
+  void CoverArtPresenter::stop() noexcept
   {
     // Make every queued resource callback stale before cancelling its work or
     // touching the native image surface.
-    _runtime = nullptr;
     _statePtr->active = false;
     ++_statePtr->generation;
 
@@ -108,13 +102,13 @@ namespace ao::winui
       {
         auto statePtr = weakStatePtr.lock();
 
-        if (!statePtr || !statePtr->active || statePtr->generation != generation || _runtime == nullptr)
+        if (!statePtr || !statePtr->active || statePtr->generation != generation)
         {
           return;
         }
 
-        _streamTask = _runtime->spawnCancellable(
-          [weakStatePtr, runtime = _runtime, generation, bytes = std::move(bytes)](
+        _streamTask = _runtime.spawnCancellable(
+          [weakStatePtr, runtime = &_runtime, generation, bytes = std::move(bytes)](
             std::stop_token const stopToken) mutable
           { return prepareAndDisplay(weakStatePtr, runtime, generation, std::move(bytes), stopToken); },
           "Windows cover-art stream preparation");

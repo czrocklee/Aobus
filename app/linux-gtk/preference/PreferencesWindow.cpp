@@ -4,7 +4,7 @@
 #include "preference/PreferencesWindow.h"
 
 #include "app/FormBuilder.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/document/LayoutPresets.h"
 #include "playback/OutputDevicePopover.h"
 #include "preference/ShortcutEditorWidget.h"

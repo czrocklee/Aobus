@@ -14,6 +14,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -49,7 +50,7 @@ namespace ao::gtk::test
                                  .artist = "Artist",
                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
                                  .duration = std::chrono::seconds{5}});
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));

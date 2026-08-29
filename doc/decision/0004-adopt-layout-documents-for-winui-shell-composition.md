@@ -49,7 +49,7 @@ semantic view state is reconciled into the candidate; focus, hover, scroll,
 realized containers, and other view-only transient state may reset. Generation
 tokens suppress callbacks from retired views.
 
-`winui::ShellStatePolicy` and `winui::DesktopSettings` remain authoritative for
+The `winui::ShellState` module and `winui::DesktopSettings` remain authoritative for
 Windows responsive shell state and persistent navigation and inspector state.
 Windows-specific navigation and inspector components receive that authority
 through build-context accessors; they do not map it into the generic component

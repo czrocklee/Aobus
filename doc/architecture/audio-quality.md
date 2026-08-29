@@ -177,7 +177,7 @@ Frontend subscriptions are released before their runtime owner.
 - Backend tests under [`test/unit/audio/backend/`](../../test/unit/audio/backend/) protect provider graph ownership and publication.
 - [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp) protects lower runtime snapshot/event adaptation, while [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects coherent public correlation.
 - [`AudioQualityFormatterTest.cpp`](../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) and [`AobusSoulViewModelTest.cpp`](../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protect the UIModel boundary.
-- [`AobusSoulTest.cpp`](../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../test/unit/tui/PlaybackPanelTest.cpp), [`AudioPipelinePanelTest.cpp`](../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`QualityIndicatorStyleTest.cpp`](../../test/unit/tui/QualityIndicatorStyleTest.cpp) protect frontend consumption of shared UIModel values.
+- [`AobusSoulTest.cpp`](../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../test/unit/tui/PlaybackPanelTest.cpp), and [`AudioPipelinePanelTest.cpp`](../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) protect frontend consumption of shared UIModel values.
 
 ## Related documents
 

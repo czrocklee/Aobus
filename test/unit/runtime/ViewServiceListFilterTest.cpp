@@ -15,6 +15,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 

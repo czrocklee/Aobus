@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TagCommand.h"
-
 #include "CliRuntime.h"
 #include "CommandError.h"
+#include "CommandRegistrations.h"
 #include "DryRunFlag.h"
 #include "Output.h"
 #include "TrackSelection.h"

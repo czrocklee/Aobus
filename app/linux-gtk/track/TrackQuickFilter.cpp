@@ -5,10 +5,12 @@
 
 #include "common/AccessibleLabel.h"
 #include "completion/EntryCompletionController.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/CompletionService.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/uimodel/library/track/TrackFilterView.h>
 
@@ -58,12 +60,13 @@ namespace ao::gtk
     }
   } // namespace
 
-  TrackQuickFilter::TrackQuickFilter(rt::AppRuntime& runtime,
+  TrackQuickFilter::TrackQuickFilter(rt::CompletionService& completion,
+                                     rt::ViewService& views,
+                                     rt::WorkspaceService& workspace,
                                      i18n::MessageCatalog const& textCatalog,
                                      DebounceScheduler debounceScheduler)
     : Gtk::Box{Gtk::Orientation::HORIZONTAL, 0}
-    , _runtime{runtime}
-    , _completer{_runtime.completion()}
+    , _completer{completion}
     , _completionController{_entry,
                             textCatalog,
                             [this](std::string_view text, std::size_t cursor) { return complete(text, cursor); },
@@ -71,8 +74,8 @@ namespace ao::gtk
     , _debounceScheduler{std::move(debounceScheduler)}
     , _textChangedConn{_entry.signal_changed().connect(
         sigc::mem_fun(*this, &TrackQuickFilter::handleFilterTextChanged))}
-    , _filterViewModel{_runtime.views(),
-                       _runtime.workspace(),
+    , _filterViewModel{views,
+                       workspace,
                        textCatalog,
                        [this](ao::uimodel::TrackFilterViewState const& state) { applyState(state); }}
   {

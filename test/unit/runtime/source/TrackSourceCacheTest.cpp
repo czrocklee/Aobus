@@ -3,6 +3,8 @@
 
 #include <ao/rt/source/TrackSourceCache.h>
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListEvaluator.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -22,7 +24,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
-#include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -74,7 +75,7 @@ namespace ao::rt::test
       auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto firstLease = ao::test::requireValue(cache.acquire(listId));
-      auto& source = firstLease.source();
+      auto const& source = firstLease.source();
       CHECK(source.state() == TrackSourceState::Live);
 
       auto secondLease = ao::test::requireValue(cache.acquire(listId));
@@ -192,7 +193,7 @@ namespace ao::rt::test
     cache.reloadAllTracks();
     auto allTracksLease = ao::test::requireValue(cache.acquire(kAllTracksListId));
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
-    auto& smartSource = smartLease.source();
+    auto const& smartSource = smartLease.source();
     REQUIRE(smartSource.size() == 0);
 
     auto allTracksBatches = std::vector<TrackSourceDelta>{};
@@ -312,7 +313,7 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
-    auto* const identity = &lease.source();
+    auto const* const identity = &lease.source();
 
     auto reacquired = ao::test::requireValue(cache.acquire(listId));
     CHECK(&reacquired.source() == identity);
@@ -354,7 +355,7 @@ namespace ao::rt::test
     })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto oldLease = ao::test::requireValue(cache.acquire(listId));
-    auto* const oldIdentity = &oldLease.source();
+    auto const* const oldIdentity = &oldLease.source();
     auto oldBatches = std::vector<TrackSourceDelta>{};
     auto oldSubscription =
       oldLease->subscribe([&](TrackSourceDelta const& batch) noexcept { oldBatches.push_back(batch); });
@@ -444,7 +445,7 @@ namespace ao::rt::test
     })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto childLease = ao::test::requireValue(cache.acquire(childId));
-    auto* const childIdentity = &childLease.source();
+    auto const* const childIdentity = &childLease.source();
     auto childBatches = std::vector<TrackSourceDelta>{};
     auto childSubscription =
       childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { childBatches.push_back(batch); });
@@ -490,7 +491,7 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(commandsFixture.runTask(commands.createList(draft)));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto lease = ao::test::requireValue(cache.acquire(listId));
-    auto* const identity = &lease.source();
+    auto const* const identity = &lease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = lease->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
@@ -564,7 +565,7 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
-    auto* const identity = &lease.source();
+    auto const* const identity = &lease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     bool handledMove = false;
     auto nestedError = Error::Code::Generic;
@@ -637,7 +638,7 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
-    auto* const identity = &childLease.source();
+    auto const* const identity = &childLease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     auto trailingBatches = std::vector<TrackSourceDelta>{};
     auto snapshotAfterNestedUpdate = std::vector<TrackId>{};
@@ -741,7 +742,7 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
-    auto* const identity = &childLease.source();
+    auto const* const identity = &childLease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     bool callbackInvoked = false;
     auto nestedMoveStatus = AuthoringStatus::NoOp;
@@ -1025,13 +1026,14 @@ namespace ao::rt::test
         cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year = 1999"}));
     }
 
-    auto const before = cache.operationCounts();
+    auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(cache);
     auto live = ao::test::requireValue(
       cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
     auto sameLive = ao::test::requireValue(
       cache.acquire(SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "$year >= 2000"}));
 
-    CHECK(cache.operationCounts().expiredAdHocSourcesPruned == before.expiredAdHocSourcesPruned + 1);
+    CHECK(::ao::rt::detail::RuntimeOperationProbe::counts(cache).expiredAdHocSourcesPruned ==
+          before.expiredAdHocSourcesPruned + 1);
     CHECK(&live.source() == &sameLive.source());
   }
 

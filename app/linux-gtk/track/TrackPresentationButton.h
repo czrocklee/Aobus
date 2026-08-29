@@ -17,7 +17,8 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class ViewService;
+  class WorkspaceService;
 }
 namespace ao::uimodel
 {
@@ -35,7 +36,7 @@ namespace ao::gtk
   class TrackPresentationButton final : public Gtk::Box
   {
   public:
-    TrackPresentationButton(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog);
+    TrackPresentationButton(rt::ViewService& views, rt::WorkspaceService& workspace, i18n::MessageCatalog textCatalog);
     ~TrackPresentationButton() override;
 
     TrackPresentationButton(TrackPresentationButton const&) = delete;
@@ -54,7 +55,8 @@ namespace ao::gtk
     void handleCreateCustomViewClicked();
     void showPresentationError(std::string_view message);
 
-    rt::AppRuntime& _runtime;
+    rt::ViewService& _views;
+    rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
     uimodel::TrackPresentationCatalog* _catalog = nullptr;
     std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _viewModelPtr;

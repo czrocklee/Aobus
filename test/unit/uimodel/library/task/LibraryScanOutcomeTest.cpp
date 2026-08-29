@@ -8,7 +8,7 @@
 #include <ao/Error.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 

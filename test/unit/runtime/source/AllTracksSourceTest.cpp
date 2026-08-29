@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/rt/source/AllTracksSource.h>
+#include "runtime/source/AllTracksSource.h"
 
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
@@ -165,7 +165,7 @@ namespace ao::rt::test
     }
     REQUIRE(source.size() == 1);
 
-    source.invalidate();
+    TrackSourceAccess::invalidate(source);
     CHECK(source.state() == TrackSourceState::Invalidated);
     CHECK(source.size() == 0);
 

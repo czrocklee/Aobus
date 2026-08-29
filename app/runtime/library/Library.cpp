@@ -81,12 +81,6 @@ namespace ao::rt
     return LibrarySnapshot{_implPtr->storage};
   }
 
-  LibraryStorageCapacity Library::storageCapacity() const
-  {
-    auto const capacity = _implPtr->storage.storageCapacity();
-    return LibraryStorageCapacity{.mapBytes = capacity.mapBytes, .highWaterBytes = capacity.highWaterBytes};
-  }
-
   LibraryChanges const& Library::changes() const noexcept
   {
     return _implPtr->changeBus;

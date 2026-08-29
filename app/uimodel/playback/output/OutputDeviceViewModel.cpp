@@ -12,7 +12,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 
 #include <format>
 #include <functional>

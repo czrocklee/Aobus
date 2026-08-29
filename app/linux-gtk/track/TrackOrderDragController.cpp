@@ -5,7 +5,7 @@
 
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
@@ -19,7 +19,6 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/ListOrderSession.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <gdkmm/contentprovider.h>
 #include <gdkmm/drag.h>

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/source/ListOrderSource.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/ListOrderSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ListOrderSource.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -247,8 +247,8 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
-    parentPtr->invalidate();
-    parentPtr->invalidate();
+    TrackSourceAccess::invalidate(*parentPtr);
+    TrackSourceAccess::invalidate(*parentPtr);
 
     REQUIRE(batches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(batches.front()));
@@ -270,7 +270,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto outerSubscription =
       outer.subscribe([&outerBatches](TrackSourceDelta const& batch) noexcept { outerBatches.push_back(batch); });
 
-    rootPtr->invalidate();
+    TrackSourceAccess::invalidate(*rootPtr);
 
     CHECK(innerPtr->state() == TrackSourceState::Invalidated);
     CHECK(outer.state() == TrackSourceState::Invalidated);

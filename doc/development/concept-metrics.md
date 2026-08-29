@@ -3,14 +3,13 @@ id: development.concept-metrics
 type: development
 status: current
 domain: development
-summary: Defines how contributors measure public concepts, construction hops, and include fan-out for RFC 0002.
+summary: Defines how contributors measure public concepts, construction hops, and include fan-out.
 ---
 # Concept metrics
 
 ## Scope
 
-This guide owns the contributor procedure for the concept baseline introduced by
-[RFC 0002](../rfc/0002-application-concept-debloat.md).
+This guide owns the contributor procedure for the repository's public concept baseline.
 It does not own layer maps, naming policy, or product behavior.
 
 The report answers four primary questions from one configured debug build:
@@ -20,7 +19,12 @@ The report answers four primary questions from one configured debug build:
 3. How many API boundaries a named frontend leaf crosses before it is usable?
 4. How heavy each public header is to include, and how many translation units Ninja invalidates when it changes?
 
-Header counts, role suffixes, and `*Context` / `*Dependencies` field counts are secondary. A change that improves a secondary number while raising a primary one is rejected.
+Header counts, role suffixes, and `*Context` / `*Dependencies` field counts are
+secondary. Primary metrics are decision evidence, not independent vetoes: a
+small local increase is acceptable when the change removes a false abstraction,
+closes an ownership boundary, or makes a capability exact. Record the cause and
+judge the complete metric vector together with the behavioral result.
+[Decision 0017](../decision/0017-evaluate-concept-metrics-as-a-vector.md) records the rationale and the refactor evidence behind this policy.
 
 ## Policy
 
@@ -63,7 +67,10 @@ Do not substitute regex inventory for these four measurements.
 2. Run `./ao deps report --concepts` (or `ao.bat` on Windows).
 3. Read the printed summary and keep `concept-report.json` beside the build. It is a build artifact, not a source file.
 4. After a concept-debloat change, build the same complete target set, run the same command on the same preset, and compare primary totals, named construction chains, and include/fan-out percentiles. If the public-header set changed, calculate both versions' percentiles over the shared-header cohort and list added and removed headers separately. This prevents deleting a low-fan-out header from masquerading as a regression by moving the median's denominator.
-5. If a primary metric moves in the wrong direction, stop and correct the measurement or the change before the next phase.
+5. Explain every material regression before the next phase. Correct measurement
+   noise; otherwise retain the change only when its concrete ownership,
+   capability, or behavioral gain outweighs the local cost and the overall
+   result still advances the repository.
 
 Windows resolves `clang` from the pinned LLVM SDK used by tidy. Linux and macOS use `clang` from the portal environment.
 
@@ -89,7 +96,7 @@ concept-debloat phase still requires the full gate in
 
 ## Related documents
 
-- [RFC 0002: Application concept debloat](../rfc/0002-application-concept-debloat.md) owns the proposal, protected structure, and phase order.
+- [Decision 0017: evaluate concept metrics as a vector](../decision/0017-evaluate-concept-metrics-as-a-vector.md) records why no individual measurement is an independent veto.
 - [Dependency governance](dependency-governance.md) owns `./ao deps verify` and governed package identity.
 - [Naming convention](naming-convention.md) owns role vocabulary; this report only counts it.
-- [Application-layer review](application-layer-review.md) owns the contributor review workflow that later consumes the RFC's three questions.
+- [Application-layer review](application-layer-review.md) owns the contributor review workflow and public-role questions.

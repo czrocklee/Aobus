@@ -11,7 +11,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WritableTagList.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <algorithm>
 #include <cstddef>

@@ -16,8 +16,10 @@
 
 namespace ao::rt
 {
-  // Forward declaration
-  class SmartListEvaluator;
+  namespace test
+  {
+    struct TrackSourceAccess;
+  }
 
   enum class TrackSourceState : std::uint8_t
   {
@@ -44,11 +46,12 @@ namespace ao::rt
 
     TrackSourceState state() const noexcept { return _state; }
 
-    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler);
-    void invalidate() noexcept;
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackSourceDelta const&)> handler) const;
 
   protected:
     TrackSource() = default;
+
+    void invalidate() noexcept;
 
     void notifyUpdated(TrackId id);
     void notifyInserted(std::span<TrackId const> ids);
@@ -64,8 +67,8 @@ namespace ao::rt
     virtual void discardSnapshot() noexcept {}
 
     TrackSourceState _state = TrackSourceState::Live;
-    async::Signal<TrackSourceDelta const&> _changedSignal;
+    mutable async::Signal<TrackSourceDelta const&> _changedSignal;
 
-    friend class SmartListEvaluator;
+    friend struct test::TrackSourceAccess;
   };
 } // namespace ao::rt

@@ -5,8 +5,7 @@
 
 #include "app/ShellLayoutCollaborators.h"
 #include "app/ThemeCoordinator.h"
-#include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
-#include "app/linux-gtk/layout/component/semantic/SemanticComponentRegistrations.h"
+#include "app/linux-gtk/layout/component/ComponentRegistrations.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"

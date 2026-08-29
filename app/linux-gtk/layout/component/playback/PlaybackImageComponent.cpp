@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "PlaybackComponentRegistrations.h"
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -108,12 +109,16 @@ namespace ao::gtk::layout
         JumpToAlbum
       };
 
-      PlaybackImageComponent(rt::AppRuntime& runtime,
+      PlaybackImageComponent(rt::PlaybackService& playback,
+                             rt::Library& library,
+                             std::function<Result<>(TrackId)> jumpToAlbum,
                              ResourceImageLoader* imageLoader,
                              i18n::MessageCatalog const& textCatalog,
                              LayoutBuildContext const& ctx,
                              LayoutNode const& node)
-        : _runtime{runtime}
+        : _playback{playback}
+        , _library{library}
+        , _jumpToAlbum{std::move(jumpToAlbum)}
         , _tooltipSurface{ctx.surface == uimodel::LayoutSurface::Tooltip}
         , _authoredVisible{node.layoutOr<bool>("visible", true)}
       {
@@ -201,10 +206,9 @@ namespace ao::gtk::layout
           _button.signal_clicked().connect([this] { handleImageClicked(); });
         }
 
-        auto& playback = _runtime.playback();
         _snapshotSub =
-          playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { syncSnapshot(snapshot); });
-        _tracksMutatedSub = _runtime.library().changes().onChanged(
+          _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { syncSnapshot(snapshot); });
+        _tracksMutatedSub = _library.changes().onChanged(
           [this](rt::LibraryChangeSet const& changeSet)
           {
             if (changeSet.libraryReset || std::ranges::contains(changeSet.tracksInserted, _currentTrackId) ||
@@ -215,7 +219,7 @@ namespace ao::gtk::layout
             }
           });
 
-        syncSnapshot(playback.snapshot());
+        syncSnapshot(_playback.snapshot());
       }
 
       Gtk::Widget& widget() override
@@ -245,7 +249,7 @@ namespace ao::gtk::layout
         switch (_action)
         {
           case Action::JumpToAlbum:
-            if (auto const result = _runtime.jumpToAlbum(_currentTrackId); !result)
+            if (auto const result = _jumpToAlbum(_currentTrackId); !result)
             {
               APP_LOG_ERROR("PlaybackImage: Failed to jump to album: {}", result.error().message);
             }
@@ -295,7 +299,7 @@ namespace ao::gtk::layout
         }
 
         auto coverArtId = kInvalidResourceId;
-        auto scope = _runtime.library().snapshot();
+        auto scope = _library.snapshot();
         coverArtId = scope.trackCoverArtId(_currentTrackId);
 
         if (coverArtId == _currentCoverArtId)
@@ -326,7 +330,9 @@ namespace ao::gtk::layout
         _button.set_visible(_authoredVisible && (!_tooltipSurface || imageAvailable));
       }
 
-      rt::AppRuntime& _runtime;
+      rt::PlaybackService& _playback;
+      rt::Library& _library;
+      std::function<Result<>(TrackId)> _jumpToAlbum;
       Action _action = Action::None;
       std::unique_ptr<CoverArtView> _imageWidgetPtr;
       std::unique_ptr<PassiveImageSlot> _passiveSlotPtr;
@@ -349,7 +355,9 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerPlaybackImageComponent(ComponentRegistry& registry,
-                                      rt::AppRuntime& runtime,
+                                      rt::PlaybackService& playback,
+                                      rt::Library& library,
+                                      std::function<Result<>(TrackId)> jumpToAlbum,
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog)
   {
@@ -380,7 +388,11 @@ namespace ao::gtk::layout
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
                    static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip),
        .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress)},
-      [&runtime, imageLoader, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
-      { return std::make_unique<PlaybackImageComponent>(runtime, imageLoader, textCatalog, ctx, node); });
+      [&playback, &library, jumpToAlbum = std::move(jumpToAlbum), imageLoader, textCatalog](
+        LayoutBuildContext const& ctx, LayoutNode const& node)
+      {
+        return std::make_unique<PlaybackImageComponent>(
+          playback, library, jumpToAlbum, imageLoader, textCatalog, ctx, node);
+      });
   }
 } // namespace ao::gtk::layout

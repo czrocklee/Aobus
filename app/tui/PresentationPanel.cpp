@@ -8,7 +8,7 @@
 #include "Style.h"
 #include "TextCell.h"
 #include "TrackPresentationNavigation.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/dom/elements.hpp>

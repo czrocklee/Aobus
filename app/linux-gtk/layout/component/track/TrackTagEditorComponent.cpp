@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackComponentRegistrations.h"
 #include "common/UiWorkflow.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
@@ -12,8 +12,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -43,16 +43,19 @@ namespace ao::gtk::layout
     class TrackTagEditorComponent final : public LayoutComponent
     {
     public:
-      TrackTagEditorComponent(rt::AppRuntime& runtime,
+      TrackTagEditorComponent(async::Runtime& asyncRuntime,
+                              rt::Library& library,
+                              rt::NotificationService& notifications,
+                              rt::TextOrderingPolicy const* textOrderingPolicy,
                               TagEditController* tagEditController,
                               i18n::MessageCatalog const& textCatalog,
                               LayoutBuildContext const& ctx,
                               LayoutNode const& /*node*/)
-        : _tagEditor{textCatalog, runtime.textOrderingPolicy()}
+        : _tagEditor{textCatalog, textOrderingPolicy}
         , _textCatalog{textCatalog}
-        , _runtime{runtime}
-        , _library{runtime.library()}
-        , _notifications{runtime.notifications()}
+        , _async{asyncRuntime}
+        , _library{library}
+        , _notifications{notifications}
         , _tagEditController{tagEditController}
       {
         if (ctx.detailScope != nullptr)
@@ -110,7 +113,7 @@ namespace ao::gtk::layout
         auto const sessionGeneration = _tagEditSessionGeneration;
         auto submission =
           uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
-        spawnUiTask(_runtime.async(),
+        spawnUiTask(_async,
                     _tasks,
                     *this,
                     "tag edit",
@@ -172,7 +175,7 @@ namespace ao::gtk::layout
 
       TagEditor _tagEditor;
       i18n::MessageCatalog _textCatalog;
-      rt::AppRuntime& _runtime;
+      async::Runtime& _async;
       rt::Library& _library;
       rt::NotificationService& _notifications;
       TagEditController* _tagEditController;
@@ -185,7 +188,10 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerTrackTagEditorComponent(ComponentRegistry& registry,
-                                       rt::AppRuntime& runtime,
+                                       async::Runtime& asyncRuntime,
+                                       rt::Library& library,
+                                       rt::NotificationService& notifications,
+                                       rt::TextOrderingPolicy const* textOrderingPolicy,
                                        TagEditController* tagEditController,
                                        i18n::MessageCatalog const& textCatalog)
   {
@@ -195,7 +201,11 @@ namespace ao::gtk::layout
        .category = ComponentCategory::Track,
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&runtime, tagEditController, textCatalog](LayoutBuildContext const& ctx, LayoutNode const& node)
-      { return std::make_unique<TrackTagEditorComponent>(runtime, tagEditController, textCatalog, ctx, node); });
+      [&asyncRuntime, &library, &notifications, textOrderingPolicy, tagEditController, textCatalog](
+        LayoutBuildContext const& ctx, LayoutNode const& node)
+      {
+        return std::make_unique<TrackTagEditorComponent>(
+          asyncRuntime, library, notifications, textOrderingPolicy, tagEditController, textCatalog, ctx, node);
+      });
   }
 } // namespace ao::gtk::layout

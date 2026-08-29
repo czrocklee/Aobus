@@ -45,7 +45,7 @@ namespace ao::rt
   struct TrackListProjectionChanged final
   {
     ViewId viewId{};
-    std::shared_ptr<TrackListProjection> projectionPtr{};
+    std::shared_ptr<TrackListProjection const> projectionPtr{};
   };
 
   class ViewService final
@@ -119,7 +119,7 @@ namespace ao::rt
     // an empty selection, or selected ids missing from the library.
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
-    Result<std::shared_ptr<TrackListProjection>> findTrackListProjection(ViewId viewId);
+    Result<std::shared_ptr<TrackListProjection const>> findTrackListProjection(ViewId viewId) const;
     std::unique_ptr<TrackListProjection> createTransientTrackListProjection(TrackSourceLease sourceLease,
                                                                             TrackOrderSpec const& order = {}) const;
     Result<TrackSourceState> listSourceState(ViewId viewId) const;

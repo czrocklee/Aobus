@@ -19,6 +19,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -98,7 +99,7 @@ namespace ao::gtk::test
         runtime,
         library::test::TrackSpec{
           .title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
       auto const viewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
@@ -120,7 +121,7 @@ namespace ao::gtk::test
     SECTION("reveal synchronizes a missing workspace page before selecting the track")
     {
       auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Reveal Target"});
-      runtime.reloadAllTracks();
+      runtime.sources().reloadAllTracks();
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);
 

@@ -4,7 +4,7 @@
 #include "status/ActivityStatusWidget.h"
 
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>

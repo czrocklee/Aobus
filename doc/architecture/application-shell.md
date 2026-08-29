@@ -46,7 +46,7 @@ WinUI follows a parallel native composition:
 ```text
 App owns dispatcher + one LibraryWindowSession
   -> one process owns one LibrarySession + MainWindow for its lifetime
-  -> aobus-winui-lib owns ShellStatePolicy + settings/theme schemas
+  -> aobus-winui-lib owns shell-state rules + settings/theme schemas
   -> MainWindow owns the XAML frame, its resources, and one layout host
      -> session callbacks, TrackListController, theme coordinator
         -> cover-art presenters borrow the runtime-owned loader and window-owned theme
@@ -77,14 +77,14 @@ The GTK Layout Editor likewise retains component types, property names, enum val
 [Decision 0004](../decision/0004-adopt-layout-documents-for-winui-shell-composition.md) makes the version 1 layout language the Windows shell composition language while leaving construction with the frontend.
 That boundary has two halves, and the split is by who decides rather than by what compiles.
 UIModel owns what both shells decide the same way: reading the version 1 common layout fields once, walking a candidate against a schema and a dialect, the parse-expand-validate step, the `ShellGenerationSequence` that keeps exactly one view generation live, and the canonical component entries whose meaning both shells share.
-The Windows-only `aobus-winui-lib` owns what is this shell's own: which shared entries it imports and extends, the types and actions only Windows has, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and `ShellStatePolicy` for native-window breakpoints and pane modes.
+The Windows-only `aobus-winui-lib` owns what is this shell's own: which shared entries it imports and extends, the types and actions only Windows has, the component-to-element mapping, the layout dialect that extends the shared rules with `styleKey` and themed surfaces, `styleKey` lookup planning, the WinUI interpretation of the common fields, and the shell-state rules for native-window breakpoints and pane modes.
 The two built-in preset documents ship under `app/windows-winui/layout/`.
 The [Windows layout schema reference](../reference/windows/layout-schema.md) owns those exact surfaces.
 
 Both halves name XAML type and resource-scope identities as values rather than as C++/WinRT types, so the pure rules remain testable without constructing a XAML host.
 Being portable at the source level is not what makes something shared: a schema builder that registers `windows.navigationPane` speaks for one shell however cleanly it compiles, so it lives in `aobus-winui-lib`.
 Where it is gated is a separate question from who owns it. The Windows schema carries no WinRT, and what it has to get right - that a type both shells present keeps one meaning - is exactly what a change made on Linux can break unseen, so it is built and tested on every host.
-Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::ShellStatePolicy` width boundaries, and `winui::DesktopSettings` pane persistence.
+Sharing the language is not sharing a runtime: there is no cross-frontend build plan or responsive classifier, GTK uses none of these contracts, and Windows keeps native construction, parent placement, controller binding, generation-owned view adapters and the focused-selection projection its components share, `winui::classifyShellWidth()` boundaries, and `winui::DesktopSettings` pane persistence.
 
 The WinUI window builds its shell from the selected preset. `MainWindow.xaml` keeps the window frame, the single layout host, `RootGrid.Resources`, styles, and compiled `DataTemplate` resources; it composes no shell of its own.
 
@@ -218,7 +218,7 @@ Panel-size promotion moves eligible splitter size values into authored defaults 
 
 ```text
 mode + width + inspector request
-  -> winui::ShellStatePolicy resolves the target state
+  -> winui::resolveShellState() resolves the target state
   -> build and publish a candidate first when the preset changes
   -> ShellBuilder commits and emits only a changed state
   -> each live component applies the state through its scoped subscription
@@ -288,7 +288,7 @@ During teardown the controller clears the host while the layout session, stores,
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
 Editor theme and callback tokens are released before the controller's collaborators.
 
-WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the borrowed session. The main window retires `ShellBuilder` first; destroying the live generation releases its scoped shell-state and track-list subscriptions while their `ShellBuilder`- and window-owned signal sources still exist. `MainWindow::shutdown()` then unbinds playback, clears the session callback registration, releases the reveal subscription, and only then releases the resource, theme, and track-list consumers. Playback leaf destructors unbind their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
+WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the borrowed session. The main window retires `ShellBuilder` first; destroying the live generation releases its scoped shell-state and track-list subscriptions while their `ShellBuilder`- and window-owned signal sources still exist. `MainWindow::shutdown()` then unbinds the XAML-owned playback controls, clears the session callback registration, releases the reveal subscription, and only then releases the resource, theme, and track-list consumers. Constructor-bound leaf destructors stop their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
 
 WinUI library restart is requested through the dispatcher so the folder-picker callback returns before teardown.
 The parent retires every shell and runtime borrower, releases its window/session graph and application-state writers, and only then starts the successor.
@@ -308,10 +308,10 @@ The selected root is persisted only after successor activation; its initial scan
 - [`App`](../../app/windows-winui/App.xaml.h), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.h), [`LibrarySession`](../../app/windows-winui/app/LibrarySession.h), [`ProcessLauncher`](../../app/windows-winui/platform/ProcessLauncher.h), and [`MainWindow`](../../app/windows-winui/MainWindow.xaml) own the WinUI shell and destructive library restart; shell, track, and playback code-behind methods are compiled from their matching subsystem directories.
 - [`MainWindow.xaml.cpp`](../../app/windows-winui/MainWindow.xaml.cpp) owns the WinUI session callback boundary along with the track-list, resource-byte, and theme consumers, and states its retirement order in `shutdown()`.
 - [`LayoutBuildContext`](../../app/windows-winui/layout/runtime/LayoutBuildContext.h) is the per-generation construction carrier; [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) binds session-backed operations into exact callback captures when it registers each component family.
-- Playback leaves bind directly to `PlaybackService` and, when required, `PlaybackActions`; [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) prevents generation components and leaf adapters from regaining session/runtime composition authority.
+- Playback leaves receive `PlaybackService` and, when required, `PlaybackActions` in their constructors; only XAML runtime classes retain explicit bind/unbind seams. [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) prevents generation components and leaf adapters from regaining session/runtime composition authority.
 - [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h) owns WinUI shell composition, [`ShellPresetSource`](../../app/windows-winui/layout/ShellPresetSource.h) reads the packaged presets, and [`LayoutHost`](../../app/windows-winui/layout/runtime/LayoutHost.h) keeps exactly one generation attached to the frame.
 - [`TransportButton`](../../app/windows-winui/playback/TransportButton.h), [`SoulTransportButton`](../../app/windows-winui/playback/SoulTransportButton.h), [`OutputDeviceControl`](../../app/windows-winui/playback/OutputDeviceControl.h), [`SeekControl`](../../app/windows-winui/playback/SeekControl.h), [`PlaybackTimeControl`](../../app/windows-winui/playback/PlaybackTimeControl.h), and [`VolumeControl`](../../app/windows-winui/playback/VolumeControl.h) own playback leaf adaptation; a document's playback components compose them.
-- [`ShellStatePolicy`](../../app/windows-winui/include/ao/winui/layout/ShellStatePolicy.h) owns the Windows-only shell-state decision, while [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) owns shared Soul policy.
+- [`ShellState`](../../app/windows-winui/include/ao/winui/layout/ShellState.h) owns the Windows-only shell-state values and decisions, while [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) owns shared Soul behavior.
 
 ## Test map
 
@@ -322,6 +322,7 @@ The selected root is persisted only after successor activation; its initial scan
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) enforces narrow WinUI generation and leaf dependencies during native builds.
+- [`AssertGtkLeafCapabilities.cmake`](../../cmake/AssertGtkLeafCapabilities.cmake) keeps `AppRuntime` and the aggregate GTK dependency bag at registration composition roots, so component leaves receive exact services.
 - Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component schema, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
 
 ## Related documents

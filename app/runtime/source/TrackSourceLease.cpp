@@ -11,7 +11,7 @@
 
 namespace ao::rt
 {
-  TrackSourceLease::TrackSourceLease(std::shared_ptr<TrackSource> sourcePtr)
+  TrackSourceLease::TrackSourceLease(std::shared_ptr<TrackSource const> sourcePtr)
     : _sourcePtr{std::move(sourcePtr)}
   {
     AO_EXPECTS(_sourcePtr != nullptr, "Track source lease requires a source");

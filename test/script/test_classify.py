@@ -20,9 +20,6 @@ class TidyClassifyTest(unittest.TestCase):
     def test_test_code_is_relaxed(self):
         self.assertEqual(tidy.classify(Path("/repo/test/unit/audio/FooTest.cpp"), explicit=False), "RELAXED")
 
-    def test_catch2_main_is_ignored(self):
-        self.assertEqual(tidy.classify(Path("/repo/test/main.cpp"), explicit=False), "IGNORE")
-
     def test_lint_fixtures_only_checked_when_explicit(self):
         fixture = Path("/repo/test/integration/lint/fixture/aobus-check/case.cpp")
         self.assertEqual(tidy.classify(fixture, explicit=True), "STRICT")
@@ -164,9 +161,8 @@ class AnalyzeClassifyTest(unittest.TestCase):
         self.assertTrue(analyze.classify(Path("/repo/lib/audio/Foo.cpp")))
         self.assertTrue(analyze.classify(Path("/repo/test/unit/audio/FooTest.cpp")))
 
-    def test_lint_integration_and_main_are_skipped(self):
+    def test_lint_integration_is_skipped(self):
         self.assertFalse(analyze.classify(Path("/repo/test/integration/lint/fixture/x/case.cpp")))
-        self.assertFalse(analyze.classify(Path("/repo/test/main.cpp")))
 
 
 class AnalyzerChecksTest(unittest.TestCase):

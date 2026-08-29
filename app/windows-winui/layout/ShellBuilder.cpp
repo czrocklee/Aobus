@@ -33,7 +33,7 @@
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellDocument.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -448,7 +448,7 @@ namespace ao::winui::layout
       return _shellState;
     }
 
-    auto const targetState = ShellStatePolicy::resolve(mode, width, optInspectorRequest);
+    auto const targetState = resolveShellState(mode, width, optInspectorRequest);
 
     if (auto const preset = presetForMode(targetState.mode); _optLivePreset != preset)
     {

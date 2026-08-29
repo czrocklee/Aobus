@@ -4,7 +4,7 @@
 #include "app/MenuController.h"
 
 #include "app/WindowActionRegistry.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <giomm/menu.h>

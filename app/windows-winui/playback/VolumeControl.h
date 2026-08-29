@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -27,7 +26,7 @@ namespace ao::winui
   class VolumeControl final
   {
   public:
-    explicit VolumeControl(VolumeControlConfig config);
+    VolumeControl(VolumeControlConfig config, rt::PlaybackService& playback);
     ~VolumeControl();
 
     VolumeControl(VolumeControl const&) = delete;
@@ -35,11 +34,8 @@ namespace ao::winui
     VolumeControl(VolumeControl&&) = delete;
     VolumeControl& operator=(VolumeControl&&) = delete;
 
-    void bind(rt::PlaybackService& playback);
-    void unbind() noexcept;
-
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
 
     void applyState(uimodel::VolumeViewState const& state);

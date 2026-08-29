@@ -4,8 +4,7 @@
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_test_macros.hpp>
 

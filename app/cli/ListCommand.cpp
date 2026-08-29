@@ -5,6 +5,7 @@
 
 #include "CliRuntime.h"
 #include "CommandError.h"
+#include "CommandRegistrations.h"
 #include "DryRunFlag.h"
 #include "DumpOutput.h"
 #include "Output.h"
@@ -269,7 +270,7 @@ namespace ao::cli
       }
 
       auto sourceLease = std::move(*sourceRes);
-      auto& source = sourceLease.source();
+      auto const& source = sourceLease.source();
       auto ids = std::vector<TrackId>{};
       ids.reserve(source.size());
 

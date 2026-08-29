@@ -14,7 +14,7 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellDocument.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -187,7 +187,7 @@ namespace ao::winui::layout
     ComponentRegistry _registry;
     // These sources outlive the host so every component subscription disconnects
     // before the signal it observes is destroyed.
-    ShellState _shellState = ShellStatePolicy::resolve(ShellMode::Modern, ShellStatePolicy::kWideWidth, std::nullopt);
+    ShellState _shellState = resolveShellState(ShellMode::Modern, kWideShellWidth, std::nullopt);
     async::Signal<ShellState> _shellStateChanged;
     WindowActivityState _windowActivity;
     async::Signal<WindowActivityState> _windowActivityChanged;

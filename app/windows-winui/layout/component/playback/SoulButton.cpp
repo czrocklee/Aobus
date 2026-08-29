@@ -73,23 +73,23 @@ namespace ao::winui::layout
           soul->setInnerGlyphScale(glyphScale);
         }
 
-        _transportPtr = std::make_unique<SoulTransportButton>(SoulTransportButtonConfig{
-          .button = _button,
-          .soul = _soul.as<winrt::Microsoft::UI::Xaml::Controls::ContentControl>(),
-          .textCatalog = textCatalog,
-          // The pipeline explanation occupies the tooltip in every shell, so the
-          // transport never writes its own.
-          .hasComplexTooltip = true,
-          // Windows draws one inner mark, so it answers whether the soul wears
-          // a glyph at all rather than which of the two the vocabulary names.
-          .showGlyph = node.propertyOr<bool>("showGlyph", true),
-          .activatesOnClick = activatesOnClick,
-        });
+        _transportPtr = std::make_unique<SoulTransportButton>(
+          SoulTransportButtonConfig{
+            .button = _button,
+            .soul = _soul.as<winrt::Microsoft::UI::Xaml::Controls::ContentControl>(),
+            .textCatalog = textCatalog,
+            // The pipeline explanation occupies the tooltip in every shell, so the
+            // transport never writes its own.
+            .hasComplexTooltip = true,
+            // Windows draws one inner mark, so it answers whether the soul wears
+            // a glyph at all rather than which of the two the vocabulary names.
+            .showGlyph = node.propertyOr<bool>("showGlyph", true),
+            .activatesOnClick = activatesOnClick,
+          },
+          playback,
+          playbackActions);
         _toolTipPtr = std::make_unique<AudioPipelineToolTip>(
-          AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = textCatalog});
-
-        _transportPtr->bind(playback, playbackActions);
-        _toolTipPtr->bind(playback);
+          AudioPipelineToolTipConfig{.anchor = _button, .textCatalog = textCatalog}, playback);
         applyWindowActivity(ctx.windowActivity);
         _windowActivitySub = subscribeUiUpdate(windowActivityChanged,
                                                "SoulButtonComponent",

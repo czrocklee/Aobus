@@ -7,7 +7,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/winui/layout/ShellStatePolicy.h>
+#include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_message.hpp>

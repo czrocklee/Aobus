@@ -6,7 +6,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/UnicodeText.h>
 
 #include <cstddef>

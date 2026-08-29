@@ -4,14 +4,14 @@
 #include "EventController.h"
 
 #include "LibraryController.h"
-#include "ListNavigation.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
-#include "PlaybackActions.h"
 #include "PlaybackPanel.h"
 #include "PresentationPanel.h"
+#include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
+#include "TrackListEntry.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
@@ -23,6 +23,8 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -56,6 +58,71 @@ namespace ao::tui
     constexpr auto kKeyboardSeekDelta = std::chrono::seconds{5};
     constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
     constexpr float kKeyboardVolumeDelta = 0.05F;
+    constexpr std::int32_t kPageSelectionDelta = 10;
+    constexpr std::int32_t kBoundarySelectionDelta = 1'000'000;
+
+    std::optional<std::int32_t> listNavigationDelta(ftxui::Event const& event)
+    {
+      if (event == ftxui::Event::ArrowUp)
+      {
+        return -1;
+      }
+
+      if (event == ftxui::Event::ArrowDown)
+      {
+        return 1;
+      }
+
+      if (event == ftxui::Event::PageUp)
+      {
+        return -kPageSelectionDelta;
+      }
+
+      if (event == ftxui::Event::PageDown)
+      {
+        return kPageSelectionDelta;
+      }
+
+      if (event == ftxui::Event::Home)
+      {
+        return -kBoundarySelectionDelta;
+      }
+
+      if (event == ftxui::Event::End)
+      {
+        return kBoundarySelectionDelta;
+      }
+
+      return std::nullopt;
+    }
+
+    template<typename MoveSelection>
+    bool handleListNavigation(ftxui::Event const& event, MoveSelection moveSelection)
+    {
+      auto const optDelta = listNavigationDelta(event);
+
+      if (!optDelta)
+      {
+        return false;
+      }
+
+      moveSelection(*optDelta);
+      return true;
+    }
+
+    bool playSelected(rt::PlaybackCommands& commands,
+                      std::vector<TrackListEntry> const& tracks,
+                      std::int32_t const selected,
+                      rt::ViewId const sourceViewId)
+    {
+      if (tracks.empty())
+      {
+        return false;
+      }
+
+      auto const index = clampSelection(static_cast<std::size_t>(std::max(0, selected)), tracks.size());
+      return static_cast<bool>(commands.startFromView(sourceViewId, tracks[index].id));
+    }
 
     bool containsTrackColumnResizeEdge(TrackColumnResizeHandle const& handle,
                                        std::int32_t const column,
@@ -1106,7 +1173,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
     {
-      _shell.moveCommandCompletionByPage(listNavigationDecision(event).delta);
+      _shell.moveCommandCompletionByPage(listNavigationDelta(event).value_or(0));
       return true;
     }
 

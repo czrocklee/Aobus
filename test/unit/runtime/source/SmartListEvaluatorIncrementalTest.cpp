@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -106,7 +107,7 @@ namespace ao::rt::test
     filtered.reload();
 
     auto spy = TrackSourceBatchSpy{filtered};
-    auto const operationCountsBefore = engine.operationCounts();
+    auto const operationCountsBefore = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
 
     libraryFixture.updateTrack(trackId, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(trackId);
@@ -136,8 +137,9 @@ namespace ao::rt::test
     CHECK(removal.start == 0);
     CHECK(removal.trackIds == std::vector{trackId});
     CHECK(filtered.size() == 0);
-    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
-    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
+    auto const operationCountsAfter = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
+    CHECK(operationCountsAfter.upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(operationCountsAfter.membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
   TEST_CASE("SmartListEvaluator - child filtered lists track parent membership as their source",

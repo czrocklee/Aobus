@@ -11,7 +11,6 @@
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.h>
 

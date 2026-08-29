@@ -6,7 +6,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -30,7 +29,7 @@ namespace ao::winui
   class TransportButton final
   {
   public:
-    explicit TransportButton(TransportButtonConfig config);
+    TransportButton(TransportButtonConfig config, rt::PlaybackService& playback, uimodel::PlaybackActions& actions);
     ~TransportButton();
 
     TransportButton(TransportButton const&) = delete;
@@ -38,12 +37,10 @@ namespace ao::winui
     TransportButton(TransportButton&&) = delete;
     TransportButton& operator=(TransportButton&&) = delete;
 
-    void bind(rt::PlaybackService& playback, uimodel::PlaybackActions& actions);
-    void unbind() noexcept;
     void activate();
 
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
 
     void applyState(uimodel::TransportViewState const& state);

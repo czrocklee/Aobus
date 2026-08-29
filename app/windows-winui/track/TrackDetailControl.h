@@ -8,34 +8,14 @@
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <memory>
 
-namespace ao::rt
-{
-  class AppRuntime;
-}
-
 namespace ao::winui
 {
-  /**
-   * @brief What the detail control reads the focused selection through.
-   *
-   * The two shells reach it differently. A document-built inspector hands over
-   * the projection its generation already shares and owns its cover as a
-   * component of its own; the static shell has neither, so it lets the control
-   * make a projection and drives the shell-lifetime cover presenter through it.
-   */
-  struct TrackDetailBinding final
-  {
-    /// The generation's shared projection, which every detail view of it reads.
-    std::shared_ptr<rt::TrackDetailProjection> projectionPtr;
-  };
-
   struct TrackDetailControlConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::ScrollViewer fieldScroll{nullptr};
@@ -64,7 +44,7 @@ namespace ao::winui
   class TrackDetailControl final
   {
   public:
-    explicit TrackDetailControl(TrackDetailControlConfig config);
+    TrackDetailControl(TrackDetailControlConfig config, std::shared_ptr<rt::TrackDetailProjection> projectionPtr);
     ~TrackDetailControl();
 
     TrackDetailControl(TrackDetailControl const&) = delete;
@@ -72,12 +52,10 @@ namespace ao::winui
     TrackDetailControl(TrackDetailControl&&) = delete;
     TrackDetailControl& operator=(TrackDetailControl&&) = delete;
 
-    void bind(TrackDetailBinding binding);
-    void unbind() noexcept;
-
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first projection snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     void handleSnapshot(rt::TrackDetailSnapshot const& snapshot);
     void renderSnapshot();

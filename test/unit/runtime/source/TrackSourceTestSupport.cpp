@@ -191,7 +191,7 @@ namespace ao::rt::test
     return std::get<delta::RegularTrackEditScript>(message);
   }
 
-  TrackSourceBatchSpy::TrackSourceBatchSpy(TrackSource& source)
+  TrackSourceBatchSpy::TrackSourceBatchSpy(TrackSource const& source)
     : _subscription{source.subscribe([this](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); })}
   {
   }

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/utility/EnumName.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -24,12 +23,6 @@ namespace ao::yaml::test
   // namespace): boost.pfr reflection rejects internal-linkage types under
   // MSVC (error C7631).
   // NOLINTBEGIN(misc-use-internal-linkage) — external linkage is required by boost.pfr on MSVC.
-  enum class FixtureState : std::uint8_t
-  {
-    Ready,
-    Done,
-  };
-
   struct NestedDto final
   {
     std::string name;
@@ -51,7 +44,6 @@ namespace ao::yaml::test
     TrackId trackId{};
     ListId listId{};
     std::filesystem::path path;
-    FixtureState state = FixtureState::Ready;
     std::uint32_t newCount = 0;
   };
   // NOLINTEND(misc-use-internal-linkage)
@@ -67,18 +59,6 @@ namespace ao::yaml::test
     }
   } // namespace
 } // namespace ao::yaml::test
-
-template<>
-struct ao::yaml::ReflectEnumTraits<ao::yaml::test::FixtureState>
-{
-  static constexpr auto names()
-  {
-    return utility::EnumNameTable<test::FixtureState, 2>{{
-      {test::FixtureState::Ready, "ready"},
-      {test::FixtureState::Done, "done"},
-    }};
-  }
-};
 
 template<>
 struct ao::yaml::ReflectNameOverrides<ao::yaml::test::ReflectFixtureDto>
@@ -121,7 +101,6 @@ namespace ao::yaml::test
       .trackId = TrackId{42},
       .listId = ListId{11},
       .path = utility::pathFromUtf8("folder/Dvo\xC5\x99\xC3\xA1k.flac"),
-      .state = FixtureState::Done,
       .newCount = 5,
     };
 
@@ -141,7 +120,6 @@ namespace ao::yaml::test
     CHECK(scalarView(findChild(root, "trackId")) == "42");
     CHECK(scalarView(findChild(root, "listId")) == "11");
     CHECK(scalarView(findChild(root, "path")) == "folder/Dvo\xC5\x99\xC3\xA1k.flac");
-    CHECK(scalarView(findChild(root, "state")) == "done");
     CHECK(scalarView(findChild(root, "new")) == "5");
 
     auto const jsonText = toJsonString(dto);

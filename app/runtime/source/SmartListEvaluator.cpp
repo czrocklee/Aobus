@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/source/SmartListEvaluator.h>
+#include "runtime/source/SmartListEvaluator.h"
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
@@ -13,7 +15,6 @@
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -139,7 +140,7 @@ namespace ao::rt
 
   void SmartListEvaluator::registerList(SmartListSource& list)
   {
-    auto& source = list.source();
+    auto const& source = list.source();
     auto [it, inserted] = _buckets.try_emplace(&source);
 
     if (inserted)
@@ -168,13 +169,13 @@ namespace ao::rt
 
     if (bucket.invalidated)
     {
-      list.invalidate();
+      list.invalidateFromEvaluator();
     }
   }
 
   void SmartListEvaluator::unregisterList(SmartListSource& list)
   {
-    auto* const source = &list.source();
+    auto const* const source = &list.source();
     auto const it = _buckets.find(source);
 
     if (it == _buckets.end())
@@ -208,7 +209,7 @@ namespace ao::rt
     evaluatePendingLists(*it->second);
   }
 
-  void SmartListEvaluator::handleSourceBatch(TrackSource& source, TrackSourceDelta const& batch)
+  void SmartListEvaluator::handleSourceBatch(TrackSource const& source, TrackSourceDelta const& batch)
   {
     auto const it = _buckets.find(&source);
 
@@ -235,7 +236,7 @@ namespace ao::rt
   void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
   {
     bucket.upstreamTracks.assign(snapshotSource(*bucket.source));
-    ++_operationCounts.upstreamIndexRebuilds;
+    ++_upstreamIndexRebuildCount;
     rebuildLists(bucket, bucket.lists);
   }
 
@@ -551,7 +552,7 @@ namespace ao::rt
       if (work.active)
       {
         work.list->replaceMembers(std::move(work.members));
-        ++_operationCounts.membershipIndexRebuilds;
+        ++_membershipIndexRebuildCount;
       }
     }
 
@@ -580,7 +581,7 @@ namespace ao::rt
 
     auto upstreamTracks = bucket.upstreamTracks;
     upstreamTracks.applyScript(script);
-    ++_operationCounts.upstreamIndexRebuilds;
+    ++_upstreamIndexRebuildCount;
     AO_INVARIANT(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
 
     auto works = buildDerivedWorks(bucket);
@@ -603,7 +604,7 @@ namespace ao::rt
         continue;
       }
 
-      list->invalidate();
+      list->invalidateFromEvaluator();
     }
   }
 
@@ -687,7 +688,7 @@ namespace ao::rt
     {
       previousSizes.push_back(lists[index]->_members.size());
       lists[index]->replaceMembers(std::move(nextMembers[index]));
-      ++_operationCounts.membershipIndexRebuilds;
+      ++_membershipIndexRebuildCount;
     }
 
     for (std::size_t index = 0; index < lists.size(); ++index)
@@ -737,4 +738,13 @@ namespace ao::rt
 
     return query::AccessProfile::NoTrackData;
   }
+
+  namespace detail
+  {
+    SmartListEvaluatorOperationCounts RuntimeOperationProbe::counts(SmartListEvaluator const& evaluator) noexcept
+    {
+      return {.upstreamIndexRebuilds = evaluator._upstreamIndexRebuildCount,
+              .membershipIndexRebuilds = evaluator._membershipIndexRebuildCount};
+    }
+  } // namespace detail
 } // namespace ao::rt

@@ -4,7 +4,7 @@
 #include "portal/LibraryImportExportWorkflow.h"
 
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
@@ -17,9 +17,9 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
 #include <cstdint>
 #include <expected>

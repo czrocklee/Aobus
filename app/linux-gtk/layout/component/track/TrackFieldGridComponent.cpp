@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TrackComponentRegistrations.h"
 #include "common/AccessibleLabel.h"
 #include "common/UiWorkflow.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
@@ -18,9 +18,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -36,9 +36,9 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/box.h>
@@ -138,16 +138,19 @@ namespace ao::gtk::layout
     class TrackFieldGridComponent final : public LayoutComponent
     {
     public:
-      TrackFieldGridComponent(rt::AppRuntime& runtime,
+      TrackFieldGridComponent(async::Runtime& asyncRuntime,
+                              rt::Library& library,
+                              rt::CompletionService& completion,
+                              rt::NotificationService& notifications,
                               i18n::MessageCatalog textCatalog,
                               LayoutBuildContext& ctx,
                               LayoutNode const& node)
         : _textCatalog{std::move(textCatalog)}
         , _editCoordinator{ctx.parentWindow}
-        , _runtime{runtime}
-        , _library{runtime.library()}
-        , _completion{runtime.completion()}
-        , _notifications{runtime.notifications()}
+        , _async{asyncRuntime}
+        , _library{library}
+        , _completion{completion}
+        , _notifications{notifications}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
         , _metadataHeader{gtkText(_textCatalog, MessageId::TrackMetadataHeading)}
@@ -656,7 +659,7 @@ namespace ao::gtk::layout
         }
 
         auto trackIds = snap.trackIds;
-        spawnUiTask(_runtime.async(),
+        spawnUiTask(_async,
                     _tasks,
                     *this,
                     "metadata update",
@@ -861,7 +864,7 @@ namespace ao::gtk::layout
                                      bool const clearInputs)
       {
         auto submission = session.submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
-        spawnUiTask(_runtime.async(),
+        spawnUiTask(_async,
                     _tasks,
                     *this,
                     clearInputs ? "custom metadata add" : "custom metadata update",
@@ -934,7 +937,7 @@ namespace ao::gtk::layout
         auto submission = sessionPtr->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
         auto trackIds = snap.trackIds;
         spawnUiTask(
-          _runtime.async(),
+          _async,
           _tasks,
           *this,
           "custom metadata delete",
@@ -1311,7 +1314,7 @@ namespace ao::gtk::layout
       Gtk::Grid _grid;
       i18n::MessageCatalog _textCatalog;
       DetailEditCoordinator _editCoordinator;
-      rt::AppRuntime& _runtime;
+      async::Runtime& _async;
       rt::Library& _library;
       rt::CompletionService& _completion;
       rt::NotificationService& _notifications;
@@ -1354,7 +1357,10 @@ namespace ao::gtk::layout
   } // namespace
 
   void registerTrackFieldGridComponent(ComponentRegistry& registry,
-                                       rt::AppRuntime& runtime,
+                                       async::Runtime& asyncRuntime,
+                                       rt::Library& library,
+                                       rt::CompletionService& completion,
+                                       rt::NotificationService& notifications,
                                        i18n::MessageCatalog const& textCatalog)
   {
     registry.registerComponent(
@@ -1364,7 +1370,11 @@ namespace ao::gtk::layout
        .properties = {{.name = "categories", .kind = PropertyKind::StringList, .label = "Categories"}},
        .minChildren = 0,
        .optMaxChildren = 0},
-      [&runtime, textCatalog](LayoutBuildContext& ctx, LayoutNode const& node)
-      { return std::make_unique<TrackFieldGridComponent>(runtime, textCatalog, ctx, node); });
+      [&asyncRuntime, &library, &completion, &notifications, textCatalog](
+        LayoutBuildContext& ctx, LayoutNode const& node)
+      {
+        return std::make_unique<TrackFieldGridComponent>(
+          asyncRuntime, library, completion, notifications, textCatalog, ctx, node);
+      });
   }
 } // namespace ao::gtk::layout

@@ -40,7 +40,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>

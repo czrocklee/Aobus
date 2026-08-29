@@ -6,12 +6,11 @@
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
-#include "portal/ImportExportCoordinatorPolicy.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/dialog.h>
@@ -20,25 +19,26 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImportExportCoordinator - policy maps dialog choices", "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - maps every export dialog choice", "[gtk][unit][portal][import-export]")
   {
-    CHECK(portal::exportModeForSelection(0U) == rt::ExportMode::Delta);
-    CHECK(portal::exportModeForSelection(1U) == rt::ExportMode::Metadata);
-    CHECK(portal::exportModeForSelection(2U) == rt::ExportMode::Full);
-    CHECK(portal::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
-    CHECK(portal::exportModeForSelection(99U) == rt::ExportMode::Metadata);
+    CHECK(portal::detail::exportModeForSelection(0U) == rt::ExportMode::Delta);
+    CHECK(portal::detail::exportModeForSelection(1U) == rt::ExportMode::Metadata);
+    CHECK(portal::detail::exportModeForSelection(2U) == rt::ExportMode::Full);
+    CHECK(portal::detail::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
+    CHECK(portal::detail::exportModeForSelection(99U) == rt::ExportMode::Metadata);
   }
 
-  TEST_CASE("ImportExportCoordinator - native chooser policy reports failures but not cancellation",
+  TEST_CASE("ImportExportCoordinator - suppresses native chooser cancellation only",
             "[gtk][unit][portal][import-export]")
   {
-    CHECK_FALSE(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
-    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
-    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
+    CHECK_FALSE(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
+    CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
+    CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
   }
 
   TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][unit][portal][import-export]")
@@ -85,6 +85,54 @@ namespace ao::gtk::test
       CHECK(receivedPath == target);
       CHECK(receivedScanAfterOpen);
     }
+  }
+
+  TEST_CASE("ImportExportCoordinator - installs its restore confirmation callback before import",
+            "[gtk][regression][portal][import-export]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto parent = Gtk::Window{};
+    auto theme = ThemeCoordinator{};
+    auto coordinator = portal::ImportExportCoordinator{
+      parent, fixture.runtime(), ao::test::englishMessageCatalog(), portal::ImportExportCallbacks{}, theme};
+    auto const importPath = fixture.tempDir().path() / "restore.yaml";
+    {
+      auto yaml = std::ofstream{importPath};
+      yaml << R"(version: 5
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists: []
+)";
+    }
+
+    coordinator.importLibraryFrom(importPath);
+
+    AppDialog* confirmationDialog = nullptr;
+    REQUIRE(pumpGtkEventsUntil(
+      [&confirmationDialog]
+      {
+        for (auto* const window : Gtk::Window::list_toplevels())
+        {
+          if (auto* const dialog = dynamic_cast<AppDialog*>(window);
+              dialog != nullptr && dialog->get_title() == "Confirm Library Restore")
+          {
+            confirmationDialog = dialog;
+            return true;
+          }
+        }
+
+        return false;
+      }));
+
+    REQUIRE(confirmationDialog != nullptr);
+    REQUIRE(confirmationDialog->get_visible());
+    confirmationDialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
   }
 
   TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown",

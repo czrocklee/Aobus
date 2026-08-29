@@ -88,8 +88,8 @@ namespace ao::rt::test
     auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
-    source.invalidate();
-    source.invalidate();
+    TrackSourceAccess::invalidate(source);
+    TrackSourceAccess::invalidate(source);
     source.emitReset();
 
     REQUIRE(batches.size() == 1);

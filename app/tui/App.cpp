@@ -4,7 +4,6 @@
 #include "App.h"
 
 #include "AnchoredOverlay.h"
-#include "AudioBackendBootstrap.h"
 #include "CommandCompletionProvider.h"
 #include "CommandPalettePanel.h"
 #include "CoverArt.h"
@@ -29,9 +28,10 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -742,7 +742,11 @@ namespace ao::tui
     auto runtimePtr = std::move(*runtimeRes);
     auto& runtime = *runtimePtr;
 
-    registerPlatformAudioBackends(runtime);
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      runtime.addAudioProvider(std::move(providerPtr));
+    }
+
     restoreOutputDeviceSelection(*appConfigStorePtr, runtime.playback());
 
     auto library = LibraryController{runtime, textCatalog};

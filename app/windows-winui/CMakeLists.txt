@@ -64,7 +64,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   layout/LayoutDialect.cpp
   layout/PlacementPlan.cpp
   layout/ShellDocument.cpp
-  layout/ShellStatePolicy.cpp
+  layout/ShellState.cpp
   layout/StyleLookup.cpp
   layout/ThemeSurface.cpp
   layout/component/container/ContainerComponents.cpp
@@ -116,7 +116,6 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   platform/StringResources.h
   platform/WinUiErrorBoundary.cpp
   include/ao/winui/WinUiErrorBoundary.h
-  include/ao/winui/WindowInteractionPolicy.h
   playback/AobusSoulControl.cpp
   playback/AobusSoulControl.h
   playback/AudioPipelineToolTip.cpp
@@ -189,7 +188,7 @@ target_include_directories(aobus-winui-lib PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(aobus-winui-lib
   PUBLIC
-    ao_app_desktop
+    ao_desktop_launch
     ao_app_runtime
     ao_app_uimodel
     ao_windows_platform

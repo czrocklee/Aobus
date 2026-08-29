@@ -6,7 +6,6 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 

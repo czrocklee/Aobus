@@ -3,11 +3,11 @@
 
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstdint>

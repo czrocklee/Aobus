@@ -80,7 +80,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def classify(path: Path) -> bool:
-    """True when the file should be analyzed (lint fixtures and the Catch2 main are skipped)."""
+    """True when the file should be analyzed; lint integration fixtures are skipped."""
     try:
         rel = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
@@ -88,8 +88,6 @@ def classify(path: Path) -> bool:
 
     rel_slash = "/" + rel
     if "/test/integration/lint/" in rel_slash:
-        return False
-    if rel.endswith("/test/main.cpp") or rel == "test/main.cpp":
         return False
     return True
 

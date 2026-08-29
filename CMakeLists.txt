@@ -80,7 +80,7 @@ function(ao_collect_guardrail_targets output)
   foreach(_target IN LISTS _targets)
     get_target_property(_type "${_target}" TYPE)
     if(_type STREQUAL "UTILITY"
-       AND _target MATCHES "^ao_.*(_check|_guardrail|_boundary_report)$")
+       AND _target MATCHES "^ao_.*(_audit|_check|_guardrail|_boundary_report)$")
       list(APPEND _guardrails "${_target}")
     endif()
   endforeach()

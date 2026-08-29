@@ -12,7 +12,8 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class PlaybackService;
+  class WorkspaceService;
 }
 
 namespace ao::gtk
@@ -22,7 +23,8 @@ namespace ao::gtk
   public:
     using Action = uimodel::NowPlayingFieldAction;
 
-    NowPlayingFieldLabel(rt::AppRuntime& runtime,
+    NowPlayingFieldLabel(rt::PlaybackService& playback,
+                         rt::WorkspaceService& workspace,
                          i18n::MessageCatalog const& textCatalog,
                          rt::TrackField field,
                          Action action = Action::None);
@@ -33,7 +35,8 @@ namespace ao::gtk
     void applyState(uimodel::NowPlayingViewState const& view);
     void handleLabelClicked();
 
-    rt::AppRuntime& _runtime;
+    rt::PlaybackService& _playback;
+    rt::WorkspaceService& _workspace;
     rt::TrackField _field;
     Action _action;
     Gtk::Label _label;

@@ -8,11 +8,9 @@ add_library(aobus-tui-lib STATIC
     Executor.cpp
     FrameTimer.cpp
     LibraryController.cpp
-    ListNavigation.cpp
     NotificationCenterPanel.cpp
     OutputDeviceController.cpp
     OutputDevicePanel.cpp
-    PlaybackActions.cpp
     PlaybackPanel.cpp
     PresentationPanel.cpp
     QualityPanel.cpp
@@ -24,13 +22,12 @@ add_library(aobus-tui-lib STATIC
     TuiHitRegions.cpp
     LibraryNavigation.cpp
     PlaybackStatusFormatter.cpp
-    QualityIndicatorStyle.cpp
     SelectionNavigation.cpp
     TrackDetailLines.cpp
     TrackListEntry.cpp
     TrackPresentationNavigation.cpp
     TrackSection.cpp
-    TuiTextCatalog.cpp
+    TuiText.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp
@@ -62,7 +59,6 @@ if(AOBUS_ENABLE_ASAN)
 endif()
 
 add_executable(aobus-tui
-    AudioBackendBootstrap.cpp
     Main.cpp
     App.cpp
 )

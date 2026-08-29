@@ -5,6 +5,9 @@
 
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/library/TextAdmission.h"
+#include "runtime/source/ListOrderSource.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -33,9 +36,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/ListOrderSource.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>

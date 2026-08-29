@@ -3,13 +3,13 @@
 
 #pragma once
 
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 
 #include <cstdint>
 #include <memory>

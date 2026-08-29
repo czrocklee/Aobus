@@ -29,7 +29,7 @@ This is a **GTK frontend composition-root** contract under the
 Its implementation is `app/linux-gtk/main.cpp`, `GtkStartupPlan.cpp`,
 `LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, and
 `SuccessorProcessLauncher.cpp`. Common root, protocol, startup, and detached
-process rules are supplied by `ao_app_desktop` under `app/include/ao/desktop/`
+process rules are supplied by `ao_desktop_launch` under `app/include/ao/desktop/`
 and `app/desktop/`.
 
 GTK may select platform paths, construct stores and executors, register audio
@@ -367,7 +367,7 @@ reopen the previous durable root.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) owns ordinary and
   successor composition, guarded switch handoff, complete unwind, selected-root
   commit, activation-token completion, and standalone startup diagnostics.
-- [`ao_app_desktop`](../../../app/desktop/) owns root identity, switch/startup
+- [`ao_desktop_launch`](../../../app/desktop/) owns root identity, switch/startup
   planning, the private protocol, and detached process creation.
 - [`GtkStartupPlan`](../../../app/linux-gtk/app/GtkStartupPlan.h) owns
   registration mode and Aobus/GTK argument partitioning around the shared

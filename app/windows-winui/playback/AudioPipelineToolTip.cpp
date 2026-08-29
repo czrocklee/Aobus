@@ -21,7 +21,7 @@ namespace ao::winui
     constexpr double kMaximumWidth = 360.0;
   }
 
-  AudioPipelineToolTip::AudioPipelineToolTip(AudioPipelineToolTipConfig config)
+  AudioPipelineToolTip::AudioPipelineToolTip(AudioPipelineToolTipConfig config, ao::rt::PlaybackService& playback)
     : _anchor{std::move(config.anchor)}, _textCatalog{std::move(config.textCatalog)}
   {
     using winrt::Microsoft::UI::Xaml::TextWrapping;
@@ -39,6 +39,10 @@ namespace ao::winui
     _toolTip.Placement(PlacementMode::Top);
     _toolTip.IsEnabled(false);
     ToolTipService::SetToolTip(_anchor, _toolTip);
+
+    resetPresentation();
+    _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(
+      playback, _textCatalog, [this](uimodel::NowPlayingViewState const& state) { apply(state.audioPipeline); });
   }
 
   AudioPipelineToolTip::~AudioPipelineToolTip()
@@ -56,19 +60,6 @@ namespace ao::winui
     _toolTip.IsOpen(false);
     ToolTipService::SetToolTip(_anchor, winrt::Windows::Foundation::IInspectable{nullptr});
     AutomationProperties::SetHelpText(_anchor, winrt::hstring{});
-  }
-
-  void AudioPipelineToolTip::bind(ao::rt::PlaybackService& playback)
-  {
-    unbind();
-    resetPresentation();
-    _viewModelPtr = std::make_unique<uimodel::NowPlayingViewModel>(
-      playback, _textCatalog, [this](uimodel::NowPlayingViewState const& state) { apply(state.audioPipeline); });
-  }
-
-  void AudioPipelineToolTip::unbind() noexcept
-  {
-    _viewModelPtr.reset();
   }
 
   void AudioPipelineToolTip::resetPresentation()

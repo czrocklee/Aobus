@@ -90,9 +90,10 @@ namespace ao::winui::layout
                                uimodel::PlaybackActions& playbackActions,
                                i18n::MessageCatalog const& textCatalog,
                                uimodel::LayoutNode const& node)
-        : _transport{TransportButtonConfig{.button = _button, .textCatalog = textCatalog, .command = commandOf(node)}}
+        : _transport{TransportButtonConfig{.button = _button, .textCatalog = textCatalog, .command = commandOf(node)},
+                     playback,
+                     playbackActions}
       {
-        _transport.bind(playback, playbackActions);
       }
 
       FrameworkElement element() const override { return _button; }
@@ -108,14 +109,14 @@ namespace ao::winui::layout
     public:
       SeekSliderComponent(rt::PlaybackService& playback, ResourceDictionary const& resources, bool const overlay)
         : _seek{SeekControlConfig{
-            .slider = configuredSlider(_slider),
-            .modernOverlay = overlay,
-            // The overlay thumb is a template, which a `Style` cannot carry, so
-            // the frame hands it over the same way it hands over item templates.
-            .thumbTemplate = adoptChrome(_slider, resources, overlay),
-          }}
+                  .slider = configuredSlider(_slider),
+                  .modernOverlay = overlay,
+                  // The overlay thumb is a template, which a `Style` cannot carry, so
+                  // the frame hands it over the same way it hands over item templates.
+                  .thumbTemplate = adoptChrome(_slider, resources, overlay),
+                },
+                playback}
       {
-        _seek.bind(playback);
       }
 
       FrameworkElement element() const override { return _slider; }
@@ -173,9 +174,8 @@ namespace ao::winui::layout
     {
     public:
       TimeLabelComponent(rt::PlaybackService& playback, uimodel::LayoutNode const& node)
-        : _time{PlaybackTimeControlConfig{.text = _text, .mode = timeModeOf(node)}}
+        : _time{PlaybackTimeControlConfig{.text = _text, .mode = timeModeOf(node)}, playback}
       {
-        _time.bind(playback);
       }
 
       FrameworkElement element() const override { return _text; }
@@ -195,7 +195,7 @@ namespace ao::winui::layout
     {
     public:
       VolumeControlComponent(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog, bool const flyout)
-        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider), .textCatalog = textCatalog}}
+        : _volume{VolumeControlConfig{.slider = configuredSlider(_slider), .textCatalog = textCatalog}, playback}
       {
         if (flyout)
         {
@@ -219,8 +219,6 @@ namespace ao::winui::layout
           _button.Flyout(popup);
           ToolTipService::SetToolTip(_button, winrt::box_value(resourceHstring(L"winui_playback_volume")));
         }
-
-        _volume.bind(playback);
       }
 
       FrameworkElement element() const override

@@ -24,10 +24,8 @@ Each row records the outgoing direct edges of one active proposal; sequence numb
 
 | RFC | Hard | Conditional | Integration |
 |---|---|---|---|
-| [RFC 0001: Library mutation write savepoints](0001-library-mutation-savepoints.md) | None | None | [RFC 0002](0002-application-concept-debloat.md) |
-| [RFC 0002: Application concept debloat](0002-application-concept-debloat.md) | None | None | [RFC 0001](0001-library-mutation-savepoints.md) |
+| [RFC 0001: Library mutation write savepoints](0001-library-mutation-savepoints.md) | None | None | None |
 
 ## Proposal inventory
 
 - [RFC 0001: Library mutation write savepoints](0001-library-mutation-savepoints.md) proposes nested LMDB savepoints under the current root Result boundary, one writer authority, and a transaction-chain Dictionary journal.
-- [RFC 0002: Application concept debloat](0002-application-concept-debloat.md) proposes removing duplicated concepts, one-shot binding protocols, and redundant boundary enforcement across the repository without changing the layer map or the authorities it protects.

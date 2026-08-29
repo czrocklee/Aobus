@@ -267,7 +267,7 @@ def generate_report(
     fan_out_stats = _fan_out_stats(fan_out, public_headers["application"])
     core_fan_out = _fan_out_stats(fan_out, public_headers["core"])
 
-    secondary = _secondary_inventory(parses, declarations, headers, root, build_dir)
+    secondary = _secondary_inventory(parses, declarations, headers, root)
     construction = [
         {
             "leaf": chain.leaf,
@@ -1040,7 +1040,6 @@ def _secondary_inventory(
     declarations: Sequence[PublicDeclaration],
     headers: Mapping[str, Sequence[Path]],
     root: Path,
-    build_dir: Path,
 ) -> dict[str, object]:
     suffixes: Counter[str] = Counter()
     for declaration in declarations:
@@ -1054,16 +1053,11 @@ def _secondary_inventory(
     bind_unbind: list[str] = []
     for parsed in parses:
         bind_unbind.extend(parsed.bind_unbind)
-    guardrail_targets = _guardrail_targets(build_dir)
     return {
         "headers": {area: len(paths) for area, paths in headers.items()},
         "roleSuffixes": dict(sorted(suffixes.items())),
         "aggregates": _source_aggregate_inventory(root),
         "bindUnbind": sorted(set(bind_unbind)),
-        "guardrailTargets": {
-            "count": len(guardrail_targets),
-            "targets": guardrail_targets,
-        },
     }
 
 
@@ -1159,38 +1153,6 @@ def _looks_like_data_member(statement: str) -> bool:
         elif angle_depth == 0 and character == "(" and index < assignment:
             return False
     return True
-
-
-def _guardrail_targets(build_dir: Path) -> list[str]:
-    ninja = shutil.which("ninja")
-    if ninja is None or not (Path(build_dir) / "build.ninja").is_file():
-        return []
-    try:
-        with buildlock.build_tree_lock(build_dir):
-            result = subprocess.run(
-                [ninja, "-t", "targets", "all"],
-                cwd=build_dir,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
-    except OSError:
-        return []
-    if result.returncode != 0:
-        return []
-    return _guardrail_targets_from_ninja(result.stdout)
-
-
-def _guardrail_targets_from_ninja(output: str) -> list[str]:
-    suffixes = ("_check", "_guardrail", "_boundary_report")
-    targets = {
-        raw_line.partition(":")[0].strip()
-        for raw_line in output.splitlines()
-        if raw_line.startswith("ao_") and raw_line.partition(":")[0].strip().endswith(suffixes)
-    }
-    return sorted(targets)
 
 
 def _area_line(label: str, area: Mapping[str, Any]) -> str:

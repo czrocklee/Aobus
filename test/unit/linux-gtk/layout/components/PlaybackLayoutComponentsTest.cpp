@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/AobusSoul.h"
-#include "app/linux-gtk/layout/component/playback/PlaybackComponentRegistrations.h"
+#include "app/linux-gtk/layout/component/ComponentRegistrations.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/playback/OutputDevicePopover.h"
 #include "test/unit/MessageCatalogTestSupport.h"

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/LibraryYamlExporter.h"
+#include "runtime/library/LibraryYamlImporter.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -11,8 +13,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers.hpp>

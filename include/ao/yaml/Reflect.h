@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/utility/EnumName.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/StrongType.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -27,12 +26,6 @@ namespace ao::yaml
 {
   template<typename T>
   struct ReflectScalarTraits
-  {};
-
-  // Specialize for an enum by providing a static `names()` that returns a
-  // utility::EnumNameTable mapping each enumerator to its serialized string.
-  template<typename T>
-  struct ReflectEnumTraits
   {};
 
   template<typename T>
@@ -89,12 +82,8 @@ namespace ao::yaml
       requires(ryml::NodeRef node, T const& value) { ReflectScalarTraits<Bare<T>>::write(node, value); };
 
     template<typename T>
-    concept ReflectEnum =
-      std::is_enum_v<Bare<T>> && requires(T value) { utility::enumName(ReflectEnumTraits<Bare<T>>::names(), value); };
-
-    template<typename T>
-    concept ReflectStruct = std::is_aggregate_v<Bare<T>> && (!ReflectScalar<T>) && (!ReflectEnum<T>) &&
-                            (!ReflectOptional<T>) && (!ReflectSequence<T>) && (!ReflectMap<T>);
+    concept ReflectStruct = std::is_aggregate_v<Bare<T>> && (!ReflectScalar<T>) && (!ReflectOptional<T>) &&
+                            (!ReflectSequence<T>) && (!ReflectMap<T>);
 
     void writeQuotedString(ryml::NodeRef node, std::string_view value);
 
@@ -107,12 +96,6 @@ namespace ao::yaml
     void writeScalarValue(ryml::NodeRef node, T const& value)
     {
       ReflectScalarTraits<Bare<T>>::write(node, value);
-    }
-
-    template<ReflectEnum T>
-    void writeEnumValue(ryml::NodeRef node, T value)
-    {
-      writeQuotedString(node, utility::enumName(ReflectEnumTraits<Bare<T>>::names(), value));
     }
 
     template<ReflectOptional T>
@@ -185,10 +168,6 @@ namespace ao::yaml
       if constexpr (ReflectScalar<T>)
       {
         writeScalarValue(node, value);
-      }
-      else if constexpr (ReflectEnum<T>)
-      {
-        writeEnumValue(node, value);
       }
       else if constexpr (ReflectOptional<T>)
       {

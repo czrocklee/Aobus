@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/source/IndexedTrackSequence.h>
+#include "runtime/source/IndexedTrackSequence.h"
 
+#include "runtime/RuntimeOperationProbe.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
@@ -52,6 +53,8 @@ namespace ao::rt
       }
     }
 
+    // Two structural ranges cover the common remove-plus-insert move. Larger
+    // scripts use the linear bulk builder instead of repeatedly shifting vector storage.
     constexpr std::size_t kMaximumInPlaceStructuralEdits = 2;
 
     if (structuralEditCount > kMaximumInPlaceStructuralEdits)
@@ -133,7 +136,7 @@ namespace ao::rt
       AO_INVARIANT(std::ranges::equal(existing, update->trackIds));
     }
 
-    ++_operationCounts.incrementalScriptApplications;
+    ++_incrementalScriptApplicationCount;
   }
 
   std::optional<std::size_t> IndexedTrackSequence::indexOf(TrackId const trackId) const
@@ -159,7 +162,7 @@ namespace ao::rt
 
     _trackIds = std::move(trackIds);
     _indexByTrackId = std::move(indexByTrackId);
-    ++_operationCounts.indexRebuilds;
+    ++_indexRebuildCount;
   }
 
   void IndexedTrackSequence::updateIndicesFrom(std::size_t const start)
@@ -171,4 +174,13 @@ namespace ao::rt
       it->second = index;
     }
   }
+
+  namespace detail
+  {
+    IndexedTrackSequenceOperationCounts RuntimeOperationProbe::counts(IndexedTrackSequence const& sequence) noexcept
+    {
+      return {.indexRebuilds = sequence._indexRebuildCount,
+              .incrementalScriptApplications = sequence._incrementalScriptApplicationCount};
+    }
+  } // namespace detail
 } // namespace ao::rt

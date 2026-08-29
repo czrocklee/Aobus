@@ -14,8 +14,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackColumnLayouts - stores layouts and exposes active field order",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes", "[uimodel][unit][library][presentation]")
   {
     auto store = TrackColumnLayouts{};
     auto events = std::vector<ListId>{};
@@ -29,8 +28,6 @@ namespace ao::uimodel::test
 
     store.updateLayout(rt::kAllTracksListId, layout);
     store.updateLayout(rt::kAllTracksListId, layout);
-    store.setActiveListId(rt::kAllTracksListId);
-
     REQUIRE(events.size() == 1);
     CHECK(events[0] == rt::kAllTracksListId);
     REQUIRE(store.layoutForList(rt::kAllTracksListId).size() == 2);
@@ -38,11 +35,6 @@ namespace ao::uimodel::test
     CHECK(store.layoutForList(rt::kAllTracksListId)[0].width == 230);
     CHECK(store.layoutForList(rt::kAllTracksListId)[1].field == rt::TrackField::Title);
     CHECK(store.layoutForList(rt::kAllTracksListId)[1].weight == 1.25);
-
-    auto const order = store.activeFieldOrder();
-    REQUIRE(order.size() == 2);
-    CHECK(order[0] == rt::TrackField::Album);
-    CHECK(order[1] == rt::TrackField::Title);
   }
 
   TEST_CASE("TrackColumnLayouts - bulk state emits only when changed", "[uimodel][unit][library][presentation]")

@@ -81,8 +81,8 @@ namespace ao::winui::test
 
   TEST_CASE("planPlacement - an authored hide is carried into the plan", "[winui][unit][layout]")
   {
-    // How an authored hide combines with runtime state is a shared rule, held
-    // by uimodel::isPlacedElementVisible. All the plan owes is carrying it.
+    // The shared LayoutPlacement parser owns the authored visibility value.
+    // All the native plan owes is carrying it without inventing a second rule.
     CHECK_FALSE(planPlacement(nodeWithLayout({{"visible", LayoutValue{false}}})).authoredVisible);
     CHECK(planPlacement(nodeWithLayout({{"visible", LayoutValue{true}}})).authoredVisible);
     CHECK(planPlacement(nodeWithLayout({})).authoredVisible);

@@ -5,7 +5,7 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <cstdint>
 #include <string_view>

@@ -13,7 +13,6 @@
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/utility/PlatformDirectories.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>

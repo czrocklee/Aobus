@@ -9,7 +9,7 @@
 #include "TextCell.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
-#include "TuiTextCatalog.h"
+#include "TuiText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>

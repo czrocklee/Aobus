@@ -4,8 +4,8 @@
 #include <ao/media/ogg/Demuxer.h>
 
 #include "TestOgg.h"
+#include "lib/media/ogg/PageLayout.h"
 #include <ao/Error.h>
-#include <ao/media/ogg/PageLayout.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>

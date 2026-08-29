@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/QuickFilterCompletionAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -50,7 +49,10 @@ namespace ao::winui
   class TrackQuickFilterControl final
   {
   public:
-    explicit TrackQuickFilterControl(TrackQuickFilterControlConfig config);
+    TrackQuickFilterControl(TrackQuickFilterControlConfig config,
+                            rt::ViewService& views,
+                            rt::WorkspaceService& workspace,
+                            rt::CompletionService& completion);
     ~TrackQuickFilterControl();
 
     TrackQuickFilterControl(TrackQuickFilterControl const&) = delete;
@@ -58,12 +60,10 @@ namespace ao::winui
     TrackQuickFilterControl(TrackQuickFilterControl&&) = delete;
     TrackQuickFilterControl& operator=(TrackQuickFilterControl&&) = delete;
 
-    void bind(rt::ViewService& views, rt::WorkspaceService& workspace, rt::CompletionService& completion);
-    void unbind() noexcept;
-
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
+    void stop() noexcept;
 
     void handleTextChanged(winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBoxTextChangedEventArgs const& args);
     void handleSuggestionChosen(

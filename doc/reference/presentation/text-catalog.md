@@ -364,18 +364,20 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 - [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def)
 - [`MessageCatalog.h`](../../../app/include/ao/i18n/MessageCatalog.h)
 - [`MessageIds.h`](../../../app/i18n/MessageIds.h)
-- [`PresentationText.h`](../../../app/include/ao/uimodel/presentation/PresentationText.h)
-- [`PresentationText.cpp`](../../../app/uimodel/presentation/PresentationText.cpp)
+- [`TrackPresentationText.h`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) and [`TrackPresentationText.cpp`](../../../app/uimodel/library/presentation/TrackPresentationText.cpp)
+- [`PlaybackCommandText.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommandText.h) and [`PlaybackCommandText.cpp`](../../../app/uimodel/playback/command/PlaybackCommandText.cpp)
+- [`PlaybackOutputText.h`](../../../app/include/ao/uimodel/playback/output/PlaybackOutputText.h) and [`PlaybackOutputText.cpp`](../../../app/uimodel/playback/output/PlaybackOutputText.cpp)
+- [`ActivityPresentationText.h`](../../../app/include/ao/uimodel/status/activity/ActivityPresentationText.h) and [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp)
 - [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp)
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt)
-- [`GtkTextCatalog.h`](../../../app/linux-gtk/i18n/GtkTextCatalog.h) and [`GtkTextCatalog.cpp`](../../../app/linux-gtk/i18n/GtkTextCatalog.cpp)
-- [`TuiTextCatalog.h`](../../../app/tui/TuiTextCatalog.h) and [`TuiTextCatalog.cpp`](../../../app/tui/TuiTextCatalog.cpp)
+- [`GtkText.h`](../../../app/linux-gtk/i18n/GtkText.h) and [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp)
+- [`TuiText.h`](../../../app/tui/TuiText.h) and [`TuiText.cpp`](../../../app/tui/TuiText.cpp)
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h)
 - [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp)
 
 ## Test authority
 
-- [`PresentationTextTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects closed-set coverage, exact representative copy, open-id fallbacks, typed report expansion, and kind-based progress selection.
+- [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) protects closed-set coverage, exact representative copy, open-id fallbacks, typed report expansion, and kind-based progress selection.
 - [`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects typed ids, exact fallback, argument kinds, owned results, pseudo output, and concurrent formatting.
 - [`CatalogPatternTest.cpp`](../../../test/unit/i18n/CatalogPatternTest.cpp) protects signature validation and deterministic generated assets.
 - [`MenuControllerTest.cpp`](../../../test/unit/linux-gtk/app/MenuControllerTest.cpp) protects typed GTK menu copy and German/pseudo resolution.

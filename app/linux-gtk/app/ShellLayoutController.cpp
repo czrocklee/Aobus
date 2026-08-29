@@ -8,7 +8,7 @@
 #include "ShellLayoutComponentStateStore.h"
 #include "ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "layout/document/LayoutDialect.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/editor/LayoutEditorDialog.h"
@@ -49,8 +49,8 @@
 #include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandText.h>
 #include <ao/uimodel/preference/ThemePreset.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/dialog.h>

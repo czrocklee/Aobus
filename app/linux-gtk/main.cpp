@@ -12,7 +12,7 @@
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "common/MainContextCallbackScope.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "platform/SuccessorProcessLauncher.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"

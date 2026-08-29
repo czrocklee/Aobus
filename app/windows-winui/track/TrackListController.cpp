@@ -28,9 +28,9 @@
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackRevealAdapter.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
@@ -64,7 +64,7 @@ namespace ao::winui
     {
     public:
       TrackItemMaterializer(rt::AppRuntime& inputRuntime,
-                            rt::TrackListProjection& inputProjection,
+                            rt::TrackListProjection const& inputProjection,
                             i18n::MessageCatalog textCatalog,
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns,
@@ -140,7 +140,7 @@ namespace ao::winui
 
     private:
       rt::AppRuntime* _runtime = nullptr;
-      rt::TrackListProjection* _projection = nullptr;
+      rt::TrackListProjection const* _projection = nullptr;
       i18n::MessageCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
       std::vector<TrackColumnCellSpec> _columns;
@@ -299,7 +299,7 @@ namespace ao::winui
     refreshRows();
   }
 
-  void TrackListController::resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
+  void TrackListController::resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr)
   {
     _bindingLifetimePtr.reset();
     _projectionSub.reset();

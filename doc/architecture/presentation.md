@@ -83,6 +83,14 @@ transient binary data owned by the consuming projection or vocabulary
 operation and never become library or session state. GTK, TUI, and WinUI retain
 the policy for the lifetime of every runtime that borrows it.
 
+Locale ordering and completion aliases remain separate ICU leaf targets.
+Their public seams are independent and a future frontend may consume a
+different subset; the current two-target shape preserves that link choice
+rather than consolidating archives from the present three-frontend graph.
+The catalog-pattern archive also remains separate because the build-time
+catalog compiler must run before the generated message-catalog source can be
+built.
+
 The CLI constructs neither an interactive catalog nor an ordering policy. Its
 target graph excludes both leaf implementations and ICU i18n, while consumers
 retain their deterministic non-locale fallback when no policy is supplied. This keeps the
@@ -313,9 +321,9 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 ## Implementation map
 
-- [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
+- [`app/uimodel/CMakeLists.txt`](../../app/uimodel/CMakeLists.txt) defines the runtime-to-UIModel target edge; [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) provides lexical regression coverage where target visibility cannot express a rule.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
-- [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h) plus `requiredText` / `requiredFormat` own required lookup; [`PresentationText.h`](../../app/include/ao/uimodel/presentation/PresentationText.h) owns feature-local formatters and open-id fallback.
+- [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h) plus `requiredText` / `requiredFormat` own required lookup; [`TrackPresentationText`](../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h), [`PlaybackCommandText`](../../app/include/ao/uimodel/playback/command/PlaybackCommandText.h), [`PlaybackOutputText`](../../app/include/ao/uimodel/playback/output/PlaybackOutputText.h), and [`ActivityPresentationText`](../../app/include/ao/uimodel/status/activity/ActivityPresentationText.h) own feature-local formatters and open-id fallback.
 - [`OutputDeviceIntent`](../../app/include/ao/uimodel/playback/output/OutputDeviceIntent.h) owns the typed destination for a requested route and its explicit absence.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   owns shared output-route projection, selection commands, and requested-intent reporting;
@@ -334,15 +342,15 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
 - [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h), its [`ICU implementation`](../../app/i18n/MessageCatalog.cpp), and the canonical [`catalog assets`](../../app/i18n/catalog/root.txt) define the interactive localization leaf.
-- [`GtkTextCatalog.h`](../../app/linux-gtk/i18n/GtkTextCatalog.h) and [`TuiTextCatalog.h`](../../app/tui/TuiTextCatalog.h) keep frontend-local formatted helpers; [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) defines the native projection boundary. There is no separate frontend message-id space.
-- [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
+- [`GtkText.h`](../../app/linux-gtk/i18n/GtkText.h) and [`TuiText.h`](../../app/tui/TuiText.h) keep frontend-local formatted helpers; [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) defines the native projection boundary. There is no separate frontend message-id space.
+- [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) composes UIModel organization, dependency, and platform-vocabulary constraints into the application audit.
 
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
-- [`PresentationTextTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
+- [`PresentationTextFeaturesTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) protects catalog completeness, structured formatting, and open-id fallback across the four feature surfaces.
 - [`MessageCatalogTest.cpp`](../../test/unit/i18n/MessageCatalogTest.cpp), [`CatalogPatternTest.cpp`](../../test/unit/i18n/CatalogPatternTest.cpp), and the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) protect explicit fallback, format signatures, immutable concurrent use, deterministic generation, and ICU/MRT parity.
 - [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`PreferencesWindowTest.cpp`](../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), [`TrackCustomViewDialogTest.cpp`](../../test/unit/linux-gtk/track/TrackCustomViewDialogTest.cpp), [`LayoutEditorTextTest.cpp`](../../test/unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp), and [`RenderTest.cpp`](../../test/unit/tui/RenderTest.cpp) protect the migrated GTK/TUI surface, localized built-in layout vocabulary, and preservation of command/key/document identities.
 - [`OutputDeviceIntentTest.cpp`](../../test/unit/uimodel/playback/output/OutputDeviceIntentTest.cpp) protects the undecided-destination compile barrier and recorder dispatch.

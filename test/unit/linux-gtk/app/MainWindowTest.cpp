@@ -9,7 +9,7 @@
 #include "app/LibraryWindowLifecycle.h"
 #include "app/ShellLayoutStore.h"
 #include "app/WindowState.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include "list/ListNavigationController.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
@@ -42,6 +42,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -619,7 +620,7 @@ namespace ao::gtk::test
                                                                 runtime.library().commands().createList(rt::ListDraft{
                                                                   .name = "Temporary sequence source",
                                                                 })));
-    runtime.reloadAllTracks();
+    runtime.sources().reloadAllTracks();
     auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
     REQUIRE(waitForPlaybackSettlement(runtime, trackId));

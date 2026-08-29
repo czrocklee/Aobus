@@ -8,7 +8,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <algorithm>
 #include <optional>

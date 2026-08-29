@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -93,7 +94,7 @@ namespace ao::rt::test
     libraryFixture.updateTrack(t3, [](library::test::TrackSpec& spec) { spec.title = "Updated"; }); // Update
 
     auto spy = TrackSourceBatchSpy{list};
-    auto const operationCountsBefore = engine.operationCounts();
+    auto const operationCountsBefore = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
     auto const updateTrackIds = std::array{t1, t2, t3};
     source.batchUpdate(updateTrackIds);
 
@@ -104,8 +105,9 @@ namespace ao::rt::test
     CHECK(std::get<delta::RemoveRange>(script.edits[0]) == delta::RemoveRange{.start = 0, .trackIds = {t2}});
     CHECK(std::get<delta::InsertRange>(script.edits[1]) == delta::InsertRange{.start = 1, .trackIds = {t1}});
     CHECK(std::get<delta::UpdateRange>(script.edits[2]) == delta::UpdateRange{.start = 0, .trackIds = {t3}});
-    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
-    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
+    auto const operationCountsAfter = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
+    CHECK(operationCountsAfter.upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(operationCountsAfter.membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
   TEST_CASE("SmartListEvaluator - filtered membership is an atomic stable subsequence of upstream order",
@@ -173,7 +175,7 @@ namespace ao::rt::test
     libraryFixture.updateTrack(t6, [](library::test::TrackSpec& spec) { spec.title = "updated t6"; });
 
     auto spy = TrackSourceBatchSpy{list};
-    auto const operationCountsBefore = engine.operationCounts();
+    auto const operationCountsBefore = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
     sourcePtr->batchUpdate(std::array{t0, t1, t2, t4, t5, t6});
 
     auto const expectedMembers = std::vector{t1, t2, t5, t6};
@@ -182,7 +184,8 @@ namespace ao::rt::test
     auto const appliedRes = delta::apply(previousMembers, sourceEditScript(spy.batches.front()));
     REQUIRE(appliedRes);
     CHECK(*appliedRes == expectedMembers);
-    CHECK(engine.operationCounts().upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
-    CHECK(engine.operationCounts().membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
+    auto const operationCountsAfter = ::ao::rt::detail::RuntimeOperationProbe::counts(engine);
+    CHECK(operationCountsAfter.upstreamIndexRebuilds == operationCountsBefore.upstreamIndexRebuilds);
+    CHECK(operationCountsAfter.membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 } // namespace ao::rt::test

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -39,7 +38,7 @@ namespace ao::winui
   class AudioPipelineToolTip final
   {
   public:
-    explicit AudioPipelineToolTip(AudioPipelineToolTipConfig config);
+    AudioPipelineToolTip(AudioPipelineToolTipConfig config, rt::PlaybackService& playback);
     ~AudioPipelineToolTip();
 
     AudioPipelineToolTip(AudioPipelineToolTip const&) = delete;
@@ -47,11 +46,8 @@ namespace ao::winui
     AudioPipelineToolTip(AudioPipelineToolTip&&) = delete;
     AudioPipelineToolTip& operator=(AudioPipelineToolTip&&) = delete;
 
-    void bind(rt::PlaybackService& playback);
-    void unbind() noexcept;
-
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Establish a blank state before the first model snapshot.
     void resetPresentation();
 
     void apply(uimodel::AudioPipelineViewState const& state);

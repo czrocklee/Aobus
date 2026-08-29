@@ -27,17 +27,12 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class TextOrderingPolicy;
-
-  struct TrackListProjectionOperationCounts final
+  namespace detail
   {
-    std::uint64_t fullProjectionRebuilds = 0;
-    std::uint64_t incrementalProjectionUpdates = 0;
-    std::uint64_t arenaRebases = 0;
-    std::uint64_t rowIndexRebuilds = 0;
+    class RuntimeOperationProbe;
+  }
 
-    bool operator==(TrackListProjectionOperationCounts const&) const = default;
-  };
+  class TextOrderingPolicy;
 
   struct TrackRowRange final
   {
@@ -56,6 +51,8 @@ namespace ao::rt
     Ensemble,
     Work,
   };
+
+  constexpr auto kMissingTrackValueKindCount = static_cast<std::size_t>(MissingTrackValueKind::Work) + 1;
 
   using TrackGroupHeadingValue = std::variant<std::monostate, std::string, std::uint16_t, MissingTrackValueKind>;
 
@@ -149,13 +146,14 @@ namespace ao::rt
     TrackId trackIdAt(std::size_t index) const;
     std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
-    TrackListProjectionOperationCounts operationCounts() const noexcept;
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler);
+    async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler) const;
 
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class detail::RuntimeOperationProbe;
   };
 } // namespace ao::rt

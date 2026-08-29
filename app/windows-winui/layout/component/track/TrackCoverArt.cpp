@@ -18,7 +18,6 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -73,7 +72,7 @@ namespace ao::winui::layout
                              ThemeCoordinator& theme,
                              i18n::MessageCatalog textCatalog)
         : _textCatalog{std::move(textCatalog)}
-        , _coverArt{_image, _placeholder, resourceBytes, theme, style}
+        , _coverArt{_image, _placeholder, asyncRuntime, resourceBytes, theme, style}
         , _focusedDetailPtr{ctx.focusedDetailPtr}
       {
         // Uniform rather than UniformToFill: the inspector shows the whole
@@ -88,16 +87,15 @@ namespace ao::winui::layout
         _sizeChangedRevoker = _root.SizeChanged(
           winrt::auto_revoke, [this](IInspectable const&, SizeChangedEventArgs const&) { keepSquare(); });
 
-        follow(asyncRuntime, workspace);
+        follow(workspace);
       }
 
       FrameworkElement element() const override { return _root; }
 
     private:
-      void follow(async::Runtime& asyncRuntime, rt::WorkspaceService& workspace)
+      void follow(rt::WorkspaceService& workspace)
       {
         _projectionPtr = _focusedDetailPtr->projection(workspace);
-        _coverArt.bind(asyncRuntime);
         // The projection hands the current snapshot to a new subscriber, so
         // this both installs the follower and draws what is selected now.
         _subscription =

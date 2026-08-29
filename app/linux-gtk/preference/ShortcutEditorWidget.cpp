@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>

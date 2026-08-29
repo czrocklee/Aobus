@@ -17,7 +17,7 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
-#include <ao/uimodel/presentation/PresentationText.h>
+#include <ao/uimodel/playback/output/PlaybackOutputText.h>
 
 #include <catch2/catch_test_macros.hpp>
 

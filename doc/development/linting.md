@@ -37,8 +37,8 @@ drive-by lint sweep.
   discarded return values, designated
   initializers for positional expected-data tables, cognitive complexity,
   identifier length, magic numbers, C arrays, C varargs, and test-only casts.
-- `test/main.cpp` and non-fixture files under `test/integration/lint/` are
-  ignored by normal tidy runs.
+- Non-fixture files under `test/integration/lint/` are ignored by normal tidy
+  runs.
 - Lint checker fixtures under `test/integration/lint/fixture/` are skipped in
   batch scans and checked only when named explicitly. The `./ao test --lint`
   suite owns fixture diagnostic and auto-fix coverage.
@@ -94,8 +94,8 @@ diagnostic context, and abort behavior remain project-owned and consistent.
 Compile-time `static_assert` and third-party or test-source assertions are not
 part of this guardrail.
 
-CMake automatically adds `ao_` custom targets ending in `_check`, `_guardrail`,
-or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
+CMake automatically adds `ao_` custom targets ending in `_audit`, `_check`,
+`_guardrail`, or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
 completion guardrail; conditional frontend targets are discovered only when
 their owning frontend is enabled.
 

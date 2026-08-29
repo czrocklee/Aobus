@@ -37,7 +37,9 @@ namespace ao::winui
     }
   } // namespace
 
-  TransportButton::TransportButton(TransportButtonConfig config)
+  TransportButton::TransportButton(TransportButtonConfig config,
+                                   ao::rt::PlaybackService& playback,
+                                   ao::uimodel::PlaybackActions& actions)
     : _button{std::move(config.button)}
     , _textCatalog{std::move(config.textCatalog)}
     , _command{config.command}
@@ -46,16 +48,6 @@ namespace ao::winui
     _clickRevoker = _button.Click(winrt::auto_revoke,
                                   [this](winrt::Windows::Foundation::IInspectable const&,
                                          winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { activate(); });
-  }
-
-  TransportButton::~TransportButton()
-  {
-    unbind();
-  }
-
-  void TransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackActions& actions)
-  {
-    unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
                                                                   actions,
@@ -66,10 +58,7 @@ namespace ao::winui
                                                                   { applyState(state); });
   }
 
-  void TransportButton::unbind() noexcept
-  {
-    _viewModelPtr.reset();
-  }
+  TransportButton::~TransportButton() = default;
 
   void TransportButton::resetPresentation()
   {

@@ -24,7 +24,7 @@
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>

@@ -418,7 +418,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned committed changes.
 - [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) owns reusable sources and their dependency graph.
-- [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) derives effective saved-List order from raw rank plus current predicate membership.
+- Source-private [`ListOrderSource`](../../app/runtime/source/ListOrderSource.h) derives effective saved-List order from raw rank plus current predicate membership.
 - [`TrackListProjection`](../../app/include/ao/rt/projection/TrackListProjection.h) is the concrete ordered-list projection boundary.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) is the ownership and lifetime composition root for the subsystem.
 

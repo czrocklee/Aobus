@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 
 #include <filesystem>
 #include <memory>
@@ -17,6 +17,7 @@ namespace ao::library
 namespace ao::rt
 {
   struct LibraryChangeSet;
+  class LibraryYamlImporter;
 
   /** Runtime-private prepare/apply split for coordinated YAML imports. */
   class LibraryYamlImportOperation final

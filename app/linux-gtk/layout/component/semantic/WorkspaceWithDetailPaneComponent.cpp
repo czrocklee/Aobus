@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "SemanticComponentRegistrations.h"
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
+#include "layout/component/ComponentRegistrations.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"

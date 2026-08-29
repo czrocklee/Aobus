@@ -4,7 +4,7 @@
 #include "TrackFieldGridCustomControls.h"
 
 #include "common/AccessibleLabel.h"
-#include "i18n/GtkTextCatalog.h"
+#include "i18n/GtkText.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <gtkmm/enums.h>

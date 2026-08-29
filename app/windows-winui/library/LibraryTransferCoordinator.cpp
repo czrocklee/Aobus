@@ -16,8 +16,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/library/LibraryTransferAdapter.h>
 

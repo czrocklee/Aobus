@@ -16,8 +16,8 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/uimodel/presentation/PresentationText.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -203,10 +203,10 @@ namespace winrt::Aobus::implementation
       auto presenterPtr = std::make_unique<ao::winui::CoverArtPresenter>(
         image,
         placeholder,
+        _session->runtime().async(),
         _session->runtime().resourceBytes(),
         *_themePtr,
         ao::uimodel::defaultCoverArtPlaceholderStyle(ao::uimodel::CoverArtPlaceholderSlot::GroupHeading));
-      presenterPtr->bind(_session->runtime().async());
       presenterIt = _groupCoverPresenters
                       .emplace(key,
                                GroupCoverPresenterEntry{

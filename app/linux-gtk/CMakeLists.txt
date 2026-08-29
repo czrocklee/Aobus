@@ -28,8 +28,7 @@ add_library(aobus-gtk-lib STATIC
     app/LibraryWindowLifecycle.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
-    app/MouseNavigationPolicy.cpp
-    app/PlaybackShortcutPolicy.cpp
+    app/WindowInput.cpp
     app/ShellLayoutController.cpp
     app/ShellLayoutComponentStateStore.cpp
     app/GtkStyleRuntime.cpp
@@ -40,14 +39,13 @@ add_library(aobus-gtk-lib STATIC
     app/AppConfigStore.cpp
     app/ShellLayoutStore.cpp
     app/GtkLayoutStateStore.cpp
-    platform/AudioBackendBootstrap.cpp
     platform/MprisArtUrlCache.cpp
     platform/MprisArtUrlSession.cpp
     platform/MprisBridge.cpp
     platform/MprisPlaybackEndpoint.cpp
     platform/SuccessorProcessLauncher.cpp
 
-    i18n/GtkTextCatalog.cpp
+    i18n/GtkText.cpp
 
     preference/ShortcutEditorWidget.cpp
     preference/PreferencesWindow.cpp
@@ -112,7 +110,6 @@ add_library(aobus-gtk-lib STATIC
     tag/TrackPropertiesDialog.cpp
 
     portal/ImportExportCoordinator.cpp
-    portal/ImportExportCoordinatorPolicy.cpp
     portal/LibraryImportExportWorkflow.cpp
 
     layout/document/LayoutDialect.cpp
@@ -128,7 +125,7 @@ add_library(aobus-gtk-lib STATIC
     layout/runtime/LayoutHost.cpp
     layout/component/common/CommonLayoutProps.cpp
     layout/component/track/TrackDetailSizing.cpp
-    layout/component/track/TrackRegistry.cpp
+    layout/component/track/TrackRegistrations.cpp
     layout/component/track/TrackQuickFilterComponent.cpp
     layout/component/track/TrackPresentationButtonComponent.cpp
     layout/component/track/TrackDetailUndo.cpp
@@ -146,7 +143,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/playback/NowPlayingFieldComponent.cpp
     layout/component/playback/OutputDeviceSelectorComponent.cpp
     layout/component/playback/PlaybackImageComponent.cpp
-    layout/component/playback/PlaybackRegistry.cpp
+    layout/component/playback/PlaybackRegistrations.cpp
     layout/component/playback/QualityIndicatorComponent.cpp
     layout/component/playback/SeekSliderComponent.cpp
     layout/component/playback/SoulButtonComponent.cpp
@@ -160,7 +157,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/semantic/MenuBarComponent.cpp
     layout/component/semantic/MenuButtonComponent.cpp
     layout/component/semantic/OpenLibraryButtonComponent.cpp
-    layout/component/semantic/SemanticRegistry.cpp
+    layout/component/semantic/SemanticRegistrations.cpp
     layout/component/semantic/TracksTableComponent.cpp
     layout/component/semantic/WorkspaceWithDetailPaneComponent.cpp
     layout/component/container/AbsoluteCanvasComponent.cpp
@@ -168,7 +165,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/container/BoxComponent.cpp
     layout/component/container/CenterBoxComponent.cpp
     layout/component/container/CollapsibleSplitComponent.cpp
-    layout/component/container/ContainerRegistry.cpp
+    layout/component/container/ContainerRegistrations.cpp
     layout/component/container/ResponsiveClassComponent.cpp
     layout/component/container/ScrollComponent.cpp
     layout/component/container/SeparatorComponent.cpp
@@ -181,13 +178,13 @@ add_library(aobus-gtk-lib STATIC
     layout/component/status/PlaybackDetailsComponent.cpp
     layout/component/status/SelectionInfoComponent.cpp
     layout/component/status/StatusMessageLabelComponent.cpp
-    layout/component/status/StatusRegistry.cpp
+    layout/component/status/StatusRegistrations.cpp
     status/ActivityStatusWidget.cpp
     layout/editor/LayoutEditorDialog.cpp
     layout/editor/LayoutEditorText.cpp
 )
 
-target_link_libraries(aobus-gtk-lib PUBLIC ao_app_desktop ao_app_uimodel ao_app_runtime)
+target_link_libraries(aobus-gtk-lib PUBLIC ao_desktop_launch ao_app_uimodel ao_app_runtime)
 target_link_libraries(aobus-gtk-lib PRIVATE ao ao_app_i18n ao_audio PkgGTKMM glibmm-2.68 Boost::process)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
