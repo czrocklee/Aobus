@@ -679,8 +679,8 @@ namespace ao::tui
       rt::loadAppPrefs(store, prefs);
 
       // The last-active route is the desktop shells' fallback, saved when their
-      // window closes. This shell keeps no session document, so there is
-      // nothing to fall back to and the explicit preference decides alone.
+      // window closes. The TUI runtime-session document deliberately excludes
+      // output identity, so its explicit global preference decides alone.
       auto const optSelection = uimodel::resolveOutputDeviceSelectionToRestore(
         prefs.preferredOutputSelection, {}, playback.snapshot().transport.output);
 
@@ -719,6 +719,8 @@ namespace ao::tui
       options.logLevel, rt::LibraryPaths{options.libraryRoot}.logsPath(), rt::LogConsoleMode::Disabled);
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
     auto const appConfigStorePtr = openAppConfigStore();
+    // Declared before AppRuntime so the executor's borrowed screen reference
+    // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
@@ -749,7 +751,22 @@ namespace ao::tui
 
     restoreOutputDeviceSelection(*appConfigStorePtr, runtime.playback());
 
+    if (auto const restoredRes = runtime.workspace().restoreSession(runtime.workspaceConfigStore()); !restoredRes)
+    {
+      APP_LOG_WARN("TUI: failed to restore the workspace session: {}", restoredRes.error().message);
+    }
+
+    // Declared before every frontend observer so reverse destruction retires
+    // all callback targets before Runtime stops producers and its executor.
+    auto const runtimeShutdown = gsl_lite::finally([&runtime] { runtime.shutdown(); });
     auto library = LibraryController{runtime, textCatalog};
+    runtime.startPlaybackSessionPersistence();
+
+    if (auto const restoredRes = runtime.restorePlaybackSession(); !restoredRes)
+    {
+      APP_LOG_WARN("TUI: failed to restore the playback session: {}", restoredRes.error().message);
+    }
+
     auto shell = ShellInteractionModel{};
     auto hitRegions = TuiHitRegions{};
     auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
@@ -879,8 +896,15 @@ namespace ao::tui
     }
 
     coverArt.cancel();
+    events.cancelTransientInteractions();
+    runtime.workspace().saveSession(runtime.workspaceConfigStore());
+
+    if (auto const savedRes = runtime.savePlaybackSession(); !savedRes)
+    {
+      APP_LOG_WARN("TUI: failed to checkpoint the playback session: {}", savedRes.error().message);
+    }
+
     playback.commands().stop();
-    runtime.shutdown();
     frameTimer.flush();
     return 0;
   }

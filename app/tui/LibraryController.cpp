@@ -9,6 +9,7 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
 #include "TuiText.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -48,10 +49,24 @@ namespace ao::tui
     , _libraryLabels{libraryNavigationLabels(_libraryEntries)}
     , _presentationEntries{loadPresentationNavigation()}
   {
-    auto snapshot = loadTrackItems(_currentListId);
-    _tracks = std::move(snapshot.tracks);
-    _sections = std::move(snapshot.sections);
-    syncSelectedPresentation(activePresentationId());
+    auto const attachedRes = attachActiveWorkspaceView();
+
+    if (!attachedRes)
+    {
+      APP_LOG_WARN("TUI: failed to attach the restored workspace view: {}", attachedRes.error().message);
+    }
+
+    if (!attachedRes || !*attachedRes)
+    {
+      auto const fallbackRes = navigateToList(rt::kAllTracksListId);
+
+      if (!fallbackRes)
+      {
+        APP_LOG_ERROR("TUI could not open the default All Tracks view: {}", fallbackRes.error().message);
+      }
+    }
+
+    publishSelection();
     _customPresetsSub = _runtime.workspace().onChanged(
       [this](rt::WorkspaceChanged const& changed)
       {
@@ -71,7 +86,6 @@ namespace ao::tui
 
         std::ignore = reloadActiveList();
       });
-    publishSelection();
   }
 
   std::string LibraryController::currentListTitle() const
@@ -114,14 +128,20 @@ namespace ao::tui
 
   void LibraryController::publishSelection()
   {
-    if (_activeViewId == rt::kInvalidViewId || _tracks.empty())
+    if (_activeViewId == rt::kInvalidViewId)
     {
       return;
     }
 
-    auto const index = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
+    auto selection = std::vector<TrackId>{};
 
-    if (auto result = _runtime.views().setSelection(_activeViewId, {_tracks[index].id}); !result)
+    if (!_tracks.empty())
+    {
+      auto const index = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
+      selection.push_back(_tracks[index].id);
+    }
+
+    if (auto result = _runtime.views().setSelection(_activeViewId, std::move(selection)); !result)
     {
       APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
     }
@@ -300,10 +320,17 @@ namespace ao::tui
     }
 
     auto const& spec = *result;
+    auto snapshotRes = materializeView(_activeViewId);
 
-    auto snapshot = loadTrackItemsFromView(_activeViewId);
-    _tracks = std::move(snapshot.tracks);
-    _sections = std::move(snapshot.sections);
+    if (!snapshotRes)
+    {
+      // A successful presentation mutation guarantees that this view still
+      // owns a projection; losing it here violates the ViewService contract.
+      AO_FATAL("TUI could not materialize a view after changing its presentation: {}", snapshotRes.error().message);
+    }
+
+    _tracks = std::move(snapshotRes->tracks);
+    _sections = std::move(snapshotRes->sections);
     syncSelectedPresentation(spec.id);
 
     if (!setSelectedTrackById(previousTrackId))
@@ -331,35 +358,56 @@ namespace ao::tui
   {
     if (_libraryEntries.empty())
     {
-      _tracks.clear();
-      _sections.clear();
-      _filterError.clear();
-      _selectedTrack = 0;
-      _currentListId = rt::kAllTracksListId;
-      _activeViewId = rt::kInvalidViewId;
       return {.opened = false, .status = tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoListsAvailable)};
     }
 
     auto const selectedIndex =
       clampSelection(static_cast<std::size_t>(std::max(0, _selectedList)), _libraryEntries.size());
-    _currentListId = _libraryEntries[selectedIndex].id;
-    auto snapshot = loadTrackItems(_currentListId);
-    _tracks = std::move(snapshot.tracks);
-    _sections = std::move(snapshot.sections);
-    _selectedTrack = 0;
-    _filterDraft.clear();
-    publishSelection();
+    auto const targetListId = _libraryEntries[selectedIndex].id;
 
+    if (auto const navigationRes = navigateToList(targetListId); !navigationRes)
+    {
+      APP_LOG_ERROR("TUI failed to open a library list: {}", navigationRes.error().message);
+      return {.opened = false};
+    }
+
+    publishSelection();
     return {.opened = true, .status = libraryOpenedList(_textCatalog, currentListTitle())};
   }
 
   std::string LibraryController::reloadActiveList()
   {
-    auto snapshot = loadTrackItems(_currentListId);
-    _tracks = std::move(snapshot.tracks);
-    _sections = std::move(snapshot.sections);
-    _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
-    _filterDraft.clear();
+    auto const selectedBefore = selectedTrackView();
+    auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
+    auto const previousSelectedTrack = _selectedTrack;
+
+    if (auto reloadRes = refreshActiveView(); !reloadRes)
+    {
+      APP_LOG_WARN(
+        "TUI active view is no longer available; opening a workspace fallback: {}", reloadRes.error().message);
+      auto const workspaceActiveViewId = _runtime.workspace().snapshot().activeViewId;
+
+      if (workspaceActiveViewId != rt::kInvalidViewId && workspaceActiveViewId != _activeViewId)
+      {
+        reloadRes = attachView(workspaceActiveViewId);
+      }
+
+      if (!reloadRes)
+      {
+        reloadRes = navigateToList(rt::kAllTracksListId);
+      }
+
+      if (!reloadRes)
+      {
+        APP_LOG_ERROR("TUI could not recover an active workspace view: {}", reloadRes.error().message);
+        return libraryReloadedTracks(_textCatalog, _tracks.size());
+      }
+    }
+    else if (!setSelectedTrackById(previousTrackId))
+    {
+      _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
+    }
+
     publishSelection();
     return libraryReloadedTracks(_textCatalog, _tracks.size());
   }
@@ -382,10 +430,17 @@ namespace ao::tui
     }
 
     refreshFilterError();
+    auto snapshotRes = materializeView(_activeViewId);
 
-    auto snapshot = loadTrackItemsFromView(_activeViewId);
-    _tracks = std::move(snapshot.tracks);
-    _sections = std::move(snapshot.sections);
+    if (!snapshotRes)
+    {
+      // A successful filter mutation guarantees that this view still owns a
+      // projection; losing it here violates the ViewService contract.
+      AO_FATAL("TUI could not materialize a view after applying its filter: {}", snapshotRes.error().message);
+    }
+
+    _tracks = std::move(snapshotRes->tracks);
+    _sections = std::move(snapshotRes->sections);
     _selectedTrack = 0;
     publishSelection();
 
@@ -448,18 +503,21 @@ namespace ao::tui
     }
   }
 
-  LibraryController::TrackItemsSnapshot LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
+  Result<LibraryController::TrackItemsSnapshot> LibraryController::materializeView(rt::ViewId const viewId)
   {
-    // Reached from the library-changes observer via reloadActiveList().
-    auto const foundProjectionRes = _runtime.views().findTrackListProjection(activeViewId);
+    auto const foundProjectionRes = _runtime.views().findTrackListProjection(viewId);
 
-    if (!foundProjectionRes || *foundProjectionRes == nullptr)
+    if (!foundProjectionRes)
     {
-      return {};
+      return std::unexpected{foundProjectionRes.error()};
+    }
+
+    if (*foundProjectionRes == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "TUI track view has no projection");
     }
 
     auto const& projectionPtr = *foundProjectionRes;
-
     auto const reader = _runtime.library().snapshot();
     auto snapshot = TrackItemsSnapshot{};
     snapshot.tracks.reserve(projectionPtr->size());
@@ -506,7 +564,113 @@ namespace ao::tui
     return snapshot;
   }
 
-  LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
+  Result<> LibraryController::refreshActiveView()
+  {
+    auto const stateRes = _runtime.views().findTrackListState(_activeViewId);
+
+    if (!stateRes)
+    {
+      return std::unexpected{stateRes.error()};
+    }
+
+    if (!std::ranges::contains(_libraryEntries, stateRes->listId, &LibraryNavEntry::id))
+    {
+      return makeError(Error::Code::NotFound, "TUI track view refers to an unavailable library list");
+    }
+
+    auto snapshotRes = materializeView(_activeViewId);
+
+    if (!snapshotRes)
+    {
+      return std::unexpected{snapshotRes.error()};
+    }
+
+    auto filterError = std::string{};
+
+    if (stateRes->optFilterError)
+    {
+      filterError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
+    }
+
+    _filterError = std::move(filterError);
+    _tracks = std::move(snapshotRes->tracks);
+    _sections = std::move(snapshotRes->sections);
+    return {};
+  }
+
+  Result<> LibraryController::attachView(rt::ViewId const viewId)
+  {
+    auto const stateRes = _runtime.views().findTrackListState(viewId);
+
+    if (!stateRes)
+    {
+      return std::unexpected{stateRes.error()};
+    }
+
+    auto snapshotRes = materializeView(viewId);
+
+    if (!snapshotRes)
+    {
+      return std::unexpected{snapshotRes.error()};
+    }
+
+    auto const listIt = std::ranges::find(_libraryEntries, stateRes->listId, &LibraryNavEntry::id);
+
+    if (listIt == _libraryEntries.end())
+    {
+      return makeError(Error::Code::NotFound, "TUI track view refers to an unavailable library list");
+    }
+
+    auto const presentationIt =
+      std::ranges::find(_presentationEntries, stateRes->presentation.id, &TrackPresentationNavEntry::id);
+    auto const selectedPresentation =
+      presentationIt == _presentationEntries.end()
+        ? moveSelection(_selectedPresentation, 0, _presentationEntries.size())
+        : static_cast<std::int32_t>(std::distance(_presentationEntries.begin(), presentationIt));
+    auto filterError = std::string{};
+
+    if (stateRes->optFilterError)
+    {
+      filterError = i18n::requiredFormat(
+        _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
+    }
+
+    _activeViewId = viewId;
+    _currentListId = stateRes->listId;
+    _selectedList = static_cast<std::int32_t>(std::distance(_libraryEntries.begin(), listIt));
+    _selectedPresentation = selectedPresentation;
+    _selectedTrack = 0;
+    _filterDraft = stateRes->filterExpression;
+    _filterError = std::move(filterError);
+    _tracks = std::move(snapshotRes->tracks);
+    _sections = std::move(snapshotRes->sections);
+    return {};
+  }
+
+  Result<bool> LibraryController::attachActiveWorkspaceView()
+  {
+    auto const workspace = _runtime.workspace().snapshot();
+
+    if (workspace.activeViewId == rt::kInvalidViewId)
+    {
+      return false;
+    }
+
+    if (!std::ranges::contains(workspace.openViews, workspace.activeViewId))
+    {
+      return makeError(Error::Code::InvalidState, "TUI workspace active view is not open");
+    }
+
+    if (auto const attachedRes = attachView(workspace.activeViewId); !attachedRes)
+    {
+      return std::unexpected{attachedRes.error()};
+    }
+
+    return true;
+  }
+
+  Result<> LibraryController::navigateToList(ListId const listId)
   {
     auto navigationRes = Result<rt::ViewId>{};
 
@@ -521,13 +685,14 @@ namespace ao::tui
 
     if (!navigationRes)
     {
-      _filterError.clear();
-      return {};
+      return std::unexpected{navigationRes.error()};
     }
 
-    _activeViewId = *navigationRes;
-    auto snapshot = loadTrackItemsFromView(_activeViewId);
-    refreshFilterError();
-    return snapshot;
+    if (auto const attachedRes = attachView(*navigationRes); !attachedRes)
+    {
+      return std::unexpected{attachedRes.error()};
+    }
+
+    return {};
   }
 } // namespace ao::tui

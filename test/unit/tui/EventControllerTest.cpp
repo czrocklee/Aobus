@@ -207,7 +207,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
   }
 
-  TEST_CASE("EventController - Ctrl-C reaches global exit handling from every text input mode",
+  TEST_CASE("EventController - Ctrl-C requests exit without stopping playback from text input",
             "[tui][regression][event]")
   {
     auto requireExitHandlingFromInput = [](std::string const& opener)
@@ -216,13 +216,14 @@ namespace ao::tui::test
       auto library = fixture.makeLibrary();
       prepareSeekablePlayback(fixture, library);
       auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+      auto const trackId = currentPlayback(fixture).transport.nowPlaying.trackId;
 
-      REQUIRE(currentPlayback(fixture).transport.nowPlaying.trackId != kInvalidTrackId);
+      REQUIRE(trackId != kInvalidTrackId);
       REQUIRE(controller.handleEvent(ftxui::Event::Character(opener)));
       REQUIRE(fixture.shell.isInputActive());
 
       CHECK(controller.handleEvent(ftxui::Event::CtrlC));
-      CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+      CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == trackId);
     };
 
     SECTION("Quick Filter")
@@ -234,6 +235,20 @@ namespace ao::tui::test
     {
       requireExitHandlingFromInput(":");
     }
+  }
+
+  TEST_CASE("EventController - quit defers playback stop to the composition root", "[tui][regression][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+    auto const trackId = currentPlayback(fixture).transport.nowPlaying.trackId;
+    REQUIRE(trackId != kInvalidTrackId);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("q")));
+
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == trackId);
   }
 
   TEST_CASE("EventController - cancelling untouched Quick Filter preserves the active filter",
@@ -427,6 +442,22 @@ namespace ao::tui::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
     CHECK(std::get<std::string>(feed.entries.back().message).contains("Filter error:"));
+  }
+
+  TEST_CASE("EventController - teardown cancellation retires a pending Quick Filter debounce",
+            "[tui][unit][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+    CHECK(controller.handleEvent(ftxui::Event::Character("/")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("First")));
+    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+
+    controller.cancelTransientInteractions();
+
+    CHECK(fixture.sleeperPtr->waitForCancellation(0));
+    CHECK(library.filterDraft().empty());
   }
 
   TEST_CASE("EventController - destruction cancels a pending Quick Filter debounce", "[tui][unit][filter][concurrency]")
@@ -1721,13 +1752,21 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto controller = EventController{fixture.screen, fixture.shell, library, *fixture.runtimePtr};
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      *fixture.runtimePtr,
+                                      EventControllerBindings{.notifications = &fixture.runtimePtr->notifications()}};
 
     fixture.shell.openOverlay(Overlay::ListChooser);
 
     CHECK(controller.handleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.currentListTitle() == "All Tracks");
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == rt::NotificationSeverity::Info);
+    CHECK(std::get<std::string>(feed.entries.front().message) == "Opened All Tracks");
   }
 
   TEST_CASE("EventController - playback shortcuts update controls", "[tui][unit][event]")
@@ -1843,6 +1882,39 @@ namespace ao::tui::test
     CHECK(seekPreviews[1] == duration);
     REQUIRE(snapshots.size() == 1);
     CHECK(snapshots[0].transport.elapsed == duration);
+  }
+
+  TEST_CASE("EventController - teardown cancellation stabilizes an active seek drag",
+            "[tui][regression][event][lifecycle]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto& playback = fixture.runtimePtr->playback();
+    playback.commands().pause();
+    auto const before = playback.snapshot().transport;
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
+                                                      { seekPreviews.push_back(elapsed); });
+    auto controller = EventController{
+      fixture.screen, fixture.shell, library, *fixture.runtimePtr, EventControllerBindings{.hitRegions = &hitRegions}};
+    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 30, .y = 1};
+    auto release = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 30, .y = 1};
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+    REQUIRE(seekPreviews.size() == 1);
+    CHECK(seekPreviews[0] == before.duration);
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
+
+    controller.cancelTransientInteractions();
+
+    auto const stabilized = playback.snapshot().transport;
+    CHECK(stabilized.elapsed == before.elapsed);
+    CHECK(stabilized.finalSeekRevision.value == before.finalSeekRevision.value + 1);
+    CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", release)));
+    CHECK(playback.snapshot().transport.finalSeekRevision == stabilized.finalSeekRevision);
   }
 
   TEST_CASE("EventController - disabled seek rail ignores mouse clicks", "[tui][unit][event]")

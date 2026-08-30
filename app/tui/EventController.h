@@ -67,6 +67,7 @@ namespace ao::tui
     bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     bool handleEvent(ftxui::Event const& event);
+    void cancelTransientInteractions();
 
   private:
     void openSelectedList();

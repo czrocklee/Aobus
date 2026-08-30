@@ -64,6 +64,7 @@ suppresses saves after ordinary discard until a qualifying active-session
 mutation admits a new payload; it is not a terminal lifecycle.
 
 The succession and transport services each retain a last-restorable snapshot after ordinary stop, exhaustion, or invalidation removes live state.
+Stop freezes both sides on the same subject before the resulting Idle checkpoint; a later shutdown checkpoint reads that same frozen pair rather than persisting cleared live state.
 A later successful launch replaces those snapshots.
 
 The save debounce is one second.
@@ -134,9 +135,9 @@ Subject changes, final seeks, and transitions to paused or idle request an immed
 
 From `Dormant`, an explicit observation start, restore, checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
 No other lifecycle can transition back to `Observing`.
-GTK and WinUI start observation when they activate an ordinary restoring
-session. A desktop successor idle session reads no stored payload and starts
-observation only after its selected root is durable.
+GTK, WinUI, and TUI start observation when they activate an ordinary restoring session.
+TUI does so after workspace restoration and terminal active-view attachment, then invokes restore before entering its event loop.
+A desktop successor idle session reads no stored payload and starts observation only after its selected root is durable.
 An explicit checkpoint writes only from `Dormant` or `Observing`; ordinary
 shutdown applies the lifecycle-specific final-save policy below.
 
@@ -216,7 +217,11 @@ It never starts audio.
 GTK may use a successful restore to reveal the actual current track. WinUI
 restores before its controllers bind and then projects the restored snapshot
 through its ordinary playback command and presentation adapters.
-TUI currently does not run the same startup/checkpoint sequence; that asymmetry belongs to interactive lifecycle architecture.
+TUI restores after workspace attachment and leaves the restored subject Idle for ordinary Play/PlayPause consumption; it does not force workspace navigation or selection.
+On normal exit, the composition root explicitly checkpoints playback before requesting stop.
+Stop checkpoints the frozen restorable snapshots as it enters Idle, frontend observers are then destroyed, and `AppRuntime::shutdown()` may rewrite the same frozen payload as its final observing-lifecycle checkpoint.
+Failure of the explicit TUI checkpoint is logged and teardown continues.
+The exact ordering belongs to interactive lifecycle architecture.
 
 ## Implementation map
 
@@ -224,10 +229,11 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h) owns payload and internal transport snapshot values.
 - [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h) and [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp) own explicit YAML mapping, version dispatch, and pre-restore validation.
 - [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp) owns public composition and lifecycle forwarding.
+- [`App.cpp`](../../../app/tui/App.cpp) owns TUI observation start, restore, explicit checkpoint, stop, and shutdown ordering.
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, and structural failure atomicity.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
 - [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
   and [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)

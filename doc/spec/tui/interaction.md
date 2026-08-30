@@ -45,6 +45,8 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
+- Startup attaches the exact active runtime view restored by `WorkspaceService`; a valid empty projection does not cause replacement navigation.
+- Reload materializes the same active view id and preserves its filter, presentation, grouping, sorting, history identity, filter draft, selected track when that track remains visible, and independent list/presentation chooser highlights.
 - Soul/Space transport toggles and ordinary stop requests use `PlaybackActions`; explicit selected-track activation remains a distinct view-based sequence command.
 - A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
@@ -100,6 +102,11 @@ Track navigation moves selection by row/page/endpoints; group navigation selects
 Mouse wheel moves selection by three tracks.
 Dragging the table scrollbar maps its visual position to a selectable track.
 Clicking a section header selects its first track; dragging a header edge installs a session-local width override.
+
+After runtime workspace restore, `LibraryController` reads the active process-local `ViewId` and materializes that view directly.
+It does not navigate by `ListId`, so multiple filtered views over one list remain distinct and construction adds no history entry.
+Only a missing or unusable active view opens the All Tracks fallback.
+Reload follows the same direct materialization path; if the controller's view disappeared, it attaches a different active workspace view when available and otherwise opens All Tracks.
 
 The list overlay renders All Tracks first and walks the shared list tree in preorder.
 Children of the virtual All Tracks root retain zero terminal indentation, while every additional user-list ancestor adds two spaces.
@@ -157,14 +164,25 @@ Return or Escape performs one immediate final application before the panel close
 Replacing, closing, or destroying Quick Filter input requests stop on the pending timer; a stopped or obsolete generation cannot mutate shell or library state.
 Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 
-Signal exit requests leave through the TUI's exit watcher and normal runtime teardown.
+`q`, the `quit` command, Ctrl-C, and signal exit only request that the event loop end; input dispatch does not stop playback early.
+Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, and cover work before persistence captures state.
+Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
+Teardown then checkpoints workspace, checkpoints playback, and requests playback stop.
+Frontend observers and controllers are destroyed before runtime shutdown, while `ScreenInteractive` outlives the runtime executor that borrows it.
 Frame timers and executor callbacks cannot access the screen after their owning application lifetime ends.
 
 ## Persistence and versioning
 
 TUI workspace config defaults to `<root>/.aobus/tui-workspace.yaml` and follows the workspace session contract.
-Column overrides, active overlay, input draft/mode, hover, and pointer gestures are session-local and unversioned.
-Exact startup paths/options belong to the TUI reference.
+The runtime uses one `ConfigStore` writer for both its `workspace` and `playback-session` groups in that file.
+Workspace is restored before terminal view attachment; playback observation and restore follow before the event loop.
+Normal exit checkpoints both groups before stop and runtime shutdown.
+
+Restored workspace state includes open view configurations, exact active-view choice, and custom presentation presets; it excludes track selection and navigation history beyond the reconstructed initial point.
+Restored playback state includes source/filter/order, current track and position, modes, volume, and mute without autoplay.
+Column overrides, active overlay, input draft/mode, the original Quick Filter editing draft, hover, and pointer gestures are session-local and unversioned.
+The preferred output route is stored separately in the global TUI application-preference file.
+Exact startup paths/options and managed locations belong to the TUI and persistence references.
 
 ## Frontend observations
 
@@ -181,7 +199,8 @@ The notification center can be opened explicitly even when compact status is not
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input, command parsing, and overlay state.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`CommandCompletionProvider.cpp`](../../../app/tui/CommandCompletionProvider.cpp) separates Command Palette and live Quick Filter providers.
-- [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch.
+- [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation.
+- [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
 - [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) owns track-table output.
@@ -190,7 +209,8 @@ The notification center can be opened explicitly even when compact status is not
 ## Test map
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
-- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, overlays, and resizing.
+- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, and exit without early playback stop.
+- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, and list-deletion recovery.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) protects sections, viewport, widths, and selection.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.

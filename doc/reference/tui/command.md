@@ -27,7 +27,7 @@ Keys that run no command - text-input entry, seeking, group jumps, volume - are 
 | --- | --- |
 | `-l, --library <root>` | music library root; normalized absolute path |
 | `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
-| `--config <path>` | default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path |
+| `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path |
 | `--cover-art-mode <auto|kitty|blocks|off>` | cover renderer |
 | `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
 | `--version` | prints `Aobus TUI <version>` and exits |
@@ -64,7 +64,7 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `play`, `p` | play selected track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop`, `s` | stop playback |
-| `quit`, `q` | stop and quit |
+| `quit`, `q` | request normal checkpoint-and-stop exit |
 
 ### Workspace keys
 

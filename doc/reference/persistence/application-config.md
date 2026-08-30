@@ -60,7 +60,7 @@ It does not denote nested mappings.
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
-| Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
+| Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
@@ -165,7 +165,7 @@ The registry fixes the group-to-type association, but these domain owners define
 - Unregistered top-level groups have no application consumer even though a loaded `ConfigStore` can retain them while rewriting another group.
 - Every registered payload uses an explicit owner-local schema; no field, enum, id, container, or aggregate schema is inferred from its C++ type.
 - The [grouped configuration store specification](../../spec/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
-- `playback-session` accepts only schema version `3`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
+- `playback-session` accepts only schema version `4`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
 - `workspace` accepts only presentation version `1` and validates its complete stable presentation vocabulary before view creation.
 - Desktop column-layout groups accept only version `2`; desktop
   list-presentation groups accept only version `1`. Each validates a complete
@@ -182,8 +182,9 @@ This registry does not convert schema membership into restore success.
 `utility::applicationConfigDirectory` reports `NotFound` only when the platform names no home or profile location at all.
 What a frontend does then depends on what it keeps there.
 
-GTK and the TUI keep only preferences, layout presets, and window state, so they open a store that has no location - `rt::ConfigStore::NoLocation`, and the `AppConfigStore` and `ShellLayoutStore` constructors that take it - rather than refusing to start.
-The Windows shell does not: it keeps its settings, its playback state, and the fallback library it opens when no other root is selected under that directory, so without one it has no library to show and reports a startup failure.
+GTK opens its global `AppConfigStore` and shell-layout stores with `rt::ConfigStore::NoLocation` rather than refusing to start.
+TUI likewise uses a no-location store for its separate global application preferences; its command-line-selected per-library workspace/playback path is not derived from this platform directory.
+The Windows shell does not degrade this way: it keeps its settings, playback state, and fallback library root under that directory, so without one it has no library to show and reports a startup failure.
 
 A store with no location behaves as follows:
 
@@ -203,7 +204,7 @@ The frontend says so once, at its composition root, where the reason is still kn
 | `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
 | Windows `desktop` | Explicit version, currently `3`, read down to the oldest this schema ever wrote (`2`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
-| `playback-session` | Explicit schema version `3`; other versions are rejected rather than migrated. |
+| `playback-session` | Explicit schema version `4`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
 
@@ -261,8 +262,8 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`WindowStateTest.cpp`](../../../test/unit/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, and store use.
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, store use, and repeated frozen checkpoints.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact restored active view.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect both per-library GTK presentation groups, version gates, and seeded-state fallback.
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects the layout payload's YAML fields and round trip; [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects its `layout` group and per-preset file boundary.
 - [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects the standalone component-state envelope, versions, and schema; [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset matching, pruning, and the file boundary.

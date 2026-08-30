@@ -42,9 +42,16 @@ Initialize and scan the root with the GTK application or CLI first.
 6. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `v` for presentations, and `n` for notifications.
 7. Press `d` and keep browsing: the detail pane stays open beside the track table and follows your selection, so arrows, pages, wheel, scrollbar, group jumps, playback, and filtering all keep working while you read it.
    Press `d` again or Escape to close it.
-8. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit.
+8. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit normally.
 
-The default workspace configuration is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
+The default session file is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
+On startup, the TUI restores its open track views, active view, filters, presentations, custom presentation presets, and last restorable playback subject, position, modes, volume, and mute from this file.
+A restored playback subject remains idle until you press Space or otherwise start playback.
+When several filtered views use the same list, the previously active one is restored exactly.
+
+Normal quit cancels unfinished input and pointer interactions, saves workspace and playback state, and then stops playback.
+Track selection, an unfinished Quick Filter draft, open panels, pointer state, and temporary column widths are not restored.
+The output device you select is remembered separately as a global TUI preference rather than in the per-library session file.
 
 ## Verify the result
 
@@ -53,6 +60,7 @@ The default workspace configuration is `<root>/.aobus/tui-workspace.yaml` unless
 - A filter changes the visible projection, and `c` clears it.
 - Opening the detail pane leaves the track table usable, and the pane's contents change as the selection moves.
 - Opening any other overlay prevents workspace-only gestures from mutating the track table beneath it.
+- Restarting the TUI returns to the active filtered/presentation view and exposes the saved playback subject without starting audio automatically.
 
 ## Related documents
 

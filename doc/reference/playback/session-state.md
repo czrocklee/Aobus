@@ -24,7 +24,7 @@ The schema requires every root field:
 
 | Field | C++ type | Default | Meaning |
 |---|---|---|---|
-| `schemaVersion` | Unsigned 32-bit integer | `3` | Exact compatibility gate. |
+| `schemaVersion` | Unsigned 32-bit integer | `4` | Exact compatibility gate. |
 | `sourceListId` | `ListId` | Invalid id | Library-scoped source list. |
 | `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
 | `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
@@ -61,7 +61,7 @@ The payload contains none of these:
 
 ## Validation rules
 
-- `schemaVersion` must equal `3`.
+- `schemaVersion` must equal `4`.
 - List and track identities must satisfy semantic restore validation against the active library.
 - Anchor and position must convert to their runtime index/duration representations without overflow.
 - Shuffle and repeat values must be supported enumerators.
@@ -114,7 +114,7 @@ The runtime schema writes strong ids through their explicit unsigned raw values 
 
 ## Test authority
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, and round trip.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, round trip, and frozen stop/shutdown checkpoints.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects the explicit schema invocation and failed-candidate boundary used by this payload.
 
 ## Related documents

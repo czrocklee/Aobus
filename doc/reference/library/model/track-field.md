@@ -134,7 +134,7 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 
 Track-field, sort-field, and group-key ids appear in versioned presentation state and must not be renamed or rebound without an explicit compatibility decision.
 Current presentation documents never serialize their enum raw values.
-The playback-session version-3 schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
+The playback-session version-4 schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
 The raw `TrackField` and `TrackGroupKey` columns remain C++ lookup information rather than current presentation-format tokens.
 
 Query-variable text is owned by the predicate language.

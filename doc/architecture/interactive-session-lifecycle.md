@@ -76,10 +76,13 @@ launcher.
 ### TUI composition root
 
 TUI constructs one `AppRuntime` for the command-line-selected root and retains it for the terminal process lifetime.
-It opens an initial All Tracks view through `LibraryController`.
-Its output overlay uses the shared UIModel output-device selector, but TUI does
-not currently persist that selection around its event loop.
-It currently does not restore and checkpoint workspace or playback sessions around its event loop, so GTK lifecycle behavior must not be described as frontend-neutral current policy.
+Before constructing frontend observers, it restores the runtime workspace from the selected TUI store.
+`LibraryController` attaches the exact `WorkspaceSnapshot::activeViewId` created by that restore rather than navigating by list identity; it navigates to All Tracks only when no usable active view exists.
+Same-list filtered views, the active view's exact presentation, and restored custom presets therefore survive frontend attachment without an extra history point.
+TUI then starts playback-session observation and restores listening intent without autoplay.
+
+Its output overlay uses the shared UIModel output-device selector.
+The exact requested route is written immediately to the separate global TUI preference store and resolved after providers register on the next startup; unlike GTK, TUI has no last-active application-session route to use as a fallback.
 
 ### WinUI composition root
 
@@ -220,7 +223,13 @@ GTK requests a final checkpoint, closes callback admission, removes the active w
 `CoreRuntime::shutdown()` seals library mutation and publication admission before callback resumption closes, then stops and joins asynchronous workers while library-backed collaborators still exist.
 Both boundaries are idempotent so explicit composition-root shutdown and destructor fallback preserve the same order.
 
-TUI exits its event loop, stops playback intent, calls the AppRuntime shutdown boundary, and releases its single composition without the GTK checkpoint and restart protocol.
+A TUI quit or signal request only ends the event loop.
+The composition root then cancels cover delivery and transient input or pointer work, checkpoints the workspace, explicitly checkpoints playback, and only then requests ordinary playback stop.
+The workspace checkpoint remains best-effort and log-only; playback checkpoint failure is logged by the composition root.
+Frontend controllers, subscriptions, render adapters, and callback targets are destroyed before a scope guard calls `AppRuntime::shutdown()`.
+Ordinary stop freezes the last-restorable succession and transport snapshots, so the playback shutdown checkpoint can safely rewrite the same intent after live playback becomes Idle.
+The runtime and its screen-borrowing executor are destroyed while `ScreenInteractive` still exists.
+TUI has no GTK-style restart protocol.
 
 WinUI closes the window, detaches session and native-media callbacks, releases XAML controllers, then destroys `LibrarySession`.
 The session invalidates the active scan's guarded presentation closure, requests task stop, and releases its single runtime while stores and dispatcher still exist.
@@ -293,7 +302,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
   switch plans, the private successor protocol, and detached process creation.
 - [`GtkStartupPlan.cpp`](../../app/linux-gtk/app/GtkStartupPlan.cpp), [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`SuccessorProcessLauncher.cpp`](../../app/linux-gtk/platform/SuccessorProcessLauncher.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup planning, prepare/activate composition, terminal retirement, complete unwind, direct process launch, diagnostics, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
-- [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
+- [`app/tui/App.cpp`](../../app/tui/App.cpp), [`LibraryController.cpp`](../../app/tui/LibraryController.cpp), and [`EventController.cpp`](../../app/tui/EventController.cpp) own TUI restore, exact-view attachment, interaction cancellation, checkpoint, and teardown composition.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   and [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   own the shared GTK, TUI, and WinUI selector projection, exact requested-intent
@@ -310,11 +319,12 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`MainWindowSessionPresentationTest.cpp`](../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) protects presentation precedence across GTK workspace and playback restoration.
 - [`GtkStartupPlanTest.cpp`](../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp) and [`SuccessorProcessLauncherTest.cpp`](../../test/unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp) protect the paired private `--aobus-successor` protocol, GTK-owned standard replacement passthrough, exact launch plan, activation-environment cleanup, exec failure, and detach.
 - [`GApplicationReplacementTest.cpp`](../../test/unit/linux-gtk/app/GApplicationReplacementTest.cpp) protects ordinary remote activation and live-owner replacement on an isolated session bus; it does not claim serialization against an independently launched graph.
-- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects terminal playback sealing against queued and delayed activity.
+- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects terminal playback sealing against queued and delayed activity and proves ordinary stop and shutdown rewrite the same frozen restorable snapshot.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects completion invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
-- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
+- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects exact active-view attachment, valid empty views, restored presentations and custom presets, reload identity and chooser highlights, and list-deletion recovery.
+- [`EventControllerTest.cpp`](../../test/unit/tui/EventControllerTest.cpp) protects exit-without-early-stop dispatch and explicit transient-interaction cancellation.
 - [`OutputSelectionTest.cpp`](../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protects catalog-aware admission and pure preferred/fallback resolution.
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)

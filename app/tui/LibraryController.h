@@ -91,8 +91,11 @@ namespace ao::tui
       std::vector<TrackSection> sections{};
     };
 
-    TrackItemsSnapshot loadTrackItemsFromView(rt::ViewId activeViewId);
-    TrackItemsSnapshot loadTrackItems(ListId listId);
+    Result<TrackItemsSnapshot> materializeView(rt::ViewId viewId);
+    Result<> refreshActiveView();
+    Result<> attachView(rt::ViewId viewId);
+    Result<bool> attachActiveWorkspaceView();
+    Result<> navigateToList(ListId listId);
 
     rt::AppRuntime& _runtime;
     i18n::MessageCatalog _textCatalog;

@@ -290,9 +290,23 @@ namespace ao::tui
 
   void EventController::openSelectedList()
   {
-    if (auto const result = _library.openSelectedList(); result.opened)
+    auto result = _library.openSelectedList();
+
+    if (result.opened)
     {
       closeOverlay();
+
+      if (!result.status.empty())
+      {
+        postActivityNotification(rt::NotificationSeverity::Info, std::move(result.status));
+      }
+
+      return;
+    }
+
+    if (!result.status.empty())
+    {
+      postActivityNotification(rt::NotificationSeverity::Warning, std::move(result.status));
     }
   }
 
@@ -523,10 +537,7 @@ namespace ao::tui
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
-      case CommandAction::Quit:
-        _playback.commands().stop();
-        _screen.ExitLoopClosure()();
-        break;
+      case CommandAction::Quit: _screen.ExitLoopClosure()(); break;
     }
   }
 
@@ -1364,7 +1375,6 @@ namespace ao::tui
 
     if (event == ftxui::Event::CtrlC)
     {
-      _playback.commands().stop();
       _screen.ExitLoopClosure()();
       return true;
     }
@@ -1390,5 +1400,11 @@ namespace ao::tui
     }
 
     return handleRootEvent(event);
+  }
+
+  void EventController::cancelTransientInteractions()
+  {
+    cancelFilterDebounce();
+    cancelWorkspaceGestures();
   }
 } // namespace ao::tui

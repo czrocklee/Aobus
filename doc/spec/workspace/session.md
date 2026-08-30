@@ -122,9 +122,17 @@ A filtered view over the same list is not reusable for this purpose, retains its
 GTK saves workspace state with its other explicit save, hide, shutdown, and active-library preparation checkpoints.
 The [GTK active-library lifecycle specification](../linux-gtk/active-library-lifecycle.md) owns those transitions.
 
-TUI currently injects a workspace store but does not restore or save it around the event loop.
-Its `LibraryController` constructs an initial All Tracks view instead.
-No shared frontend lifecycle owner is proposed; this remains an explicit GTK/TUI product difference.
+TUI restores the selected workspace store before constructing `LibraryController`.
+Restore allocates process-local view ids, and the controller attaches the exact `WorkspaceSnapshot::activeViewId` from that runtime rather than navigating by a persisted id or by `ListId`.
+This preserves the active member when several filtered views share one list, its exact presentation and grouping/sort state, restored custom presets, and the initial history point.
+A successfully materialized empty projection is a usable active view, not a fallback condition.
+Only an absent, closed, unprojectable, or otherwise unusable active view causes explicit navigation to All Tracks.
+
+TUI reload materializes the existing active view id without navigation, preserving canonical filter and presentation state, any in-progress terminal filter draft, and list/presentation chooser highlights that may intentionally differ from the active view.
+If that id disappeared, reload first follows a different active workspace id and otherwise navigates to All Tracks; list-deletion recovery therefore does not depend on library-observer registration order.
+On normal exit, TUI cancels transient interactions before calling the same best-effort `saveSession()` command, then checkpoints playback and stops it.
+A workspace save failure remains log-only and does not block teardown.
+No shared frontend lifecycle owner is introduced; GTK and TUI keep explicit composition-root sequences.
 
 ## Failure, execution, and lifetime
 
@@ -161,6 +169,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) creates and destroys candidate views.
 - [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) supplies explicit schema invocation, presence-aware candidate loading, and one-shot save.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns current GTK restore/default/checkpoint sequencing.
+- [`App.cpp`](../../../app/tui/App.cpp) owns TUI restore/checkpoint sequencing, and [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact active-view attachment and reload materialization.
 
 ## Test map
 
@@ -170,6 +179,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects GTK workspace/playback restore composition.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves restored presentation preservation, initial history replay, and new-view default selection.
+- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) proves exact same-list filtered-view attachment, valid empty-view acceptance, restored custom-preset visibility, reload and chooser-highlight preservation, and list-deletion fallback.
 
 ## Related documents
 
@@ -179,3 +189,4 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Grouped configuration store](../persistence/config-store.md)
 - [GTK active-library lifecycle](../linux-gtk/active-library-lifecycle.md)
+- [TUI interaction](../tui/interaction.md)

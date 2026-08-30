@@ -762,11 +762,14 @@ namespace ao::rt::test
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
     CHECK(restoredRes->trackId == alpha);
-    CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Idle);
-    CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == alpha);
-    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{500});
-    CHECK(runtimePtr->playback().snapshot().succession.shuffle == ShuffleMode::On);
-    CHECK(runtimePtr->playback().snapshot().succession.repeat == RepeatMode::All);
+    auto const restoredSnapshot = runtimePtr->playback().snapshot();
+    CHECK(restoredSnapshot.transport.transport == audio::Transport::Idle);
+    CHECK(restoredSnapshot.transport.nowPlaying.trackId == alpha);
+    CHECK(restoredSnapshot.transport.elapsed == std::chrono::milliseconds{500});
+    CHECK(restoredSnapshot.transport.volume.level == 0.5F);
+    CHECK(restoredSnapshot.transport.volume.muted);
+    CHECK(restoredSnapshot.succession.shuffle == ShuffleMode::On);
+    CHECK(restoredSnapshot.succession.repeat == RepeatMode::All);
   }
 
   TEST_CASE("PlaybackSession - explicit checkpoint starts event-driven debounce",
@@ -1784,6 +1787,9 @@ namespace ao::rt::test
     auto const viewId = createView(*runtimePtr);
 
     runtimePtr->startPlaybackSessionPersistence();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK_FALSE(restoredRes->restored);
     REQUIRE_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
     REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
     runtimePtr->playback().commands().pause();
@@ -1827,6 +1833,50 @@ namespace ao::rt::test
       runtimePtr->shutdown();
       CHECK_FALSE(*runtimePtr->playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
     }
+  }
+
+  TEST_CASE("PlaybackSession - stop and shutdown rewrite the frozen restorable snapshot",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    addReadyAudioProvider(*runtimePtr);
+    auto const track = addPlayableTrack(*runtimePtr, *executor, "Frozen checkpoint");
+    auto const viewId = createView(*runtimePtr);
+    runtimePtr->startPlaybackSessionPersistence();
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, track));
+    runtimePtr->playback().commands().pause();
+    runtimePtr->playback().commands().seek(std::chrono::milliseconds{450});
+    runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
+    runtimePtr->playback().commands().setRepeatMode(RepeatMode::All);
+    executor->drain();
+    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const expected = storedSession(runtimePtr->playbackSessionConfigStore());
+    CHECK(expected.currentTrackId == track);
+    CHECK(expected.positionMs == 450);
+    CHECK(expected.shuffleMode == ShuffleMode::On);
+    CHECK(expected.repeatMode == RepeatMode::All);
+
+    auto stopSentinel = expected;
+    stopSentinel.positionMs = 1;
+    stopSentinel.shuffleMode = ShuffleMode::Off;
+    REQUIRE(stopSentinel != expected);
+    storeSession(*runtimePtr, stopSentinel);
+
+    runtimePtr->playback().commands().stop();
+
+    CHECK(storedSession(runtimePtr->playbackSessionConfigStore()) == expected);
+
+    auto shutdownSentinel = expected;
+    shutdownSentinel.positionMs = 2;
+    shutdownSentinel.repeatMode = RepeatMode::Off;
+    REQUIRE(shutdownSentinel != expected);
+    storeSession(*runtimePtr, shutdownSentinel);
+
+    runtimePtr->shutdown();
+
+    CHECK(storedSession(runtimePtr->playbackSessionConfigStore()) == expected);
   }
 
   TEST_CASE("PlaybackSession - library-switch retirement permanently seals persistence",
