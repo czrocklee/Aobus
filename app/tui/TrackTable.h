@@ -28,6 +28,8 @@ namespace ftxui
 
 namespace ao::tui
 {
+  class TuiKeymapPlan;
+
   struct TrackColumnResizeHandle final
   {
     rt::TrackField field = rt::TrackField::Title;
@@ -108,9 +110,11 @@ namespace ao::tui
                                 TrackTableViewOptions options = {});
   std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
                                          std::vector<std::string> const& labels,
+                                         TuiKeymapPlan const& keymapPlan,
                                          std::int32_t terminalColumns);
   ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
                                     std::vector<std::string> const& labels,
                                     std::int32_t selected,
+                                    TuiKeymapPlan const& keymapPlan,
                                     std::int32_t columns = 0);
 } // namespace ao::tui

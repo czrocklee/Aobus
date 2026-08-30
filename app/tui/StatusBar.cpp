@@ -6,6 +6,7 @@
 #include "CommandCompletion.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
+#include "TuiKeymap.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -64,6 +65,11 @@ namespace ao::tui
 
   std::string activityProgressRail(double const fraction, std::int32_t const columns)
   {
+    if (columns <= 0)
+    {
+      return {};
+    }
+
     auto const clamped = std::clamp(fraction, 0.0, 1.0);
     auto const filled = static_cast<std::int32_t>(std::lround(clamped * static_cast<double>(columns)));
     auto rail = std::string{};
@@ -106,12 +112,13 @@ namespace ao::tui
     return state != nullptr && state->compact.kind != uimodel::ActivityStatusKind::Idle && !state->compact.text.empty();
   }
 
-  ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog, StatusBarViewState const& state)
+  ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog,
+                           StatusBarViewState const& state,
+                           TuiKeymapPlan const& keymapPlan)
   {
     using namespace ftxui;
 
     constexpr std::int32_t kExpandedWorkspaceHintColumns = 100;
-
     auto workspaceHintPtr = [&]
     {
       auto parts = Elements{};
@@ -126,41 +133,52 @@ namespace ao::tui
 
       auto appendChip = [&](std::string_view const key, std::string_view const label)
       {
+        if (key.empty())
+        {
+          return;
+        }
+
         appendSeparator();
         parts.push_back(style::shortcutChip(key, label));
       };
 
-      // The key comes from the one binding declaration, so a rebound action
-      // cannot leave the bar advertising the key it used to answer to. The
-      // words are the bar's own: they name the destination, not the command.
-      auto appendCommandChip = [&](CommandAction const action, std::string_view const label)
-      { appendChip(shortcutFor(action), label); };
+      auto appendActionChip = [&](TuiKeyAction const action, std::string_view const label)
+      { appendChip(keymapPlan.shortcutFor(action), label); };
 
-      appendChip("/",
-                 state.filterDraft.empty() ? i18n::requiredText(textCatalog, i18n::MessageId::TuiShellFilterLabel)
-                                           : std::string_view{state.filterDraft});
+      auto const filterLabel = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellFilterLabel);
+      auto const filterShortcut = keymapPlan.shortcutFor(TuiKeyAction::OpenQuickFilter);
+
+      if (state.filterDraft.empty())
+      {
+        appendChip(filterShortcut, filterLabel);
+      }
+      else
+      {
+        // The draft is state, not a shortcut hint. Keep it visible when the
+        // entry action is unbound, using the localized label in place of a key.
+        appendChip(filterShortcut.empty() ? filterLabel : filterShortcut, state.filterDraft);
+      }
 
       if (!state.filterDraft.empty())
       {
-        appendCommandChip(
-          CommandAction::ClearFilter, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusClearFilter));
+        appendActionChip(
+          TuiKeyAction::ClearFilter, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusClearFilter));
       }
 
-      // Opening the text inputs is not a command, so it is named here rather
-      // than added to the key-binding declaration.
-      appendChip(":", i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
+      appendActionChip(
+        TuiKeyAction::OpenCommandPalette, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
 
       if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
       {
-        appendCommandChip(
-          CommandAction::OpenLists, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
-        appendCommandChip(
-          CommandAction::OpenPresentationPanel, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
-        appendCommandChip(
-          CommandAction::OpenDetail, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
+        appendActionChip(
+          TuiKeyAction::ToggleListChooser, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
+        appendActionChip(
+          TuiKeyAction::TogglePresentations, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
+        appendActionChip(
+          TuiKeyAction::ToggleDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
       }
 
-      appendCommandChip(CommandAction::ShowHelp, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusHelp));
+      appendActionChip(TuiKeyAction::ShowHelp, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusHelp));
       return hbox(std::move(parts));
     };
 
@@ -213,7 +231,7 @@ namespace ao::tui
 
     if (auto const overlay = shell.overlay(); overlay != Overlay::None)
     {
-      auto const interactionHint = std::string{overlayHint(textCatalog, overlay)};
+      auto const interactionHint = overlayHint(textCatalog, keymapPlan, overlay);
       auto const contextLabel = std::string{overlayLabel(textCatalog, overlay)};
 
       return hbox({

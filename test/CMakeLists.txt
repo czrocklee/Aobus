@@ -712,6 +712,7 @@ if(AOBUS_BUILD_TUI)
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
+    unit/tui/TuiKeymapTestSupport.cpp
     unit/tui/TuiRenderTestSupport.cpp
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandCompletionTest.cpp
@@ -739,6 +740,7 @@ add_executable(ao_tui_test
     unit/tui/TextCellTest.cpp
     unit/tui/TrackTableTest.cpp
     unit/tui/TuiHitRegionsTest.cpp
+    unit/tui/TuiKeymapTest.cpp
     unit/tui/TuiLayoutStateStoreTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)

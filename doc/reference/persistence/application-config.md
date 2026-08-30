@@ -11,7 +11,7 @@ summary: Enumerates Aobus managed YAML documents, registered groups, payload aut
 
 This reference owns the exact registry of application-managed YAML documents and `ConfigStore` groups.
 For each entry it identifies the logical document, literal top-level group, C++ payload type, explicit schema, writer, and current version marker.
-It also owns the complete field surface for the small global GTK `window`, `runtime`, `session`, and `shortcuts` groups.
+It also owns the complete field surface for the small global `window`, `runtime`, `session`, and `shortcuts` groups used by the interactive frontends.
 
 It does not own platform paths, store state transitions, restore/save behavior, the nested [workspace](../workspace/session-state.md) or playback schemas, presentation semantics, shell-layout node grammar, or component-state lifecycle.
 Those facts belong to the linked location reference, store specification, and domain owners.
@@ -40,7 +40,7 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Logical document | Composition | Container | Registered top-level surface |
 |---|---|---|---|
 | Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
-| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`. |
+| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | TUI library presentation | One per-library TUI file. | `TuiLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
@@ -62,6 +62,7 @@ It does not denote nested mappings.
 | Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
+| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | No TUI writer; `ao::uimodel::loadKeymap` reads it over TUI defaults. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
@@ -96,7 +97,7 @@ Unknown fields are tolerated, duplicate fields are rejected, and a malformed pre
 The persistence schema does not impose positive-size or display-geometry bounds.
 `width` and `height` retain the last positive dimensions observed while the window was not maximized; a maximized checkpoint updates only `maximized` and preserves those normal dimensions for the next restore.
 
-### Global GTK runtime-preference group
+### Global runtime-preference group
 
 The `runtime` group is a mapping whose fields are all strings with an empty C++ default:
 
@@ -130,7 +131,7 @@ It uses the same seeded-missing, unknown-field, duplicate-field, and malformed-k
 When the preferred runtime-group tuple is not restorable, the session tuple is the GTK fallback.
 An incomplete session tuple is ignored; restore never synthesizes missing identity fields.
 
-### Global GTK shortcut group
+### Global shortcut group
 
 The `shortcuts` group is itself the dynamic mapping; its complete serialized shape is:
 
@@ -142,8 +143,12 @@ Each present action id replaces the complete shipped chord list for that action.
 An empty sequence explicitly unbinds it; an absent action id retains its current shipped defaults.
 Saving writes only bindings whose effective chord sequence differs from the defaults supplied to `KeymapModel`.
 
+GTK and WinUI expose mutation surfaces and persist those deltas in their own global documents.
+TUI loads the same group from `<config>/tui.yaml` over its shared-plus-terminal defaults, but exposes no editor and does not save the keymap during ordinary shutdown.
+Its normal output-preference checkpoint writes the `runtime` sibling through the same live `ConfigStore`, preserving the shortcut group already present in the store snapshot.
+
 Action ids are plain strings in this payload.
-Persistence accepts arbitrary action ids; the editor derives shortcut eligibility from the layout schema.
+Persistence accepts arbitrary action ids; the GTK editor derives shortcut eligibility from the layout schema, while TUI recognizes only its frontend descriptor inventory.
 Loading the group itself does not reject an unknown action id.
 Chord values use the canonical `KeyChord::toString()` representation; the exact chord tokens, aliases, and shipped default bindings belong to the [keyboard map reference](../shell/keymap.md).
 The schema rejects an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.
@@ -188,7 +193,7 @@ This registry does not convert schema membership into restore success.
 What a frontend does then depends on what it keeps there.
 
 GTK opens its global `AppConfigStore` and shell-layout stores with `rt::ConfigStore::NoLocation` rather than refusing to start.
-TUI likewise uses a no-location store for its separate global application preferences; its command-line-selected per-library workspace/playback path is not derived from this platform directory.
+TUI likewise uses a no-location store for its separate global application preferences and shortcut overrides; its command-line-selected per-library workspace/playback path is not derived from this platform directory.
 The Windows shell does not degrade this way: it keeps its settings, playback state, and fallback library root under that directory, so without one it has no library to show and reports a startup failure.
 
 A store with no location behaves as follows:
@@ -249,7 +254,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`WindowState.cpp`](../../../app/linux-gtk/app/WindowState.cpp) owns the geometry accumulation rule and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns when a checkpoint is taken.
 - [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns `NoLocation` and what a store with nowhere to keep anything does; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend reaches for it.
-- [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
+- [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload; [`TuiKeymap.h`](../../../app/tui/TuiKeymap.h) owns the terminal defaults supplied when the TUI reads it.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
 - [`WorkspaceSessionYamlSchema.h`](../../../app/runtime/WorkspaceSessionYamlSchema.h), [`WorkspaceSessionYamlSchema.cpp`](../../../app/runtime/WorkspaceSessionYamlSchema.cpp), and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload conversion.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) and [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) own their independent library-presentation file boundaries.
@@ -266,7 +271,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
 - [`WindowStateTest.cpp`](../../../test/unit/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory.
-- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
+- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence; [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects the shared-plus-terminal default seed and executable projection.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, store use, and repeated frozen checkpoints.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact restored active view.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect the shared presentation groups, independent files, TUI writer-path alias rejection, version gates, and seeded-state fallback.

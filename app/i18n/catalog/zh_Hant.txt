@@ -402,12 +402,12 @@ zh_Hant:table {
     tui_shell_overlay_views { "檢視" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "說明" }
-    tui_shell_hint_lists { "{toggleKey} 切換  {openKey} 開啟  {closeKey} 關閉" }
-    tui_shell_hint_detail { "{toggleKey} 切換  {closeKey} 關閉" }
-    tui_shell_hint_pipeline { "{toggleKey} 切換  {closeKey} 關閉" }
-    tui_shell_hint_output { "{toggleKey} 切換  {selectKey} 選取  {closeKey} 關閉" }
-    tui_shell_hint_views { "{toggleKey} 切換  {selectKey} 選取  {closeKey} 關閉" }
-    tui_shell_hint_notifications { "{toggleKey} 切換  {hideKey} 隱藏精簡項目  {closeKey} 關閉" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{openKey} 開啟  {closeKey} 關閉" }
+    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
+    tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
+    tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{selectKey} 選取  {closeKey} 關閉" }
+    tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{selectKey} 選取  {closeKey} 關閉" }
+    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{hideKey} 隱藏精簡項目  {closeKey} 關閉" }
     tui_shell_hint_help { "{closeKey} 關閉" }
     tui_shell_status_command { "命令" }
     tui_shell_status_lists { "列表" }
@@ -448,22 +448,22 @@ zh_Hant:table {
     tui_playback_no_output_device_selected { "未選取輸出裝置" }
     tui_playback_no_output_devices_found { "未找到輸出裝置" }
     tui_playback_no_audio_pipeline { "尚無音訊鏈路" }
-    tui_shell_help_quick_filter { "{command}              快速篩選" }
-    tui_shell_help_choose_list { "{command} 或 {alias}       選取列表" }
-    tui_shell_help_track_detail { "{command} 或 {alias}      顯示所選曲目詳情" }
-    tui_shell_help_audio_pipeline { "{command} 或 {alias}    顯示音訊鏈路" }
-    tui_shell_help_output_device { "{command} 或 {alias}      選取輸出裝置" }
-    tui_shell_help_choose_view { "{command} 或 {alias}       選取檢視" }
-    tui_shell_help_notifications { "{command} 或 {alias} 顯示通知中心" }
-    tui_shell_help_current_track { "{command}           定位目前曲目" }
-    tui_shell_help_switch_presentation { "{command}         切換檢視" }
-    tui_shell_help_previous_next_group { "{command}              上一組 / 下一組" }
-    tui_shell_help_clear_filter { "{command}             清除篩選" }
-    tui_shell_help_reload_list { "{command}            重新載入目前列表" }
-    tui_shell_help_playback { "{command} 播放控制" }
-    tui_shell_help_quit { "{command}              結束" }
-    tui_shell_help_footer { "{closeKey} 關閉  {runKey} 執行" }
-    tui_shell_notification_footer { "{toggleKey} 切換  {hideKey} 隱藏精簡項目  按一下可清除的列  {closeKey} 關閉" }
+    tui_shell_help_quick_filter { "快速篩選" }
+    tui_shell_help_choose_list { "選取列表" }
+    tui_shell_help_track_detail { "顯示所選曲目詳情" }
+    tui_shell_help_audio_pipeline { "顯示音訊鏈路" }
+    tui_shell_help_output_device { "選取輸出裝置" }
+    tui_shell_help_choose_view { "選取檢視" }
+    tui_shell_help_notifications { "顯示通知中心" }
+    tui_shell_help_current_track { "定位目前曲目" }
+    tui_shell_help_switch_presentation { "切換檢視" }
+    tui_shell_help_previous_next_group { "上一組 / 下一組" }
+    tui_shell_help_clear_filter { "清除篩選" }
+    tui_shell_help_reload_list { "重新載入目前列表" }
+    tui_shell_help_playback { "播放控制" }
+    tui_shell_help_quit { "結束" }
+    tui_shell_help_footer { "{closeKey} 關閉" }
+    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{hideKey} 隱藏精簡項目  按一下可清除的列  {closeKey} 關閉" }
     tui_library_detail { "音樂庫" }
     tui_library_no_sections { "此檢視中無分節" }
     tui_library_no_section_selected { "未選取分節" }

@@ -16,17 +16,18 @@ Exact startup options, keys, commands, and aliases belong to the [TUI command re
 ## Code boundary
 
 TUI code under `app/tui/` owns FTXUI elements, terminal geometry, hit regions, input dispatch, frame timing, terminal cover rendering, and TUI-local shell state.
-It consumes `AppRuntime` and shared UIModel policies for presentation, seek gestures, status, output, quality, column widths, and soul animation.
+It consumes `AppRuntime` and shared UIModel policies for presentation, seek gestures, status, output, quality, column widths, soul animation, and neutral keymaps.
 
 `LibraryController` adapts runtime workspace/views into terminal rows but does not become library storage or playback authority.
 Its list chooser consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
-`EventController` translates terminal events into runtime/UIModel commands.
+`TuiKeymapPlan` is the immutable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
+`EventController` translates terminal events from that plan or from fixed scoped protocol into runtime/UIModel commands.
 `CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
 ## Terminology
 
-- **Quick Filter input** is the live filter editor entered by `/`.
-- **Command Palette input** is the command editor entered by `:`.
+- **Quick Filter input** is the live filter editor entered by its effective shortcut (shipped as `/`).
+- **Command Palette input** is the command editor entered by its effective shortcut (shipped as `:`).
 - **Text input** means either of those mutually exclusive shell modes.
 - An **overlay** is one of list, detail, quality, output, presentation, notification, or help panels.
 - A **modal** overlay blocks workspace input beneath it; a **visible** overlay merely occupies the screen. The detail inspector is the only visible overlay that is not modal.
@@ -42,6 +43,8 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Detail pane width follows locale and terminal width only. Selection, cover presence, and optional-field presence cannot change it.
 - Render code writes hit regions into the one `TuiHitRegions` owner; input reads that same frame state.
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
+- Fixed input, list, modal-overlay, notification, mouse, and escape protocol is resolved before configurable root actions; Ctrl-C remains an unconditional emergency exit.
+- One prepared `TuiKeymapPlan` drives root dispatch and every hint for a configurable action, so rebinding or unbinding cannot leave a hard-coded execution or display path behind.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
@@ -59,7 +62,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 `EventController` retains pointer drags for seek, scrollbar, and column resize plus hover state.
 It also retains one cancellable generation-checked Quick Filter debounce task; all shell and library access occurs after resumption on the callback executor.
 `LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, applied filter draft and error, and presentation adaptation.
-The composition root retains one shared presentation catalog, one per-list presentation-preference model, one per-list column-layout model, and one frontend-local store writer for the selected library.
+The composition root retains one shared presentation catalog, one per-list presentation-preference model, one per-list column-layout model, one frontend-local store writer for the selected library, and one immutable TUI keymap plan loaded from the global application store.
 
 Each input mode's completion result carries a replacement range, ranked items, display text, insertion text, and detail.
 Quick Filter drafts delegate directly to the shared UIModel track-filter completer, which selects live values or structured expression candidates according to the same boundary as GTK.
@@ -70,7 +73,7 @@ Presentation contexts add built-in and custom preset ids.
 
 ### Quick Filter input
 
-`/` opens an empty Quick Filter draft without clearing or copying the currently applied filter.
+The effective `tui.library.openQuickFilter` shortcut (shipped as `/`) opens an empty Quick Filter draft without clearing or copying the currently applied filter.
 Until the user edits that draft, Escape closes the input without changing the applied filter, while Return confirms the empty draft and clears the filter.
 After an edit, the draft is applied after 200 milliseconds without another edit.
 Every further edit or accepted completion cancels and replaces that pending generation.
@@ -83,7 +86,7 @@ Applying a live value replaces the active filter term with one safely quoted ter
 
 ### Command Palette input
 
-`:` opens an empty Command Palette draft.
+The effective `tui.shell.openCommandPalette` shortcut (shipped as `:`) opens an empty Command Palette draft.
 Text editing and completion navigation use the same grapheme, arrow, page, and Tab rules as Quick Filter input, but no debounce or live filtering occurs.
 Return executes a known command or explicit command prefix without applying the highlighted completion.
 An empty draft closes the palette; an unknown nonempty command remains open and reports a warning instead of changing the filter.
@@ -121,7 +124,8 @@ While it is visible, track and group navigation, wheel selection, scrollbar drag
 Entering text input suspends those gestures for the duration of the input without closing the inspector.
 There is no track-row click target.
 
-Overlay toggle keys reopen/close their own panel.
+The list, detail, quality, output, presentation, and notification panels use their effective toggle shortcut to reopen or close that panel, and show that shortcut in the panel footer.
+Help remains a modal surface closed by fixed Escape rather than by its root open shortcut.
 Return activates the selected list, presentation, or output row.
 Escape closes the active overlay.
 Notification `x` locally suppresses the compact activity entry according to the shared activity model.
@@ -130,7 +134,7 @@ Notification `x` locally suppresses the compact activity entry according to the 
 
 The single-row dock contains the Soul transport/quality control, title/artist, output badge, elapsed, bounded responsive seek rail, duration, and volume percentage.
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
-Space and the Soul control pause active playback and resume paused playback even while an output-device selection is pending.
+The effective `playback.playPause` shortcut (shipped with Space first) and the Soul control pause active playback and resume paused playback even while an output-device selection is pending.
 From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
 Stop is an idempotent silent no-op when playback is already Idle.
 
@@ -168,7 +172,7 @@ Replacing, closing, or destroying Quick Filter input requests stop on the pendin
 Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 An interrupted column drag instead discards its preview. Overlay changes, text input, list changes, unrelated pointer presses, and teardown therefore produce no column-layout model change or save.
 
-`q`, the `quit` command, Ctrl-C, and signal exit only request that the event loop end; input dispatch does not stop playback early.
+The effective quit shortcut (shipped as `q`), the `quit` command, Ctrl-C, and signal exit only request that the event loop end; input dispatch does not stop playback early.
 Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, and cover work before persistence captures state.
 Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
 Teardown then checkpoints workspace, checkpoints playback, and requests playback stop.
@@ -189,6 +193,8 @@ Restored playback state includes source/filter/order, current track and position
 Restored TUI presentation state includes each list's column order, visibility, fixed cell widths or flexible weights, and preferred presentation id.
 Active overlay, input draft/mode, the original Quick Filter editing draft, hover, and pointer gestures are session-local and unversioned.
 The preferred output route is stored separately in the global TUI application-preference file.
+The same global `<config>/tui.yaml` document supplies the `shortcuts` group over shared-plus-TUI defaults.
+TUI loads that group before constructing dispatch and render owners, but has no shortcut editor and performs no ordinary keymap save; the unrelated `runtime` preference checkpoint preserves the loaded sibling group.
 Exact startup paths/options and managed locations belong to the TUI and persistence references.
 
 ## Frontend observations
@@ -205,6 +211,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input, command parsing, and overlay state.
+- [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) owns stable terminal action descriptors, TUI-local defaults, the FTXUI projection whitelist, collision selection, and the immutable dispatch/hint plan.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`CommandCompletionProvider.cpp`](../../../app/tui/CommandCompletionProvider.cpp) separates Command Palette and live Quick Filter providers.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation.
 - [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
@@ -216,6 +223,7 @@ The notification center can be opened explicitly even when compact status is not
 ## Test map
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
+- [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects action identities, shared/local defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, and exit without early playback stop.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, and list-deletion recovery.
 - [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal-cell projection, sections, viewport, persisted widths, and selection.

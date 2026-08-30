@@ -209,7 +209,7 @@ namespace ao::uimodel
       {"playback.previous", {chord("Ctrl+Left"), chord("Media:Prev")}},
       {"playback.toggleShuffle", {chord("Ctrl+U")}},
       {"playback.cycleRepeat", {chord("Ctrl+R")}},
-      {"workspace.revealCurrentTrack", {chord("Ctrl+L")}},
+      {std::string{kRevealCurrentTrackActionId}, {chord("Ctrl+L")}},
       {"track.orderMoveUp", {chord("Alt+Up")}},
       {"track.orderMoveDown", {chord("Alt+Down")}},
       {"track.orderMoveToTop", {chord("Alt+Home")}},

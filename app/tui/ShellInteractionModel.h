@@ -4,6 +4,7 @@
 #pragma once
 
 #include "CommandCompletionState.h"
+#include "TuiKeymap.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -70,12 +71,12 @@ namespace ao::tui
     /**
      * @brief The action whose key this entry advertises, when not its own.
      *
-     * `:view <name>` selects a track view outright while `v` opens the panel to
-     * pick one, so they are different actions that reach the same place. Naming
-     * the action rather than the key is what keeps the hint from drifting: a
+     * A prefix can lead to a related interactive path: `/` opens Quick Filter
+     * editing for `:filter`, while `v` opens the chooser for `:view <name>`.
+     * Naming that action rather than its key keeps the hint from drifting: a
      * rebound key moves the hint with it, and an unbound one shows nothing.
      */
-    std::optional<CommandAction> optShortcutAction{};
+    std::optional<TuiKeyAction> optShortcutAction{};
   };
 
   struct CommandAliasSpec final
@@ -86,26 +87,12 @@ namespace ao::tui
     i18n::MessageId category;
   };
 
-  /**
-   * @brief A key that runs a command without the command line, and what it runs.
-   *
-   * The key is written the way a reader sees it rather than as a terminal
-   * event, so this stays the one declaration behind both what the shell listens
-   * for and what it tells the user. An action may appear more than once when
-   * more than one key runs it.
-   */
-  struct KeyBindingSpec final
-  {
-    std::string_view key;
-    CommandAction action;
-  };
-
   std::span<CommandPrefixSpec const> commandPrefixSpecs();
   std::span<CommandAliasSpec const> commandAliasSpecs();
-  std::span<KeyBindingSpec const> keyBindingSpecs();
-
-  /// The first key that runs @p action, or empty when no key does.
-  std::string_view shortcutFor(CommandAction action);
+  /// The root shortcut worth showing beside a command alias, when one has the same semantics.
+  std::optional<TuiKeyAction> shortcutActionForCommand(CommandAction action) noexcept;
+  /// The command action with the same semantics as a root key action.
+  std::optional<CommandAction> commandActionForKeyAction(TuiKeyAction action) noexcept;
   /**
    * @brief Whether @p overlay blocks interaction with the workspace beneath it.
    *
@@ -118,7 +105,9 @@ namespace ao::tui
   bool isModalOverlay(Overlay overlay) noexcept;
   std::optional<Command> parseCommand(std::string_view input);
   std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay overlay);
-  std::string overlayHint(i18n::MessageCatalog const& textCatalog, Overlay overlay);
+  /// The first binding that reaches an overlay's toggle after its fixed local protocol handles input.
+  std::string_view overlayToggleShortcut(TuiKeymapPlan const& keymapPlan, Overlay overlay);
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog, TuiKeymapPlan const& keymapPlan, Overlay overlay);
 
   class ShellInteractionModel final
   {

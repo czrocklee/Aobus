@@ -24,15 +24,20 @@ if(NOT TEST_ROOT)
 endif()
 
 # Each frontend Aobus ships, spelled as it would appear at the head of a name.
-set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|Qt)[A-Z0-9]")
+set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|Qt)([._A-Z0-9]|$)")
 
 # A frontend's API vocabulary, which no shared file has a reason to spell in
 # code. Comments are exempt on purpose: explaining that GTK derives expansion
 # from a widget's children is why a shared field is optional, and that reason
 # belongs next to the field. Reaching for the type in code is a different act.
-set(_ao_frontend_vocabulary_regex "(winrt::|Xaml|gtkmm|Gtk::|Gdk::|Glib::|Gio::|Pango::|Cairo::)")
+set(_ao_frontend_vocabulary_regex "(winrt::|Xaml|gtkmm|Gtk::|Gdk::|Glib::|Gio::|Pango::|Cairo::|ftxui::|ftxui/)")
 
 function(_ao_assert_frontend_neutral root label)
+  if(NOT IS_DIRECTORY "${root}")
+    message(FATAL_ERROR
+            "AssertUimodelFrontendNeutrality: ${label} root is not a directory: ${root}")
+  endif()
+
   file(GLOB_RECURSE _files LIST_DIRECTORIES false
        "${root}/*.h"
        "${root}/*.hpp"

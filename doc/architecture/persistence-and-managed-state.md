@@ -155,13 +155,16 @@ music root is used only for library-bound runtime state.
 Every frontend persists the exact route requested through the shared selector and retains it independently of the engine-confirmed Runtime snapshot.
 GTK additionally captures the last active Runtime route in application-session state as a fallback when no valid explicit preference exists.
 After providers are registered, each frontend asks the pure UIModel policy to resolve stored intent and then submits the resulting runtime command itself.
-TUI keeps its global application preferences in its own file under the platform user-configuration directory, using the same groups and schema as every other frontend that keeps them.
+TUI keeps its global application preferences and shortcut overrides in its own file under the platform user-configuration directory, using the same group schemas as every other frontend that keeps them.
 It does not share GTK's file: `ConfigStore` rewrites a whole document from the snapshot it took at first read, so two frontends running at once against one file would drop each other's groups.
 When the environment names no configuration directory, TUI runs without preferences rather than failing to start.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
-TUI uses its selected `ConfigStore` for both workspace and playback-session groups, preserving one live document and one writer authority for that physical file, and opens a separate application-preference store for global output intent.
+TUI uses its selected `ConfigStore` for both workspace and playback-session groups, preserving one live document and one writer authority for that physical file, and opens a separate application-preference store for global output intent and shortcut overrides.
+The composition root loads `shortcuts` from that global store over the TUI's shared-plus-local defaults before constructing input and rendering owners.
+It does not load shortcuts from the library-selected workspace store or the `--config` override, and it does not call the keymap save path on ordinary exit because the current TUI exposes no editing acknowledgement.
+The ordinary `runtime` preference checkpoint uses the same live global store, which preserves the shortcut sibling it loaded.
 It also owns one per-library TUI layout store. That single writer atomically saves the UIModel column-layout and list-presentation groups together; its terminal-cell dimensions are never read from or written to the GTK pixel document. Before constructing stores, the composition root rejects path aliases among the runtime-session, layout, and global application-preference documents.
 TUI restores the two presentation groups before constructing the terminal library controller, restores workspace before attaching terminal view state, then restores playback. Layout and presentation changes save through the layout-store writer; normal exit retries a pending failed presentation checkpoint and sequences workspace and playback checkpoints through the runtime-owned store before playback stop and runtime shutdown.
 CLI opens the library database for the selected root but does not load interactive managed state.
@@ -319,7 +322,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, restore, and store use.
 - [`AppState`](../../app/include/ao/rt/AppState.h) owns the `runtime` and `session` group names, their schemas, and their optional-over-seed compatibility rule, for every frontend that keeps application-global state.
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary and the GTK-only `window` group; it delegates the shared groups to the `AppState` API.
-- [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
+- [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers; [`TuiKeymap`](../../app/tui/TuiKeymap.h) owns only the terminal default/projection policy above the shared keymap payload.
 - [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   owns shared route-intent validation and fallback resolution without issuing a
   runtime command or owning a persistence location.
@@ -344,7 +347,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects exact TUI view attachment and per-list presentation resolution; [`TuiLayoutStateStoreTest.cpp`](../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protects the independent per-library file, atomic two-group saves, sibling preservation, and load isolation.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppStateTest.cpp`](../../test/unit/runtime/AppStateTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
-- [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect the GTK file boundary and delta-from-default keymaps.
+- [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp), [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp), and [`TuiKeymapTest.cpp`](../../test/unit/tui/TuiKeymapTest.cpp) protect the GTK file boundary, shared override schema, and TUI default/projection boundary.
 - [`OutputSelectionTest.cpp`](../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
   protects the shared persisted-route admission rule.
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)

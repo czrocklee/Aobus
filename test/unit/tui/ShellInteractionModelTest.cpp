@@ -4,10 +4,15 @@
 #include "tui/ShellInteractionModel.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/tui/TuiKeymapTestSupport.h"
+#include "tui/TuiKeymap.h"
+#include <ao/uimodel/input/KeymapModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <string_view>
+#include <utility>
 
 namespace ao::tui::test
 {
@@ -53,6 +58,39 @@ namespace ao::tui::test
     CHECK(requiredCommand("stop").action == CommandAction::Stop);
     CHECK(requiredCommand("quit").action == CommandAction::Quit);
     CHECK(requiredCommand("close").action == CommandAction::CloseOverlay);
+  }
+
+  TEST_CASE("ShellInteractionModel - command and root key actions share one relation", "[tui][unit][keymap]")
+  {
+    constexpr auto kRelations = std::to_array<std::pair<CommandAction, TuiKeyAction>>({
+      {CommandAction::OpenLists, TuiKeyAction::ToggleListChooser},
+      {CommandAction::OpenDetail, TuiKeyAction::ToggleDetails},
+      {CommandAction::OpenQuality, TuiKeyAction::ToggleAudioPipeline},
+      {CommandAction::OpenOutputDevices, TuiKeyAction::ToggleOutputDevices},
+      {CommandAction::OpenPresentationPanel, TuiKeyAction::TogglePresentations},
+      {CommandAction::OpenNotifications, TuiKeyAction::ToggleNotifications},
+      {CommandAction::ShowHelp, TuiKeyAction::ShowHelp},
+      {CommandAction::RevealCurrentTrack, TuiKeyAction::RevealCurrentTrack},
+      {CommandAction::ClearFilter, TuiKeyAction::ClearFilter},
+      {CommandAction::Reload, TuiKeyAction::Reload},
+      {CommandAction::Play, TuiKeyAction::PlaySelection},
+      {CommandAction::TogglePlayback, TuiKeyAction::PlaybackPlayPause},
+      {CommandAction::Stop, TuiKeyAction::PlaybackStop},
+      {CommandAction::Quit, TuiKeyAction::Quit},
+    });
+
+    for (auto const& [command, key] : kRelations)
+    {
+      CHECK(shortcutActionForCommand(command) == key);
+      CHECK(commandActionForKeyAction(key) == command);
+    }
+
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::QuickFilter));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::CloseOverlay));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::SetPresentation));
+    CHECK_FALSE(commandActionForKeyAction(TuiKeyAction::OpenCommandPalette));
+    CHECK_FALSE(commandActionForKeyAction(TuiKeyAction::OpenQuickFilter));
+    CHECK_FALSE(commandActionForKeyAction(TuiKeyAction::PreviousSection));
   }
 
   TEST_CASE("ShellInteractionModel - only explicit filter commands become quick filters", "[tui][unit][shell]")
@@ -152,13 +190,41 @@ namespace ao::tui::test
   TEST_CASE("ShellInteractionModel - overlay hints are stable", "[tui][unit][shell]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    CHECK(overlayHint(textCatalog, Overlay::None).empty());
-    CHECK(overlayHint(textCatalog, Overlay::ListChooser) == "l toggle  Enter open  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::DetailPanel) == "d toggle  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::QualityPanel) == "a toggle  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::OutputDevices) == "o toggle  Enter select  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::PresentationPanel) == "v toggle  Enter select  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::Notifications) == "n toggle  x hide compact  Esc close");
-    CHECK(overlayHint(textCatalog, Overlay::Help) == "Esc close");
+    auto const& keymapPlan = defaultTuiKeymapPlan();
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::None).empty());
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser) == "l toggle  Enter open  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::DetailPanel) == "d toggle  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel) == "a toggle  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices) == "o toggle  Enter select  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel) == "v toggle  Enter select  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Notifications) == "n toggle  x hide compact  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Help) == "Esc close");
+  }
+
+  TEST_CASE("ShellInteractionModel - overlay hints choose a binding that survives local protocol",
+            "[tui][unit][keymap]")
+  {
+    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    model.applyOverrides({
+      {"tui.shell.toggleListChooser", {"Enter", "F2"}},
+      {"tui.shell.toggleNotifications", {"X", "F3"}},
+    });
+    auto const plan = TuiKeymapPlan{model};
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+
+    CHECK(plan.shortcutFor(TuiKeyAction::ToggleListChooser) == "Enter");
+    CHECK(overlayToggleShortcut(plan, Overlay::ListChooser) == "F2");
+    CHECK(overlayHint(textCatalog, plan, Overlay::ListChooser) == "F2 toggle  Enter open  Esc close");
+
+    CHECK(plan.shortcutFor(TuiKeyAction::ToggleNotifications) == "x");
+    CHECK(overlayToggleShortcut(plan, Overlay::Notifications) == "F3");
+    CHECK(overlayHint(textCatalog, plan, Overlay::Notifications) == "F3 toggle  x hide compact  Esc close");
+
+    auto outputModel = uimodel::KeymapModel{tuiDefaultKeymap()};
+    outputModel.applyOverrides({{"tui.shell.toggleOutputDevices", {"Enter"}}});
+    auto const outputPlan = TuiKeymapPlan{outputModel};
+    CHECK(outputPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices) == "Enter");
+    CHECK(overlayToggleShortcut(outputPlan, Overlay::OutputDevices).empty());
+    CHECK(overlayHint(textCatalog, outputPlan, Overlay::OutputDevices) == "Enter select  Esc close");
   }
 } // namespace ao::tui::test

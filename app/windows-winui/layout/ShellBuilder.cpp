@@ -25,6 +25,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -155,7 +156,7 @@ namespace ao::winui::layout
     bindCommand("shell.toggleInspector", _config.commands.toggleInspector);
     bindCommand("shell.showSoul", _config.commands.showSoul);
     bindCommand("shell.showSystemMenu", _config.commands.showSystemMenu);
-    bindCommand("workspace.revealCurrentTrack", _config.commands.revealCurrentTrack);
+    bindCommand(uimodel::kRevealCurrentTrackActionId, _config.commands.revealCurrentTrack);
     bindCommand("track.presentProperties", _config.commands.presentTrackProperties);
 
     if (auto const& applyOrder = _config.listCommands.applyOrder; applyOrder)
@@ -565,7 +566,7 @@ namespace ao::winui::layout
     applyKeymapAccelerators(_config.host,
                             plans,
                             [this, lifetimePtr = std::weak_ptr{_lifetimePtr}](std::string_view const id)
-                            { return !lifetimePtr.expired() && _actions.invoke(id, ActionContext{}); });
+                            { return !lifetimePtr.expired() && invokeAction(id); });
   }
 
   bool ShellBuilder::invokeAction(std::string_view const actionId) const

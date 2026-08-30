@@ -71,7 +71,10 @@ The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a who
 
 | Location | Class | Writer or reader |
 |---|---|---|
-| `<config>/tui.yaml` | Global managed state for TUI application preferences | One `ConfigStore` owned by the TUI composition root |
+| `<config>/tui.yaml` | Global managed state for TUI application preferences and load-only shortcut overrides | One `ConfigStore` owned by the TUI composition root |
+
+The TUI loads the `shortcuts` group from this global file, independently of the selected library and `--config` workspace override.
+It has no shortcut editor and performs no ordinary keymap save; saving the sibling `runtime` preference group through the same live store preserves the loaded shortcut content.
 
 ### Per-library locations
 
@@ -107,7 +110,7 @@ Linux defaults and `AOBUS_BUILD_ROOT` are described in the repository [README](.
 - `ShellLayoutStore` rejects an empty preset id and ids containing `/`, `\`, or `..` before constructing a path.
 - `ShellLayoutComponentStateStore` additionally rejects preset ids containing a null byte.
 - A TUI `--database` override changes the database path without changing the selected music root.
-- A TUI `--config` override changes the workspace/playback-session file without changing its payload ownership or the independent `tui_layout.yaml` location; startup rejects an override that aliases the TUI layout or global application-preference file.
+- A TUI `--config` override changes the workspace/playback-session file without changing its payload ownership, the independent `tui_layout.yaml` location, or the global shortcut source; startup rejects an override that aliases the TUI layout or global application-preference file.
 - TUI normalizes its selected root and override paths to absolute lexical paths before runtime composition.
 - CLI passes its selected root to `LibraryPaths` and opens the derived database without a separate interactive configuration store.
 - `LibraryPaths::hasExistingDatabase()` detects a database created at the canonical location without exposing the LMDB marker filename to a frontend.

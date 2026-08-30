@@ -21,6 +21,8 @@ namespace ftxui
 
 namespace ao::tui
 {
+  class TuiKeymapPlan;
+
   inline constexpr std::int32_t kPresentationPanelColumns = 48;
   inline constexpr std::int32_t kPresentationPanelListRows = 10;
   inline constexpr std::int32_t kPresentationPanelChromeRows = 6;
@@ -35,11 +37,13 @@ namespace ao::tui
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view activePresentationId,
+                                        TuiKeymapPlan const& keymapPlan,
                                         std::int32_t terminalColumns);
   ftxui::Element presentationPanel(i18n::MessageCatalog const& textCatalog,
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view activePresentationId,
                                    std::int32_t selectedIndex,
+                                   TuiKeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* rowHitRegions = nullptr,
                                    std::int32_t columns = 0);
 } // namespace ao::tui

@@ -14,6 +14,8 @@ namespace ao::tui
 {
   /// Resolves argument-free text and the fixed argument-bearing TUI chrome cases; other invalid selections fail closed.
   std::string tuiChromeText(i18n::MessageCatalog const& catalog, i18n::MessageId id);
+  std::string tuiOverlayHint(i18n::MessageCatalog const& catalog, i18n::MessageId id, std::string_view toggleKey);
+  std::string tuiNotificationFooter(i18n::MessageCatalog const& catalog, std::string_view toggleKey);
   std::string playbackVolume(i18n::MessageCatalog const& catalog, std::int32_t percent);
   std::string librarySection(i18n::MessageCatalog const& catalog, std::string_view name);
   std::string libraryRevealedTrack(i18n::MessageCatalog const& catalog, std::string_view track);

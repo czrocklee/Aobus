@@ -15,9 +15,10 @@ The surface is unversioned; modal and rendering behavior belongs to the [TUI int
 ## Code boundary
 
 Startup option authority is `app/tui/Main.cpp`.
-Command, alias, and key-binding authority is `ShellInteractionModel.cpp`: a key that runs a command is declared once there and read by the dispatcher, the overlay handler that closes on the same key, the status bar, and the Command Palette alike.
-Key and mouse dispatch is `EventController.cpp`, which also owns the one translation from a declared key's written form to a terminal event.
-Keys that run no command - text-input entry, seeking, group jumps, volume - are answered where they are pressed and are named nowhere else.
+Command-prefix and alias authority is `ShellInteractionModel.cpp`.
+Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translation, projected collision selection, and effective display chords belong to `TuiKeymap.cpp`.
+The immutable plan built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
+`EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and emergency-exit protocol.
 
 ## Surface
 
@@ -35,9 +36,15 @@ Keys that run no command - text-input entry, seeking, group jumps, volume - are 
 Per-library column layouts and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
 Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
 
+### Shortcut overrides
+
+At startup the TUI loads the `shortcuts` group from the application-global `<config>/tui.yaml`, using the shared application defaults plus the TUI-local defaults in the [keyboard map reference](../shell/keymap.md).
+This source is independent of the selected library and `--config`.
+There is no TUI shortcut editor and ordinary shutdown does not rewrite the keymap; the same global store may save the unrelated output preference while preserving the loaded shortcut group.
+
 ### Command prefixes
 
-Commands are entered through `:` and are case-insensitive after trimming.
+Commands are entered through the Command Palette (shipped root shortcut `:`) and are case-insensitive after trimming.
 The parser accepts the Command Palette draft with or without its leading `:`; `/` is reserved for live Quick Filter input and is never a command prefix.
 
 | Prefix | Action |
@@ -71,27 +78,30 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 
 ### Workspace keys
 
-| Key | Action |
-| --- | --- |
-| `Up`, `Down` | previous/next track or active panel row |
-| `PageUp`, `PageDown` | page selection |
-| `Home`, `End` | first/last selection |
-| `Return` | play selected track; in list/view/output overlay, activate row |
-| `p` | play selected track |
-| `Space` | toggle play/pause |
-| `s` | stop |
-| `[` / `]` | seek -/+ 5 seconds |
-| `{` / `}` | previous/next presentation group |
-| `-` / `+` / `=` | volume -/+ 5 percentage points |
-| `l`, `d`, `a`, `o`, `v`, `n` | toggle corresponding overlay |
-| `?` | open help |
-| `Ctrl-L` | reveal current track |
-| `c` | clear filter |
-| `r` | reload active list |
-| `/` | open an empty live Quick Filter input |
-| `:` | open an empty Command Palette input |
-| `q` / `Ctrl-C` | quit |
-| `Esc` | close overlay or cancel active text input according to its mode |
+The following table shows shipped defaults.
+Except for rows marked **fixed protocol**, each action is configurable through its stable id in the [keyboard map reference](../shell/keymap.md), and every visible hint uses the effective projected shortcut.
+
+| Default key | Action | Ownership |
+| --- | --- | --- |
+| `Up`, `Down` | previous/next track or active panel row | fixed protocol |
+| `PageUp`, `PageDown` | page selection | fixed protocol |
+| `Home`, `End` | first/last selection | fixed protocol |
+| `Return`, `p` | play selected track | configurable at root; Return is fixed activation inside supported overlays |
+| `Space` | toggle play/pause | configurable |
+| `s` | stop | configurable |
+| `[` / `]` | seek -/+ 5 seconds | configurable |
+| `{` / `}` | previous/next presentation group | configurable |
+| `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
+| `l`, `d`, `a`, `o`, `v`, `n` | toggle corresponding overlay | configurable |
+| `?` | open help | configurable |
+| `Ctrl+L` | reveal current track | configurable |
+| `c` | clear filter | configurable |
+| `r` | reload active list | configurable |
+| `/` | open an empty live Quick Filter input | configurable |
+| `:` | open an empty Command Palette input | configurable |
+| `q` | request normal exit | configurable |
+| `Ctrl-C` | emergency exit request | fixed protocol |
+| `Esc` | close overlay or cancel active text input according to its mode | fixed protocol |
 
 ### Quick Filter keys
 
@@ -105,10 +115,10 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `Return` | apply selected completion, apply the filter immediately, and close; an untouched empty draft clears the filter |
 | `Esc` | ignore selected completion, apply the literal edited draft immediately, and close; an untouched draft preserves the existing filter |
 
-Opening `/` does not copy or clear the current filter.
+Opening Quick Filter through its effective shortcut does not copy or clear the current filter.
 Confirming that untouched empty input with Return clears the filter, while closing it with Escape leaves the current filter unchanged.
 After an edit, the draft also applies live following a 200-millisecond quiet interval.
-The active draft replaces the bottom status bar, and its completion popup opens directly above it; the separate `:` Command Palette remains centered.
+The active draft replaces the bottom status bar, and its completion popup opens directly above it; the separate Command Palette remains centered.
 
 Return and Escape intentionally differ between the two input modes.
 Quick Filter edits are live, so Return accepts the highlighted value and Escape keeps the literal draft; Command Palette input has no live effect, so Return executes only the typed command and Escape cancels it.
@@ -129,13 +139,13 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 
 | Overlay | Keys |
 | --- | --- |
-| Lists | `l` toggle, `Return` open, `Esc` close |
-| Detail | `d` toggle, `Esc` close; every workspace key and mouse gesture below stays available while it is open |
-| Pipeline | `a` toggle, `Esc` close |
-| Output | `o` toggle, `Return` select, `Esc` close |
-| Views | `v` toggle, `Return` select, `Esc` close |
-| Notifications | `n` toggle, `x` hide compact/local entry when eligible, `Esc` close |
-| Help | `Esc` close |
+| Lists | effective toggle (default `l`), `Return` open, `Esc` close |
+| Detail | effective toggle (default `d`), `Esc` close; every workspace key and mouse gesture below stays available while it is open |
+| Pipeline | effective toggle (default `a`), `Esc` close |
+| Output | effective toggle (default `o`), `Return` select, `Esc` close |
+| Views | effective toggle (default `v`), `Return` select, `Esc` close |
+| Notifications | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close |
+| Help | `Esc` close; its root open shortcut is not a toggle inside the modal panel |
 
 ### Mouse targets
 
@@ -163,11 +173,15 @@ All track-table gestures below remain available while the detail inspector is op
 - Both text-input modes and modal overlays disable workspace seek/table gestures; the detail inspector does not.
 - Opening or closing an overlay, entering text input, changing lists, another pointer press, or teardown cancels an unfinished column drag without saving it.
 - A duration-zero seek rail is inert.
+- A supported override affects root dispatch and every configurable hint for that action; an empty sequence removes both.
+- Unsupported terminal chords and later projected collisions omit only those entries, while fixed protocol and unrelated supported actions remain available.
+- Fixed protocol takes precedence in its active scope, so rebinding Return, Escape, navigation, or a text-editing key cannot strand an input or modal overlay.
 
 ## Compatibility and versioning
 
-The TUI input surface is unversioned.
-Changing a key, alias, option, or default path requires updating this reference and the relevant model/controller test.
+Command aliases and fixed protocol are unversioned.
+Stable `tui.*` action ids and canonical neutral chord strings are persisted compatibility surfaces; changing one requires an explicit migration decision.
+Changing a default key, alias, option, or default path requires updating this reference and the relevant model/controller test.
 
 ## Examples
 
@@ -181,13 +195,15 @@ Changing a key, alias, option, or default path requires updating this reference 
 
 - [`Main.cpp`](../../../app/tui/Main.cpp) registers startup options.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) registers prefixes and aliases.
+- [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) registers stable terminal action ids and defaults and owns executable projection plus dynamic shortcut selection.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) routes command, presentation, and shared filter completion.
-- [`EventController.cpp`](../../../app/tui/EventController.cpp) maps keys and mouse events.
+- [`EventController.cpp`](../../../app/tui/EventController.cpp) applies the prepared root plan after fixed scoped protocol and maps mouse events.
 
 ## Test authority
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects commands and aliases.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects keyboard and mouse mappings.
+- [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
 - [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects completion routing.
 
 ## Related documents

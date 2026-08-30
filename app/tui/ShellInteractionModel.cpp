@@ -3,11 +3,14 @@
 
 #include "ShellInteractionModel.h"
 
+#include "TuiKeymap.h"
 #include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/utility/String.h>
 #include <ao/utility/UnicodeText.h>
+
+#include <ftxui/component/event.hpp>
 
 #include <algorithm>
 #include <array>
@@ -26,7 +29,8 @@ namespace ao::tui
       {.prefix = "filter ",
        .action = CommandAction::QuickFilter,
        .detail = i18n::MessageId::TuiShellDetailQuickFilter,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
+       .category = i18n::MessageId::TuiShellCategoryLibrary,
+       .optShortcutAction = TuiKeyAction::OpenQuickFilter},
       {.prefix = "presentation ",
        .action = CommandAction::SetPresentation,
        .detail = i18n::MessageId::TuiShellDetailTrackView,
@@ -39,7 +43,7 @@ namespace ao::tui
        .action = CommandAction::SetPresentation,
        .detail = i18n::MessageId::TuiShellDetailTrackView,
        .category = i18n::MessageId::TuiShellCategoryView,
-       .optShortcutAction = CommandAction::OpenPresentationPanel},
+       .optShortcutAction = TuiKeyAction::TogglePresentations},
     });
 
     constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
@@ -213,55 +217,35 @@ namespace ao::tui
        .category = i18n::MessageId::TuiShellCategoryApp},
     });
 
+    struct CommandKeyAction final
+    {
+      CommandAction command = CommandAction::Quit;
+      TuiKeyAction key = TuiKeyAction::Quit;
+    };
+
+    constexpr auto kCommandKeyActions = std::to_array<CommandKeyAction>({
+      {.command = CommandAction::OpenLists, .key = TuiKeyAction::ToggleListChooser},
+      {.command = CommandAction::OpenDetail, .key = TuiKeyAction::ToggleDetails},
+      {.command = CommandAction::OpenQuality, .key = TuiKeyAction::ToggleAudioPipeline},
+      {.command = CommandAction::OpenOutputDevices, .key = TuiKeyAction::ToggleOutputDevices},
+      {.command = CommandAction::OpenPresentationPanel, .key = TuiKeyAction::TogglePresentations},
+      {.command = CommandAction::OpenNotifications, .key = TuiKeyAction::ToggleNotifications},
+      {.command = CommandAction::ShowHelp, .key = TuiKeyAction::ShowHelp},
+      {.command = CommandAction::RevealCurrentTrack, .key = TuiKeyAction::RevealCurrentTrack},
+      {.command = CommandAction::ClearFilter, .key = TuiKeyAction::ClearFilter},
+      {.command = CommandAction::Reload, .key = TuiKeyAction::Reload},
+      {.command = CommandAction::Play, .key = TuiKeyAction::PlaySelection},
+      {.command = CommandAction::TogglePlayback, .key = TuiKeyAction::PlaybackPlayPause},
+      {.command = CommandAction::Stop, .key = TuiKeyAction::PlaybackStop},
+      {.command = CommandAction::Quit, .key = TuiKeyAction::Quit},
+    });
+
     std::string lower(std::string value)
     {
       std::ranges::transform(value, value.begin(), utility::toAsciiLower);
       return value;
     }
-
-    /**
-     * @brief Every key that runs a command without the command line.
-     *
-     * Order decides which key a reader is shown for an action, so the one a
-     * shortcut hint should name comes first.
-     *
-     * Keys that are not commands - seeking, section jumps, volume - are not
-     * here: they are answered where they are pressed and are named nowhere
-     * else, so there is nothing for a second declaration to drift from.
-     */
-    constexpr auto kKeyBindings = std::to_array<KeyBindingSpec>({
-      {.key = "q", .action = CommandAction::Quit},
-      {.key = "l", .action = CommandAction::OpenLists},
-      {.key = "d", .action = CommandAction::OpenDetail},
-      {.key = "a", .action = CommandAction::OpenQuality},
-      {.key = "o", .action = CommandAction::OpenOutputDevices},
-      {.key = "v", .action = CommandAction::OpenPresentationPanel},
-      {.key = "n", .action = CommandAction::OpenNotifications},
-      {.key = "?", .action = CommandAction::ShowHelp},
-      {.key = "Ctrl-L", .action = CommandAction::RevealCurrentTrack},
-      {.key = "c", .action = CommandAction::ClearFilter},
-      {.key = "r", .action = CommandAction::Reload},
-      {.key = "Enter", .action = CommandAction::Play},
-      {.key = "p", .action = CommandAction::Play},
-      {.key = "Space", .action = CommandAction::TogglePlayback},
-      {.key = "s", .action = CommandAction::Stop},
-      {.key = "Esc", .action = CommandAction::CloseOverlay},
-    });
   } // namespace
-
-  std::span<KeyBindingSpec const> keyBindingSpecs()
-  {
-    return kKeyBindings;
-  }
-
-  std::string_view shortcutFor(CommandAction const action)
-  {
-    // std::array's iterator is a raw pointer in libstdc++ but a class type in
-    // MSVC's STL, so spelling it as a pointer does not compile on Windows.
-    // NOLINTNEXTLINE(readability-qualified-auto)
-    auto const it = std::ranges::find(kKeyBindings, action, &KeyBindingSpec::action);
-    return it == kKeyBindings.end() ? std::string_view{} : it->key;
-  }
 
   std::span<CommandPrefixSpec const> commandPrefixSpecs()
   {
@@ -271,6 +255,32 @@ namespace ao::tui
   std::span<CommandAliasSpec const> commandAliasSpecs()
   {
     return kAliasCommands;
+  }
+
+  std::optional<TuiKeyAction> shortcutActionForCommand(CommandAction const action) noexcept
+  {
+    for (auto const& relation : kCommandKeyActions)
+    {
+      if (relation.command == action)
+      {
+        return relation.key;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  std::optional<CommandAction> commandActionForKeyAction(TuiKeyAction const action) noexcept
+  {
+    for (auto const& relation : kCommandKeyActions)
+    {
+      if (relation.key == action)
+      {
+        return relation.command;
+      }
+    }
+
+    return std::nullopt;
   }
 
   bool isModalOverlay(Overlay const overlay) noexcept
@@ -348,18 +358,53 @@ namespace ao::tui
     return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
   }
 
-  std::string overlayHint(i18n::MessageCatalog const& textCatalog, Overlay const overlay)
+  std::string_view overlayToggleShortcut(TuiKeymapPlan const& keymapPlan, Overlay const overlay)
+  {
+    static auto const selectionEvents = std::to_array({ftxui::Event::Return});
+    static auto const notificationEvents = std::to_array({ftxui::Event::Character("x")});
+
+    switch (overlay)
+    {
+      case Overlay::ListChooser: return keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser, selectionEvents);
+      case Overlay::DetailPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleDetails);
+      case Overlay::QualityPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleAudioPipeline);
+      case Overlay::OutputDevices: return keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices, selectionEvents);
+      case Overlay::PresentationPanel:
+        return keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations, selectionEvents);
+      case Overlay::Notifications: return keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications, notificationEvents);
+      case Overlay::None:
+      case Overlay::Help: return {};
+    }
+
+    return {};
+  }
+
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog,
+                          TuiKeymapPlan const& keymapPlan,
+                          Overlay const overlay)
   {
     switch (overlay)
     {
       case Overlay::None: return {};
-      case Overlay::ListChooser: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintLists);
-      case Overlay::DetailPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintDetail);
-      case Overlay::QualityPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintPipeline);
-      case Overlay::OutputDevices: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintOutput);
-      case Overlay::PresentationPanel: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintViews);
-      case Overlay::Notifications: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintNotifications);
-      case Overlay::Help: return tuiChromeText(textCatalog, i18n::MessageId::TuiShellHintHelp);
+      case Overlay::ListChooser:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintLists, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::DetailPanel:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintDetail, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::QualityPanel:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintPipeline, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::OutputDevices:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintOutput, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::PresentationPanel:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintViews, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::Notifications:
+        return tuiOverlayHint(
+          textCatalog, i18n::MessageId::TuiShellHintNotifications, overlayToggleShortcut(keymapPlan, overlay));
+      case Overlay::Help: return tuiOverlayHint(textCatalog, i18n::MessageId::TuiShellHintHelp, {});
     }
 
     return {};

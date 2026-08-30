@@ -40,6 +40,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
@@ -446,7 +447,7 @@ namespace ao::gtk
                                                        layout::ActionStateProvider const& hasActiveSequence)
   {
     registerAction(
-      "workspace.revealCurrentTrack",
+      uimodel::kRevealCurrentTrackActionId,
       gtkText(_textCatalog, MessageId::GtkActionRevealTrack),
       gtkText(_textCatalog, MessageId::GtkActionCategoryWorkspace),
       0,

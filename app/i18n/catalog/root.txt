@@ -404,12 +404,12 @@ root:table {
     tui_shell_overlay_views { "Views" }
     tui_shell_overlay_notifications { "Notifications" }
     tui_shell_overlay_help { "Help" }
-    tui_shell_hint_lists { "{toggleKey} toggle  {openKey} open  {closeKey} close" }
-    tui_shell_hint_detail { "{toggleKey} toggle  {closeKey} close" }
-    tui_shell_hint_pipeline { "{toggleKey} toggle  {closeKey} close" }
-    tui_shell_hint_output { "{toggleKey} toggle  {selectKey} select  {closeKey} close" }
-    tui_shell_hint_views { "{toggleKey} toggle  {selectKey} select  {closeKey} close" }
-    tui_shell_hint_notifications { "{toggleKey} toggle  {hideKey} hide compact  {closeKey} close" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{openKey} open  {closeKey} close" }
+    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
+    tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
+    tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{selectKey} select  {closeKey} close" }
+    tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{selectKey} select  {closeKey} close" }
+    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{hideKey} hide compact  {closeKey} close" }
     tui_shell_hint_help { "{closeKey} close" }
     tui_shell_status_command { "command" }
     tui_shell_status_lists { "lists" }
@@ -450,22 +450,22 @@ root:table {
     tui_playback_no_output_device_selected { "No output device selected" }
     tui_playback_no_output_devices_found { "No output devices found" }
     tui_playback_no_audio_pipeline { "No audio pipeline yet" }
-    tui_shell_help_quick_filter { "{command}              quick filter" }
-    tui_shell_help_choose_list { "{command} or {alias}       choose list" }
-    tui_shell_help_track_detail { "{command} or {alias}      show selected track detail" }
-    tui_shell_help_audio_pipeline { "{command} or {alias}    show audio pipeline" }
-    tui_shell_help_output_device { "{command} or {alias}      choose output device" }
-    tui_shell_help_choose_view { "{command} or {alias}       choose presentation" }
-    tui_shell_help_notifications { "{command} or {alias} show notification center" }
-    tui_shell_help_current_track { "{command}           reveal current track" }
-    tui_shell_help_switch_presentation { "{command}         switch presentation" }
-    tui_shell_help_previous_next_group { "{command}              previous / next group" }
-    tui_shell_help_clear_filter { "{command}             clear filter" }
-    tui_shell_help_reload_list { "{command}            reload active list" }
-    tui_shell_help_playback { "{command} playback" }
-    tui_shell_help_quit { "{command}              exit" }
-    tui_shell_help_footer { "{closeKey} close  {runKey} run" }
-    tui_shell_notification_footer { "{toggleKey} toggle  {hideKey} hide compact  click clearable row  {closeKey} close" }
+    tui_shell_help_quick_filter { "quick filter" }
+    tui_shell_help_choose_list { "choose list" }
+    tui_shell_help_track_detail { "show selected track detail" }
+    tui_shell_help_audio_pipeline { "show audio pipeline" }
+    tui_shell_help_output_device { "choose output device" }
+    tui_shell_help_choose_view { "choose presentation" }
+    tui_shell_help_notifications { "show notification center" }
+    tui_shell_help_current_track { "reveal current track" }
+    tui_shell_help_switch_presentation { "switch presentation" }
+    tui_shell_help_previous_next_group { "previous / next group" }
+    tui_shell_help_clear_filter { "clear filter" }
+    tui_shell_help_reload_list { "reload active list" }
+    tui_shell_help_playback { "playback" }
+    tui_shell_help_quit { "exit" }
+    tui_shell_help_footer { "{closeKey} close" }
+    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{hideKey} hide compact  click clearable row  {closeKey} close" }
     tui_library_detail { "library" }
     tui_library_no_sections { "No sections in this view" }
     tui_library_no_section_selected { "No section selected" }

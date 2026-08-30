@@ -46,11 +46,12 @@ namespace ao::tui
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view const activePresentationId,
+                                        TuiKeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
     auto contentColumns = std::max(cellWidth(tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
                                      kPresentationPanelScrollIndicatorColumns,
-                                   cellWidth(overlayHint(textCatalog, Overlay::PresentationPanel)));
+                                   cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
                               cellWidth(overlayLabel(textCatalog, Overlay::PresentationPanel)) + cellWidth(" · ") +
                                 cellWidth(trackPresentationDisplayId(textCatalog, activePresentationId)));
@@ -69,13 +70,14 @@ namespace ao::tui
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view const activePresentationId,
                                    std::int32_t const selectedIndex,
+                                   TuiKeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* const rowHitRegions,
                                    std::int32_t const columns)
   {
     using namespace ftxui;
 
     auto const panelColumns =
-      columns <= 0 ? presentationPanelColumns(textCatalog, items, activePresentationId, 0) : columns;
+      columns <= 0 ? presentationPanelColumns(textCatalog, items, activePresentationId, keymapPlan, 0) : columns;
 
     auto rows = Elements{};
     auto listRows = std::vector<SelectableListRow>{};
@@ -122,7 +124,7 @@ namespace ao::tui
                             .height = kPresentationPanelListRows,
                             .emptyText = tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)}));
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, Overlay::PresentationPanel)));
+    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
 
     auto activePresentationLabel = trackPresentationDisplayId(textCatalog, activePresentationId);
     return style::popupPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),

@@ -46,6 +46,12 @@ Initialize and scan the root with the GTK application or CLI first.
    Opening a panel, entering text input, changing lists, or quitting before release cancels the preview.
 9. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit normally.
 
+These are the shipped shortcuts.
+The TUI loads global overrides from the `shortcuts` group in `<config>/tui.yaml`; supported changes update both behavior and the key shown in status chips, panels, Help, and the Command Palette.
+An empty chord list unbinds a configurable action.
+The TUI currently has no shortcut editor and does not rewrite that group on ordinary exit, so edit the YAML only while Aobus is not running and use the stable action ids and chord syntax in the [keyboard map reference](../reference/shell/keymap.md).
+Ctrl+C, text-entry editing/submission/cancellation keys, overlay navigation/activation/Escape, notification `x`, and mouse input remain fixed protocol and cannot be disabled by a root shortcut override.
+
 The default session file is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
 On startup, the TUI restores its open track views, active view, filters, presentations, custom presentation presets, and last restorable playback subject, position, modes, volume, and mute from this file.
 A restored playback subject remains idle until you press Space or otherwise start playback.
@@ -57,7 +63,7 @@ Opening a list uses its remembered presentation, while startup still keeps the e
 
 Normal quit cancels unfinished input and pointer interactions, saves committed layout/presentation preferences plus workspace and playback state, and then stops playback.
 Track selection, an unfinished Quick Filter draft, open panels, pointer state, and an unfinished column-width preview are not restored.
-The output device you select is remembered separately as a global TUI preference rather than in the per-library session file.
+The output device you select is remembered separately as a global TUI preference in `<config>/tui.yaml` rather than in the per-library session file; saving it preserves the load-only `shortcuts` sibling.
 
 ## Verify the result
 
@@ -71,6 +77,7 @@ The output device you select is remembered separately as a global TUI preference
 ## Related documents
 
 - [TUI command reference](../reference/tui/command.md)
+- [Keyboard map reference](../reference/shell/keymap.md)
 - [TUI interaction specification](../spec/tui/interaction.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Track preset reference](../reference/presentation/track-preset.md)

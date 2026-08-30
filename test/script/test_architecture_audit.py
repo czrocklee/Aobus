@@ -158,6 +158,61 @@ class ArchitectureAuditTest(unittest.TestCase):
         )
         self.assertEqual(allowed.returncode, 0, allowed.stdout + allowed.stderr)
 
+    def test_uimodel_frontend_neutrality_rejects_terminal_types_and_names(self):
+        cmake = shutil.which("cmake")
+        if cmake is None:
+            self.skipTest("cmake is not on PATH")
+
+        def run_fixture(
+            filename: str, source: str, *, create_source_root: bool = True
+        ) -> subprocess.CompletedProcess[str]:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                public_root = root / "public"
+                source_root = root / "source"
+                test_root = root / "test"
+                public_root.mkdir()
+                if create_source_root:
+                    source_root.mkdir()
+                test_root.mkdir()
+                (public_root / filename).write_text(source, encoding="utf-8")
+
+                return subprocess.run(
+                    [
+                        cmake,
+                        f"-DPUBLIC_ROOT={public_root.as_posix()}",
+                        f"-DSOURCE_ROOT={source_root.as_posix()}",
+                        f"-DTEST_ROOT={test_root.as_posix()}",
+                        "-P",
+                        str(PROJECT_ROOT / "cmake" / "AssertUimodelFrontendNeutrality.cmake"),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                )
+
+        vocabulary_rejected = run_fixture("Projection.h", "ftxui::Event event;\n")
+        output = vocabulary_rejected.stdout + vocabulary_rejected.stderr
+        self.assertNotEqual(vocabulary_rejected.returncode, 0, output)
+        self.assertIn("Projection.h", output)
+        self.assertRegex(output, r"frontend's\s+vocabulary")
+
+        name_rejected = run_fixture("Tui.h", "struct SharedValue {};\n")
+        output = name_rejected.stdout + name_rejected.stderr
+        self.assertNotEqual(name_rejected.returncode, 0, output)
+        self.assertIn("Tui.h", output)
+        self.assertIn("file names a frontend", output)
+
+        comment_allowed = run_fixture("Projection.h", "// ftxui::Event remains frontend-owned.\n")
+        self.assertEqual(comment_allowed.returncode, 0, comment_allowed.stdout + comment_allowed.stderr)
+
+        missing_root_rejected = run_fixture("Projection.h", "struct SharedValue {};\n", create_source_root=False)
+        output = missing_root_rejected.stdout + missing_root_rejected.stderr
+        self.assertNotEqual(missing_root_rejected.returncode, 0, output)
+        self.assertIn("source root is not a directory", output)
+
 
 if __name__ == "__main__":
     unittest.main()

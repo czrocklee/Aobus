@@ -402,12 +402,12 @@ de:table {
     tui_shell_overlay_views { "Ansichten" }
     tui_shell_overlay_notifications { "Benachrichtigungen" }
     tui_shell_overlay_help { "Hilfe" }
-    tui_shell_hint_lists { "{toggleKey} umschalten  {openKey} öffnen  {closeKey} schließen" }
-    tui_shell_hint_detail { "{toggleKey} umschalten  {closeKey} schließen" }
-    tui_shell_hint_pipeline { "{toggleKey} umschalten  {closeKey} schließen" }
-    tui_shell_hint_output { "{toggleKey} umschalten  {selectKey} wählen  {closeKey} schließen" }
-    tui_shell_hint_views { "{toggleKey} umschalten  {selectKey} wählen  {closeKey} schließen" }
-    tui_shell_hint_notifications { "{toggleKey} umschalten  {hideKey} kompakt ausblenden  {closeKey} schließen" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{openKey} öffnen  {closeKey} schließen" }
+    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
+    tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
+    tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
+    tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
+    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{hideKey} kompakt ausblenden  {closeKey} schließen" }
     tui_shell_hint_help { "{closeKey} schließen" }
     tui_shell_status_command { "Befehl" }
     tui_shell_status_lists { "Listen" }
@@ -448,22 +448,22 @@ de:table {
     tui_playback_no_output_device_selected { "Kein Ausgabegerät ausgewählt" }
     tui_playback_no_output_devices_found { "Keine Ausgabegeräte gefunden" }
     tui_playback_no_audio_pipeline { "Noch keine Audiokette" }
-    tui_shell_help_quick_filter { "{command}              Schnellfilter" }
-    tui_shell_help_choose_list { "{command} oder {alias}       Liste wählen" }
-    tui_shell_help_track_detail { "{command} oder {alias}      Details zum gewählten Titel" }
-    tui_shell_help_audio_pipeline { "{command} oder {alias}    Audiokette anzeigen" }
-    tui_shell_help_output_device { "{command} oder {alias}      Ausgabegerät wählen" }
-    tui_shell_help_choose_view { "{command} oder {alias}       Ansicht wählen" }
-    tui_shell_help_notifications { "{command} oder {alias} Benachrichtigungen anzeigen" }
-    tui_shell_help_current_track { "{command}           Aktuellen Titel zeigen" }
-    tui_shell_help_switch_presentation { "{command}         Ansicht wechseln" }
-    tui_shell_help_previous_next_group { "{command}              Vorherige / nächste Gruppe" }
-    tui_shell_help_clear_filter { "{command}             Filter löschen" }
-    tui_shell_help_reload_list { "{command}            Aktive Liste neu laden" }
-    tui_shell_help_playback { "{command} Wiedergabe" }
-    tui_shell_help_quit { "{command}              Beenden" }
-    tui_shell_help_footer { "{closeKey} schließen  {runKey} ausführen" }
-    tui_shell_notification_footer { "{toggleKey} umschalten  {hideKey} kompakt ausblenden  löschbare Zeile anklicken  {closeKey} schließen" }
+    tui_shell_help_quick_filter { "Schnellfilter" }
+    tui_shell_help_choose_list { "Liste wählen" }
+    tui_shell_help_track_detail { "Details zum gewählten Titel" }
+    tui_shell_help_audio_pipeline { "Audiokette anzeigen" }
+    tui_shell_help_output_device { "Ausgabegerät wählen" }
+    tui_shell_help_choose_view { "Ansicht wählen" }
+    tui_shell_help_notifications { "Benachrichtigungen anzeigen" }
+    tui_shell_help_current_track { "Aktuellen Titel zeigen" }
+    tui_shell_help_switch_presentation { "Ansicht wechseln" }
+    tui_shell_help_previous_next_group { "Vorherige / nächste Gruppe" }
+    tui_shell_help_clear_filter { "Filter löschen" }
+    tui_shell_help_reload_list { "Aktive Liste neu laden" }
+    tui_shell_help_playback { "Wiedergabe" }
+    tui_shell_help_quit { "Beenden" }
+    tui_shell_help_footer { "{closeKey} schließen" }
+    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{hideKey} kompakt ausblenden  löschbare Zeile anklicken  {closeKey} schließen" }
     tui_library_detail { "Bibliothek" }
     tui_library_no_sections { "Keine Abschnitte in dieser Ansicht" }
     tui_library_no_section_selected { "Kein Abschnitt ausgewählt" }

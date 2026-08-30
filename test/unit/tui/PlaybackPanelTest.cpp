@@ -4,6 +4,7 @@
 #include "tui/PlaybackPanel.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/tui/TuiKeymapTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/QualityPanel.h"
@@ -41,7 +42,7 @@ namespace ao::tui::test
   {
     ftxui::Element englishQualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t const columns = 0)
     {
-      return qualityPanel(ao::test::englishMessageCatalog(), state, columns);
+      return qualityPanel(ao::test::englishMessageCatalog(), state, defaultTuiKeymapPlan(), columns);
     }
 
     ftxui::Element englishPlaybackBar(PlaybackBarViewState const& view)
@@ -52,7 +53,7 @@ namespace ao::tui::test
     std::int32_t englishQualityPanelColumns(rt::PlaybackTransportSnapshot const& state,
                                             std::int32_t const terminalColumns)
     {
-      return qualityPanelColumns(ao::test::englishMessageCatalog(), state, terminalColumns);
+      return qualityPanelColumns(ao::test::englishMessageCatalog(), state, defaultTuiKeymapPlan(), terminalColumns);
     }
 
     ftxui::Element englishOutputDevicePanel(uimodel::OutputDeviceViewState const& view,
@@ -60,13 +61,14 @@ namespace ao::tui::test
                                             std::vector<OutputDeviceRowHitRegion>* const rowHitRegions = nullptr,
                                             std::int32_t const columns = 0)
     {
-      return outputDevicePanel(ao::test::englishMessageCatalog(), view, selectedRow, rowHitRegions, columns);
+      return outputDevicePanel(
+        ao::test::englishMessageCatalog(), view, selectedRow, defaultTuiKeymapPlan(), rowHitRegions, columns);
     }
 
     std::int32_t englishOutputDevicePanelColumns(uimodel::OutputDeviceViewState const& view,
                                                  std::int32_t const terminalColumns)
     {
-      return outputDevicePanelColumns(ao::test::englishMessageCatalog(), view, terminalColumns);
+      return outputDevicePanelColumns(ao::test::englishMessageCatalog(), view, defaultTuiKeymapPlan(), terminalColumns);
     }
 
     std::string renderPlaybackText(ftxui::Element elementPtr)
@@ -499,7 +501,7 @@ namespace ao::tui::test
                                   }}},
     };
 
-    auto const text = renderPlaybackText(qualityPanel(textCatalog, state, 0));
+    auto const text = renderPlaybackText(qualityPanel(textCatalog, state, defaultTuiKeymapPlan(), 0));
 
     CHECK(text.contains("Dvořák DAC"));
     CHECK(text.contains("[Quelle] 誰か"));
@@ -507,7 +509,7 @@ namespace ao::tui::test
     CHECK(text.contains("Signalverarbeitung in der Audiokette"));
 
     state.quality.assessments.clear();
-    auto const emptyText = renderPlaybackText(qualityPanel(textCatalog, state, 0));
+    auto const emptyText = renderPlaybackText(qualityPanel(textCatalog, state, defaultTuiKeymapPlan(), 0));
     CHECK(emptyText.contains("Noch keine Audiokette"));
   }
 
@@ -583,7 +585,7 @@ namespace ao::tui::test
   {
     auto const german = ao::test::messageCatalog("de-AT");
     auto const view = uimodel::OutputDeviceViewState{};
-    auto const text = renderPlaybackText(outputDevicePanel(german, view, 0));
+    auto const text = renderPlaybackText(outputDevicePanel(german, view, 0, defaultTuiKeymapPlan()));
 
     CHECK(text.contains("Ausgabegeräte"));
     CHECK(text.contains("Keine Ausgabegeräte gefunden"));

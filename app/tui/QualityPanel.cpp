@@ -98,10 +98,12 @@ namespace ao::tui
 
   std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
+                                   TuiKeymapPlan const& keymapPlan,
                                    std::int32_t const terminalColumns)
   {
     auto const deviceName = selectedDeviceName(state);
-    auto contentColumns = std::max(cellWidth(deviceName), cellWidth(overlayHint(textCatalog, Overlay::QualityPanel)));
+    auto contentColumns =
+      std::max(cellWidth(deviceName), cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel)));
 
     if (state.quality.assessments.empty())
     {
@@ -136,13 +138,14 @@ namespace ao::tui
 
   ftxui::Element qualityPanel(i18n::MessageCatalog const& textCatalog,
                               rt::PlaybackTransportSnapshot const& state,
+                              TuiKeymapPlan const& keymapPlan,
                               std::int32_t columns)
   {
     using namespace ftxui;
 
     if (columns <= 0)
     {
-      columns = qualityPanelColumns(textCatalog, state, 0);
+      columns = qualityPanelColumns(textCatalog, state, keymapPlan, 0);
     }
 
     auto rows = Elements{};
@@ -189,7 +192,7 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, Overlay::QualityPanel)));
+    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel)));
 
     return style::popupPanel(deviceName, vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
   }

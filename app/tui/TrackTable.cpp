@@ -606,13 +606,14 @@ namespace ao::tui
 
   std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
                                          std::vector<std::string> const& labels,
+                                         TuiKeymapPlan const& keymapPlan,
                                          std::int32_t const terminalColumns)
   {
     auto contentColumns =
       std::max({cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
                 cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryNoListsFound)) +
                   kListChooserScrollIndicatorColumns,
-                cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
+                cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser))});
 
     for (auto const& label : labels)
     {
@@ -625,13 +626,14 @@ namespace ao::tui
   ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
                                     std::vector<std::string> const& labels,
                                     std::int32_t const selected,
+                                    TuiKeymapPlan const& keymapPlan,
                                     std::int32_t columns)
   {
     using namespace ftxui;
 
     if (columns <= 0)
     {
-      columns = libraryChooserPaneColumns(textCatalog, labels, 0);
+      columns = libraryChooserPaneColumns(textCatalog, labels, keymapPlan, 0);
     }
 
     auto rows = std::vector<SelectableListRow>{};
@@ -655,7 +657,7 @@ namespace ao::tui
                                                     .flex = !labels.empty(),
                                                     .centerEmpty = labels.empty()}),
                separator(),
-               style::panelFooterHint(overlayHint(textCatalog, Overlay::ListChooser)),
+               style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser)),
              })) |
            size(WIDTH, EQUAL, columns);
   }

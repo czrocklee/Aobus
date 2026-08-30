@@ -112,7 +112,8 @@ The exact fallback behavior belongs to the [interactive localization specificati
 GTK and TUI resolve shell copy through the process `MessageCatalog` and canonical `MessageId` values.
 There is no separate frontend message-id space.
 GTK widget APIs that require owned strings copy `requiredText` at the widget boundary.
-TUI argument-bearing chrome (help, hints, footers) is formatted through `tuiChromeText`.
+TUI argument-bearing chrome such as hints and footers is formatted through feature-local TUI formatters.
+Help descriptions remain catalog text, while the TUI renderer owns the separate shortcut and command columns.
 
 The completed frontend migration owns these families:
 
@@ -123,7 +124,8 @@ The completed frontend migration owns these families:
 | WinUI | generated MRT resources | shell menus/actions, playback/output, library, metadata, tooltips, accessibility, empty states, and recoverable native wrappers |
 
 TUI command strings and key names remain shell identity, not translated copy.
-Patterns receive values such as `:view <id>`, `/`, `Enter`, `Esc`, and `Ctrl-L` as named arguments, so a locale may reorder but cannot rewrite them.
+The help pane lays those tokens out beside localized descriptions as structured columns rather than embedding alignment spaces in catalog patterns.
+Other chrome patterns receive values such as `Enter`, `Esc`, and effective shortcut labels as named arguments, so a locale may reorder but cannot rewrite them.
 GTK Gio action names and WinUI action/component identities likewise remain untranslated.
 Layout action labels and categories are display text selected from the catalog; their stable action ids remain the only binding identity.
 GTK Layout Editor component/property/enum labels follow the same rule: the serialized token remains the combo-row id, known built-ins receive localized display text, and unknown extension values display unchanged.

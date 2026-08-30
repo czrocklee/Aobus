@@ -14,6 +14,8 @@
 
 namespace ao::uimodel
 {
+  inline constexpr auto kRevealCurrentTrackActionId = std::string_view{"workspace.revealCurrentTrack"};
+
   /// Effective bindings: stable action id -> ordered list of chords.
   using KeymapBindings = std::map<std::string, std::vector<KeyChord>, std::less<>>;
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ShellInteractionModel.h"
+#include "TuiKeymap.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -37,5 +38,7 @@ namespace ao::tui
   std::string activityProgressRail(double fraction, std::int32_t columns);
   ftxui::Element activityCompactLine(uimodel::ActivityCompactState const& compact, bool plain = false);
   bool hasVisibleActivity(uimodel::ActivityStatusViewState const* state) noexcept;
-  ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog, StatusBarViewState const& state);
+  ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog,
+                           StatusBarViewState const& state,
+                           TuiKeymapPlan const& keymapPlan);
 } // namespace ao::tui

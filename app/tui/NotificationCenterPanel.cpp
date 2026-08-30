@@ -29,10 +29,11 @@ namespace ao::tui
 
   std::int32_t notificationCenterPanelColumns(i18n::MessageCatalog const& textCatalog,
                                               uimodel::ActivityStatusViewState const& state,
+                                              TuiKeymapPlan const& keymapPlan,
                                               std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(cellWidth(overlayLabel(textCatalog, Overlay::Notifications)),
-                                   cellWidth(tuiChromeText(textCatalog, i18n::MessageId::TuiShellNotificationFooter)));
+    auto const footer = tuiNotificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications));
+    auto contentColumns = std::max(cellWidth(overlayLabel(textCatalog, Overlay::Notifications)), cellWidth(footer));
 
     if (state.compact.kind != uimodel::ActivityStatusKind::Idle)
     {
@@ -45,17 +46,19 @@ namespace ao::tui
     {
       contentColumns =
         std::max(contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::LibraryTaskLabel)));
-      contentColumns = std::max(contentColumns, cellWidth(state.detail.optLibraryTask->message));
+      contentColumns = std::max(
+        contentColumns,
+        cellWidth(state.detail.optLibraryTask->message) + cellWidth(" ") +
+          cellWidth(activityProgressRail(state.detail.optLibraryTask->progressFraction, kActivityProgressRailColumns)));
     }
 
     for (auto const& item : state.detail.items)
     {
-      contentColumns = std::max(contentColumns, cellWidth(item.message) + cellWidth("error "));
-
-      if (item.dismissible)
-      {
-        contentColumns = std::max(contentColumns, cellWidth(item.message) + cellWidth("  x"));
-      }
+      auto const itemKind = activityKindForSeverity(item.severity);
+      auto const dismissColumns = item.dismissible ? cellWidth(" x") : 0;
+      auto const itemColumns =
+        cellWidth(activityKindLabel(itemKind)) + cellWidth(" ") + cellWidth(item.message) + dismissColumns;
+      contentColumns = std::max(contentColumns, itemColumns);
     }
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
@@ -63,12 +66,14 @@ namespace ao::tui
 
   ftxui::Element notificationCenterPanel(i18n::MessageCatalog const& textCatalog,
                                          uimodel::ActivityStatusViewState const& state,
+                                         TuiKeymapPlan const& keymapPlan,
                                          std::vector<NotificationDetailRowHitRegion>* const rowHitRegions,
                                          std::int32_t const columns)
   {
     using namespace ftxui;
 
-    auto const panelColumns = columns <= 0 ? notificationCenterPanelColumns(textCatalog, state, 0) : columns;
+    auto const panelColumns =
+      columns <= 0 ? notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) : columns;
 
     if (rowHitRegions != nullptr)
     {
@@ -125,7 +130,8 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(tuiChromeText(textCatalog, i18n::MessageId::TuiShellNotificationFooter)));
+    rows.push_back(style::panelFooterHint(
+      tuiNotificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications))));
 
     return style::popupPanel(overlayLabel(textCatalog, Overlay::Notifications), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, panelColumns);

@@ -402,12 +402,12 @@ ja:table {
     tui_shell_overlay_views { "表示" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "ヘルプ" }
-    tui_shell_hint_lists { "{toggleKey} 切り替え  {openKey} 開く  {closeKey} 閉じる" }
-    tui_shell_hint_detail { "{toggleKey} 切り替え  {closeKey} 閉じる" }
-    tui_shell_hint_pipeline { "{toggleKey} 切り替え  {closeKey} 閉じる" }
-    tui_shell_hint_output { "{toggleKey} 切り替え  {selectKey} 選択  {closeKey} 閉じる" }
-    tui_shell_hint_views { "{toggleKey} 切り替え  {selectKey} 選択  {closeKey} 閉じる" }
-    tui_shell_hint_notifications { "{toggleKey} 切り替え  {hideKey} コンパクト非表示  {closeKey} 閉じる" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{openKey} 開く  {closeKey} 閉じる" }
+    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
+    tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
+    tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{selectKey} 選択  {closeKey} 閉じる" }
+    tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{selectKey} 選択  {closeKey} 閉じる" }
+    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{hideKey} コンパクト非表示  {closeKey} 閉じる" }
     tui_shell_hint_help { "{closeKey} 閉じる" }
     tui_shell_status_command { "コマンド" }
     tui_shell_status_lists { "リスト" }
@@ -448,22 +448,22 @@ ja:table {
     tui_playback_no_output_device_selected { "出力デバイスが選択されていません" }
     tui_playback_no_output_devices_found { "出力デバイスが見つかりません" }
     tui_playback_no_audio_pipeline { "オーディオパイプラインはまだありません" }
-    tui_shell_help_quick_filter { "{command}              クイックフィルター" }
-    tui_shell_help_choose_list { "{command} または {alias}       リストを選択" }
-    tui_shell_help_track_detail { "{command} または {alias}      選択した曲の詳細を表示" }
-    tui_shell_help_audio_pipeline { "{command} または {alias}    オーディオパイプラインを表示" }
-    tui_shell_help_output_device { "{command} または {alias}      出力デバイスを選択" }
-    tui_shell_help_choose_view { "{command} または {alias}       表示を選択" }
-    tui_shell_help_notifications { "{command} または {alias} 通知センターを表示" }
-    tui_shell_help_current_track { "{command}           現在の曲を表示" }
-    tui_shell_help_switch_presentation { "{command}         表示を切り替え" }
-    tui_shell_help_previous_next_group { "{command}              前 / 次のグループ" }
-    tui_shell_help_clear_filter { "{command}             フィルターをクリア" }
-    tui_shell_help_reload_list { "{command}            アクティブなリストを再読み込み" }
-    tui_shell_help_playback { "{command} 再生" }
-    tui_shell_help_quit { "{command}              終了" }
-    tui_shell_help_footer { "{closeKey} 閉じる  {runKey} 実行" }
-    tui_shell_notification_footer { "{toggleKey} 切り替え  {hideKey} コンパクト非表示  消去可能な行をクリック  {closeKey} 閉じる" }
+    tui_shell_help_quick_filter { "クイックフィルター" }
+    tui_shell_help_choose_list { "リストを選択" }
+    tui_shell_help_track_detail { "選択した曲の詳細を表示" }
+    tui_shell_help_audio_pipeline { "オーディオパイプラインを表示" }
+    tui_shell_help_output_device { "出力デバイスを選択" }
+    tui_shell_help_choose_view { "表示を選択" }
+    tui_shell_help_notifications { "通知センターを表示" }
+    tui_shell_help_current_track { "現在の曲を表示" }
+    tui_shell_help_switch_presentation { "表示を切り替え" }
+    tui_shell_help_previous_next_group { "前 / 次のグループ" }
+    tui_shell_help_clear_filter { "フィルターをクリア" }
+    tui_shell_help_reload_list { "アクティブなリストを再読み込み" }
+    tui_shell_help_playback { "再生" }
+    tui_shell_help_quit { "終了" }
+    tui_shell_help_footer { "{closeKey} 閉じる" }
+    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{hideKey} コンパクト非表示  消去可能な行をクリック  {closeKey} 閉じる" }
     tui_library_detail { "ライブラリ" }
     tui_library_no_sections { "この表示にはセクションがありません" }
     tui_library_no_section_selected { "セクションが選択されていません" }

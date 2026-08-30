@@ -157,6 +157,8 @@ function(_aobus_architecture_audit_self_test)
   _aobus_adjudicate_architecture_rule(frontend_library_path "\"data.mdb\"" "\"library.db\"")
   _aobus_adjudicate_architecture_rule(
     cli_localization "#include <ao/i18n/MessageCatalog.h>" "#include <ao/rt/CoreRuntime.h>")
+  _aobus_adjudicate_architecture_rule(
+    tui_keymap_load_only "saveKeymap(store, keymap)" "loadKeymap(store, defaults)")
 
   set(_expected_rules "${_ao_rule_names}")
   list(REMOVE_DUPLICATES _aobus_adjudicated_rules)
@@ -261,6 +263,9 @@ function(_aobus_run_architecture_audit)
   _aobus_register_architecture_rule(cli_localization
     ROOTS app/cli
     FORBIDDEN "#[ \t]*include[ \t]*[<\"]ao/i18n/")
+  _aobus_register_architecture_rule(tui_keymap_load_only
+    ROOTS app/tui
+    FORBIDDEN "(^|[^A-Za-z0-9_])saveKeymap[ \t\r\n]*\\(")
 
   if(AOBUS_ARCHITECTURE_AUDIT_SELF_TEST)
     _aobus_architecture_audit_self_test()

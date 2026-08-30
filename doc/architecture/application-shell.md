@@ -10,7 +10,7 @@ summary: Defines ownership and lifetime boundaries for the declarative shell, ac
 ## Scope
 
 This document owns the structural graph of Aobus desktop application shells.
-It covers the GTK declarative layout session, schema, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement.
+It covers the GTK declarative layout session, schema, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement, plus the TUI's projection of neutral application shortcuts into terminal input.
 
 It does not own the semantic state rendered by a track, playback, workspace, status, or resource component.
 It does not make the GTK declarative layout system a cross-frontend contract: the document, schema values, and build-time state vocabulary are platform-neutral, but component construction is not, so WinUI builds its own presets against its own schema while TUI builds its terminal shell independently.
@@ -150,6 +150,10 @@ It refuses to write on a tooltip surface, in edit mode, for an anonymous node, w
 
 The keymap model binds neutral chords to action ids.
 GTK translates those chords to native accelerator syntax and applies eligible window actions; the shortcut editor remains a GTK view over UIModel policy.
+WinUI translates the same neutral values into the keyboard accelerators its live action registry can execute.
+TUI begins with the shared application defaults, adds terminal-only defaults in its adapter, loads the global override group, and builds one immutable `TuiKeymapPlan`.
+That plan considers only actions with a TUI handler, resolves collisions after FTXUI projection, and supplies both root dispatch and every configurable shortcut hint.
+Terminal input protocol remains a narrower scope above the plan: Ctrl-C, text editing and completion, list and modal-overlay navigation/activation, notification `x`, mouse sequences, and escape routes cannot be disabled by a root binding.
 
 ## Boundaries and dependency direction
 
@@ -159,8 +163,8 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 - GTK component factories capture the exact runtime/UIModel collaborators they name when they are registered, never from `LayoutBuildContext`; runtime services never depend on layout components.
 - Layout documents carry stable component types, properties, action ids, and semantic CSS class values, not C++ factory names or widget pointers.
 - The action registry owns activation and availability; a component binding or keymap is a reference, not a parallel handler.
-- Gio export and shortcut application stop at the GTK boundary.
-- TUI may reuse action, keymap, or layout values deliberately, but the current GTK document cannot be described as the TUI shell authority.
+- Gio export and native accelerator application stop at their frontend boundaries.
+- TUI reuses neutral action and keymap values deliberately, but FTXUI events, terminal aliases, TUI-only action ids, and the immutable terminal plan remain frontend-private; the GTK document cannot be described as TUI shell authority.
 - WinUI does not parse or adapt the GTK layout document. It shares the layout language and genuinely cross-frontend semantic policy, while keeping its presets, shell-state policy, schema extensions, and factories, without introducing a second runtime authority.
 - WinUI component registration captures explicit borrowed services and individual callback values; its `LayoutBuildContext` carries only generation-scoped build values. Generation components and leaf adapters cannot accept `LibrarySession`, `AppRuntime`, or a complete window dependency graph.
 - Coordinator-owned track-list, resource-byte, and theme collaborators remain valid until the window retires its shell generation and then its coordinator before destroying the owning session.
@@ -318,7 +322,7 @@ The selected root is persisted only after successor activation; its initial scan
 - UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, schema, actions, component state, promotion, and session policy.
 - GTK layout runtime and component tests under [`test/unit/linux-gtk/layout/`](../../test/unit/linux-gtk/layout/) protect construction, registry injection, actions, surfaces, editor behavior, and component state.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects shell ownership by the window.
-- Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/) and [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protect neutral and GTK shortcut boundaries.
+- Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), and [`TuiKeymapTest.cpp`](../../test/unit/tui/TuiKeymapTest.cpp) protect neutral, GTK, and terminal shortcut boundaries.
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) enforces narrow WinUI generation and leaf dependencies during native builds.

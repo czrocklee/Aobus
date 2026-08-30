@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ShellInteractionModel.h"
+#include "TuiKeymap.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <cstdint>
@@ -23,9 +24,11 @@ namespace ao::tui
   std::int32_t quickFilterPanelRows(ShellInteractionModel const& shell, bool hasFilterError, std::int32_t terminalRows);
   ftxui::Element commandPalettePanel(i18n::MessageCatalog const& textCatalog,
                                      ShellInteractionModel const& shell,
+                                     TuiKeymapPlan const& keymapPlan,
                                      std::int32_t columns = 0);
   ftxui::Element quickFilterCompletionPanel(i18n::MessageCatalog const& textCatalog,
                                             ShellInteractionModel const& shell,
+                                            TuiKeymapPlan const& keymapPlan,
                                             std::int32_t columns = 0,
                                             std::string_view filterError = {});
 } // namespace ao::tui

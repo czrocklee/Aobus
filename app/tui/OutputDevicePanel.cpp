@@ -81,13 +81,14 @@ namespace ao::tui
 
   std::int32_t outputDevicePanelColumns(i18n::MessageCatalog const& textCatalog,
                                         uimodel::OutputDeviceViewState const& view,
+                                        TuiKeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
     auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
     auto contentColumns = std::max({cellWidth(title) + cellWidth(outputDeviceSummary(&view)),
                                     cellWidth(title) + cellWidth(" · ") + cellWidth(outputDeviceSummary(&view)),
                                     cellWidth(outputDeviceFooter(textCatalog, view)),
-                                    cellWidth(overlayHint(textCatalog, Overlay::OutputDevices))});
+                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices))});
 
     if (view.rows.empty())
     {
@@ -120,6 +121,7 @@ namespace ao::tui
   ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
                                    uimodel::OutputDeviceViewState const& view,
                                    std::int32_t const selectedRow,
+                                   TuiKeymapPlan const& keymapPlan,
                                    std::vector<OutputDeviceRowHitRegion>* const rowHitRegions,
                                    std::int32_t columns)
   {
@@ -127,7 +129,7 @@ namespace ao::tui
 
     if (columns <= 0)
     {
-      columns = outputDevicePanelColumns(textCatalog, view, 0);
+      columns = outputDevicePanelColumns(textCatalog, view, keymapPlan, 0);
     }
 
     auto const bodyColumns = style::popupPanelBodyColumns(columns);
@@ -193,7 +195,7 @@ namespace ao::tui
         .emptyText = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)}}));
     rows.push_back(separator());
     rows.push_back(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true));
-    rows.push_back(outputText(std::string{overlayHint(textCatalog, Overlay::OutputDevices)}, footerTextColumns, true));
+    rows.push_back(outputText(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), footerTextColumns, true));
 
     auto const summary = outputDeviceSummary(&view);
     return style::popupPanel(i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle),

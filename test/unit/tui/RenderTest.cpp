@@ -4,11 +4,14 @@
 #include "tui/Render.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/tui/TuiKeymapTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
 #include "tui/CommandPalettePanel.h"
 #include "tui/CoverArt.h"
 #include "tui/NotificationCenterPanel.h"
+#include "tui/OutputDevicePanel.h"
 #include "tui/PresentationPanel.h"
+#include "tui/QualityPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
 #include "tui/Style.h"
@@ -16,7 +19,9 @@
 #include "tui/TrackDetailLines.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
+#include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
+#include "tui/TuiKeymap.h"
 #include "tui/TuiText.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
@@ -26,7 +31,10 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_message.hpp>
@@ -38,6 +46,7 @@
 #include <ftxui/screen/screen.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -106,6 +115,20 @@ namespace ao::tui::test
       return box.y_max - box.y_min + 1;
     }
 
+    std::optional<std::int32_t> textColumn(std::string_view const rendered, std::string_view const text)
+    {
+      auto const position = rendered.find(text);
+
+      if (position == std::string_view::npos)
+      {
+        return std::nullopt;
+      }
+
+      auto const previousNewline = rendered.rfind('\n', position);
+      auto const lineStart = previousNewline == std::string_view::npos ? 0 : previousNewline + 1;
+      return cellWidth(rendered.substr(lineStart, position - lineStart));
+    }
+
     /**
      * @brief Renders @p panePtr where the shell puts it: beside a flexible
      *        workspace, which is what makes its declared width its real one.
@@ -167,31 +190,33 @@ namespace ao::tui::test
 
     ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
     {
-      return ao::tui::commandPalettePanel(ao::test::englishMessageCatalog(), shell, columns);
+      return ao::tui::commandPalettePanel(ao::test::englishMessageCatalog(), shell, defaultTuiKeymapPlan(), columns);
     }
 
     ftxui::Element quickFilterCompletionPanel(ShellInteractionModel const& shell,
                                               std::int32_t const columns = 0,
                                               std::string_view const filterError = {})
     {
-      return ao::tui::quickFilterCompletionPanel(ao::test::englishMessageCatalog(), shell, columns, filterError);
+      return ao::tui::quickFilterCompletionPanel(
+        ao::test::englishMessageCatalog(), shell, defaultTuiKeymapPlan(), columns, filterError);
     }
 
     ftxui::Element helpPane(std::int32_t const columns = 0)
     {
-      return ao::tui::helpPane(ao::test::englishMessageCatalog(), columns);
+      return ao::tui::helpPane(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), columns);
     }
 
-    ftxui::Element statusBar(StatusBarViewState const& state)
+    ftxui::Element statusBar(StatusBarViewState const& state, TuiKeymapPlan const& keymapPlan = defaultTuiKeymapPlan())
     {
-      return ao::tui::statusBar(ao::test::englishMessageCatalog(), state);
+      return ao::tui::statusBar(ao::test::englishMessageCatalog(), state, keymapPlan);
     }
 
     ftxui::Element notificationCenterPanel(uimodel::ActivityStatusViewState const& state,
                                            std::vector<NotificationDetailRowHitRegion>* const rowHitRegions = nullptr,
                                            std::int32_t const columns = 0)
     {
-      return ao::tui::notificationCenterPanel(ao::test::englishMessageCatalog(), state, rowHitRegions, columns);
+      return ao::tui::notificationCenterPanel(
+        ao::test::englishMessageCatalog(), state, defaultTuiKeymapPlan(), rowHitRegions, columns);
     }
 
     ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
@@ -200,8 +225,13 @@ namespace ao::tui::test
                                      std::vector<PresentationRowHitRegion>* const rowHitRegions = nullptr,
                                      std::int32_t const columns = 0)
     {
-      return ao::tui::presentationPanel(
-        ao::test::englishMessageCatalog(), items, activePresentationId, selectedIndex, rowHitRegions, columns);
+      return ao::tui::presentationPanel(ao::test::englishMessageCatalog(),
+                                        items,
+                                        activePresentationId,
+                                        selectedIndex,
+                                        defaultTuiKeymapPlan(),
+                                        rowHitRegions,
+                                        columns);
     }
 
     std::int32_t presentationPanelColumns(std::vector<TrackPresentationNavEntry> const& items,
@@ -209,7 +239,7 @@ namespace ao::tui::test
                                           std::int32_t const terminalColumns)
     {
       return ao::tui::presentationPanelColumns(
-        ao::test::englishMessageCatalog(), items, activePresentationId, terminalColumns);
+        ao::test::englishMessageCatalog(), items, activePresentationId, defaultTuiKeymapPlan(), terminalColumns);
     }
   } // namespace
 
@@ -220,7 +250,7 @@ namespace ao::tui::test
     CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterTitle) == "Schnellfilter");
     CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterFooter).contains("Enter übernehmen"));
     CHECK(tuiChromeText(german, i18n::MessageId::TuiShellOverlayViews) == "Ansichten");
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellHintLists).contains("Enter öffnen"));
+    CHECK(tuiOverlayHint(german, i18n::MessageId::TuiShellHintLists, "l").contains("Enter öffnen"));
     CHECK(tuiChromeText(german, i18n::MessageId::TuiLibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
     CHECK(libraryReloadedTracks(german, 2) == "2 Titel neu geladen");
     CHECK(libraryQuickFilterMatched(german, 1) == "Schnellfilter fand 1 Titel");
@@ -228,14 +258,14 @@ namespace ao::tui::test
     auto const pseudo = ao::test::messageCatalog("qps-ploc");
     CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellCommandPaletteTitle) != "Command Palette");
     CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
-    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellHintViews).contains("Enter"));
+    CHECK(tuiOverlayHint(pseudo, i18n::MessageId::TuiShellHintViews, "v").contains("Enter"));
     CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
           "No tracks found. Run `aobus init` in this library first.");
     CHECK(libraryOpenedList(pseudo, "Road Trip").contains("Road Trip"));
 
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "view albums");
-    auto const narrow = renderElement(commandPalettePanel(pseudo, shell, 32), 32, 8);
+    auto const narrow = renderElement(commandPalettePanel(pseudo, shell, defaultTuiKeymapPlan(), 32), 32, 8);
     CHECK(narrow.text.contains(":view albums"));
     CHECK_FALSE(narrow.text.empty());
   }
@@ -252,6 +282,39 @@ namespace ao::tui::test
     CHECK(text.contains("{ / }"));
   }
 
+  TEST_CASE("Render - help pane aligns localized descriptions after dynamic shortcut and command columns",
+            "[tui][unit][render][keymap]")
+  {
+    auto checkAligned = [](i18n::MessageCatalog const& textCatalog, std::array<std::string_view, 5> const descriptions)
+    {
+      auto const rendered = renderText(helpPane(textCatalog, defaultTuiKeymapPlan(), 120), 120);
+      auto const optExpectedColumn = textColumn(rendered, descriptions.front());
+      REQUIRE(optExpectedColumn);
+
+      for (auto const description : descriptions)
+      {
+        CHECK(textColumn(rendered, description) == optExpectedColumn);
+      }
+    };
+
+    checkAligned(
+      ao::test::englishMessageCatalog(), {"quick filter", "choose list", "reveal current track", "playback", "exit"});
+    checkAligned(ao::test::messageCatalog("de-DE"),
+                 {"Schnellfilter", "Liste wählen", "Aktuellen Titel zeigen", "Wiedergabe", "Beenden"});
+    checkAligned(ao::test::messageCatalog("zh-CN"), {"快速筛选", "选择列表", "定位当前曲目", "播放控制", "退出"});
+
+    for (auto const panelColumns : {40, 60})
+    {
+      auto const rendered = renderText(helpPane(panelColumns), panelColumns);
+      CHECK(rendered.contains("quick filter"));
+      CHECK(rendered.contains("choose list"));
+      CHECK(rendered.contains("playback"));
+      CHECK(rendered.contains(kCellEllipsis));
+      CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "choose list"));
+      CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "playback"));
+    }
+  }
+
   TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
   {
     auto wideHelpBox = ftxui::Box{};
@@ -259,8 +322,8 @@ namespace ao::tui::test
     std::ignore = renderBesideWorkspace(helpPane(120), wideHelpBox, 120);
     std::ignore = renderBesideWorkspace(helpPane(30), narrowHelpBox, 30);
 
-    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), 120));
-    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), 30));
+    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), 120));
+    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), 30));
     CHECK(englishDetailPaneColumns(120) > 0);
     CHECK(englishDetailPaneColumns(40) == 40);
   }
@@ -435,6 +498,8 @@ namespace ao::tui::test
     auto const box1 = ftxui::Box{.x_min = 10, .x_max = 34, .y_min = 5, .y_max = 17};
     auto const box2 = ftxui::Box{.x_min = 12, .x_max = 36, .y_min = 6, .y_max = 18};
     auto const invalidBox = ftxui::Box{.x_min = 0, .x_max = 0, .y_min = 0, .y_max = 0};
+    auto const negativeXBox = ftxui::Box{.x_min = -1, .x_max = 4, .y_min = 1, .y_max = 3};
+    auto const negativeYBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = -1, .y_max = 3};
     auto const optPngBytes =
       std::optional{std::vector{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}}};
 
@@ -443,6 +508,10 @@ namespace ao::tui::test
 
     CHECK(isValidBox(box1));
     CHECK_FALSE(isValidBox(invalidBox));
+    CHECK_FALSE(isValidBox(negativeXBox));
+    CHECK_FALSE(isValidBox(negativeYBox));
+    CHECK(kittyCoverArtPaintEscape(negativeXBox, *optPngBytes).empty());
+    CHECK(kittyCoverArtPaintEscape(negativeYBox, *optPngBytes).empty());
     CHECK(isSameBox(box1, box1));
     CHECK_FALSE(isSameBox(box1, box2));
 
@@ -723,7 +792,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("a pipeline"));
     CHECK_FALSE(rendered.text.contains("o output"));
     CHECK_FALSE(rendered.text.contains("groups"));
-    CHECK_FALSE(rendered.text.contains("Ctrl-L current"));
+    CHECK_FALSE(rendered.text.contains("Ctrl+L current"));
     CHECK_FALSE(rendered.text.contains("q quit"));
     CHECK_FALSE(rendered.text.contains("c clear filter"));
     CHECK_FALSE(rendered.text.contains("Mode:"));
@@ -767,6 +836,18 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("Filter:"));
   }
 
+  TEST_CASE("Render - an applied filter remains visible when its entry shortcut is unbound", "[tui][unit][keymap]")
+  {
+    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    model.applyOverrides({{"tui.library.openQuickFilter", {}}});
+    auto const plan = TuiKeymapPlan{model};
+    auto shell = ShellInteractionModel{};
+    auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}, plan), 140);
+
+    CHECK(rendered.contains("Filter Aimer"));
+    CHECK_FALSE(rendered.contains("/ Aimer"));
+  }
+
   TEST_CASE("Render - status bar uses overlay-specific help for every overlay", "[tui][unit][render]")
   {
     struct Case final
@@ -799,6 +880,111 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("Render - one effective keymap drives status, overlay, palette, and help hints", "[tui][unit][keymap]")
+  {
+    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    model.applyOverrides({
+      {"tui.shell.toggleListChooser", {"F2"}},
+      {"tui.shell.toggleTrackDetail", {}},
+      {"tui.shell.toggleAudioQuality", {"F5"}},
+      {"tui.shell.toggleOutputDevices", {"F6"}},
+      {"tui.shell.togglePresentationChooser", {"F7"}},
+      {"tui.shell.toggleNotifications", {"F8"}},
+      {"tui.library.openQuickFilter", {"F3"}},
+      {"tui.shell.openCommandPalette", {"F4"}},
+    });
+    auto const keymapPlan = TuiKeymapPlan{model};
+    auto shell = ShellInteractionModel{};
+
+    auto const status =
+      renderText(statusBar(StatusBarViewState{.terminalColumns = 140, .shell = &shell}, keymapPlan), 140);
+    CHECK(status.contains("F3 Filter"));
+    CHECK(status.contains("F4 command"));
+    CHECK(status.contains("F2 lists"));
+    CHECK_FALSE(status.contains("/ Filter"));
+    CHECK_FALSE(status.contains(": command"));
+    CHECK_FALSE(status.contains("d detail"));
+
+    shell.openOverlay(Overlay::ListChooser);
+    auto const listStatus = renderText(statusBar(StatusBarViewState{.shell = &shell}, keymapPlan), 140);
+    CHECK(listStatus.contains("F2 toggle  Enter open  Esc close"));
+
+    shell.openOverlay(Overlay::DetailPanel);
+    auto const detailStatus = renderText(statusBar(StatusBarViewState{.shell = &shell}, keymapPlan), 140);
+    CHECK(detailStatus.contains("Esc close"));
+    CHECK_FALSE(detailStatus.contains("toggle"));
+
+    shell.beginInput(ShellInputMode::Command);
+    shell.setCommandCompletion(rt::CompletionResult{
+      .items =
+        {
+          rt::CompletionItem{.displayText = ":lists",
+                             .insertText = "lists",
+                             .detail = rt::CompletionDetail::makeResolvedText("choose list")},
+          rt::CompletionItem{.displayText = ":detail",
+                             .insertText = "detail",
+                             .detail = rt::CompletionDetail::makeResolvedText("track detail")},
+        },
+    });
+    auto const palette = renderText(commandPalettePanel(ao::test::englishMessageCatalog(), shell, keymapPlan, 72), 72);
+    CHECK(palette.contains("F2"));
+    CHECK(palette.contains("track detail"));
+    CHECK_FALSE(palette.contains(" d "));
+
+    auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), keymapPlan, 120), 120);
+    CHECK(help.contains("F2"));
+    CHECK(help.contains(":lists / :l"));
+    CHECK(help.contains("F3"));
+    CHECK(help.contains(":filter <text>"));
+    CHECK(lineIndexContaining(help, "F2") == lineIndexContaining(help, ":lists / :l"));
+    CHECK(lineIndexContaining(help, "F3") == lineIndexContaining(help, ":filter <text>"));
+    CHECK_FALSE(help.contains("l  :lists"));
+    CHECK_FALSE(help.contains("d  :detail"));
+    CHECK_FALSE(help.contains("Enter run"));
+
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const lists = renderText(libraryChooserPane(textCatalog, {"All Tracks"}, 0, keymapPlan, 100), 100);
+    auto const quality = renderText(qualityPanel(textCatalog, rt::PlaybackTransportSnapshot{}, keymapPlan, 100), 100);
+    auto const output =
+      renderText(outputDevicePanel(textCatalog, uimodel::OutputDeviceViewState{}, -1, keymapPlan, nullptr, 100), 100);
+    auto const presentation = renderText(presentationPanel(textCatalog, {}, "", 0, keymapPlan, nullptr, 100), 100);
+    auto const notification = renderText(
+      notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, keymapPlan, nullptr, 100), 100);
+
+    CHECK(lists.contains("F2 toggle"));
+    CHECK(quality.contains("F5 toggle"));
+    CHECK(output.contains("F6 toggle"));
+    CHECK(presentation.contains("F7 toggle"));
+    CHECK(notification.contains("F8 toggle"));
+    CHECK(notification.contains("x hide compact"));
+    CHECK(notification.contains("click clearable row"));
+
+    model.applyOverrides({{"tui.shell.toggleNotifications", {}}});
+    auto const unboundPlan = TuiKeymapPlan{model};
+    auto const unboundNotification = renderText(
+      notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, unboundPlan, nullptr, 100), 100);
+    CHECK_FALSE(unboundNotification.contains("toggle"));
+    CHECK(unboundNotification.contains("x hide compact"));
+  }
+
+  TEST_CASE("Render - combined help rows omit ambiguous partial shortcut sets", "[tui][unit][keymap]")
+  {
+    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    model.applyOverrides({
+      {"tui.library.previousSection", {}},
+      {"tui.library.playSelection", {}},
+    });
+    auto const plan = TuiKeymapPlan{model};
+    auto const rendered = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
+
+    CHECK(rendered.contains("previous / next group"));
+    CHECK_FALSE(rendered.contains("{ / }"));
+    CHECK(rendered.contains(":play :pause :stop"));
+    CHECK(rendered.contains("playback"));
+    CHECK_FALSE(rendered.contains("Enter / Space / s"));
+    CHECK(textColumn(rendered, "previous / next group") == textColumn(rendered, "playback"));
+  }
+
   TEST_CASE("Render - status slot shows activity compact state", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
@@ -820,6 +1006,13 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("Ready"));
     CHECK(activityBox.x_min == 0);
     CHECK(activityBox.y_min == 0);
+  }
+
+  TEST_CASE("Render - activity progress rail rejects non-positive widths", "[tui][unit][render]")
+  {
+    CHECK(activityProgressRail(0.5, 4) == "[==--]");
+    CHECK(activityProgressRail(0.5, 0).empty());
+    CHECK(activityProgressRail(0.5, -1).empty());
   }
 
   TEST_CASE("Render - idle status bar clears stale activity hit box", "[tui][regression][render]")
@@ -898,6 +1091,43 @@ namespace ao::tui::test
     CHECK(rowHitRegions.front().box.y_min > 0);
   }
 
+  TEST_CASE("Render - notification center width includes complete row chrome", "[tui][unit][render]")
+  {
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const& keymapPlan = defaultTuiKeymapPlan();
+
+    SECTION("library task progress rail")
+    {
+      auto const message = std::string(64, 't');
+      auto const state = uimodel::ActivityStatusViewState{
+        .detail =
+          uimodel::ActivityDetailState{
+            .optLibraryTask = uimodel::ActivityTaskDetail{.message = message, .progressFraction = 0.5},
+          },
+      };
+      auto const contentColumns = cellWidth(message) + cellWidth(" ") + cellWidth(activityProgressRail(0.5, 10));
+
+      CHECK(notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) ==
+            style::popupPanelColumnsForContent(contentColumns, 0));
+    }
+
+    SECTION("dismissible notification severity and affordance")
+    {
+      auto const message = std::string(64, 'n');
+      auto const state = uimodel::ActivityStatusViewState{
+        .detail =
+          uimodel::ActivityDetailState{
+            .items = {uimodel::ActivityDetailItem{
+              .severity = rt::NotificationSeverity::Error, .message = message, .dismissible = true}},
+          },
+      };
+      auto const contentColumns = cellWidth("error") + cellWidth(" ") + cellWidth(message) + cellWidth(" x");
+
+      CHECK(notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) ==
+            style::popupPanelColumnsForContent(contentColumns, 0));
+    }
+  }
+
   TEST_CASE("Render - text input leaves bottom status bar in workspace layout", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
@@ -926,6 +1156,10 @@ namespace ao::tui::test
     CHECK(commandPalettePanelRows(80) == 20);
     CHECK(commandPalettePanelRows(8) == 8);
 
+    auto emptyBox = ftxui::Box{};
+    auto emptyShell = ShellInteractionModel{};
+    std::ignore = renderBesideWorkspace(commandPalettePanel(emptyShell, wideColumns), emptyBox, 180);
+
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "a");
     shell.setCommandCompletion(rt::CompletionResult{
@@ -937,7 +1171,12 @@ namespace ao::tui::test
                                      "a long detail that should also stay inside the fixed ratio frame")}},
     });
 
-    CHECK(commandPalettePanelColumns(180) == wideColumns);
+    auto populatedBox = ftxui::Box{};
+    auto const rendered = renderBesideWorkspace(commandPalettePanel(shell, wideColumns), populatedBox, 180);
+
+    CHECK(boxColumns(emptyBox) == wideColumns);
+    CHECK(boxColumns(populatedBox) == wideColumns);
+    CHECK(rendered.text.contains("a very long completion label"));
   }
 
   TEST_CASE("Render - command palette keeps selected completion visible in constrained height",

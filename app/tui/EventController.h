@@ -7,6 +7,7 @@
 #include "OutputDeviceController.h"
 #include "ShellInteractionModel.h"
 #include "TuiHitRegions.h"
+#include "TuiKeymap.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -70,6 +71,7 @@ namespace ao::tui
                     ShellInteractionModel& shell,
                     LibraryController& library,
                     rt::AppRuntime& runtime,
+                    TuiKeymapPlan const& keymapPlan,
                     EventControllerBindings bindings = {});
 
     bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
@@ -92,6 +94,7 @@ namespace ao::tui
     void revealCurrentTrack();
     void playSelectedTrack();
     void executePlaybackCommand(uimodel::PlaybackCommand command);
+    void executeKeyAction(TuiKeyAction action);
     void runCommand(Command const& command);
     void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
@@ -155,6 +158,7 @@ namespace ao::tui
     ftxui::ScreenInteractive& _screen;
     ShellInteractionModel& _shell;
     LibraryController& _library;
+    TuiKeymapPlan const& _keymapPlan;
     async::Runtime& _asyncRuntime;
     rt::PlaybackService& _playback;
     uimodel::PlaybackActions _playbackActions;

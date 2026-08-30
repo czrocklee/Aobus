@@ -29,6 +29,7 @@ add_library(aobus-tui-lib STATIC
     TrackPresentationNavigation.cpp
     TrackSection.cpp
     TuiLayoutStateStore.cpp
+    TuiKeymap.cpp
     TuiText.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp

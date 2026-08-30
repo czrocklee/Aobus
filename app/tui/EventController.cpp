@@ -16,6 +16,7 @@
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include "TuiKeymap.h"
 #include <ao/Contract.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -185,67 +186,18 @@ namespace ao::tui
       return row.kind == uimodel::OutputDeviceRow::Kind::DeviceProfile && row.backendId == hitRegion.backendId &&
              row.deviceId == hitRegion.deviceId && row.profileId == hitRegion.profileId;
     }
-
-    /**
-     * @brief The terminal event a declared key names.
-     *
-     * The one place a key's written form becomes something the terminal can
-     * report, so the binding table stays readable text rather than ftxui
-     * constants and can be shown to the user as it stands.
-     */
-    std::optional<ftxui::Event> terminalEventFor(std::string_view const key)
-    {
-      if (key == "Enter")
-      {
-        return ftxui::Event::Return;
-      }
-
-      if (key == "Space")
-      {
-        return ftxui::Event::Character(" ");
-      }
-
-      if (key == "Esc")
-      {
-        return ftxui::Event::Escape;
-      }
-
-      if (key == "Ctrl-L")
-      {
-        return ftxui::Event::CtrlL;
-      }
-
-      if (key.size() == 1)
-      {
-        return ftxui::Event::Character(std::string{key});
-      }
-
-      return std::nullopt;
-    }
-
-    /// The command @p event runs, or nothing when no binding names it.
-    std::optional<CommandAction> commandKeyAction(ftxui::Event const& event)
-    {
-      for (auto const& binding : keyBindingSpecs())
-      {
-        if (auto const optKeyEvent = terminalEventFor(binding.key); optKeyEvent && event == *optKeyEvent)
-        {
-          return binding.action;
-        }
-      }
-
-      return std::nullopt;
-    }
   } // namespace
 
   EventController::EventController(ftxui::ScreenInteractive& screen,
                                    ShellInteractionModel& shell,
                                    LibraryController& library,
                                    rt::AppRuntime& runtime,
+                                   TuiKeymapPlan const& keymapPlan,
                                    EventControllerBindings bindings)
     : _screen{screen}
     , _shell{shell}
     , _library{library}
+    , _keymapPlan{keymapPlan}
     , _asyncRuntime{runtime.async()}
     , _playback{runtime.playback()}
     , _playbackActions{_playback, [this] { playSelectedTrack(); }}
@@ -486,6 +438,48 @@ namespace ao::tui
     }
   }
 
+  void EventController::executeKeyAction(TuiKeyAction const action)
+  {
+    if (auto const optCommandAction = commandActionForKeyAction(action); optCommandAction)
+    {
+      runCommand(Command{.action = *optCommandAction});
+      return;
+    }
+
+    using enum TuiKeyAction;
+
+    switch (action)
+    {
+      case OpenCommandPalette:
+      case OpenQuickFilter:
+        cancelWorkspaceGestures();
+        _shell.beginInput(action == OpenQuickFilter ? ShellInputMode::QuickFilter : ShellInputMode::Command);
+        refreshCommandCompletion();
+        break;
+      case PreviousSection: _library.jumpToAdjacentSection(-1); break;
+      case NextSection: _library.jumpToAdjacentSection(1); break;
+      case SeekBackward: _seekViewModel.seekBy(-kKeyboardSeekDelta); break;
+      case SeekForward: _seekViewModel.seekBy(kKeyboardSeekDelta); break;
+      case VolumeDown: _volumeViewModel.adjustVolume(-kKeyboardVolumeDelta); break;
+      case VolumeUp: _volumeViewModel.adjustVolume(kKeyboardVolumeDelta); break;
+      case Quit:
+      case ToggleListChooser:
+      case ToggleDetails:
+      case ToggleAudioPipeline:
+      case ToggleOutputDevices:
+      case TogglePresentations:
+      case ToggleNotifications:
+      case ShowHelp:
+      case RevealCurrentTrack:
+      case ClearFilter:
+      case Reload:
+      case PlaySelection:
+      case PlaybackPlayPause:
+      case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
+      case Count: break;
+    }
+  }
+
   void EventController::runCommand(Command const& command)
   {
     switch (command.action)
@@ -501,10 +495,14 @@ namespace ao::tui
       case CommandAction::OpenPresentationPanel: togglePresentationPanel(); break;
       case CommandAction::OpenNotifications: toggleNotificationCenter(); break;
       case CommandAction::CloseOverlay:
-        closeOverlay();
-        postActivityNotification(
-          rt::NotificationSeverity::Info,
-          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOverlayClosed)});
+        if (_shell.overlay() != Overlay::None)
+        {
+          closeOverlay();
+          postActivityNotification(
+            rt::NotificationSeverity::Info,
+            std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOverlayClosed)});
+        }
+
         break;
       case CommandAction::ShowHelp:
         openOverlay(Overlay::Help);
@@ -1240,12 +1238,6 @@ namespace ao::tui
     switch (_shell.overlay())
     {
       case Overlay::ListChooser:
-        if (commandKeyAction(event) == CommandAction::OpenLists)
-        {
-          toggleListChooser();
-          return true;
-        }
-
         if (handleListNavigation(
               event, [this](std::int32_t const delta) { _library.moveFocusedSelection(true, delta); }))
         {
@@ -1255,33 +1247,27 @@ namespace ao::tui
         if (event == ftxui::Event::Return)
         {
           openSelectedList();
+          return true;
+        }
+
+        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleListChooser)
+        {
+          toggleListChooser();
         }
 
         return true;
       case Overlay::DetailPanel:
-        if (commandKeyAction(event) == CommandAction::OpenDetail)
-        {
-          toggleDetailPanel();
-          return true;
-        }
-
         // Detail inspects whatever the table has selected, so every other key
         // belongs to the workspace it is watching.
         return false;
       case Overlay::QualityPanel:
-        if (commandKeyAction(event) == CommandAction::OpenQuality)
+        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleAudioPipeline)
         {
           toggleQualityPanel();
         }
 
         return true;
       case Overlay::OutputDevices:
-        if (commandKeyAction(event) == CommandAction::OpenOutputDevices)
-        {
-          toggleOutputDevices();
-          return true;
-        }
-
         if (_outputDevices != nullptr &&
             handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices->moveSelection(delta); }))
         {
@@ -1291,16 +1277,16 @@ namespace ao::tui
         if (event == ftxui::Event::Return)
         {
           selectOutputDevice();
+          return true;
+        }
+
+        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleOutputDevices)
+        {
+          toggleOutputDevices();
         }
 
         return true;
       case Overlay::PresentationPanel:
-        if (commandKeyAction(event) == CommandAction::OpenPresentationPanel)
-        {
-          togglePresentationPanel();
-          return true;
-        }
-
         if (handleListNavigation(
               event, [this](std::int32_t const delta) { _library.movePresentationSelection(delta); }))
         {
@@ -1310,20 +1296,29 @@ namespace ao::tui
         if (event == ftxui::Event::Return)
         {
           selectPresentation();
+          return true;
+        }
+
+        if (_keymapPlan.actionFor(event) == TuiKeyAction::TogglePresentations)
+        {
+          togglePresentationPanel();
         }
 
         return true;
       case Overlay::Notifications:
-        if (commandKeyAction(event) == CommandAction::OpenNotifications)
+        if (event == ftxui::Event::Character("x"))
         {
-          toggleNotificationCenter();
+          if (_activityStatusViewModel != nullptr && _activityStatusViewModel->viewState().compact.dismissible)
+          {
+            _activityStatusViewModel->dismissCompact();
+          }
+
           return true;
         }
 
-        if (event == ftxui::Event::Character("x") && _activityStatusViewModel != nullptr &&
-            _activityStatusViewModel->viewState().compact.dismissible)
+        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleNotifications)
         {
-          _activityStatusViewModel->dismissCompact();
+          toggleNotificationCenter();
         }
 
         return true;
@@ -1336,58 +1331,14 @@ namespace ao::tui
 
   bool EventController::handleRootEvent(ftxui::Event const& event)
   {
-    if (auto const optAction = commandKeyAction(event); optAction)
-    {
-      runCommand({.action = *optAction});
-      return true;
-    }
-
     if (handleListNavigation(event, [this](std::int32_t const delta) { _library.moveFocusedSelection(false, delta); }))
     {
       return true;
     }
 
-    if (event == ftxui::Event::Character("/") || event == ftxui::Event::Character(":"))
+    if (auto const optAction = _keymapPlan.actionFor(event); optAction)
     {
-      cancelWorkspaceGestures();
-      _shell.beginInput(event == ftxui::Event::Character("/") ? ShellInputMode::QuickFilter : ShellInputMode::Command);
-      refreshCommandCompletion();
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("["))
-    {
-      _seekViewModel.seekBy(-kKeyboardSeekDelta);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("]"))
-    {
-      _seekViewModel.seekBy(kKeyboardSeekDelta);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("{") && !isModalOverlay(_shell.overlay()))
-    {
-      _library.jumpToAdjacentSection(-1);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("}") && !isModalOverlay(_shell.overlay()))
-    {
-      _library.jumpToAdjacentSection(1);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("-"))
-    {
-      _volumeViewModel.adjustVolume(-kKeyboardVolumeDelta);
-      return true;
-    }
-
-    if (event == ftxui::Event::Character("+") || event == ftxui::Event::Character("="))
-    {
-      _volumeViewModel.adjustVolume(kKeyboardVolumeDelta);
+      executeKeyAction(*optAction);
       return true;
     }
 
@@ -1413,9 +1364,9 @@ namespace ao::tui
       return handleCommandEvent(event);
     }
 
-    // Escape is answered before any overlay sees it, so whatever is open closes
-    // rather than the overlay deciding for itself what the key means.
-    if (commandKeyAction(event) == CommandAction::CloseOverlay)
+    // Escape is protocol-owned before any overlay sees it, so rebinding cannot
+    // strand the user inside a modal surface.
+    if (event == ftxui::Event::Escape)
     {
       runCommand({.action = CommandAction::CloseOverlay});
       return true;
