@@ -43,9 +43,12 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
+| TUI library presentation | One per-library TUI file. | `TuiLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop`, `trackView.columnLayouts`, `trackView.presentations`, and `shortcuts`. |
 | Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
 | Shell component state | One runtime-state file per preset id. | `ShellLayoutComponentStateStore` uses a standalone YAML document. | Document root; it has no `ConfigStore` group. |
+
+TUI validates that its runtime workspace override, per-library presentation path, and global application-preference path do not alias before it constructs their stores.
 
 The dot in `trackView.columnLayouts` and `trackView.presentations` is a literal character in one top-level YAML key.
 It does not denote nested mappings.
@@ -64,6 +67,8 @@ It does not denote nested mappings.
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `TuiLayoutStateStore`. |
+| TUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `TuiLayoutStateStore`. |
 | Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
 | Windows desktop settings | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
 | Windows desktop settings | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
@@ -160,14 +165,14 @@ The registry fixes the group-to-type association, but these domain owners define
 ## Validation rules
 
 - Registered group names are exact and case-sensitive.
-- The directory these files live in is resolved by `utility::applicationConfigDirectory`, which accepts only absolute candidates. A relative environment value is treated as unset rather than resolved against the working directory, so no managed document is ever written beside the running process.
+- Global application files use `utility::applicationConfigDirectory`, which accepts only absolute candidates. Per-library files use `LibraryPaths` below the selected music root, while an explicitly selected workspace path remains owned by its frontend. No missing global-directory value falls back to the process working directory.
 - A conforming `ConfigStore` file has a top-level mapping; each registered group is one unique keyed direct child, and duplicate group keys reject initialization.
 - Unregistered top-level groups have no application consumer even though a loaded `ConfigStore` can retain them while rewriting another group.
 - Every registered payload uses an explicit owner-local schema; no field, enum, id, container, or aggregate schema is inferred from its C++ type.
 - The [grouped configuration store specification](../../spec/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
 - `playback-session` accepts only schema version `4`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
 - `workspace` accepts only presentation version `1` and validates its complete stable presentation vocabulary before view creation.
-- Desktop column-layout groups accept only version `2`; desktop
+- Interactive column-layout groups accept only version `2`; interactive
   list-presentation groups accept only version `1`. Each validates a complete
   candidate before replacing seeded UIModel state.
 - Shell layout files require a readable `layout` group whose payload contains `version` and `root`; `templates` is optional.
@@ -247,8 +252,8 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
 - [`WorkspaceSessionYamlSchema.h`](../../../app/runtime/WorkspaceSessionYamlSchema.h), [`WorkspaceSessionYamlSchema.cpp`](../../../app/runtime/WorkspaceSessionYamlSchema.cpp), and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload conversion.
-- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns the two GTK library-presentation group names.
-- [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own their exact GTK presentation payloads.
+- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) and [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) own their independent library-presentation file boundaries.
+- [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own the shared literal group names and exact presentation payloads.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) owns the layout-preset group and file boundary.
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h), [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own the standalone component-state envelope and markers.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp), [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own store selection and sharing.
@@ -264,7 +269,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, store use, and repeated frozen checkpoints.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact restored active view.
-- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect both per-library GTK presentation groups, version gates, and seeded-state fallback.
+- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect the shared presentation groups, independent files, TUI writer-path alias rejection, version gates, and seeded-state fallback.
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects the layout payload's YAML fields and round trip; [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects its `layout` group and per-preset file boundary.
 - [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects the standalone component-state envelope, versions, and schema; [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset matching, pruning, and the file boundary.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)

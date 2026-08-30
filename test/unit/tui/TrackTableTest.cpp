@@ -5,6 +5,7 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/TuiRenderTestSupport.h"
+#include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
 #include <ao/CoreIds.h>
@@ -355,7 +356,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, trackLine).inverted);
   }
 
-  TEST_CASE("TrackTable - column width overrides reposition following columns", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - projected column widths reposition following columns", "[tui][unit][track-table]")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "widths", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -363,10 +364,17 @@ namespace ao::tui::test
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .duration = std::chrono::seconds{65}})};
     auto const defaultText = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation), 120);
     auto const defaultHeader = lineContaining(defaultText, "Duration");
-    auto const overrides = std::vector{TrackColumnWidthOverride{.field = rt::TrackField::Title, .columns = 12}};
+    auto const resizedLayout = TerminalTrackColumnLayout{
+      .columns =
+        {
+          TerminalTrackColumn{.field = rt::TrackField::Title, .columns = 12},
+          TerminalTrackColumn{.field = rt::TrackField::Duration, .columns = 8},
+        },
+      .availableColumns = 120,
+    };
 
     auto const resizedText = renderText(
-      trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.columnWidths = &overrides}),
+      trackTableView(tracks, -1, kInvalidTrackId, presentation, TrackTableViewOptions{.columnLayout = &resizedLayout}),
       120);
     auto const resizedHeader = lineContaining(resizedText, "Duration");
 
@@ -406,35 +414,52 @@ namespace ao::tui::test
     CHECK(wideHandles[0].columns > narrowHandles[0].columns);
     CHECK(wideHandles[1].columns > narrowHandles[1].columns);
     CHECK(wideHandles[2].columns > narrowHandles[2].columns);
+    CHECK(narrowHandles[0].availableColumns == 100);
+    CHECK(wideHandles[0].availableColumns == 120);
   }
 
-  TEST_CASE("TrackTable - column width overrides stay fixed while other text columns flex", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - renderer consumes projected widths without re-solving", "[tui][unit][track-table]")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "override-elastic-widths",
       .visibleFields = {rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album}};
     auto const tracks = std::vector{
       makeTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Alpha", .artist = "Artist", .album = "Album"})};
-    auto const overrides = std::vector{TrackColumnWidthOverride{.field = rt::TrackField::Title, .columns = 12}};
+    auto const narrowLayout = TerminalTrackColumnLayout{
+      .columns =
+        {
+          TerminalTrackColumn{.field = rt::TrackField::Title, .columns = 12},
+          TerminalTrackColumn{.field = rt::TrackField::Artist, .columns = 30},
+          TerminalTrackColumn{.field = rt::TrackField::Album, .columns = 48},
+        },
+      .availableColumns = 100,
+    };
+    auto const wideLayout = TerminalTrackColumnLayout{
+      .columns =
+        {
+          TerminalTrackColumn{.field = rt::TrackField::Title, .columns = 12},
+          TerminalTrackColumn{.field = rt::TrackField::Artist, .columns = 40},
+          TerminalTrackColumn{.field = rt::TrackField::Album, .columns = 58},
+        },
+      .availableColumns = 120,
+    };
     auto narrowHandles = std::vector<TrackColumnResizeHandle>{};
     auto wideHandles = std::vector<TrackColumnResizeHandle>{};
 
     auto const narrowRendered = renderElement(
-      trackTableView(
-        tracks,
-        -1,
-        kInvalidTrackId,
-        presentation,
-        TrackTableViewOptions{.columnWidths = &overrides, .resizeHandles = &narrowHandles, .availableColumns = 100}),
+      trackTableView(tracks,
+                     -1,
+                     kInvalidTrackId,
+                     presentation,
+                     TrackTableViewOptions{.columnLayout = &narrowLayout, .resizeHandles = &narrowHandles}),
       100);
-    auto const wideRendered = renderElement(
-      trackTableView(
-        tracks,
-        -1,
-        kInvalidTrackId,
-        presentation,
-        TrackTableViewOptions{.columnWidths = &overrides, .resizeHandles = &wideHandles, .availableColumns = 120}),
-      120);
+    auto const wideRendered =
+      renderElement(trackTableView(tracks,
+                                   -1,
+                                   kInvalidTrackId,
+                                   presentation,
+                                   TrackTableViewOptions{.columnLayout = &wideLayout, .resizeHandles = &wideHandles}),
+                    120);
 
     REQUIRE_FALSE(narrowRendered.text.empty());
     REQUIRE_FALSE(wideRendered.text.empty());

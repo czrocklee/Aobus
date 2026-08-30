@@ -3,17 +3,19 @@
 
 #pragma once
 
-#include "ListPresentations.h"
 #include <ao/Error.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include <ryml.hpp>
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::uimodel
 {
+  inline constexpr auto kListPresentationsConfigGroup = std::string_view{"trackView.presentations"};
   inline constexpr std::uint32_t kListPresentationPreferenceVersion = 1;
 
   // Persistence DTOs isolate the versioned wire shape from live UIModel state.

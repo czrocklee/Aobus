@@ -76,8 +76,8 @@ launcher.
 ### TUI composition root
 
 TUI constructs one `AppRuntime` for the command-line-selected root and retains it for the terminal process lifetime.
-Before constructing frontend observers, it restores the runtime workspace from the selected TUI store.
-`LibraryController` attaches the exact `WorkspaceSnapshot::activeViewId` created by that restore rather than navigating by list identity; it navigates to All Tracks only when no usable active view exists.
+Before constructing frontend observers, it restores the runtime workspace from the selected TUI store and loads the independent per-library TUI column-layout and list-presentation snapshots into their shared UIModel owners.
+`LibraryController` attaches the exact `WorkspaceSnapshot::activeViewId` created by that restore rather than navigating by list identity; it navigates to All Tracks only when no usable active view exists. A fallback or later plain-list navigation resolves that list's preference or recommendation, while exact restored views are never replaced by that default.
 Same-list filtered views, the active view's exact presentation, and restored custom presets therefore survive frontend attachment without an extra history point.
 TUI then starts playback-session observation and restores listening intent without autoplay.
 
@@ -224,8 +224,8 @@ GTK requests a final checkpoint, closes callback admission, removes the active w
 Both boundaries are idempotent so explicit composition-root shutdown and destructor fallback preserve the same order.
 
 A TUI quit or signal request only ends the event loop.
-The composition root then cancels cover delivery and transient input or pointer work, checkpoints the workspace, explicitly checkpoints playback, and only then requests ordinary playback stop.
-The workspace checkpoint remains best-effort and log-only; playback checkpoint failure is logged by the composition root.
+The composition root then cancels cover delivery and transient input or pointer work, retries any dirty layout/presentation checkpoint, checkpoints the workspace, explicitly checkpoints playback, and only then requests ordinary playback stop.
+Layout/presentation and playback checkpoint failures are logged by the composition root; the workspace checkpoint remains best-effort and log-only.
 Frontend controllers, subscriptions, render adapters, and callback targets are destroyed before a scope guard calls `AppRuntime::shutdown()`.
 Ordinary stop freezes the last-restorable succession and transport snapshots, so the playback shutdown checkpoint can safely rewrite the same intent after live playback becomes Idle.
 The runtime and its screen-borrowing executor are destroyed while `ScreenInteractive` still exists.

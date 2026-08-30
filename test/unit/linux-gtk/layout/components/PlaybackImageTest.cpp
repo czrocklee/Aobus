@@ -137,6 +137,7 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][unit][image]")
   {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto mutableCoverTrackId = kInvalidTrackId;
     auto coverTrackId = kInvalidTrackId;
     auto noCoverTrackId = kInvalidTrackId;

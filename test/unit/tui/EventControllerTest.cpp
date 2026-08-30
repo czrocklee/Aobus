@@ -13,12 +13,14 @@
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "tui/LibraryController.h"
+#include "tui/LibraryNavigation.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PlaybackPanel.h"
 #include "tui/PresentationPanel.h"
 #include "tui/ShellInteractionModel.h"
+#include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
 #include "tui/TrackSection.h"
@@ -29,16 +31,22 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -80,6 +88,8 @@ namespace ao::tui::test
       std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr{};
       rt::test::QueuedExecutor* executor = nullptr;
       std::unique_ptr<rt::AppRuntime> runtimePtr;
+      uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
+      uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
       ftxui::ScreenInteractive screen{ftxui::ScreenInteractive::FixedSize(80, 24)};
       ShellInteractionModel shell{};
 
@@ -95,14 +105,20 @@ namespace ao::tui::test
         addTrack(library::test::TrackSpec{.title = "Second", .uri = fixturePath});
       }
 
-      LibraryController makeLibrary() const
+      LibraryController makeLibrary()
       {
-        return LibraryController{*runtimePtr, ao::test::englishMessageCatalog()};
+        return LibraryController{*runtimePtr, ao::test::englishMessageCatalog(), listPresentations};
       }
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
         return rt::test::addRuntimeTrack(*runtimePtr, spec, [this] { executor->drain(); });
+      }
+
+      ListId addList(std::string name) const
+      {
+        return ao::test::requireValue(rt::test::runRuntimeTask(
+          *runtimePtr, runtimePtr->library().commands().createList(rt::ListDraft{.name = std::move(name)})));
       }
 
       void addReadyAudioProvider() const
@@ -140,6 +156,16 @@ namespace ao::tui::test
       auto const& entries = library.presentationEntries();
       auto const it = std::ranges::find(entries, presentationId, &TrackPresentationNavEntry::id);
       return it == entries.end() ? -1 : static_cast<std::int32_t>(it - entries.begin());
+    }
+
+    void openList(LibraryController& library, ListId const listId)
+    {
+      auto const it = std::ranges::find(library.libraryEntries(), listId, &LibraryNavEntry::id);
+      REQUIRE(it != library.libraryEntries().end());
+      auto const targetIndex = static_cast<std::int32_t>(it - library.libraryEntries().begin());
+      library.moveFocusedSelection(true, targetIndex - library.selectedList());
+      REQUIRE(library.openSelectedList().opened);
+      REQUIRE(library.currentListId() == listId);
     }
 
     void prepareSeekablePlayback(EventControllerFixture& fixture, LibraryController const& library)
@@ -766,26 +792,34 @@ namespace ao::tui::test
     hitRegions.trackColumnResizeHandles = {
       TrackColumnResizeHandle{.field = rt::TrackField::Title,
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20}};
-    auto columnWidths = std::vector<TrackColumnWidthOverride>{};
-    auto controller =
-      EventController{fixture.screen,
-                      fixture.shell,
-                      library,
-                      *fixture.runtimePtr,
-                      EventControllerBindings{.hitRegions = &hitRegions, .trackColumnWidthOverrides = &columnWidths}};
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
 
     REQUIRE(controller.handleEvent(ftxui::Event::Character("d")));
     auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
     REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+    auto drag = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 34, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", drag)));
+    REQUIRE_FALSE(resizePreview.layout.empty());
+    CHECK(columnLayouts.snapshot().empty());
 
-    // Help replaces Detail and blocks the workspace, so the drag stops here.
+    // Help replaces Detail and blocks the workspace, so the preview rolls back.
     CHECK(controller.handleEvent(ftxui::Event::Character("?")));
     REQUIRE(fixture.shell.overlay() == Overlay::Help);
+    CHECK(resizePreview.layout.empty());
+    CHECK(columnLayouts.snapshot().empty());
 
-    auto drag = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 34, .y = 2};
     controller.handleEvent(ftxui::Event::Mouse("", drag));
-    CHECK(columnWidths.empty());
+    CHECK(columnLayouts.snapshot().empty());
   }
 
   TEST_CASE("EventController - another overlay replaces detail", "[tui][unit][event][detail]")
@@ -963,6 +997,7 @@ namespace ao::tui::test
 
     auto const albumsIndex = presentationIndex(library, "albums");
     REQUIRE(albumsIndex >= 0);
+    CHECK(controller.handleEvent(ftxui::Event::Home));
 
     for (std::int32_t index = 0; index < albumsIndex; ++index)
     {
@@ -1509,7 +1544,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.size() == 1);
   }
 
-  TEST_CASE("EventController - mouse drag resizes track columns in session state", "[tui][unit][event]")
+  TEST_CASE("EventController - column resize previews then commits once on release", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1517,43 +1552,92 @@ namespace ao::tui::test
     hitRegions.trackColumnResizeHandles = {
       TrackColumnResizeHandle{.field = rt::TrackField::Title,
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20}};
-    auto widthOverrides = std::vector<TrackColumnWidthOverride>{};
-    auto controller =
-      EventController{fixture.screen,
-                      fixture.shell,
-                      library,
-                      *fixture.runtimePtr,
-                      EventControllerBindings{.hitRegions = &hitRegions, .trackColumnWidthOverrides = &widthOverrides}};
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto changedLists = std::vector<ListId>{};
+    auto changedSub =
+      columnLayouts.signalChanged().connect([&](ListId const listId) noexcept { changedLists.push_back(listId); });
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
 
     auto pressEdge = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", pressEdge)));
 
     auto moveRight = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 25, .y = 2};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", moveRight)));
-    REQUIRE(widthOverrides.size() == 1);
-    CHECK(widthOverrides[0].field == rt::TrackField::Title);
-    CHECK(widthOverrides[0].columns == 25);
+    CHECK(resizePreview.listId == rt::kAllTracksListId);
+    REQUIRE_FALSE(resizePreview.layout.empty());
+    CHECK(columnLayouts.snapshot().empty());
+    CHECK(changedLists.empty());
 
     auto release = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 25, .y = 2};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", release)));
-    REQUIRE(widthOverrides.size() == 1);
-    CHECK(widthOverrides[0].columns == 25);
+    CHECK(resizePreview.layout.empty());
+    REQUIRE(columnLayouts.snapshot().contains(rt::kAllTracksListId));
+    REQUIRE(changedLists.size() == 1);
+    CHECK(changedLists[0] == rt::kAllTracksListId);
+    auto const committed = projectTerminalTrackColumnLayout(
+      library.activePresentation(), columnLayouts.layoutForList(rt::kAllTracksListId), 100);
+    auto const title = std::ranges::find(committed.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
+    REQUIRE(title != committed.columns.end());
+    CHECK(title->columns == 25);
 
     auto moveAfterRelease = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 30, .y = 2};
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", moveAfterRelease)));
-    CHECK(widthOverrides[0].columns == 25);
+    CHECK(changedLists.size() == 1);
+  }
 
-    CHECK(controller.handleEvent(ftxui::Event::Mouse("", pressEdge)));
-    auto moveFarLeft = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = -100, .y = 2};
-    CHECK(controller.handleEvent(ftxui::Event::Mouse("", moveFarLeft)));
-    CHECK(widthOverrides[0].columns == kMinimumTrackColumnWidthColumns);
-    CHECK(controller.handleEvent(ftxui::Event::Mouse("", release)));
+  TEST_CASE("EventController - column resize follows a terminal resize during the drag", "[tui][regression][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
 
-    CHECK(controller.handleEvent(ftxui::Event::Mouse("", pressEdge)));
-    auto moveFarRight = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 220, .y = 2};
-    CHECK(controller.handleEvent(ftxui::Event::Mouse("", moveFarRight)));
-    CHECK(widthOverrides[0].columns == kMaximumTrackColumnResizeColumns);
+    auto const press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 26, .y_min = 2, .y_max = 2},
+                              .columns = 26,
+                              .availableColumns = 130}};
+    auto const move = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 25, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", move)));
+    auto const preview = projectTerminalTrackColumnLayout(
+      library.activePresentation(), resizePreview.layout, hitRegions.trackColumnResizeHandles.front().availableColumns);
+    auto const previewTitle = std::ranges::find(preview.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
+    REQUIRE(previewTitle != preview.columns.end());
+    CHECK(previewTitle->columns == 25);
+
+    auto const release = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 25, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", release)));
+    auto const committed = projectTerminalTrackColumnLayout(
+      library.activePresentation(), columnLayouts.layoutForList(rt::kAllTracksListId), 130);
+    auto const committedTitle =
+      std::ranges::find(committed.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
+    REQUIRE(committedTitle != committed.columns.end());
+    CHECK(committedTitle->columns == 25);
   }
 
   TEST_CASE("EventController - interrupted column drag does not swallow the next press", "[tui][regression][event]")
@@ -1564,24 +1648,145 @@ namespace ao::tui::test
     hitRegions.trackColumnResizeHandles = {
       TrackColumnResizeHandle{.field = rt::TrackField::Title,
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20}};
-    auto widthOverrides = std::vector<TrackColumnWidthOverride>{};
-    auto controller =
-      EventController{fixture.screen,
-                      fixture.shell,
-                      library,
-                      *fixture.runtimePtr,
-                      EventControllerBindings{.hitRegions = &hitRegions, .trackColumnWidthOverrides = &widthOverrides}};
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
 
     auto pressEdge = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", pressEdge)));
+    auto firstMove = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 30, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", firstMove)));
+    REQUIRE_FALSE(resizePreview.layout.empty());
 
     auto secondPress = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 2, .y = 8};
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", secondPress)));
+    CHECK(resizePreview.layout.empty());
 
     auto staleMove = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 40, .y = 2};
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", staleMove)));
-    CHECK(widthOverrides.empty());
+    CHECK(columnLayouts.snapshot().empty());
+  }
+
+  TEST_CASE("EventController - list navigation rolls back an in-flight column preview", "[tui][regression][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const otherListId = fixture.addList("Other");
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
+    auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
+    auto move = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 28, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", move)));
+    REQUIRE_FALSE(resizePreview.layout.empty());
+
+    openList(library, otherListId);
+    auto release = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 28, .y = 2};
+    CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", release)));
+
+    CHECK(resizePreview.layout.empty());
+    CHECK(columnLayouts.snapshot().empty());
+  }
+
+  TEST_CASE("EventController - committed column layouts remain scoped to their list", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const otherListId = fixture.addList("Other");
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
+    auto resizeCurrentList = [&](std::int32_t const releaseX)
+    {
+      auto const press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
+      auto const release =
+        ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = releaseX, .y = 2};
+      REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+      REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", release)));
+    };
+
+    auto const allTracksPresentation = library.activePresentation();
+    resizeCurrentList(25);
+    openList(library, otherListId);
+    CHECK(columnLayouts.layoutForList(otherListId).empty());
+    resizeCurrentList(30);
+
+    REQUIRE(columnLayouts.snapshot().size() == 2);
+    auto const allTracks =
+      projectTerminalTrackColumnLayout(allTracksPresentation, columnLayouts.layoutForList(rt::kAllTracksListId), 100);
+    auto const other =
+      projectTerminalTrackColumnLayout(library.activePresentation(), columnLayouts.layoutForList(otherListId), 100);
+    auto const allTracksTitle =
+      std::ranges::find(allTracks.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
+    auto const otherTitle = std::ranges::find(other.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
+    REQUIRE(allTracksTitle != allTracks.columns.end());
+    REQUIRE(otherTitle != other.columns.end());
+    CHECK(allTracksTitle->columns == 25);
+    CHECK(otherTitle->columns == 30);
+  }
+
+  TEST_CASE("EventController - teardown rolls back an in-flight column preview", "[tui][regression][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto hitRegions = TuiHitRegions{};
+    hitRegions.trackColumnResizeHandles = {
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20,
+                              .availableColumns = 100}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      *fixture.runtimePtr,
+      EventControllerBindings{
+        .hitRegions = &hitRegions, .trackColumnLayouts = &columnLayouts, .trackColumnResizePreview = &resizePreview}};
+    auto const press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
+    auto const move = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 28, .y = 2};
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", press)));
+    REQUIRE(controller.handleEvent(ftxui::Event::Mouse("", move)));
+    REQUIRE_FALSE(resizePreview.layout.empty());
+
+    controller.cancelTransientInteractions();
+
+    CHECK(resizePreview.layout.empty());
+    CHECK(columnLayouts.snapshot().empty());
   }
 
   TEST_CASE("EventController - mouse wheel scrolls the track table", "[tui][unit][event]")
@@ -1736,6 +1941,7 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation("songs") == "View: songs");
     REQUIRE(library.sections().empty());
     auto hitRegions = TuiHitRegions{};
     hitRegions.trackSectionRows = {
@@ -1993,17 +2199,20 @@ namespace ao::tui::test
     hitRegions.trackColumnResizeHandles = {
       TrackColumnResizeHandle{.field = rt::TrackField::Title,
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20}};
+                              .columns = 20,
+                              .availableColumns = 100}};
     hitRegions.trackSectionRows = {
       TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
-    auto widthOverrides = std::vector<TrackColumnWidthOverride>{};
-    auto controller = EventController{
-      fixture.screen,
-      fixture.shell,
-      library,
-      *fixture.runtimePtr,
-      EventControllerBindings{
-        .outputDevices = &outputDevices, .hitRegions = &hitRegions, .trackColumnWidthOverrides = &widthOverrides}};
+    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto resizePreview = TrackColumnResizePreview{};
+    auto controller = EventController{fixture.screen,
+                                      fixture.shell,
+                                      library,
+                                      *fixture.runtimePtr,
+                                      EventControllerBindings{.outputDevices = &outputDevices,
+                                                              .hitRegions = &hitRegions,
+                                                              .trackColumnLayouts = &columnLayouts,
+                                                              .trackColumnResizePreview = &resizePreview}};
 
     REQUIRE(library.selectedTrack() == 0);
     CHECK(controller.handleEvent(ftxui::Event::Character("/")));
@@ -2028,7 +2237,8 @@ namespace ao::tui::test
     CHECK(fixture.shell.isInputActive());
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.selectedTrack() == 0);
-    CHECK(widthOverrides.empty());
+    CHECK(columnLayouts.snapshot().empty());
+    CHECK(resizePreview.layout.empty());
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
   }
 

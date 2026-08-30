@@ -5,15 +5,61 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
 #include <map>
+#include <ranges>
 #include <span>
 #include <utility>
 #include <vector>
 
 namespace ao::uimodel
 {
+  TrackColumnLayouts::TrackColumnLayouts(rt::LibraryChanges const& changes)
+  {
+    _changesSubscription = changes.onChanged(
+      [this](rt::LibraryChangeSet const& changeSet)
+      {
+        auto removedListIds = std::vector<ListId>{};
+
+        if (changeSet.libraryReset)
+        {
+          removedListIds.reserve(_listLayouts.size());
+
+          for (auto const listId : _listLayouts | std::views::keys)
+          {
+            removedListIds.push_back(listId);
+          }
+
+          _listLayouts.clear();
+        }
+        else
+        {
+          removedListIds.reserve(changeSet.listsDeleted.size());
+
+          for (auto const listId : changeSet.listsDeleted)
+          {
+            if (_listLayouts.erase(listId) > 0)
+            {
+              removedListIds.push_back(listId);
+            }
+          }
+        }
+
+        // No owner state is touched after notification starts: an observer may
+        // synchronously destroy this owner while the shared signal stays alive.
+        auto const changedPtr = _changedPtr;
+
+        for (auto const listId : removedListIds)
+        {
+          changedPtr->emit(listId);
+        }
+      });
+  }
+
+  TrackColumnLayouts::~TrackColumnLayouts() = default;
+
   void TrackColumnLayouts::restore(Snapshot layouts)
   {
     if (_listLayouts == layouts)
@@ -22,7 +68,7 @@ namespace ao::uimodel
     }
 
     _listLayouts = std::move(layouts);
-    _changed.emit(kInvalidListId);
+    _changedPtr->emit(kInvalidListId);
   }
 
   std::vector<TrackColumnState> const& TrackColumnLayouts::layoutForList(ListId listId) const noexcept
@@ -50,7 +96,7 @@ namespace ao::uimodel
     }
 
     _listLayouts[listId] = layout;
-    _changed.emit(listId);
+    _changedPtr->emit(listId);
   }
 
   std::vector<rt::TrackField> visibleTrackFieldsInStoredOrder(std::span<rt::TrackField const> const visibleFields,

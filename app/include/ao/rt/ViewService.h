@@ -108,12 +108,10 @@ namespace ao::rt
     TrackListViewState trackListState(ViewId viewId) const;
     Result<TrackListViewState> findTrackListState(ViewId viewId) const;
 
-    // Lightweight per-frame accessor returning a reference to the stored presentation
-    // spec, avoiding a full TrackListViewState copy (filter/sort/selection) on the
-    // render path. Throws std::out_of_range for an unknown view, like trackListState.
-    // The reference remains valid until the view is destroyed.
-    TrackPresentationSpec const& trackListPresentation(ViewId viewId) const&;
-    TrackPresentationSpec const& trackListPresentation(ViewId viewId) const&& = delete;
+    // Lightweight per-frame lookup avoiding a full TrackListViewState copy
+    // (filter/sort/selection) on the render path. Returns nullptr for an unknown
+    // view. The pointer remains valid until the view is destroyed.
+    TrackPresentationSpec const* findTrackListPresentation(ViewId viewId) const noexcept;
 
     // Total playback duration of the view's current selection. Returns 0 for an unknown view,
     // an empty selection, or selected ids missing from the library.

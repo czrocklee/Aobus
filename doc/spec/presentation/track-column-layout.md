@@ -12,10 +12,10 @@ summary: Defines shared track-table column alignment, sizing, resizing, visibili
 This specification owns the platform-neutral policy for track-table column
 alignment, sizing, visibility, ordering, and user resize behavior.
 It defines start/end alignment, fixed and flexible column roles, minimums,
-weighted allocation, canonical per-list desktop state, and terminal adaptation.
+weighted allocation, canonical per-list frontend state, and terminal adaptation.
 
 The presentation supplies the available fields and their initial semantic order.
-A desktop layout may hide or reorder those fields without making a field outside
+A persisted layout may hide or reorder those fields without making a field outside
 the active presentation available.
 This specification does not own exact widget geometry, terminal hit testing, or
 library data.
@@ -33,7 +33,7 @@ It depends on runtime's stable track-field vocabulary but has no path or GTK dep
 GTK adapts the policy in `app/linux-gtk/track/TrackColumnController` and persists per-list state through `GtkLayoutStateStore`.
 WinUI adapts it in `app/windows-winui/track/TrackListController` and persists
 per-list state through `LibrarySession`.
-TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units and keeps manual overrides in the current TUI session.
+TUI adapts the same solver through `app/tui/TerminalTrackColumnLayout`, renders the result in `TrackTable`, and persists per-list canonical state through `TuiLayoutStateStore`. Its concrete widths are terminal cells rather than desktop pixels.
 
 ## Terminology
 
@@ -43,6 +43,7 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 - The **minimum width** is a hard lower bound independent of the preferred/default width.
 - A **solve specification** is one field plus its fixed width or weight, default width, and minimum width.
 - A **canonical state** is the normalized persisted representation of one column.
+- A **geometry unit** is selected by the containing frontend document: desktop layout files use desktop geometry, while the TUI layout file uses terminal cells.
 
 ## Invariants
 
@@ -53,12 +54,14 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 - With at least one flexible column and sufficient space, solved widths sum to the viewport width.
 - When fixed widths plus flexible minimums exceed the viewport, flexible columns remain at minimum and horizontal overflow is preserved.
 - When all visible columns are fixed, trailing viewport space is not assigned to an arbitrary column.
-- Flexible weights are positive and rounded to three decimal places when converted to canonical state.
+- Flexible weights are positive and finite when converted to canonical state. Ordinary values are rounded to three decimal places, values below the smallest canonical step clamp to `0.001`, and extreme finite values remain finite rather than overflowing during rounding.
 - Canonical flexible state stores `width = -1` and a positive `weight`; canonical fixed state stores a positive `width` and `weight = -1`.
 - A missing, invalid, or pre-layout viewport uses preferred widths instead of producing zero-width columns.
 - A resize never changes field identity, source membership, sort order, or grouping.
-- Hidden desktop columns retain their canonical order and sizing.
-- Desktop interaction keeps at least one field visible.
+- Hidden columns retain their canonical order and sizing.
+- GTK and WinUI visibility interaction keeps at least one field visible; TUI currently consumes persisted visibility but exposes no reorder/visibility editor.
+- TUI fixed widths, preferred widths, minimums, pointer deltas, and viewport measurements are all terminal-cell counts. Restored fixed widths and explicit pointer targets are bounded to the supported 8 through 160 cells before solving. No pixel-to-cell conversion participates in restore or save.
+- A TUI drag changes only preview state until normal pointer release commits one per-list canonical update.
 
 ## State model
 
@@ -66,9 +69,9 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 `TrackColumnState` is the canonical UI-local order, sizing, and visibility state
 for a field.
 `TrackColumnLayouts` maps `ListId` to an ordered vector of column states and emits the affected list id after a real change.
+When constructed with `LibraryChanges`, it removes every layout named by a committed list deletion and emits each removed id only after the complete deletion set has been pruned.
+A full library reset carries no incremental List ids, so it clears the complete layout map and emits every removed key.
 
-The active list id is used only to expose the active field order.
-It is not a second owner of the runtime view or list selection.
 The invalid list id cannot receive an update.
 
 ## Commands and transitions
@@ -96,6 +99,11 @@ It may create overflow rather than forcing unrelated flexible columns below thei
 After solving, widths are converted back into canonical fixed widths and flexible weights.
 Repeated solve/store cycles converge and avoid spurious changes caused only by floating-point noise.
 
+TUI begins a resize from the rendered header handle and previews the canonical candidate against the current list without mutating `TrackColumnLayouts`.
+Pointer release recomputes the candidate at the release coordinate and performs one model update, which is the persistence trigger.
+Opening or closing an overlay, entering text input, navigating to another list, receiving an unrelated pointer press, or frontend teardown cancels the gesture and discards the preview.
+TUI clamps explicit pointer targets to 8 through 160 terminal cells before the shared representable-range rules are applied.
+
 ### User reorder and visibility
 
 Desktop adapters may move an active presentation field left or right and may
@@ -105,9 +113,10 @@ that order. An adapter rejects an attempt to hide the last visible field.
 
 ## Failure and cancellation
 
-Width operations are synchronous, deterministic value transformations and expose no recoverable error or cancellation channel.
+Width operations are synchronous, deterministic value transformations and expose no recoverable error channel.
 Size mismatches in conversion helpers preserve the prior solve specifications.
 Unknown resize fields are no-ops.
+TUI pointer cancellation is a frontend interaction boundary: an interrupted preview performs no model update and therefore no persistence write.
 
 Persistence deserialization validates one complete layout group before replacing the caller's state.
 An unsupported version, unknown or duplicate field, duplicate or invalid list
@@ -117,9 +126,9 @@ Persistence I/O failures belong to the [persistence and managed-state architectu
 
 ## Persistence and versioning
 
-Desktop column state is UI-local per-library managed state keyed by list id.
-GTK stores it in `gtk_layout.yaml`; WinUI stores it in
-`%LOCALAPPDATA%\Aobus\windows-settings.yaml`.
+Column state is UI-local per-library managed state keyed by list id.
+GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in
+`%LOCALAPPDATA%\Aobus\windows-settings.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
 The `trackView.columnLayouts` group carries required `version: 2` and stores
 field id, canonical dimensions, and visibility.
 The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
@@ -130,11 +139,11 @@ The explicit schema returns `NotSupported` for a future version before interpret
 GTK suppresses layout/preference persistence callbacks while installing deserialized startup candidates, so a valid sibling group cannot rewrite a rejected layout merely because bulk state changed.
 WinUI loads a complete typed candidate before installing it and saves the
 desktop and presentation groups as one atomic candidate.
+TUI loads each group independently before connecting save observers, and its single store writer saves column layouts and presentation preferences through one atomic `saveTogether()` candidate.
 The solver owns no file format and accepts only deserialized `TrackColumnState` values.
 
-TUI manual column-width overrides are session-local terminal-column values and
-are not written to either desktop document.
-Pixel and terminal-column states are not interchangeable persisted representations.
+Desktop and TUI documents share the semantic schema but not geometry units or writer authority.
+A TUI process never reads `gtk_layout.yaml`, writes desktop widths, converts persisted pixels, or duplicates a cell-to-pixel representation.
 
 ## Frontend observations
 
@@ -146,8 +155,9 @@ order. It solves against the current viewport, keeps header and rows on one
 horizontal scroll surface, uses `ListView` for vertical recycling, and writes
 resize, reorder, and visibility changes through the shared state.
 
-TUI maps shared start/end alignment to terminal-cell alignment and converts the shared field policy to bounded terminal-column defaults and minimums.
-A manually overridden TUI column is treated as fixed for the current solve while remaining text columns continue to flex.
+TUI maps shared start/end alignment to terminal-cell alignment and supplies bounded terminal-cell defaults with an 8-cell minimum.
+Projected fixed fields retain cell widths within the TUI adapter's supported 8-through-160-cell range; persisted flexible fields retain canonical weights and therefore reflow when the terminal viewport changes.
+Persisted field order and visibility are merged with the active presentation before every solve.
 
 ## Implementation map
 
@@ -157,17 +167,17 @@ A manually overridden TUI column is treated as fixed for the current solve while
 - [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) owns explicit YAML mapping, versioned persistence conversion, and validation.
 - [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) adapts GTK viewport and drag events.
 - [`TrackListController.cpp`](../../../app/windows-winui/track/TrackListController.cpp) adapts WinUI headers, rows, viewport, reordering, and visibility.
-- [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) adapts the solver to terminal geometry.
+- [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) adapts shared state and the solver to terminal geometry; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) renders the projected result; [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns the TUI file boundary.
 
 ## Test map
 
 - [`TrackColumnDefaultsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnDefaultsTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
-- [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow, convergence, resize, and canonical state.
-- [`TrackColumnLayoutsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state and notification behavior.
+- [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow-safe finite-weight normalization, viewport overflow, convergence, resize, and canonical state.
+- [`TrackColumnLayoutsTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutsTest.cpp) protects per-list state, cascade deletion, notification behavior, and deletion-callback lifetime.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
 - [`TrackColumnLayoutMergingTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
 - [`TrackColumnControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
-- [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) and [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protect terminal layout and resize gestures.
+- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
 
 ## Related documents
 

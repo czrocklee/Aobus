@@ -6,13 +6,14 @@
 #include "LibraryController.h"
 #include "OutputDeviceController.h"
 #include "ShellInteractionModel.h"
-#include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
@@ -44,11 +45,18 @@ namespace ao::tui
 {
   using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
 
+  struct TrackColumnResizePreview final
+  {
+    ListId listId = kInvalidListId;
+    std::vector<uimodel::TrackColumnState> layout{};
+  };
+
   struct EventControllerBindings final
   {
     OutputDeviceController* outputDevices = nullptr;
     TuiHitRegions* hitRegions = nullptr;
-    std::vector<TrackColumnWidthOverride>* trackColumnWidthOverrides = nullptr;
+    uimodel::TrackColumnLayouts* trackColumnLayouts = nullptr;
+    TrackColumnResizePreview* trackColumnResizePreview = nullptr;
     uimodel::ActivityStatusViewModel* activityStatusViewModel = nullptr;
     rt::NotificationService* notifications = nullptr;
     InputCompletionCallback commandCompletionCallback{};
@@ -97,6 +105,7 @@ namespace ao::tui
                                                    std::stop_token stopToken);
     bool handleMouse(ftxui::Mouse const& mouse);
     std::optional<bool> handleActiveMouseDrag(ftxui::Mouse const& mouse);
+    bool handleTrackColumnResizeDrag(ftxui::Mouse const& mouse);
     std::optional<bool> handleMouseWheel(ftxui::Mouse const& mouse);
     bool handleMouseMove(ftxui::Mouse const& mouse);
     std::optional<bool> handleSeekRailPress(ftxui::Mouse const& mouse, bool modalInputActive);
@@ -113,6 +122,7 @@ namespace ao::tui
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
     void cancelSeekInteraction();
+    void cancelColumnResize();
     bool hasWorkspaceGesture() const noexcept;
     /**
      * @brief Drops pointer gestures the workspace can no longer own.
@@ -133,6 +143,7 @@ namespace ao::tui
       rt::TrackField field = rt::TrackField::Title;
       std::int32_t startX = 0;
       std::int32_t startColumns = 0;
+      ListId listId = kInvalidListId;
     };
 
     struct TrackScrollbarDrag final
@@ -151,7 +162,8 @@ namespace ao::tui
     uimodel::VolumeViewModel _volumeViewModel;
     OutputDeviceController* _outputDevices = nullptr;
     TuiHitRegions* _hitRegions = nullptr;
-    std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;
+    uimodel::TrackColumnLayouts* _trackColumnLayouts = nullptr;
+    TrackColumnResizePreview* _trackColumnResizePreview = nullptr;
     std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
     std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
     std::optional<SeekRailDrag> _optSeekRailDrag{};

@@ -6,6 +6,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryCommands.h>
 
@@ -257,7 +258,7 @@ namespace ao::rt::test
     CHECK(callCount == 2);
   }
 
-  TEST_CASE("ViewService - trackListPresentation returns a reference to the stored spec",
+  TEST_CASE("ViewService - findTrackListPresentation borrows the stored spec and reports a miss",
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
@@ -268,13 +269,15 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     REQUIRE(service.setPresentation(result, preset->spec));
 
-    auto const& presentation = service.trackListPresentation(result);
-    auto const& presentationAgain = service.trackListPresentation(result);
+    auto const* presentation = service.findTrackListPresentation(result);
+    auto const* presentationAgain = service.findTrackListPresentation(result);
 
     // Both calls hand back the same stored object: an accessor to the view's spec,
     // not a per-call copy of the whole TrackListViewState.
-    CHECK(&presentation == &presentationAgain);
-    CHECK(presentation.id == "albums");
-    CHECK(presentation.id == service.trackListState(result).presentation.id);
+    REQUIRE(presentation != nullptr);
+    CHECK(presentation == presentationAgain);
+    CHECK(presentation->id == "albums");
+    CHECK(presentation->id == service.trackListState(result).presentation.id);
+    CHECK(service.findTrackListPresentation(kInvalidViewId) == nullptr);
   }
 } // namespace ao::rt::test

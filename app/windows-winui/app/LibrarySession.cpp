@@ -149,8 +149,8 @@ namespace ao::winui
 
     auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
 
-    if (auto loadedRes =
-          _settingsStorePtr->load("trackView.columnLayouts", columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+    if (auto loadedRes = _settingsStorePtr->load(
+          uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
         loadedRes)
     {
       _columnLayouts.restore(std::move(columnLayouts));
@@ -160,8 +160,9 @@ namespace ao::winui
       APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
     }
 
-    if (auto loadedRes = _settingsStorePtr->load(
-          "trackView.presentations", _restoredListPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
+    if (auto loadedRes = _settingsStorePtr->load(uimodel::kListPresentationsConfigGroup,
+                                                 _restoredListPresentations,
+                                                 uimodel::ListPresentationPreferenceYamlSchema{});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
@@ -366,8 +367,9 @@ namespace ao::winui
     auto const listPresentations = _listPresentationsPtr->snapshot();
     return _settingsStorePtr->saveTogether(
       rt::configWrite("desktop", settings, winui::DesktopSettingsYamlSchema{}),
-      rt::configWrite("trackView.columnLayouts", columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
-      rt::configWrite("trackView.presentations", listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));
+      rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
+      rt::configWrite(
+        uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));
   }
 
   Result<> LibrarySession::commitSelectedRoot()
@@ -495,7 +497,7 @@ namespace ao::winui
       {
         auto const listPresentations = _listPresentationsPtr->snapshot();
         auto const savedRes = _settingsStorePtr->save(
-          "trackView.presentations", listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
+          uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
 
         if (!savedRes)
         {

@@ -25,7 +25,8 @@ Persistence follows state ownership rather than a universal store:
 music root
   -> MusicLibrary database                  durable library truth
   -> runtime workspace ConfigStore          per-library application session
-  -> GTK library presentation store         per-library UI preference
+  -> GTK library presentation store         per-library desktop UI preference
+  -> TUI library presentation store         per-library terminal UI preference
   -> TUI config store                       configurable TUI workspace/session
 
 user application directories
@@ -98,7 +99,7 @@ Persistence through a shared file mechanism does not transfer that responsibilit
 | Global GTK window and keymap state | The GTK workflow plus the runtime/UIModel value owner for each payload | `AppConfigStore` and the GTK composition root |
 | Customized shell layout documents | UIModel layout document and validation code, coordinated by the GTK shell-layout workflow | `ShellLayoutStore`, one document per preset |
 | Shell layout component runtime state | UIModel component-state model, pruning, and promotion rules | `ShellLayoutComponentStateStore` |
-| Desktop column and list-presentation preferences | UIModel presentation state plus the GTK and WinUI window workflows | `GtkLayoutStateStore` per library; WinUI `LibrarySession` under the platform application-data root |
+| Column and list-presentation preferences | UIModel presentation state plus each interactive frontend workflow | `GtkLayoutStateStore` per library; TUI per-library layout-state store; WinUI `LibrarySession` under the platform application-data root |
 | Preferred output selection | Core audio defines the neutral typed route, Runtime owns the engine-confirmed snapshot, UIModel owns pure restore resolution, and each frontend owns its requested/last-active lifecycle | GTK `AppConfigStore`, WinUI desktop settings, and the TUI application-preference file |
 | Windows desktop session and semantic theme | `aobus-winui-lib` settings/theme schemas and the WinUI process-session lifecycle | WinUI `LibrarySession`, `ConfigStore`, and theme coordinator under the platform application-data root |
 
@@ -154,14 +155,15 @@ music root is used only for library-bound runtime state.
 Every frontend persists the exact route requested through the shared selector and retains it independently of the engine-confirmed Runtime snapshot.
 GTK additionally captures the last active Runtime route in application-session state as a fallback when no valid explicit preference exists.
 After providers are registered, each frontend asks the pure UIModel policy to resolve stored intent and then submits the resulting runtime command itself.
-TUI keeps its preferences in its own file under the platform user-configuration directory, using the same groups and schema as every other frontend.
+TUI keeps its global application preferences in its own file under the platform user-configuration directory, using the same groups and schema as every other frontend that keeps them.
 It does not share GTK's file: `ConfigStore` rewrites a whole document from the snapshot it took at first read, so two frontends running at once against one file would drop each other's groups.
 When the environment names no configuration directory, TUI runs without preferences rather than failing to start.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
 TUI uses its selected `ConfigStore` for both workspace and playback-session groups, preserving one live document and one writer authority for that physical file, and opens a separate application-preference store for global output intent.
-It restores workspace before attaching terminal view state, then restores playback; normal exit sequences both checkpoints through that same runtime-owned store before playback stop and runtime shutdown.
+It also owns one per-library TUI layout store. That single writer atomically saves the UIModel column-layout and list-presentation groups together; its terminal-cell dimensions are never read from or written to the GTK pixel document. Before constructing stores, the composition root rejects path aliases among the runtime-session, layout, and global application-preference documents.
+TUI restores the two presentation groups before constructing the terminal library controller, restores workspace before attaching terminal view state, then restores playback. Layout and presentation changes save through the layout-store writer; normal exit retries a pending failed presentation checkpoint and sequences workspace and playback checkpoints through the runtime-owned store before playback stop and runtime shutdown.
 CLI opens the library database for the selected root but does not load interactive managed state.
 
 ## Boundaries and dependency direction
@@ -221,7 +223,7 @@ It always installs a private-user file after a complete write, data barrier, and
 Its success means the platform replacement call succeeded; it does not serialize concurrent writers, prove absolute power-loss durability, or acknowledge a newer in-memory revision on behalf of the state owner.
 
 Playback-session persistence adds event-driven debounce, natural checkpoints, and final checkpoint policy above this mechanism.
-Workspace, GTK preference, layout, and presentation owners use their own explicit lifecycle save points; the TUI composition root explicitly sequences workspace and playback checkpoints without introducing a shared lifecycle manager.
+Workspace, frontend preference, layout, and presentation owners use their own explicit lifecycle save points; the TUI composition root saves committed presentation-model changes through its dedicated store and explicitly sequences workspace and playback checkpoints without introducing a shared lifecycle manager.
 
 ### Library switching
 
@@ -299,7 +301,7 @@ The [runtime execution architecture](runtime-execution.md) owns executor and tea
 No shared asynchronous configuration writer is proposed; each semantic owner decides whether its small synchronous save belongs on the callback executor or needs a private asynchronous boundary.
 
 Before a runtime replacement, process restart, or ordinary TUI exit releases its graph, owners that require a final checkpoint run while the referenced runtime state and stores still exist.
-TUI cancels transient frontend work, checkpoints workspace and playback, and requests playback stop before destroying frontend observers; runtime shutdown follows those observer lifetimes.
+TUI cancels transient frontend work, retries any dirty layout/presentation checkpoint, checkpoints workspace and playback, and requests playback stop before destroying frontend observers; runtime shutdown follows those observer lifetimes.
 Playback-session shutdown precedes destruction of its sequence, transport, async runtime, and borrowed config store.
 Frontend stores shared with windows or controllers outlive those consumers and are released after their final save opportunity.
 The specialized layout component-state store provides its own mutex-protected operation lifetime; that property does not extend to `ConfigStore`.
@@ -323,7 +325,7 @@ The specialized layout component-state store provides its own mutex-protected op
   runtime command or owning a persistence location.
 - [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
   adapts that policy to WinUI's in-memory desktop settings before their normal checkpoint.
-- [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
+- [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters; [`TuiLayoutStateStore`](../../app/tui/TuiLayoutStateStore.h) is the independent terminal presentation-file adapter.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/Main.cpp`](../../app/tui/Main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), and [`CliRuntime.cpp`](../../app/cli/CliRuntime.cpp) select roots, platform locations, and overrides and compose runtime paths, stores, and lifecycle checkpoints.
 - WinUI [`App`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession`](../../app/windows-winui/app/LibraryWindowSession.cpp), and [`LibrarySession`](../../app/windows-winui/app/LibrarySession.cpp) sequence parent writer release, successor startup, and post-activation selected-root commit.
 - [`SelectedRootCommit`](../../app/windows-winui/include/ao/winui/app/SelectedRootCommit.h)
@@ -339,7 +341,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, store selection, and repeated frozen checkpoints across stop and shutdown.
-- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact active runtime view without a second navigation mutation.
+- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects exact TUI view attachment and per-list presentation resolution; [`TuiLayoutStateStoreTest.cpp`](../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protects the independent per-library file, atomic two-group saves, sibling preservation, and load isolation.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the GTK selected-root/playback admission boundary, failed-commit seal, prior-root preservation, and continued window, output, layout, and workspace saves over the shared global store.
 - [`AppStateTest.cpp`](../../test/unit/runtime/AppStateTest.cpp) protects the shared application groups, their seed-preserving reads, and per-group rejection isolation without composing a frontend.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect the GTK file boundary and delta-from-default keymaps.

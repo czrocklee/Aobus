@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <span>
 #include <tuple>
 #include <utility>
@@ -22,10 +23,21 @@ namespace ao::uimodel
   namespace
   {
     constexpr double kWeightScale = 1000.0;
+    constexpr double kMinimumCanonicalWeight = 1.0 / kWeightScale;
 
     double roundedWeight(double value)
     {
-      return std::round(value * kWeightScale) / kWeightScale;
+      if (value < kMinimumCanonicalWeight)
+      {
+        return kMinimumCanonicalWeight;
+      }
+
+      if (value >= std::numeric_limits<double>::max() / kWeightScale)
+      {
+        return value;
+      }
+
+      return std::max(kMinimumCanonicalWeight, std::round(value * kWeightScale) / kWeightScale);
     }
 
     std::int32_t normalizedMinimumWidth(TrackColumnSolveSpec const& spec)
@@ -40,8 +52,13 @@ namespace ao::uimodel
 
     double effectiveWeight(TrackColumnSolveSpec const& spec)
     {
-      auto const weight = spec.weight > 0.0 ? spec.weight : trackColumnDefaults(spec.field).weight;
-      return weight > 0.0 ? weight : 1.0;
+      if (spec.weight > 0.0 && std::isfinite(spec.weight))
+      {
+        return spec.weight;
+      }
+
+      auto const fallback = trackColumnDefaults(spec.field).weight;
+      return fallback > 0.0 && std::isfinite(fallback) ? fallback : 1.0;
     }
 
     std::int32_t effectiveFixedWidth(TrackColumnSolveSpec const& spec)
@@ -72,23 +89,36 @@ namespace ao::uimodel
       }
 
       double totalWeight = 0.0;
+      double maximumWeight = 0.0;
 
       for (auto const index : indices)
       {
-        totalWeight += effectiveWeight(specs[index]);
+        auto const weight = effectiveWeight(specs[index]);
+        totalWeight += weight;
+        maximumWeight = std::max(maximumWeight, weight);
       }
 
-      if (totalWeight <= 0.0)
+      auto const directAllocationIsSafe =
+        std::isfinite(totalWeight) && maximumWeight <= std::numeric_limits<double>::max() / amount;
+      double scaledTotalWeight = 0.0;
+
+      if (!directAllocationIsSafe)
       {
-        totalWeight = static_cast<double>(indices.size());
+        for (auto const index : indices)
+        {
+          scaledTotalWeight += effectiveWeight(specs[index]) / maximumWeight;
+        }
       }
 
       std::int32_t assigned = 0;
 
       for (std::size_t index = 0; index < indices.size(); ++index)
       {
-        auto const weight = totalWeight > 0.0 ? effectiveWeight(specs[indices[index]]) : 1.0;
-        auto const share = static_cast<std::int32_t>(std::floor((static_cast<double>(amount) * weight) / totalWeight));
+        auto const weight = effectiveWeight(specs[indices[index]]);
+        auto const exactShare = directAllocationIsSafe
+                                  ? (static_cast<double>(amount) * weight) / totalWeight
+                                  : (static_cast<double>(amount) * (weight / maximumWeight)) / scaledTotalWeight;
+        auto const share = static_cast<std::int32_t>(std::floor(exactShare));
         shares[index] = share;
         assigned += share;
       }
@@ -239,8 +269,8 @@ namespace ao::uimodel
 
     widths.assign(specs.size(), 0);
     auto flexibleIndices = std::vector<std::size_t>{};
-    std::int32_t fixedWidth = 0;
-    std::int32_t flexibleMinWidth = 0;
+    std::int64_t fixedWidth = 0;
+    std::int64_t flexibleMinWidth = 0;
 
     for (std::size_t index = 0; index < specs.size(); ++index)
     {
@@ -262,9 +292,9 @@ namespace ao::uimodel
       return widths;
     }
 
-    auto remainingWidth = viewportWidth - fixedWidth;
+    auto const remainingWidthCandidate = static_cast<std::int64_t>(viewportWidth) - fixedWidth;
 
-    if (remainingWidth <= flexibleMinWidth)
+    if (remainingWidthCandidate <= flexibleMinWidth)
     {
       for (auto const index : flexibleIndices)
       {
@@ -274,6 +304,7 @@ namespace ao::uimodel
       return widths;
     }
 
+    auto remainingWidth = static_cast<std::int32_t>(remainingWidthCandidate);
     auto active = flexibleIndices;
 
     while (!active.empty())
@@ -327,7 +358,7 @@ namespace ao::uimodel
     }
 
     auto flexibleIndices = std::vector<std::size_t>{};
-    std::int32_t flexibleWidth = 0;
+    std::int64_t flexibleWidth = 0;
 
     for (std::size_t index = 0; index < specs.size(); ++index)
     {
@@ -389,8 +420,8 @@ namespace ao::uimodel
 
     if (resizedIsFlexible)
     {
-      std::int32_t otherFixedWidth = 0;
-      std::int32_t otherFlexibleMinWidth = 0;
+      std::int64_t otherFixedWidth = 0;
+      std::int64_t otherFlexibleMinWidth = 0;
       bool hasOtherFlexible = false;
 
       for (std::size_t index = 0; index < specs.size(); ++index)
@@ -411,7 +442,8 @@ namespace ao::uimodel
         }
       }
 
-      auto const maxTarget = std::max(minTarget, viewportWidth - otherFixedWidth - otherFlexibleMinWidth);
+      auto const maxTarget = static_cast<std::int32_t>(std::max<std::int64_t>(
+        minTarget, static_cast<std::int64_t>(viewportWidth) - otherFixedWidth - otherFlexibleMinWidth));
       auto const minFeasibleTarget = hasOtherFlexible ? minTarget : maxTarget;
       clampedTarget = std::clamp(clampedTarget, minFeasibleTarget, maxTarget);
     }

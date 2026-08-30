@@ -385,6 +385,13 @@ namespace ao::tui
            size(WIDTH, EQUAL, columns);
   }
 
+  std::int32_t helpPaneColumns(i18n::MessageCatalog const& textCatalog, std::int32_t const terminalColumns)
+  {
+    auto const lines = resolveHelpPaneLines(textCatalog);
+    auto const title = std::string{overlayLabel(textCatalog, Overlay::Help)};
+    return resolvedHelpPaneColumns(lines, title, terminalColumns);
+  }
+
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog, std::int32_t const terminalColumns)
   {
     using namespace ftxui;

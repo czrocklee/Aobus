@@ -42,7 +42,7 @@ The four window coordinates encode the native normal-position rectangle in
 Windows workspace coordinates. `window.maximized` is applied independently.
 
 Presentation choice and column layout are deliberately not members of `desktop`.
-They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies.
+They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK, TUI, and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies; each frontend keeps a separate document for its geometry units.
 Column layout includes stable field order, canonical sizing, and visibility.
 Workspace owns the active view's current presentation and sort state.
 `windows-theme.yaml` requires exactly three maps. `shared` requires `fontFamily`, `accent`, `windowBackground`, `surface`, `textPrimary`, `textSecondary`, `divider`, and `selection`. `modern` requires `navigationBackground`, `inspectorBackground`, and `nowPlayingBackground`. `classic` requires `chrome`, `toolbarBackground`, `treeBackground`, and `statusBackground`. `chrome` is `system` or `retro` and defaults to `system` when the file is absent.

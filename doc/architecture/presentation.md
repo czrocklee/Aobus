@@ -129,7 +129,7 @@ UIModel owns List-order eligibility, revision-bound authoring sessions, stable-I
 It permits saved-order writes only for a saved List in a flat presentation with empty `sortBy`; All Tracks, grouping, active presentation sorting, source errors, maintenance, and stale bindings are explicit disabled or cancelled states.
 
 UIModel owns semantic track-field column roles, including sizing, start/end
-alignment, persisted visibility, and stored-order projection.
+alignment, persisted visibility, stored-order projection, and per-list layout cleanup after committed list deletion.
 GTK, WinUI, and TUI translate those roles to native geometry without maintaining
 independent field classifications.
 
@@ -172,6 +172,7 @@ TUI owns FTXUI components, terminal geometry, key/mouse routing, overlays, refre
 It constructs the same `AppRuntime`, uses shared runtime services and selected UIModel view models/policies, and builds terminal elements from their state.
 
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
+The TUI composition root instantiates the shared `TrackPresentationCatalog`, `ListPresentations`, and `TrackColumnLayouts` models for the selected library. Its frontend-local store adapter chooses a TUI-only document and terminal-cell geometry, while the shared UIModel models and schemas remain the semantic authorities. A column drag is a terminal preview until release commits one canonical per-list layout; cancellation discards the preview.
 Its output overlay consumes the same UIModel output-device view model as GTK and WinUI.
 Its list chooser consumes the shared UIModel list-tree projection, and its live Quick Filter consumes the same UIModel track-filter completer as GTK's Quick-filter entry.
 Its separate Command Palette retains terminal-only command and presentation routing and delegates only explicit filter arguments to that completer.
@@ -338,7 +339,8 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h) and [`ShellLayoutCollaborators`](../../app/linux-gtk/app/ShellLayoutCollaborators.h) define GTK composition boundaries.
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
-- [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
+- [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, rendering, and the one TUI layout-state writer.
+- [`TerminalTrackColumnLayout`](../../app/tui/TerminalTrackColumnLayout.h) adapts shared column semantics to terminal cells; [`TuiLayoutStateStore`](../../app/tui/TuiLayoutStateStore.h) owns the TUI per-library presentation-file boundary.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
 - [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h), its [`ICU implementation`](../../app/i18n/MessageCatalog.cpp), and the canonical [`catalog assets`](../../app/i18n/catalog/root.txt) define the interactive localization leaf.
@@ -365,7 +367,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
 - [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.
 - [`LayoutRuntimeBuildTest.cpp`](../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp) protects the UIModel-layout to GTK-widget boundary.
-- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) and [`TuiHitRegionsTest.cpp`](../../test/unit/tui/TuiHitRegionsTest.cpp) protect TUI runtime adaptation and terminal-only policy.
+- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp), [`TerminalTrackColumnLayoutTest.cpp`](../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TuiLayoutStateStoreTest.cpp`](../../test/unit/tui/TuiLayoutStateStoreTest.cpp), and [`TuiHitRegionsTest.cpp`](../../test/unit/tui/TuiHitRegionsTest.cpp) protect TUI runtime adaptation, terminal-cell projection, per-library persistence, and terminal-only policy.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects non-interactive runtime adaptation.
 
 ## Related documents

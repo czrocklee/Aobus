@@ -11,6 +11,7 @@
 
 #include <map>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,13 +31,28 @@ namespace ao::uimodel
       [this](rt::LibraryChangeSet const& changeSet)
       {
         auto removedListIds = std::vector<ListId>{};
-        removedListIds.reserve(changeSet.listsDeleted.size());
 
-        for (auto const listId : changeSet.listsDeleted)
+        if (changeSet.libraryReset)
         {
-          if (_presentations.erase(listId) > 0)
+          removedListIds.reserve(_presentations.size());
+
+          for (auto const listId : _presentations | std::views::keys)
           {
             removedListIds.push_back(listId);
+          }
+
+          _presentations.clear();
+        }
+        else
+        {
+          removedListIds.reserve(changeSet.listsDeleted.size());
+
+          for (auto const listId : changeSet.listsDeleted)
+          {
+            if (_presentations.erase(listId) > 0)
+            {
+              removedListIds.push_back(listId);
+            }
           }
         }
 

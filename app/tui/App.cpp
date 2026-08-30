@@ -25,9 +25,11 @@
 #include "SignalExitWatcher.h"
 #include "StatusBar.h"
 #include "Style.h"
+#include "TerminalTrackColumnLayout.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include "TuiLayoutStateStore.h"
 #include "TuiText.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -46,6 +48,9 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputSelection.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
@@ -318,13 +323,13 @@ namespace ao::tui
       i18n::MessageCatalog const& textCatalog;
       LibraryController& library;
       ShellInteractionModel& shell;
-      rt::AppRuntime& runtime;
       rt::PlaybackService& playback;
       OutputDeviceController& outputDevices;
       uimodel::ActivityStatusViewModel& activityStatusViewModel;
       EventController& events;
       TuiHitRegions& hitRegions;
-      std::vector<TrackColumnWidthOverride>& trackColumnWidthOverrides;
+      uimodel::TrackColumnLayouts& trackColumnLayouts;
+      TrackColumnResizePreview& trackColumnResizePreview;
       uimodel::PlaybackPositionInterpolator& playbackClock;
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
       CoverArtLoader& coverArt;
@@ -389,7 +394,19 @@ namespace ao::tui
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
         auto const animationElapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
-        auto const& presentation = runtime.views().trackListPresentation(library.activeViewId());
+        auto const& presentation = library.activePresentation();
+        auto const sidePanelLimit = sidePanelColumnsLimit(terminalColumns);
+        auto const detailPanelColumns =
+          detailVisible ? detailPaneColumns(textCatalog, sidePanelLimit, coverColumns) : 0;
+        auto const helpPanelColumns =
+          shell.overlay() == Overlay::Help ? helpPaneColumns(textCatalog, sidePanelLimit) : 0;
+        auto const sidePaneColumns = std::max(detailPanelColumns, helpPanelColumns);
+        auto const availableTrackColumns = std::max(1, terminalColumns - sidePaneColumns - 2);
+        auto const listId = library.currentListId();
+        auto const& storedLayout = trackColumnResizePreview.listId == listId ? trackColumnResizePreview.layout
+                                                                             : trackColumnLayouts.layoutForList(listId);
+        auto const terminalColumnLayout =
+          projectTerminalTrackColumnLayout(presentation, storedLayout, availableTrackColumns);
         auto const hoveredButton = shell.isInputActive() ? HoveredButton::None : events.hoveredButton();
         auto tableElementPtr =
           trackTableView(textCatalog,
@@ -398,11 +415,11 @@ namespace ao::tui
                          library.selectedTrack(),
                          state.nowPlaying.trackId,
                          presentation,
-                         TrackTableViewOptions{.columnWidths = &trackColumnWidthOverrides,
+                         TrackTableViewOptions{.columnLayout = &terminalColumnLayout,
                                                .resizeHandles = &hitRegions.trackColumnResizeHandles,
                                                .sectionRowHitRegions = &hitRegions.trackSectionRows,
                                                .tableBox = &hitRegions.trackTableBox,
-                                               .availableColumns = std::max(1, terminalColumns - 2),
+                                               .availableColumns = availableTrackColumns,
                                                .viewportRows = terminalRows});
         auto const presentationTitle = trackPresentationDisplayId(textCatalog, presentation.id);
         auto workspaceElementPtr =
@@ -456,11 +473,9 @@ namespace ao::tui
           }
           case Overlay::DetailPanel:
           {
-            auto const panelColumns =
-              detailPaneColumns(textCatalog, sidePanelColumnsLimit(terminalColumns), coverColumns);
             mainContentPtr = hbox({
               workspaceElementPtr,
-              detailPane(textCatalog, selectedTrackView.track, std::move(coverElementPtr), panelColumns),
+              detailPane(textCatalog, selectedTrackView.track, std::move(coverElementPtr), detailPanelColumns),
             });
             break;
           }
@@ -494,7 +509,7 @@ namespace ao::tui
           {
             mainContentPtr = hbox({
               workspaceElementPtr,
-              helpPane(textCatalog, sidePanelColumnsLimit(terminalColumns)),
+              helpPane(textCatalog, helpPanelColumns),
             });
             break;
           }
@@ -611,19 +626,28 @@ namespace ao::tui
      * is degraded, not failed, and every caller below is spared a null check for
      * a case none of them can do anything about.
      */
-    std::unique_ptr<rt::ConfigStore> openAppConfigStore()
+    std::optional<std::filesystem::path> resolveAppConfigPath()
     {
       auto dirRes = utility::applicationConfigDirectory();
 
       if (!dirRes)
       {
         APP_LOG_INFO("TUI: keeping no application preferences: {}", dirRes.error().message);
+        return std::nullopt;
+      }
+
+      return *dirRes / "tui.yaml";
+    }
+
+    std::unique_ptr<rt::ConfigStore> openAppConfigStore(std::optional<std::filesystem::path> const& optAppConfigPath)
+    {
+      if (!optAppConfigPath)
+      {
         return std::make_unique<rt::ConfigStore>(rt::ConfigStore::NoLocation{});
       }
 
-      auto const path = *dirRes / "tui.yaml";
       auto ec = std::error_code{};
-      std::filesystem::create_directories(path.parent_path(), ec);
+      std::filesystem::create_directories(optAppConfigPath->parent_path(), ec);
 
       if (ec)
       {
@@ -631,7 +655,7 @@ namespace ao::tui
         return std::make_unique<rt::ConfigStore>(rt::ConfigStore::NoLocation{});
       }
 
-      return std::make_unique<rt::ConfigStore>(path);
+      return std::make_unique<rt::ConfigStore>(*optAppConfigPath);
     }
 
     /**
@@ -710,15 +734,34 @@ namespace ao::tui
       coverArtDeliveryMode = CoverArtDeliveryMode::Blocks;
     }
 
-    std::filesystem::create_directories(options.configPath.parent_path());
-    // Logging comes up first: opening the preference store is the first thing
-    // that can degrade, and its one explanation of why this session keeps
-    // nothing would otherwise be written to the null sink that stands in until
-    // initialize() runs.
+    auto workspaceConfigDirectoryEc = std::error_code{};
+    std::filesystem::create_directories(options.configPath.parent_path(), workspaceConfigDirectoryEc);
+
+    if (workspaceConfigDirectoryEc)
+    {
+      std::println(stderr,
+                   "Failed to prepare the TUI workspace configuration directory: {}",
+                   workspaceConfigDirectoryEc.message());
+      return 1;
+    }
+
+    // Logging comes up before opening the optional preference store: its one
+    // explanation of why this session keeps nothing would otherwise be written
+    // to the null sink that stands in until initialize() runs.
     rt::Log::initialize(
       options.logLevel, rt::LibraryPaths{options.libraryRoot}.logsPath(), rt::LogConsoleMode::Disabled);
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
-    auto const appConfigStorePtr = openAppConfigStore();
+    auto const optAppConfigPath = resolveAppConfigPath();
+
+    if (auto const validatedRes =
+          validateTuiConfigStorePaths(options.libraryRoot, options.configPath, optAppConfigPath);
+        !validatedRes)
+    {
+      std::println(stderr, "Invalid TUI managed-state paths: {}", validatedRes.error().message);
+      return 1;
+    }
+
+    auto const appConfigStorePtr = openAppConfigStore(optAppConfigPath);
     // Declared before AppRuntime so the executor's borrowed screen reference
     // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
@@ -759,7 +802,48 @@ namespace ao::tui
     // Declared before every frontend observer so reverse destruction retires
     // all callback targets before Runtime stops producers and its executor.
     auto const runtimeShutdown = gsl_lite::finally([&runtime] { runtime.shutdown(); });
-    auto library = LibraryController{runtime, textCatalog};
+    auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
+    auto layoutStateStore = TuiLayoutStateStore{options.libraryRoot};
+    auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
+    auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
+    layoutStateStore.load(restoredColumnLayouts, restoredListPresentations);
+
+    auto presentationCatalog = uimodel::TrackPresentationCatalog{runtime.workspace(), textCatalog};
+    auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtime.library().changes()};
+    listPresentations.restore(std::move(restoredListPresentations));
+    auto trackColumnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    trackColumnLayouts.restore(std::move(restoredColumnLayouts));
+    // Input dispatch and Runtime library callbacks share the screen executor,
+    // keeping this one unsynchronized ConfigStore writer serial. A loop-turn
+    // checkpoint folds every per-list signal in one LibraryChangeSet into the
+    // final combined document instead of writing intermediate model states.
+    bool layoutStateDirty = false;
+    bool layoutCheckpointRequested = false;
+    auto saveLayoutState = [&]
+    {
+      if (auto const savedRes = layoutStateStore.save(trackColumnLayouts.snapshot(), listPresentations.snapshot());
+          !savedRes)
+      {
+        APP_LOG_WARN("TUI: failed to persist layout state: {}", savedRes.error().message);
+        return;
+      }
+
+      layoutStateDirty = false;
+    };
+    auto requestLayoutCheckpoint = [&]
+    {
+      layoutStateDirty = true;
+
+      if (!std::exchange(layoutCheckpointRequested, true))
+      {
+        requestRefresh();
+      }
+    };
+    auto columnLayoutsSub =
+      trackColumnLayouts.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
+    auto listPresentationsSub =
+      listPresentations.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
+    auto library = LibraryController{runtime, textCatalog, listPresentations};
     runtime.startPlaybackSessionPersistence();
 
     if (auto const restoredRes = runtime.restorePlaybackSession(); !restoredRes)
@@ -769,13 +853,12 @@ namespace ao::tui
 
     auto shell = ShellInteractionModel{};
     auto hitRegions = TuiHitRegions{};
-    auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
+    auto trackColumnResizePreview = TrackColumnResizePreview{};
     auto kittyPaintState = KittyPaintState{};
     auto const cellAspectRatio = queryTerminalCellAspectRatio();
     auto const coverColumns = coverArtColumns(kCoverArtRows, cellAspectRatio);
 
     auto& playback = runtime.playback();
-    auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
     auto coverArt =
       CoverArtLoader{runtime.resourceBytes(), runtime.async(), coverArtDeliveryMode, requestRefresh, coverColumns};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
@@ -832,7 +915,8 @@ namespace ao::tui
                                   EventControllerBindings{
                                     .outputDevices = &outputDevices,
                                     .hitRegions = &hitRegions,
-                                    .trackColumnWidthOverrides = &trackColumnWidthOverrides,
+                                    .trackColumnLayouts = &trackColumnLayouts,
+                                    .trackColumnResizePreview = &trackColumnResizePreview,
                                     .activityStatusViewModel = &activityStatusViewModel,
                                     .notifications = &runtime.notifications(),
                                     .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
@@ -847,13 +931,13 @@ namespace ao::tui
       .textCatalog = textCatalog,
       .library = library,
       .shell = shell,
-      .runtime = runtime,
       .playback = playback,
       .outputDevices = outputDevices,
       .activityStatusViewModel = activityStatusViewModel,
       .events = events,
       .hitRegions = hitRegions,
-      .trackColumnWidthOverrides = trackColumnWidthOverrides,
+      .trackColumnLayouts = trackColumnLayouts,
+      .trackColumnResizePreview = trackColumnResizePreview,
       .playbackClock = playbackClock,
       .optPreviewElapsed = optPreviewElapsed,
       .coverArt = coverArt,
@@ -881,6 +965,11 @@ namespace ao::tui
       loop.RunOnceBlocking();
       frameTimer.recordPresentIfDrawn();
 
+      if (std::exchange(layoutCheckpointRequested, false))
+      {
+        saveLayoutState();
+      }
+
       activityStatusViewModel.autoDismissCompactIfDue();
 
       if (kittyCoverArt)
@@ -897,6 +986,12 @@ namespace ao::tui
 
     coverArt.cancel();
     events.cancelTransientInteractions();
+
+    if (layoutStateDirty)
+    {
+      saveLayoutState();
+    }
+
     runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
     if (auto const savedRes = runtime.savePlaybackSession(); !savedRes)

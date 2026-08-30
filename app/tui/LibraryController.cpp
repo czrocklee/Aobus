@@ -25,6 +25,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
@@ -42,9 +43,12 @@
 
 namespace ao::tui
 {
-  LibraryController::LibraryController(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog)
+  LibraryController::LibraryController(rt::AppRuntime& runtime,
+                                       i18n::MessageCatalog textCatalog,
+                                       uimodel::ListPresentations& listPresentations)
     : _runtime{runtime}
     , _textCatalog{std::move(textCatalog)}
+    , _listPresentations{listPresentations}
     , _libraryEntries{loadLibraryNavigation()}
     , _libraryLabels{libraryNavigationLabels(_libraryEntries)}
     , _presentationEntries{loadPresentationNavigation()}
@@ -95,14 +99,21 @@ namespace ao::tui
 
   std::string LibraryController::activePresentationId() const
   {
-    if (_activeViewId == rt::kInvalidViewId)
+    // Reached from the workspace observer via refreshPresentationNavigation().
+    auto const* presentation = _runtime.views().findTrackListPresentation(_activeViewId);
+    return presentation == nullptr ? std::string{} : presentation->id;
+  }
+
+  rt::TrackPresentationSpec const& LibraryController::activePresentation() const
+  {
+    if (auto const* presentation = _runtime.views().findTrackListPresentation(_activeViewId); presentation != nullptr)
     {
-      return {};
+      return *presentation;
     }
 
-    // Reached from the workspace observer via refreshPresentationNavigation().
-    auto const foundRes = _runtime.views().findTrackListState(_activeViewId);
-    return foundRes ? foundRes->presentation.id : std::string{};
+    auto const* fallback = rt::builtinTrackPresentationPreset(rt::kDefaultTrackPresentationId);
+    AO_INVARIANT(fallback != nullptr, "The default track presentation must be registered");
+    return fallback->spec;
   }
 
   SelectedTrackView LibraryController::selectedTrackView() const
@@ -332,6 +343,8 @@ namespace ao::tui
     _tracks = std::move(snapshotRes->tracks);
     _sections = std::move(snapshotRes->sections);
     syncSelectedPresentation(spec.id);
+
+    _listPresentations.setPresentationIdForList(_currentListId, spec.id);
 
     if (!setSelectedTrackById(previousTrackId))
     {
@@ -670,17 +683,42 @@ namespace ao::tui
     return true;
   }
 
+  rt::TrackPresentationSpec LibraryController::presentationForList(ListId const listId) const
+  {
+    auto context = uimodel::ListPresentationContext{
+      .listId = listId,
+      .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
+    };
+
+    if (!rt::isVirtualListId(listId))
+    {
+      if (auto const optNode = _runtime.library().snapshot().listNode(listId); optNode)
+      {
+        context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
+        context.listExpression = optNode->expression;
+        return _listPresentations.presentationForList(context);
+      }
+    }
+
+    return _listPresentations.presentationForList(context);
+  }
+
   Result<> LibraryController::navigateToList(ListId const listId)
   {
     auto navigationRes = Result<rt::ViewId>{};
+    auto const presentation = rt::NavigationPresentation{
+      .mode = rt::NavigationPresentationMode::NewViewDefault,
+      .spec = presentationForList(listId),
+    };
 
     if (listId == rt::kAllTracksListId)
     {
-      navigationRes = _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
+      navigationRes =
+        _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks, .optPresentation = presentation});
     }
     else
     {
-      navigationRes = _runtime.workspace().navigate({.target = listId});
+      navigationRes = _runtime.workspace().navigate({.target = listId, .optPresentation = presentation});
     }
 
     if (!navigationRes)

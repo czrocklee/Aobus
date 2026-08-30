@@ -3,15 +3,15 @@ id: presentation.persisted-state
 type: reference
 status: current
 domain: presentation
-summary: Enumerates versioned desktop presentation documents, stable token authorities, exact fields, validation, and compatibility behavior.
+summary: Enumerates versioned interactive presentation documents, stable token authorities, exact fields, validation, and compatibility behavior.
 ---
 # Persisted presentation state
 
 ## Scope and version
 
 This reference owns the exact version-2 `trackView.columnLayouts` payload and
-version-1 `trackView.presentations` payload stored by desktop frontends.
-GTK stores them per library in `gtk_layout.yaml`; WinUI stores them alongside its desktop group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml`.
+version-1 `trackView.presentations` payload stored by interactive frontends.
+GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them alongside its desktop group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
 The [workspace session-state reference](../workspace/session-state.md) owns the exact workspace group.
@@ -23,10 +23,10 @@ There is no migration from earlier or unversioned payloads.
 
 ## Code boundary
 
-This surface spans the application runtime, UIModel, and desktop persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
+This surface spans the application runtime, UIModel, and interactive-frontend persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
 The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
-`GtkLayoutStateStore` and the WinUI `LibrarySession` own their respective files and literal group names but do not redefine either payload.
+`GtkLayoutStateStore`, `TuiLayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
 
 ## Stable vocabulary
 
@@ -83,7 +83,7 @@ trackView.columnLayouts:
 | Field | Type | Requirement |
 |---|---|---|
 | `field` | Stable track-field id. | Required and known. |
-| `width` | Signed 32-bit integer. | Fixed state uses a positive value; flexible state uses `-1`. |
+| `width` | Signed 32-bit integer. | Fixed state uses a positive value in the containing frontend document's geometry unit; flexible state uses `-1`. GTK and WinUI interpret positive widths as desktop pixel units, while TUI interprets them as terminal cells. |
 | `weight` | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value. |
 | `visible` | Boolean. | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it. |
 
@@ -91,6 +91,8 @@ Exactly one canonical dimension form is accepted:
 
 - fixed: `width > 0` and `weight == -1`;
 - flexible: `width == -1` and finite `weight > 0`.
+
+The shared payload accepts every positive signed 32-bit fixed width. When this payload is contained by `tui_layout.yaml`, the terminal adapter projects fixed values into its supported 8-through-160-cell range; desktop adapters retain their own geometry policy.
 
 ## List-presentation preference group
 
@@ -139,8 +141,10 @@ It is not a complete workspace root schema version.
 - The two groups are independent on load, so rejection of one does not reject a valid sibling group.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
 - WinUI loads each group into a temporary typed candidate during stable-session construction and retains the corresponding default when a candidate is missing or rejected.
+- TUI loads each group independently before connecting model-save observers, preserving a seeded group when its sibling succeeds or it is rejected.
 - Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
-- Each desktop writer submits both schemas through one `saveTogether()` candidate, so a serialization failure cannot persist only one new group.
+- GTK, TUI, and the combined WinUI settings checkpoint submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI may save an isolated presentation-preference change as a single-group transaction.
+- Layout documents are frontend-local: no writer converts or copies a positive `width` between desktop pixel units and terminal cells.
 
 ## Compatibility and versioning
 
@@ -153,7 +157,7 @@ Changing a stable token's meaning or spelling requires an explicit compatibility
 Adding a token does not change the meaning of existing documents, but older
 readers reject a document that uses the new unknown value.
 
-The surrounding `gtk_layout.yaml` and `windows-settings.yaml` files have no shared envelope version.
+The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `windows-settings.yaml` files have no shared envelope version.
 Each literal group carries and gates its own payload version.
 
 ## Implementation authority
@@ -161,7 +165,8 @@ Each literal group carries and gates its own payload version.
 - [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) and [`TrackField.cpp`](../../../app/runtime/TrackField.cpp) own stable token conversion.
 - [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) own the layout document and conversion.
 - [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.cpp`](../../../app/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp) own the preference document and conversion.
-- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns group selection, load policy, and the file save boundary.
+- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns GTK group selection, load policy, and the file save boundary.
+- [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns TUI group selection, independent-load policy, and the terminal file save boundary.
 - [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI group selection, load policy, and atomic file save boundary.
 
 ## Test authority
@@ -169,7 +174,7 @@ Each literal group carries and gates its own payload version.
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects exact group integration, seeded fallback, and canonical output.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
 
 ## Related documents

@@ -79,7 +79,8 @@ The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a who
 |---|---|---|---|
 | `<root>/.aobus/library/` | GTK, TUI, and CLI | Default LMDB music-library database | TUI `--database` may select another database path; CLI derives this path from `-C`/`--root` or `AOBUS_ROOT` |
 | `<root>/.aobus/library/workspace.yaml` | GTK | Runtime workspace and view session | None in the current GTK command surface |
-| `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library track-column and list-presentation preferences | None |
+| `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library desktop track-column and list-presentation preferences | None |
+| `<root>/.aobus/tui_layout.yaml` | TUI | Per-library terminal-cell track-column and list-presentation preferences | None |
 | `<root>/.aobus/tui-workspace.yaml` | TUI | Default workspace and playback-session `ConfigStore` | `--config` selects another file |
 | `<root>/.aobus/logs/` | TUI | TUI operational logs | The library root changes the base location |
 
@@ -88,10 +89,11 @@ The current GTK database path is `<root>/.aobus/library/`.
 
 TUI passes one store as the owned workspace store and does not inject a separate playback-session store.
 `AppRuntime` therefore uses the selected TUI configuration file for both managed-state groups.
+The TUI layout file is always derived from the selected root and is independent of `--config`; one `TuiLayoutStateStore` writer owns both of its presentation groups.
 
 ### CLI and interchange files
 
-CLI opens `<root>/.aobus/library/` and does not load the interactive workspace, playback-session, GTK application, or GTK presentation files.
+CLI opens `<root>/.aobus/library/` and does not load the interactive workspace, playback-session, application-preference, GTK presentation, or TUI presentation files.
 Its root is selected through `-C`/`--root` or `AOBUS_ROOT`.
 
 Library YAML imports and exports use user-selected input or output paths.
@@ -105,7 +107,7 @@ Linux defaults and `AOBUS_BUILD_ROOT` are described in the repository [README](.
 - `ShellLayoutStore` rejects an empty preset id and ids containing `/`, `\`, or `..` before constructing a path.
 - `ShellLayoutComponentStateStore` additionally rejects preset ids containing a null byte.
 - A TUI `--database` override changes the database path without changing the selected music root.
-- A TUI `--config` override changes the workspace/playback-session file without changing its payload ownership.
+- A TUI `--config` override changes the workspace/playback-session file without changing its payload ownership or the independent `tui_layout.yaml` location; startup rejects an override that aliases the TUI layout or global application-preference file.
 - TUI normalizes its selected root and override paths to absolute lexical paths before runtime composition.
 - CLI passes its selected root to `LibraryPaths` and opens the derived database without a separate interactive configuration store.
 - `LibraryPaths::hasExistingDatabase()` detects a database created at the canonical location without exposing the LMDB marker filename to a frontend.
@@ -131,7 +133,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) owns the shared derived cover-cache layout below the supplied runtime cache directory.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
-- [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store.
+- [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store; [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) appends the TUI presentation filename to the canonical managed-data path.
 - [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root and resolves the cache directory it passes to the runtime.
 - [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h), [`PlatformDirectoriesPosix.cpp`](../../../lib/utility/PlatformDirectoriesPosix.cpp), and [`PlatformDirectoriesWindows.cpp`](../../../lib/utility/PlatformDirectoriesWindows.cpp) own the config and cache resolvers.
 - [`LibraryWindowLifecycle.cpp`](../../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`app/tui/App.cpp`](../../../app/tui/App.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) resolve the same cache directory for their frontends.
@@ -145,7 +147,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects the per-library GTK presentation file.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement and owner-only permission behavior used by managed YAML files.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects CLI root use around the runtime boundary.
-- TUI option defaults are exercised through the TUI application and tooling build/test gates; no focused path-surface test currently locks every TUI override.
+- [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protects the exact per-library TUI presentation path; TUI option defaults are exercised through the TUI application and tooling build/test gates, and no focused test currently locks every override.
 
 ## Related documents
 

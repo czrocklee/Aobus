@@ -4,6 +4,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
@@ -20,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -179,6 +181,26 @@ namespace ao::uimodel::test
     CHECK(removed == std::vector{parentId, childId, grandchildId});
     REQUIRE(listPresentations.snapshot().size() == 1);
     CHECK(listPresentations.snapshot().contains(unrelatedId));
+  }
+
+  TEST_CASE("ListPresentations - library reset clears every preference",
+            "[uimodel][regression][presentation][library-reset]")
+  {
+    auto presentationFixture = TrackPresentationFixture{};
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
+    auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
+    listPresentations.restore({{ListId{42}, "songs"}, {ListId{43}, "albums"}});
+    auto removed = std::vector<ListId>{};
+    auto sub = listPresentations.signalChanged().connect([&removed](ListId const listId) noexcept
+                                                         { removed.push_back(listId); });
+
+    std::ignore = rt::test::addTrackAndPublishReset(
+      libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset"}, executor);
+
+    CHECK(listPresentations.snapshot().empty());
+    CHECK(removed == std::vector{ListId{42}, ListId{43}});
   }
 
   TEST_CASE("ListPresentations - deletion callback may destroy its owner",

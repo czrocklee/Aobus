@@ -50,7 +50,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Soul/Space transport toggles and ordinary stop requests use `PlaybackActions`; explicit selected-track activation remains a distinct view-based sequence command.
 - A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
-- Column drag changes only TUI session-local widths.
+- Column drag previews a per-list terminal-cell layout; only normal release commits it, while any interruption rolls the preview back.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
 
 ## State model
@@ -59,6 +59,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 `EventController` retains pointer drags for seek, scrollbar, and column resize plus hover state.
 It also retains one cancellable generation-checked Quick Filter debounce task; all shell and library access occurs after resumption on the callback executor.
 `LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, applied filter draft and error, and presentation adaptation.
+The composition root retains one shared presentation catalog, one per-list presentation-preference model, one per-list column-layout model, and one frontend-local store writer for the selected library.
 
 Each input mode's completion result carries a replacement range, ranked items, display text, insertion text, and detail.
 Quick Filter drafts delegate directly to the shared UIModel track-filter completer, which selects live values or structured expression candidates according to the same boundary as GTK.
@@ -101,11 +102,13 @@ Runtime/query completions without TUI category metadata retain their core detail
 Track navigation moves selection by row/page/endpoints; group navigation selects the first track in the previous/next section.
 Mouse wheel moves selection by three tracks.
 Dragging the table scrollbar maps its visual position to a selectable track.
-Clicking a section header selects its first track; dragging a header edge installs a session-local width override.
+Clicking a section header selects its first track; dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list.
 
 After runtime workspace restore, `LibraryController` reads the active process-local `ViewId` and materializes that view directly.
 It does not navigate by `ListId`, so multiple filtered views over one list remain distinct and construction adds no history entry.
 Only a missing or unusable active view opens the All Tracks fallback.
+A fallback or later plain-list navigation supplies that list's saved or recommended presentation as `NewViewDefault`; runtime view reuse still retains the exact active presentation.
+A successful user presentation choice records the current base list's preference, while filtering and exact workspace attachment do not.
 Reload follows the same direct materialization path; if the controller's view disappeared, it attaches a different active workspace view when available and otherwise opens All Tracks.
 
 The list overlay renders All Tracks first and walks the shared list tree in preorder.
@@ -163,6 +166,7 @@ An invalid live expression remains visible in the Quick Filter panel without pos
 Return or Escape performs one immediate final application before the panel closes; a recoverable expression error posts one Warning, while a command-level failure posts one Error.
 Replacing, closing, or destroying Quick Filter input requests stop on the pending timer; a stopped or obsolete generation cannot mutate shell or library state.
 Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
+An interrupted column drag instead discards its preview. Overlay changes, text input, list changes, unrelated pointer presses, and teardown therefore produce no column-layout model change or save.
 
 `q`, the `quit` command, Ctrl-C, and signal exit only request that the event loop end; input dispatch does not stop playback early.
 Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, and cover work before persistence captures state.
@@ -175,12 +179,15 @@ Frame timers and executor callbacks cannot access the screen after their owning 
 
 TUI workspace config defaults to `<root>/.aobus/tui-workspace.yaml` and follows the workspace session contract.
 The runtime uses one `ConfigStore` writer for both its `workspace` and `playback-session` groups in that file.
-Workspace is restored before terminal view attachment; playback observation and restore follow before the event loop.
-Normal exit checkpoints both groups before stop and runtime shutdown.
+The independent `<root>/.aobus/tui_layout.yaml` file has one TUI writer for `trackView.columnLayouts` and `trackView.presentations`; committed model changes save both groups atomically.
+Column widths in that document are terminal cells and are never converted to or from desktop pixels.
+Workspace and presentation state are restored before terminal view attachment; playback observation and restore follow before the event loop.
+Normal exit discards any unfinished column preview, retries a pending failed presentation checkpoint, checkpoints both runtime groups, then stops playback before runtime shutdown.
 
 Restored workspace state includes open view configurations, exact active-view choice, and custom presentation presets; it excludes track selection and navigation history beyond the reconstructed initial point.
 Restored playback state includes source/filter/order, current track and position, modes, volume, and mute without autoplay.
-Column overrides, active overlay, input draft/mode, the original Quick Filter editing draft, hover, and pointer gestures are session-local and unversioned.
+Restored TUI presentation state includes each list's column order, visibility, fixed cell widths or flexible weights, and preferred presentation id.
+Active overlay, input draft/mode, the original Quick Filter editing draft, hover, and pointer gestures are session-local and unversioned.
 The preferred output route is stored separately in the global TUI application-preference file.
 Exact startup paths/options and managed locations belong to the TUI and persistence references.
 
@@ -200,10 +207,10 @@ The notification center can be opened explicitly even when compact status is not
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input, command parsing, and overlay state.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`CommandCompletionProvider.cpp`](../../../app/tui/CommandCompletionProvider.cpp) separates Command Palette and live Quick Filter providers.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation.
-- [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, and reload fallback.
+- [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
-- [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) owns track-table output.
+- [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) projects shared column state into terminal cells; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) owns track-table output; [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns the presentation file.
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
 
 ## Test map
@@ -211,7 +218,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, and exit without early playback stop.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, and list-deletion recovery.
-- [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) protects sections, viewport, widths, and selection.
+- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal-cell projection, sections, viewport, persisted widths, and selection.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.
 - Command completion tests under [`test/unit/tui/`](../../../test/unit/tui/) protect prefix, alias, presentation, Quick-filter, and expression completion.

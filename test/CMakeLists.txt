@@ -735,9 +735,11 @@ add_executable(ao_tui_test
     unit/tui/RenderTest.cpp
     unit/tui/ShellInteractionModelTest.cpp
     unit/tui/SoulButtonTest.cpp
+    unit/tui/TerminalTrackColumnLayoutTest.cpp
     unit/tui/TextCellTest.cpp
     unit/tui/TrackTableTest.cpp
     unit/tui/TuiHitRegionsTest.cpp
+    unit/tui/TuiLayoutStateStoreTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 

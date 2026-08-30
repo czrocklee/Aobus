@@ -102,5 +102,6 @@ namespace ao::tui
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
                             std::int32_t columns);
+  std::int32_t helpPaneColumns(i18n::MessageCatalog const& textCatalog, std::int32_t terminalColumns);
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog, std::int32_t terminalColumns = 0);
 } // namespace ao::tui

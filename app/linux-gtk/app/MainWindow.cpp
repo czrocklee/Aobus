@@ -88,6 +88,7 @@ namespace ao::gtk
       , textCatalog{std::move(catalog)}
       , trackPresentationCatalog{runtime.workspace(), textCatalog}
       , listPresentations{trackPresentationCatalog, runtime.library().changes()}
+      , trackColumnLayouts{runtime.library().changes()}
       , tagEditController{window,
                           runtime,
                           textCatalog,

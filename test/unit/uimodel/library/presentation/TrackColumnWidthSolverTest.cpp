@@ -8,8 +8,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <numeric>
 #include <vector>
 
@@ -38,6 +40,11 @@ namespace ao::uimodel::test
     }
   } // namespace
 
+  TEST_CASE("TrackColumnWidthSolver - empty input produces no widths", "[uimodel][unit][library][presentation]")
+  {
+    CHECK(solveTrackColumnWidths({}, 120).empty());
+  }
+
   TEST_CASE("TrackColumnWidthSolver - distributes flexible columns by weight", "[uimodel][unit][library][presentation]")
   {
     auto const specs = std::vector{
@@ -53,6 +60,89 @@ namespace ao::uimodel::test
     CHECK(widths[1] == 300);
     CHECK(widths[2] == 100);
     CHECK(totalWidth(widths) == 480);
+  }
+
+  TEST_CASE("TrackColumnWidthSolver - normalizes finite weights without overflowing",
+            "[uimodel][unit][library][presentation]")
+  {
+    auto const maximumWeight = std::numeric_limits<double>::max();
+
+    SECTION("Weight sum")
+    {
+      auto const specs = std::vector{
+        flexible(rt::TrackField::Title, maximumWeight),
+        flexible(rt::TrackField::Artist, maximumWeight),
+      };
+
+      auto const widths = solveTrackColumnWidths(specs, 300);
+
+      REQUIRE(widths.size() == 2);
+      CHECK(widths[0] == 150);
+      CHECK(widths[1] == 150);
+    }
+
+    SECTION("Weighted allocation product")
+    {
+      auto const specs = std::vector{
+        flexible(rt::TrackField::Title, maximumWeight),
+        flexible(rt::TrackField::Artist),
+      };
+
+      auto const widths = solveTrackColumnWidths(specs, 300);
+
+      REQUIRE(widths.size() == 2);
+      CHECK(widths[0] == 280);
+      CHECK(widths[1] == 20);
+    }
+  }
+
+  TEST_CASE("TrackColumnWidthSolver - aggregates extreme dimensions without signed overflow",
+            "[uimodel][regression][library][presentation]")
+  {
+    auto const maximumWidth = std::numeric_limits<std::int32_t>::max();
+
+    SECTION("Fixed widths")
+    {
+      auto const specs = std::vector{
+        fixed(rt::TrackField::Year, maximumWidth),
+        fixed(rt::TrackField::Duration, maximumWidth),
+        flexible(rt::TrackField::Title),
+      };
+
+      auto const widths = solveTrackColumnWidths(specs, 300);
+
+      CHECK(widths == std::vector{maximumWidth, maximumWidth, 20});
+      auto const resized = resizeTrackColumnSpecs(specs, rt::TrackField::Title, 100, 300);
+      REQUIRE(resized.size() == specs.size());
+      CHECK(canonicalTrackColumnState(resized[2]).weight > 0.0);
+    }
+
+    SECTION("Flexible minimums and canonical width totals")
+    {
+      auto const specs = std::vector{
+        flexible(rt::TrackField::Title, 1.0, maximumWidth, maximumWidth),
+        flexible(rt::TrackField::Artist, 1.0, maximumWidth, maximumWidth),
+      };
+
+      CHECK(solveTrackColumnWidths(specs, 300) == std::vector{maximumWidth, maximumWidth});
+      auto const canonical = specsFromWidths(specs, std::vector{maximumWidth, maximumWidth});
+      REQUIRE(canonical.size() == specs.size());
+      CHECK(canonical[0].weight == 1.0);
+      CHECK(canonical[1].weight == 1.0);
+    }
+  }
+
+  TEST_CASE("TrackColumnWidthSolver - canonical weights stay inside the persisted finite-positive domain",
+            "[uimodel][regression][library][presentation]")
+  {
+    auto const maximum = canonicalTrackColumnState(flexible(rt::TrackField::Title, std::numeric_limits<double>::max()));
+    auto const minimum =
+      canonicalTrackColumnState(flexible(rt::TrackField::Title, std::numeric_limits<double>::denorm_min()));
+
+    CHECK(std::isfinite(maximum.weight));
+    CHECK(maximum.weight > 0.0);
+    CHECK(std::isfinite(minimum.weight));
+    CHECK(minimum.weight == 0.001);
   }
 
   TEST_CASE("TrackColumnWidthSolver - pins minimum columns and redistributes remaining width",

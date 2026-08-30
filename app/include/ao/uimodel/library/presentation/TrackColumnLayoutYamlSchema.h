@@ -10,10 +10,12 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::uimodel
 {
+  inline constexpr auto kTrackColumnLayoutsConfigGroup = std::string_view{"trackView.columnLayouts"};
   inline constexpr std::uint32_t kTrackColumnLayoutVersion = 2;
 
   // Persistence DTOs isolate the versioned wire shape from live UIModel state.

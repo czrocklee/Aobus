@@ -27,10 +27,13 @@ Keys that run no command - text-input entry, seeking, group jumps, volume - are 
 | --- | --- |
 | `-l, --library <root>` | music library root; normalized absolute path |
 | `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
-| `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path |
+| `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
 | `--cover-art-mode <auto|kitty|blocks|off>` | cover renderer |
 | `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
 | `--version` | prints `Aobus TUI <version>` and exits |
+
+Per-library column layouts and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
+Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
 
 ### Command prefixes
 
@@ -142,7 +145,7 @@ All track-table gestures below remain available while the detail inspector is op
 | --- | --- |
 | track-table wheel | move selection by three tracks |
 | table scrollbar press/drag | map visual row to selected track |
-| header column edge drag | resize column for current session |
+| header column edge drag/release | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
 | group header click | select first track in section |
 | seek rail press/drag/release | preview/final seek |
 | Soul button click | toggle playback |
@@ -158,6 +161,7 @@ All track-table gestures below remain available while the detail inspector is op
 - Presentation completion includes built-in and custom preset ids.
 - Quick-filter values come from live titles, artist, album, album artist, genre, composer, work, and tags; list names and other fields are excluded.
 - Both text-input modes and modal overlays disable workspace seek/table gestures; the detail inspector does not.
+- Opening or closing an overlay, entering text input, changing lists, another pointer press, or teardown cancels an unfinished column drag without saving it.
 - A duration-zero seek rail is inert.
 
 ## Compatibility and versioning

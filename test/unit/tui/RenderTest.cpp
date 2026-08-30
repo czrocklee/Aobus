@@ -259,8 +259,8 @@ namespace ao::tui::test
     std::ignore = renderBesideWorkspace(helpPane(120), wideHelpBox, 120);
     std::ignore = renderBesideWorkspace(helpPane(30), narrowHelpBox, 30);
 
-    CHECK(boxColumns(wideHelpBox) > 0);
-    CHECK(boxColumns(narrowHelpBox) == 30);
+    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), 120));
+    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), 30));
     CHECK(englishDetailPaneColumns(120) > 0);
     CHECK(englishDetailPaneColumns(40) == 40);
   }

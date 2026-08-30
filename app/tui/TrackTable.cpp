@@ -6,6 +6,7 @@
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
+#include "TerminalTrackColumnLayout.h"
 #include "TextCell.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
@@ -18,7 +19,6 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
-#include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/utility/Path.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -38,13 +38,7 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::int32_t kPlayingColumns = 2;
-    constexpr std::int32_t kColumnPadding = 2;
-    constexpr std::int32_t kMaximumFieldColumns = 72;
-    constexpr std::int32_t kScrollIndicatorColumns = 1;
-    // GTK policy widths are pixels; TUI columns are character cells. This keeps
-    // relative presentation widths while avoiding terminal-specific measurement.
-    constexpr std::int32_t kPresentationPixelToTerminalColumnRatio = 12;
+    constexpr std::int32_t kListChooserScrollIndicatorColumns = 1;
 
     struct TrackColumn final
     {
@@ -57,26 +51,6 @@ namespace ao::tui
     std::string blankFallback(std::string_view value)
     {
       return value.empty() ? std::string{"-"} : std::string{value};
-    }
-
-    std::int32_t terminalColumnWidth(rt::TrackField const field)
-    {
-      auto const policyWidth = uimodel::trackColumnDefaults(field).width;
-
-      if (policyWidth <= 0)
-      {
-        return kMinimumTrackColumnWidthColumns;
-      }
-
-      return std::clamp(
-        policyWidth / kPresentationPixelToTerminalColumnRatio, kMinimumTrackColumnWidthColumns, kMaximumFieldColumns);
-    }
-
-    std::int32_t terminalMinimumColumnWidth(rt::TrackField const field)
-    {
-      return std::clamp(uimodel::trackColumnDefaults(field).minimumWidth / kPresentationPixelToTerminalColumnRatio,
-                        kMinimumTrackColumnWidthColumns,
-                        kMaximumFieldColumns);
     }
 
     ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
@@ -92,12 +66,14 @@ namespace ao::tui
 
     ftxui::Element columnSeparator(std::size_t const index)
     {
-      return ftxui::text(index == 0 ? std::string(kColumnPadding, ' ') : std::string{"| "}) | ftxui::dim;
+      return ftxui::text(
+               std::string{index == 0 ? kTrackTableLeadingColumnSeparator : kTrackTableInterColumnSeparator}) |
+             ftxui::dim;
     }
 
     ftxui::Element trailingColumnSeparator()
     {
-      return ftxui::text("|") | ftxui::dim;
+      return ftxui::text(std::string{kTrackTableTrailingColumnSeparator}) | ftxui::dim;
     }
 
     rt::TrackFieldRawValue rawValueForField(i18n::MessageCatalog const& textCatalog,
@@ -172,96 +148,35 @@ namespace ao::tui
       return blankFallback(value);
     }
 
-    std::optional<std::int32_t> overrideColumnWidth(rt::TrackField const field,
-                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths)
+    std::vector<TrackColumn> columnsForLayout(i18n::MessageCatalog const& textCatalog,
+                                              TerminalTrackColumnLayout const& layout)
     {
-      if (columnWidths == nullptr)
-      {
-        return std::nullopt;
-      }
-
-      auto const it = std::ranges::find(*columnWidths, field, &TrackColumnWidthOverride::field);
-
-      if (it == columnWidths->end() || it->columns <= 0)
-      {
-        return std::nullopt;
-      }
-
-      return std::clamp(it->columns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnResizeColumns);
-    }
-
-    std::int32_t trackColumnViewport(std::int32_t const availableColumns, std::size_t const columnCount)
-    {
-      if (availableColumns <= 0 || columnCount == 0)
-      {
-        return 0;
-      }
-
-      auto const separators = columnCount > 1 ? static_cast<std::int32_t>(columnCount - 1) * 2 : 0;
-      auto const trailingSeparator = columnCount > 0 ? 1 : 0;
-      auto const chromeColumns =
-        kPlayingColumns + kColumnPadding + separators + trailingSeparator + kScrollIndicatorColumns;
-      return std::max(0, availableColumns - chromeColumns);
-    }
-
-    std::vector<TrackColumn> columnsForPresentation(i18n::MessageCatalog const& textCatalog,
-                                                    rt::TrackPresentationSpec const& presentation,
-                                                    std::vector<TrackColumnWidthOverride> const* const columnWidths,
-                                                    std::int32_t const availableColumns)
-    {
-      auto normalized = rt::normalizeTrackPresentationSpec(presentation);
-
-      if (normalized.visibleFields.empty())
-      {
-        normalized = rt::defaultTrackPresentationSpec();
-      }
-
       auto columns = std::vector<TrackColumn>{};
-      columns.reserve(normalized.visibleFields.size());
-      auto specs = std::vector<uimodel::TrackColumnSolveSpec>{};
-      specs.reserve(normalized.visibleFields.size());
+      columns.reserve(layout.columns.size());
 
-      for (auto const field : normalized.visibleFields)
+      for (auto const& terminalColumn : layout.columns)
       {
-        auto spec = uimodel::TrackColumnSolveSpec{.field = field,
-                                                  .weight = uimodel::trackColumnDefaults(field).weight,
-                                                  .fixedWidth = -1,
-                                                  .defaultWidth = terminalColumnWidth(field),
-                                                  .minimumWidth = terminalMinimumColumnWidth(field)};
-
-        if (auto const optOverrideWidth = overrideColumnWidth(field, columnWidths); optOverrideWidth)
-        {
-          spec.fixedWidth = *optOverrideWidth;
-        }
-
-        specs.push_back(spec);
-      }
-
-      auto const widths =
-        uimodel::solveTrackColumnWidths(specs, trackColumnViewport(availableColumns, normalized.visibleFields.size()));
-
-      for (std::size_t index = 0; index < normalized.visibleFields.size(); ++index)
-      {
-        auto const field = normalized.visibleFields[index];
-        auto const width = index < widths.size() ? widths[index] : terminalColumnWidth(field);
         columns.push_back(TrackColumn{
-          .field = field,
-          .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, field)},
-          .width = width,
-          .rightAligned = uimodel::trackColumnDefaults(field).alignment == uimodel::TrackColumnAlignment::End});
+          .field = terminalColumn.field,
+          .label = std::string{uimodel::trackFieldColumnTitle(textCatalog, terminalColumn.field)},
+          .width = terminalColumn.columns,
+          .rightAligned =
+            uimodel::trackColumnDefaults(terminalColumn.field).alignment == uimodel::TrackColumnAlignment::End,
+        });
       }
 
       return columns;
     }
 
     ftxui::Element trackHeaderRow(std::vector<TrackColumn> const& columns,
+                                  std::int32_t const availableColumns,
                                   std::vector<TrackColumnResizeHandle>* const resizeHandles)
     {
       using namespace ftxui;
 
       auto cells = Elements{};
       cells.reserve((columns.size() * 2) + 4);
-      cells.push_back(fixedCell("", kPlayingColumns));
+      cells.push_back(fixedCell("", kTrackTablePlayingColumns));
 
       if (resizeHandles != nullptr)
       {
@@ -278,7 +193,11 @@ namespace ao::tui
 
         if (resizeHandles != nullptr)
         {
-          resizeHandles->push_back(TrackColumnResizeHandle{.field = column.field, .columns = column.width});
+          resizeHandles->push_back(TrackColumnResizeHandle{
+            .field = column.field,
+            .columns = column.width,
+            .availableColumns = availableColumns,
+          });
           cellPtr = std::move(cellPtr) | reflect(resizeHandles->back().box);
         }
 
@@ -291,7 +210,7 @@ namespace ao::tui
       }
 
       cells.push_back(filler());
-      cells.push_back(fixedCell("", kScrollIndicatorColumns));
+      cells.push_back(fixedCell("", kTrackTableScrollIndicatorColumns));
       return hbox(std::move(cells));
     }
 
@@ -305,7 +224,7 @@ namespace ao::tui
       auto const playing = track.id == playingTrackId;
       auto cells = Elements{};
       cells.reserve((columns.size() * 2) + 3);
-      auto playingMarkerPtr = fixedCell(playing ? std::string{">"} : std::string{}, kPlayingColumns);
+      auto playingMarkerPtr = fixedCell(playing ? std::string{">"} : std::string{}, kTrackTablePlayingColumns);
 
       if (playing)
       {
@@ -583,8 +502,11 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    auto const columns =
-      columnsForPresentation(textCatalog, presentation, options.columnWidths, options.availableColumns);
+    auto const fallbackLayout = options.columnLayout == nullptr
+                                  ? projectTerminalTrackColumnLayout(presentation, {}, options.availableColumns)
+                                  : TerminalTrackColumnLayout{};
+    auto const& columnLayout = options.columnLayout != nullptr ? *options.columnLayout : fallbackLayout;
+    auto const columns = columnsForLayout(textCatalog, columnLayout);
 
     if (options.sectionRowHitRegions != nullptr)
     {
@@ -669,7 +591,7 @@ namespace ao::tui
     }
 
     auto tablePtr = vbox({
-                      trackHeaderRow(columns, options.resizeHandles),
+                      trackHeaderRow(columns, columnLayout.availableColumns, options.resizeHandles),
                       std::move(listElementPtr),
                     }) |
                     flex;
@@ -686,14 +608,15 @@ namespace ao::tui
                                          std::vector<std::string> const& labels,
                                          std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(
-      {cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
-       cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryNoListsFound)) + kScrollIndicatorColumns,
-       cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
+    auto contentColumns =
+      std::max({cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
+                cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryNoListsFound)) +
+                  kListChooserScrollIndicatorColumns,
+                cellWidth(overlayHint(textCatalog, Overlay::ListChooser))});
 
     for (auto const& label : labels)
     {
-      contentColumns = std::max(contentColumns, cellWidth(label) + kScrollIndicatorColumns);
+      contentColumns = std::max(contentColumns, cellWidth(label) + kListChooserScrollIndicatorColumns);
     }
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);

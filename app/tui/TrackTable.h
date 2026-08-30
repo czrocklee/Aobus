@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "TerminalTrackColumnLayout.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
@@ -27,20 +28,12 @@ namespace ftxui
 
 namespace ao::tui
 {
-  inline constexpr std::int32_t kMinimumTrackColumnWidthColumns = 8;
-  inline constexpr std::int32_t kMaximumTrackColumnResizeColumns = 160;
-
-  struct TrackColumnWidthOverride final
-  {
-    rt::TrackField field = rt::TrackField::Title;
-    std::int32_t columns = 0;
-  };
-
   struct TrackColumnResizeHandle final
   {
     rt::TrackField field = rt::TrackField::Title;
     ftxui::Box box{};
     std::int32_t columns = 0;
+    std::int32_t availableColumns = 0;
   };
 
   struct TrackSectionRowHitRegion final
@@ -51,7 +44,7 @@ namespace ao::tui
 
   struct TrackTableViewOptions final
   {
-    std::vector<TrackColumnWidthOverride> const* columnWidths = nullptr;
+    TerminalTrackColumnLayout const* columnLayout = nullptr;
     std::vector<TrackColumnResizeHandle>* resizeHandles = nullptr;
     std::vector<TrackSectionRowHitRegion>* sectionRowHitRegions = nullptr;
     ftxui::Box* tableBox = nullptr;

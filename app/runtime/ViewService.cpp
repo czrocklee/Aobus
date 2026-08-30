@@ -470,9 +470,10 @@ namespace ao::rt
     return iter->second.state;
   }
 
-  TrackPresentationSpec const& ViewService::trackListPresentation(ViewId viewId) const&
+  TrackPresentationSpec const* ViewService::findTrackListPresentation(ViewId const viewId) const noexcept
   {
-    return _implPtr->views.at(viewId).state.presentation;
+    auto const iter = _implPtr->views.find(viewId);
+    return iter == _implPtr->views.end() ? nullptr : &iter->second.state.presentation;
   }
 
   std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const

@@ -11,6 +11,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 
@@ -23,6 +24,11 @@ namespace ao::rt
 {
   class AppRuntime;
 } // namespace ao::rt
+
+namespace ao::uimodel
+{
+  class ListPresentations;
+} // namespace ao::uimodel
 
 namespace ao::tui
 {
@@ -41,7 +47,9 @@ namespace ao::tui
   class LibraryController final
   {
   public:
-    LibraryController(rt::AppRuntime& runtime, i18n::MessageCatalog textCatalog);
+    LibraryController(rt::AppRuntime& runtime,
+                      i18n::MessageCatalog textCatalog,
+                      uimodel::ListPresentations& listPresentations);
 
     std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
     std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
@@ -59,6 +67,9 @@ namespace ao::tui
 
     std::string currentListTitle() const;
     std::string activePresentationId() const;
+    // Borrowed from the active view (or the process-stable default); consume
+    // before the active view can be replaced or destroyed.
+    rt::TrackPresentationSpec const& activePresentation() const;
     SelectedTrackView selectedTrackView() const;
 
     void setFilterDraft(std::string value);
@@ -95,10 +106,12 @@ namespace ao::tui
     Result<> refreshActiveView();
     Result<> attachView(rt::ViewId viewId);
     Result<bool> attachActiveWorkspaceView();
+    rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> navigateToList(ListId listId);
 
     rt::AppRuntime& _runtime;
     i18n::MessageCatalog _textCatalog;
+    uimodel::ListPresentations& _listPresentations;
     std::vector<LibraryNavEntry> _libraryEntries{};
     std::vector<std::string> _libraryLabels{};
     std::vector<TrackPresentationNavEntry> _presentationEntries{};

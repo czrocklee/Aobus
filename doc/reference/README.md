@@ -56,7 +56,7 @@ Use the [reference template](../template/reference.md).
 
 - [Presentation text catalog](presentation/text-catalog.md) enumerates shared UIModel semantic inputs, exact English output, and open-id fallbacks.
 - [Activity-status surface](presentation/activity-status.md) enumerates shared UIModel state, kinds, helpers, defaults, and commands.
-- [Persisted presentation state](presentation/persisted-state.md) enumerates versioned GTK presentation documents, stable token authorities, validation, and compatibility behavior.
+- [Persisted presentation state](presentation/persisted-state.md) enumerates versioned interactive-frontend presentation documents, stable token authorities, validation, and compatibility behavior.
 - [Track presentation presets](presentation/track-preset.md) enumerate built-in structural ids, menu order, and intent.
 
 ## Workspace

@@ -11,10 +11,12 @@
 #include "PresentationPanel.h"
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
+#include "TerminalTrackColumnLayout.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
+#include <ao/Contract.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -22,7 +24,6 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -167,23 +168,6 @@ namespace ao::tui
       return trackIndexForVisualRow(static_cast<std::int32_t>(visualRow), trackCount, sections);
     }
 
-    void setColumnWidthOverride(std::vector<TrackColumnWidthOverride>& overrides,
-                                rt::TrackField const field,
-                                std::int32_t const columns)
-    {
-      auto const clampedColumns =
-        std::clamp(columns, kMinimumTrackColumnWidthColumns, kMaximumTrackColumnResizeColumns);
-      auto const it = std::ranges::find(overrides, field, &TrackColumnWidthOverride::field);
-
-      if (it == overrides.end())
-      {
-        overrides.push_back(TrackColumnWidthOverride{.field = field, .columns = clampedColumns});
-        return;
-      }
-
-      it->columns = clampedColumns;
-    }
-
     /**
      * @brief Whether any overlay currently occupies the screen.
      *
@@ -269,7 +253,8 @@ namespace ao::tui
     , _volumeViewModel{_playback}
     , _outputDevices{bindings.outputDevices}
     , _hitRegions{bindings.hitRegions}
-    , _trackColumnWidthOverrides{bindings.trackColumnWidthOverrides}
+    , _trackColumnLayouts{bindings.trackColumnLayouts}
+    , _trackColumnResizePreview{bindings.trackColumnResizePreview}
     , _activityStatusViewModel{bindings.activityStatusViewModel}
     , _notifications{bindings.notifications}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
@@ -693,6 +678,16 @@ namespace ao::tui
     _seekSlider.reset();
   }
 
+  void EventController::cancelColumnResize()
+  {
+    _optTrackColumnResizeDrag.reset();
+
+    if (_trackColumnResizePreview != nullptr)
+    {
+      *_trackColumnResizePreview = {};
+    }
+  }
+
   bool EventController::hasWorkspaceGesture() const noexcept
   {
     return _optSeekRailDrag || _optTrackScrollbarDrag || _optTrackColumnResizeDrag;
@@ -702,7 +697,7 @@ namespace ao::tui
   {
     cancelSeekInteraction();
     _optTrackScrollbarDrag.reset();
-    _optTrackColumnResizeDrag.reset();
+    cancelColumnResize();
   }
 
   void EventController::openOverlay(Overlay const overlay)
@@ -715,6 +710,50 @@ namespace ao::tui
   {
     cancelWorkspaceGestures();
     _shell.closeOverlay();
+  }
+
+  bool EventController::handleTrackColumnResizeDrag(ftxui::Mouse const& mouse)
+  {
+    if (mouse.motion != ftxui::Mouse::Moved && mouse.motion != ftxui::Mouse::Released)
+    {
+      cancelColumnResize();
+      return false;
+    }
+
+    AO_EXPECTS(_optTrackColumnResizeDrag);
+    auto const drag = *_optTrackColumnResizeDrag;
+
+    if (_library.currentListId() != drag.listId || _hitRegions == nullptr || _trackColumnLayouts == nullptr ||
+        _trackColumnResizePreview == nullptr)
+    {
+      cancelColumnResize();
+      return false;
+    }
+
+    auto const handleIt =
+      std::ranges::find(_hitRegions->trackColumnResizeHandles, drag.field, &TrackColumnResizeHandle::field);
+
+    if (handleIt == _hitRegions->trackColumnResizeHandles.end())
+    {
+      cancelColumnResize();
+      return false;
+    }
+
+    auto const columns = drag.startColumns + mouse.x - drag.startX;
+    _trackColumnResizePreview->listId = drag.listId;
+    _trackColumnResizePreview->layout = resizeTerminalTrackColumnLayout(_library.activePresentation(),
+                                                                        _trackColumnLayouts->layoutForList(drag.listId),
+                                                                        drag.field,
+                                                                        columns,
+                                                                        handleIt->availableColumns);
+
+    if (mouse.motion == ftxui::Mouse::Released)
+    {
+      _trackColumnLayouts->updateLayout(drag.listId, _trackColumnResizePreview->layout);
+      cancelColumnResize();
+    }
+
+    return true;
   }
 
   std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
@@ -760,23 +799,7 @@ namespace ao::tui
 
     if (_optTrackColumnResizeDrag)
     {
-      if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
-      {
-        if (_trackColumnWidthOverrides != nullptr)
-        {
-          auto const columns = _optTrackColumnResizeDrag->startColumns + mouse.x - _optTrackColumnResizeDrag->startX;
-          setColumnWidthOverride(*_trackColumnWidthOverrides, _optTrackColumnResizeDrag->field, columns);
-        }
-
-        if (mouse.motion == ftxui::Mouse::Released)
-        {
-          _optTrackColumnResizeDrag.reset();
-        }
-
-        return true;
-      }
-
-      _optTrackColumnResizeDrag.reset();
+      return handleTrackColumnResizeDrag(mouse);
     }
 
     return std::nullopt;
@@ -849,7 +872,8 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleColumnResizePress(ftxui::Mouse const& mouse)
   {
-    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr || _trackColumnWidthOverrides == nullptr)
+    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr || _trackColumnLayouts == nullptr ||
+        _trackColumnResizePreview == nullptr)
     {
       return std::nullopt;
     }
@@ -863,8 +887,13 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    _optTrackColumnResizeDrag =
-      TrackColumnResizeDrag{.field = handleIt->field, .startX = mouse.x, .startColumns = handleIt->columns};
+    *_trackColumnResizePreview = {};
+    _optTrackColumnResizeDrag = TrackColumnResizeDrag{
+      .field = handleIt->field,
+      .startX = mouse.x,
+      .startColumns = handleIt->columns,
+      .listId = _library.currentListId(),
+    };
     return true;
   }
 
