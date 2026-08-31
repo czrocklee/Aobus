@@ -1,108 +1,70 @@
 ---
 name: diagnose-issue
 description: >-
-  Diagnose and fix Aobus failures (compile errors, test failures, crashes, sanitizer reports,
-  deadlocks, races, hangs, threading bugs). Stay focused on root cause — avoid cleanup,
-  formatting, or refactors unless required to resolve the issue.
+  Diagnose Aobus compile errors, test failures, crashes, sanitizer reports, deadlocks, races, and
+  hangs and, when explicitly requested, apply the smallest root-cause fix. Avoid unrelated cleanup,
+  formatting, and refactors.
 ---
 
-# diagnose-issue
+# Diagnose an issue
 
-Use this skill when the user reports a failure or asks to debug behavior. The goal is to find and fix the root cause with the shortest reliable feedback loop.
+## Boundary
 
-## Operating Rule
+Diagnosis is read-only by default. Reproducing failures and inspecting generated diagnostics are
+allowed, but do not edit tracked code or tests unless the user also asks to fix or resolve the
+problem.
 
-Stay focused on the failing behavior. Do not start documentation updates, formatting passes, lint cleanup, include cleanup, coverage work, dependency upgrades, broad refactors, or unrelated test rewrites while diagnosing. Do those only when they directly unblock the fix or the user explicitly asks.
+Stay on the failing path. Do not start documentation, formatting, lint, include, coverage,
+dependency, or broad refactor work unless it directly unblocks the requested fix. Follow
+`doc/development/test/validation-and-review.md`; activate `use-clang-tidy` only for an explicit lint
+request.
 
-When the fix touches C++ files, follow the repository's local style directly and keep the edit scoped to the failing path. Use `use-clang-tidy` only when the user explicitly asks to diagnose linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session; otherwise do not run lint validation.
+Examples below use the Linux portal. On macOS follow `doc/development/macos.md`; on Windows use the
+equivalent `ao.bat` command and the `develop-aobus-on-windows` skill.
 
-Follow the project validation policy in `doc/development/test/validation-and-review.md`. While diagnosing, focused commands are allowed only to reproduce a known failure or prove one concrete hypothesis.
+## Loop
 
-## Debugging Loop
+1. Capture the exact failing command, input, diagnostic, assertion, signal, or stack trace.
+2. Reproduce that failure from the repository root, preserving existing build trees and logs.
+3. Read the diagnostic location, called API, closest test, and nearby helpers; avoid unrelated code.
+4. Form one concrete hypothesis and prove or reject it with one focused source read, trace, debugger
+   session, assertion, or command.
+5. For diagnosis-only work, stop at the proven cause and report the evidence.
+6. When a fix was requested, make the smallest behavioral correction, add a regression only when
+   existing coverage does not pin the defect, and re-run the original reproducer.
+7. Complete the repository validation gate for code changes and report the cause, fix, and results.
 
-1. Capture the exact failing command, test filter, input, log excerpt, signal, assertion, or stack trace.
-2. Reproduce with the command that actually fails from the repo root. If `./ao check` is the reliable reproducer, use it. Prefer preserving existing `/tmp/build/...` trees.
-3. Read only the files on the failing path: the diagnostic location, the called API, the closest test, and nearby helpers.
-4. Form one concrete hypothesis. Verify it with one focused command, trace, assertion, log, debugger session, or source read.
-5. Make the smallest behavioral change that addresses the root cause.
-6. Re-run a focused command only if it was needed to debug the concrete failure; otherwise run `./ao check`.
-7. Report the cause, the fix, and the validation result. Mention deferred nonfunctional work only if it remains necessary.
+## Failure-specific checks
 
-## Useful Commands
+- **Compile/link:** start at the first real error; verify declaration, definition, namespace,
+  include, target linkage, and source lists before editing.
+- **Test:** read the assertion and production path first. Treat it as a product defect until proven
+  otherwise; never weaken an assertion merely to pass.
+- **Crash/sanitizer:** capture the report and relevant frames, then prove the invalid ownership,
+  lifetime, bounds, cast, or state transition before patching.
+- **Hang/concurrency:** use `review-concurrency`; distinguish spin, blocked wait, deadlock,
+  starvation, missed callback, and unmet condition before changing synchronization. Never use sleep
+  as the fix.
 
-Prefer the project wrapper commands from the repository root:
+## Useful Linux commands
 
 ```bash
 ./ao check
 ./ao check --clang
-DEBUG_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug}"
-nix-shell --run "cmake --build $DEBUG_BUILD_DIR --parallel"
 ./ao test --core "test filter"
 ./ao test --gtk "test filter"
 ./ao test --integration "test filter"
 ```
 
-Inspect build logs instead of rerunning full builds when a previous run already captured the failure:
+Prefer an existing build log over rerunning a full build:
 
 ```bash
-DEBUG_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug}"
-tail -200 "$DEBUG_BUILD_DIR/build.log"
-rg -n "error:|undefined reference|AddressSanitizer|ThreadSanitizer|SUMMARY|FAILED|SIG" "$DEBUG_BUILD_DIR/build.log"
+debug_build_dir="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug}"
+tail -200 "$debug_build_dir/build.log"
+rg -n "error:|undefined reference|AddressSanitizer|ThreadSanitizer|SUMMARY|FAILED|SIG" \
+  "$debug_build_dir/build.log"
 ```
 
-Use `rg` for code search. Search narrowly by symbol, error text, test name, or assertion text.
-
-## Compile And Link Errors
-
-- Start from the first real compiler error in the log, not the cascade.
-- Check the exact declaration, definition, namespace, include, target linkage, and CMake source list involved.
-- If a generated or moved file is involved, verify `test/CMakeLists.txt` or the relevant target includes it.
-- Do not run clang-format, include-cleaner, or tidy just because the compiler mentions formatting-adjacent code.
-- After the fix, rebuild the smallest target that failed; run tests only if the compile fix can affect behavior.
-
-## Failing Tests
-
-- Re-run the single failing Catch2 test case or section when possible.
-- Read the assertion and the production path it exercises before editing the test.
-- Treat test failure as a product bug until proven otherwise. Do not weaken assertions to pass.
-- Fix the test only when the expected behavior has intentionally changed or the test relies on an invalid assumption.
-- Add a regression test only when the existing failing test does not already pin the bug.
-
-## Crashes And Sanitizers
-
-- Capture the crashing command, signal, sanitizer report, and top relevant stack frames.
-- Prefer debug/sanitizer builds already produced by `./ao check`.
-- For AddressSanitizer/UBSan, trace ownership, lifetime, bounds, optional/result access, casts, and moved-from state.
-- For crashes without a report, use `gdb` or `lldb` inside `nix-shell` only after a narrow reproducer exists.
-- Avoid speculative rewrites. Prove the invalid object, pointer, index, enum, or lifetime before patching.
-
-## Hangs And Threading Bugs
-
-Use `review-concurrency`; it owns the repository-specific concurrency workflow.
-
-- First distinguish CPU spin, blocked wait, deadlock, starvation, missed callback, and test waiting on a condition that never becomes true.
-- Capture where threads are blocked with a debugger backtrace or targeted logging before changing synchronization.
-- Inspect lock ordering, callback reentrancy, executor affinity, subscription lifetime, condition-variable predicates, atomics, and shutdown paths.
-- Prefer deterministic tests with immediate executors, fake callbacks, and explicit synchronization over sleeps.
-- Do not add arbitrary sleeps as a fix. Timeouts are acceptable only as test guards or user-facing failure handling.
-
-## Patch Discipline
-
-- Keep the edit close to the broken code path.
-- Avoid drive-by modernization, renames, formatting churn, documentation updates, and unrelated cleanup.
-- If a wider refactor appears necessary, first prove why a local fix is incorrect or unsafe.
-- Preserve user changes in the worktree and do not revert unrelated edits.
-- Add or adjust focused tests when the defect was not already covered.
-
-## Validation Scope
-
-Focused commands are diagnosis tools:
-
-- Compile error: rebuild the failing target.
-- Unit failure: rerun the exact failing test only when it materially speeds root-cause diagnosis.
-- Crash: rerun the crashing command under the same build mode.
-- Threading fix: rerun the reproducer repeatedly or under the relevant sanitizer when available.
-
-After the focused diagnosis is done, return to the project validation policy.
-
-Run formatting, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable. Run clang-tidy only when the user explicitly asks for linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session.
+For a code fix, use focused commands only while iterating, then follow the completion policy in
+`doc/development/test/validation-and-review.md`. A diagnosis-only task reports its reproducer and
+evidence without manufacturing a completion build for unchanged code.

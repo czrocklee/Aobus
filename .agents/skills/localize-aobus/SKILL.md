@@ -7,6 +7,8 @@ description: Add or review Aobus interactive UI translations, catalog messages, 
 
 Translate semantic UI messages, not isolated English strings. Keep catalog mechanics deterministic and review language quality in the interface where the text appears.
 
+Localization review is read-only unless the user also asks for catalog or UI fixes.
+
 ## Required reading
 
 Before changing a catalog, read:
@@ -51,7 +53,7 @@ For a new locale or any WinUI projection change, run the native Windows gate des
 
 ## Validation and handoff
 
-Use the repository portal and finish with the validation required by `doc/development/test/validation-and-review.md`. At minimum, ensure the catalog compiler runs through a normal build, run the focused localization tests while iterating, and run one full `./ao check` for completed work. Run `./ao docs check` when governed localization documents change.
+Use the repository portal and finish with the validation required by `doc/development/test/validation-and-review.md`. Ensure the catalog compiler runs through a normal build and use focused localization tests while iterating. Run `./ao docs check` when governed localization documents change.
 
 Report:
 

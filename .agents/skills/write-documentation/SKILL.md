@@ -28,11 +28,12 @@ Read the relevant implementation, tests, legacy documents, and inbound links nee
 6. When architecture coverage changes, update the landscape role, relationship, and coverage tables in the same change.
 7. Update the nearest index and every inbound link.
 8. During legacy migration, remove the superseded legacy document only after every fact has a new owner in the same change.
-9. Run `./ao docs check` and the implementation validation appropriate to any code changed.
+9. Run `./ao docs check`, then the repository completion validation appropriate to the change.
 
 Do not link tracked documents to `doc/plan/`.
 Do not create redirect stubs or compatibility copies unless the user explicitly requires an external stable URL.
-Do not run format or lint tools unless the user explicitly asks for them.
+Do not run modifying format or standalone tidy tools unless the user explicitly asks for them.
+The check-only completion gate required by `AGENTS.md` still applies.
 
 ## Decisions and RFCs
 

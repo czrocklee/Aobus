@@ -7,16 +7,14 @@ description: Guides the development of custom Clang-Tidy lint checkers for Aobus
 
 This skill is an explicit linting workflow. It is the exception to the repository's session-level clang-tidy opt-in rule because the user has asked to create, debug, or extend lint behavior.
 
-This guide provides the mandatory workflow and debugging strategies for developing custom Clang-Tidy lint checks in the Aobus codebase. Aobus relies heavily on custom AST matchers to enforce C++26 standards and Modern C++ paradigms.
+Use fixture-driven AST matcher development for Aobus custom Clang-Tidy checks.
 
-## Delegation Boundary
-
-Checker behavior, AST matcher design, diagnostic policy, checker registration, and fixture design are
-chair work. Treat checker development as chair-owned end-to-end work.
+Checker diagnosis and review are read-only unless the user also asks to create, extend, or fix the
+checker. The implementation workflow below applies only when code changes were requested.
 
 ## 1. Test-Driven Development (TDD) Workflow
 
-Always prioritize integration tests. You must define the expected behavior before writing the AST Matcher.
+Define the expected behavior in an integration fixture before writing the AST matcher.
 
 1.  **Create the Fixture**: Add a file such as `BasicFixture.cpp` under
     `test/integration/lint/fixture/<check-alias>/` — one subdirectory per check alias, and the
@@ -46,7 +44,8 @@ Header-only helpers live in `tool/lint/check/*.h` under `namespace clang::tidy::
 - **`CalleeQualificationHelpers.h`**: C standard library function list, callee extraction for qualification FixIts.
 - **`RaiiHeuristics.h`**: RAII-type detection.
 
-If a new helper is general (used or usable by ≥2 checks), add it to `AstHelpers.h` instead of an anonymous namespace.
+Move a helper to `AstHelpers.h` only when at least two current checks need the same stable contract;
+otherwise keep it local. Do not extract for hypothetical reuse.
 
 ## Hardening Checklist for FixIt-Emitting Checks
 
@@ -64,12 +63,11 @@ Every check that emits a `FixItHint` must satisfy these, each locked by a fixtur
 ### Workflow
 
 1. Create a scratch file with the target pattern.
-2. Write the query in a file (`clang-query` only parses single-line `match` interactively):
-    ```bash
-    cat > /tmp/query.txt << 'EOF'
+2. Create `/tmp/query.txt` with the editing tool (`clang-query` only parses single-line `match`
+   interactively):
+    ```text
     enable output dump
     match cxxMemberCallExpr(callee(cxxMethodDecl(hasName("erase")))).bind("root")
-    EOF
     ```
 3. Add one clause at a time, re-run after each change:
     ```bash
@@ -82,7 +80,7 @@ Every check that emits a `FixItHint` must satisfy these, each locked by a fixtur
 ### Raw AST Dump (supplement)
 
 ```bash
-nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-dump scratch.cpp" 2>&1 > /tmp/ast.txt
+nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-dump /tmp/scratch.cpp" > /tmp/ast.txt 2>&1
 ```
 
 ### ⚠️ Common Pitfalls
@@ -93,7 +91,7 @@ nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-du
 - **Niebloids**: `std::ranges` algorithms are function objects, matched via `CXXOperatorCallExpr` + `hasOverloadedOperatorName("()")`. Arguments start at index 1.
 - **`getNumArgs()` counts defaulted arguments**: `std::ranges::find(v, 5)` has FOUR operator() arguments (CPO object + range + value + a `CXXDefaultArgExpr` for the defaulted projection). Exact arg-count checks silently reject everything; count only non-`CXXDefaultArgExpr` arguments.
 - **C++20 rewritten comparisons double-match**: source `a != b` lowers to a `CXXRewrittenBinaryOperator` containing a *synthesized* `operator==` call. In AsIs traversal an `==` matcher also hits that inner node (source operator is actually `!=`), producing duplicate/wrong diagnostics. Guard with `aobus::isWithinRewrittenOperator`; `binaryOperation(...)` matches the rewritten node itself with the correct operator name.
-- **clang 21 API gaps**: `CXXConstructorDecl::isInitListConstructor()` does not exist on the Decl (Sema-only API) — check the first parameter type for `std::initializer_list` manually. `context.getParents(...)` needs `#include <clang/AST/ParentMapContext.h>`.
+- **Clang AST API traps**: `CXXConstructorDecl::isInitListConstructor()` is not a Decl API — check the first parameter type for `std::initializer_list` manually. `context.getParents(...)` needs `#include <clang/AST/ParentMapContext.h>`.
 
 ## 3. Implementation Steps
 
@@ -106,3 +104,8 @@ nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-du
     every fixture's diagnostics against the `POSITIVE`/`NEGATIVE` markers through `./ao tidy
     --no-build`, applies `--fix` on a temporary copy of each fixture that declares `FIX-TO`
     expectations, and syntax-checks the fixed output so the auto-fix cannot generate invalid C++.
+
+The shell examples above are Linux-specific because they enter `nix-shell`. On macOS use the
+portal-selected Homebrew LLVM tools; on Windows use the governed LLVM SDK and substitute `ao.bat`
+for `./ao`. Completed checker changes follow
+`doc/development/test/validation-and-review.md`.
