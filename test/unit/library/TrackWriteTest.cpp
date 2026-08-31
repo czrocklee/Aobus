@@ -11,16 +11,19 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/library/WriteTransaction.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -194,33 +197,51 @@ namespace ao::library::test
   TEST_CASE("updatePreparedTrackRecord rolls back its hot update when the cold reservation fails",
             "[library][regression][track-store]")
   {
-    constexpr std::size_t kMapSize = std::size_t{64} * 1024;
+    constexpr std::uint64_t kInitialMapSize = std::uint64_t{1} * 1024 * 1024;
+    constexpr std::uint64_t kUpdateHeadroom = std::uint64_t{32} * 1024;
+    constexpr std::size_t kOversizedValue = std::size_t{60} * 1024;
     auto const temp = ao::test::TempDir{};
+    auto trackId = kInvalidTrackId;
+    auto optPrepared = std::optional<std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold>>{};
+    std::uint64_t tightMapSize = 0;
+
+    {
+      auto library = ao::test::requireValue(
+        MusicLibrary::open(temp.path(), temp.path(), MusicLibrary::Options{.pinnedMapBytes = kInitialMapSize}));
+      auto originalTransaction = writeTransaction(library);
+      auto originalBuilder = TrackBuilder::makeEmpty();
+      originalBuilder.metadata().title("Original");
+      originalBuilder.property().uri("original.flac");
+      auto const createRes =
+        originalTransaction.apply([&originalBuilder](LibraryWrite& write)
+                                  { return write.tracks().create(originalBuilder, FileManifestBuilder::makeEmpty()); });
+      REQUIRE(createRes);
+      trackId = *createRes;
+
+      auto updatedBuilder = TrackBuilder::makeEmpty();
+      updatedBuilder.metadata().title("Must roll back");
+      // This canonical cold record needs more than the deliberately retained
+      // headroom, while the preceding hot replacement fits in one page.
+      auto const oversizedValue = std::string(kOversizedValue, 'x');
+      updatedBuilder.property().uri("oversized.flac");
+      updatedBuilder.customMetadata().add("oversized", oversizedValue);
+      optPrepared.emplace(prepareTrack(updatedBuilder, originalTransaction, library.resources()));
+      REQUIRE(originalTransaction.commit());
+
+      // highWaterBytes is page-aligned on each host. The byte headroom becomes
+      // eight 4 KiB pages on Intel and two 16 KiB pages on Apple Silicon.
+      tightMapSize = library.storageCapacity().highWaterBytes + kUpdateHeadroom;
+    }
+
+    REQUIRE(optPrepared);
     auto library = ao::test::requireValue(
-      MusicLibrary::open(temp.path(), temp.path(), MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
-    auto originalTransaction = writeTransaction(library);
-    auto originalBuilder = TrackBuilder::makeEmpty();
-    originalBuilder.metadata().title("Original");
-    originalBuilder.property().uri("original.flac");
-    auto const [originalHot, originalCold] = prepareTrack(originalBuilder, originalTransaction, library.resources());
-    auto originalWriter = physicalWriter(library.tracks(), originalTransaction);
-    auto const createRes = createPreparedTrackRecord(originalWriter, originalHot, originalCold);
-    REQUIRE(createRes);
-    auto const trackId = *createRes;
-    REQUIRE(originalTransaction.commit());
+      MusicLibrary::open(temp.path(), temp.path(), MusicLibrary::Options{.pinnedMapBytes = tightMapSize}));
 
     auto optFailure = std::optional<Error>{};
 
     {
       auto updateTransaction = writeTransaction(library);
-      auto updatedBuilder = TrackBuilder::makeEmpty();
-      updatedBuilder.metadata().title("Must roll back");
-      // This canonical cold record is larger than the complete LMDB map, while
-      // the preceding hot replacement fits in one ordinary page.
-      auto const oversizedValue = std::string(std::size_t{60} * 1024, 'x');
-      updatedBuilder.property().uri("oversized.flac");
-      updatedBuilder.customMetadata().add("oversized", oversizedValue);
-      auto const [updatedHot, updatedCold] = prepareTrack(updatedBuilder, updateTransaction, library.resources());
+      auto const& [updatedHot, updatedCold] = *optPrepared;
       auto updateWriter = physicalWriter(library.tracks(), updateTransaction);
 
       try

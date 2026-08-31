@@ -55,6 +55,9 @@ The portal re-enters the pinned `nix-shell` automatically. Linux build trees
 default to `/tmp/build/<project-directory>` (for example, `/tmp/build/Aobus`),
 using only the source directory's final name. Set `AOBUS_BUILD_ROOT` to replace
 the `/tmp/build` base while retaining that project-directory component.
+The normal shell uses Nixpkgs' cached GTK build. Set
+`AOBUS_NIX_UNSTRIPPED_GTK=1` only when stepping into GTK internals with a
+debugger; that opt-in forces Nix to build an unstripped GTK locally.
 Portal commands that mutate one build tree serialize through a persistent
 exclusive lock beside that tree and report when they wait for another writer.
 The adjacent `.ao-build.lock` file survives `--clean`; it does not reserve a
@@ -67,10 +70,10 @@ when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 
 ### macOS
 
-The current macOS profile is a headless development port for the shared core,
-CLI, and TUI. It has no native desktop frontend or audio backend. Install the
-Xcode Command Line Tools and the documented Homebrew host tools; the `./ao`
-portal bootstraps a pinned vcpkg checkout and resolves the shared manifest.
+The native macOS profile builds the shared core, CLI, and TUI with Core Audio
+output. It has no Cocoa or GTK desktop frontend. Install the Xcode Command Line
+Tools and the documented Homebrew host tools; the `./ao` portal bootstraps a
+pinned vcpkg checkout and resolves the shared manifest.
 
 ```bash
 ./ao build
@@ -80,6 +83,9 @@ portal bootstraps a pinned vcpkg checkout and resolves the shared manifest.
 ./ao check
 ./ao hygiene
 ```
+
+GitHub Actions runs `./ao check` and changed-file hygiene natively on both
+Intel (`macos-15-intel`) and Apple Silicon (`macos-15`) runners.
 
 See [macOS development](doc/development/macos.md) for the validated host,
 local-state paths, SMB workflow, supported suites, and known limitations.

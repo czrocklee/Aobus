@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from ao.core import concept_report, concept_scope
+from ao.core.paths import absolute_path
 
 
 def _decl(
@@ -565,7 +566,7 @@ class ConceptMetricTest(unittest.TestCase):
 
             self.assertIn("-std=c++26", flags)
             self.assertIn("-DFOO=1", flags)
-            self.assertIn("-I" + str((build_dir / "include").resolve()), flags)
+            self.assertIn("-I" + str(absolute_path(build_dir / "include")), flags)
             self.assertNotIn("-Werror", flags)
             self.assertNotIn(str(source), flags)
 

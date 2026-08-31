@@ -104,10 +104,10 @@ class NativePortalTest(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(
-                result.stdout.splitlines(),
-                [str(state / "ccache"), str(project), "10G", "1", "time_macros"],
-            )
+            lines = result.stdout.splitlines()
+            self.assertEqual(Path(lines[0]), state / "ccache")
+            self.assertEqual(Path(lines[1]), project)
+            self.assertEqual(lines[2:], ["10G", "1", "time_macros"])
             self.assertTrue((state / "ccache").is_dir())
 
     def test_macos_expected_shim_disables_exactly_five_libcxx_gates(self):
@@ -299,7 +299,13 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertEqual(windows_presets["windows-debug"]["inherits"], "windows-base")
         self.assertEqual(windows_presets["windows-release"]["inherits"], "windows-base")
         self.assertEqual(windows_presets["windows-winui"]["generator"], "Visual Studio 18 2026")
-        self.assertEqual(windows_presets["windows-winui"]["cacheVariables"]["AOBUS_BUILD_WINUI"], "ON")
+        winui_cache = windows_presets["windows-winui"]["cacheVariables"]
+        self.assertEqual(winui_cache["AOBUS_BUILD_WINUI"], "ON")
+        self.assertEqual(winui_cache["AOBUS_MSBUILD_CL_TOOL_EXE"], "$env{AOBUS_MSBUILD_CL_TOOL_EXE}")
+        self.assertEqual(
+            winui_cache["CMAKE_MSVC_DEBUG_INFORMATION_FORMAT"],
+            "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
+        )
         base_cache = windows_presets["windows-base"]["cacheVariables"]
         self.assertFalse(any(name.startswith("AOBUS_BUILD_") for name in base_cache))
         self.assertEqual(tidy_preset["inherits"], "windows-release")
@@ -742,7 +748,10 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.docs_action, "check")
 
     def test_winui_host_commands_parse(self):
-        self.assertEqual(self.parse(["doctor", "winui"]).area, "winui")
+        doctor = self.parse(["doctor", "winui"])
+        self.assertEqual(doctor.area, "winui")
+        self.assertFalse(doctor.build_only)
+        self.assertTrue(self.parse(["doctor", "winui", "--build-only"]).build_only)
         self.assertEqual(self.parse(["setup", "winui-runtime"]).component, "winui-runtime")
 
     def test_windows_build_selects_the_shared_flavor_preset(self):
@@ -960,6 +969,36 @@ class CliParseTest(unittest.TestCase):
         )
         server.terminate.assert_called_once()
         server.wait.assert_called_once_with(timeout=5)
+
+    def test_macos_catch2_execution_runs_directly(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "test" / "ao_core_test"
+            binary.parent.mkdir()
+            binary.touch()
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                with mock.patch.object(test_command, "run", return_value=0) as run:
+                    self.assertEqual(test_command.run_suite("core", build_dir, test_filter="[coreaudio]"), 0)
+                    self.assertEqual(test_command.run_suite("core", build_dir, list_only=True), 0)
+
+        self.assertEqual(
+            run.call_args_list,
+            [
+                mock.call(
+                    [str(binary), "[coreaudio]"],
+                    env=None,
+                    log=None,
+                    append=False,
+                ),
+                mock.call(
+                    [str(binary), "--list-tests", "--verbosity", "high"],
+                    env=None,
+                    log=None,
+                    append=False,
+                ),
+            ],
+        )
 
     def test_test_no_build_lint_uses_selected_tree_without_building(self):
         build_dir = Path("/tmp/aobus-test-build")

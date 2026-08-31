@@ -22,6 +22,19 @@ WINDOWS_BUILD_TOOLS_CONFIG = PROJECT_ROOT / "config" / "windows-build-tools.vsco
 WINDOWS_SDK_VERSION = "10.0.26100.0"
 VISUAL_STUDIO_GENERATOR = "Visual Studio 18 2026"
 
+# Visual Studio uses product-specific package IDs for the same installed
+# capabilities.  The governed .vsconfig intentionally targets the standalone
+# Build Tools product, while hosted CI supplies Visual Studio Enterprise.
+# Accept the equivalent Enterprise workload IDs without weakening the concrete
+# compiler, CMake, NuGet, and SDK component checks below.
+VISUAL_STUDIO_COMPONENT_ALTERNATIVES: dict[str, tuple[str, ...]] = {
+    "Microsoft.VisualStudio.Workload.VCTools": ("Microsoft.VisualStudio.Workload.NativeDesktop",),
+    "Microsoft.VisualStudio.Workload.UniversalBuildTools": ("Microsoft.VisualStudio.Workload.Universal",),
+    "Microsoft.VisualStudio.ComponentGroup.WindowsAppDevelopment.VC.BuildTools": (
+        "Microsoft.VisualStudio.ComponentGroup.WindowsAppDevelopment.Prerequisites",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class RuntimeContract:
@@ -85,8 +98,28 @@ def vswhere_path(environ: Mapping[str, str] | None = None) -> Path:
     return _program_files_x86(environment) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
 
 
-def _run_text(command: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, check=False, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def _run_text(
+    command: list[str],
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=None if environ is None else dict(environ),
+    )
+
+
+def _windows_powershell_environment(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Drop inherited PowerShell 7 paths before launching Windows PowerShell 5.1."""
+    source = os.environ if environ is None else environ
+    return {name: value for name, value in source.items() if name.casefold() != "psmodulepath"}
 
 
 def visual_studio_installation(
@@ -101,9 +134,22 @@ def visual_studio_installation(
     if component:
         command += ["-requires", component]
     command += ["-property", "installationPath"]
-    result = _run_text(command)
+    result = _run_text(command, environ=environ)
     paths = [Path(line.strip()) for line in result.stdout.splitlines() if line.strip()]
     return paths[-1] if result.returncode == 0 and paths else None
+
+
+def installed_component(
+    component: str,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> str | None:
+    """Return the canonical or product-equivalent installed component ID."""
+    candidates = (component, *VISUAL_STUDIO_COMPONENT_ALTERNATIVES.get(component, ()))
+    for candidate in candidates:
+        if visual_studio_installation(component=candidate, environ=environ) is not None:
+            return candidate
+    return None
 
 
 def bundled_cmake(installation: Path) -> Path:
@@ -140,13 +186,17 @@ def installed_runtime_packages(
     runtime: RuntimeContract | None = None,
     *,
     powershell: str = "powershell.exe",
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[RuntimePackage, ...]:
     selected = _runtime_contract() if runtime is None else runtime
     command = (
         f"Get-AppxPackage -Name '{selected.package_name}' -PackageTypeFilter Framework | "
         "Select-Object Name,Version,Architecture,PackageFullName | ConvertTo-Json -Compress"
     )
-    result = _run_text([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command])
+    result = _run_text(
+        [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+        environ=_windows_powershell_environment(environ),
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Get-AppxPackage failed")
     return _runtime_packages_from_json(result.stdout, selected.architecture)
@@ -156,9 +206,10 @@ def matching_runtime(
     runtime: RuntimeContract | None = None,
     *,
     powershell: str = "powershell.exe",
+    environ: Mapping[str, str] | None = None,
 ) -> RuntimePackage | None:
     selected = _runtime_contract() if runtime is None else runtime
-    for package in installed_runtime_packages(selected, powershell=powershell):
+    for package in installed_runtime_packages(selected, powershell=powershell, environ=environ):
         if package.version == selected.version:
             return package
     return None
@@ -198,12 +249,13 @@ def inspect_host(
     )
 
     for component in required_components():
-        present = visual_studio_installation(component=component, environ=environment)
+        present = installed_component(component, environ=environment)
+        detail = "installed" if present == component else f"installed via {present}"
         checks.append(
             HostCheck(
                 component,
                 present is not None,
-                "installed" if present else f"missing; install from {WINDOWS_BUILD_TOOLS_CONFIG}",
+                detail if present else f"missing; install from {WINDOWS_BUILD_TOOLS_CONFIG}",
             )
         )
 
@@ -212,7 +264,7 @@ def inspect_host(
         generator_present = False
         detail = str(cmake)
         if cmake.is_file():
-            result = _run_text([str(cmake), "--help"])
+            result = _run_text([str(cmake), "--help"], environ=environment)
             generator_present = result.returncode == 0 and VISUAL_STUDIO_GENERATOR in result.stdout
             if not generator_present:
                 detail = f"{cmake} does not advertise {VISUAL_STUDIO_GENERATOR}"
@@ -224,7 +276,7 @@ def inspect_host(
     if include_runtime:
         try:
             runtime = _runtime_contract()
-            installed = matching_runtime(runtime)
+            installed = matching_runtime(runtime, environ=environment)
             checks.append(
                 HostCheck(
                     f"Windows App Runtime {runtime.version} {runtime.architecture}",
@@ -315,15 +367,27 @@ def _download_verified_installer(runtime: RuntimeContract, state_root: Path) -> 
     return installer
 
 
-def _verify_authenticode(installer: Path) -> None:
+def _verify_authenticode(
+    installer: Path,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    environment = _windows_powershell_environment(environ)
+    environment["AOBUS_AUTHENTICODE_PATH"] = str(installer)
     script = (
-        "& { param([string]$Path) "
-        "$signature = Get-AuthenticodeSignature -LiteralPath $Path; "
-        "[pscustomobject]@{Status=[string]$signature.Status;Subject=[string]$signature.SignerCertificate.Subject} "
-        "| ConvertTo-Json -Compress }"
+        "$ErrorActionPreference = 'Stop'; "
+        "$path = $env:AOBUS_AUTHENTICODE_PATH; "
+        "if ([string]::IsNullOrWhiteSpace($path)) { throw 'Authenticode path is missing.' }; "
+        "if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Authenticode file is missing.' }; "
+        "$signature = Get-AuthenticodeSignature -LiteralPath $path -ErrorAction Stop; "
+        "if ($null -eq $signature) { throw 'Authenticode query returned no result.' }; "
+        "$subject = if ($null -eq $signature.SignerCertificate) { '' } "
+        "else { [string]$signature.SignerCertificate.Subject }; "
+        "[pscustomobject]@{Status=[string]$signature.Status;Subject=$subject} | ConvertTo-Json -Compress"
     )
     result = _run_text(
-        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, str(installer)]
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+        environ=environment,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Authenticode verification failed")
@@ -331,10 +395,13 @@ def _verify_authenticode(installer: Path) -> None:
         signature = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Authenticode verification returned invalid data") from exc
-    if signature.get("Status") != "Valid" or "Microsoft Corporation" not in signature.get("Subject", ""):
+    if not isinstance(signature, dict):
+        raise RuntimeError("Authenticode verification returned invalid data")
+    status = signature.get("Status")
+    subject = signature.get("Subject")
+    if status != "Valid" or not isinstance(subject, str) or "Microsoft Corporation" not in subject:
         raise RuntimeError(
-            f"Windows App Runtime installer has an invalid signer: "
-            f"status={signature.get('Status')!r}, subject={signature.get('Subject')!r}"
+            f"Windows App Runtime installer has an invalid signer: status={status!r}, subject={subject!r}"
         )
 
 

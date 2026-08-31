@@ -244,6 +244,14 @@ namespace ao::yaml
 
   Result<std::vector<char>> readFileResult(std::filesystem::path const& path, std::optional<std::size_t> optMaxBytes)
   {
+    auto statusEc = std::error_code{};
+
+    if (auto const status = std::filesystem::status(path, statusEc);
+        !statusEc && std::filesystem::exists(status) && !std::filesystem::is_regular_file(status))
+    {
+      return makeError(Error::Code::IoError, "Path is not a regular file: " + utility::pathToUtf8(path));
+    }
+
     auto ifs = std::ifstream{path, std::ios::binary | std::ios::ate};
 
     if (!ifs)

@@ -1,0 +1,539 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux / check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: aobus-linux-v1
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24  # v31.11.1
+        with:
+          enable_kvm: false
+
+      - name: Set up compiler cache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Enable compiler cache
+        id: compiler-cache
+        if: ${{ steps.sccache.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [[ ! -x "$SCCACHE_PATH" ]]; then
+            echo "sccache action did not provide an executable: $SCCACHE_PATH" >&2
+            exit 1
+          fi
+          sccache="$(realpath "$SCCACHE_PATH")"
+          {
+            printf 'SCCACHE_PATH=%s\n' "$sccache"
+            printf 'CMAKE_C_COMPILER_LAUNCHER=%s\n' "$sccache"
+            printf 'CMAKE_CXX_COMPILER_LAUNCHER=%s\n' "$sccache"
+          } >> "$GITHUB_ENV"
+
+      - name: Reset compiler cache statistics
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        continue-on-error: true
+        run: '"$SCCACHE_PATH" --zero-stats'
+
+      - name: Show initial disk usage
+        run: df -h
+
+      - name: Build and test
+        id: build
+        run: ./ao check
+
+      - name: Resolve hygiene base
+        id: hygiene-base
+        uses: ./.github/actions/resolve-hygiene-base
+
+      - name: Run hygiene
+        env:
+          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+        run: ./ao hygiene --commit "$BASE_SHA"
+
+      - name: Show compiler cache statistics
+        if: >-
+          ${{ !cancelled() && steps.compiler-cache.outcome == 'success' &&
+              steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        run: '"$SCCACHE_PATH" --show-stats'
+
+      - name: Show final disk usage
+        if: ${{ always() }}
+        run: df -h
+
+  macos:
+    name: macOS ${{ matrix.label }} / check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Intel
+            runner: macos-15-intel
+            cache_arch: x64
+            uname_arch: x86_64
+          - label: ARM64
+            runner: macos-15
+            cache_arch: arm64
+            uname_arch: arm64
+    env:
+      AOBUS_CHECKOUT_ID: github-actions-macos-${{ matrix.cache_arch }}
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: aobus-macos-${{ matrix.cache_arch }}-v1
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure local state
+        shell: bash
+        run: |
+          state_root="$RUNNER_TEMP/aobus-state"
+          mkdir -p "$state_root"
+          printf 'AOBUS_STATE_ROOT=%s\n' "$state_root" >> "$GITHUB_ENV"
+
+      - name: Install host toolchain
+        shell: bash
+        run: |
+          brew install \
+            llvm@22 \
+            cmake \
+            ninja \
+            pkgconf \
+            python@3.14 \
+            autoconf \
+            autoconf-archive \
+            automake \
+            libtool
+
+      - name: Capture macOS toolchain identity
+        id: macos-toolchain
+        shell: bash
+        env:
+          EXPECTED_ARCH: ${{ matrix.uname_arch }}
+        run: |
+          actual_arch="$(uname -m)"
+          if [[ "$actual_arch" != "$EXPECTED_ARCH" ]]; then
+            echo "Runner architecture is $actual_arch; expected $EXPECTED_ARCH." >&2
+            exit 1
+          fi
+
+          console_user="$(stat -f '%Su' /dev/console)"
+          if [[ "$console_user" == "root" ]]; then
+            echo 'No logged-in console user; native Core Audio validation would be incomplete.' >&2
+            exit 1
+          fi
+
+          llvm_root="$(brew --prefix llvm@22)"
+          python_root="$(brew --prefix python@3.14)"
+          llvm_version="$("$llvm_root/bin/clang++" -dumpversion)"
+          python_version="$("$python_root/bin/python3.14" -c \
+            'import platform; print(platform.python_version())')"
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          {
+            printf 'llvm=%s\n' "$llvm_version"
+            printf 'python=%s\n' "$python_version"
+            printf 'sdk=%s\n' "$sdk_version"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'macOS %s, %s, console %s, LLVM %s, Python %s, SDK %s, image %s\n' \
+            "$(sw_vers -productVersion)" \
+            "$actual_arch" \
+            "$console_user" \
+            "$llvm_version" \
+            "$python_version" \
+            "$sdk_version" \
+            "${ImageVersion:-unknown}"
+
+      - name: Set up compiler cache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Enable compiler cache
+        id: compiler-cache
+        if: ${{ steps.sccache.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [[ ! -x "$SCCACHE_PATH" ]]; then
+            echo "sccache action did not provide an executable: $SCCACHE_PATH" >&2
+            exit 1
+          fi
+          sccache="$(cd "$(dirname "$SCCACHE_PATH")" && pwd -P)/$(basename "$SCCACHE_PATH")"
+          {
+            printf 'SCCACHE_PATH=%s\n' "$sccache"
+            printf 'CMAKE_C_COMPILER_LAUNCHER=%s\n' "$sccache"
+            printf 'CMAKE_CXX_COMPILER_LAUNCHER=%s\n' "$sccache"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore managed macOS tools
+        id: macos-state
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/aobus-state/tools/vcpkg
+            ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
+          key: >-
+            macos-state-v1-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
+              hashFiles('script/ao/macos-toolchain.json')
+            }}
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
+          key: >-
+            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
+              steps.macos-toolchain.outputs.sdk
+            }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+          restore-keys: |
+            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{ steps.macos-toolchain.outputs.sdk }}-
+            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-
+            vcpkg-files-v1-macos-${{ runner.arch }}-
+
+      - name: Show initial disk usage
+        run: df -h
+
+      # Resolve the native dependency graph before the full gate so a later
+      # compile or test failure does not discard a cold vcpkg cache fill.
+      - name: Prepare vcpkg binary cache
+        id: vcpkg-prepare
+        timeout-minutes: 120
+        run: ./ao build --target ao_utility
+
+      - name: Inspect vcpkg binary cache
+        id: vcpkg-cache-ready
+        if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          cache_dir="$AOBUS_STATE_ROOT/cache/vcpkg/binaries"
+          if [[ -d "$cache_dir" ]]; then
+            archives="$(find "$cache_dir" -type f | wc -l | tr -d ' ')"
+            bytes="$(du -sk "$cache_dir" | awk '{print $1 * 1024}')"
+          else
+            archives=0
+            bytes=0
+          fi
+          printf 'vcpkg binary archives: %s (%s bytes)\n' "$archives" "$bytes"
+          if [[ "$archives" == "0" ]]; then
+            echo 'vcpkg produced no binary archives; skipping cache save.' >&2
+            printf 'ready=false\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'ready=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save managed macOS tools
+        if: >-
+          ${{ !cancelled() && steps.macos-state.outcome == 'success' &&
+              steps.macos-state.outputs.cache-hit != 'true' &&
+              steps.vcpkg-prepare.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/aobus-state/tools/vcpkg
+            ${{ runner.temp }}/aobus-state/tools/libcxx-expected-shim
+          key: ${{ steps.macos-state.outputs.cache-primary-key }}
+
+      - name: Save vcpkg binary cache
+        if: >-
+          ${{ !cancelled() && steps.vcpkg-cache.outcome == 'success' &&
+              steps.vcpkg-cache.outputs.cache-hit != 'true' &&
+              steps.vcpkg-cache-ready.outputs.ready == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Reset compiler cache statistics
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        continue-on-error: true
+        run: '"$SCCACHE_PATH" --zero-stats'
+
+      - name: Build and test
+        id: build
+        run: ./ao check
+
+      - name: Resolve hygiene base
+        id: hygiene-base
+        uses: ./.github/actions/resolve-hygiene-base
+
+      - name: Run hygiene
+        env:
+          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+        run: ./ao hygiene --commit "$BASE_SHA"
+
+      - name: Show compiler cache statistics
+        if: >-
+          ${{ !cancelled() && steps.compiler-cache.outcome == 'success' &&
+              steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        run: '"$SCCACHE_PATH" --show-stats'
+
+      - name: Show final disk usage
+        if: ${{ always() }}
+        run: df -h
+
+  windows:
+    name: Windows / check
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 180
+    env:
+      # Keep portal-owned paths stable across GitHub's fresh Windows VMs so
+      # restored tools contain the same absolute paths used when created.
+      AOBUS_STATE_ROOT: C:\aobus-state
+      AOBUS_CHECKOUT_ID: github-actions-windows-x64
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: aobus-windows-v1
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      # vcpkg 2026 removed x-gha. Keep its ABI-addressed archives in a local
+      # files backend and let actions/cache move that directory between VMs.
+      VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up compiler cache
+        id: sccache
+        continue-on-error: true
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Enable compiler cache
+        id: compiler-cache
+        if: ${{ steps.sccache.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SCCACHE_PATH)) {
+            throw 'sccache action did not provide SCCACHE_PATH.'
+          }
+          $sccacheCandidate = $env:SCCACHE_PATH
+          if (-not (Test-Path -LiteralPath $sccacheCandidate -PathType Leaf)) {
+            $windowsCandidate = "$sccacheCandidate.exe"
+            if (Test-Path -LiteralPath $windowsCandidate -PathType Leaf) {
+              $sccacheCandidate = $windowsCandidate
+            }
+          }
+          if (-not (Test-Path -LiteralPath $sccacheCandidate -PathType Leaf)) {
+            throw "sccache action did not provide a valid executable: $env:SCCACHE_PATH"
+          }
+          $sccache = (Resolve-Path -LiteralPath $sccacheCandidate).Path
+          $shimDirectory = Join-Path $env:RUNNER_TEMP 'aobus-sccache-msbuild'
+          $shim = Join-Path $shimDirectory 'cl.exe'
+          New-Item -ItemType Directory -Force -Path $shimDirectory | Out-Null
+          Copy-Item -LiteralPath $sccache -Destination $shim -Force
+
+          "SCCACHE_PATH=$sccache" >> $env:GITHUB_ENV
+          "CMAKE_C_COMPILER_LAUNCHER=$sccache" >> $env:GITHUB_ENV
+          "CMAKE_CXX_COMPILER_LAUNCHER=$sccache" >> $env:GITHUB_ENV
+          "AOBUS_MSBUILD_CL_TOOL_EXE=$shim" >> $env:GITHUB_ENV
+
+      - name: Capture Windows image version
+        id: windows-image
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:ImageVersion)) {
+            throw 'GitHub-hosted Windows runner did not expose ImageVersion.'
+          }
+          "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\vcpkg-binary
+          key: >-
+            vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-${{
+              hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**')
+            }}
+          restore-keys: |
+            vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-
+            vcpkg-files-v1-${{ runner.arch }}-
+
+      - name: Restore managed Windows tools
+        id: windows-state
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            C:\aobus-state\tools
+            C:\aobus-state\n
+            C:\aobus-state\cache\llvm
+            C:\aobus-state\cache\pip
+            C:\aobus-state\cache\windows-app-sdk
+          key: >-
+            windows-state-v1-${{ runner.arch }}-${{
+              hashFiles(
+                'script/ao/toolchain.json',
+                'script/ao/windows-requirements.txt',
+                'dependency-contract.json',
+                'app/windows-winui/packages.config',
+                'app/windows-winui/NuGet.Config',
+                'cmake/LlvmSdk.cmake'
+              )
+            }}
+
+      - name: Check Windows build prerequisites
+        id: windows-prerequisites
+        shell: pwsh
+        run: .\ao.bat doctor winui --build-only
+
+      - name: Set up Windows App Runtime
+        shell: pwsh
+        timeout-minutes: 10
+        run: .\ao.bat setup winui-runtime
+
+      - name: Show initial disk usage
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize
+
+      # Populate and persist vcpkg's ABI-addressed packages before the full
+      # gate. A later compile or test failure must not discard a cold restore.
+      - name: Prepare vcpkg binary cache
+        id: vcpkg-prepare
+        shell: pwsh
+        timeout-minutes: 60
+        run: .\ao.bat build --target ao_utility
+
+      - name: Inspect vcpkg binary cache
+        id: vcpkg-cache-ready
+        if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
+        shell: pwsh
+        run: |
+          $archives = @(
+            Get-ChildItem "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary" `
+              -File -Recurse -ErrorAction SilentlyContinue
+          )
+          $ninjaFiles = @(
+            Get-ChildItem "$env:AOBUS_STATE_ROOT\build" `
+              -Filter build.ninja -File -Recurse -ErrorAction SilentlyContinue
+          )
+          $bytes = ($archives | Measure-Object -Property Length -Sum).Sum
+          if ($null -eq $bytes) {
+            $bytes = 0
+          }
+          Write-Host "vcpkg binary archives: $($archives.Count) ($bytes bytes)"
+          if ($archives.Count -eq 0 -or $ninjaFiles.Count -eq 0) {
+            Write-Warning 'vcpkg or CMake configuration did not complete; skipping cache save.'
+            "ready=false" >> $env:GITHUB_OUTPUT
+          } else {
+            "ready=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Save vcpkg binary cache
+        if: >-
+          ${{ !cancelled() && steps.vcpkg-cache.outcome == 'success' &&
+              steps.vcpkg-cache.outputs.cache-hit != 'true' &&
+              steps.vcpkg-cache-ready.outputs.ready == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\vcpkg-binary
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Reset build compiler cache statistics
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: '& $env:SCCACHE_PATH --zero-stats'
+
+      - name: Build and test
+        id: build
+        shell: pwsh
+        run: .\ao.bat check
+
+      - name: Show build compiler cache statistics
+        if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' && steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        shell: pwsh
+        run: '& $env:SCCACHE_PATH --show-stats'
+
+      - name: Resolve hygiene base
+        id: hygiene-base
+        uses: ./.github/actions/resolve-hygiene-base
+
+      - name: Run hygiene
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+        run: .\ao.bat hygiene --commit $env:BASE_SHA
+
+      - name: Show final compiler cache statistics
+        if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' }}
+        continue-on-error: true
+        shell: pwsh
+        run: '& $env:SCCACHE_PATH --show-stats'
+
+      - name: Save managed Windows tools
+        if: >-
+          ${{ !cancelled() && steps.windows-prerequisites.outcome == 'success' &&
+              steps.windows-state.outcome == 'success' &&
+              steps.windows-state.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            C:\aobus-state\tools
+            C:\aobus-state\n
+            C:\aobus-state\cache\llvm
+            C:\aobus-state\cache\pip
+            C:\aobus-state\cache\windows-app-sdk
+          key: ${{ steps.windows-state.outputs.cache-primary-key }}
+
+      - name: Show final disk usage
+        if: ${{ always() }}
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table -AutoSize

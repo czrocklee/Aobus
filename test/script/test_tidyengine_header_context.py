@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import tidyengine
+from ao.core.paths import absolute_path
 
 
 class HeaderContextFixture:
@@ -139,14 +140,14 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
 
         run.assert_called_once_with(
             ["ninja", "-t", "deps"],
-            cwd=self.fixture.build_dir.resolve(),
+            cwd=absolute_path(self.fixture.build_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
         )
-        lock.assert_called_once_with(self.fixture.build_dir.resolve())
+        lock.assert_called_once_with(absolute_path(self.fixture.build_dir))
         self.assertEqual([(target.selected, target.translation_unit) for target in plan.targets], [(header, consumer)])
 
     def test_fallback_selects_lexicographically_first_consumer_and_reads_graph_once(self):
@@ -208,7 +209,7 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
                 project_root=self.fixture.root,
             )
 
-        self.assertEqual(run.call_args.kwargs["cwd"], native_build_dir.resolve())
+        self.assertEqual(run.call_args.kwargs["cwd"], absolute_path(native_build_dir))
         self.assertEqual([(target.selected, target.translation_unit) for target in plan.targets], [(header, consumer)])
 
     def test_additional_tree_proves_consumption_but_primary_database_supplies_command(self):
@@ -253,7 +254,7 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         )
 
         def ninja_deps(_command, *, cwd, **_kwargs):
-            output = dependency_output_text if cwd == dependency_build_dir.resolve() else ""
+            output = dependency_output_text if cwd == absolute_path(dependency_build_dir) else ""
             return subprocess.CompletedProcess(["ninja", "-t", "deps"], 0, output)
 
         with mock.patch.object(tidyengine.subprocess, "run", side_effect=ninja_deps):
@@ -307,7 +308,7 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         dependency_output_text = f"{output_spelling}: #deps 1, deps mtime 1 (VALID)\n    {header_spelling}\n"
 
         def ninja_deps(_command, *, cwd, **_kwargs):
-            output = dependency_output_text if cwd == dependency_build_dir.resolve() else ""
+            output = dependency_output_text if cwd == absolute_path(dependency_build_dir) else ""
             return subprocess.CompletedProcess(["ninja", "-t", "deps"], 0, output)
 
         with mock.patch.object(tidyengine.subprocess, "run", side_effect=ninja_deps):

@@ -183,7 +183,12 @@ else()
   # Compiler Cache
   option(USE_CCACHE "Use ccache for faster recompilation if available" ON)
 
-  if(USE_CCACHE)
+  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
+    message(STATUS
+      "Using configured compiler launcher(s): "
+      "C='${CMAKE_C_COMPILER_LAUNCHER}', "
+      "CXX='${CMAKE_CXX_COMPILER_LAUNCHER}'")
+  elseif(USE_CCACHE)
     find_program(CCACHE_PROGRAM ccache)
     if(CCACHE_PROGRAM)
       message(STATUS "Using compiler cache: ${CCACHE_PROGRAM}")

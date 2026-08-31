@@ -89,6 +89,17 @@ namespace ao::test
       CHECK(result.error().code == Error::Code::IoError);
     }
 
+    SECTION("readFileResult rejects directories before reading")
+    {
+      auto const tempDir = TempDir{};
+      auto const directory = std::filesystem::path{tempDir.path()} / "config.yaml";
+      REQUIRE(std::filesystem::create_directory(directory));
+
+      auto const result = yaml::readFileResult(directory);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
+    }
+
     SECTION("readFileResult applies its optional byte ceiling before reading")
     {
       auto const tempDir = TempDir{};

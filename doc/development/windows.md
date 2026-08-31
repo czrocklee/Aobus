@@ -25,7 +25,10 @@ filesystem.
   Universal Windows build workloads, x64 compiler toolset, NuGet Build Tools,
   Windows SDK 10.0.26100, and the C++ WinUI application build tools. Install the
   optional **C++ AddressSanitizer** component for sanitizer gates. The Visual
-  Studio IDE and Visual Studio Clang component are not required.
+  Studio IDE and Visual Studio Clang component are not required. Visual Studio
+  Enterprise is also supported when its equivalent desktop C++, Universal
+  Windows, and Windows app development workloads provide the same concrete
+  components.
 - Git with long-path support, recommended for vcpkg build trees.
 - Network access for the first managed Python and dependency bootstrap. A valid
   local state directory is reused on later runs.
@@ -107,6 +110,7 @@ The following overrides have distinct scopes:
 | `AOBUS_STATE_ROOT` | Replaces `%LOCALAPPDATA%\Aobus` for managed Windows state, including default builds, tools, and caches. |
 | `AOBUS_BUILD_ROOT` | Replaces only the `build` base; checkout and preset directories are still appended. |
 | `BUILD_DIR` | Selects one exact primary build tree. This is useful for a one-off command but should not be reused across incompatible presets. |
+| `AOBUS_MSBUILD_CL_TOOL_EXE` | Names an absolute, host-local `cl.exe`-compatible compiler-cache wrapper for the Visual Studio WinUI tree. |
 | `AOBUS_LLVM_SDK_CACHE_ROOT` | Relocates the automatically managed LLVM cache containing `toolchains`, `downloads`, and its lock. It is available as both an environment setting and a CMake cache option. |
 | `AOBUS_LLVM_SDK_ROOT` | CMake cache option naming one complete, pre-extracted LLVM SDK. It is validated and never modified; it is not the automatic cache root. |
 
@@ -141,6 +145,7 @@ ao.bat build                 rem debug build of all enabled targets
 ao.bat build release         rem Release build of the full graph with IPO/LTCG
 ao.bat build --target aobus-tui  rem build only the TUI target
 ao.bat doctor winui          rem inspect WinUI build/runtime prerequisites
+ao.bat doctor winui --build-only  rem inspect build prerequisites without the launch runtime
 ao.bat setup winui-runtime   rem install the governed runtime when missing
 ao.bat build --target winui  rem build WinUI with CMake-generated MSBuild
 ao.bat build release --target winui  rem build the WinUI Release configuration with IPO/LTCG
@@ -238,6 +243,21 @@ ao.bat build --target winui
 The WinUI build enables MSBuild MultiToolTask with a process-count semaphore, so
 the limit applies to concurrent `cl.exe` work across generated projects rather
 than multiplying project-level and translation-unit-level parallelism.
+
+The normal Windows Ninja trees honor CMake's standard
+`CMAKE_C_COMPILER_LAUNCHER` and `CMAKE_CXX_COMPILER_LAUNCHER` settings.
+The Visual Studio generator does not honor those launchers, so an automated
+host may instead set `AOBUS_MSBUILD_CL_TOOL_EXE` to an absolute, host-local
+compiler-cache wrapper whose file name is `cl.exe`.
+For sccache 0.17 or newer, copy `sccache.exe` to that wrapper path without
+adding its directory to `PATH`; the real MSVC `cl.exe` remains discoverable in
+the initialized Visual Studio environment.
+The portal applies the wrapper to every generated WinUI C++ project, disables
+MSBuild file tracking only while `ClCompile` runs as required by wrapper mode,
+and emits embedded debug information for cacheable Debug and RelWithDebInfo
+compilation. CMake regeneration, ICU resources, and other custom commands keep
+normal file tracking and dependency ordering.
+Leave the setting unset for ordinary uncached local builds.
 
 The current target is unpackaged and framework-dependent. Developer Mode is not
 required. Launch must occur in an interactive desktop session: SSH service

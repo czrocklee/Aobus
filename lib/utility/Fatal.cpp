@@ -3,6 +3,15 @@
 
 #include <ao/Contract.h>
 
+#ifdef _WIN32
+#include <io.h>
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- MSVC abort-control APIs require this header.
+#else
+#include <pthread.h>
+#include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX signal-set APIs require this header.
+#include <unistd.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -15,14 +24,6 @@
 #include <source_location>
 #include <string_view>
 #include <system_error>
-
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <pthread.h>
-#include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX signal-set APIs require this header.
-#include <unistd.h>
-#endif
 
 // Apple SDKs declare these POSIX functions before defining function-like
 // macros with the same names. Remove the macros so qualified calls resolve to
@@ -154,6 +155,11 @@ namespace ao
     [[noreturn]] void terminateProcess() noexcept
     {
       AO_RAW_FATAL_BACKEND();
+#ifdef _WIN32
+      // Debug CRT abort() otherwise shows a message box and can wait for WER/JIT.
+      ::_set_error_mode(_OUT_TO_STDERR);
+      ::_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
       std::abort();
     }
 

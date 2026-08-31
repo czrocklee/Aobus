@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.30)
 
+include(cmake/WindowsCompilerCache.cmake)
+
 project(aobus VERSION 0.1.0)
 
 if(NOT WIN32 AND NOT LINUX AND NOT APPLE)
@@ -296,3 +298,5 @@ get_property(AOBUS_GENERATED_HEADERS GLOBAL PROPERTY AOBUS_GENERATED_HEADERS)
 if(AOBUS_GENERATED_HEADERS)
   add_custom_target(aobus_generated_headers DEPENDS ${AOBUS_GENERATED_HEADERS})
 endif()
+
+aobus_apply_msbuild_compiler_cache("${CMAKE_SOURCE_DIR}")

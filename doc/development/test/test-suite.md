@@ -36,7 +36,11 @@ The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
 built. Its Homebrew host Python is outside the exact repository-tooling
 contract; native clang-tidy and its integration fixtures do have a Darwin
 baseline. `./ao test --all` and `./ao check` resolve the same supported
-five-suite group.
+five-suite group. macOS Catch2 executables run directly, like their Linux and
+Windows counterparts. The portal neither creates a console login nor changes
+the host's power policy. Core Audio coverage requires a logged-in console user;
+the GitHub Actions job checks that prerequisite before running the gate, and an
+unattended local host should provide it through host configuration.
 
 The tooling gate uses the pinned Ruff and mypy environment supplied by Nix on
 Linux and the checkout-specific managed environment supplied by `ao.bat` on

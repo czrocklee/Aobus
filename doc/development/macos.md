@@ -24,8 +24,9 @@ It uses the shared profile; macOS may resample, remap channels, or convert the
 lossless client PCM stream downstream of Aobus.
 
 The build targets macOS 14.0 or newer. The project-maintained validation host is
-macOS 15.7.9 on x86_64. The repository also defines an arm64 vcpkg triplet, but
-that triplet remains unvalidated until a native arm64 gate passes.
+macOS 15.7.9 on x86_64. GitHub Actions runs the native gate on both the
+`macos-15-intel` x86_64 image and the `macos-15` arm64 image, using a dedicated
+vcpkg triplet and compiler-cache namespace for each architecture.
 
 ## Policy
 
@@ -137,14 +138,28 @@ optimizer-sensitive code also run `./ao check release`. Sanitizer-sensitive chan
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md) and
 run the relevant `--asan` or `--tsan` gate.
 
+The GitHub Actions matrix runs that normal completion gate natively on Intel
+and Apple Silicon. These jobs validate the shared libraries, CLI, TUI, Core
+Audio provider, tests, and native lint integration; they do not claim a Cocoa
+desktop frontend.
+
 The macOS `all` group is exactly core, TUI, CLI, integration, and lint. Its core
 suite opens the native AUHAL path and exercises a silent render/drain cycle on
 a live output when the host exposes one. A passing gate does not claim a GUI or
 the exact Python tooling contract. Linux and Windows remain required for those
 platform-specific contracts.
 
-Native audio validation requires an active logged-in console session, including when `./ao` itself runs over SSH.
-At the login window, Core Audio may enumerate the device while refusing to start AUHAL; log in before running the gate.
+Native audio validation requires a logged-in console session, including when
+`./ao` itself runs over SSH. GitHub's hosted macOS images establish that session,
+and the workflow rejects a runner whose `/dev/console` owner is `root` before it
+starts the native gate. An unattended local validation host should use automatic
+login and disable system sleep; display sleep may remain enabled because it does
+not stop SSH, compilation, or headless tests.
+
+The portal runs test executables directly. It does not create a login session,
+change host power policy, or keep the display awake. At the login window, Core
+Audio may enumerate the device while refusing to start AUHAL, so establish the
+console session before running the gate.
 
 Audio-backend changes also run the opt-in audible probe on a host where a short,
 quiet tone is acceptable:
@@ -178,7 +193,16 @@ automated probe does not by itself claim audible hardware behavior.
   Audio MIDI Setup. Aobus does not synthesize a default route when Core Audio
   publishes no concrete device.
 - If AUHAL or `afplay` cannot start over SSH, run `stat -f "%Su" /dev/console`.
-  A result of `root` means no console user is logged in; log in through the desktop before retrying native audio validation.
+  A result of `root` means no console user is logged in; log in through the desktop
+  or repair automatic login before retrying native audio validation. For an
+  unattended local VM, `pmset -g custom` should report `sleep 0`; set that policy
+  once with `sudo pmset -a sleep 0` rather than coupling power management to every
+  test process.
+- Display sleep can leave the QEMU framebuffer showing an old clock even while
+  the system time, SSH, and tests remain live. Check `date` and
+  `sntp -d time.apple.com` before diagnosing clock drift. Wake the display for a
+  visual check, or disable `displaysleep` only if the extra WindowServer load is
+  acceptable.
 - If a selected output disappears, choose one of the newly published concrete
   devices. Aobus reports device loss and does not redirect the stream to a new
   system default behind the user's selection.

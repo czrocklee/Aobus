@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ao.command import analyze, tidy
 from ao.core import tidyconfig
+from ao.core.paths import absolute_path
 
 
 class TidyClassifyTest(unittest.TestCase):
@@ -153,7 +154,7 @@ class TidySplitExistingTest(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".py") as outside:
             cpp_files, python_files = tidy.split_existing([outside.name])
             self.assertEqual(cpp_files, [])
-            self.assertEqual(python_files, [Path(outside.name).resolve().as_posix()])
+            self.assertEqual(python_files, [absolute_path(outside.name).as_posix()])
 
 
 class AnalyzeClassifyTest(unittest.TestCase):

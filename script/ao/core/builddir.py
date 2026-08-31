@@ -214,10 +214,10 @@ LINUX_PROFILE = PlatformProfile(
     compiler="gcc",
 )
 
-# macOS builds the terminal and command-line frontends only: there is no GTK
-# frontend and no native audio backend there yet, so the app runs silently and
-# the gtk suites do not exist. Python repository tooling remains owned by Linux
-# and Windows. Native clang-tidy integration is supported on Darwin.
+# macOS builds the terminal and command-line frontends with Core Audio output.
+# There is no GTK or Cocoa desktop frontend, so the GTK suites do not exist.
+# Python repository tooling remains owned by Linux and Windows. Native
+# clang-tidy integration is supported on Darwin.
 MACOS_PROFILE = PlatformProfile(
     name="macos",
     build_root=BUILD_ROOT,

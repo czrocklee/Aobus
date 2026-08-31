@@ -645,7 +645,9 @@ namespace ao::lmdb::test
   TEST_CASE("IntegerKeyDatabase::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
             "[lmdb][regression][database][writer]")
   {
-    constexpr std::size_t kMapSize = std::size_t{64} * 1024;
+    // Apple Silicon uses 16 KiB pages. Leave enough LMDB pages for the named
+    // database and baseline record before forcing the capacity failure.
+    constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     constexpr std::size_t kOversizedValue = kMapSize * 4;
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20, .pinnedMapBytes = kMapSize});

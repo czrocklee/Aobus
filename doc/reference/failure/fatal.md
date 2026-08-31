@@ -187,6 +187,7 @@ Its result never changes the final abort.
 - A recursive entry on the same thread emits a minimal `recursive-fatal` marker and aborts without re-entering formatting or the sink.
 - Concurrent entries each attempt their complete emergency record; at most one enters the application sink, while every concurrent loser emits a minimal `concurrent-fatal` marker and aborts.
 - Ordinary diagnostic formatting, emergency output, or sink failure never escapes and never prevents `std::abort()`.
+- On Windows, the backend disables the Debug CRT abort dialog and Windows Error Reporting before `std::abort()`, so termination cannot block on UI.
 - The ordinary sink path is bounded and non-blocking by application contract.
 - The realtime form performs no heap allocation, dynamic formatting, application mutex acquisition, logger call, or explicit wait.
 - Contract conditions and diagnostic arguments contain no operation required for program correctness.
