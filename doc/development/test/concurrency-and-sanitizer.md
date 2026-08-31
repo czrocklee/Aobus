@@ -9,8 +9,8 @@ summary: Defines concurrency review, race testing, and sanitizer validation prac
 
 Use this reference for cross-thread state, callback affinity, cancellation races,
 and teardown while work is in flight. Production synchronization rules belong
-to `doc/development/coding-style.md`; test tag grammar and command semantics belong to
-`naming-and-assertions.md` and `test-suites.md`.
+to [C++ coding style](../coding-style.md); test tag grammar and command semantics belong to
+[test naming and assertions](naming-and-assertion.md) and [test suites](test-suite.md).
 
 ## Review model
 
@@ -48,12 +48,12 @@ their collision, and obsolete reschedule generations.
 Prefer controlled executors, barriers, latches, and captured callbacks. A
 timeout may guard against hangs, but elapsed time is not proof. Tag applicable
 tests `[concurrency]`; reserve `[stress]` for additional repetition or schedule
-exploration. See `naming-and-assertions.md` for the permitted tag forms.
+exploration. See [test naming and assertions](naming-and-assertion.md) for the permitted tag forms.
 
 ## Validation
 
-Run the concurrency gate prescribed by `validation-and-review.md`. Use repetition
-only after a deterministic regression exists; `test-suites.md` owns suite
+Run the concurrency gate prescribed by [validation and review](validation-and-review.md). Use
+repetition only after a deterministic regression exists; [the test-suite reference](test-suite.md) owns suite
 selection and `--repeat` behavior.
 
 ## Sanitizer findings

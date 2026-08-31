@@ -7,6 +7,8 @@ description: Write or review Aobus C++ tests using Catch2, FakeIt, deterministic
 
 Use this skill to write behavior-focused Aobus tests that are easy to read, deterministic to run, and placed at the lowest layer that proves the behavior.
 
+Test review is read-only unless the user also asks for fixes or new tests.
+
 Aobus tests are layered, not just coverage probes. Prefer pure `lib`, `runtime`, or `uimodel` tests for product behavior. Use `linux-gtk` tests only for GTK rendering, event binding, widget lifecycle, and targeted layout regressions.
 
 ## Core rule
@@ -29,7 +31,7 @@ This skill is an agent-facing routing layer. The operational rules — naming, t
 - `doc/development/test/coverage-workflow.md` — coverage reports and the measure-analyze-test-verify loop.
 - `doc/development/test/test-suite.md` — `./ao test` suite organization, suite groups, and non-Catch2 suite behavior.
 
-## Default workflow
+## Authoring workflow
 
 1. Read the production API and the closest sibling test file.
 2. Pick the lowest layer that can prove the behavior.
@@ -50,9 +52,7 @@ This skill is an agent-facing routing layer. The operational rules — naming, t
 
 When unsure between GTK and uimodel, prefer `uimodel` if the behavior can be expressed as `input state -> view state`.
 
-## Validation
-
-Use `doc/development/test/validation-and-review.md` as the source of truth for validation commands and scope.
+## Boundaries
 
 Do not run clang-tidy for ordinary test changes unless the user explicitly asks for linting, clang-tidy, tidy cleanup, or lint findings. If requested, use `./ao tidy`.
 

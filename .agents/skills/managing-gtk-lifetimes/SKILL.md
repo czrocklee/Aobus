@@ -5,6 +5,8 @@ description: Reviews and changes Aobus GTK ownership, signal wiring, replaceable
 
 # Managing GTK lifetimes
 
+Review is read-only unless the user also asks for fixes.
+
 Use lifetime-aligned wiring for every GTK connection and attachment.
 
 ## Required reading
@@ -22,7 +24,8 @@ When tests change, also read `doc/development/test/uimodel-and-gtk.md` and `doc/
 6. For a simple one-shot popover, use `PopoverAttachment`; keep stable or multi-stage popovers in their owning controller.
 7. Defer any operation that would destroy its currently dispatching widget, gesture, action, or view generation, and bind that deferred callback to its owner.
 8. Keep generation-local widgets and pointers out of longer-lived controllers; communicate across generations with stable ids, values, commands, or host signals.
-9. Add a GTK regression that performs replacement or teardown, then run `./ao check`.
+9. When changing code, add a GTK regression that performs replacement or teardown,
+   then run the repository completion gate.
 
 Do not treat blanket `scoped_connection`, weak pointers, refresh calls, or a global wiring registry as substitutes for a proven ownership graph.
 Do not report a raw `this` capture as a bug until emitter ownership and destruction order show it can outlive the receiver.

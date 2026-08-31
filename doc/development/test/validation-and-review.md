@@ -45,7 +45,7 @@ When adding to an already large test file, prefer a new focused file if the beha
 
 Prefer standalone `TEST_CASE`s for independent behavior contracts; keep `SECTION` for
 variants of one contract that share an arrange (see *SECTION vs TEST_CASE* in
-`naming-and-assertions.md`). Splitting duplicates the arrange, so route genuinely shared
+[test naming and assertions](naming-and-assertion.md)). Splitting duplicates the arrange, so route genuinely shared
 setup into an existing `*TestSupport.h` rather than copying it — and do not hide a
 duplicate helper behind a nested namespace to dodge a collision.
 Keep its concrete implementation in the paired `.cpp` unless it must remain

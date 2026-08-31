@@ -1,66 +1,77 @@
 ---
 name: manage-git-flow
 description: >-
-  BLOCKING — Activate before any git operation that mutates repository state
-  (add/commit/push/rebase/merge/cherry-pick/stash/checkout/restore/reset), or when the user says
-  commit, push, or rebase. Read-only inspection (status/diff/log/show/blame/branch listing) does
-  not require this skill. Enforces project hygiene, validation, and no AI attribution in commits.
+  BLOCKING — Activate before any Git or GitHub workflow mutation: stage, commit, amend, create or
+  switch branches, push, rebase, squash, merge, cherry-pick, stash, restore, reset, or create,
+  update, or merge a pull request. Read-only status, diff, log, blame, branch, PR, and CI inspection
+  does not require this skill. Enforces cohesive history, project gates, and safe publication.
 ---
 
 # Manage Git Flow
 
-Use this skill before any Git operation that mutates repository state. Read-only inspection
-commands (`git status`, `git diff`, `git log`, `git show`, `git blame`) may run without it;
-the repository's own git hooks still enforce hard rules such as the no-AI-attribution check.
+Use this skill before using Git or GitHub to change the worktree, index, history, refs, remote
+branches, or pull requests. Repository hooks remain authoritative.
 
-## Hygiene Tools
+## Invariants
 
-Mid-session formatting and lint are forbidden for the reasons in AGENTS.md Rule 8; this skill
-only owns the commit-time gate.
+- Preserve unrelated worktree changes.
+- Read `AGENTS.md` and `doc/development/commit-message.md` before committing.
+- Do not commit directly to the default branch unless the user explicitly requests it.
+- Treat explicit history guidance as a continuing constraint until the topic changes or the user
+  revises it.
+- Permission to commit, push, or open a PR does not authorize merging, changing repository rules,
+  or rewriting unrelated history.
 
-Before committing, run the check-only gate:
+## Shape History by Intent
 
-```bash
-./ao hygiene
-```
+Commits are review and revert units, not activity logs. Prefer the smallest sequence of cohesive,
+independently understandable changes; do not force a branch into one commit by default.
 
-`./ao hygiene` never modifies files. A failing gate blocks the commit; resolve it in this order:
+- **Amend** when a follow-up completes or corrects the same technical intent and a separate commit
+  would add no review or revert value.
+- **Create a new commit** when the change is a distinct concern, deserves an independent review, or
+  should be independently revertible.
+- **Squash or reorder** only to restore an agreed history shape, never merely to reduce commit count.
 
-1. **Formatting first.** Run `./ao format` on the same scope (the one sanctioned formatting pass —
-   cheap, no compile), report exactly which files were reformatted, and re-stage them. Do this
-   before touching lint: formatting shifts line numbers, so fixing lint first strands the tidy
-   findings on stale lines and forces an extra, expensive clang-tidy pass.
-2. **Lint findings (clang-tidy / Ruff / mypy).** Fix them manually against the post-format lines —
-   most C++ findings have no safe auto-fix — then re-run scoped validation.
-
-Re-run `./ao hygiene` to verify before staging. Done in this order, clang-tidy runs only twice
-(discover + verify).
-
-## Validation
-
-For commit requests, use the final project gate directly:
+Before rewriting a published branch, confirm the intended commit range and observed upstream tip.
+Require explicit authorization unless the user already requested amend, squash, consolidation, or
+equivalent history rewriting. Push with an OID-bound lease:
 
 ```bash
-./ao check
+git push --force-with-lease=<remote-ref>:<observed-remote-oid> <remote> <local-ref>:<remote-ref>
 ```
 
-The gate is fast enough that fine-grained pre-commit test selection is usually wasted agent loop
-time and can miss coverage from tooling, lint integration, or platform suites. Use narrower tests
-only while actively debugging a failure or validating a small hypothesis before the final gate.
-Preserve unrelated worktree changes.
+Never rewrite the default branch. If the lease fails, stop and inspect the remote change; do not
+weaken or retry the force push.
 
-## Commit Procedure
+## Validate and Commit
 
-1. Inspect `git status`, `git diff HEAD`, and `git log -n 3`.
-2. Confirm implementation and debugging are complete.
-3. Run `./ao hygiene`; resolve any findings in the order given in Hygiene Tools (format first, then
-   lint) and re-run until clean.
-4. Run `./ao check`; fix any failures and re-run it until clean.
-5. Stage only intended changes.
-6. Commit using `doc/development/commit-message.md`. The subject must describe the primary technical
-   contribution and must not mention AI, internal plans, or append co-author signatures.
-   Do not add validation trailers such as `Validation: ./ao check`; report validation results in the
-   final user-facing response instead.
-7. Run `git status` and report any remaining unrelated changes.
+1. Inspect `git status --short --branch`, `git diff HEAD`, the branch range against its base, and the
+   latest commits. Check for an existing PR before deciding the history shape.
+2. Confirm implementation and debugging are complete. Run the validation required by `AGENTS.md`.
+3. Run the final check-only gate:
 
-Never use destructive checkout, restore, or reset operations without explicit user approval.
+   ```bash
+   ./ao hygiene
+   ```
+
+   Fix reported files deliberately. Run modifying format or lint tools only when the user has
+   authorized them under `AGENTS.md`.
+4. Stage only intended changes and review the staged diff.
+5. Commit using `doc/development/commit-message.md`. Describe the technical result; omit AI/tool
+   attribution, internal plans, co-author signatures, and validation trailers.
+6. Inspect the resulting commit, worktree, and branch range before publishing.
+
+Do not use destructive checkout, restore, or reset operations without explicit user approval.
+
+## Publish and Pull Requests
+
+- Use a normal push when history is additive. Use the exact lease procedure above after an
+  authorized rewrite.
+- Verify the remote ref resolves to the intended local commit after pushing.
+- Before opening a PR, confirm the base, head, existing-PR state, and repository template. Derive the
+  title and body from the full `base...HEAD` change, not only the latest commit. Never create a
+  duplicate PR.
+- After each push, monitor checks attached to the current HEAD SHA. Treat superseded runs as stale,
+  diagnose failures before rerunning, and report any intentionally skipped platform validation.
+- Merge the PR or change required checks only with separate authorization.

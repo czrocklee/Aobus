@@ -33,7 +33,9 @@ Read the human docs for project policy instead of duplicating them here:
 4. **No TACO:** Do not over-promise and under-deliver; no shortcuts when things get difficult.
 5. **Docs:** When behavior or architecture changes, use `doc/README.md` to
    select the authoritative documentation type and owner.
-6. **Tests:** All changes include appropriate test coverage.
+6. **Tests:** Cover changed behavior at the lowest owning layer. When behavior did not change, use
+   the owning validator; do not add test-only production seams or duplicate tests to satisfy a
+   blanket coverage rule.
 7. **Scratch files:** Agent throwaway artifacts go to `/tmp`, never into the repo.
 8. **Hygiene:** Do not run format or tidy tools mid-session unless the user
    explicitly asks for linting. The final check-only `./ao hygiene` pass is
@@ -45,6 +47,11 @@ Read the human docs for project policy instead of duplicating them here:
 11. **Proportionality:** Aobus is a music application, not a flight-control or
     life-support system. Match engineering rigor to actual product risk and do
     not over-design for speculative hazards.
+12. **Abstraction budget:** Before adding a public role, wrapper, registry, map,
+    skill, or policy document, identify its owner, current consumers, and
+    independent correctness contract. If it has one consumer and no independent
+    invariant, keep it local or inline it. Extend an existing authority instead
+    of adding a parallel mechanism for hypothetical reuse.
 
 > [!TIP]
 > Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
