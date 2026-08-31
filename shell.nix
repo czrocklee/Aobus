@@ -71,6 +71,14 @@ let
     ];
   });
   aobus-icu = pkgs.icu78;
+  useUnstrippedGtk = builtins.getEnv "AOBUS_NIX_UNSTRIPPED_GTK" == "1";
+  aobus-gtk4 =
+    if useUnstrippedGtk then
+      pkgs.gtk4.overrideAttrs (_: {
+        dontStrip = true;
+      })
+    else
+      pkgs.gtk4;
 
   dependencyReport = pkgs.writeText "aobus-nix-dependencies.json" (builtins.toJSON {
     schemaVersion = 1;
@@ -107,9 +115,7 @@ let
     gdb
     gcc
 
-    (gtk4.overrideAttrs (old: {
-      dontStrip = true;
-    }))
+    aobus-gtk4
     gtkmm4
     librsvg
     glib.dev
@@ -174,7 +180,7 @@ pkgs.mkShell {
   shellHook = ''
     export PATH="$PATH:/run/current-system/sw/bin"
     # Include gtk4 schemas - need both desktop schemas and gtk4 schemas
-    export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${pkgs.gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
+    export GSETTINGS_SCHEMA_DIR="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.version}/glib-2.0/schemas:${aobus-gtk4}/share/gsettings-schemas/gtk4-${pkgs.gtk4.version}/glib-2.0/schemas:$GSETTINGS_SCHEMA_DIR"
     # Set header-only dependency include paths
     export CMAKE_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include:$CMAKE_INCLUDE_PATH"
     export CPLUS_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include/stb:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
@@ -182,7 +188,7 @@ pkgs.mkShell {
     # ccache configuration
     export CCACHE_DIR="$PWD/.cache/ccache"
     export CCACHE_BASEDIR="$PWD"
-    export CCACHE_MAXSIZE="10G"
+    export CCACHE_MAXSIZE="''${CCACHE_MAXSIZE:-10G}"
     export CCACHE_COMPRESS=1
     export CCACHE_SLOPPINESS="time_macros"
 

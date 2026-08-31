@@ -13,13 +13,18 @@ REQUIRES_BUILD_ENV = False
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     parser.add_argument("area", choices=("winui",), help="development surface to inspect")
+    parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="omit runtime launch checks when validating a build-only host",
+    )
     parser.set_defaults(func=run_command)
 
 
 def run_command(args: argparse.Namespace) -> int:
     if args.area != "winui":
         raise die(f"unsupported doctor area {args.area!r}")
-    checks = winui.inspect_host()
+    checks = winui.inspect_host(include_runtime=not args.build_only)
     for check in checks:
         if check.ok:
             marker = "ok"

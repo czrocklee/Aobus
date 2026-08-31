@@ -19,6 +19,36 @@ else()
   find_package(Clang 22.1 REQUIRED CONFIG)
 endif()
 
+set(AOBUS_LINT_TOOLCHAIN_INCLUDE_DIRS
+  ${LLVM_INCLUDE_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+)
+if(APPLE)
+  # Keep the SDK C headers driver-owned. Adding this directory explicitly puts
+  # it ahead of the driver's libc++ wrappers, so their include_next checks
+  # reach the SDK too early. The driver already supplies it through its sysroot
+  # in the correct order.
+  set(AOBUS_MACOS_SDK_C_INCLUDE_REGEX
+    "/MacOSX[^/]*[.]sdk/usr/include/?$")
+  list(FILTER AOBUS_LINT_TOOLCHAIN_INCLUDE_DIRS EXCLUDE REGEX
+    "${AOBUS_MACOS_SDK_C_INCLUDE_REGEX}")
+
+  # LLVMSupport links CMake's imported ZLIB target. On Xcode installations,
+  # FindZLIB can publish the active SDK's root include directory through that
+  # target. Its symlink spelling may differ from Clang's implicit sysroot path,
+  # preventing CMake from deduplicating it before generating compile commands.
+  if(TARGET ZLIB::ZLIB)
+    get_target_property(AOBUS_ZLIB_INCLUDE_DIRS
+      ZLIB::ZLIB INTERFACE_INCLUDE_DIRECTORIES)
+    if(AOBUS_ZLIB_INCLUDE_DIRS)
+      list(FILTER AOBUS_ZLIB_INCLUDE_DIRS EXCLUDE REGEX
+        "${AOBUS_MACOS_SDK_C_INCLUDE_REGEX}")
+      set_target_properties(ZLIB::ZLIB PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${AOBUS_ZLIB_INCLUDE_DIRS}")
+    endif()
+  endif()
+endif()
+
 if(WIN32)
   # LLVM's official Windows package leaks its release-builder DIA SDK path.
   # Replace only that non-relocatable library with the active VS environment.
@@ -134,8 +164,7 @@ set_target_properties(${AOBUS_LINT_TARGET} PROPERTIES
 
 target_include_directories(${AOBUS_LINT_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${AOBUS_LINT_TARGET} SYSTEM PRIVATE
-  ${LLVM_INCLUDE_DIRS}
-  ${CLANG_INCLUDE_DIRS}
+  ${AOBUS_LINT_TOOLCHAIN_INCLUDE_DIRS}
 )
 target_compile_options(${AOBUS_LINT_TARGET} PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-null-dereference>

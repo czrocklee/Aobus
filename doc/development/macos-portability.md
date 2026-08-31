@@ -21,9 +21,9 @@ Machine setup, portal behavior, local state, and the SMB workflow belong to
 ## Current support
 
 The macOS profile builds the shared core libraries, the CLI, the FTXUI terminal
-application, and the native test suites. There is no GTK frontend and no native
-audio backend: `lib/audio/PlatformBackendProvidersMacos.cpp` returns no
-providers, so the terminal application reports `--` where Linux reports `PW`.
+application, and the native test suites. There is no GTK or Cocoa desktop
+frontend. Audio playback uses the native Core Audio shared backend, and the TUI
+can render through any live Core Audio output device published by macOS.
 
 The toolchain is Clang 22 from Homebrew's `llvm@22` formula, targeting
 `-mmacosx-version-min=14.0`. Compilation uses that formula's libc++ headers and
@@ -117,6 +117,15 @@ the real one with `-isystem`. Two mechanics are easy to get wrong:
 - **Only that one header may be copied.** libc++'s own `<cstdint>` reaches the
   SDK through `#include_next`, and a duplicate include tree on the search path
   captures that hop, leaving `intmax_t` unresolved.
+- **The SDK C include directory must remain driver-owned.** `LLVMSupport`
+  transitively links CMake's `ZLIB::ZLIB` target. On Xcode installations,
+  FindZLIB can export `MacOSX.sdk/usr/include` through that target using a
+  symlink spelling that CMake does not recognize as one of Clang's implicit
+  directories. The lint target filters that redundant entry because making it
+  an explicit `-isystem` path places it ahead of libc++'s C wrappers; headers
+  such as `<cstdlib>` then reach the SDK before libc++ can establish its wrapper
+  contract. Clang still discovers the same SDK directory through its sysroot,
+  after libc++, which is the required order.
 
 The portal transform asserts that exactly five gates are present and fails the
 build otherwise, so an `llvm@22` update that reworks the file stops the build

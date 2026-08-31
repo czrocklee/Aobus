@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import PROJECT_ROOT
+from .paths import PROJECT_ROOT, absolute_path
 
 GOVERNED_ROOT_TYPES: dict[str, frozenset[str]] = {
     "user": frozenset({"index", "user-guide"}),
@@ -158,13 +158,14 @@ def discover_markdown(root: Path = PROJECT_ROOT) -> list[Path]:
 
 
 def check_tree(root: Path = PROJECT_ROOT) -> list[Issue]:
+    root = absolute_path(root)
     paths = discover_markdown(root)
     documents: dict[Path, Document] = {}
     issues: list[Issue] = []
 
     for path in paths:
         document, metadata_issues = _read_document(path, root)
-        documents[path.resolve()] = document
+        documents[absolute_path(path)] = document
         issues.extend(metadata_issues)
 
     issues.extend(_check_directory_names(paths, root))
@@ -519,7 +520,7 @@ def _check_index_ownership(documents: dict[Path, Document], root: Path) -> list[
             resolved, _ = _resolve_link(index.path, target, root)
             if resolved is None:
                 continue
-            target_document = documents.get(resolved.resolve())
+            target_document = documents.get(absolute_path(resolved))
             if target_document is None:
                 continue
             try:
@@ -527,11 +528,11 @@ def _check_index_ownership(documents: dict[Path, Document], root: Path) -> list[
             except (ValueError, IndexError):
                 continue
             if target_root == index_root:
-                directly_indexed.add(target_document.path.resolve())
+                directly_indexed.add(absolute_path(target_document.path))
 
     issues: list[Issue] = []
     for document in governed_documents:
-        if document.metadata.get("type") == "index" or document.path.resolve() in directly_indexed:
+        if document.metadata.get("type") == "index" or absolute_path(document.path) in directly_indexed:
             continue
         issues.append(
             Issue(
@@ -545,10 +546,10 @@ def _check_index_ownership(documents: dict[Path, Document], root: Path) -> list[
 
 
 def _check_architecture_portfolio(documents: dict[Path, Document], root: Path) -> list[Issue]:
-    index_path = (root / "doc" / "architecture" / "README.md").resolve()
+    index_path = absolute_path(root / "doc" / "architecture" / "README.md")
     index = documents.get(index_path)
     architecture_documents = {
-        document.path.resolve(): document
+        absolute_path(document.path): document
         for document in documents.values()
         if document.metadata.get("type") == "architecture"
     }
@@ -726,7 +727,7 @@ def _governed_link_targets(source: Document, text: str, documents: dict[Path, Do
         resolved, _ = _resolve_link(source.path, target, root)
         if resolved is None:
             continue
-        key = resolved.resolve()
+        key = absolute_path(resolved)
         if key in documents:
             targets.append(key)
     return targets
@@ -825,7 +826,7 @@ def _rfc_dependency_relations(
                         )
                     )
                     continue
-                target_document = documents.get(resolved.resolve())
+                target_document = documents.get(absolute_path(resolved))
                 if target_document is None or target_document.metadata.get("type") != "rfc":
                     issues.append(
                         Issue(
@@ -881,7 +882,7 @@ def _check_rfc_dependency_index(
     rfc_documents: dict[str, Document],
     relations: dict[str, dict[str, tuple[str, ...]]],
 ) -> list[Issue]:
-    index_path = (root / "doc" / "rfc" / "README.md").resolve()
+    index_path = absolute_path(root / "doc" / "rfc" / "README.md")
     index = documents.get(index_path)
     if index is None:
         if not rfc_documents:
@@ -1011,7 +1012,7 @@ def _rfc_index_cell_ids(
     dependency_ids: list[str] = []
     for _, target in links:
         resolved, _ = _resolve_link(index.path, target, root)
-        target_document = documents.get(resolved.resolve()) if resolved is not None else None
+        target_document = documents.get(absolute_path(resolved)) if resolved is not None else None
         if target_document is None or target_document.metadata.get("type") != "rfc":
             issues.append(
                 Issue(
@@ -1098,7 +1099,7 @@ def _check_links(documents: dict[Path, Document], root: Path) -> list[Issue]:
             if not resolved.exists():
                 issues.append(Issue(document.path, line_number, "broken-link", f"target does not exist: {target}"))
                 continue
-            resolved_key = resolved.resolve()
+            resolved_key = absolute_path(resolved)
             if fragment and resolved_key in anchor_cache and fragment not in anchor_cache[resolved_key]:
                 target_name = target.split("#", 1)[0] or document.path.name
                 issues.append(
@@ -1113,7 +1114,7 @@ def _check_links(documents: dict[Path, Document], root: Path) -> list[Issue]:
 
 
 def _check_reachability(documents: dict[Path, Document], root: Path) -> list[Issue]:
-    start = (root / "doc" / "README.md").resolve()
+    start = absolute_path(root / "doc" / "README.md")
     if start not in documents:
         return [Issue(root / "doc" / "README.md", 1, "index", "documentation root index is missing")]
 
@@ -1129,7 +1130,7 @@ def _check_reachability(documents: dict[Path, Document], root: Path) -> list[Iss
             resolved, _ = _resolve_link(document.path, target, root)
             if resolved is None:
                 continue
-            key = resolved.resolve()
+            key = absolute_path(resolved)
             if key in documents and key not in reachable:
                 pending.append(key)
 
@@ -1231,7 +1232,7 @@ def _resolve_link(source: Path, target: str, root: Path) -> tuple[Path | None, s
     path_text = urllib.parse.unquote(parsed.path)
     fragment = urllib.parse.unquote(parsed.fragment).lower()
     if not path_text:
-        return source.resolve(), fragment
+        return absolute_path(source), fragment
     if path_text.startswith("/"):
         resolved = root / path_text.lstrip("/")
     else:
@@ -1277,7 +1278,7 @@ def _heading_slug(text: str) -> str:
 
 def _is_under(path: Path, parent: Path) -> bool:
     try:
-        path.resolve().relative_to(parent.resolve())
+        absolute_path(path).relative_to(absolute_path(parent))
     except ValueError:
         return False
     return True

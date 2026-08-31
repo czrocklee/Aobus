@@ -1,0 +1,30 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Aobus Contributors -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="AobusDisableFileTrackingForClCompileCache"
+          AfterTargets="SelectClCompile">
+    <PropertyGroup>
+      <AobusClCompileSavedTrackFileAccess>$(TrackFileAccess)</AobusClCompileSavedTrackFileAccess>
+      <TrackFileAccess>false</TrackFileAccess>
+    </PropertyGroup>
+  </Target>
+  <Target Name="AobusRestoreFileTrackingAfterClCompileCache"
+          AfterTargets="ClCompile">
+    <PropertyGroup>
+      <TrackFileAccess>$(AobusClCompileSavedTrackFileAccess)</TrackFileAccess>
+    </PropertyGroup>
+  </Target>
+  <Target Name="AobusDisableFileTrackingForXamlCompileCache"
+          BeforeTargets="CompileXamlGeneratedFiles">
+    <PropertyGroup>
+      <AobusXamlCompileSavedTrackFileAccess>$(TrackFileAccess)</AobusXamlCompileSavedTrackFileAccess>
+      <TrackFileAccess>false</TrackFileAccess>
+    </PropertyGroup>
+  </Target>
+  <Target Name="AobusRestoreFileTrackingAfterXamlCompileCache"
+          AfterTargets="CompileXamlGeneratedFiles">
+    <PropertyGroup>
+      <TrackFileAccess>$(AobusXamlCompileSavedTrackFileAccess)</TrackFileAccess>
+    </PropertyGroup>
+  </Target>
+</Project>

@@ -23,6 +23,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -36,6 +37,8 @@ namespace ao::rt::test
 {
   namespace
   {
+    constexpr auto kLargeResourceCompletionTimeout = std::chrono::seconds{10};
+
     ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
@@ -142,7 +145,8 @@ namespace ao::rt::test
       auto const resourceId = writeResource(libraryFixture.library(), bytes);
       installCacheEntry(cacheRoot, bytes);
       auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
-      auto result = runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId));
+      auto result =
+        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
 
       REQUIRE(result);
       REQUIRE(*result);
@@ -165,12 +169,14 @@ namespace ao::rt::test
       }};
       oversizedCache.store(utility::computeSha256(bytes), bytes);
       auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
-      auto result = runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId));
+      auto result =
+        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
 
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::ValueTooLarge);
 
-      auto exportRes = runQueuedTask(runtime, executor, reader.readForExportAsync(resourceId));
+      auto exportRes =
+        runQueuedTask(runtime, executor, reader.readForExportAsync(resourceId), kLargeResourceCompletionTimeout);
       REQUIRE(exportRes);
       REQUIRE(*exportRes);
       CHECK((*exportRes)->size() == bytes.size());
@@ -245,7 +251,8 @@ namespace ao::rt::test
       futures.push_back(runtime.spawn(countCompletion(completedCountPtr, reader.readInteractiveAsync(resourceId))));
     }
 
-    REQUIRE(executor.drainUntil([&completedCountPtr] { return completedCountPtr->load() == kRequestCount; }));
+    REQUIRE(executor.drainUntil(
+      [&completedCountPtr] { return completedCountPtr->load() == kRequestCount; }, kLargeResourceCompletionTimeout));
 
     for (auto& future : futures)
     {

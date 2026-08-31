@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from ao.core import tidyengine
+from ao.core.paths import absolute_path
 
 
 class ClangToolDiscoveryTest(unittest.TestCase):
@@ -517,7 +518,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             self.assertEqual(list(plan.deferred), [])
             self.assertEqual(
                 [(target.selected, target.translation_unit) for target in plan.targets],
-                [(fixture.resolve(), native.resolve())],
+                [(absolute_path(fixture), absolute_path(native))],
             )
 
     def test_conditional_include_does_not_claim_header_coverage(self):
@@ -802,10 +803,10 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
             self.assertEqual(database_dir, destination)
             entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
             self.assertEqual(len(entries), 1)
-            self.assertEqual(entries[0]["file"], header.resolve().as_posix())
+            self.assertEqual(entries[0]["file"], absolute_path(header).as_posix())
             self.assertEqual(
                 entries[0]["arguments"],
-                ["clang++", "-DFEATURE=1", "-c", str(header.resolve())],
+                ["clang++", "-DFEATURE=1", "-c", str(absolute_path(header))],
             )
             self.assertNotIn("output", entries[0])
 
@@ -838,9 +839,9 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
             rewritten = entries[0]["command"]
             self.assertIn("-DFEATURE=1", rewritten)
             self.assertNotIn("/TP", rewritten)
-            self.assertIn(f'"{header.resolve()}"', rewritten)
+            self.assertIn(f'"{absolute_path(header)}"', rewritten)
             self.assertNotIn(str(source), rewritten)
-            self.assertEqual(entries[0]["file"], header.resolve().as_posix())
+            self.assertEqual(entries[0]["file"], absolute_path(header).as_posix())
 
     def test_string_command_accepts_input_relative_to_command_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -874,7 +875,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
             )
 
             entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(f'"{header.resolve()}"', entries[0]["command"])
+            self.assertIn(f'"{absolute_path(header)}"', entries[0]["command"])
 
     def test_unquoted_relative_input_quotes_a_replacement_path_with_spaces(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -907,7 +908,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
             )
 
             entries = json.loads((Path(temp_dir) / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(str(header.resolve()), shlex.split(entries[0]["command"]))
+            self.assertIn(str(absolute_path(header)), shlex.split(entries[0]["command"]))
 
     def test_string_command_accepts_absolute_input_when_source_and_build_are_on_different_volumes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -941,7 +942,7 @@ class HeaderCompileDatabaseTest(unittest.TestCase):
                 )
 
             entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
-            self.assertIn(f'"{header.resolve()}"', entries[0]["command"])
+            self.assertIn(f'"{absolute_path(header)}"', entries[0]["command"])
             self.assertNotIn(str(source), entries[0]["command"])
 
     def test_missing_source_token_fails_closed_for_argument_list(self):

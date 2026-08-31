@@ -234,11 +234,14 @@ namespace ao::rt::test
   }
 
   template<typename RuntimeType, typename ExecutorType, typename T>
-  T runQueuedTask(RuntimeType& runtime, ExecutorType& executor, async::Task<T> task)
+  T runQueuedTask(RuntimeType& runtime,
+                  ExecutorType& executor,
+                  async::Task<T> task,
+                  std::chrono::milliseconds timeout = std::chrono::seconds{2})
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
-    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }, timeout));
     return detail::finishDrivenTask(future, [&executor] { executor.drain(); });
   }
 

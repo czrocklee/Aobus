@@ -69,6 +69,8 @@ namespace ao::gtk::layout::test
 
   namespace
   {
+    constexpr auto kCoverMutationTimeout = std::chrono::seconds{5};
+
     class StaticWidgetComponent final : public LayoutComponent
     {
     public:
@@ -641,7 +643,8 @@ namespace ao::gtk::layout::test
         {
           auto const currentPaintablePtr = coverArt->imagePaintable();
           return currentPaintablePtr && currentPaintablePtr != firstPaintablePtr;
-        }));
+        },
+        kCoverMutationTimeout));
 
       REQUIRE(button->get_visible());
       auto const secondPaintablePtr = coverArt->imagePaintable();
@@ -650,7 +653,7 @@ namespace ao::gtk::layout::test
 
       writeCoverImport(importPath, std::nullopt);
       workflow.importFrom(importPath);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return coverArt->showingPlaceholder(); }));
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return coverArt->showingPlaceholder(); }, kCoverMutationTimeout));
 
       CHECK(button->get_visible());
       CHECK(coverArt->showingPlaceholder());

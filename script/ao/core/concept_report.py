@@ -1261,10 +1261,10 @@ def _is_project_include_path(value: str, root: Path, build_dir: Path | None, ent
 def _resolve_include(value: str, root: Path, entry: Mapping[str, Any]) -> str:
     path = Path(value)
     if path.is_absolute():
-        return str(path)
+        return str(absolute_path(path))
     directory = entry.get("directory")
     base = Path(directory) if isinstance(directory, str) else root
-    return str((base / path).resolve())
+    return str(absolute_path(base / path))
 
 
 def _relative(path: Path, root: Path) -> str:
