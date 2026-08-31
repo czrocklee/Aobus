@@ -143,7 +143,7 @@ family can use a package-scoped registry baseline.
 
 macOS bootstraps the vcpkg tool revision and verified archive from
 `script/ao/macos-toolchain.json`. Project-owned x64 and arm64 triplets select
-static libraries, the native architecture, and the macOS 14.0 deployment
+static libraries, the native architecture, and the macOS 15.0 deployment
 target. Windows uses the vcpkg tool bundled with Visual Studio and its native
 Windows triplet. Both hosts resolve the same manifest and registry snapshots.
 

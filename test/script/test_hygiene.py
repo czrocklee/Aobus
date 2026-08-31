@@ -383,6 +383,70 @@ class TidyCommandTest(unittest.TestCase):
         self.assertIn("the file is incompatible with the current platform", stderr.getvalue())
         self.assertIn("not checked here", stderr.getvalue())
 
+    def test_non_explicit_scope_allows_only_foreign_platform_files(self):
+        args = Namespace(
+            files=[],
+            all=True,
+            folder=[],
+            commit=None,
+            check=None,
+            debug=False,
+            output=None,
+            jobs=1,
+            path=None,
+            fix=False,
+            no_build=False,
+            tidy_arg=[],
+            header_filter=None,
+        )
+        foreign = Path("lib/Foreign.cpp")
+        stderr = io.StringIO()
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=([str(foreign)], False))
+            )
+            stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=([str(foreign)], [])))
+            stack.enter_context(
+                mock.patch.object(
+                    tidy,
+                    "prepare_toolchain",
+                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    tidy,
+                    "classify_existing",
+                    return_value={"STRICT": [foreign], "RELAXED": []},
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    tidy.tidyengine,
+                    "compile_command_plan",
+                    return_value=tidy.tidyengine.CompileCommandPlan(
+                        (),
+                        (foreign,),
+                        (
+                            tidy.tidyengine.CompileCommandDeferral(
+                                foreign,
+                                "the file is incompatible with the current platform",
+                                "platform-incompatible",
+                            ),
+                        ),
+                    ),
+                )
+            )
+            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
+            stack.enter_context(contextlib.redirect_stderr(stderr))
+            self.assertEqual(tidy.run_command(args), 0)
+
+        run_parallel.assert_not_called()
+        self.assertIn("Deferred files", stderr.getvalue())
+        self.assertIn("not checked here", stderr.getvalue())
+        self.assertNotIn("coverage is incomplete", stderr.getvalue())
+
     def test_non_explicit_native_deferral_fails_before_partial_tidy_run(self):
         args = Namespace(
             files=[],

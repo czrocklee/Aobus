@@ -340,7 +340,11 @@ class LintTestRunnerTest(unittest.TestCase):
                     "// POSITIVE: FIX-TO: int replacement;\nint replacement;\n",
                     encoding="utf-8",
                 )
-                return linttest.subprocess.CompletedProcess(command, 1, stdout="expected warning\n")
+                return linttest.subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout=f"{fixed}:2:1: warning: expected [aobus-example]\n",
+                )
 
             with mock.patch.object(linttest.subprocess, "run", side_effect=run_fix_or_syntax):
                 success, log = linttest._run_fix(fixture, root, root)
@@ -393,8 +397,16 @@ class LintTestRunnerTest(unittest.TestCase):
             result_log.touch()
 
             with mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]):
-                with mock.patch.object(linttest, "_run_diagnostic", return_value=(True, result_log)):
-                    with mock.patch.object(linttest, "_run_fix", return_value=(True, result_log)):
+                with mock.patch.object(
+                    linttest,
+                    "_run_diagnostic",
+                    return_value=(True, result_log),
+                ) as run_diagnostic:
+                    with mock.patch.object(
+                        linttest,
+                        "_run_fix",
+                        return_value=(True, result_log),
+                    ) as run_fix:
                         with mock.patch.object(linttest, "_run_replacement_smoke", return_value=(True, result_log)):
                             with mock.patch.object(
                                 linttest,
@@ -405,6 +417,8 @@ class LintTestRunnerTest(unittest.TestCase):
                                     with contextlib.redirect_stdout(io.StringIO()):
                                         self.assertEqual(linttest.run(build_dir, jobs=1), 0)
 
+            run_diagnostic.assert_not_called()
+            run_fix.assert_called_once_with(fixture, build_dir, mock.ANY)
             remove_tree.assert_called_once()
 
 

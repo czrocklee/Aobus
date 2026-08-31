@@ -9,7 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import tidyengine
+from ao.command import format as format_command
+from ao.command import tidy as tidy_command
+from ao.core import gitfiles, tidyengine
 from ao.core.paths import absolute_path
 
 
@@ -276,6 +278,38 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
 
 
 class CompileCommandCoverageTest(unittest.TestCase):
+    def test_every_tracked_source_is_in_hygiene_scope_and_cpp_has_a_native_owner(self):
+        profiles = (
+            tidyengine.builddir.LINUX_PROFILE,
+            tidyengine.builddir.MACOS_PROFILE,
+            tidyengine.builddir.WINDOWS_PROFILE,
+        )
+        tracked_sources = [
+            relative for relative in gitfiles._git_lines("ls-files") if relative.endswith(gitfiles.SOURCE_SUFFIXES)
+        ]
+        format_prefixes = tuple(f"{folder}/" for folder in format_command.FORMAT_TOP_DIRS)
+        tidy_prefixes = tuple(f"{folder}/" for folder in tidy_command.ALL_FOLDERS)
+        outside_format_scope = [relative for relative in tracked_sources if not relative.startswith(format_prefixes)]
+        outside_tidy_scope = [relative for relative in tracked_sources if not relative.startswith(tidy_prefixes)]
+        uncovered: list[str] = []
+
+        for relative in tracked_sources:
+            if not relative.endswith(gitfiles.CPP_SUFFIXES) or relative.startswith(f"{gitfiles.LINT_INTEGRATION_DIR}/"):
+                continue
+            path = tidyengine.PROJECT_ROOT / relative
+            compatible = False
+            for profile in profiles:
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    if not tidyengine._is_platform_incompatible(path, tidyengine.PROJECT_ROOT):
+                        compatible = True
+                        break
+            if not compatible:
+                uncovered.append(relative)
+
+        self.assertEqual(outside_format_scope, [])
+        self.assertEqual(outside_tidy_scope, [])
+        self.assertEqual(uncovered, [])
+
     def test_explicit_header_companion_must_have_an_exact_command(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"

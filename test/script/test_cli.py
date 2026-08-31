@@ -961,9 +961,14 @@ class CliParseTest(unittest.TestCase):
         )
         run.assert_called_once_with(
             [str(binary), "[layout]"],
-            # GDK/GTK environment defaults are set by the test binary itself
-            # (GtkTestMain.cpp); the runner only provides the Xvfb display.
-            env={"DISPLAY": ":42"},
+            env={
+                "DISPLAY": ":42",
+                "GTK_A11Y": "test",
+                "GTK_IM_MODULE": "simple",
+                "GDK_BACKEND": "x11",
+                "GDK_DISABLE": "gl,vulkan",
+                "GSK_RENDERER": "cairo",
+            },
             log=None,
             append=False,
         )
@@ -1649,6 +1654,50 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(commands, [])
         do_build.assert_not_called()
         compile_commands.assert_not_called()
+
+    def test_winui_tidy_reuses_the_debug_tree_built_by_check(self):
+        args = mock.Mock(path=None, no_build=False)
+        toolchain = tidy_command.TidyToolchain(
+            "AobusClangTidy.exe",
+            None,
+            Path("C:/llvm/lib/clang/22"),
+        )
+        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
+        winui_dir = Path("C:/aobus/windows-winui")
+
+        with mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir):
+            with mock.patch.object(
+                tidy_command.buildlock,
+                "build_tree_lock",
+                return_value=contextlib.nullcontext(),
+            ):
+                with mock.patch.object(tidy_command.build, "do_build") as do_build:
+                    with mock.patch.object(
+                        tidy_command.tidyengine,
+                        "clang_tool",
+                        return_value="C:/llvm/bin/clang-cl.exe",
+                    ):
+                        with mock.patch.object(
+                            tidy_command.winuitidy,
+                            "compile_commands",
+                            return_value=[],
+                        ) as compile_commands:
+                            self.assertEqual(
+                                tidy_command.prepare_winui_compile_commands(
+                                    args,
+                                    Path("C:/aobus/windows-tidy"),
+                                    toolchain,
+                                    selected,
+                                ),
+                                [],
+                            )
+
+        self.assertEqual(do_build.call_args.args[0].flavor, "debug")
+        compile_commands.assert_called_once_with(
+            winui_dir,
+            Path("C:/llvm/bin/clang-cl.exe"),
+            required_translation_units=(selected[0],),
+        )
 
     def test_tidy_toolchain_validation_requires_registered_aobus_checks(self):
         toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)

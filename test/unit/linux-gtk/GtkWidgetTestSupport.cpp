@@ -80,9 +80,16 @@ namespace ao::gtk::test
 
   bool hasAccessibleLabel(Gtk::Widget& widget, std::string_view const label)
   {
+    auto* const accessible = GTK_ACCESSIBLE(widget.gobj());
+
+    if (::gtk_test_accessible_has_property(accessible, GTK_ACCESSIBLE_PROPERTY_LABEL) == FALSE)
+    {
+      return false;
+    }
+
     auto const expected = std::string{label};
-    auto* const mismatch = ::gtk_test_accessible_check_property(
-      GTK_ACCESSIBLE(widget.gobj()), GTK_ACCESSIBLE_PROPERTY_LABEL, expected.c_str());
+    auto* const mismatch =
+      ::gtk_test_accessible_check_property(accessible, GTK_ACCESSIBLE_PROPERTY_LABEL, expected.c_str());
 
     if (mismatch == nullptr)
     {

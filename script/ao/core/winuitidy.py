@@ -181,7 +181,7 @@ def compile_commands(
             str(project),
             "/nologo",
             "/v:quiet",
-            "/p:Configuration=Release",
+            "/p:Configuration=Debug",
             "/p:Platform=x64",
             "-getTargetResult:GetCompileCommands",
         ]

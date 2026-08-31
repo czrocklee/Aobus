@@ -550,7 +550,7 @@ def prepare_winui_compile_commands(
         if not args.no_build:
             build.do_build(
                 argparse.Namespace(
-                    flavor="release",
+                    flavor="debug",
                     clean=False,
                     clang=False,
                     asan=False,
@@ -887,6 +887,8 @@ def run_command(args: argparse.Namespace) -> int:
                 "  These files were not checked here; the platform that builds them must cover them.",
                 file=sys.stderr,
             )
+            if not coverage_plan.targets:
+                return 1 if overall_failed else 0
 
         invocations = build_invocations(coverage_plan, buckets)
         if not invocations["STRICT"] and not invocations["RELAXED"]:
