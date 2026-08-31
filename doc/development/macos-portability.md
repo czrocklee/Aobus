@@ -26,7 +26,7 @@ frontend. Audio playback uses the native Core Audio shared backend, and the TUI
 can render through any live Core Audio output device published by macOS.
 
 The toolchain is Clang 22 from Homebrew's `llvm@22` formula, targeting
-`-mmacosx-version-min=14.0`. Compilation uses that formula's libc++ headers and
+`-mmacosx-version-min=15.0`. Compilation uses that formula's libc++ headers and
 links Apple's system `/usr/lib/libc++.1.dylib`. Apple's availability annotations
 are load-bearing and must not be suppressed. Defining
 `_LIBCPP_DISABLE_AVAILABILITY` makes the build succeed and then fails at process

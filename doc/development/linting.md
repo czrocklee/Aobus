@@ -185,9 +185,10 @@ headers.
 WinUI deliberately remains disabled in the Ninja tree because CMake's WinUI
 integration requires the Visual Studio generator.
 When the selected tidy scope contains a WinUI file, the portal incrementally
-builds the Release WinUI target, asks MSBuild's `GetCompileCommands` target for
-the exact compiler state, validates that every selected WinUI translation unit
-is present, and merges those commands with the Ninja database.
+builds the Debug WinUI target already exercised by `ao.bat check`, asks
+MSBuild's `GetCompileCommands` target for the exact compiler state, validates
+that every selected WinUI translation unit is present, and merges those
+commands with the Ninja database.
 Generated translation units outside the repository source tree are excluded.
 `--no-build` skips the incremental WinUI build and requires an already
 configured, generated Visual Studio tree.

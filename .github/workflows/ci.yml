@@ -411,20 +411,30 @@ jobs:
           path: |
             C:\aobus-state\tools
             C:\aobus-state\n
-            C:\aobus-state\cache\llvm
             C:\aobus-state\cache\pip
             C:\aobus-state\cache\windows-app-sdk
           key: >-
-            windows-state-v1-${{ runner.arch }}-${{
+            windows-state-v2-${{ runner.arch }}-${{
               hashFiles(
                 'script/ao/toolchain.json',
                 'script/ao/windows-requirements.txt',
                 'dependency-contract.json',
                 'app/windows-winui/packages.config',
-                'app/windows-winui/NuGet.Config',
-                'cmake/LlvmSdk.cmake'
+                'app/windows-winui/NuGet.Config'
               )
             }}
+
+      # Cache the verified extracted SDK separately from fast-changing Python,
+      # NuGet, and runtime tools. The official archive expands to about 4 GiB;
+      # caching only its stable toolchain tree avoids a 2.5-minute xz extraction.
+      - name: Restore Windows LLVM SDK
+        id: windows-llvm
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\llvm\toolchains
+          key: >-
+            windows-llvm-v1-${{ runner.arch }}-${{ hashFiles('cmake/LlvmSdk.cmake') }}
 
       - name: Check Windows build prerequisites
         id: windows-prerequisites
@@ -511,6 +521,36 @@ jobs:
           BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
         run: .\ao.bat hygiene --commit $env:BASE_SHA
 
+      - name: Inspect Windows LLVM SDK
+        id: windows-llvm-ready
+        if: >-
+          ${{ !cancelled() && steps.windows-llvm.outcome == 'success' &&
+              steps.windows-llvm.outputs.cache-hit != 'true' }}
+        shell: pwsh
+        run: |
+          $markers = @(
+            Get-ChildItem "$env:AOBUS_STATE_ROOT\cache\llvm\toolchains" `
+              -Filter .aobus-llvm-sdk-complete -File -Recurse -ErrorAction SilentlyContinue
+          )
+          if ($markers.Count -ne 1) {
+            Write-Warning "Expected one verified LLVM SDK marker; found $($markers.Count)."
+            "ready=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Verified LLVM SDK marker: $($markers[0].FullName)"
+            "ready=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Save Windows LLVM SDK
+        if: >-
+          ${{ !cancelled() && steps.windows-llvm.outcome == 'success' &&
+              steps.windows-llvm.outputs.cache-hit != 'true' &&
+              steps.windows-llvm-ready.outputs.ready == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: C:\aobus-state\cache\llvm\toolchains
+          key: ${{ steps.windows-llvm.outputs.cache-primary-key }}
+
       - name: Show final compiler cache statistics
         if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' }}
         continue-on-error: true
@@ -528,7 +568,6 @@ jobs:
           path: |
             C:\aobus-state\tools
             C:\aobus-state\n
-            C:\aobus-state\cache\llvm
             C:\aobus-state\cache\pip
             C:\aobus-state\cache\windows-app-sdk
           key: ${{ steps.windows-state.outputs.cache-primary-key }}

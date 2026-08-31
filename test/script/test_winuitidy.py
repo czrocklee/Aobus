@@ -60,7 +60,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             self.assertNotIn(str(generated), "\n".join(str(entry) for entry in commands))
             self.assertIn(str(project), run.call_args.args[0])
             self.assertIn("-getTargetResult:GetCompileCommands", run.call_args.args[0])
-            self.assertIn("/p:Configuration=Release", run.call_args.args[0])
+            self.assertIn("/p:Configuration=Debug", run.call_args.args[0])
 
     def test_indexes_header_companions_from_the_winui_include_graph(self):
         with tempfile.TemporaryDirectory() as temp_dir:

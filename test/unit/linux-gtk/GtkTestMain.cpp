@@ -17,10 +17,9 @@ namespace
 
 int main(int argc, char* argv[])
 {
-  // These variables are read by GDK/GTK during initialization. The defaults
-  // below pin the test process to a deterministic, headless-friendly setup so
-  // every execution path (./ao test, ctest, CI, IDEs) behaves identically
-  // without external environment wiring:
+  // These fallback defaults cover direct binary launches. The ao runner and
+  // CTest set them before process startup because GTK can select some backends
+  // before this main() begins:
   // - GTK_A11Y=test selects the in-process accessibility backend that
   //   gtk_test_accessible_check_property() (see GtkWidgetTestSupport.h)
   //   relies on.
@@ -32,6 +31,7 @@ int main(int argc, char* argv[])
   // An explicitly set value still wins, so debugging with a real display,
   // renderer, or accessibility backend stays possible.
   setDefaultEnv("GTK_A11Y", "test");
+  setDefaultEnv("GTK_IM_MODULE", "simple");
   setDefaultEnv("GDK_BACKEND", "x11");
   setDefaultEnv("GDK_DISABLE", "gl,vulkan");
   setDefaultEnv("GSK_RENDERER", "cairo");

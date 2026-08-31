@@ -187,6 +187,20 @@ def _fixture_tidy_args(include_dir: Path) -> tuple[str, ...]:
     )
 
 
+def _diagnostic_errors(
+    fixture: Fixture,
+    source: str,
+    result: subprocess.CompletedProcess[str],
+) -> list[str]:
+    errors = verify_diagnostics(source, result.stdout, fixture.check)
+    has_expected_diagnostics = bool(parse_expectations(source, fixture.check).expected)
+    if "[clang-diagnostic-error]" in result.stdout:
+        errors.append("clang-tidy reported a fatal compiler diagnostic")
+    if result.returncode != 0 and (errors or not has_expected_diagnostics):
+        errors.append(f"clang-tidy exited with status {result.returncode}")
+    return errors
+
+
 def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
@@ -198,12 +212,7 @@ def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[b
         stderr=subprocess.STDOUT,
         text=True,
     )
-    errors = verify_diagnostics(source, result.stdout, fixture.check)
-    has_expected_diagnostics = bool(parse_expectations(source, fixture.check).expected)
-    if "[clang-diagnostic-error]" in result.stdout:
-        errors.append("clang-tidy reported a fatal compiler diagnostic")
-    if result.returncode != 0 and (errors or not has_expected_diagnostics):
-        errors.append(f"clang-tidy exited with status {result.returncode}")
+    errors = _diagnostic_errors(fixture, source, result)
     with log.open("w", encoding="utf-8") as sink:
         sink.write(result.stdout)
         for error in errors:
@@ -263,7 +272,7 @@ def _run_fix(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Pa
         stderr=subprocess.STDOUT,
         text=True,
     )
-    errors: list[str] = []
+    errors = _diagnostic_errors(fixture, source, tidy)
     fixed_text = fixed.read_text(encoding="utf-8")
     fixes = expected_fixes(source)
     if fixes and fixed_text == source:
@@ -410,17 +419,22 @@ def run(build_dir: Path, *, log: Path | None = None, jobs: int | None = None) ->
     run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
     failed = True
     try:
+        fix_fixtures = [fixture for fixture in fixtures if expected_fixes(fixture.path.read_text(encoding="utf-8"))]
+        fix_paths = {fixture.path for fixture in fix_fixtures}
+        diagnostic_fixtures = [fixture for fixture in fixtures if fixture.path not in fix_paths]
+
         reporter.write("=== Diagnostic Verification ===")
         worker_count = min(jobs or max((os.cpu_count() or 1) - 1, 1), len(fixtures))
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-            diagnostic_results = list(pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir), fixtures))
-        diagnostics_passed = _report_results("Diagnostics", fixtures, diagnostic_results, reporter)
+            diagnostic_results = list(
+                pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir), diagnostic_fixtures)
+            )
+        diagnostics_passed = _report_results("Diagnostics", diagnostic_fixtures, diagnostic_results, reporter)
 
-        reporter.write("=== Auto-Fix Verification ===")
-        fix_fixtures = [fixture for fixture in fixtures if expected_fixes(fixture.path.read_text(encoding="utf-8"))]
+        reporter.write("=== Diagnostic + Auto-Fix Verification ===")
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
             fix_results = list(pool.map(lambda fixture: _run_fix(fixture, build_dir, run_dir), fix_fixtures))
-        fixes_passed = _report_results("Auto-fixes", fix_fixtures, fix_results, reporter)
+        fixes_passed = _report_results("Diagnostics + auto-fixes", fix_fixtures, fix_results, reporter)
 
         reporter.write("=== Replacement Application Smoke ===")
         smoke_passed, smoke_log = _run_replacement_smoke(run_dir)

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "deploymentTarget": "14.0",
+  "deploymentTarget": "15.0",
   "homebrew": {
     "llvmFormula": "llvm@22",
     "llvmMajorVersion": "22",

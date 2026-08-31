@@ -124,10 +124,17 @@ def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
 
         display = f":{display_number}"
         print(f"GTK display: Xvfb {display}")
-        # GDK/GTK environment defaults (GDK_BACKEND, GDK_DISABLE, GSK_RENDERER,
-        # GTK_A11Y) are set by the test binary itself (GtkTestMain.cpp); the
-        # runner only provides the Xvfb display.
-        yield {"DISPLAY": display}
+        # GTK may select its accessibility and input-method backends before the
+        # test binary reaches main().  Set the complete headless profile on the
+        # child process rather than relying on GtkTestMain's fallback defaults.
+        yield {
+            "DISPLAY": display,
+            "GTK_A11Y": "test",
+            "GTK_IM_MODULE": "simple",
+            "GDK_BACKEND": "x11",
+            "GDK_DISABLE": "gl,vulkan",
+            "GSK_RENDERER": "cairo",
+        }
     finally:
         server.terminate()
         try:

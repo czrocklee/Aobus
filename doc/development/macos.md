@@ -23,7 +23,7 @@ only AUHAL output unit, disables input, and does not request microphone access.
 It uses the shared profile; macOS may resample, remap channels, or convert the
 lossless client PCM stream downstream of Aobus.
 
-The build targets macOS 14.0 or newer. The project-maintained validation host is
+The build targets macOS 15.0 or newer. The project-maintained validation host is
 macOS 15.7.9 on x86_64. GitHub Actions runs the native gate on both the
 `macos-15-intel` x86_64 image and the `macos-15` arm64 image, using a dedicated
 vcpkg triplet and compiler-cache namespace for each architecture.

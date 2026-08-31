@@ -944,6 +944,9 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
 add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
+set_tests_properties(ao_gtk_test PROPERTIES
+    ENVIRONMENT "GTK_A11Y=test;GTK_IM_MODULE=simple;GDK_BACKEND=x11;GDK_DISABLE=gl,vulkan;GSK_RENDERER=cairo"
+)
 endif()
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
