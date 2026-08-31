@@ -16,6 +16,11 @@ namespace ao::audio
   struct Device;
 }
 
+namespace ao::audio::backend::detail
+{
+  struct PipeWireMonitorHooks;
+}
+
 namespace ao::audio::backend
 {
   /**
@@ -25,6 +30,7 @@ namespace ao::audio::backend
   {
   public:
     PipeWireProvider();
+    explicit PipeWireProvider(std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr);
     ~PipeWireProvider() override;
 
     PipeWireProvider(PipeWireProvider const&) = delete;

@@ -6,6 +6,7 @@
 #include "LayoutEditorText.h"
 #include "app/AppDialog.h"
 #include "common/AccessibleLabel.h"
+#include "common/ActionMapRegistration.h"
 #include "i18n/GtkText.h"
 #include "layout/document/LayoutDialect.h"
 #include "layout/document/LayoutPresets.h"
@@ -19,6 +20,7 @@
 #include <ao/uimodel/layout/document/LayoutValidation.h>
 
 #include <giomm/menu.h>
+#include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/main.h>
 #include <glibmm/markup.h>
@@ -187,6 +189,9 @@ namespace ao::gtk::layout::editor
   LayoutEditorDialog::~LayoutEditorDialog()
   {
     _previewDebounceConn.disconnect();
+    _actionRegistration.reset();
+    remove_action_group("editor");
+    _actionGroupPtr.reset();
     headerBar().remove(_comboPresets);
     headerBar().remove(_comboThemePresets);
     headerBar().remove(_btnReset);
@@ -234,6 +239,8 @@ namespace ao::gtk::layout::editor
     _btnReset.add_css_class("flat");
 
     _actionGroupPtr = Gio::SimpleActionGroup::create();
+    auto const componentCount = _registry.schema().components().size();
+    _actionRegistration = ActionMapRegistration{*_actionGroupPtr, componentCount * 2};
     insert_action_group("editor", _actionGroupPtr);
 
     auto const addMenuPtr = Gio::Menu::create();
@@ -256,7 +263,9 @@ namespace ao::gtk::layout::editor
       categoryMenus[categoryLabel]->append(
         layoutEditorVocabularyText(_textCatalog, componentSchema.displayName), "editor." + actionName);
 
-      _actionGroupPtr->add_action(actionName, [this, type = componentSchema.id] { addComponent(type); });
+      auto addActionPtr = Gio::SimpleAction::create(actionName);
+      _actionRegistration.add(
+        addActionPtr, [this, type = componentSchema.id](Glib::VariantBase const&) { addComponent(type); });
 
       if (uimodel::isContainer(componentSchema))
       {
@@ -264,7 +273,9 @@ namespace ao::gtk::layout::editor
         std::ranges::replace(wrapActionName, '.', '_');
         wrapMenuPtr->append(
           layoutEditorVocabularyText(_textCatalog, componentSchema.displayName), "editor." + wrapActionName);
-        _actionGroupPtr->add_action(wrapActionName, [this, type = componentSchema.id] { wrapNode(type); });
+        auto wrapActionPtr = Gio::SimpleAction::create(wrapActionName);
+        _actionRegistration.add(
+          wrapActionPtr, [this, type = componentSchema.id](Glib::VariantBase const&) { wrapNode(type); });
       }
     }
 

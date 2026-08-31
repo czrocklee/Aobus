@@ -3,18 +3,25 @@
 
 #include "app/WindowActionRegistry.h"
 
+#include "common/ActionMapRegistration.h"
 #include "portal/ImportExportActions.h"
 
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
 #include <gtkmm/applicationwindow.h>
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr std::size_t kWindowActionCount = 7;
+  }
+
   WindowActionRegistry::WindowActionRegistry(portal::ImportExportActions& importExport, Callbacks callbacks)
     : _importExport{importExport}, _callbacks{std::move(callbacks)}
   {
@@ -27,55 +34,52 @@ namespace ao::gtk
     return detailed;
   }
 
-  void WindowActionRegistry::install(Gtk::ApplicationWindow& window)
+  ActionMapRegistration WindowActionRegistry::install(Gtk::ApplicationWindow& window)
   {
+    auto registration = ActionMapRegistration{window, kWindowActionCount};
+
     auto openActionPtr = Gio::SimpleAction::create(kOpenLibrary);
-    openActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.openLibrary(); });
-    window.add_action(openActionPtr);
+    registration.add(openActionPtr, [this](Glib::VariantBase const&) { _importExport.openLibrary(); });
 
     auto scanActionPtr = Gio::SimpleAction::create(kScanLibrary);
-    scanActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.scanLibrary(); });
-    window.add_action(scanActionPtr);
+    registration.add(scanActionPtr, [this](Glib::VariantBase const&) { _importExport.scanLibrary(); });
 
     auto exportLibActionPtr = Gio::SimpleAction::create(kExportLibrary);
-    exportLibActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.exportLibrary(); });
-    window.add_action(exportLibActionPtr);
+    registration.add(exportLibActionPtr, [this](Glib::VariantBase const&) { _importExport.exportLibrary(); });
 
     auto importLibActionPtr = Gio::SimpleAction::create(kImportLibrary);
-    importLibActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { _importExport.importLibrary(); });
-    window.add_action(importLibActionPtr);
+    registration.add(importLibActionPtr, [this](Glib::VariantBase const&) { _importExport.importLibrary(); });
 
     auto editLayoutActionPtr = Gio::SimpleAction::create(kEditLayout);
-    editLayoutActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const&)
-      {
-        if (_callbacks.onEditLayout)
-        {
-          _callbacks.onEditLayout();
-        }
-      });
-    window.add_action(editLayoutActionPtr);
+    registration.add(editLayoutActionPtr,
+                     [this](Glib::VariantBase const&)
+                     {
+                       if (_callbacks.onEditLayout)
+                       {
+                         _callbacks.onEditLayout();
+                       }
+                     });
 
     auto savePanelSizesActionPtr = Gio::SimpleAction::create(kSavePanelSizesAsLayoutDefaults);
-    savePanelSizesActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const&)
-      {
-        if (_callbacks.onSaveCurrentPanelSizesAsLayoutDefaults)
-        {
-          _callbacks.onSaveCurrentPanelSizesAsLayoutDefaults();
-        }
-      });
-    window.add_action(savePanelSizesActionPtr);
+    registration.add(savePanelSizesActionPtr,
+                     [this](Glib::VariantBase const&)
+                     {
+                       if (_callbacks.onSaveCurrentPanelSizesAsLayoutDefaults)
+                       {
+                         _callbacks.onSaveCurrentPanelSizesAsLayoutDefaults();
+                       }
+                     });
 
     auto resetRuntimeLayoutStateActionPtr = Gio::SimpleAction::create(kResetRuntimeLayoutState);
-    resetRuntimeLayoutStateActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const&)
-      {
-        if (_callbacks.onResetRuntimeLayoutState)
-        {
-          _callbacks.onResetRuntimeLayoutState();
-        }
-      });
-    window.add_action(resetRuntimeLayoutStateActionPtr);
+    registration.add(resetRuntimeLayoutStateActionPtr,
+                     [this](Glib::VariantBase const&)
+                     {
+                       if (_callbacks.onResetRuntimeLayoutState)
+                       {
+                         _callbacks.onResetRuntimeLayoutState();
+                       }
+                     });
+
+    return registration;
   }
 } // namespace ao::gtk

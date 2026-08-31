@@ -16,9 +16,7 @@
 
 namespace ao::audio::backend::detail
 {
-  /**
-   * @brief Operational mode for ALSA volume control.
-   */
+  /** @brief Operational mode for ALSA volume control. */
   enum class AlsaVolumeControlMode : std::uint8_t
   {
     Unavailable,
@@ -26,9 +24,7 @@ namespace ao::audio::backend::detail
     SoftwareGain,
   };
 
-  /**
-   * @brief Current runtime state for an ALSA route.
-   */
+  /** @brief Current runtime state for an ALSA route. */
   struct AlsaRouteState final
   {
     std::string routeAnchor;
@@ -42,11 +38,31 @@ namespace ao::audio::backend::detail
     AlsaVolumeControlMode volumeMode = AlsaVolumeControlMode::Unavailable;
   };
 
+  struct AlsaGraphPublicationState;
+
+  /** @brief Lifetime-safe backend handle for ALSA graph publication. */
+  class AlsaGraphPublisher final
+  {
+  public:
+    AlsaGraphPublisher() = default;
+
+    void publish(AlsaRouteState state) const;
+    void clear(std::string_view routeAnchor) const;
+
+  private:
+    explicit AlsaGraphPublisher(std::shared_ptr<AlsaGraphPublicationState> statePtr);
+
+    std::shared_ptr<AlsaGraphPublicationState> _statePtr;
+
+    friend class AlsaGraphRegistry;
+  };
+
   /**
    * @brief Registry for ALSA graph snapshots.
    *
-   * This class allows ALSA backends to publish their runtime state (volume, mute, mode)
-   * and allows providers to serve live graph subscriptions to the Player.
+   * Providers own and retire this registry. Backends retain only a publisher
+   * over the independently shared publication state, which becomes inert when
+   * the registry shuts down.
    */
   class AlsaGraphRegistry final
   {
@@ -61,33 +77,15 @@ namespace ao::audio::backend::detail
     AlsaGraphRegistry(AlsaGraphRegistry&&) = delete;
     AlsaGraphRegistry& operator=(AlsaGraphRegistry&&) = delete;
 
-    /**
-     * @brief Subscribes to graph updates for a specific route anchor.
-     *
-     * @param routeAnchor The unique identifier for the route (e.g. device name).
-     * @param callback The function to invoke whenever the graph changes.
-     * @return A Subscription that removes the callback on destruction.
-     *
-     * The returned subscription may safely outlive this registry.
-     */
     Subscription subscribe(std::string_view routeAnchor, Callback callback);
+    AlsaGraphPublisher publisher() const;
+    void publish(AlsaRouteState state) const;
+    void clear(std::string_view routeAnchor) const;
 
-    /**
-     * @brief Publishes new state for an ALSA route.
-     *
-     * @param state The updated route state.
-     */
-    void publish(AlsaRouteState state);
-
-    /**
-     * @brief Clears the state for a route anchor, emitting an empty graph to subscribers.
-     *
-     * @param routeAnchor The identifier of the route to clear.
-     */
-    void clear(std::string_view routeAnchor);
+    /** @brief Retires subscriptions and makes every publisher inert. */
+    void shutdown() noexcept;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<AlsaGraphPublicationState> _statePtr;
   };
 } // namespace ao::audio::backend::detail

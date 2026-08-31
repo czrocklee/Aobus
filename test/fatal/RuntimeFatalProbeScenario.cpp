@@ -64,6 +64,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <expected>
 #include <filesystem>
 #include <functional>
 #include <future>
@@ -397,13 +398,20 @@ namespace ao::rt::test
         return makeError(Error::Code::IoError, directoryError.message());
       }
 
-      return AppRuntime::create(AppRuntimeDependencies{
+      auto runtimeRes = AppRuntime::create(AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = scratchPath,
         .databasePath = scratchPath / "db",
         .musicLibraryPinnedMapBytes = std::size_t{16} * 1024U * 1024U,
         .workspaceConfigStorePtr = std::make_unique<ConfigStore>(scratchPath / "workspace.yaml"),
       });
+
+      if (!runtimeRes)
+      {
+        return std::unexpected{runtimeRes.error()};
+      }
+
+      return std::make_unique<AppRuntime>(std::move(*runtimeRes));
     }
 
     std::int32_t runYamlExportMissingCoverResource(std::string_view const scratchName)
@@ -550,6 +558,23 @@ namespace ao::rt::test
       }
 
       future.get();
+      return 3;
+    }
+
+    std::int32_t runLibraryNestedDeliveryDestruction()
+    {
+      auto executor = ImmediateProbeExecutor{};
+      auto outerChangesPtr = std::make_unique<LibraryChanges>(executor, 0, "outer-library");
+      auto innerChanges = LibraryChanges{executor, 0, "inner-library"};
+      auto innerBinding = LibraryChangesAccess::bindReplica(
+        innerChanges, "InnerReplica", [&outerChangesPtr](LibraryChangeSet const&) { outerChangesPtr.reset(); });
+      auto outerBinding = LibraryChangesAccess::bindReplica(
+        *outerChangesPtr,
+        "OuterReplica",
+        [&innerChanges](LibraryChangeSet const&)
+        { LibraryChangesAccess::publish(innerChanges, LibraryChangeSet{.libraryRevision = 1}); });
+
+      LibraryChangesAccess::publish(*outerChangesPtr, LibraryChangeSet{.libraryRevision = 1});
       return 3;
     }
 
@@ -1215,6 +1240,11 @@ namespace ao::rt::test
     if (name == "library-control-delivery-closing-race")
     {
       return runControlDeliveryClosingRace(scratchName);
+    }
+
+    if (name == "library-nested-delivery-destruction")
+    {
+      return runLibraryNestedDeliveryDestruction();
     }
 
     if (name == "library-mutation-execute-after-apply")

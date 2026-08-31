@@ -23,6 +23,8 @@
 
 namespace ao::audio::backend::test
 {
+  constexpr auto kWaitTimeout = std::chrono::seconds{5};
+
   TEST_CASE("WasapiProvider - exposes shared-mode wiring without a render endpoint", "[audio][unit][wasapi][provider]")
   {
     auto snapshotMutex = std::mutex{};
@@ -32,7 +34,7 @@ namespace ao::audio::backend::test
     auto const status = provider.status();
 
     CHECK(status.descriptor.id == kBackendWasapi);
-    REQUIRE(status.descriptor.supportedProfiles.size() == 1);
+    REQUIRE(status.descriptor.supportedProfiles.size() == 1U);
     CHECK(status.descriptor.supportedProfiles.front().id == kProfileShared);
 
     auto deviceSub = provider.subscribeDevices(
@@ -60,7 +62,7 @@ namespace ao::audio::backend::test
     CHECK(graphUpdateCount == 1);
     REQUIRE(backendPtr->set(props::kVolume, 0.5F));
     CHECK(graphUpdateCount == 2);
-    REQUIRE(graph.nodes.size() == 2);
+    REQUIRE(graph.nodes.size() == 2U);
     CHECK_FALSE(graph.nodes[1].softwareVolumeNotUnity);
     CHECK(graph.nodes[1].maxSoftwareGain == 1.0F);
 
@@ -110,8 +112,51 @@ namespace ao::audio::backend::test
     sub.reset();
   }
 
+  TEST_CASE("WasapiProvider - nested provider callback may destroy the outer provider",
+            "[audio][regression][wasapi][concurrency]")
+  {
+    auto makeHooks = []
+    {
+      auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+      hooksPtr->enumerateDevices = []
+      { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
+      return hooksPtr;
+    };
+    auto outerMonitorExited = std::binary_semaphore{0};
+    auto outerStateDestroyed = std::binary_semaphore{0};
+    auto outerHooksPtr = makeHooks();
+    outerHooksPtr->onMonitorExit = [&] { outerMonitorExited.release(); };
+    outerHooksPtr->onMonitorStateDestroyed = [&] { outerStateDestroyed.release(); };
+    auto outerProviderPtr = std::make_unique<WasapiProvider>(outerHooksPtr);
+    auto innerProvider = WasapiProvider{makeHooks()};
+    auto innerSub = Subscription{};
+    std::size_t outerCallbackCount = 0U;
+    std::size_t innerCallbackCount = 0U;
+
+    auto outerSub = outerProviderPtr->subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        ++outerCallbackCount;
+        innerSub = innerProvider.subscribeDevices(
+          [&](std::vector<Device> const&)
+          {
+            ++innerCallbackCount;
+            outerProviderPtr.reset();
+          });
+      });
+
+    CHECK_FALSE(outerProviderPtr);
+    CHECK_FALSE(outerSub);
+    REQUIRE(innerSub);
+    CHECK(outerCallbackCount == 1U);
+    CHECK(innerCallbackCount == 1U);
+    REQUIRE(outerMonitorExited.try_acquire_for(kWaitTimeout));
+    REQUIRE(outerStateDestroyed.try_acquire_for(kWaitTimeout));
+    innerSub.reset();
+  }
+
   TEST_CASE("WasapiProvider - monitor callback may destroy provider on its own thread",
-            "[audio][regression][wasapi][provider]")
+            "[audio][regression][wasapi][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -141,8 +186,8 @@ namespace ao::audio::backend::test
 
     hooksPtr->requestRefresh();
 
-    REQUIRE(monitorExited.try_acquire_for(std::chrono::seconds{5}));
-    REQUIRE(monitorStateDestroyed.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
+    REQUIRE(monitorStateDestroyed.try_acquire_for(kWaitTimeout));
     CHECK(callbackCount.load(std::memory_order_relaxed) == 2);
     CHECK(callbackThread != callerThread);
     CHECK_FALSE(providerPtr);
@@ -150,7 +195,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - initial callback destruction cannot deadlock a waiting monitor",
-            "[audio][regression][wasapi][provider]")
+            "[audio][regression][wasapi][concurrency]")
   {
     auto callbacksReady = std::binary_semaphore{0};
     auto monitorExited = std::binary_semaphore{0};
@@ -168,18 +213,18 @@ namespace ao::audio::backend::test
         ++callbackCount;
         REQUIRE(hooksPtr->requestRefresh);
         hooksPtr->requestRefresh();
-        REQUIRE(callbacksReady.try_acquire_for(std::chrono::seconds{5}));
+        REQUIRE(callbacksReady.try_acquire_for(kWaitTimeout));
         providerPtr.reset();
       });
 
     CHECK(callbackCount == 1);
     CHECK_FALSE(providerPtr);
     CHECK_FALSE(sub);
-    CHECK(monitorExited.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(monitorExited.try_acquire_for(kWaitTimeout));
   }
 
   TEST_CASE("WasapiProvider - cancellation removes a device callback already copied by monitor",
-            "[audio][regression][wasapi][provider]")
+            "[audio][regression][wasapi][concurrency]")
   {
     auto refreshCompleted = std::binary_semaphore{0};
     auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
@@ -210,19 +255,166 @@ namespace ao::audio::backend::test
 
     hooksPtr->requestRefresh();
 
-    REQUIRE(refreshCompleted.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
     CHECK(firstCalls.load(std::memory_order_relaxed) == 2);
     CHECK(secondCalls.load(std::memory_order_relaxed) == 1);
 
     hooksPtr->requestRefresh();
-    REQUIRE(refreshCompleted.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(refreshCompleted.try_acquire_for(kWaitTimeout));
     CHECK(firstCalls.load(std::memory_order_relaxed) == 3);
     CHECK(secondCalls.load(std::memory_order_relaxed) == 1);
     provider.shutdown();
   }
 
+  TEST_CASE("WasapiProvider - concurrent external shutdown callers share callback quiescence",
+            "[audio][regression][wasapi][concurrency]")
+  {
+    auto callbackEntered = std::binary_semaphore{0};
+    auto releaseCallback = std::binary_semaphore{0};
+    auto shutdownStarted = std::binary_semaphore{0};
+    auto shutdownWait = std::binary_semaphore{0};
+    auto firstReturned = std::binary_semaphore{0};
+    auto secondReturned = std::binary_semaphore{0};
+    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = []
+    { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
+    hooksPtr->onShutdownStarted = [&] { shutdownStarted.release(); };
+    hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
+    auto provider = WasapiProvider{hooksPtr};
+    auto blockCallback = std::atomic_bool{false};
+    auto sub = provider.subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        if (blockCallback.load(std::memory_order_acquire))
+        {
+          callbackEntered.release();
+          releaseCallback.acquire();
+        }
+      });
+    REQUIRE(sub);
+    blockCallback.store(true, std::memory_order_release);
+    REQUIRE(hooksPtr->requestRefresh);
+    hooksPtr->requestRefresh();
+    REQUIRE(callbackEntered.try_acquire_for(kWaitTimeout));
+
+    auto firstShutdown = std::jthread{[&]
+                                      {
+                                        provider.shutdown();
+                                        firstReturned.release();
+                                      }};
+    REQUIRE(shutdownStarted.try_acquire_for(kWaitTimeout));
+    auto secondShutdown = std::jthread{[&]
+                                       {
+                                         provider.shutdown();
+                                         secondReturned.release();
+                                       }};
+    REQUIRE(shutdownWait.try_acquire_for(kWaitTimeout));
+
+    CHECK_FALSE(firstReturned.try_acquire());
+    CHECK_FALSE(secondReturned.try_acquire());
+    releaseCallback.release();
+    firstShutdown.join();
+    secondShutdown.join();
+    CHECK(firstReturned.try_acquire());
+    CHECK(secondReturned.try_acquire());
+    CHECK(provider.status().devices.empty());
+  }
+
+  TEST_CASE("WasapiProvider - callback shutdown returns while later external shutdown waits",
+            "[audio][regression][wasapi][concurrency]")
+  {
+    auto callbackShutdownReturned = std::binary_semaphore{0};
+    auto releaseCallback = std::binary_semaphore{0};
+    auto shutdownWait = std::binary_semaphore{0};
+    auto externalReturned = std::binary_semaphore{0};
+    auto monitorExited = std::binary_semaphore{0};
+    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = []
+    { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
+    hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
+    hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
+    auto provider = WasapiProvider{hooksPtr};
+    auto callbackCount = std::atomic{std::size_t{0}};
+    auto sub = provider.subscribeDevices(
+      [&](std::vector<Device> const&)
+      {
+        if (callbackCount.fetch_add(1, std::memory_order_relaxed) == 0)
+        {
+          return;
+        }
+
+        provider.shutdown();
+        callbackShutdownReturned.release();
+        releaseCallback.acquire();
+      });
+    REQUIRE(sub);
+    REQUIRE(hooksPtr->requestRefresh);
+
+    hooksPtr->requestRefresh();
+    REQUIRE(callbackShutdownReturned.try_acquire_for(kWaitTimeout));
+    auto externalShutdown = std::jthread{[&]
+                                         {
+                                           provider.shutdown();
+                                           externalReturned.release();
+                                         }};
+    REQUIRE(shutdownWait.try_acquire_for(kWaitTimeout));
+
+    CHECK_FALSE(externalReturned.try_acquire());
+    releaseCallback.release();
+    externalShutdown.join();
+    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
+    CHECK(externalReturned.try_acquire());
+    CHECK(callbackCount.load(std::memory_order_relaxed) == 2);
+    CHECK(provider.status().devices.empty());
+  }
+
+  TEST_CASE("WasapiProvider - graph callback may destroy provider and retained backend stays inert",
+            "[audio][regression][wasapi][concurrency]")
+  {
+    auto monitorExited = std::binary_semaphore{0};
+    auto monitorStateDestroyed = std::binary_semaphore{0};
+    auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
+    hooksPtr->enumerateDevices = []
+    { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
+    hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
+    hooksPtr->onMonitorStateDestroyed = [&] { monitorStateDestroyed.release(); };
+    auto providerPtr = std::make_unique<WasapiProvider>(hooksPtr);
+    auto graph = flow::Graph{};
+    std::size_t graphUpdateCount = 0;
+    bool destroyProvider = false;
+    auto graphSub = providerPtr->subscribeGraph("synthetic-endpoint",
+                                                [&](flow::Graph const& nextGraph)
+                                                {
+                                                  graph = nextGraph;
+                                                  ++graphUpdateCount;
+
+                                                  if (destroyProvider && !nextGraph.nodes.empty())
+                                                  {
+                                                    providerPtr.reset();
+                                                  }
+                                                });
+    auto backendPtr = providerPtr->createBackend(
+      Device{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}, kProfileShared);
+    REQUIRE(graphSub);
+    REQUIRE(backendPtr);
+    destroyProvider = true;
+
+    REQUIRE(backendPtr->set(props::kVolume, 0.5F));
+
+    CHECK_FALSE(providerPtr);
+    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
+    REQUIRE(monitorStateDestroyed.try_acquire_for(kWaitTimeout));
+    CHECK(graphUpdateCount == 2);
+    CHECK_FALSE(graph.nodes.empty());
+    REQUIRE(backendPtr->set(props::kVolume, 0.25F));
+    backendPtr->close();
+    CHECK(graphUpdateCount == 2);
+    graphSub.reset();
+    CHECK_FALSE(graphSub);
+  }
+
   TEST_CASE("WasapiProvider - device subscription racing shutdown receives no initial callback",
-            "[audio][regression][wasapi][provider]")
+            "[audio][regression][wasapi][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto startSubscription = std::binary_semaphore{0};
@@ -262,7 +454,7 @@ namespace ao::audio::backend::test
 
     hooksPtr->requestRefresh();
 
-    REQUIRE(monitorExited.try_acquire_for(std::chrono::seconds{5}));
+    REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
     subscribeThread.join();
     CHECK(racedCalls.load(std::memory_order_relaxed) == 0);
     CHECK_FALSE(racedSub);

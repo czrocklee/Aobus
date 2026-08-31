@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/ActionMapRegistration.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
@@ -67,7 +68,7 @@ namespace ao::gtk
     void createSmartListFromExpression(ListId parentListId, std::string expression);
     void openNewPlaylistDialog();
 
-    void addActionsTo(Gio::ActionMap& actionMap);
+    ActionMapRegistration addActionsTo(Gio::ActionMap& actionMap);
 
   private:
     void createActions();

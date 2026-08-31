@@ -689,7 +689,7 @@ namespace ao::gtk
           }
         });
     };
-    auto& session = **sessionRes;
+    auto& session = *sessionRes;
     auto selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
 
     switch (command)

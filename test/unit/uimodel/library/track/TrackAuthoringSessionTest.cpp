@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/uimodel/library/track/TrackAuthoringTestSupport.h"
 #include <ao/rt/ListMutation.h>
@@ -18,6 +19,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -30,29 +32,29 @@ namespace ao::uimodel::test
     auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0]};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds);
     REQUIRE(sessionRes);
-    auto sessionPtr = std::move(*sessionRes);
+    auto session = std::move(*sessionRes);
 
-    CHECK(std::ranges::equal(sessionPtr->targetIds(), targetIds));
-    CHECK(sessionPtr->isCurrent());
+    CHECK(std::ranges::equal(session.targetIds(), targetIds));
+    CHECK(session.isCurrent());
 
     std::size_t invalidatedCount = 0;
-    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+    auto subscription = session.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
     auto patch = rt::MetadataPatch{.optTitle = "Applied"};
-    auto submitRes = fixture.runTask(sessionPtr->submitMetadata(patch));
+    auto submitRes = fixture.runTask(session.submitMetadata(patch));
 
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Applied);
-    CHECK(sessionPtr->isCurrent());
+    CHECK(session.isCurrent());
     CHECK(invalidatedCount == 0);
     CHECK(fixture.title(targetIds[0]) == "Applied");
     CHECK(fixture.title(targetIds[1]) == "Applied");
 
     REQUIRE(fixture.runTask(fixture.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
-    CHECK_FALSE(sessionPtr->isCurrent());
+    CHECK_FALSE(session.isCurrent());
     CHECK(invalidatedCount == 1);
 
     patch.optTitle = "Must not apply";
-    submitRes = fixture.runTask(sessionPtr->submitMetadata(patch));
+    submitRes = fixture.runTask(session.submitMetadata(patch));
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Stale);
     CHECK(fixture.title(targetIds[0]) == "Applied");
@@ -63,14 +65,14 @@ namespace ao::uimodel::test
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
     REQUIRE(sessionRes);
-    auto sessionPtr = std::move(*sessionRes);
+    auto session = std::move(*sessionRes);
 
-    auto submitRes = fixture.runTask(sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Old Title"}));
+    auto submitRes = fixture.runTask(session.submitMetadata(rt::MetadataPatch{.optTitle = "Old Title"}));
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::NoOp);
-    CHECK(sessionPtr->isCurrent());
+    CHECK(session.isCurrent());
 
-    submitRes = fixture.runTask(sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Now changed"}));
+    submitRes = fixture.runTask(session.submitMetadata(rt::MetadataPatch{.optTitle = "Now changed"}));
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Applied);
     CHECK(fixture.title(fixture.trackIds().front()) == "Now changed");
@@ -82,16 +84,16 @@ namespace ao::uimodel::test
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
     REQUIRE(sessionRes);
-    auto sessionPtr = std::move(*sessionRes);
+    auto session = std::move(*sessionRes);
 
-    auto const submitRes = fixture.runTask(sessionPtr->submitProperties(rt::TrackPropertiesPatch{
+    auto const submitRes = fixture.runTask(session.submitProperties(rt::TrackPropertiesPatch{
       .metadata = rt::MetadataPatch{.optTitle = "Together"},
       .tagsToAdd = {"Favorite"},
     }));
 
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Applied);
-    CHECK(sessionPtr->isCurrent());
+    CHECK(session.isCurrent());
     CHECK(fixture.title(fixture.trackIds().front()) == "Together");
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"Favorite"});
   }
@@ -104,18 +106,18 @@ namespace ao::uimodel::test
     auto secondRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
     REQUIRE(firstRes);
     REQUIRE(secondRes);
-    auto firstPtr = std::move(*firstRes);
-    auto secondPtr = std::move(*secondRes);
+    auto first = std::move(*firstRes);
+    auto second = std::move(*secondRes);
 
-    auto submitRes = fixture.runTask(firstPtr->submitTags({"First"}, {}));
+    auto submitRes = fixture.runTask(first.submitTags({"First"}, {}));
 
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Applied);
-    CHECK(firstPtr->isCurrent());
-    CHECK_FALSE(secondPtr->isCurrent());
+    CHECK(first.isCurrent());
+    CHECK_FALSE(second.isCurrent());
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"First"});
 
-    submitRes = fixture.runTask(secondPtr->submitTags({"Second"}, {}));
+    submitRes = fixture.runTask(second.submitTags({"Second"}, {}));
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Stale);
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"First"});
@@ -127,9 +129,9 @@ namespace ao::uimodel::test
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
     REQUIRE(sessionRes);
-    auto sessionPtr = std::move(*sessionRes);
+    auto session = std::move(*sessionRes);
     std::size_t invalidatedCount = 0;
-    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+    auto subscription = session.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
 
     auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto createFuture = fixture.runtime().spawn(rt::test::flagCompletion(
@@ -138,11 +140,11 @@ namespace ao::uimodel::test
 
     auto submitCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto submitFuture = fixture.runtime().spawn(rt::test::flagCompletion(
-      submitCompletedPtr, sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Must not apply"})));
+      submitCompletedPtr, session.submitMetadata(rt::MetadataPatch{.optTitle = "Must not apply"})));
     REQUIRE(fixture.executor().waitUntilQueuedCount(2));
 
     REQUIRE(fixture.executor().runOne());
-    CHECK(sessionPtr->isCurrent());
+    CHECK(session.isCurrent());
     REQUIRE(fixture.executor().drainUntil([&] { return createCompletedPtr->load() && submitCompletedPtr->load(); }));
 
     auto createRes = createFuture.get();
@@ -150,8 +152,46 @@ namespace ao::uimodel::test
     REQUIRE(createRes);
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Busy);
-    CHECK_FALSE(sessionPtr->isCurrent());
+    CHECK_FALSE(session.isCurrent());
     CHECK(invalidatedCount == 1);
     CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
+  }
+
+  TEST_CASE("TrackAuthoringSession - pending submission outlives moved and destroyed facades",
+            "[uimodel][regression][library-authoring][concurrency]")
+  {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<TrackAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<TrackAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<TrackAuthoringSession>);
+
+    auto fixture = TrackAuthoringFixture{1};
+    std::size_t invalidatedCount = 0;
+    auto invalidatedSubscription = async::Subscription{};
+    auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto submitCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto futures = [&]
+    {
+      auto source = ao::test::requireValue(TrackAuthoringSession::begin(fixture.library(), fixture.trackIds()));
+      auto moved = std::move(source);
+      invalidatedSubscription = moved.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+      auto createFuture = fixture.runtime().spawn(rt::test::flagCompletion(
+        createCompletedPtr, fixture.library().commands().createList(rt::ListDraft{.name = "Invalidate binding"})));
+      REQUIRE(fixture.executor().waitUntilQueued());
+      auto submitFuture = fixture.runtime().spawn(rt::test::flagCompletion(
+        submitCompletedPtr, moved.submitMetadata(rt::MetadataPatch{.optTitle = "Must not apply"})));
+      REQUIRE(fixture.executor().waitUntilQueuedCount(2));
+      return std::pair{std::move(createFuture), std::move(submitFuture)};
+    }();
+
+    REQUIRE(fixture.executor().drainUntil([&] { return createCompletedPtr->load() && submitCompletedPtr->load(); }));
+    REQUIRE(futures.first.get());
+    auto const submitRes = futures.second.get();
+    REQUIRE(submitRes);
+    CHECK(submitRes->status == rt::AuthoringStatus::Busy);
+    CHECK(invalidatedCount == 1);
+    CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
+
+    REQUIRE(fixture.runTask(fixture.library().commands().createList(rt::ListDraft{.name = "After cleanup"})));
+    CHECK(invalidatedCount == 1);
   }
 } // namespace ao::uimodel::test

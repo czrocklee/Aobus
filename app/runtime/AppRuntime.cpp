@@ -34,23 +34,26 @@ namespace ao::rt
 {
   struct AppRuntime::Impl final
   {
+    CoreRuntime core;
     ResourceByteMemoryCache resourceByteCache;
     ViewService viewService;
     PlaybackTransport playbackTransport;
     PlaybackSuccession playbackSuccession;
     PlaybackBootstrap playbackBootstrap;
-    std::unique_ptr<PlaybackService> playbackPtr;
+    PlaybackService playback;
     WorkspaceService workspaceService;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
-    ConfigStore* playbackSessionConfigStore = nullptr;
-    std::unique_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
+    ConfigStore& playbackSessionStore;
+    PlaybackSessionPersistence playbackSessionPersistence;
     bool stopped = false;
 
-    Impl(CoreRuntime& core,
-         ResourceByteMemoryCache::ReadBytes readResourceBytes,
+    template<typename ReadBytesFactory>
+    Impl(CoreRuntime&& coreValue,
+         ReadBytesFactory&& makeReadResourceBytes,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
-      : resourceByteCache{core.async(), std::move(readResourceBytes)}
+      : core{std::move(coreValue)}
+      , resourceByteCache{core.async(), std::forward<ReadBytesFactory>(makeReadResourceBytes)(core)}
       , viewService{core.async().callbackExecutor(),
                     core.musicLibrary(),
                     core.sources(),
@@ -68,17 +71,17 @@ namespace ao::rt
                            core.notifications(),
                            core.async()}
       , playbackBootstrap{playbackTransport}
-      , playbackPtr{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(), playbackSuccession)}
+      , playback{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(), playbackSuccession)}
       , workspaceService{core.async().callbackExecutor(), viewService, core.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
-      , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
-                                                                              : workspaceConfigStorePtr.get()}
-      , playbackSessionPersistencePtr{std::make_unique<PlaybackSessionPersistence>(*playbackSessionConfigStore,
-                                                                                   core.library(),
-                                                                                   playbackSuccession,
-                                                                                   playbackTransport,
-                                                                                   *playbackPtr,
-                                                                                   core.async())}
+      , playbackSessionStore{playbackSessionConfigStoreValue != nullptr ? *playbackSessionConfigStoreValue
+                                                                        : *workspaceConfigStorePtr}
+      , playbackSessionPersistence{playbackSessionStore,
+                                   core.library(),
+                                   playbackSuccession,
+                                   playbackTransport,
+                                   playback,
+                                   core.async()}
     {
     }
 
@@ -97,14 +100,15 @@ namespace ao::rt
       }
 
       stopped = true;
-      std::ignore = playbackSessionPersistencePtr->shutdown();
+      std::ignore = playbackSessionPersistence.shutdown();
       // Join playback callback producers while every consumer is still alive.
-      playbackPtr->shutdown();
+      playback.shutdown();
       playbackBootstrap.shutdown();
+      core.shutdown();
     }
   };
 
-  Result<std::unique_ptr<AppRuntime>> AppRuntime::create(AppRuntimeDependencies dependencies)
+  Result<AppRuntime> AppRuntime::create(AppRuntimeDependencies dependencies)
   {
     if (dependencies.executorPtr == nullptr)
     {
@@ -130,69 +134,73 @@ namespace ao::rt
       return std::unexpected{coreRes.error()};
     }
 
-    return std::unique_ptr<AppRuntime>{new AppRuntime{
-      std::move(*coreRes), std::move(dependencies.workspaceConfigStorePtr), dependencies.playbackSessionConfigStore}};
+    return AppRuntime{
+      std::move(*coreRes), std::move(dependencies.workspaceConfigStorePtr), dependencies.playbackSessionConfigStore};
   }
 
-  AppRuntime::AppRuntime(std::unique_ptr<CoreRuntime> corePtr,
+  AppRuntime::AppRuntime(CoreRuntime&& core,
                          std::unique_ptr<ConfigStore> workspaceConfigStorePtr,
                          ConfigStore* const playbackSessionConfigStore)
-    : _corePtr{std::move(corePtr)}
   {
-    auto* const core = _corePtr.get();
-    auto readResourceBytes =
-      ResourceByteMemoryCache::ReadBytes{[core](ResourceId const resourceId, std::stop_token const stopToken)
-                                         { return core->readInteractiveResourceBytesAsync(resourceId, stopToken); }};
+    auto const makeReadResourceBytes = [](CoreRuntime& finalCore)
+    {
+      return ResourceByteMemoryCache::ReadBytes{
+        [core = &finalCore](ResourceId const resourceId, std::stop_token const stopToken)
+        { return core->readInteractiveResourceBytesAsync(resourceId, stopToken); }};
+    };
     _implPtr = std::make_unique<Impl>(
-      *core, std::move(readResourceBytes), std::move(workspaceConfigStorePtr), playbackSessionConfigStore);
+      std::move(core), makeReadResourceBytes, std::move(workspaceConfigStorePtr), playbackSessionConfigStore);
   }
 
   AppRuntime::~AppRuntime() = default;
+  AppRuntime::AppRuntime(AppRuntime&& other) noexcept = default;
 
   void AppRuntime::shutdown() noexcept
   {
-    _implPtr->shutdown();
-    _corePtr->shutdown();
+    if (_implPtr)
+    {
+      _implPtr->shutdown();
+    }
   }
 
   Library const& AppRuntime::library() const noexcept
   {
-    return _corePtr->library();
+    return _implPtr->core.library();
   }
 
   Library& AppRuntime::library() noexcept
   {
-    return _corePtr->library();
+    return _implPtr->core.library();
   }
 
   async::Runtime& AppRuntime::async() noexcept
   {
-    return _corePtr->async();
+    return _implPtr->core.async();
   }
 
   TrackSourceCache& AppRuntime::sources() noexcept
   {
-    return _corePtr->sources();
+    return _implPtr->core.sources();
   }
 
   NotificationService& AppRuntime::notifications() noexcept
   {
-    return _corePtr->notifications();
+    return _implPtr->core.notifications();
   }
 
   CompletionService& AppRuntime::completion() noexcept
   {
-    return _corePtr->completion();
+    return _implPtr->core.completion();
   }
 
   TextOrderingPolicy const* AppRuntime::textOrderingPolicy() const noexcept
   {
-    return _corePtr->textOrderingPolicy();
+    return _implPtr->core.textOrderingPolicy();
   }
 
   std::filesystem::path const& AppRuntime::musicRoot() const noexcept
   {
-    return _corePtr->musicRoot();
+    return _implPtr->core.musicRoot();
   }
 
   ResourceByteMemoryCache& AppRuntime::resourceBytes() noexcept
@@ -202,7 +210,7 @@ namespace ao::rt
 
   PlaybackService& AppRuntime::playback() noexcept
   {
-    return *_implPtr->playbackPtr;
+    return _implPtr->playback;
   }
 
   WorkspaceService& AppRuntime::workspace() noexcept
@@ -222,21 +230,21 @@ namespace ao::rt
 
   ConfigStore& AppRuntime::playbackSessionConfigStore() noexcept
   {
-    return *_implPtr->playbackSessionConfigStore;
+    return _implPtr->playbackSessionStore;
   }
 
   Result<> AppRuntime::savePlaybackSession()
   {
-    return _implPtr->playbackSessionPersistencePtr->checkpoint();
+    return _implPtr->playbackSessionPersistence.checkpoint();
   }
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
     auto restoredRes = Result<PlaybackSessionRestoreResult>{};
-    auto const accepted = _implPtr->playbackPtr->runSynchronousCommand(
+    auto const accepted = _implPtr->playback.runSynchronousCommand(
       [this, &restoredRes]
       {
-        restoredRes = _implPtr->playbackSessionPersistencePtr->restore();
+        restoredRes = _implPtr->playbackSessionPersistence.restore();
         return restoredRes && restoredRes->restored;
       });
 
@@ -256,22 +264,22 @@ namespace ao::rt
 
   Result<> AppRuntime::discardRestorablePlaybackSession()
   {
-    return _implPtr->playbackSessionPersistencePtr->discardRestorableSession();
+    return _implPtr->playbackSessionPersistence.discardRestorableSession();
   }
 
   void AppRuntime::startPlaybackSessionPersistence()
   {
-    _implPtr->playbackSessionPersistencePtr->start();
+    _implPtr->playbackSessionPersistence.start();
   }
 
   void AppRuntime::sealPlaybackSessionPersistenceWrites()
   {
-    _implPtr->playbackSessionPersistencePtr->sealWrites();
+    _implPtr->playbackSessionPersistence.sealWrites();
   }
 
   Result<> AppRuntime::retirePlaybackSessionForLibrarySwitch()
   {
-    return _implPtr->playbackSessionPersistencePtr->retireForLibrarySwitch();
+    return _implPtr->playbackSessionPersistence.retireForLibrarySwitch();
   }
 
   Result<TrackId> AppRuntime::playSelectionInFocusedView()
@@ -297,7 +305,7 @@ namespace ao::rt
 
     auto const trackId = stateRes->selection.front();
 
-    if (auto const playedRes = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !playedRes)
+    if (auto const playedRes = _implPtr->playback.commands().startFromView(focus.activeViewId, trackId); !playedRes)
     {
       return std::unexpected{playedRes.error()};
     }
@@ -333,7 +341,7 @@ namespace ao::rt
       return std::unexpected{navigationRes.error()};
     }
 
-    _implPtr->playbackPtr->commands().revealTrack(trackId, *navigationRes);
+    _implPtr->playback.commands().revealTrack(trackId, *navigationRes);
     return {};
   }
 

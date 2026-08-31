@@ -15,6 +15,8 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
+#include <ao/audio/flow/Graph.h>
+#include <ao/utility/CallbackStackScope.h>
 #include <ao/utility/ThreadName.h>
 
 #include <CoreAudio/AudioHardware.h>
@@ -25,9 +27,14 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <semaphore>
 #include <string_view>
 #include <thread>
@@ -39,6 +46,23 @@ namespace ao::audio::backend
   namespace
   {
     constexpr auto kChangeCoalesceDelay = std::chrono::milliseconds{150};
+
+    void invokeHook(std::function<void()> const& hook, char const* const context) noexcept
+    {
+      if (!hook)
+      {
+        return;
+      }
+
+      try
+      {
+        hook();
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), context);
+      }
+    }
 
     class CallbackLeave final
     {
@@ -86,16 +110,9 @@ namespace ao::audio::backend
       {
         requestShutdown();
 
-        if (monitorHooksPtr && monitorHooksPtr->onMonitorStateDestroyed)
+        if (monitorHooksPtr)
         {
-          try
-          {
-            monitorHooksPtr->onMonitorStateDestroyed();
-          }
-          catch (...)
-          {
-            AO_FATAL_EXCEPTION(std::current_exception(), "Core Audio monitor destruction observer");
-          }
+          invokeHook(monitorHooksPtr->onMonitorStateDestroyed, "Core Audio monitor destruction observer");
         }
       }
 
@@ -180,10 +197,18 @@ namespace ao::audio::backend
 
           deviceRegistryPtr->publish(enumerateDevices());
 
-          if (monitorHooksPtr && monitorHooksPtr->onRefreshComplete)
+          if (monitorHooksPtr)
           {
-            monitorHooksPtr->onRefreshComplete();
+            invokeHook(monitorHooksPtr->onRefreshComplete, "Core Audio monitor refresh observer");
           }
+        }
+      }
+
+      void requestRefresh() noexcept
+      {
+        if (!shutdownRequested.load(std::memory_order_acquire))
+        {
+          changeSignal.release();
         }
       }
 
@@ -207,88 +232,370 @@ namespace ao::audio::backend
         changeSignal.release();
       }
     };
+
+    class CoreAudioProviderControl final : public std::enable_shared_from_this<CoreAudioProviderControl>
+    {
+    public:
+      explicit CoreAudioProviderControl(std::shared_ptr<detail::CoreAudioProviderMonitorHooks> monitorHooksPtr)
+        : _deviceRegistryPtr{std::make_shared<detail::BackendDeviceRegistry>()}
+        , _graphRegistryPtr{std::make_shared<detail::BackendGraphRegistry>()}
+        , _monitorStatePtr{std::make_shared<CoreAudioMonitorState>(_deviceRegistryPtr, std::move(monitorHooksPtr))}
+      {
+      }
+
+      ~CoreAudioProviderControl() { shutdown(); }
+
+      CoreAudioProviderControl(CoreAudioProviderControl const&) = delete;
+      CoreAudioProviderControl& operator=(CoreAudioProviderControl const&) = delete;
+      CoreAudioProviderControl(CoreAudioProviderControl&&) = delete;
+      CoreAudioProviderControl& operator=(CoreAudioProviderControl&&) = delete;
+
+      void startMonitor()
+      {
+        auto const statePtr = _monitorStatePtr;
+
+        if (statePtr->monitorHooksPtr)
+        {
+          statePtr->monitorHooksPtr->requestRefresh = [weakStatePtr = std::weak_ptr{statePtr}]
+          {
+            if (auto const retainedStatePtr = weakStatePtr.lock(); retainedStatePtr)
+            {
+              retainedStatePtr->requestRefresh();
+            }
+          };
+        }
+
+        if (!statePtr->installNativeListeners())
+        {
+          auto const lock = std::scoped_lock{_lifecycleMutex};
+          _monitorExited = true;
+          return;
+        }
+
+        try
+        {
+          statePtr->deviceRegistryPtr->publish(statePtr->enumerateDevices());
+          auto const retainedControlPtr = shared_from_this();
+          _monitorThread = std::jthread{
+            [retainedControlPtr, statePtr]
+            {
+              auto const monitorScope = utility::CallbackStackScope{retainedControlPtr->monitorScopeIdentity()};
+
+              try
+              {
+                setCurrentThreadName("CoreAudioMonitor");
+                statePtr->monitorLoop();
+
+                if (statePtr->monitorHooksPtr)
+                {
+                  invokeHook(statePtr->monitorHooksPtr->onMonitorExit, "Core Audio monitor-exit observer");
+                }
+              }
+              catch (...)
+              {
+                AO_FATAL_EXCEPTION(std::current_exception(), "Core Audio device-monitor thread");
+              }
+
+              retainedControlPtr->markMonitorExited();
+            }};
+        }
+        catch (...)
+        {
+          statePtr->requestShutdown();
+          markMonitorExited();
+          throw;
+        }
+      }
+
+      void shutdown() noexcept
+      {
+        bool returnWithoutWaiting = false;
+        bool startedShutdown = false;
+
+        {
+          auto lock = std::unique_lock{_lifecycleMutex};
+          returnWithoutWaiting = isCurrentCallbackOrMonitor();
+
+          if (_lifecycle == Lifecycle::Stopped)
+          {
+            return;
+          }
+
+          if (_lifecycle == Lifecycle::Stopping)
+          {
+            if (returnWithoutWaiting)
+            {
+              return;
+            }
+
+            lock.unlock();
+            notifyShutdownWait();
+            lock.lock();
+            _completionChanged.wait(lock, [this] { return _lifecycle == Lifecycle::Stopped; });
+            return;
+          }
+
+          _lifecycle = Lifecycle::Stopping;
+          startedShutdown = true;
+        }
+
+        if (startedShutdown)
+        {
+          notifyShutdownStarted();
+        }
+
+        auto const monitorStatePtr = _monitorStatePtr;
+        auto const graphRegistryPtr = _graphRegistryPtr;
+        auto const deviceRegistryPtr = _deviceRegistryPtr;
+        monitorStatePtr->requestShutdown();
+        graphRegistryPtr->shutdown();
+        deviceRegistryPtr->shutdown();
+
+        if (_monitorThread.joinable())
+        {
+          if (returnWithoutWaiting)
+          {
+            // The worker captures only independent provider control and monitor
+            // state. Detaching lets the current outward callback unwind before
+            // shared completion observes callback and monitor quiescence.
+            _monitorThread.detach();
+          }
+          else
+          {
+            _monitorThread.join();
+          }
+        }
+
+        {
+          auto lock = std::unique_lock{_lifecycleMutex};
+          _listenerRetired = true;
+          _registriesRetired = true;
+          _threadRetired = true;
+          updateCompletionLocked();
+
+          if (returnWithoutWaiting)
+          {
+            return;
+          }
+
+          _completionChanged.wait(lock, [this] { return _lifecycle == Lifecycle::Stopped; });
+        }
+      }
+
+      Subscription subscribeDevices(BackendProvider::OnDevicesChangedCallback callback)
+      {
+        if (!callback || !acceptsSubscriptions())
+        {
+          return {};
+        }
+
+        auto const weakControlPtr = weak_from_this();
+        auto const deviceRegistryPtr = _deviceRegistryPtr;
+        auto sub = deviceRegistryPtr->subscribe(
+          [weakControlPtr, callback = std::move(callback)](std::vector<Device> const& devices)
+          {
+            if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+            {
+              controlPtr->invokeDeviceCallback(callback, devices);
+            }
+          });
+
+        if (!acceptsSubscriptions())
+        {
+          sub.reset();
+          return {};
+        }
+
+        return sub;
+      }
+
+      Subscription subscribeGraph(std::string_view const routeAnchor, BackendProvider::OnGraphChangedCallback callback)
+      {
+        if (!callback || !acceptsSubscriptions())
+        {
+          return {};
+        }
+
+        auto const weakControlPtr = weak_from_this();
+        auto const graphRegistryPtr = _graphRegistryPtr;
+        auto sub =
+          graphRegistryPtr->subscribe(routeAnchor,
+                                      [weakControlPtr, callback = std::move(callback)](flow::Graph const& graph)
+                                      {
+                                        if (auto const controlPtr = weakControlPtr.lock(); controlPtr)
+                                        {
+                                          controlPtr->invokeGraphCallback(callback, graph);
+                                        }
+                                      });
+
+        if (!acceptsSubscriptions())
+        {
+          sub.reset();
+          return {};
+        }
+
+        return sub;
+      }
+
+      std::vector<Device> devices() const { return _deviceRegistryPtr->snapshot(); }
+
+      std::shared_ptr<detail::BackendGraphRegistry> graphRegistry() const { return _graphRegistryPtr; }
+
+    private:
+      enum class Lifecycle : std::uint8_t
+      {
+        Running,
+        Stopping,
+        Stopped,
+      };
+
+      class [[nodiscard]] CallbackScope final
+      {
+      public:
+        explicit CallbackScope(CoreAudioProviderControl& control)
+          : _control{control}
+        {
+          auto const lock = std::scoped_lock{_control._lifecycleMutex};
+
+          auto const callbackAlreadyActive = utility::CallbackStackScope::containsIdentity(&_control);
+
+          if (_control._lifecycle == Lifecycle::Running ||
+              (_control._lifecycle == Lifecycle::Stopping && !callbackAlreadyActive))
+          {
+            ++_control._activeCallbackCount;
+            _optCallbackStackScope.emplace(&_control);
+          }
+        }
+
+        ~CallbackScope()
+        {
+          if (!_optCallbackStackScope)
+          {
+            return;
+          }
+
+          _optCallbackStackScope.reset();
+          auto const lock = std::scoped_lock{_control._lifecycleMutex};
+          --_control._activeCallbackCount;
+          _control.updateCompletionLocked();
+        }
+
+        CallbackScope(CallbackScope const&) = delete;
+        CallbackScope& operator=(CallbackScope const&) = delete;
+        CallbackScope(CallbackScope&&) = delete;
+        CallbackScope& operator=(CallbackScope&&) = delete;
+
+        bool isAdmitted() const noexcept { return _optCallbackStackScope.has_value(); }
+
+      private:
+        CoreAudioProviderControl& _control;
+        std::optional<utility::CallbackStackScope> _optCallbackStackScope;
+      };
+
+      bool acceptsSubscriptions() const
+      {
+        auto const lock = std::scoped_lock{_lifecycleMutex};
+        return _lifecycle == Lifecycle::Running;
+      }
+
+      void const* monitorScopeIdentity() const noexcept { return &_monitorScopeIdentity; }
+
+      bool isCurrentCallbackOrMonitor() const noexcept
+      {
+        return utility::CallbackStackScope::containsIdentity(this) ||
+               utility::CallbackStackScope::containsIdentity(monitorScopeIdentity());
+      }
+
+      void invokeDeviceCallback(BackendProvider::OnDevicesChangedCallback const& callback,
+                                std::vector<Device> const& devices)
+      {
+        auto const scope = CallbackScope{*this};
+
+        if (scope.isAdmitted())
+        {
+          callback(devices);
+        }
+      }
+
+      void invokeGraphCallback(BackendProvider::OnGraphChangedCallback const& callback, flow::Graph const& graph)
+      {
+        auto const scope = CallbackScope{*this};
+
+        if (scope.isAdmitted())
+        {
+          callback(graph);
+        }
+      }
+
+      void markMonitorExited() noexcept
+      {
+        auto const lock = std::scoped_lock{_lifecycleMutex};
+        _monitorExited = true;
+        updateCompletionLocked();
+      }
+
+      void updateCompletionLocked() noexcept
+      {
+        if (_lifecycle == Lifecycle::Stopping && _listenerRetired && _registriesRetired && _threadRetired &&
+            _monitorExited && _activeCallbackCount == 0U)
+        {
+          _lifecycle = Lifecycle::Stopped;
+          _completionChanged.notify_all();
+        }
+      }
+
+      void notifyShutdownStarted() const noexcept
+      {
+        if (_monitorStatePtr->monitorHooksPtr)
+        {
+          invokeHook(_monitorStatePtr->monitorHooksPtr->onShutdownStarted, "Core Audio shutdown-start observer");
+        }
+      }
+
+      void notifyShutdownWait() const noexcept
+      {
+        if (_monitorStatePtr->monitorHooksPtr)
+        {
+          invokeHook(_monitorStatePtr->monitorHooksPtr->onShutdownWait, "Core Audio shutdown-wait observer");
+        }
+      }
+
+      std::shared_ptr<detail::BackendDeviceRegistry> _deviceRegistryPtr;
+      std::shared_ptr<detail::BackendGraphRegistry> _graphRegistryPtr;
+      std::shared_ptr<CoreAudioMonitorState> _monitorStatePtr;
+      std::byte _monitorScopeIdentity{};
+      mutable std::mutex _lifecycleMutex;
+      std::condition_variable _completionChanged;
+      std::jthread _monitorThread;
+      std::size_t _activeCallbackCount = 0U;
+      Lifecycle _lifecycle = Lifecycle::Running;
+      bool _listenerRetired = false;
+      bool _registriesRetired = false;
+      bool _threadRetired = false;
+      bool _monitorExited = false;
+    };
   } // namespace
 
   struct CoreAudioProvider::Impl final
   {
-    std::shared_ptr<detail::BackendDeviceRegistry> deviceRegistryPtr =
-      std::make_shared<detail::BackendDeviceRegistry>();
-    std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
-    std::shared_ptr<CoreAudioMonitorState> monitorStatePtr;
-    std::jthread monitorThread;
-    std::atomic<bool> shutdownStarted{false};
+    std::shared_ptr<CoreAudioProviderControl> controlPtr;
 
     explicit Impl(std::shared_ptr<detail::CoreAudioProviderMonitorHooks> monitorHooksPtr)
-      : monitorStatePtr{std::make_shared<CoreAudioMonitorState>(deviceRegistryPtr, std::move(monitorHooksPtr))}
+      : controlPtr{std::make_shared<CoreAudioProviderControl>(std::move(monitorHooksPtr))}
     {
-      if (monitorStatePtr->monitorHooksPtr)
-      {
-        monitorStatePtr->monitorHooksPtr->requestRefresh = [weakStatePtr = std::weak_ptr{monitorStatePtr}]
-        {
-          if (auto const statePtr = weakStatePtr.lock(); statePtr)
-          {
-            statePtr->changeSignal.release();
-          }
-        };
-      }
-
-      if (monitorStatePtr->installNativeListeners())
-      {
-        monitorStatePtr->deviceRegistryPtr->publish(monitorStatePtr->enumerateDevices());
-        monitorThread =
-          std::jthread{[statePtr = monitorStatePtr]
-                       {
-                         try
-                         {
-                           setCurrentThreadName("CoreAudioMonitor");
-                           statePtr->monitorLoop();
-
-                           if (statePtr->monitorHooksPtr && statePtr->monitorHooksPtr->onMonitorExit)
-                           {
-                             statePtr->monitorHooksPtr->onMonitorExit();
-                           }
-                         }
-                         catch (...)
-                         {
-                           AO_FATAL_EXCEPTION(std::current_exception(), "Core Audio device-monitor thread");
-                         }
-                       }};
-      }
+      controlPtr->startMonitor();
     }
 
-    ~Impl() { shutdown(); }
+    ~Impl()
+    {
+      auto const retainedControlPtr = controlPtr;
+      retainedControlPtr->shutdown();
+    }
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
-
-    void shutdown() noexcept
-    {
-      if (shutdownStarted.exchange(true, std::memory_order_acq_rel))
-      {
-        return;
-      }
-
-      auto const deviceRegistryPtr = this->deviceRegistryPtr;
-      auto const graphRegistryPtr = this->graphRegistryPtr;
-      monitorStatePtr->requestShutdown();
-
-      if (monitorThread.joinable())
-      {
-        if (monitorThread.get_id() == std::this_thread::get_id())
-        {
-          monitorThread.detach();
-        }
-        else
-        {
-          monitorThread.join();
-        }
-      }
-
-      deviceRegistryPtr->shutdown();
-      graphRegistryPtr->shutdown();
-    }
   };
 
   CoreAudioProvider::CoreAudioProvider()
@@ -308,27 +615,32 @@ namespace ao::audio::backend
 
   void CoreAudioProvider::shutdown() noexcept
   {
-    _implPtr->shutdown();
+    auto const controlPtr = _implPtr->controlPtr;
+    controlPtr->shutdown();
   }
 
   Subscription CoreAudioProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    return _implPtr->deviceRegistryPtr->subscribe(std::move(callback));
+    auto const controlPtr = _implPtr->controlPtr;
+    return controlPtr->subscribeDevices(std::move(callback));
   }
 
   BackendProvider::Status CoreAudioProvider::status() const
   {
+    auto const controlPtr = _implPtr->controlPtr;
     return {.descriptor = {.id = kBackendCoreAudio, .supportedProfiles = {{.id = kProfileShared}}},
-            .devices = _implPtr->deviceRegistryPtr->snapshot()};
+            .devices = controlPtr->devices()};
   }
 
   std::unique_ptr<Backend> CoreAudioProvider::createBackend(Device const& device, ProfileId const& /*profile*/)
   {
-    return std::make_unique<CoreAudioBackend>(device, kProfileShared, _implPtr->graphRegistryPtr);
+    auto const controlPtr = _implPtr->controlPtr;
+    return std::make_unique<CoreAudioBackend>(device, kProfileShared, controlPtr->graphRegistry());
   }
 
   Subscription CoreAudioProvider::subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
   {
-    return _implPtr->graphRegistryPtr->subscribe(routeAnchor, std::move(callback));
+    auto const controlPtr = _implPtr->controlPtr;
+    return controlPtr->subscribeGraph(routeAnchor, std::move(callback));
   }
 } // namespace ao::audio::backend

@@ -11,18 +11,23 @@
 #include <string_view>
 #include <vector>
 
+namespace ao::audio::backend::detail
+{
+  struct PipeWireMonitorHooks;
+}
+
 namespace ao::audio::backend
 {
   /**
-   * PipeWire graph monitor with structured worker teardown. Subscription
-   * handles must be reset before destruction. Callbacks must not call stop() or
-   * synchronously destroy the monitor; owner teardown is deferred until after
-   * publication returns.
+   * PipeWire graph monitor with provider-independent publication state.
+   * Subscriptions remain safe after monitor destruction, and callbacks may
+   * synchronously stop or destroy the monitor.
    */
   class PipeWireMonitor final
   {
   public:
     PipeWireMonitor();
+    explicit PipeWireMonitor(std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr);
     ~PipeWireMonitor();
 
     PipeWireMonitor(PipeWireMonitor const&) = delete;
@@ -38,11 +43,14 @@ namespace ao::audio::backend
     Subscription subscribeDevices(DeviceCallback callback);
 
     std::vector<Device> enumerateSinks() const;
+    bool isRunning() const noexcept;
 
     Subscription subscribeGraph(std::string_view routeAnchor, std::function<void(flow::Graph const&)> callback);
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    struct State;
+    struct Worker;
+    std::shared_ptr<State> _statePtr;
+    std::unique_ptr<Worker> _workerPtr;
   };
 } // namespace ao::audio::backend

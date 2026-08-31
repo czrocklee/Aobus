@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
+#include "common/ActionMapRegistration.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkText.h"
 #include "list/ListNavigationPanel.h"
@@ -59,6 +60,15 @@ namespace ao::gtk
   {
     constexpr int kDeleteDialogWidth = 420;
     constexpr int kDeleteMessageWidthChars = 65;
+
+    Glib::RefPtr<Gio::SimpleAction> recreateActionPreservingEnabled(
+      char const* const actionName,
+      Glib::RefPtr<Gio::SimpleAction> const& previousActionPtr)
+    {
+      auto actionPtr = Gio::SimpleAction::create(actionName);
+      actionPtr->set_enabled(previousActionPtr && previousActionPtr->get_enabled());
+      return actionPtr;
+    }
 
     std::string displayedTag(std::string_view const tag)
     {
@@ -123,38 +133,26 @@ namespace ao::gtk
 
   void ListNavigationController::createActions()
   {
-    _newListActionPtr = Gio::SimpleAction::create("list-new-smart-list");
-    _newListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
-                                                 { openNewSmartListDialog(); });
-    _newListActionPtr->set_enabled(false);
-
-    _newPlaylistActionPtr = Gio::SimpleAction::create("list-new-playlist");
-    _newPlaylistActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { openNewPlaylistDialog(); });
-    _newPlaylistActionPtr->set_enabled(false);
-
-    _deleteListActionPtr = Gio::SimpleAction::create("list-delete");
-    _deleteListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
-                                                    { handleDeleteListActivated(); });
-    _deleteListActionPtr->set_enabled(false);
-
-    _deleteListSubtreeActionPtr = Gio::SimpleAction::create("list-delete-subtree");
-    _deleteListSubtreeActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
-                                                           { handleDeleteListSubtreeActivated(); });
-    _deleteListSubtreeActionPtr->set_enabled(false);
-
-    _editListActionPtr = Gio::SimpleAction::create("list-edit");
-    _editListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
-                                                  { handleEditListActivated(); });
-    _editListActionPtr->set_enabled(false);
+    _newListActionPtr = recreateActionPreservingEnabled("list-new-smart-list", _newListActionPtr);
+    _newPlaylistActionPtr = recreateActionPreservingEnabled("list-new-playlist", _newPlaylistActionPtr);
+    _deleteListActionPtr = recreateActionPreservingEnabled("list-delete", _deleteListActionPtr);
+    _deleteListSubtreeActionPtr = recreateActionPreservingEnabled("list-delete-subtree", _deleteListSubtreeActionPtr);
+    _editListActionPtr = recreateActionPreservingEnabled("list-edit", _editListActionPtr);
   }
 
-  void ListNavigationController::addActionsTo(Gio::ActionMap& actionMap)
+  ActionMapRegistration ListNavigationController::addActionsTo(Gio::ActionMap& actionMap)
   {
-    actionMap.add_action(_newListActionPtr);
-    actionMap.add_action(_newPlaylistActionPtr);
-    actionMap.add_action(_deleteListActionPtr);
-    actionMap.add_action(_deleteListSubtreeActionPtr);
-    actionMap.add_action(_editListActionPtr);
+    createActions();
+
+    auto registration = ActionMapRegistration{actionMap};
+    registration.add(_newListActionPtr, [this](Glib::VariantBase const& /*variant*/) { openNewSmartListDialog(); });
+    registration.add(_newPlaylistActionPtr, [this](Glib::VariantBase const&) { openNewPlaylistDialog(); });
+    registration.add(
+      _deleteListActionPtr, [this](Glib::VariantBase const& /*variant*/) { handleDeleteListActivated(); });
+    registration.add(
+      _deleteListSubtreeActionPtr, [this](Glib::VariantBase const&) { handleDeleteListSubtreeActivated(); });
+    registration.add(_editListActionPtr, [this](Glib::VariantBase const& /*variant*/) { handleEditListActivated(); });
+    return registration;
   }
 
   void ListNavigationController::rebuildTree(TrackRowCache& dataProvider)

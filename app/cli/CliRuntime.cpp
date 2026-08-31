@@ -24,6 +24,12 @@
 
 namespace ao::cli
 {
+  struct CliRuntime::Storage final
+  {
+    std::optional<rt::CoreRuntime> optRuntime;
+    async::LoopExecutor* loopExecutor = nullptr;
+  };
+
   namespace
   {
     struct TaskCompletionState final
@@ -49,29 +55,30 @@ namespace ao::cli
     : _io{.out = out, .err = err}
     , _musicLibraryPinnedMapBytes{musicLibraryPinnedMapBytes}
     , _optCacheDirectory{std::move(optCacheDirectory)}
+    , _storagePtr{std::make_unique<Storage>()}
   {
   }
 
   CliRuntime::~CliRuntime()
   {
-    if (!_runtimePtr)
+    if (!_storagePtr->optRuntime)
     {
       return;
     }
 
-    _runtimePtr->shutdown();
+    _storagePtr->optRuntime->shutdown();
 
-    while (_loopExecutor->runReadyTurn())
+    while (_storagePtr->loopExecutor->runReadyTurn())
     {
     }
 
-    _runtimePtr.reset();
-    _loopExecutor = nullptr;
+    _storagePtr->optRuntime.reset();
+    _storagePtr->loopExecutor = nullptr;
   }
 
   rt::CoreRuntime& CliRuntime::core()
   {
-    if (!_runtimePtr)
+    if (!_storagePtr->optRuntime)
     {
       // CliRuntime is invocation-thread confined; lazy construction binds the
       // loop executor to the thread that enters the first command callback.
@@ -102,11 +109,11 @@ namespace ao::cli
         throwCommandError(runtimeRes.error(), "failed to open library: {}", runtimeRes.error().message);
       }
 
-      _loopExecutor = loopExecutor;
-      _runtimePtr = std::move(*runtimeRes);
+      _storagePtr->optRuntime.emplace(std::move(*runtimeRes));
+      _storagePtr->loopExecutor = loopExecutor;
     }
 
-    return *_runtimePtr;
+    return *_storagePtr->optRuntime;
   }
 
   library::MusicLibrary const& CliRuntime::musicLibrary()
@@ -128,7 +135,7 @@ namespace ao::cli
 
     while (!completionStatePtr->completed)
     {
-      _loopExecutor->runOneTurn();
+      _storagePtr->loopExecutor->runOneTurn();
     }
 
     completionFuture.get();

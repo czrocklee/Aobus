@@ -3,10 +3,8 @@
 
 #include "MprisArtUrlSession.h"
 
-#include "common/MainContextCallbackScope.h"
 #include <ao/CoreIds.h>
 
-#include <memory>
 #include <string>
 #include <utility>
 
@@ -38,19 +36,19 @@ namespace ao::gtk::platform
       return;
     }
 
-    _callbackScopePtr = std::make_unique<MainContextCallbackScope>();
-    auto onReady = _callbackScopePtr->guard([this](std::string url) { handleUrlReady(std::move(url)); });
+    _optCallbackScope.emplace();
+    auto onReady = _optCallbackScope->guard([this](std::string url) { handleUrlReady(std::move(url)); });
 
     try
     {
-      if (auto request = _requestUrl(resourceId, std::move(onReady)); _callbackScopePtr)
+      if (auto request = _requestUrl(resourceId, std::move(onReady)); _optCallbackScope)
       {
         _request = std::move(request);
       }
     }
     catch (...)
     {
-      _callbackScopePtr.reset();
+      _optCallbackScope.reset();
       throw;
     }
   }
@@ -69,7 +67,7 @@ namespace ao::gtk::platform
 
   void MprisArtUrlSession::invalidateRequest()
   {
-    _callbackScopePtr.reset();
+    _optCallbackScope.reset();
     _request.reset();
   }
 

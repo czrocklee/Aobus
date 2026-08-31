@@ -12,6 +12,7 @@
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellState.h>
@@ -21,11 +22,9 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 namespace ao::winui
@@ -206,15 +205,11 @@ namespace ao::winui::layout
      */
     std::optional<ShellPreset> _optRejectedPreset;
     /**
-     * @brief Proof that this builder is still alive, for handlers that outlive it.
-     *
-     * Keyboard accelerators hang on the frame's host region, which outlives
-     * every generation and this builder with it. Construction installs them, so
-     * a throw part-way through leaves installed handlers behind with no
-     * destructor to run. Holding the token by weak reference is what makes
-     * those handlers inert instead of a call into freed memory.
+     * Keyboard accelerators hang on the frame's host region and can outlive
+     * this builder. The token gates admission only; host teardown still settles
+     * callbacks before the builder's memory retires.
      */
-    std::shared_ptr<std::monostate> _lifetimePtr = std::make_shared<std::monostate>();
+    CallbackAdmissionGate _ownerCallbackGate;
     bool _retired = false;
   };
 } // namespace ao::winui::layout

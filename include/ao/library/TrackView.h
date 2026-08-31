@@ -120,6 +120,25 @@ namespace ao::library
     class Iterator;
     Iterator begin() const;
     Iterator end() const;
+
+    /**
+     * Finds a custom value without copying its bytes.
+     *
+     * An engaged result aliases the cold-record bytes supplied to this proxy;
+     * the caller-provided buffer or active LMDB transaction owns those bytes.
+     * The view remains valid only while that storage is alive and unchanged.
+     * A TrackStore-returned view must not outlive its ReadTransaction or
+     * WriteTransaction. Destruction ends a read transaction; commit(), abort(),
+     * or destruction ends a write transaction. Each ending invalidates the
+     * result, and a later mutation in the same write transaction may invalidate
+     * it earlier.
+     *
+     * This proxy adds no synchronization. TrackView row access is intended for
+     * single-threaded use, and callers must also obey the backing owner's
+     * affinity. Copy the value before transaction completion, backing-buffer
+     * mutation or destruction, a potentially reentrant call, coroutine
+     * suspension, or longer-lived storage.
+     */
     std::optional<std::string_view> get(DictionaryId dictionaryId) const noexcept;
     bool contains(DictionaryId dictionaryId) const noexcept;
 

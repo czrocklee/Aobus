@@ -46,6 +46,7 @@ They do not reimplement list membership, scan planning, query evaluation, mutati
 
 Global CLI options select one normalized music root and one output format for the command invocation.
 `CliRuntime` owns one `CoreRuntime`/library environment for that invocation.
+Its cpp-local Storage represents lazy presence as `optional<CoreRuntime>` so the public header keeps the incomplete-type firewall; it emplaces the factory value once, then explicitly shuts down, drains ready `LoopExecutor` turns, and resets that value.
 It constructs that graph lazily through `CoreRuntime::create()`.
 The factory validates the persisted library and completes initial All Tracks materialization before the command receives the runtime; an Error becomes `CommandError` before command payload is emitted.
 The invocation thread owns its callback executor and remains the only CLI application-control thread.

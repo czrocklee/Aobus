@@ -802,8 +802,7 @@ namespace ao::tui
       return 1;
     }
 
-    auto runtimePtr = std::move(*runtimeRes);
-    auto& runtime = *runtimePtr;
+    auto runtime = std::move(*runtimeRes);
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {

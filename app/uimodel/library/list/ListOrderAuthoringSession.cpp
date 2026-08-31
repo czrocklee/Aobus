@@ -36,15 +36,15 @@
 
 namespace ao::uimodel
 {
-  struct ListOrderAuthoringSession::Impl final
+  struct ListOrderAuthoringSession::State final
   {
-    Impl(rt::Library& libraryValue,
-         rt::ViewService& viewsValue,
-         rt::ViewId const viewIdValue,
-         rt::BoundListOrder orderValue,
-         ListOrderCapabilityState capabilitiesValue,
-         std::shared_ptr<rt::TrackListProjection const> projectionValuePtr,
-         i18n::MessageCatalog textCatalogValue)
+    State(rt::Library& libraryValue,
+          rt::ViewService& viewsValue,
+          rt::ViewId const viewIdValue,
+          rt::BoundListOrder orderValue,
+          ListOrderCapabilityState capabilitiesValue,
+          std::shared_ptr<rt::TrackListProjection const> projectionValuePtr,
+          i18n::MessageCatalog textCatalogValue)
       : library{libraryValue}
       , views{viewsValue}
       , viewId{viewIdValue}
@@ -172,69 +172,70 @@ namespace ao::uimodel
     }
 
     template<typename RuntimeResult, typename Operation>
-    static async::Task<Result<RuntimeResult>> submitAsync(std::shared_ptr<Impl> implPtr, Operation operation)
+    static async::Task<Result<RuntimeResult>> submitAsync(std::shared_ptr<State> statePtr, Operation operation)
     {
-      if (!implPtr->current)
+      if (!statePtr->current)
       {
         co_return RuntimeResult{.status = rt::AuthoringStatus::Stale};
       }
 
-      if (implPtr->submitting)
+      if (statePtr->submitting)
       {
         co_return RuntimeResult{.status = rt::AuthoringStatus::Busy};
       }
 
-      implPtr->submitting = true;
+      statePtr->submitting = true;
       auto result = Result<RuntimeResult>{};
       auto deferredException = std::exception_ptr{};
 
       try
       {
-        result = co_await std::invoke(std::move(operation), *implPtr);
+        result = co_await std::invoke(std::move(operation), *statePtr);
       }
       catch (...)
       {
         deferredException = std::current_exception();
-        implPtr->submitting = false;
-        implPtr->reconcileExceptionalSubmission();
+        statePtr->submitting = false;
+        statePtr->reconcileExceptionalSubmission();
         async::rethrowException(deferredException);
       }
 
-      implPtr->submitting = false;
+      statePtr->submitting = false;
 
       if (!result)
       {
-        implPtr->reconcileAfterSubmission(true);
+        statePtr->reconcileAfterSubmission(true);
         co_return std::unexpected{result.error()};
       }
 
-      implPtr->reconcileAfterSubmission(result->status != rt::AuthoringStatus::NoOp &&
-                                        result->status != rt::AuthoringStatus::Busy);
+      statePtr->reconcileAfterSubmission(result->status != rt::AuthoringStatus::NoOp &&
+                                         result->status != rt::AuthoringStatus::Busy);
 
       co_return result;
     }
 
     static async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveAsync(
-      std::shared_ptr<Impl> implPtr,
+      std::shared_ptr<State> statePtr,
       std::vector<TrackId> selectedTrackIds,
       std::optional<TrackId> optBeforeTrackId)
     {
       return submitAsync<rt::AuthoringResult<rt::MoveListOrderReply>>(
-        std::move(implPtr),
-        [selectedTrackIds = std::move(selectedTrackIds), optBeforeTrackId](Impl& impl) mutable
-        { return impl.library.commands().moveListOrder(impl.order, std::move(selectedTrackIds), optBeforeTrackId); });
+        std::move(statePtr),
+        [selectedTrackIds = std::move(selectedTrackIds), optBeforeTrackId](State& state) mutable
+        { return state.library.commands().moveListOrder(state.order, std::move(selectedTrackIds), optBeforeTrackId); });
     }
 
     static async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>>
-    moveRelative(std::shared_ptr<Impl> implPtr, std::vector<TrackId> selectedTrackIds, int const direction)
+    moveRelative(std::shared_ptr<State> statePtr, std::vector<TrackId> selectedTrackIds, int const direction)
     {
-      if (auto optRejection = implPtr->commandRejection<rt::MoveListOrderReply>(implPtr->capabilities.canRelativeMove);
+      if (auto optRejection =
+            statePtr->commandRejection<rt::MoveListOrderReply>(statePtr->capabilities.canRelativeMove);
           optRejection)
       {
         return async::makeReadyTask(std::move(*optRejection));
       }
 
-      auto anchorRes = implPtr->relativeAnchor(selectedTrackIds, direction);
+      auto anchorRes = statePtr->relativeAnchor(selectedTrackIds, direction);
 
       if (!anchorRes)
       {
@@ -242,7 +243,7 @@ namespace ao::uimodel
           Result<rt::AuthoringResult<rt::MoveListOrderReply>>{std::unexpected{anchorRes.error()}});
       }
 
-      return moveAsync(std::move(implPtr), std::move(selectedTrackIds), *anchorRes);
+      return moveAsync(std::move(statePtr), std::move(selectedTrackIds), *anchorRes);
     }
 
     Result<std::optional<TrackId>> relativeAnchor(std::span<TrackId const> const selectedTrackIds,
@@ -325,11 +326,10 @@ namespace ao::uimodel
     mutable async::Signal<> invalidated;
   };
 
-  Result<std::unique_ptr<ListOrderAuthoringSession>> ListOrderAuthoringSession::begin(
-    rt::Library& library,
-    rt::ViewService& views,
-    rt::ViewId const viewId,
-    i18n::MessageCatalog const& textCatalog)
+  Result<ListOrderAuthoringSession> ListOrderAuthoringSession::begin(rt::Library& library,
+                                                                     rt::ViewService& views,
+                                                                     rt::ViewId const viewId,
+                                                                     i18n::MessageCatalog const& textCatalog)
   {
     auto stateRes = views.findTrackListState(viewId);
 
@@ -381,66 +381,69 @@ namespace ao::uimodel
       return std::unexpected{projectionRes.error()};
     }
 
-    return std::unique_ptr<ListOrderAuthoringSession>{new ListOrderAuthoringSession{std::make_shared<Impl>(
-      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes), textCatalog)}};
+    return ListOrderAuthoringSession{std::make_shared<State>(
+      library, views, viewId, std::move(*orderRes), std::move(capabilities), std::move(*projectionRes), textCatalog)};
   }
 
-  ListOrderAuthoringSession::ListOrderAuthoringSession(std::shared_ptr<Impl> implPtr)
-    : _implPtr{std::move(implPtr)}
+  ListOrderAuthoringSession::ListOrderAuthoringSession(std::shared_ptr<State> statePtr)
+    : _statePtr{std::move(statePtr)}
   {
   }
 
   ListOrderAuthoringSession::~ListOrderAuthoringSession() = default;
 
+  ListOrderAuthoringSession::ListOrderAuthoringSession(ListOrderAuthoringSession&&) noexcept = default;
+
   bool ListOrderAuthoringSession::isCurrent() const noexcept
   {
-    return _implPtr->current;
+    return _statePtr->current;
   }
 
   ListOrderCapabilityState const& ListOrderAuthoringSession::capabilities() const noexcept
   {
-    return _implPtr->capabilities;
+    return _statePtr->capabilities;
   }
 
   std::span<TrackId const> ListOrderAuthoringSession::effectiveTrackIds() const noexcept
   {
-    return _implPtr->order.effectiveTrackIds();
+    return _statePtr->order.effectiveTrackIds();
   }
 
   async::Subscription ListOrderAuthoringSession::onInvalidated(compat::MoveOnlyFunction<void()> handler) const
   {
-    return _implPtr->invalidated.connect(std::move(handler));
+    return _statePtr->invalidated.connect(std::move(handler));
   }
 
   async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> ListOrderAuthoringSession::moveBefore(
     std::vector<TrackId> selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
-    if (auto optRejection = _implPtr->commandRejection<rt::MoveListOrderReply>(_implPtr->capabilities.canGapMove);
+    if (auto optRejection = _statePtr->commandRejection<rt::MoveListOrderReply>(_statePtr->capabilities.canGapMove);
         optRejection)
     {
       return async::makeReadyTask(std::move(*optRejection));
     }
 
-    return Impl::moveAsync(_implPtr, std::move(selectedTrackIds), optBeforeTrackId);
+    return State::moveAsync(_statePtr, std::move(selectedTrackIds), optBeforeTrackId);
   }
 
   async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> ListOrderAuthoringSession::moveUp(
     std::vector<TrackId> selectedTrackIds)
   {
-    return Impl::moveRelative(_implPtr, std::move(selectedTrackIds), -1);
+    return State::moveRelative(_statePtr, std::move(selectedTrackIds), -1);
   }
 
   async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> ListOrderAuthoringSession::moveDown(
     std::vector<TrackId> selectedTrackIds)
   {
-    return Impl::moveRelative(_implPtr, std::move(selectedTrackIds), 1);
+    return State::moveRelative(_statePtr, std::move(selectedTrackIds), 1);
   }
 
   async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> ListOrderAuthoringSession::moveToTop(
     std::vector<TrackId> selectedTrackIds)
   {
-    if (auto optRejection = _implPtr->commandRejection<rt::MoveListOrderReply>(_implPtr->capabilities.canAbsoluteMove);
+    if (auto optRejection =
+          _statePtr->commandRejection<rt::MoveListOrderReply>(_statePtr->capabilities.canAbsoluteMove);
         optRejection)
     {
       return async::makeReadyTask(std::move(*optRejection));
@@ -449,7 +452,7 @@ namespace ao::uimodel
     auto const selectedMembership = std::unordered_set<TrackId>{selectedTrackIds.begin(), selectedTrackIds.end()};
     auto optBeforeTrackId = std::optional<TrackId>{};
 
-    for (auto const trackId : _implPtr->order.effectiveTrackIds())
+    for (auto const trackId : _statePtr->order.effectiveTrackIds())
     {
       if (!selectedMembership.contains(trackId))
       {
@@ -458,44 +461,45 @@ namespace ao::uimodel
       }
     }
 
-    return Impl::moveAsync(_implPtr, std::move(selectedTrackIds), optBeforeTrackId);
+    return State::moveAsync(_statePtr, std::move(selectedTrackIds), optBeforeTrackId);
   }
 
   async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> ListOrderAuthoringSession::moveToBottom(
     std::vector<TrackId> selectedTrackIds)
   {
-    if (auto optRejection = _implPtr->commandRejection<rt::MoveListOrderReply>(_implPtr->capabilities.canAbsoluteMove);
+    if (auto optRejection =
+          _statePtr->commandRejection<rt::MoveListOrderReply>(_statePtr->capabilities.canAbsoluteMove);
         optRejection)
     {
       return async::makeReadyTask(std::move(*optRejection));
     }
 
-    return Impl::moveAsync(_implPtr, std::move(selectedTrackIds), std::nullopt);
+    return State::moveAsync(_statePtr, std::move(selectedTrackIds), std::nullopt);
   }
 
   async::Task<Result<rt::AuthoringResult<rt::ResetListOrderReply>>> ListOrderAuthoringSession::resetOrder()
   {
-    if (auto optRejection = _implPtr->commandRejection<rt::ResetListOrderReply>(_implPtr->capabilities.canResetOrder);
+    if (auto optRejection = _statePtr->commandRejection<rt::ResetListOrderReply>(_statePtr->capabilities.canResetOrder);
         optRejection)
     {
       return async::makeReadyTask(std::move(*optRejection));
     }
 
-    return Impl::submitAsync<rt::AuthoringResult<rt::ResetListOrderReply>>(
-      _implPtr, [](Impl& impl) { return impl.library.commands().resetListOrder(impl.order); });
+    return State::submitAsync<rt::AuthoringResult<rt::ResetListOrderReply>>(
+      _statePtr, [](State& state) { return state.library.commands().resetListOrder(state.order); });
   }
 
   async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>>
   ListOrderAuthoringSession::forgetHiddenPositions()
   {
     if (auto optRejection =
-          _implPtr->commandRejection<rt::ForgetHiddenListOrderReply>(_implPtr->capabilities.canForgetHiddenPositions);
+          _statePtr->commandRejection<rt::ForgetHiddenListOrderReply>(_statePtr->capabilities.canForgetHiddenPositions);
         optRejection)
     {
       return async::makeReadyTask(std::move(*optRejection));
     }
 
-    return Impl::submitAsync<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>(
-      _implPtr, [](Impl& impl) { return impl.library.commands().forgetHiddenListOrder(impl.order); });
+    return State::submitAsync<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>(
+      _statePtr, [](State& state) { return state.library.commands().forgetHiddenListOrder(state.order); });
   }
 } // namespace ao::uimodel

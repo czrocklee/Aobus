@@ -133,7 +133,7 @@ namespace ao::winui
                                     {{"detail", sessionRes.error().message}}));
     }
 
-    _callbackLifetimePtr = std::make_shared<std::monostate>();
+    _ownerCallbackGate.renew();
     _active = true;
     updateSaveEnabled();
 
@@ -144,9 +144,9 @@ namespace ao::winui
     catch (...)
     {
       _active = false;
-      _callbackLifetimePtr.reset();
+      _ownerCallbackGate.retire();
       _sessionInvalidatedSub.reset();
-      _sessionPtr.reset();
+      _optSession.reset();
       throw;
     }
 
@@ -167,8 +167,9 @@ namespace ao::winui
       return std::unexpected{sessionRes.error()};
     }
 
-    _sessionPtr = std::shared_ptr<uimodel::TrackAuthoringSession>{std::move(*sessionRes)};
-    _sessionInvalidatedSub = _sessionPtr->onInvalidated([this] { handleSessionInvalidated(); });
+    _optSession.reset();
+    _optSession.emplace(std::move(*sessionRes));
+    _sessionInvalidatedSub = _optSession->onInvalidated([this] { handleSessionInvalidated(); });
     auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
     _snapshot = projectionPtr->snapshot();
     _originalTags = _library.snapshot().selectionTags(_trackIds);
@@ -314,7 +315,7 @@ namespace ao::winui
     auto editor = FieldEditor{
       .field = projection.field,
       .controlKind = projection.controlKind,
-      .enabled = projection.enabled && _sessionPtr != nullptr && !_sessionInvalid,
+      .enabled = projection.enabled && _optSession && !_sessionInvalid,
     };
 
     if (projection.controlKind == TrackPropertyControlKind::Text &&
@@ -442,7 +443,7 @@ namespace ao::winui
     _tagInput = AutoSuggestBox{};
     _tagInput.PlaceholderText(
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesTags)));
-    _tagInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    _tagInput.IsEnabled(_optSession && !_sessionInvalid);
     _tagTextChangedRevoker =
       _tagInput.TextChanged(winrt::auto_revoke,
                             [this](AutoSuggestBox const&, AutoSuggestBoxTextChangedEventArgs const& args)
@@ -459,7 +460,7 @@ namespace ao::winui
     auto addButton = Button{};
     addButton.Content(
       winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
-    addButton.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    addButton.IsEnabled(_optSession && !_sessionInvalid);
     _tagAddClickRevoker =
       addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addTag(); });
     Grid::SetColumn(addButton, 1);
@@ -495,7 +496,7 @@ namespace ao::winui
       auto remove = Button{};
       remove.Content(winrt::box_value(
         winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesDelete))));
-      remove.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid && !_saving);
+      remove.IsEnabled(_optSession && !_sessionInvalid && !_saving);
       _tagRemoveClickRevokers.push_back(remove.Click(winrt::auto_revoke,
                                                      [this, tag](IInspectable const&, RoutedEventArgs const&)
                                                      {
@@ -576,7 +577,7 @@ namespace ao::winui
     _customKeyInput = AutoSuggestBox{};
     _customKeyInput.PlaceholderText(
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomKey)));
-    _customKeyInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    _customKeyInput.IsEnabled(_optSession && !_sessionInvalid);
     _customKeyChangedRevoker =
       _customKeyInput.TextChanged(winrt::auto_revoke,
                                   [this](AutoSuggestBox const&, AutoSuggestBoxTextChangedEventArgs const& args)
@@ -591,14 +592,14 @@ namespace ao::winui
     _customValueInput = TextBox{};
     _customValueInput.PlaceholderText(
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesCustomValue)));
-    _customValueInput.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    _customValueInput.IsEnabled(_optSession && !_sessionInvalid);
     Grid::SetColumn(_customValueInput, 1);
     addRow.Children().Append(_customValueInput);
 
     auto addButton = Button{};
     addButton.Content(
       winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
-    addButton.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    addButton.IsEnabled(_optSession && !_sessionInvalid);
     _customAddClickRevoker =
       addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addCustomMetadata(); });
     Grid::SetColumn(addButton, 2);
@@ -623,14 +624,14 @@ namespace ao::winui
     auto const display = editable ? item.value.optValue.value_or("")
                                   : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::TrackMultipleValues)};
     value.Text(winrt::to_hstring(display));
-    value.IsEnabled(editable && _sessionPtr != nullptr && !_sessionInvalid);
+    value.IsEnabled(editable && _optSession && !_sessionInvalid);
     panel.Children().Append(value);
 
     auto remove = Button{};
     remove.Content(winrt::box_value(
       winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesDelete))));
     remove.VerticalAlignment(VerticalAlignment::Bottom);
-    remove.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+    remove.IsEnabled(_optSession && !_sessionInvalid);
     auto const index = _customEditors.size();
     auto deleteClickRevoker = remove.Click(
       winrt::auto_revoke, [this, index](IInspectable const&, RoutedEventArgs const&) { deleteCustomMetadata(index); });
@@ -715,7 +716,7 @@ namespace ao::winui
       existing->deleted = false;
       existing->editable = true;
       existing->panel.Visibility(Visibility::Visible);
-      existing->value.IsEnabled(_sessionPtr != nullptr && !_sessionInvalid);
+      existing->value.IsEnabled(_optSession && !_sessionInvalid);
       existing->value.Text(_customValueInput.Text());
       _customKeyInput.Text(L"");
       _customValueInput.Text(L"");
@@ -868,8 +869,7 @@ namespace ao::winui
       return;
     }
 
-    auto const valid =
-      !_sessionInvalid && _sessionPtr != nullptr && _sessionPtr->isCurrent() && synchronizeFieldEdits();
+    auto const valid = !_sessionInvalid && _optSession && _optSession->isCurrent() && synchronizeFieldEdits();
     _dialog.IsPrimaryButtonEnabled(valid && !_saving && hasPendingChanges());
   }
 
@@ -914,7 +914,7 @@ namespace ao::winui
     // dialog open until the callback-executor completion says it was accepted.
     args.Cancel(true);
 
-    if (_saving || _sessionInvalid || _sessionPtr == nullptr || !synchronizeFieldEdits() || !hasPendingChanges())
+    if (_saving || _sessionInvalid || !_optSession || !synchronizeFieldEdits() || !hasPendingChanges())
     {
       updateSaveEnabled();
       return;
@@ -929,26 +929,24 @@ namespace ao::winui
     updateSaveEnabled();
     rebuildTagRows();
 
-    auto submission = submitChanges(_sessionPtr,
-                                    rt::TrackPropertiesPatch{
-                                      .metadata = std::move(metadataPatch),
-                                      .tagsToAdd = std::move(addTags),
-                                      .tagsToRemove = std::move(removeTags),
-                                    });
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_callbackLifetimePtr};
+    auto submission = submitChanges(_optSession->submitProperties(rt::TrackPropertiesPatch{
+      .metadata = std::move(metadataPatch),
+      .tagsToAdd = std::move(addTags),
+      .tagsToRemove = std::move(removeTags),
+    }));
+    auto const token = _ownerCallbackGate.token();
     _asyncRuntime.spawnWithLifetime(
       _tasks,
-      [runtime = &_asyncRuntime, owner = this, lifetimePtr, submission = std::move(submission)](
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
-      { return runSaveWorkflow(runtime, owner, lifetimePtr, std::move(submission), stopToken); },
+      { return runSaveWorkflow(runtime, owner, token, std::move(submission), stopToken); },
       "Windows track-properties save");
   }
 
   async::Task<Result<TrackPropertiesCommitState>> TrackPropertiesCoordinator::submitChanges(
-    std::shared_ptr<uimodel::TrackAuthoringSession> sessionPtr,
-    rt::TrackPropertiesPatch patch)
+    async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
   {
-    auto propertiesRes = co_await sessionPtr->submitProperties(std::move(patch));
+    auto propertiesRes = co_await std::move(submission);
 
     if (!propertiesRes)
     {
@@ -961,14 +959,14 @@ namespace ao::winui
   async::Task<void> TrackPropertiesCoordinator::runSaveWorkflow(
     async::Runtime* const runtime,
     TrackPropertiesCoordinator* const owner,
-    std::weak_ptr<std::monostate> lifetimePtr,
+    CallbackAdmissionGate::Token token,
     async::Task<Result<TrackPropertiesCommitState>> submission,
     std::stop_token const stopToken)
   {
     auto result = co_await std::move(submission);
     co_await runtime->resumeOnCallbackExecutor(stopToken);
 
-    if (!lifetimePtr.expired())
+    if (token.admits())
     {
       owner->finishSave(std::move(result));
     }
@@ -1020,10 +1018,10 @@ namespace ao::winui
   {
     _active = false;
     _saving = false;
-    _callbackLifetimePtr.reset();
+    _ownerCallbackGate.retire();
     _tasks.cancelAll();
     _sessionInvalidatedSub.reset();
-    _sessionPtr.reset();
+    _optSession.reset();
     _primaryClickRevoker.revoke();
     _closedRevoker.revoke();
     _tagTextChangedRevoker.revoke();
@@ -1048,10 +1046,10 @@ namespace ao::winui
   {
     _active = false;
     _saving = false;
-    _callbackLifetimePtr.reset();
+    _ownerCallbackGate.retire();
     _tasks.cancelAll();
     _sessionInvalidatedSub.reset();
-    _sessionPtr.reset();
+    _optSession.reset();
 
     _primaryClickRevoker.revoke();
     _closedRevoker.revoke();
@@ -1064,7 +1062,7 @@ namespace ao::winui
 
     if (_dialog)
     {
-      // The callback lifetime is already expired, so native dismissal is
+      // Callback admission is already closed, so native dismissal is
       // presentation-only cleanup rather than an operation invariant.
       runOptionalWinRt("hiding the WinUI track-properties dialog", [this] { _dialog.Hide(); });
     }

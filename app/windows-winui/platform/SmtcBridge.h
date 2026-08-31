@@ -63,8 +63,8 @@ namespace ao::winui
     static void writeArtworkStream(State& state, ResourceId resourceId, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;
-    rt::AppRuntime* _runtime = nullptr;
-    rt::ResourceByteMemoryCache* _resourceBytes = nullptr;
+    rt::AppRuntime& _runtime;
+    rt::ResourceByteMemoryCache& _resourceBytes;
     async::Subscription _snapshotSub;
     utility::ScopedRegistration _artworkRequest;
     async::TaskHandle _artworkTask;

@@ -34,6 +34,13 @@ namespace ao::audio::backend
     WasapiProvider(WasapiProvider&&) = delete;
     WasapiProvider& operator=(WasapiProvider&&) = delete;
 
+    /**
+     * @brief Retires provider callbacks and waits for full shutdown completion.
+     *
+     * Calls made from a provider callback request shutdown without waiting for
+     * that callback itself; a later external call waits for callback and monitor
+     * completion.
+     */
     void shutdown() noexcept override;
     Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
     BackendProvider::Status status() const override;

@@ -105,7 +105,7 @@ namespace ao::winui
                          rt::AppRuntime& runtime,
                          uimodel::PlaybackActions& actions,
                          rt::ResourceByteMemoryCache& resourceBytes)
-    : _statePtr{std::make_shared<State>()}, _runtime{&runtime}, _resourceBytes{&resourceBytes}
+    : _statePtr{std::make_shared<State>()}, _runtime{runtime}, _resourceBytes{resourceBytes}
   {
     _statePtr->dispatcher = std::move(dispatcher);
     _statePtr->actions = &actions;
@@ -174,39 +174,43 @@ namespace ao::winui
       return;
     }
 
-    auto const& transport = snapshot.transport;
-    _statePtr->controls.PlaybackStatus(playbackStatus(transport.transport));
-    auto updater = _statePtr->controls.DisplayUpdater();
-    updater.Type(winrt::Windows::Media::MediaPlaybackType::Music);
-    auto music = updater.MusicProperties();
-    music.Title(winrt::to_hstring(transport.nowPlaying.title));
-    music.Artist(winrt::to_hstring(transport.nowPlaying.artist));
-    music.AlbumTitle(winrt::to_hstring(transport.nowPlaying.album));
-    updater.Update();
+    runOptionalWinRt("updating the SMTC playback snapshot",
+                     [this, &snapshot]
+                     {
+                       auto const& transport = snapshot.transport;
+                       _statePtr->controls.PlaybackStatus(playbackStatus(transport.transport));
+                       auto updater = _statePtr->controls.DisplayUpdater();
+                       updater.Type(winrt::Windows::Media::MediaPlaybackType::Music);
+                       auto music = updater.MusicProperties();
+                       music.Title(winrt::to_hstring(transport.nowPlaying.title));
+                       music.Artist(winrt::to_hstring(transport.nowPlaying.artist));
+                       music.AlbumTitle(winrt::to_hstring(transport.nowPlaying.album));
+                       updater.Update();
 
-    if (transport.nowPlaying.coverArtId == _statePtr->displayedArtworkId)
-    {
-      return;
-    }
+                       if (transport.nowPlaying.coverArtId == _statePtr->displayedArtworkId)
+                       {
+                         return;
+                       }
 
-    _statePtr->displayedArtworkId = transport.nowPlaying.coverArtId;
-    updater.Thumbnail(nullptr);
-    updater.Update();
+                       updater.Thumbnail(nullptr);
+                       updater.Update();
+                       _statePtr->displayedArtworkId = transport.nowPlaying.coverArtId;
 
-    if (transport.nowPlaying.coverArtId == kInvalidResourceId)
-    {
-      _artworkRequest.reset();
-      _artworkTask.reset();
-    }
-    else
-    {
-      updateArtwork(transport.nowPlaying.coverArtId);
-    }
+                       if (transport.nowPlaying.coverArtId == kInvalidResourceId)
+                       {
+                         _artworkRequest.reset();
+                         _artworkTask.reset();
+                       }
+                       else
+                       {
+                         updateArtwork(transport.nowPlaying.coverArtId);
+                       }
+                     });
   }
 
   void SmtcBridge::updateArtwork(ResourceId const resourceId)
   {
-    if (!_statePtr->active || _resourceBytes == nullptr || _runtime == nullptr)
+    if (!_statePtr->active)
     {
       return;
     }
@@ -214,15 +218,14 @@ namespace ao::winui
     _artworkRequest.reset();
     _artworkTask.reset();
     auto const statePtr = std::weak_ptr<State>{_statePtr};
-    _artworkRequest = _resourceBytes->request(
+    _artworkRequest = _resourceBytes.request(
       resourceId,
       [this, statePtr, resourceId](rt::ResourceBytes bytes)
       {
         if (auto lockedStatePtr = statePtr.lock(); lockedStatePtr && lockedStatePtr->active &&
-                                                   lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty() &&
-                                                   _runtime != nullptr)
+                                                   lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty())
         {
-          auto* const runtime = &_runtime->async();
+          auto* const runtime = &_runtime.async();
           _artworkTask = runtime->spawnCancellable(
             [statePtr, runtime, resourceId, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
             { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); },

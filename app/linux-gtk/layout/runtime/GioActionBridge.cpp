@@ -10,7 +10,7 @@
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
 
-#include <memory>
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,40 +20,54 @@ namespace ao::gtk::layout
   GioActionBridgeSession::GioActionBridgeSession(ActionRegistry const& registry,
                                                  Gio::ActionMap& actionMap,
                                                  ActionContextProvider& contextProvider,
-                                                 std::vector<std::string> exportedActionIds)
-    : _registry{registry}
-    , _actionMap{actionMap}
-    , _contextProvider{contextProvider}
-    , _exportedActionIds{std::move(exportedActionIds)}
+                                                 std::size_t const expectedActionCount)
+    : _registry{registry}, _contextProvider{contextProvider}, _registration{actionMap, expectedActionCount}
   {
+    _exportedActions.reserve(expectedActionCount);
+  }
+
+  GioActionBridgeSession::GioActionBridgeSession(GioActionBridgeSession&& other) noexcept
+    : _registry{other._registry}
+    , _contextProvider{other._contextProvider}
+    , _registration{std::move(other._registration)}
+    , _exportedActions{std::move(other._exportedActions)}
+  {
+  }
+
+  void GioActionBridgeSession::addExportedAction(std::string id, Glib::RefPtr<Gio::SimpleAction> actionPtr)
+  {
+    _exportedActions.push_back(ExportedAction{.id = std::move(id), .actionPtr = actionPtr});
+    auto const& exported = _exportedActions.back();
+    _registration.add(actionPtr,
+                      [&registry = _registry, &contextProvider = _contextProvider, id = exported.id](
+                        Glib::VariantBase const& /*parameter*/)
+                      {
+                        auto ctx = contextProvider.actionContext(id);
+                        registry.activate(id, ctx);
+                      });
   }
 
   void GioActionBridgeSession::refreshStates()
   {
-    for (auto const& id : _exportedActionIds)
+    for (auto const& exported : _exportedActions)
     {
-      auto gioActionPtr = _actionMap.lookup_action(id);
-
-      if (!gioActionPtr)
+      if (!_registration.isCurrent(exported.actionPtr))
       {
         continue;
       }
 
-      if (auto simpleActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(gioActionPtr); simpleActionPtr != nullptr)
-      {
-        auto ctx = _contextProvider.actionContext(id);
-        auto const state = _registry.state(id, ctx);
-        simpleActionPtr->set_enabled(state.enabled);
-      }
+      auto ctx = _contextProvider.actionContext(exported.id);
+      auto const state = _registry.state(exported.id, ctx);
+      exported.actionPtr->set_enabled(state.enabled);
     }
   }
 
-  std::unique_ptr<GioActionBridgeSession> GioActionBridge::exportActions(ActionRegistry const& registry,
-                                                                         Gio::ActionMap& actionMap,
-                                                                         ActionContextProvider& contextProvider)
+  GioActionBridgeSession GioActionBridge::exportActions(ActionRegistry const& registry,
+                                                        Gio::ActionMap& actionMap,
+                                                        ActionContextProvider& contextProvider)
   {
-    auto exportedActionIds = std::vector<std::string>{};
     auto const actionSchemas = registry.actions();
+    auto session = GioActionBridgeSession{registry, actionMap, contextProvider, actionSchemas.size()};
 
     for (auto const& actionSchema : actionSchemas)
     {
@@ -74,18 +88,10 @@ namespace ao::gtk::layout
       auto const initialState = registry.state(actionSchema.id, ctx);
       actionPtr->set_enabled(initialState.enabled);
 
-      actionPtr->signal_activate().connect(
-        [&registry, &contextProvider, id = actionSchema.id](Glib::VariantBase const& /*parameter*/)
-        {
-          auto ctx = contextProvider.actionContext(id);
-          registry.activate(id, ctx);
-        });
-
-      actionMap.add_action(actionPtr);
-      exportedActionIds.push_back(actionSchema.id);
+      session.addExportedAction(actionSchema.id, actionPtr);
       APP_LOG_DEBUG("GioActionBridge: Exported action {}", actionSchema.id);
     }
 
-    return std::make_unique<GioActionBridgeSession>(registry, actionMap, contextProvider, std::move(exportedActionIds));
+    return session;
   }
 } // namespace ao::gtk::layout

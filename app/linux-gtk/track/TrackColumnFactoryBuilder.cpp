@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -50,7 +51,7 @@ namespace ao::gtk
       // so a recycled cell needs no reconnect.
       sigc::scoped_connection commitConnection;         // inline-edit commit (Enter)
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
-      std::unique_ptr<uimodel::TrackAuthoringSession> editSessionPtr;
+      std::optional<uimodel::TrackAuthoringSession> optEditSession;
       async::Subscription editSessionInvalidatedSubscription;
       sigc::scoped_connection editSessionInvalidationIdleConnection;
 
@@ -58,7 +59,7 @@ namespace ao::gtk
       {
         editSessionInvalidationIdleConnection.disconnect();
         editSessionInvalidatedSubscription.reset();
-        editSessionPtr.reset();
+        optEditSession.reset();
       }
     };
 
@@ -330,8 +331,8 @@ namespace ao::gtk
         return;
       }
 
-      bindingState.editSessionPtr = std::move(*sessionRes);
-      bindingState.editSessionInvalidatedSubscription = bindingState.editSessionPtr->onInvalidated(
+      bindingState.optEditSession.emplace(std::move(*sessionRes));
+      bindingState.editSessionInvalidatedSubscription = bindingState.optEditSession->onInvalidated(
         [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState] noexcept
         { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw); });
     }
@@ -367,10 +368,9 @@ namespace ao::gtk
       entry.add_controller(focusControllerPtr);
     }
 
-    bool editSessionTargetsRow(CellBindingState const& bindingState, TrackRowObject const& row)
+    bool editSessionTargetsRow(uimodel::TrackAuthoringSession const& editSession, TrackRowObject const& row)
     {
-      return bindingState.editSessionPtr != nullptr && bindingState.editSessionPtr->targetIds().size() == 1 &&
-             bindingState.editSessionPtr->targetIds().front() == row.trackId();
+      return editSession.targetIds().size() == 1 && editSession.targetIds().front() == row.trackId();
     }
 
     void commitInlineEdit(Gtk::ListItem& item,
@@ -383,13 +383,14 @@ namespace ao::gtk
     {
       auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item.get_item());
 
-      if (rowPtr == nullptr || !editSessionTargetsRow(bindingState, *rowPtr))
+      if (rowPtr == nullptr || !bindingState.optEditSession ||
+          !editSessionTargetsRow(*bindingState.optEditSession, *rowPtr))
       {
         closeInlineEditor(stack, bindingState);
         return;
       }
 
-      commitFn(rowPtr, field, entry.get_text().raw(), *bindingState.editSessionPtr);
+      commitFn(rowPtr, field, entry.get_text().raw(), *bindingState.optEditSession);
       auto const synced = rowPtr->fieldText(field);
       label.set_text(synced);
       entry.set_text(synced);

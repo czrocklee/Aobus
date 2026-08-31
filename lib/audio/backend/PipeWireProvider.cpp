@@ -5,6 +5,7 @@
 
 #include "backend/PipeWireBackend.h"
 #include "backend/PipeWireMonitor.h"
+#include "backend/detail/PipeWireMonitorHooks.h"
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -18,11 +19,24 @@
 
 namespace ao::audio::backend
 {
+  namespace
+  {
+    std::vector<Device> withPipeWireDefaultRoute(std::vector<Device> devices)
+    {
+      devices.insert(devices.begin(), {.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire});
+      return devices;
+    }
+  } // namespace
+
   struct PipeWireProvider::Impl final
   {
     PipeWireMonitor monitor;
 
-    Impl() { monitor.start(); }
+    explicit Impl(std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr)
+      : monitor{std::move(monitorHooksPtr)}
+    {
+      monitor.start();
+    }
 
     ~Impl() = default;
 
@@ -33,11 +47,19 @@ namespace ao::audio::backend
   };
 
   PipeWireProvider::PipeWireProvider()
-    : _implPtr{std::make_unique<Impl>()}
+    : PipeWireProvider{nullptr}
   {
   }
 
-  PipeWireProvider::~PipeWireProvider() = default;
+  PipeWireProvider::PipeWireProvider(std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr)
+    : _implPtr{std::make_unique<Impl>(std::move(monitorHooksPtr))}
+  {
+  }
+
+  PipeWireProvider::~PipeWireProvider()
+  {
+    shutdown();
+  }
 
   void PipeWireProvider::shutdown() noexcept
   {
@@ -46,12 +68,13 @@ namespace ao::audio::backend
 
   Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    // Wrap the callback to prepend the virtual default-route device
-    auto wrappedCallback = [callback = std::move(callback)](std::vector<Device> devices)
+    if (!callback)
     {
-      devices.insert(devices.begin(), {.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire});
-      callback(devices);
-    };
+      return {};
+    }
+
+    auto wrappedCallback = [callback = std::move(callback)](std::vector<Device> devices)
+    { callback(withPipeWireDefaultRoute(std::move(devices))); };
 
     return _implPtr->monitor.subscribeDevices(std::move(wrappedCallback));
   }
@@ -63,9 +86,20 @@ namespace ao::audio::backend
 
   BackendProvider::Status PipeWireProvider::status() const
   {
+    auto devices = _implPtr->monitor.enumerateSinks();
+
+    if (_implPtr->monitor.isRunning())
+    {
+      devices = withPipeWireDefaultRoute(std::move(devices));
+    }
+    else
+    {
+      devices.clear();
+    }
+
     return {
       .descriptor = {.id = kBackendPipeWire, .supportedProfiles = {{.id = kProfileShared}, {.id = kProfileExclusive}}},
-      .devices = _implPtr->monitor.enumerateSinks()};
+      .devices = std::move(devices)};
   }
 
   Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)

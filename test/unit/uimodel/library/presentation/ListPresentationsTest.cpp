@@ -54,6 +54,26 @@ namespace ao::uimodel::test
     CHECK(events[1] == rt::kAllTracksListId);
   }
 
+  TEST_CASE("ListPresentations - copied presentation id survives preference removal",
+            "[uimodel][unit][library][presentation]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    auto& store = fixture.listPresentations;
+    store.setPresentationIdForList(rt::kAllTracksListId, "albums");
+    auto copiedId = std::string{};
+
+    {
+      auto const optId = store.presentationIdForList(rt::kAllTracksListId);
+      REQUIRE(optId);
+      copiedId.assign(*optId);
+    }
+
+    store.clearPresentationForList(rt::kAllTracksListId);
+
+    CHECK(copiedId == "albums");
+    CHECK_FALSE(store.presentationIdForList(rt::kAllTracksListId));
+  }
+
   TEST_CASE("ListPresentations - empty presentation id clears without inserting empty state",
             "[uimodel][unit][library][presentation]")
   {

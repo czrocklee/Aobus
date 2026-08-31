@@ -9,6 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
@@ -43,11 +44,13 @@
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/app/SelectedRootCommit.h>
 
+#include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
@@ -96,6 +99,101 @@ namespace ao::winui
     }
   } // namespace
 
+  enum class PlaybackPersistenceAdmission : std::uint8_t
+  {
+    Ready,
+    AwaitingRootCommit,
+    Sealed,
+    Retired,
+  };
+
+  struct InteractiveBorrowers final
+  {
+    InteractiveBorrowers(rt::AppRuntime& runtime,
+                         i18n::MessageCatalog const& textCatalog,
+                         uimodel::ListPresentations::Snapshot restoredListPresentations,
+                         std::function<void(ListId)> persistListPresentations,
+                         std::function<void()> requestPlaySelection)
+      : presentationCatalog{runtime.workspace(), textCatalog}
+      , listPresentations{presentationCatalog, runtime.library().changes()}
+      , playbackActions{runtime.playback(), std::move(requestPlaySelection)}
+    {
+      listPresentations.restore(std::move(restoredListPresentations));
+      listPresentationsSub = listPresentations.signalChanged().connect(std::move(persistListPresentations));
+    }
+
+    uimodel::TrackPresentationCatalog presentationCatalog;
+    uimodel::ListPresentations listPresentations;
+    async::Subscription listPresentationsSub;
+    uimodel::PlaybackActions playbackActions;
+  };
+
+  struct RuntimeGraph final
+  {
+    RuntimeGraph(rt::AppRuntime&& runtimeValue, DispatcherQueueExecutor& dispatcherExecutorValue)
+      : runtime{std::move(runtimeValue)}, dispatcherExecutor{dispatcherExecutorValue}
+    {
+    }
+
+    void shutdown() noexcept
+    {
+      if (stopped)
+      {
+        return;
+      }
+
+      optInteractiveBorrowers.reset();
+      runtime.shutdown();
+      dispatcherExecutor.completeClosing();
+      stopped = true;
+    }
+
+    rt::AppRuntime runtime;
+    DispatcherQueueExecutor& dispatcherExecutor;
+    std::optional<InteractiveBorrowers> optInteractiveBorrowers;
+    bool stopped = false;
+  };
+
+  struct LibrarySession::Storage final
+  {
+    Storage(std::filesystem::path stateRootValue,
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcherValue,
+            i18n::MessageCatalog textCatalogValue,
+            rt::TextOrderingPolicy const& textOrderingPolicyValue,
+            rt::CompletionAliasPolicy const& completionAliasPolicyValue)
+      : stateRoot{std::move(stateRootValue)}
+      , dispatcher{std::move(dispatcherValue)}
+      , textCatalog{std::move(textCatalogValue)}
+      , textOrderingPolicy{textOrderingPolicyValue}
+      , completionAliasPolicy{completionAliasPolicyValue}
+      , settingsStorePtr{std::make_unique<rt::ConfigStore>(stateRoot / "windows-settings.yaml")}
+      , playbackStorePtr{std::make_unique<rt::ConfigStore>(stateRoot / "windows-playback.yaml")}
+    {
+    }
+
+    std::filesystem::path stateRoot;
+    winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher{nullptr};
+    i18n::MessageCatalog textCatalog;
+    rt::TextOrderingPolicy const& textOrderingPolicy;
+    rt::CompletionAliasPolicy const& completionAliasPolicy;
+    std::unique_ptr<rt::ConfigStore> settingsStorePtr;
+    std::unique_ptr<rt::ConfigStore> playbackStorePtr;
+    DesktopSettings settings{};
+    uimodel::TrackColumnLayouts columnLayouts{};
+    uimodel::ListPresentations::Snapshot restoredListPresentations{};
+    uimodel::KeymapModel keymap{};
+    std::optional<std::filesystem::path> optSelectedRootCommit;
+    std::optional<RuntimeGraph> optRuntimeGraph;
+    LibrarySessionCallbacks callbacks{};
+    async::TaskHandle libraryTask;
+    CallbackAdmissionGate ownerCallbackGate;
+    std::string_view operationStatusKey;
+    bool operationActive = false;
+    bool scanAfterOpen = false;
+    bool shutdown = false;
+    PlaybackPersistenceAdmission playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
+  };
+
   Result<std::unique_ptr<LibrarySession>> LibrarySession::create(
     std::filesystem::path stateRoot,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
@@ -120,20 +218,19 @@ namespace ao::winui
                                  i18n::MessageCatalog textCatalog,
                                  rt::TextOrderingPolicy const& textOrderingPolicy,
                                  rt::CompletionAliasPolicy const& completionAliasPolicy)
-    : _stateRoot{std::move(stateRoot)}
-    , _dispatcher{std::move(dispatcher)}
-    , _textCatalog{std::move(textCatalog)}
-    , _textOrderingPolicy{textOrderingPolicy}
-    , _completionAliasPolicy{completionAliasPolicy}
-    , _settingsStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-settings.yaml")}
-    , _playbackStorePtr{std::make_unique<rt::ConfigStore>(_stateRoot / "windows-playback.yaml")}
+    : _storagePtr{std::make_unique<Storage>(std::move(stateRoot),
+                                            std::move(dispatcher),
+                                            std::move(textCatalog),
+                                            textOrderingPolicy,
+                                            completionAliasPolicy)}
   {
   }
 
   Result<> LibrarySession::initialize(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest)
   {
+    auto& storage = *_storagePtr;
     auto directoryEc = std::error_code{};
-    std::filesystem::create_directories(_stateRoot, directoryEc);
+    std::filesystem::create_directories(storage.stateRoot, directoryEc);
 
     if (directoryEc)
     {
@@ -141,7 +238,8 @@ namespace ao::winui
         Error::Code::IoError, std::format("Failed to create the WinUI state directory: {}", directoryEc.message()));
     }
 
-    if (auto loadedRes = _settingsStorePtr->load("desktop", _settings, winui::DesktopSettingsYamlSchema{});
+    if (auto loadedRes =
+          storage.settingsStorePtr->load("desktop", storage.settings, winui::DesktopSettingsYamlSchema{});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loadedRes.error().message);
@@ -149,20 +247,20 @@ namespace ao::winui
 
     auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
 
-    if (auto loadedRes = _settingsStorePtr->load(
+    if (auto loadedRes = storage.settingsStorePtr->load(
           uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
         loadedRes)
     {
-      _columnLayouts.restore(std::move(columnLayouts));
+      storage.columnLayouts.restore(std::move(columnLayouts));
     }
     else if (loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
     }
 
-    if (auto loadedRes = _settingsStorePtr->load(uimodel::kListPresentationsConfigGroup,
-                                                 _restoredListPresentations,
-                                                 uimodel::ListPresentationPreferenceYamlSchema{});
+    if (auto loadedRes = storage.settingsStorePtr->load(uimodel::kListPresentationsConfigGroup,
+                                                        storage.restoredListPresentations,
+                                                        uimodel::ListPresentationPreferenceYamlSchema{});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
@@ -170,15 +268,15 @@ namespace ao::winui
 
     // Shortcuts share the settings file: one store, one process, so the whole
     // document is still written as a unit.
-    _keymap = uimodel::loadKeymap(*_settingsStorePtr, uimodel::defaultKeymap());
+    storage.keymap = uimodel::loadKeymap(*storage.settingsStorePtr, uimodel::defaultKeymap());
 
     auto optPersistedRoot = std::optional<std::filesystem::path>{};
 
-    if (!_settings.lastLibraryPath.empty())
+    if (!storage.settings.lastLibraryPath.empty())
     {
       try
       {
-        optPersistedRoot = utility::pathFromUtf8(_settings.lastLibraryPath);
+        optPersistedRoot = utility::pathFromUtf8(storage.settings.lastLibraryPath);
       }
       catch (std::filesystem::filesystem_error const&)
       {
@@ -189,7 +287,7 @@ namespace ao::winui
     auto startupPlanRes = desktop::planLibraryStartup({
       .optSuccessorRequest = std::move(optSuccessorRequest),
       .optPersistedRoot = std::move(optPersistedRoot),
-      .emptyLibraryRoot = _stateRoot / "empty-library",
+      .emptyLibraryRoot = storage.stateRoot / "empty-library",
     });
 
     if (!startupPlanRes)
@@ -210,23 +308,36 @@ namespace ao::winui
     }
 
     auto root = std::move(startupPlanRes->libraryRoot);
-    _optSelectedRootCommit = std::move(startupPlanRes->optSelectedRootCommit);
-    _playbackPersistenceAdmission = startupPlanRes->playbackPersistence == desktop::PlaybackPersistenceStartup::Restore
-                                      ? PlaybackPersistenceAdmission::Ready
-                                      : PlaybackPersistenceAdmission::AwaitingRootCommit;
-    _scanAfterOpen = startupPlanRes->scanAfterOpen || !rt::LibraryPaths{root}.hasExistingDatabase();
-    auto runtimeRes = createRuntime(root);
+    storage.optSelectedRootCommit = std::move(startupPlanRes->optSelectedRootCommit);
+    storage.playbackPersistenceAdmission =
+      startupPlanRes->playbackPersistence == desktop::PlaybackPersistenceStartup::Restore
+        ? PlaybackPersistenceAdmission::Ready
+        : PlaybackPersistenceAdmission::AwaitingRootCommit;
+    storage.scanAfterOpen = startupPlanRes->scanAfterOpen || !rt::LibraryPaths{root}.hasExistingDatabase();
 
-    if (!runtimeRes)
+    if (auto runtimeRes = emplaceRuntimeGraph(root); !runtimeRes)
     {
       return makeError(
         runtimeRes.error().code, std::format("Failed to open initial library: {}", runtimeRes.error().message));
     }
 
-    _runtimePtr = std::move(*runtimeRes);
-    auto& playback = _runtimePtr->playback();
+    auto& runtime = storage.optRuntimeGraph->runtime;
+
+    for (auto& providerPtr : audio::createPlatformBackendProviders())
+    {
+      runtime.addAudioProvider(std::move(providerPtr));
+    }
+
+    if (auto const restoredRes = runtime.workspace().restoreSession(runtime.workspaceConfigStore()); !restoredRes)
+    {
+      APP_LOG_WARN("LibrarySession: failed to restore workspace for '{}': {}",
+                   utility::pathToUtf8(root),
+                   restoredRes.error().message);
+    }
+
+    auto& playback = runtime.playback();
     auto const optOutputSelection =
-      resolveDesktopOutputSelectionToRestore(_settings, playback.snapshot().transport.output);
+      resolveDesktopOutputSelectionToRestore(storage.settings, playback.snapshot().transport.output);
 
     if (optOutputSelection)
     {
@@ -234,11 +345,11 @@ namespace ao::winui
         optOutputSelection->backendId, optOutputSelection->deviceId, optOutputSelection->profileId);
     }
 
-    if (_playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready)
+    if (storage.playbackPersistenceAdmission == PlaybackPersistenceAdmission::Ready)
     {
-      _runtimePtr->startPlaybackSessionPersistence();
+      runtime.startPlaybackSessionPersistence();
 
-      if (auto restoredRes = _runtimePtr->restorePlaybackSession(); !restoredRes)
+      if (auto restoredRes = runtime.restorePlaybackSession(); !restoredRes)
       {
         APP_LOG_WARN("LibrarySession: failed to restore Windows playback session for '{}': {}",
                      utility::pathToUtf8(root),
@@ -257,70 +368,109 @@ namespace ao::winui
 
   void LibrarySession::shutdown() noexcept
   {
-    if (_shutdown)
+    auto& storage = *_storagePtr;
+
+    if (storage.shutdown)
     {
       return;
     }
 
-    _shutdown = true;
+    storage.shutdown = true;
 
-    // Classify native wake rejection as expected before any cancellation path
-    // can publish its final dispatcher continuation.
-    if (_dispatcherExecutor != nullptr)
+    if (storage.optRuntimeGraph)
     {
-      _dispatcherExecutor->beginClosing();
+      // Classify native wake rejection as expected while final runtime
+      // publications are still admitted and before cancellation can wake it.
+      storage.optRuntimeGraph->dispatcherExecutor.beginClosing();
     }
 
-    // Invalidate every callback target before requesting cancellation. A task
-    // or queued dispatcher continuation may still exist until the runtime joins,
-    // but its weak lifetime token must already be dead.
-    _callbackLifetimePtr.reset();
-    _callbacks = {};
-    _operationActive = false;
-    _operationStatusKey = {};
+    // Admission tokens never protect this object's memory. Retire them before
+    // cancellation, then join every producer before releasing the facade.
+    storage.ownerCallbackGate.retire();
+    storage.callbacks = {};
+    storage.operationActive = false;
+    storage.operationStatusKey = {};
+    storage.libraryTask.reset();
 
-    _libraryTask.reset();
-
-    if (_runtimePtr != nullptr)
+    if (storage.optRuntimeGraph)
     {
-      checkpointWorkspaceBestEffort(*_runtimePtr);
+      checkpointWorkspaceBestEffort(storage.optRuntimeGraph->runtime);
+      storage.optRuntimeGraph->shutdown();
     }
 
-    // These UI-model owners borrow runtime services. They must disappear while
-    // the runtime, stores, and dispatcher are still alive.
-    _playbackActionsPtr.reset();
-    _listPresentationsSub.reset();
-    _listPresentationsPtr.reset();
-    _presentationCatalogPtr.reset();
-
-    // Stop and join every foreign producer while runtime callback consumers
-    // remain alive. The executor can then synchronously settle accepted work,
-    // including owner-thread continuations queued by that work, before those
-    // consumers are destroyed.
-    if (_runtimePtr != nullptr)
-    {
-      AO_INVARIANT(_dispatcherExecutor != nullptr);
-      _runtimePtr->shutdown();
-      _dispatcherExecutor->completeClosing();
-      _dispatcherExecutor = nullptr;
-    }
-
-    _runtimePtr.reset();
+    // RuntimeGraph destroys interactive borrowers before the runtime, whose
+    // own graph retires before the settings stores declared earlier in Storage.
+    storage.optRuntimeGraph.reset();
   }
 
   rt::AppRuntime& LibrarySession::runtime() const noexcept
   {
-    return *_runtimePtr;
+    return _storagePtr->optRuntimeGraph->runtime;
   }
 
   std::filesystem::path const& LibrarySession::musicRoot() const noexcept
   {
-    return _runtimePtr->musicRoot();
+    return runtime().musicRoot();
+  }
+
+  bool LibrarySession::scanAfterOpen() const noexcept
+  {
+    return _storagePtr->scanAfterOpen;
+  }
+
+  bool LibrarySession::operationActive() const noexcept
+  {
+    return _storagePtr->operationActive;
   }
 
   uimodel::PlaybackActions& LibrarySession::playbackActions() const noexcept
   {
-    return *_playbackActionsPtr;
+    return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->playbackActions;
+  }
+
+  i18n::MessageCatalog const& LibrarySession::textCatalog() const noexcept
+  {
+    return _storagePtr->textCatalog;
+  }
+
+  DesktopSettings const& LibrarySession::settings() const noexcept
+  {
+    return _storagePtr->settings;
+  }
+
+  DesktopSettings& LibrarySession::settings() noexcept
+  {
+    return _storagePtr->settings;
+  }
+
+  uimodel::TrackColumnLayouts const& LibrarySession::columnLayouts() const noexcept
+  {
+    return _storagePtr->columnLayouts;
+  }
+
+  uimodel::TrackColumnLayouts& LibrarySession::columnLayouts() noexcept
+  {
+    return _storagePtr->columnLayouts;
+  }
+
+  uimodel::TrackPresentationCatalog& LibrarySession::presentationCatalog() const noexcept
+  {
+    return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->presentationCatalog;
+  }
+
+  uimodel::ListPresentations& LibrarySession::listPresentations() const noexcept
+  {
+    return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->listPresentations;
+  }
+
+  uimodel::KeymapModel const& LibrarySession::keymap() const noexcept
+  {
+    return _storagePtr->keymap;
+  }
+
+  std::filesystem::path const& LibrarySession::stateRoot() const noexcept
+  {
+    return _storagePtr->stateRoot;
   }
 
   rt::TrackPresentationSpec LibrarySession::presentationForList(ListId const listId) const
@@ -329,43 +479,47 @@ namespace ao::winui
       .listId = listId,
       .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
     };
+    auto& graph = *_storagePtr->optRuntimeGraph;
+    auto& listPresentations = graph.optInteractiveBorrowers->listPresentations;
 
     if (!rt::isVirtualListId(listId))
     {
-      if (auto const optNode = _runtimePtr->library().snapshot().listNode(listId); optNode)
+      if (auto const optNode = graph.runtime.library().snapshot().listNode(listId); optNode)
       {
         context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
         context.listExpression = optNode->expression;
-        return _listPresentationsPtr->presentationForList(context);
+        return listPresentations.presentationForList(context);
       }
     }
 
-    return _listPresentationsPtr->presentationForList(context);
+    return listPresentations.presentationForList(context);
   }
 
   Result<> LibrarySession::saveSettings()
   {
-    if (_shutdown)
+    if (_storagePtr->shutdown)
     {
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    return saveSettingsCandidate(_settings);
+    return saveSettingsCandidate(_storagePtr->settings);
   }
 
   void LibrarySession::setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept
   {
-    std::ignore = rememberDesktopOutputSelection(_settings, selection);
+    std::ignore = rememberDesktopOutputSelection(_storagePtr->settings, selection);
   }
 
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
   {
-    AO_INVARIANT(
-      _listPresentationsPtr != nullptr, "LibrarySession cannot save settings before List presentations are bound");
-    _runtimePtr->workspace().saveSession(_runtimePtr->workspaceConfigStore());
-    auto const columnLayouts = _columnLayouts.snapshot();
-    auto const listPresentations = _listPresentationsPtr->snapshot();
-    return _settingsStorePtr->saveTogether(
+    auto& storage = *_storagePtr;
+    AO_INVARIANT(storage.optRuntimeGraph && storage.optRuntimeGraph->optInteractiveBorrowers,
+                 "LibrarySession cannot save settings before List presentations are bound");
+    auto& graph = *storage.optRuntimeGraph;
+    graph.runtime.workspace().saveSession(graph.runtime.workspaceConfigStore());
+    auto const columnLayouts = storage.columnLayouts.snapshot();
+    auto const listPresentations = graph.optInteractiveBorrowers->listPresentations.snapshot();
+    return storage.settingsStorePtr->saveTogether(
       rt::configWrite("desktop", settings, winui::DesktopSettingsYamlSchema{}),
       rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
       rt::configWrite(
@@ -374,73 +528,79 @@ namespace ao::winui
 
   Result<> LibrarySession::commitSelectedRoot()
   {
-    if (_playbackPersistenceAdmission != PlaybackPersistenceAdmission::AwaitingRootCommit || !_optSelectedRootCommit)
+    auto& storage = *_storagePtr;
+
+    if (storage.playbackPersistenceAdmission != PlaybackPersistenceAdmission::AwaitingRootCommit ||
+        !storage.optSelectedRootCommit)
     {
       return {};
     }
 
-    auto candidateRes = prepareSelectedRootCommit(_settings, *_optSelectedRootCommit);
+    auto candidateRes = prepareSelectedRootCommit(storage.settings, *storage.optSelectedRootCommit);
+    auto& runtime = storage.optRuntimeGraph->runtime;
 
     if (!candidateRes)
     {
-      _optSelectedRootCommit.reset();
-      _runtimePtr->sealPlaybackSessionPersistenceWrites();
-      _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      storage.optSelectedRootCommit.reset();
+      runtime.sealPlaybackSessionPersistenceWrites();
+      storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
       return std::unexpected{candidateRes.error()};
     }
 
     auto commitRes = saveSettingsCandidate(*candidateRes);
-
-    _optSelectedRootCommit.reset();
+    storage.optSelectedRootCommit.reset();
 
     if (!commitRes)
     {
-      _runtimePtr->sealPlaybackSessionPersistenceWrites();
-      _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      runtime.sealPlaybackSessionPersistenceWrites();
+      storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
       return commitRes;
     }
 
-    _settings = std::move(*candidateRes);
-    _runtimePtr->startPlaybackSessionPersistence();
-    _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
+    storage.settings = std::move(*candidateRes);
+    runtime.startPlaybackSessionPersistence();
+    storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
     return {};
   }
 
   Result<> LibrarySession::retirePlaybackSessionForLibrarySwitch()
   {
-    if (_playbackPersistenceAdmission == PlaybackPersistenceAdmission::Retired)
+    auto& storage = *_storagePtr;
+
+    if (storage.playbackPersistenceAdmission == PlaybackPersistenceAdmission::Retired)
     {
       return {};
     }
 
-    if (_shutdown || _runtimePtr == nullptr)
+    if (storage.shutdown || !storage.optRuntimeGraph)
     {
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    auto retiredRes = _runtimePtr->retirePlaybackSessionForLibrarySwitch();
+    auto retiredRes = storage.optRuntimeGraph->runtime.retirePlaybackSessionForLibrarySwitch();
 
     if (!retiredRes)
     {
       return retiredRes;
     }
 
-    _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Retired;
+    storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Retired;
     return {};
   }
 
   void LibrarySession::setCallbacks(LibrarySessionCallbacks callbacks)
   {
-    _callbacks = std::move(callbacks);
+    _storagePtr->callbacks = std::move(callbacks);
   }
 
-  Result<std::unique_ptr<rt::AppRuntime>> LibrarySession::createRuntime(std::filesystem::path const& root)
+  Result<> LibrarySession::emplaceRuntimeGraph(std::filesystem::path const& root)
   {
-    _dispatcherExecutor = nullptr;
+    auto& storage = *_storagePtr;
+    AO_INVARIANT(!storage.optRuntimeGraph, "LibrarySession cannot replace a live runtime graph");
     auto const paths = rt::LibraryPaths{root};
     auto workspaceStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "workspace.yaml");
-    auto executorPtr = std::make_unique<DispatcherQueueExecutor>(_dispatcher);
-    auto* const createdDispatcherExecutor = executorPtr.get();
+    auto executorPtr = std::make_unique<DispatcherQueueExecutor>(storage.dispatcher);
+    auto& dispatcherExecutor = *executorPtr;
 
     // A missing cache location is not a startup failure the way a missing state
     // root is: what lives there is derived, so the session opens without it and
@@ -452,79 +612,66 @@ namespace ao::winui
                                  .databasePath = paths.databasePath(),
                                  .cacheDirectory = cacheDirRes ? *cacheDirRes : std::filesystem::path{},
                                  .workspaceConfigStorePtr = std::move(workspaceStorePtr),
-                                 .playbackSessionConfigStore = _playbackStorePtr.get(),
-                                 .textOrderingPolicy = &_textOrderingPolicy,
-                                 .completionAliasPolicy = &_completionAliasPolicy});
+                                 .playbackSessionConfigStore = storage.playbackStorePtr.get(),
+                                 .textOrderingPolicy = &storage.textOrderingPolicy,
+                                 .completionAliasPolicy = &storage.completionAliasPolicy});
 
     if (!runtimeRes)
     {
       return std::unexpected{runtimeRes.error()};
     }
 
-    auto runtimePtr = std::move(*runtimeRes);
-
-    for (auto& providerPtr : audio::createPlatformBackendProviders())
-    {
-      runtimePtr->addAudioProvider(std::move(providerPtr));
-    }
-
-    if (auto const restoredRes = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
-        !restoredRes)
-    {
-      APP_LOG_WARN("LibrarySession: failed to restore workspace for '{}': {}",
-                   utility::pathToUtf8(root),
-                   restoredRes.error().message);
-    }
-
-    _dispatcherExecutor = createdDispatcherExecutor;
-    return runtimePtr;
+    // This is the sole post-factory move. Nothing may publish a callback or a
+    // provider borrow until the runtime has reached this final storage address.
+    storage.optRuntimeGraph.emplace(std::move(*runtimeRes), dispatcherExecutor);
+    return {};
   }
 
   void LibrarySession::bindRuntimeServices()
   {
-    _playbackActionsPtr.reset();
-    _listPresentationsSub.reset();
-    _listPresentationsPtr.reset();
-    _presentationCatalogPtr.reset();
-    _presentationCatalogPtr =
-      std::make_unique<uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), _textCatalog);
-    _listPresentationsPtr =
-      std::make_unique<uimodel::ListPresentations>(*_presentationCatalogPtr, _runtimePtr->library().changes());
-    _listPresentationsPtr->restore(std::move(_restoredListPresentations));
-    _restoredListPresentations.clear();
-    _listPresentationsSub = _listPresentationsPtr->signalChanged().connect(
+    auto& storage = *_storagePtr;
+    auto& graph = *storage.optRuntimeGraph;
+    AO_INVARIANT(!graph.optInteractiveBorrowers, "LibrarySession cannot bind interactive runtime borrowers twice");
+    graph.optInteractiveBorrowers.emplace(
+      graph.runtime,
+      storage.textCatalog,
+      std::move(storage.restoredListPresentations),
       [this](ListId const)
       {
-        auto const listPresentations = _listPresentationsPtr->snapshot();
-        auto const savedRes = _settingsStorePtr->save(
+        auto& callbackStorage = *_storagePtr;
+        auto const listPresentations =
+          callbackStorage.optRuntimeGraph->optInteractiveBorrowers->listPresentations.snapshot();
+        auto const savedRes = callbackStorage.settingsStorePtr->save(
           uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
 
         if (!savedRes)
         {
           APP_LOG_WARN("LibrarySession: failed to persist presentation preference: {}", savedRes.error().message);
         }
-      });
-    _playbackActionsPtr =
-      std::make_unique<uimodel::PlaybackActions>(_runtimePtr->playback(), [this] { requestPlaySelection(); });
+      },
+      [this] { requestPlaySelection(); });
+    storage.restoredListPresentations.clear();
   }
 
   void LibrarySession::rescan() noexcept
   {
+    auto& storage = *_storagePtr;
+
     try
     {
-      if (_shutdown)
+      if (storage.shutdown)
       {
         return;
       }
 
-      if (_operationActive)
+      if (storage.operationActive)
       {
         reportBusy();
         return;
       }
 
-      _operationActive = true;
-      _operationStatusKey = "winui_library_rescanning";
+      storage.operationActive = true;
+      storage.operationStatusKey = "winui_library_rescanning";
       reportBusy();
 
       startActiveScan();
@@ -532,47 +679,52 @@ namespace ao::winui
     catch (...)
     {
       auto exceptionPtr = std::current_exception();
-      _operationStatusKey = {};
-      _operationActive = false;
+      storage.operationStatusKey = {};
+      storage.operationActive = false;
       AO_FATAL_EXCEPTION(std::move(exceptionPtr), "WinUI library scan start");
     }
   }
 
   void LibrarySession::startActiveScan()
   {
-    auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
-    auto present = PresentLibraryScan{[owner = this, lifetimePtr](uimodel::LibraryScanOutcome outcome)
+    auto& storage = *_storagePtr;
+    auto const token = storage.ownerCallbackGate.token();
+    auto present = PresentLibraryScan{[owner = this, token](uimodel::LibraryScanOutcome outcome)
                                       {
-                                        if (!lifetimePtr.expired())
+                                        if (token.admits())
                                         {
                                           owner->finishActiveScan(std::move(outcome));
                                         }
                                       }};
-    auto* const runtime = &_runtimePtr->async();
-    auto* const jobs = &_runtimePtr->library().jobs();
-    _libraryTask = _runtimePtr->async().spawnCancellable(
+    auto& appRuntime = storage.optRuntimeGraph->runtime;
+    auto* const runtime = &appRuntime.async();
+    auto* const jobs = &appRuntime.library().jobs();
+    storage.libraryTask = appRuntime.async().spawnCancellable(
       [runtime, jobs, present = std::move(present)](std::stop_token const stopToken) mutable
       { return runActiveScan(runtime, jobs, std::move(present), stopToken); });
   }
 
   void LibrarySession::finishActiveScan(uimodel::LibraryScanOutcome outcome)
   {
-    if (_shutdown)
+    auto& storage = *_storagePtr;
+
+    if (storage.shutdown)
     {
       return;
     }
 
-    _operationStatusKey = {};
-    _operationActive = false;
+    storage.operationStatusKey = {};
+    storage.operationActive = false;
 
     // What the scan amounts to, how loudly to say it, and the sentence itself
     // are decided in uimodel, so this window and the GTK one report the same
     // scan the same way. A scan that lost files says so here rather than
     // reporting a plain ready library.
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
-    auto message = formatLibraryScanMessage(_textCatalog, outcome);
+    auto message = formatLibraryScanMessage(storage.textCatalog, outcome);
+    auto& appRuntime = storage.optRuntimeGraph->runtime;
 
-    _runtimePtr->notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
+    appRuntime.notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
 
     if (severity == rt::NotificationSeverity::Error)
     {
@@ -591,17 +743,19 @@ namespace ao::winui
       return;
     }
 
-    reportReady(_runtimePtr->musicRoot());
+    reportReady(appRuntime.musicRoot());
   }
 
   void LibrarySession::reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message)
   {
-    if (!_callbacks.onFailure)
+    auto& callback = _storagePtr->callbacks.onFailure;
+
+    if (!callback)
     {
       return;
     }
 
-    _callbacks.onFailure(Error{
+    callback(Error{
       .code = outcome.optError ? outcome.optError->code : Error::Code::FormatRejected,
       .message = std::move(message),
     });
@@ -609,17 +763,19 @@ namespace ao::winui
 
   void LibrarySession::reportStatus(std::string status)
   {
-    if (!_callbacks.onStatus)
+    auto& callback = _storagePtr->callbacks.onStatus;
+
+    if (!callback)
     {
       return;
     }
 
-    _callbacks.onStatus(std::move(status));
+    callback(std::move(status));
   }
 
   void LibrarySession::reportBusy()
   {
-    reportStatus(resourceString(_operationStatusKey));
+    reportStatus(resourceString(_storagePtr->operationStatusKey));
   }
 
   void LibrarySession::reportReady(std::filesystem::path const& root)
@@ -629,31 +785,37 @@ namespace ao::winui
 
   void LibrarySession::requestPlaySelection()
   {
-    if (_shutdown)
+    auto& storage = *_storagePtr;
+
+    if (storage.shutdown)
     {
       return;
     }
 
-    std::ignore = _runtimePtr->playSelectionInFocusedView();
+    std::ignore = storage.optRuntimeGraph->runtime.playSelectionInFocusedView();
   }
 
   Result<> LibrarySession::playTrack(rt::ViewId const viewId, TrackId const trackId)
   {
-    if (_shutdown)
+    auto& storage = *_storagePtr;
+
+    if (storage.shutdown)
     {
       return makeError(Error::Code::InvalidState, "The WinUI library session is shutting down");
     }
 
-    if (auto selectedRes = _runtimePtr->views().setSelection(viewId, {trackId}); !selectedRes)
+    auto& appRuntime = storage.optRuntimeGraph->runtime;
+
+    if (auto selectedRes = appRuntime.views().setSelection(viewId, {trackId}); !selectedRes)
     {
       return selectedRes;
     }
 
-    if (auto focusedRes = _runtimePtr->workspace().focusView(viewId); !focusedRes)
+    if (auto focusedRes = appRuntime.workspace().focusView(viewId); !focusedRes)
     {
       return focusedRes;
     }
 
-    return _runtimePtr->playback().commands().startFromView(viewId, trackId);
+    return appRuntime.playback().commands().startFromView(viewId, trackId);
   }
 } // namespace ao::winui

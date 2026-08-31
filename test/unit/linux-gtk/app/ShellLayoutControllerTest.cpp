@@ -37,6 +37,7 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <giomm/simpleaction.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
@@ -516,6 +517,9 @@ namespace ao::gtk::test
       REQUIRE(gioActionPtr != nullptr);
       CHECK(actionMap->lookup_action("playback.play") != nullptr);
       CHECK(actionMap->lookup_action("playback.pause") != nullptr);
+      CHECK(actionMap->lookup_action("shell.showSystemMenu") != nullptr);
+      CHECK(actionMap->lookup_action("playback.showOutputDeviceSelector") == nullptr);
+      CHECK(actionMap->lookup_action("track.editTags") == nullptr);
 
       // Layout state actions are owned by the window menu, not exported as shell.* actions.
       CHECK(actionMap->lookup_action("shell.resetRuntimeLayoutState") == nullptr);
@@ -524,6 +528,26 @@ namespace ao::gtk::test
       // Nothing is playing yet, so stop should be disabled.
       controller.refreshExportedActions();
       CHECK(gioActionPtr->property_enabled() == false);
+    }
+
+    SECTION("repeated attachment revokes the previous action generation")
+    {
+      controller.attachToWindow();
+      auto* const actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+      REQUIRE(actionMap != nullptr);
+      auto oldActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
+      REQUIRE(oldActionPtr);
+
+      controller.attachToWindow();
+      auto newActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
+      REQUIRE(newActionPtr);
+      CHECK(newActionPtr.get() != oldActionPtr.get());
+
+      oldActionPtr->activate();
+      CHECK(controller.soulWindow() == nullptr);
+
+      newActionPtr->activate();
+      CHECK(controller.soulWindow() != nullptr);
     }
 
     SECTION("playPause resumes restored idle now-playing and stop is transport-gated")
@@ -689,6 +713,91 @@ namespace ao::gtk::test
       CHECK(remainingEntry.state.size() == 1);
       CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
     }
+  }
+
+  TEST_CASE("ShellLayoutController - teardown revokes exported actions while the window remains alive",
+            "[gtk][regression][shell][lifecycle]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(appPtr);
+    auto themeCoordinator = ThemeCoordinator{};
+    auto& playback = runtime.playback();
+    auto playbackActions =
+      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto unrelatedActionPtr = Gio::SimpleAction::create("unrelated");
+    window.add_action(unrelatedActionPtr);
+    auto retainedShellActionPtr = Glib::RefPtr<Gio::SimpleAction>{};
+    auto const topLevelCount = Gtk::Window::list_toplevels().size();
+    auto const tempDir = fixture.tempDir().path();
+
+    {
+      auto controller =
+        ShellLayoutController{runtime,
+                              window,
+                              std::make_shared<AppConfigStore>(tempDir / "config.yaml"),
+                              std::make_shared<ShellLayoutStore>(tempDir / "layouts"),
+                              std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state"),
+                              ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                                                       .playbackActions = &playbackActions,
+                                                       .themeCoordinator = &themeCoordinator,
+                                                       .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
+      controller.attachToWindow();
+      retainedShellActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(window.lookup_action("shell.showSoul"));
+      REQUIRE(retainedShellActionPtr);
+    }
+
+    CHECK(window.lookup_action("shell.showSoul") == nullptr);
+    auto const currentUnrelatedActionPtr = window.lookup_action("unrelated");
+    REQUIRE(currentUnrelatedActionPtr);
+    CHECK(currentUnrelatedActionPtr.get() == unrelatedActionPtr.get());
+
+    retainedShellActionPtr->activate();
+    drainGtkEvents();
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
+  }
+
+  TEST_CASE("ShellLayoutController - teardown makes a pending layout load presentation inert",
+            "[gtk][regression][shell][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(appPtr);
+    auto themeCoordinator = ThemeCoordinator{};
+    auto& playback = runtime.playback();
+    auto playbackActions =
+      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto const tempDir = fixture.tempDir().path();
+    auto configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
+    auto layoutStorePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
+    auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
+    auto const weakConfigStorePtr = std::weak_ptr{configStorePtr};
+    auto const weakLayoutStorePtr = std::weak_ptr{layoutStorePtr};
+    auto const weakComponentStateStorePtr = std::weak_ptr{componentStateStorePtr};
+
+    {
+      auto controller =
+        ShellLayoutController{runtime,
+                              window,
+                              std::move(configStorePtr),
+                              std::move(layoutStorePtr),
+                              std::move(componentStateStorePtr),
+                              ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                                                       .playbackActions = &playbackActions,
+                                                       .themeCoordinator = &themeCoordinator,
+                                                       .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()}};
+      controller.loadLayout();
+    }
+
+    REQUIRE(pumpGtkEventsUntil(
+      [&]
+      {
+        return weakConfigStorePtr.expired() && weakLayoutStorePtr.expired() && weakComponentStateStorePtr.expired();
+      }));
   }
 
   TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement",

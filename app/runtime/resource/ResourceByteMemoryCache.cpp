@@ -26,7 +26,7 @@ namespace ao::rt
                                                    std::size_t const maximumEntries,
                                                    std::size_t const maximumBytes)
     : _readBytesPtr{std::make_shared<ReadBytes const>(std::move(readBytes))}
-    , _asyncRuntime{&runtime}
+    , _asyncRuntime{runtime}
     , _maximumEntries{std::max<std::size_t>(1, maximumEntries)}
     , _maximumBytes{std::max<std::size_t>(1, maximumBytes)}
   {
@@ -67,7 +67,7 @@ namespace ao::rt
 
   void ResourceByteMemoryCache::startRead(ResourceId const resourceId, Requests::FlightToken token)
   {
-    auto* const asyncRuntime = _asyncRuntime;
+    auto* const asyncRuntime = &_asyncRuntime;
     auto readBytesPtr = _readBytesPtr;
     asyncRuntime->spawnWithLifetime(
       _scope,

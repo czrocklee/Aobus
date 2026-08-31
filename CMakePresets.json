@@ -40,6 +40,7 @@
         "CMAKE_OSX_DEPLOYMENT_TARGET": "$env{AOBUS_MACOS_DEPLOYMENT_TARGET}",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_HOST_TRIPLET": "$env{AOBUS_VCPKG_TRIPLET}",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
         "VCPKG_TARGET_TRIPLET": "$env{AOBUS_VCPKG_TRIPLET}"
       }
@@ -76,6 +77,7 @@
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       }
     },
@@ -113,6 +115,7 @@
         "AOBUS_MSBUILD_CL_TOOL_EXE": "$env{AOBUS_MSBUILD_CL_TOOL_EXE}",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
         "AOBUS_BUILD_CLI": "OFF",

@@ -175,10 +175,14 @@ namespace ao::rt
 
     LibraryMutationOwnerLease(LibraryMutationOwnerLease const&) = delete;
     LibraryMutationOwnerLease& operator=(LibraryMutationOwnerLease const&) = delete;
-    LibraryMutationOwnerLease(LibraryMutationOwnerLease&&) = delete;
+    LibraryMutationOwnerLease(LibraryMutationOwnerLease&& other) noexcept;
     LibraryMutationOwnerLease& operator=(LibraryMutationOwnerLease&&) = delete;
 
     LibraryWriteLane& owner() const noexcept { return *_owner; }
+    bool ownerIsOpen() const noexcept;
+    void releaseCommand(std::shared_ptr<LibraryMutationCommandRequest> const& requestPtr) noexcept;
+    LibraryWriteLane* releaseOwner() noexcept { return std::exchange(_owner, nullptr); }
+    std::shared_ptr<LibraryMutationLifetimeState> releaseState() noexcept { return std::move(_statePtr); }
 
   private:
     LibraryMutationOwnerLease(std::shared_ptr<LibraryMutationLifetimeState> statePtr, LibraryWriteLane& owner) noexcept
@@ -200,27 +204,26 @@ namespace ao::rt
     {
     }
 
-    std::unique_ptr<LibraryMutationOwnerLease> acquire()
+    std::optional<LibraryMutationOwnerLease> acquire()
     {
+      auto statePtr = shared_from_this();
       auto const lock = std::scoped_lock{_mutex};
 
       if (_owner == nullptr)
       {
-        return {};
+        return std::nullopt;
       }
 
       ++_activeCalls;
-      return std::unique_ptr<LibraryMutationOwnerLease>{new LibraryMutationOwnerLease{shared_from_this(), *_owner}};
+      return LibraryMutationOwnerLease{std::move(statePtr), *_owner};
     }
 
     template<typename Operation>
     void invokeIfAlive(Operation&& operation)
     {
-      auto ownerLeasePtr = acquire();
-
-      if (ownerLeasePtr != nullptr)
+      if (auto optOwnerLease = acquire(); optOwnerLease)
       {
-        std::invoke(std::forward<Operation>(operation), ownerLeasePtr->owner());
+        std::invoke(std::forward<Operation>(operation), optOwnerLease->owner());
       }
     }
 
@@ -255,13 +258,34 @@ namespace ao::rt
     std::size_t _activeCalls = 0;
 
     friend class LibraryMutationOwnerLease;
+    friend class LibraryWriteLane::Mutation;
   };
 
   namespace detail
   {
     LibraryMutationOwnerLease::~LibraryMutationOwnerLease()
     {
-      _statePtr->releaseCall();
+      if (_owner != nullptr)
+      {
+        _statePtr->releaseCall();
+      }
+    }
+
+    LibraryMutationOwnerLease::LibraryMutationOwnerLease(LibraryMutationOwnerLease&& other) noexcept
+      : _statePtr{std::move(other._statePtr)}, _owner{std::exchange(other._owner, nullptr)}
+    {
+    }
+
+    bool LibraryMutationOwnerLease::ownerIsOpen() const noexcept
+    {
+      auto const lock = std::scoped_lock{_owner->_stateMutex};
+      return _owner->_lifecycle == LibraryWriteLane::Lifecycle::Open;
+    }
+
+    void LibraryMutationOwnerLease::releaseCommand(
+      std::shared_ptr<LibraryMutationCommandRequest> const& requestPtr) noexcept
+    {
+      _owner->releaseCommand(requestPtr);
     }
   } // namespace detail
 
@@ -314,43 +338,112 @@ namespace ao::rt
     bool retired = false;
   };
 
-  class detail::LibraryMutationCommandLease final
+  namespace
   {
-  public:
-    LibraryMutationCommandLease(LibraryWriteLane& owner,
-                                std::shared_ptr<LibraryMutationCommandRequest> requestPtr,
-                                std::unique_ptr<LibraryMutationOwnerLease> ownerLeasePtr) noexcept
-      : _owner{&owner}, _requestPtr{std::move(requestPtr)}, _ownerLeasePtr{std::move(ownerLeasePtr)}
+    struct CommandAdmission final
     {
-    }
+      LibraryWriteLane* owner;
+      std::shared_ptr<detail::LibraryMutationCommandRequest> requestPtr;
+      std::shared_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr;
+    };
 
-    ~LibraryMutationCommandLease() { release(); }
-
-    LibraryMutationCommandLease(LibraryMutationCommandLease const&) = delete;
-    LibraryMutationCommandLease& operator=(LibraryMutationCommandLease const&) = delete;
-    LibraryMutationCommandLease(LibraryMutationCommandLease&&) = delete;
-    LibraryMutationCommandLease& operator=(LibraryMutationCommandLease&&) = delete;
-
-    LibraryWriteLane& owner() const noexcept { return *_owner; }
-    std::stop_token closingStopToken() const noexcept { return _requestPtr->closingStopToken(); }
-
-    void release() noexcept
+    class [[nodiscard]] CommandAdmissionGuard final
     {
-      if (_owner == nullptr)
+    public:
+      CommandAdmissionGuard(detail::LibraryMutationOwnerLease ownerPermit,
+                            std::shared_ptr<detail::LibraryMutationCommandRequest> requestPtr) noexcept
+        : _ownerPermit{std::move(ownerPermit)}, _requestPtr{std::move(requestPtr)}
       {
-        return;
       }
 
-      auto* const owner = std::exchange(_owner, nullptr);
-      owner->releaseCommand(_requestPtr);
-      _ownerLeasePtr.reset();
-    }
+      ~CommandAdmissionGuard()
+      {
+        if (_granted)
+        {
+          _ownerPermit.releaseCommand(_requestPtr);
+        }
+      }
 
-  private:
-    LibraryWriteLane* _owner;
-    std::shared_ptr<LibraryMutationCommandRequest> _requestPtr;
-    std::unique_ptr<LibraryMutationOwnerLease> _ownerLeasePtr;
-  };
+      CommandAdmissionGuard(CommandAdmissionGuard const&) = delete;
+      CommandAdmissionGuard& operator=(CommandAdmissionGuard const&) = delete;
+      CommandAdmissionGuard(CommandAdmissionGuard&& other) noexcept
+        : _ownerPermit{std::move(other._ownerPermit)}
+        , _requestPtr{std::move(other._requestPtr)}
+        , _granted{std::exchange(other._granted, false)}
+      {
+      }
+      CommandAdmissionGuard& operator=(CommandAdmissionGuard&&) = delete;
+
+      LibraryWriteLane& owner() const noexcept { return _ownerPermit.owner(); }
+      bool ownerIsOpen() const noexcept { return _ownerPermit.ownerIsOpen(); }
+      std::stop_token closingStopToken() const noexcept { return _requestPtr->closingStopToken(); }
+      async::Task<bool> wait() const { return _requestPtr->wait(); }
+      void markGranted() noexcept { _granted = true; }
+
+      CommandAdmission release() noexcept
+      {
+        AO_INVARIANT(_granted);
+        _granted = false;
+        auto admission = CommandAdmission{
+          .owner = _ownerPermit.releaseOwner(),
+          .requestPtr = std::move(_requestPtr),
+          .lifetimeStatePtr = _ownerPermit.releaseState(),
+        };
+        return admission;
+      }
+
+    private:
+      detail::LibraryMutationOwnerLease _ownerPermit;
+      std::shared_ptr<detail::LibraryMutationCommandRequest> _requestPtr;
+      bool _granted = false;
+    };
+
+    using EnqueueCommand =
+      compat::MoveOnlyFunction<Result<std::shared_ptr<detail::LibraryMutationCommandRequest>>(LibraryWriteLane&)>;
+
+    async::Task<Result<CommandAdmissionGuard>> acquireCommandAsync(
+      std::weak_ptr<detail::LibraryMutationLifetimeState> weakLifetimeStatePtr,
+      EnqueueCommand enqueueCommand,
+      std::string operation)
+    {
+      auto lifetimeStatePtr = weakLifetimeStatePtr.lock();
+
+      if (lifetimeStatePtr == nullptr)
+      {
+        co_return makeError(Error::Code::InvalidState, std::format("{} is unavailable", operation));
+      }
+
+      auto optOwnerPermit = lifetimeStatePtr->acquire();
+
+      if (!optOwnerPermit)
+      {
+        co_return makeError(Error::Code::InvalidState, std::format("{} is unavailable", operation));
+      }
+
+      auto requestRes = enqueueCommand(optOwnerPermit->owner());
+
+      if (!requestRes)
+      {
+        co_return std::unexpected{requestRes.error()};
+      }
+
+      auto guard = CommandAdmissionGuard{std::move(*optOwnerPermit), std::move(*requestRes)};
+
+      if (!co_await guard.wait())
+      {
+        async::throwOperationCancelled();
+      }
+
+      guard.markGranted();
+
+      if (!guard.ownerIsOpen())
+      {
+        async::throwOperationCancelled();
+      }
+
+      co_return std::move(guard);
+    }
+  } // namespace
 
   LibraryWriteLane::Submission::Submission(std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
                                            bool const reentrant) noexcept
@@ -359,9 +452,13 @@ namespace ao::rt
   }
 
   LibraryWriteLane::Mutation::Mutation(LibraryWriteLane& owner,
-                                       std::unique_ptr<detail::LibraryMutationCommandLease> commandLeasePtr,
+                                       std::shared_ptr<detail::LibraryMutationCommandRequest> requestPtr,
+                                       std::shared_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
                                        library::WriteTransaction transaction) noexcept
-    : _owner{&owner}, _commandLeasePtr{std::move(commandLeasePtr)}, _transaction{std::move(transaction)}
+    : _owner{&owner}
+    , _requestPtr{std::move(requestPtr)}
+    , _lifetimeStatePtr{std::move(lifetimeStatePtr)}
+    , _transaction{std::move(transaction)}
   {
   }
 
@@ -372,7 +469,8 @@ namespace ao::rt
 
   LibraryWriteLane::Mutation::Mutation(Mutation&& other) noexcept
     : _owner{std::exchange(other._owner, nullptr)}
-    , _commandLeasePtr{std::move(other._commandLeasePtr)}
+    , _requestPtr{std::move(other._requestPtr)}
+    , _lifetimeStatePtr{std::move(other._lifetimeStatePtr)}
     , _transaction{std::move(other._transaction)}
     , _terminal{std::exchange(other._terminal, true)}
     , _executeEligible{std::exchange(other._executeEligible, false)}
@@ -382,13 +480,27 @@ namespace ao::rt
   void LibraryWriteLane::Mutation::finish() noexcept
   {
     _terminal = true;
-    _commandLeasePtr.reset();
+    releaseAdmission();
+  }
+
+  void LibraryWriteLane::Mutation::releaseAdmission() noexcept
+  {
+    if (_owner == nullptr)
+    {
+      return;
+    }
+
+    auto* const owner = std::exchange(_owner, nullptr);
+    owner->releaseCommand(_requestPtr);
+    _requestPtr.reset();
+    _lifetimeStatePtr->releaseCall();
+    _lifetimeStatePtr.reset();
   }
 
   std::stop_token LibraryWriteLane::Mutation::closingStopToken() const noexcept
   {
-    AO_INVARIANT(_commandLeasePtr != nullptr, "Terminal library mutation has no Closing stop token");
-    return _commandLeasePtr->closingStopToken();
+    AO_INVARIANT(_owner != nullptr, "Terminal library mutation has no Closing stop token");
+    return _requestPtr->closingStopToken();
   }
 
   void LibraryWriteLane::Mutation::abort() noexcept
@@ -399,7 +511,7 @@ namespace ao::rt
       _transaction.abort();
     }
 
-    _commandLeasePtr.reset();
+    releaseAdmission();
   }
 
   LibraryWriteLane::MaintenanceGuard::MaintenanceGuard(
@@ -477,11 +589,13 @@ namespace ao::rt
 
   LibraryWriteLane::LibraryWriteLane(async::Executor& callbackExecutor,
                                      library::WritableMusicLibrary writableLibrary,
-                                     LibraryChanges& changes)
+                                     LibraryChanges& changes,
+                                     WriteTransactionFactory writeTransactionFactory)
     : _callbackExecutor{callbackExecutor}
     , _writableLibrary{std::move(writableLibrary)}
     , _library{_writableLibrary.library()}
     , _changes{changes}
+    , _writeTransactionFactory{std::move(writeTransactionFactory)}
     , _runtimeInstanceId{nextRuntimeInstanceId()}
     , _lifetimeStatePtr{std::make_shared<detail::LibraryMutationLifetimeState>(this)}
     , _lastCommittedRevision{currentLibraryRevision(_library)}
@@ -765,57 +879,6 @@ namespace ao::rt
     return requestPtr;
   }
 
-  async::Task<Result<std::unique_ptr<detail::LibraryMutationCommandLease>>> LibraryWriteLane::acquireCommandAsync(
-    Submission submission,
-    CommandKind const kind,
-    std::uint64_t const generation,
-    std::string operation)
-  {
-    auto lifetimeStatePtr = submission._lifetimeStatePtr.lock();
-
-    if (lifetimeStatePtr == nullptr)
-    {
-      co_return makeError(Error::Code::InvalidState, std::format("{} is unavailable", operation));
-    }
-
-    auto ownerLeasePtr = lifetimeStatePtr->acquire();
-
-    if (ownerLeasePtr == nullptr)
-    {
-      co_return makeError(Error::Code::InvalidState, std::format("{} is unavailable", operation));
-    }
-
-    auto& owner = ownerLeasePtr->owner();
-    auto requestRes = owner.enqueueCommand(kind, generation, submission._reentrant, operation);
-
-    if (!requestRes)
-    {
-      co_return std::unexpected{requestRes.error()};
-    }
-
-    if (!co_await (*requestRes)->wait())
-    {
-      async::throwOperationCancelled();
-    }
-
-    auto commandLeasePtr =
-      std::make_unique<detail::LibraryMutationCommandLease>(owner, std::move(*requestRes), std::move(ownerLeasePtr));
-    bool closing = false;
-
-    {
-      auto const lock = std::scoped_lock{owner._stateMutex};
-      closing = owner._lifecycle != Lifecycle::Open;
-    }
-
-    if (closing)
-    {
-      commandLeasePtr.reset();
-      async::throwOperationCancelled();
-    }
-
-    co_return commandLeasePtr;
-  }
-
   async::Task<Result<LibraryWriteLane::Mutation>> LibraryWriteLane::beginMutationAsync(
     Submission submission,
     CommandKind const kind,
@@ -824,34 +887,43 @@ namespace ao::rt
     std::string operation,
     compat::MoveOnlyFunction<Result<>(std::stop_token)> preTransaction)
   {
-    auto commandLeaseRes = co_await acquireCommandAsync(std::move(submission), kind, generation, operation);
+    auto commandGuardRes = co_await acquireCommandAsync(
+      submission._lifetimeStatePtr,
+      EnqueueCommand{[kind, generation, reentrant = submission._reentrant, operation](LibraryWriteLane& owner)
+                     { return owner.enqueueCommand(kind, generation, reentrant, operation); }},
+      operation);
 
-    if (!commandLeaseRes)
+    if (!commandGuardRes)
     {
-      co_return std::unexpected{commandLeaseRes.error()};
+      co_return std::unexpected{commandGuardRes.error()};
     }
 
-    auto commandLeasePtr = std::move(*commandLeaseRes);
-    auto& owner = commandLeasePtr->owner();
+    auto commandGuard = std::move(*commandGuardRes);
+    auto& owner = commandGuard.owner();
 
     if (preTransaction)
     {
-      auto preTransactionRes = preTransaction(commandLeasePtr->closingStopToken());
+      auto preTransactionRes = preTransaction(commandGuard.closingStopToken());
 
       if (!preTransactionRes)
       {
-        commandLeasePtr.reset();
         co_return std::unexpected{preTransactionRes.error()};
       }
     }
 
     if (!owner.beginTransaction())
     {
-      commandLeasePtr.reset();
       async::throwOperationCancelled();
     }
 
-    co_return Mutation{owner, std::move(commandLeasePtr), owner._writableLibrary.writeTransaction(std::move(options))};
+    // The factory is immutable after construction and lane admission serializes
+    // invocation, so worker access does not require _stateMutex.
+    auto transaction = owner._writeTransactionFactory
+                         ? owner._writeTransactionFactory(owner._writableLibrary, std::move(options))
+                         : owner._writableLibrary.writeTransaction(std::move(options));
+    auto admission = commandGuard.release();
+    co_return Mutation{
+      *admission.owner, std::move(admission.requestPtr), std::move(admission.lifetimeStatePtr), std::move(transaction)};
   }
 
   async::Task<Result<LibraryWriteLane::Mutation>> LibraryWriteLane::beginInteractiveMutationAsync(
@@ -999,7 +1071,7 @@ namespace ao::rt
 
   Result<std::uint64_t> LibraryWriteLane::commitMutation(Mutation& mutation, LibraryChangeSet changeSet)
   {
-    AO_EXPECTS(mutation._owner == this && mutation._commandLeasePtr != nullptr && !mutation._terminal,
+    AO_EXPECTS(mutation._owner == this && mutation._requestPtr != nullptr && !mutation._terminal,
                "Library mutation does not belong to this service");
     AO_INVARIANT(changeSet.libraryRevision == 0, "Library operation produced a pre-stamped change set");
 
@@ -1205,16 +1277,20 @@ namespace ao::rt
 
   async::Task<Result<LibraryWriteLane::MaintenanceGuard>> LibraryWriteLane::beginMaintenanceAsync(Submission submission)
   {
-    auto commandLeaseRes =
-      co_await acquireCommandAsync(std::move(submission), CommandKind::MaintenanceEnter, 0, "Library maintenance");
+    auto commandGuardRes = co_await acquireCommandAsync(
+      submission._lifetimeStatePtr,
+      EnqueueCommand{
+        [reentrant = submission._reentrant](LibraryWriteLane& owner)
+        { return owner.enqueueCommand(CommandKind::MaintenanceEnter, 0, reentrant, "Library maintenance"); }},
+      "Library maintenance");
 
-    if (!commandLeaseRes)
+    if (!commandGuardRes)
     {
-      co_return std::unexpected{commandLeaseRes.error()};
+      co_return std::unexpected{commandGuardRes.error()};
     }
 
-    auto commandLeasePtr = std::move(*commandLeaseRes);
-    auto& owner = commandLeasePtr->owner();
+    auto commandGuard = std::move(*commandGuardRes);
+    auto& owner = commandGuard.owner();
     auto expected = LibraryAuthoringAvailability{};
     std::uint64_t generation = 0;
     bool closing = false;
@@ -1235,13 +1311,11 @@ namespace ao::rt
 
     if (closing)
     {
-      commandLeasePtr.reset();
       async::throwOperationCancelled();
     }
 
     auto lifetimeStatePtr = std::weak_ptr<detail::LibraryMutationLifetimeState>{owner._lifetimeStatePtr};
     auto const delivered = co_await owner.deliverControlAvailabilityAsync(expected);
-    commandLeasePtr.reset();
 
     if (!delivered)
     {
@@ -1255,13 +1329,18 @@ namespace ao::rt
     std::weak_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
     std::uint64_t const generation)
   {
-    auto submission = Submission{lifetimeStatePtr, false};
-    auto commandLeaseRes = co_await acquireCommandAsync(
-      std::move(submission), CommandKind::MaintenanceExit, generation, "Library maintenance completion");
+    auto commandGuardRes = co_await acquireCommandAsync(
+      lifetimeStatePtr,
+      EnqueueCommand{[generation](LibraryWriteLane& owner)
+                     {
+                       return owner.enqueueCommand(
+                         CommandKind::MaintenanceExit, generation, false, "Library maintenance completion");
+                     }},
+      "Library maintenance completion");
 
-    if (!commandLeaseRes)
+    if (!commandGuardRes)
     {
-      if (commandLeaseRes.error().code == Error::Code::InvalidState)
+      if (commandGuardRes.error().code == Error::Code::InvalidState)
       {
         async::throwOperationCancelled();
       }
@@ -1269,8 +1348,8 @@ namespace ao::rt
       abortLibraryInfrastructure("Library maintenance completion violated sequencer ordering");
     }
 
-    auto commandLeasePtr = std::move(*commandLeaseRes);
-    auto& owner = commandLeasePtr->owner();
+    auto commandGuard = std::move(*commandGuardRes);
+    auto& owner = commandGuard.owner();
     auto expected = LibraryAuthoringAvailability{};
     bool closing = false;
 
@@ -1289,12 +1368,10 @@ namespace ao::rt
 
     if (closing)
     {
-      commandLeasePtr.reset();
       async::throwOperationCancelled();
     }
 
     auto const delivered = co_await owner.deliverControlAvailabilityAsync(expected);
-    commandLeasePtr.reset();
 
     if (!delivered)
     {

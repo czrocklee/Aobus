@@ -689,7 +689,7 @@ namespace ao::gtk::layout::test
     auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
     auto deletePatch = rt::MetadataPatch{};
     deletePatch.customUpdates["Mood"] = std::nullopt;
-    auto deleteRes = runGtkTask(runtime, sessionPtr->submitMetadata(deletePatch));
+    auto deleteRes = runGtkTask(runtime, sessionPtr.submitMetadata(deletePatch));
     REQUIRE(deleteRes);
     REQUIRE(deleteRes->status == rt::AuthoringStatus::Applied);
     auto controller = TrackDetailUndoController{};
@@ -697,7 +697,7 @@ namespace ao::gtk::layout::test
 
     REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(controller.pendingCustomMetadataUndo());
-    CHECK_FALSE(controller.pendingCustomMetadataUndo()->sessionPtr->isCurrent());
+    CHECK_FALSE(controller.pendingCustomMetadataUndo()->session.isCurrent());
 
     auto const undoRes = runGtkTask(runtime, controller.undo());
 

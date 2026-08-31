@@ -333,3 +333,49 @@ TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied fo
   CHECK(firstCalls == 2);
   CHECK(secondCalls == 1);
 }
+
+TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publishers",
+          "[audio][regression][alsa][concurrency]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto publisher = registry.publisher();
+  auto graphs = std::vector<Graph>{};
+  auto sub = registry.subscribe("hw:0,0", [&](Graph const& graph) { graphs.push_back(graph); });
+  REQUIRE(sub);
+
+  publisher.publish({.routeAnchor = "hw:0,0", .volume = 0.5F});
+  registry.shutdown();
+  registry.shutdown();
+  publisher.publish({.routeAnchor = "hw:0,0", .volume = 0.25F});
+  publisher.clear("hw:0,0");
+
+  REQUIRE(graphs.size() == 3U);
+  CHECK(graphs.back().nodes.empty());
+  CHECK(graphs.back().connections.empty());
+  std::int32_t lateCalls = 0;
+  CHECK_FALSE(registry.subscribe("hw:0,0", [&](Graph const&) { ++lateCalls; }));
+  CHECK(lateCalls == 0);
+  sub.reset();
+}
+
+TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry",
+          "[audio][regression][alsa][concurrency]")
+{
+  auto publisher = AlsaGraphPublisher{};
+  auto sub = ao::audio::Subscription{};
+  std::int32_t callbackCount = 0;
+
+  {
+    auto registryPtr = std::make_unique<AlsaGraphRegistry>();
+    publisher = registryPtr->publisher();
+    sub = registryPtr->subscribe("hw:0,0", [&](Graph const&) { ++callbackCount; });
+    REQUIRE(sub);
+  }
+
+  CHECK(callbackCount == 2);
+  publisher.publish({.routeAnchor = "hw:0,0", .volume = 0.5F});
+  publisher.clear("hw:0,0");
+  CHECK(callbackCount == 2);
+  sub.reset();
+  CHECK_FALSE(sub);
+}

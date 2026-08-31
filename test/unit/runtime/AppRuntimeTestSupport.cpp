@@ -164,7 +164,7 @@ namespace ao::rt::test
                                           async::Sleeper* const sleeper,
                                           TextOrderingPolicy const* const textOrderingPolicy)
   {
-    return ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    return std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
@@ -174,7 +174,7 @@ namespace ao::rt::test
       .playbackSessionConfigStore = playbackSessionConfigStore,
       .sleeper = sleeper,
       .textOrderingPolicy = textOrderingPolicy,
-    }));
+    })));
   }
 
   std::unique_ptr<AppRuntime> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,

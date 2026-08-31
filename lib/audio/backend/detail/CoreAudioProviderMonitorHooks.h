@@ -10,7 +10,7 @@
 
 namespace ao::audio::backend::detail
 {
-  /** @brief Deterministic event-source hooks for CoreAudioProvider tests. */
+  /** @brief Deterministic monitor and shutdown hooks for CoreAudioProvider tests. */
   struct CoreAudioProviderMonitorHooks final
   {
     std::function<std::vector<Device>()> enumerateDevices;
@@ -18,5 +18,7 @@ namespace ao::audio::backend::detail
     std::function<void()> onRefreshComplete;
     std::function<void()> onMonitorExit;
     std::function<void()> onMonitorStateDestroyed;
+    std::function<void()> onShutdownStarted;
+    std::function<void()> onShutdownWait;
   };
 } // namespace ao::audio::backend::detail

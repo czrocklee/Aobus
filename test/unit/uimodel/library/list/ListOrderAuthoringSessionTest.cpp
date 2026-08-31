@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -119,7 +120,7 @@ namespace ao::uimodel::test
     auto sessionRes = ListOrderAuthoringSession::begin(
       fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
-    auto& session = **sessionRes;
+    auto& session = *sessionRes;
 
     CHECK(std::vector<TrackId>{session.effectiveTrackIds().begin(), session.effectiveTrackIds().end()} ==
           std::vector{fixture.first, fixture.second, fixture.third});
@@ -139,7 +140,7 @@ namespace ao::uimodel::test
     auto sessionRes = ListOrderAuthoringSession::begin(
       fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
-    auto& session = **sessionRes;
+    auto& session = *sessionRes;
 
     CHECK(session.capabilities().canAbsoluteMove);
     CHECK_FALSE(session.capabilities().canGapMove);
@@ -163,31 +164,31 @@ namespace ao::uimodel::test
     SECTION("presentation")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+      auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
         fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
       fixture.runtime.drainCallbacks();
-      CHECK_FALSE(sessionPtr->isCurrent());
+      CHECK_FALSE(session.isCurrent());
     }
 
     SECTION("quick filter")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+      auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
         fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.service.setFilter(viewId, "true"));
       fixture.runtime.drainCallbacks();
-      CHECK_FALSE(sessionPtr->isCurrent());
+      CHECK_FALSE(session.isCurrent());
     }
 
     SECTION("view close")
     {
       auto const viewId = fixture.open();
-      auto sessionPtr = ao::test::requireValue(ListOrderAuthoringSession::begin(
+      auto session = ao::test::requireValue(ListOrderAuthoringSession::begin(
         fixture.runtime.commandsFixture.library(), fixture.runtime.service, viewId, ao::test::englishMessageCatalog()));
       REQUIRE(fixture.runtime.workspace.closeView(viewId));
       fixture.runtime.drainCallbacks();
-      CHECK_FALSE(sessionPtr->isCurrent());
+      CHECK_FALSE(session.isCurrent());
     }
   }
 
@@ -199,22 +200,57 @@ namespace ao::uimodel::test
     auto sessionRes = ListOrderAuthoringSession::begin(
       fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
-    auto sessionPtr = std::move(*sessionRes);
+    auto session = std::move(*sessionRes);
     std::size_t invalidatedCount = 0;
-    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+    auto subscription = session.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future =
-      fixture.commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, sessionPtr->resetOrder()));
+    auto future = fixture.commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, session.resetOrder()));
     REQUIRE(fixture.executor.waitUntilQueued());
 
     REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
-    CHECK(sessionPtr->isCurrent());
+    CHECK(session.isCurrent());
     REQUIRE(fixture.executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
 
     auto result = future.get();
     REQUIRE(result);
     CHECK(result->status == rt::AuthoringStatus::NoOp);
-    CHECK_FALSE(sessionPtr->isCurrent());
+    CHECK_FALSE(session.isCurrent());
+    CHECK(invalidatedCount == 1);
+  }
+
+  TEST_CASE("ListOrderAuthoringSession - pending submission outlives moved and destroyed facades",
+            "[uimodel][regression][list-order][concurrency]")
+  {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListOrderAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListOrderAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<ListOrderAuthoringSession>);
+
+    auto fixture = PendingSessionFixture{};
+    auto const viewId = fixture.open();
+    std::size_t invalidatedCount = 0;
+    auto invalidatedSubscription = async::Subscription{};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = [&]
+    {
+      auto source = ao::test::requireValue(ListOrderAuthoringSession::begin(
+        fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog()));
+      auto moved = std::move(source);
+      invalidatedSubscription = moved.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
+      auto pending =
+        fixture.commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, moved.resetOrder()));
+      REQUIRE(fixture.executor.waitUntilQueued());
+      return pending;
+    }();
+
+    REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    REQUIRE(fixture.executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    auto const result = future.get();
+    REQUIRE(result);
+    CHECK(result->status == rt::AuthoringStatus::NoOp);
+    CHECK(invalidatedCount == 1);
+
+    REQUIRE(fixture.commandsFixture.runTask(
+      fixture.commandsFixture.commands().createList(rt::ListDraft{.name = "After cleanup"})));
     CHECK(invalidatedCount == 1);
   }
 } // namespace ao::uimodel::test

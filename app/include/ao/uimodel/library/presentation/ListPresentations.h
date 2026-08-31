@@ -59,6 +59,20 @@ namespace ao::uimodel
     Snapshot snapshot() const { return _presentations; }
     void restore(Snapshot presentations);
 
+    /**
+     * Returns a borrowed view of the matching string owned by _presentations.
+     *
+     * The view remains valid until this owner is destroyed or that map entry is
+     * replaced or erased. An effective restore(), same-list replacement or
+     * clear, library reset, or deletion of that List invalidates it; mutation
+     * of a different map entry does not.
+     *
+     * ListPresentations supplies no synchronization or intrinsic thread
+     * affinity, so callers must serialize access to the mutable model. Copy the
+     * id before an invalidating operation, reentrant callback, coroutine
+     * suspension, or longer-lived storage unless owner lifetime and entry
+     * stability remain guaranteed throughout.
+     */
     std::optional<std::string_view> presentationIdForList(ListId listId) const;
     void setPresentationIdForList(ListId listId, std::string_view presentationId);
     void clearPresentationForList(ListId listId);

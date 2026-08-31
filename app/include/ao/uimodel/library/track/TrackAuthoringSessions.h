@@ -43,18 +43,19 @@ namespace ao::uimodel
    * The session owns the runtime binding and becomes stale on maintenance,
    * runtime replacement, or any intervening effective library commit. A stale
    * session never silently rebinds its draft to newer projection state.
+   * Submitted operations retain the session State, but Library remains a
+   * borrow and must outlive every such operation.
    */
   class [[nodiscard]] TrackAuthoringSession final
   {
   public:
-    static Result<std::unique_ptr<TrackAuthoringSession>> begin(rt::Library& library,
-                                                                std::span<TrackId const> targetIds);
+    static Result<TrackAuthoringSession> begin(rt::Library& library, std::span<TrackId const> targetIds);
 
     ~TrackAuthoringSession();
 
     TrackAuthoringSession(TrackAuthoringSession const&) = delete;
     TrackAuthoringSession& operator=(TrackAuthoringSession const&) = delete;
-    TrackAuthoringSession(TrackAuthoringSession&&) = delete;
+    TrackAuthoringSession(TrackAuthoringSession&&) noexcept;
     TrackAuthoringSession& operator=(TrackAuthoringSession&&) = delete;
 
     bool isCurrent() const noexcept;
@@ -67,10 +68,10 @@ namespace ao::uimodel
     async::Task<Result<TrackPropertiesSubmitResult>> submitProperties(rt::TrackPropertiesPatch patch);
 
   private:
-    struct Impl;
-    explicit TrackAuthoringSession(std::shared_ptr<Impl> implPtr);
+    struct State;
+    explicit TrackAuthoringSession(std::shared_ptr<State> statePtr);
 
-    std::shared_ptr<Impl> _implPtr;
+    std::shared_ptr<State> _statePtr;
   };
 
   enum class ListMembershipOperation : std::uint8_t
@@ -108,17 +109,22 @@ namespace ao::uimodel
   std::string formatListMembershipEditNotification(i18n::MessageCatalog const& textCatalog,
                                                    ListMembershipEditResult const& result);
 
+  /**
+   * Revision-bound membership editing for one stable target set.
+   *
+   * Submitted operations retain the session State, but Library remains a
+   * borrow and must outlive every such operation.
+   */
   class [[nodiscard]] ListMembershipAuthoringSession final
   {
   public:
-    static Result<std::unique_ptr<ListMembershipAuthoringSession>> begin(rt::Library& library,
-                                                                         std::span<TrackId const> trackIds);
+    static Result<ListMembershipAuthoringSession> begin(rt::Library& library, std::span<TrackId const> trackIds);
 
     ~ListMembershipAuthoringSession();
 
     ListMembershipAuthoringSession(ListMembershipAuthoringSession const&) = delete;
     ListMembershipAuthoringSession& operator=(ListMembershipAuthoringSession const&) = delete;
-    ListMembershipAuthoringSession(ListMembershipAuthoringSession&&) = delete;
+    ListMembershipAuthoringSession(ListMembershipAuthoringSession&&) noexcept;
     ListMembershipAuthoringSession& operator=(ListMembershipAuthoringSession&&) = delete;
 
     std::span<TrackId const> targetIds() const noexcept;
@@ -126,9 +132,9 @@ namespace ao::uimodel
     async::Task<Result<ListMembershipEditResult>> removeFromList(ListId listId);
 
   private:
-    struct Impl;
-    explicit ListMembershipAuthoringSession(std::shared_ptr<Impl> implPtr);
+    struct State;
+    explicit ListMembershipAuthoringSession(std::shared_ptr<State> statePtr);
 
-    std::shared_ptr<Impl> _implPtr;
+    std::shared_ptr<State> _statePtr;
   };
 } // namespace ao::uimodel

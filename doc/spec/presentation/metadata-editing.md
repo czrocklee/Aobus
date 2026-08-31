@@ -35,6 +35,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - A **common tag** is present on every selected track.
 - An **undo-eligible deletion** removes a custom key that was present on all selected tracks with one non-mixed value.
 - An **authoring binding** identifies one runtime instance, one committed library revision, and one exact ordered target-id set.
+- **Session State** is the independently retained asynchronous binding/invalidation state behind a move-only authoring facade; it borrows the runtime `Library`.
 
 ## Invariants
 
@@ -46,7 +47,8 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - A custom key cannot be added when already present in the snapshot or when it collides with a reserved built-in field id.
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
-- One open editor owns one `TrackAuthoringSession`; changing selection or recycling a row cannot retarget that session.
+- One open editor owns one move-only `TrackAuthoringSession` value; changing selection or recycling a row cannot retarget that session.
+- A submitted operation retains Session State and may settle after the public facade is moved or destroyed, but it cannot outlive the borrowed runtime `Library`.
 - A WinUI window admits at most one track-properties dialog, and that dialog retains the selection captured when it opened.
 - Any intervening effective library commit, maintenance entry, fault, or runtime replacement invalidates an open session.
 - Missing targets reject the complete metadata/tag command; multi-selection authoring never applies a surviving subset.
@@ -63,8 +65,9 @@ Each `CustomMetadataItem` carries key, aggregate string value, `presentOnAll`, a
 The field-grid schema divides supported definitions into metadata, composite metadata, and technical fields according to the requested categories.
 Visibility policy depends on category enablement, selection, section expansion, show-empty state, editor activity, and current display text.
 
-`TrackAuthoringSession` exposes only whether its retained binding is current and a one-shot invalidation observation.
-Submission is asynchronous, and one session admits at most one pending command; another submission receives non-terminal `Busy` without replacing the retained draft or binding.
+`TrackAuthoringSession::begin()` returns a move-only value facade that exposes only whether its retained binding is current and a one-shot invalidation observation.
+The facade holds shared Session State because a submitted coroutine independently retains binding, subscription, and one-pending-command state through completion; this is not shared ownership of the public facade or runtime.
+Submission is asynchronous, and one State admits at most one pending command; another submission receives non-terminal `Busy` without replacing the retained draft or binding.
 Beginning a session binds its explicit targets and immediately reconciles current runtime availability after subscribing, closing the bind-to-subscribe event gap.
 During its own submission, the session defers availability invalidation until the runtime result supplies the next binding.
 An applied submission replaces the retained binding with that next-revision binding; a later effective commit invalidates it.
@@ -123,6 +126,7 @@ GTK table inline edits place parsing, operational, stale, and unavailable failur
 GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
 Custom-metadata undo returns its terminal failure, clears the expired action, and the undo bar publishes that failure as an error notification.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.
+Destroying or moving the facade after submission does not itself cancel the command, because the coroutine retains Session State; the owning frontend workflow must settle that task before destroying the runtime `Library` borrowed by the State.
 
 Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
 Missing targets are rejected with `NotFound` while creating the binding.
@@ -160,7 +164,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, mixed-value policy, editor kinds, and patch construction.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
-- [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns stable targets, current-binding lifetime, invalidation, and result mapping.
+- [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns the move-only value facade and stable targets; [`TrackAuthoringSession.cpp`](../../../app/uimodel/library/track/TrackAuthoringSession.cpp) owns shared asynchronous State, current-binding lifetime, invalidation, and result mapping.
 - [`LibraryCommands.cpp`](../../../app/runtime/library/LibraryCommands.cpp) owns mutation commit.
 - [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native dialog and guarded asynchronous workflow; [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) maps shared form and vocabulary state without WinRT.
 
@@ -171,7 +175,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackAuthoringTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
 - [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, mixed values, and undo eligibility.
 - [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
-- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, and invalidation after another commit.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, invalidation after another commit, move-only facade semantics, and a pending submission settling after moved and destroyed facades.
 - [`LibraryCommandsTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior.
 - [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.

@@ -27,8 +27,7 @@ namespace ao::uimodel::test
 {
   namespace
   {
-    std::unique_ptr<TrackAuthoringSession> beginSession(TrackAuthoringFixture& fixture,
-                                                        std::span<TrackId const> trackIds)
+    TrackAuthoringSession beginSession(TrackAuthoringFixture& fixture, std::span<TrackId const> trackIds)
     {
       auto result = TrackAuthoringSession::begin(fixture.library(), trackIds);
       REQUIRE(result);
@@ -45,8 +44,8 @@ namespace ao::uimodel::test
 
     SECTION("empty tag changes do not submit a mutation")
     {
-      auto sessionPtr = beginSession(fixture, std::array{trackId});
-      auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {}, {}));
+      auto session = beginSession(fixture, std::array{trackId});
+      auto const result = fixture.runTask(applyTagEdit(session, textCatalog, {}, {}));
 
       REQUIRE(result);
       CHECK(result->status == rt::AuthoringStatus::NoOp);
@@ -56,10 +55,10 @@ namespace ao::uimodel::test
 
     SECTION("an intervening commit reports the edit as stale")
     {
-      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto session = beginSession(fixture, std::array{trackId});
       REQUIRE(fixture.runTask(fixture.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
 
-      auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {"Tag1"}, {}));
+      auto const result = fixture.runTask(applyTagEdit(session, textCatalog, {"Tag1"}, {}));
 
       REQUIRE(result);
       CHECK(result->status == rt::AuthoringStatus::Stale);
@@ -69,7 +68,7 @@ namespace ao::uimodel::test
 
     SECTION("lane contention reports that the edit can be retried")
     {
-      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto session = beginSession(fixture, std::array{trackId});
       auto createCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto createFuture = fixture.runtime().spawn(rt::test::flagCompletion(
         createCompletedPtr, fixture.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
@@ -77,7 +76,7 @@ namespace ao::uimodel::test
 
       auto editCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto editFuture = fixture.runtime().spawn(
-        rt::test::flagCompletion(editCompletedPtr, applyTagEdit(*sessionPtr, textCatalog, {"Tag1"}, {})));
+        rt::test::flagCompletion(editCompletedPtr, applyTagEdit(session, textCatalog, {"Tag1"}, {})));
       REQUIRE(fixture.executor().waitUntilQueuedCount(2));
       REQUIRE(fixture.executor().drainUntil([&] { return createCompletedPtr->load() && editCompletedPtr->load(); }));
 
@@ -91,8 +90,8 @@ namespace ao::uimodel::test
 
     SECTION("adding a single tag mutates the bound track and reports the count")
     {
-      auto sessionPtr = beginSession(fixture, std::array{trackId});
-      auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {"Tag1"}, {}));
+      auto session = beginSession(fixture, std::array{trackId});
+      auto const result = fixture.runTask(applyTagEdit(session, textCatalog, {"Tag1"}, {}));
 
       REQUIRE(result);
       CHECK(result->status == rt::AuthoringStatus::Applied);
@@ -104,10 +103,10 @@ namespace ao::uimodel::test
     SECTION("removing a tag mutates every bound track and reports the count")
     {
       auto const targetIds = std::array{trackId, trackId2};
-      auto sessionPtr = beginSession(fixture, targetIds);
-      REQUIRE(fixture.runTask(sessionPtr->submitTags({"Tag1"}, {})));
+      auto session = beginSession(fixture, targetIds);
+      REQUIRE(fixture.runTask(session.submitTags({"Tag1"}, {})));
 
-      auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {}, {"Tag1"}));
+      auto const result = fixture.runTask(applyTagEdit(session, textCatalog, {}, {"Tag1"}));
 
       REQUIRE(result);
       CHECK(result->status == rt::AuthoringStatus::Applied);
@@ -118,10 +117,10 @@ namespace ao::uimodel::test
 
     SECTION("adding and removing tags remains one atomic session submission")
     {
-      auto sessionPtr = beginSession(fixture, std::array{trackId});
-      REQUIRE(fixture.runTask(sessionPtr->submitTags({"OldTag"}, {})));
+      auto session = beginSession(fixture, std::array{trackId});
+      REQUIRE(fixture.runTask(session.submitTags({"OldTag"}, {})));
 
-      auto const result = fixture.runTask(applyTagEdit(*sessionPtr, textCatalog, {"NewTag"}, {"OldTag"}));
+      auto const result = fixture.runTask(applyTagEdit(session, textCatalog, {"NewTag"}, {"OldTag"}));
 
       REQUIRE(result);
       CHECK(result->status == rt::AuthoringStatus::Applied);

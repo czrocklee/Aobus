@@ -22,7 +22,7 @@ namespace ao::audio
 
 namespace ao::audio::backend::detail
 {
-  class AlsaGraphRegistry;
+  class AlsaGraphPublisher;
 }
 
 namespace ao::audio::backend
@@ -36,7 +36,7 @@ namespace ao::audio::backend
     explicit AlsaExclusiveBackend(Device const& device, ProfileId const& profile);
     explicit AlsaExclusiveBackend(Device const& device,
                                   ProfileId const& profile,
-                                  detail::AlsaGraphRegistry& graphRegistry);
+                                  detail::AlsaGraphPublisher graphPublisher);
     ~AlsaExclusiveBackend() override;
 
     AlsaExclusiveBackend(AlsaExclusiveBackend const&) = delete;

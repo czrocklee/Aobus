@@ -174,4 +174,29 @@ namespace ao::uimodel::test
     REQUIRE_FALSE(outsideRes);
     CHECK(outsideRes.error().code == Error::Code::InvalidInput);
   }
+
+  TEST_CASE("listOrderAnchorForGap rejects invalid track identities", "[uimodel][unit][list-order]")
+  {
+    SECTION("effective sequence")
+    {
+      auto const effective = std::array{TrackId{1}, kInvalidTrackId, TrackId{3}};
+      auto const selected = std::array{TrackId{1}};
+
+      auto const result = listOrderAnchorForGap(effective, selected, 1);
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+    }
+
+    SECTION("selected span")
+    {
+      auto const effective = std::array{TrackId{1}, TrackId{2}, TrackId{3}};
+      auto const selected = std::array{kInvalidTrackId};
+
+      auto const result = listOrderAnchorForGap(effective, selected, 1);
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+    }
+  }
 } // namespace ao::uimodel::test

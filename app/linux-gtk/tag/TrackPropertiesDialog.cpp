@@ -97,8 +97,8 @@ namespace ao::gtk
 
     if (sessionRes)
     {
-      _editSessionPtr = std::move(*sessionRes);
-      _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated([this] { updateSaveEnabled(); });
+      _optEditSession.emplace(std::move(*sessionRes));
+      _editSessionInvalidatedSubscription = _optEditSession->onInvalidated([this] { updateSaveEnabled(); });
     }
     else
     {
@@ -337,7 +337,7 @@ namespace ao::gtk
 
     auto const patch = _formModel.buildPatch();
 
-    if (_editSessionPtr == nullptr)
+    if (!_optEditSession)
     {
       return;
     }
@@ -348,7 +348,7 @@ namespace ao::gtk
       _tasks,
       *this,
       "track properties save",
-      _editSessionPtr->submitMetadata(std::move(patch)),
+      _optEditSession->submitMetadata(std::move(patch)),
       [](TrackPropertiesDialog* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
       {
         owner->updateSaveEnabled();
@@ -400,7 +400,7 @@ namespace ao::gtk
   {
     if (_saveButton != nullptr)
     {
-      auto const sessionCanSave = _editSessionPtr != nullptr && _editSessionPtr->isCurrent();
+      auto const sessionCanSave = _optEditSession && _optEditSession->isCurrent();
       _saveButton->set_sensitive(sessionCanSave && _formModel.canSave());
     }
   }

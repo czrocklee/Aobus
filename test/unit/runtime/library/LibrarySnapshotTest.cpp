@@ -42,9 +42,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -72,11 +72,12 @@ namespace ao::rt::test
 
     std::unique_ptr<CoreRuntime> makeCoreRuntime(ao::test::TempDir const& tempDir)
     {
-      return ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
-                                                        tempDir.path(),
-                                                        LibraryPaths{tempDir.path()}.databasePath(),
-                                                        tempDir.path() / "cache",
-                                                        library::test::kTestMusicLibraryMapBytes));
+      return std::make_unique<CoreRuntime>(
+        ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                                   tempDir.path(),
+                                                   LibraryPaths{tempDir.path()}.databasePath(),
+                                                   tempDir.path() / "cache",
+                                                   library::test::kTestMusicLibraryMapBytes)));
     }
 
     SeededReadModelLibrary seedLibrary(ao::test::TempDir const& tempDir)
@@ -235,6 +236,12 @@ namespace ao::rt::test
     CHECK(scope.resolve(seeded.albumId) == "The Album");
   }
 
+  TEST_CASE("Library - published facade identity is nonmovable", "[runtime][unit][library][lifetime]")
+  {
+    STATIC_CHECK_FALSE(std::is_move_constructible_v<Library>);
+    STATIC_CHECK_FALSE(std::is_move_assignable_v<Library>);
+  }
+
   TEST_CASE("LibrarySnapshot - URI paths reject symlinks escaping the library root",
             "[runtime][unit][library][readmodel]")
   {
@@ -251,8 +258,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
     auto changes = makeStateOnlyLibraryChanges(ml);
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(asyncRuntime, ml, changes));
-    auto reader = runtimeLibraryPtr->snapshot();
+    auto runtimeLibrary = Library{asyncRuntime, ao::test::requireValue(Library::prepare(ml)), changes};
+    auto reader = runtimeLibrary.snapshot();
     auto const optRow = reader.trackRow(trackId);
     REQUIRE(optRow);
     CHECK_FALSE(optRow->optUriPath);

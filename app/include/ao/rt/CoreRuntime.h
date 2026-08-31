@@ -43,20 +43,22 @@ namespace ao::rt
   class CoreRuntime final
   {
   public:
+    /// Returns a move-only value whose implementation graph has stable internal
+    /// addresses. Place the wrapper before publishing a borrow of the facade.
     /// @param cacheDirectory Where derived caches live, resolved by the
     ///        composition root: the runtime owns paths derived from a supplied
     ///        root and does not discover platform application directories. Empty
     ///        is supported: a cover read then re-extracts from a carrier file
     ///        every time, which costs latency, and costs the image itself for
     ///        content whose carrier files are all gone.
-    static Result<std::unique_ptr<CoreRuntime>> create(std::unique_ptr<async::Executor> executorPtr,
-                                                       std::filesystem::path musicRoot,
-                                                       std::filesystem::path databasePath,
-                                                       std::filesystem::path cacheDirectory = {},
-                                                       std::uint64_t musicLibraryPinnedMapBytes = 0,
-                                                       async::Sleeper* sleeper = nullptr,
-                                                       TextOrderingPolicy const* textOrderingPolicy = nullptr,
-                                                       CompletionAliasPolicy const* completionAliasPolicy = nullptr);
+    static Result<CoreRuntime> create(std::unique_ptr<async::Executor> executorPtr,
+                                      std::filesystem::path musicRoot,
+                                      std::filesystem::path databasePath,
+                                      std::filesystem::path cacheDirectory = {},
+                                      std::uint64_t musicLibraryPinnedMapBytes = 0,
+                                      async::Sleeper* sleeper = nullptr,
+                                      TextOrderingPolicy const* textOrderingPolicy = nullptr,
+                                      CompletionAliasPolicy const* completionAliasPolicy = nullptr);
     ~CoreRuntime();
 
     // Composition-root teardown must not run from a synchronous runtime
@@ -65,7 +67,7 @@ namespace ao::rt
 
     CoreRuntime(CoreRuntime const&) = delete;
     CoreRuntime& operator=(CoreRuntime const&) = delete;
-    CoreRuntime(CoreRuntime&&) = delete;
+    CoreRuntime(CoreRuntime&& other) noexcept;
     CoreRuntime& operator=(CoreRuntime&&) = delete;
 
     library::MusicLibrary const& musicLibrary() const noexcept;

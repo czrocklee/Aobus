@@ -65,7 +65,6 @@ namespace ao::i18n::detail
     {.resourceId = "SoulWindowTitle", .text = "Aobus Soul"},
     {.resourceId = "SortAscendingSuffix", .text = " ↑"},
     {.resourceId = "SortDescendingSuffix", .text = " ↓"},
-    {.resourceId = "ColumnLayoutUnavailable", .text = "Windows column layout state is unavailable"},
     {.resourceId = "NoListActive", .text = "No Windows list is active"},
     {.resourceId = "NoResizableColumn", .text = "No resizable Windows track column is active"},
     {.resourceId = "ColumnHidden", .text = "The requested Windows track column is hidden"},
@@ -78,7 +77,6 @@ namespace ao::i18n::detail
     {.resourceId = "NoPlayableTrackRow", .text = "No playable Windows track row is active"},
     {.resourceId = "NoTrackViewActive", .text = "No Windows track view is active"},
     {.resourceId = "UnknownPresentationFormat", .text = "Unknown track presentation '{0}'"},
-    {.resourceId = "NoLibraryActive", .text = "No Windows library is active"},
     {.resourceId = "StartupHresultDetailFormat", .text = "{0} (HRESULT 0x{1:08X})"},
   });
 } // namespace ao::i18n::detail

@@ -160,7 +160,7 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
     - 4.2.2. Minimize type exposure
       - If a type is used only in one `.cpp`, keep it in that file's anonymous namespace
       - If a type must appear in a header, prefer a nested type with the narrowest possible visibility, ideally `private`
-  - 4.2.3. Use the Pimpl idiom for complex implementation details
+    - 4.2.3. Use the Pimpl idiom for complex implementation details
       - Forward-declare an `Impl` struct in the header: `struct Impl;`
       - Define it as `struct ClassName::Impl final { ... };` in the `.cpp` file
       - Hold via `std::unique_ptr<Impl> _impl;`
@@ -168,6 +168,31 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
         to pin a facade around individual method calls. Forbid synchronous owner
         destruction with a contract and share only a narrow control block when
         callbacks or tokens have a genuinely independent lifetime.
+    - 4.2.4. Prefer direct values for mandatory owner-local graph members and
+      references for mandatory borrows. Use `std::optional<T>` when presence
+      names a real phase whose reset completely ends that phase.
+    - 4.2.5. A recoverable factory should return a move-only value when the only
+      reason for an outer `unique_ptr` would be ownership transfer. Retain
+      `unique_ptr` for PImpl, polymorphism, native ownership, explicit stable
+      facade identity, nonmovable storage, or another documented lifetime need.
+    - 4.2.6. Complete final placement before publishing references, callbacks,
+      subscriptions, provider registrations, observers, or restored state that
+      target the object. A value factory may have one post-factory move into
+      final storage; later wrapper movement is not permission to move a
+      published facade identity.
+    - 4.2.7. Move-only composition roots and lifecycle facades should provide
+      `noexcept` move construction, delete move assignment unless replacement
+      has a proved contract, and make destruction of a moved-from value inert.
+    - 4.2.8. Use a reference for a required non-owning collaborator. Use a raw
+      pointer only for genuine optional absence, late binding, or a revocable
+      callback target, and document the owner and invalidation boundary.
+    - 4.2.9. Use `shared_ptr` only when an identified independent participant may
+      legitimately retain the same state after the originating facade releases
+      it. Name independently retained asynchronous storage `State`, keep its
+      shared surface narrow, and document every borrowed lifetime ceiling.
+    - 4.2.10. An admission or generation token is not owner lifetime. Retire it
+      before cancellation, drain or join the admitted work by a separate
+      protocol, and keep the raw owner alive until that settlement completes.
   - 4.3. Const Correctness
     - 4.3.1. Use `const` wherever possible
       - locals: `auto const result = compute();`
@@ -187,6 +212,10 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       stops and joins them before releasing that owner. A callback must defer
       synchronous owner destruction unless the API explicitly documents a
       stronger reentrant lifetime model.
+    - 4.4.9. Concurrent shutdown callers share one completion boundary. A
+      callback-thread initiator may avoid self-wait only when independently
+      retained state completes quiescence after the callback returns and a later
+      external caller can still wait for that completion.
 - 5\. Error Handling
   - 5.1. Outcome Policy
     - 5.1.1. **`ao::Result<T>`** (alias for `std::expected<T, ao::Error>`) — Recoverable fallible operations

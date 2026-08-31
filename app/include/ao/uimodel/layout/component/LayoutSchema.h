@@ -142,6 +142,24 @@ namespace ao::uimodel
     constexpr bool allows(ActionSlot const slot) const noexcept { return (actionSlots & actionSlotBit(slot)) != 0; }
 
     std::string_view defaultAction(ActionSlot slot) const noexcept;
+
+    /**
+     * Resolves an authored or default action id without copying it.
+     *
+     * An authored result aliases the selected string in node.props; otherwise
+     * the result aliases the selected string in this schema's defaultActions.
+     * The corresponding LayoutNode or ComponentSchema owns that string. The
+     * view remains valid only while the selected owner and backing string stay
+     * alive and unchanged.
+     *
+     * Replacing or erasing the selected property, clearing or assigning the
+     * node's props, replacing or erasing the selected default, reallocating or
+     * assigning defaultActions, and assigning or destroying the selected owner
+     * invalidate its view. The values provide no synchronization or intrinsic
+     * thread affinity; callers must prevent concurrent mutation. Copy the id
+     * before mutation, reentrant calls, coroutine suspension, or longer-lived
+     * storage unless both source lifetime and stability remain guaranteed.
+     */
     std::optional<std::string_view> actionId(LayoutNode const& node, ActionSlot slot) const;
     ActionSlotMask boundActionSlots(LayoutNode const& node) const;
     bool hasBoundAction(LayoutNode const& node) const;

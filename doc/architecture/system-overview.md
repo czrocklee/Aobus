@@ -64,12 +64,16 @@ Interactive-runtime-owned components may provide reusable application delivery b
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
 It owns storage, asynchronous execution, the library facade and change bus, source caching, verified resource-byte reading, completion, and notifications.
-`CoreRuntime::create()` is a typed-result factory: it opens and validates storage, acquires the runtime library facade, and completes the initial All Tracks source reload before returning ownership.
+`CoreRuntime::create()` is a typed-result factory: it opens and validates storage, allocates and finalizes its `Impl` and direct `MusicLibrary` first, uses the short-lived `Library::Prepared` token to acquire write authority against that final object, then emplaces the nonmovable `Library` directly in phase-local optional storage.
+It completes the initial All Tracks source reload before exposing the runtime.
+The `CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; moving either public wrapper transfers only its unique PImpl and moved-from destruction is inert.
 
-`AppRuntime` owns one `CoreRuntime` and adds the interactive application graph; it does not inherit from or expose the core owner.
-It adds view and workspace services, playback transport and succession, audio-player ownership, playback-session persistence, and one shared read-through `ResourceByteMemoryCache` exposed through `resourceBytes()`.
+`AppRuntime` owns one `CoreRuntime` as the first direct member of its pinned implementation and adds the interactive application graph; it does not inherit from or expose the core owner.
+It directly contains mandatory view, workspace, playback transport and succession, `PlaybackService`, and playback-session-persistence values; among those interactive additions, only the transferred nonmovable workspace store retains unique ownership.
+The resolved playback-session store is a required reference, and one shared read-through `ResourceByteMemoryCache` is exposed through `resourceBytes()`.
 Its public application face explicitly forwards the core library, async runtime, sources, notifications, completion, ordering policy, and music root, but not raw `MusicLibrary` or database-path access.
-`AppRuntime::create()` is likewise the sole public construction boundary and returns no interactive graph until core initialization and the required workspace-store composition have succeeded.
+`AppRuntime::create()` is likewise the sole public construction boundary and returns a move-only value only after Core has moved into its final pinned implementation address and every Core-borrowing interactive member has been constructed there.
+It exposes no partial graph when core initialization or required workspace-store composition fails.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, frontend-specific library transition, and teardown coordination.
@@ -94,7 +98,8 @@ a runtime, show failures, or claim graph teardown. TUI and CLI do not link it.
 ### Frontends
 
 Each frontend is a composition root and platform adapter.
-It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; transfers the fresh providers returned by core audio's platform factory; binds user events to commands; and owns toolkit or terminal lifecycle.
+It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; completes the runtime value's final frontend placement; transfers the fresh providers returned by core audio's platform factory; binds user events to commands; and owns toolkit or terminal lifecycle.
+No provider registration, restoration, subscription, or frontend borrower may target a runtime wrapper that still has a move pending.
 Composition roots translate recoverable runtime-factory errors into their existing startup or replacement presentation; no public throwing runtime constructor is retained as an adapter.
 Frontends use the runtime path contract for standard per-library locations while retaining frontend-specific filenames and override policy.
 
@@ -178,7 +183,9 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 
 ## Structural constraints
 
-- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns desktop successor-process restart and the TUI's single-runtime lifetime, while [workspace](workspace.md) owns state within the graph.
+- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns desktop successor-process restart, final placement, and the TUI's single-runtime lifetime, while [workspace](workspace.md) owns state within the graph.
+- Move-only composition-root factories expose complete values, not ownership boxes; mandatory graph members are direct values or references.
+  Phase-only presence is optional, and PImpl allocation pins implementation addresses across the wrapper's sole post-factory move.
 - Cross-frontend domain behavior belongs in runtime or UIModel. Pure
   desktop-process selection and launch rules belong in `ao_desktop_launch`, not in
   parallel GTK and WinUI implementations.
@@ -190,8 +197,9 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 ## Failure, cancellation, and lifetime boundaries
 
 Composition roots own runtime lifetime and destroy frontend observers before the runtime services they observe.
+They first place each returned runtime value in its final stack, optional, or deliberately heap-pinned frontend owner, then publish runtime borrows.
 `CoreRuntime` stops and joins worker execution before destroying library-backed collaborators.
-`AppRuntime` shuts down playback-session work and audio callback producers before shutting down and releasing its owned core graph.
+`AppRuntime` destroys or quiesces its direct interactive borrowers in producer-first order, shuts down playback-session work and audio callback producers, and then shuts down and releases its first-member Core graph.
 
 Recoverable failures cross core and runtime boundaries as typed results or typed runtime events.
 The [failure and reporting architecture](failure-and-reporting.md) owns cross-layer classification, recovery, reporting, and application-leaf responsibilities.
@@ -216,7 +224,7 @@ Subsystem-specific code families and translations belong to their focused specif
 
 ## Test map
 
-- [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
+- [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects value-factory failure isolation, move-only wrapper semantics, stable service identity across wrapper movement, interactive runtime composition, and service wiring.
 - [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
 - [`ResourceByteMemoryCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects bounded retention, coalescing, retry, callback affinity, cancellation, and destruction fencing.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.

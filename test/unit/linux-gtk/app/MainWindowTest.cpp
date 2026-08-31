@@ -47,12 +47,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <giomm/actiongroup.h>
 #include <giomm/actionmap.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/popovermenubar.h>
 #include <gtkmm/window.h>
+#include <sigc++/connection.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -95,8 +98,52 @@ namespace ao::gtk::test
     CHECK(actionMap->lookup_action("save-panel-sizes-as-layout-defaults") != nullptr);
     CHECK(actionMap->lookup_action("keyboard-shortcuts") == nullptr);
     CHECK(actionMap->lookup_action("list-new-smart-list") != nullptr);
+    CHECK(actionMap->lookup_action("list-new-playlist") != nullptr);
     CHECK(actionMap->lookup_action("list-edit") != nullptr);
     CHECK(actionMap->lookup_action("list-delete") != nullptr);
+    CHECK(actionMap->lookup_action("list-delete-subtree") != nullptr);
+  }
+
+  TEST_CASE("MainWindow - destruction unexports window actions before retained handlers can run",
+            "[gtk][regression][main-window]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto removedActionIds = std::vector<std::string>{};
+    auto retainedActionPtr = Glib::RefPtr<Gio::Action>{};
+    auto actionRemovedConnection = sigc::connection{};
+
+    {
+      auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+      auto* const actionGroup = dynamic_cast<Gio::ActionGroup*>(&window);
+      REQUIRE(actionGroup != nullptr);
+      actionRemovedConnection = actionGroup->signal_action_removed().connect(
+        [&removedActionIds](Glib::ustring const& id) { removedActionIds.push_back(id.raw()); });
+      retainedActionPtr = window.lookup_action("edit-layout");
+      REQUIRE(retainedActionPtr);
+    }
+
+    for (auto const* const expectedId : {"open-library",
+                                         "scan-library",
+                                         "import-library",
+                                         "export-library",
+                                         "edit-layout",
+                                         "reset-runtime-layout-state",
+                                         "save-panel-sizes-as-layout-defaults",
+                                         "list-new-smart-list",
+                                         "list-new-playlist",
+                                         "list-edit",
+                                         "list-delete",
+                                         "list-delete-subtree"})
+    {
+      CHECK(std::ranges::contains(removedActionIds, expectedId));
+    }
+
+    auto const topLevelCount = Gtk::Window::list_toplevels().size();
+    retainedActionPtr->activate();
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
   TEST_CASE("MainWindow - hide persists current library path", "[gtk][unit][main-window]")
@@ -200,14 +247,15 @@ namespace ao::gtk::test
     REQUIRE(configStorePtr->saveAppSession(oldSession));
     REQUIRE_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
 
-    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
-      .musicRoot = musicRoot,
-      .databasePath = databasePath,
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
-      .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
-    }));
+    auto runtimePtr =
+      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+        .musicRoot = musicRoot,
+        .databasePath = databasePath,
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspacePath),
+        .playbackSessionConfigStore = &configStorePtr->playbackSessionStore(),
+      })));
     rt::test::addReadyAudioProvider(*runtimePtr);
     drainGtkEvents();
 
@@ -300,14 +348,15 @@ namespace ao::gtk::test
     std::filesystem::create_directories(databasePath);
     std::filesystem::create_directories(invalidPlaybackStorePath);
     auto invalidPlaybackStore = rt::ConfigStore{invalidPlaybackStorePath};
-    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
-      .musicRoot = musicRoot,
-      .databasePath = databasePath,
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
-      .playbackSessionConfigStore = &invalidPlaybackStore,
-    }));
+    auto runtimePtr =
+      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+        .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+        .musicRoot = musicRoot,
+        .databasePath = databasePath,
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
+        .playbackSessionConfigStore = &invalidPlaybackStore,
+      })));
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
     auto window = MainWindow{*runtimePtr, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
     REQUIRE(window.prepareSession());

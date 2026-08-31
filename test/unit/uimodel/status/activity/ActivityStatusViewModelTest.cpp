@@ -192,8 +192,9 @@ namespace ao::uimodel::test
     auto notifications = rt::NotificationService{runtime};
     auto changes = rt::test::makeLibraryChanges(executor);
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto runtimeLibraryPtr = ao::test::requireValue(rt::Library::create(runtime, libraryFixture.library(), changes));
-    auto& jobs = runtimeLibraryPtr->jobs();
+    auto runtimeLibrary =
+      rt::Library{runtime, ao::test::requireValue(rt::Library::prepare(libraryFixture.library())), changes};
+    auto& jobs = runtimeLibrary.jobs();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{

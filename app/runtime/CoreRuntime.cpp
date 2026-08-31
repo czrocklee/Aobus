@@ -4,6 +4,7 @@
 #include <ao/rt/CoreRuntime.h>
 
 #include "resource/ResourceByteReader.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -44,9 +45,9 @@ namespace ao::rt
     async::Runtime asyncRuntime;
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
-    std::unique_ptr<library::MusicLibrary> musicLibraryPtr;
+    library::MusicLibrary musicLibrary;
     LibraryChanges libraryChanges;
-    std::unique_ptr<Library> libraryFacadePtr;
+    std::optional<Library> optLibrary;
     CompletionService completionService;
     TrackSourceCache trackSourceCache;
     NotificationService notificationService;
@@ -58,7 +59,7 @@ namespace ao::rt
          std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          std::filesystem::path cacheDirectory,
-         std::unique_ptr<library::MusicLibrary> libraryPtr,
+         library::MusicLibrary&& library,
          async::Sleeper* sleeper,
          TextOrderingPolicy const* orderingPolicy,
          CompletionAliasPolicy const* aliasPolicy)
@@ -66,14 +67,14 @@ namespace ao::rt
       , asyncRuntime{*executorPtr, sleeper}
       , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
-      , musicLibraryPtr{std::move(libraryPtr)}
+      , musicLibrary{std::move(library)}
       , libraryChanges{*executorPtr,
-                       currentLibraryRevision(*musicLibraryPtr),
-                       utility::pathToUtf8(musicLibraryPtr->databasePath())}
-      , completionService{*musicLibraryPtr, libraryChanges, orderingPolicy, aliasPolicy}
-      , trackSourceCache{*musicLibraryPtr, libraryChanges}
+                       currentLibraryRevision(musicLibrary),
+                       utility::pathToUtf8(musicLibrary.databasePath())}
+      , completionService{musicLibrary, libraryChanges, orderingPolicy, aliasPolicy}
+      , trackSourceCache{musicLibrary, libraryChanges}
       , notificationService{asyncRuntime}
-      , resourceByteReader{asyncRuntime, *musicLibraryPtr, cacheDirectory}
+      , resourceByteReader{asyncRuntime, musicLibrary, cacheDirectory}
       , textOrderingPolicy{orderingPolicy}
     {
     }
@@ -97,9 +98,9 @@ namespace ao::rt
       // then stop worker coroutines before library-backed members are destroyed.
       // Runtime is declared before them, so its destructor would otherwise run
       // after the LMDB environment and its consumers have already torn down.
-      if (libraryFacadePtr)
+      if (optLibrary)
       {
-        libraryFacadePtr->beginClosing();
+        optLibrary->beginClosing();
       }
 
       asyncRuntime.requestStop();
@@ -107,14 +108,14 @@ namespace ao::rt
     }
   };
 
-  Result<std::unique_ptr<CoreRuntime>> CoreRuntime::create(std::unique_ptr<async::Executor> executorPtr,
-                                                           std::filesystem::path musicRoot,
-                                                           std::filesystem::path databasePath,
-                                                           std::filesystem::path cacheDirectory,
-                                                           std::uint64_t const musicLibraryPinnedMapBytes,
-                                                           async::Sleeper* const sleeper,
-                                                           TextOrderingPolicy const* const textOrderingPolicy,
-                                                           CompletionAliasPolicy const* const completionAliasPolicy)
+  Result<CoreRuntime> CoreRuntime::create(std::unique_ptr<async::Executor> executorPtr,
+                                          std::filesystem::path musicRoot,
+                                          std::filesystem::path databasePath,
+                                          std::filesystem::path cacheDirectory,
+                                          std::uint64_t const musicLibraryPinnedMapBytes,
+                                          async::Sleeper* const sleeper,
+                                          TextOrderingPolicy const* const textOrderingPolicy,
+                                          CompletionAliasPolicy const* const completionAliasPolicy)
   {
     if (executorPtr == nullptr)
     {
@@ -129,25 +130,24 @@ namespace ao::rt
       return std::unexpected{storageRes.error()};
     }
 
-    auto storagePtr = std::make_unique<library::MusicLibrary>(std::move(*storageRes));
     auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
                                           std::move(musicRoot),
                                           std::move(databasePath),
                                           std::move(cacheDirectory),
-                                          std::move(storagePtr),
+                                          std::move(*storageRes),
                                           sleeper,
                                           textOrderingPolicy,
                                           completionAliasPolicy);
-    auto libraryRes = Library::create(implPtr->asyncRuntime, *implPtr->musicLibraryPtr, implPtr->libraryChanges);
+    auto preparedLibraryRes = Library::prepare(implPtr->musicLibrary);
 
-    if (!libraryRes)
+    if (!preparedLibraryRes)
     {
-      return std::unexpected{libraryRes.error()};
+      return std::unexpected{preparedLibraryRes.error()};
     }
 
-    implPtr->libraryFacadePtr = std::move(*libraryRes);
+    implPtr->optLibrary.emplace(implPtr->asyncRuntime, std::move(*preparedLibraryRes), implPtr->libraryChanges);
     implPtr->trackSourceCache.reloadAllTracks();
-    return std::unique_ptr<CoreRuntime>{new CoreRuntime{std::move(implPtr)}};
+    return CoreRuntime{std::move(implPtr)};
   }
 
   CoreRuntime::CoreRuntime(std::unique_ptr<Impl> implPtr)
@@ -155,6 +155,7 @@ namespace ao::rt
   {
   }
   CoreRuntime::~CoreRuntime() = default;
+  CoreRuntime::CoreRuntime(CoreRuntime&& other) noexcept = default;
 
   void CoreRuntime::shutdown() noexcept
   {
@@ -166,17 +167,19 @@ namespace ao::rt
 
   library::MusicLibrary const& CoreRuntime::musicLibrary() const noexcept
   {
-    return *_implPtr->musicLibraryPtr;
+    return _implPtr->musicLibrary;
   }
 
   Library const& CoreRuntime::library() const noexcept
   {
-    return *_implPtr->libraryFacadePtr;
+    AO_INVARIANT(_implPtr->optLibrary, "Core runtime library is not initialized");
+    return _implPtr->optLibrary.value();
   }
 
   Library& CoreRuntime::library() noexcept
   {
-    return *_implPtr->libraryFacadePtr;
+    AO_INVARIANT(_implPtr->optLibrary, "Core runtime library is not initialized");
+    return _implPtr->optLibrary.value();
   }
 
   std::filesystem::path const& CoreRuntime::musicRoot() const noexcept

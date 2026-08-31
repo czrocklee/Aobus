@@ -4,12 +4,14 @@
 #include "tag/TagEditController.h"
 
 #include "app/ThemeCoordinator.h"
+#include "common/ActionMapRegistration.h"
 #include "common/UiWorkflow.h"
 #include "i18n/GtkText.h"
 #include "tag/TagPopover.h"
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -27,20 +29,17 @@
 #include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
-#include <giomm/actionmap.h>
 #include <giomm/menu.h>
 #include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/main.h>
 #include <glibmm/variant.h>
-#include <glibmm/varianttype.h>
 #include <gtkmm/object.h>
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -74,7 +73,6 @@ namespace ao::gtk
     , _parent{parent}
     , _themeCoordinator{themeCoordinator}
   {
-    createActions();
   }
 
   TagEditController::~TagEditController()
@@ -88,19 +86,6 @@ namespace ao::gtk
     _dataProvider = provider;
   }
 
-  void TagEditController::addActionsTo(Gio::ActionMap& actionMap)
-  {
-    if (_trackTagAddActionPtr)
-    {
-      actionMap.add_action(_trackTagAddActionPtr);
-    }
-
-    if (_trackTagRemoveActionPtr)
-    {
-      actionMap.add_action(_trackTagRemoveActionPtr);
-    }
-  }
-
   void TagEditController::openTrackContextMenu(TrackViewPage& page,
                                                TrackSelection const& selection,
                                                double xPosition,
@@ -112,7 +97,7 @@ namespace ao::gtk
     }
 
     _optActiveSelection = selection;
-    _tagEditSessionPtr.reset();
+    _optTagEditSession.reset();
     retireContextPopover();
     _contextPage = &page;
     _contextXPosition = xPosition;
@@ -187,12 +172,17 @@ namespace ao::gtk
                                            std::vector<std::string> tagsToAdd,
                                            std::vector<std::string> tagsToRemove)
   {
-    if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), selection.selectedIds))
+    if (!_optTagEditSession || !std::ranges::equal(_optTagEditSession->targetIds(), selection.selectedIds))
     {
       if (!beginTagEditSession(selection.selectedIds))
       {
         return;
       }
+    }
+
+    if (!_optTagEditSession)
+    {
+      AO_FATAL("Tag edit session admission succeeded without session state");
     }
 
     auto const sessionGeneration = _tagEditSessionGeneration;
@@ -201,7 +191,7 @@ namespace ao::gtk
       _tasks,
       *this,
       "tag edit",
-      ao::uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove)),
+      ao::uimodel::applyTagEdit(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove)),
       [sessionGeneration](TagEditController* owner, Result<uimodel::TagEditResult> result)
       {
         if (!result)
@@ -225,7 +215,7 @@ namespace ao::gtk
 
           if (owner->_tagEditSessionGeneration == sessionGeneration)
           {
-            owner->_tagEditSessionPtr.reset();
+            owner->_optTagEditSession.reset();
           }
 
           return;
@@ -246,35 +236,20 @@ namespace ao::gtk
       });
   }
 
-  void TagEditController::createActions()
-  {
-    auto const stringType = Glib::VariantType{"s"};
-
-    _trackTagAddActionPtr = Gio::SimpleAction::create("track-tag-add", stringType);
-    _trackTagAddActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const& parameter)
-      { addTagToCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
-
-    _trackTagRemoveActionPtr = Gio::SimpleAction::create("track-tag-remove", stringType);
-    _trackTagRemoveActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const& parameter)
-      { removeTagFromCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
-  }
-
   void TagEditController::buildContextActionsAndMenu(TrackViewPage& page)
   {
     _contextActionGroupPtr = Gio::SimpleActionGroup::create();
+    auto actionRegistration = ActionMapRegistration{*_contextActionGroupPtr};
     auto menuModelPtr = Gio::Menu::create();
-    auto addAction = [this](Glib::RefPtr<Gio::Menu> const& menuPtr,
-                            std::string const& label,
-                            std::string const& name,
-                            std::function<void()> callback,
-                            bool const enabled = true)
+    auto addAction = [&actionRegistration](Glib::RefPtr<Gio::Menu> const& menuPtr,
+                                           std::string const& label,
+                                           std::string const& name,
+                                           std::function<void()> callback,
+                                           bool const enabled = true)
     {
       auto actionPtr = Gio::SimpleAction::create(name);
       actionPtr->set_enabled(enabled);
-      actionPtr->signal_activate().connect([callback = std::move(callback)](Glib::VariantBase const&) { callback(); });
-      _contextActionGroupPtr->add_action(actionPtr);
+      actionRegistration.add(actionPtr, [callback = std::move(callback)](Glib::VariantBase const&) { callback(); });
       menuPtr->append(label, std::format("ctx.{}", name));
     };
 
@@ -463,6 +438,7 @@ namespace ao::gtk
 
     menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::GtkListManualOrder), orderingMenuPtr);
     _contextPopoverPtr->set_menu_model(menuModelPtr);
+    _contextActionsRegistration = std::move(actionRegistration);
   }
 
   void TagEditController::applyListMembershipToCurrentSelection(ListId const listId, bool const add)
@@ -482,8 +458,8 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionPtr = std::move(*sessionRes);
-    auto submission = add ? sessionPtr->addToList(listId) : sessionPtr->removeFromList(listId);
+    auto session = std::move(*sessionRes);
+    auto submission = add ? session.addToList(listId) : session.removeFromList(listId);
     spawnUiTask(_runtime.async(),
                 _tasks,
                 *this,
@@ -605,7 +581,15 @@ namespace ao::gtk
   void TagEditController::finishContextPopoverRetirement()
   {
     unparentClosedContextPopover();
+    _contextActionsRegistration.reset();
+
+    if (_contextPopoverPtr)
+    {
+      _contextPopoverPtr->remove_action_group("ctx");
+    }
+
     _contextPopoverPtr.reset();
+    _contextActionGroupPtr.reset();
     _contextPage = nullptr;
   }
 
@@ -648,18 +632,6 @@ namespace ao::gtk
     }
   }
 
-  void TagEditController::addTagToCurrentSelection(std::string tag)
-  {
-    auto const toAdd = std::array{std::move(tag)};
-    applyTagChangeToCurrentSelection(toAdd, {});
-  }
-
-  void TagEditController::removeTagFromCurrentSelection(std::string tag)
-  {
-    auto const toRemove = std::array{std::move(tag)};
-    applyTagChangeToCurrentSelection({}, toRemove);
-  }
-
   void TagEditController::applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
                                                            std::span<std::string const> tagsToRemove)
   {
@@ -679,13 +651,14 @@ namespace ao::gtk
 
     if (!sessionRes)
     {
-      _tagEditSessionPtr.reset();
+      _optTagEditSession.reset();
       _runtime.notifications().post(
         rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
       return false;
     }
 
-    _tagEditSessionPtr = std::move(*sessionRes);
+    _optTagEditSession.reset();
+    _optTagEditSession.emplace(std::move(*sessionRes));
     ++_tagEditSessionGeneration;
     return true;
   }

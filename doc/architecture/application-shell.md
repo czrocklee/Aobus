@@ -125,9 +125,13 @@ WinUI also owns XAML controls, HWND and `AppWindow` adaptation, `DispatcherQueue
 
 The GTK `ComponentRegistry` pairs each platform-neutral `ComponentSchema` with one GTK `ComponentFactory`.
 Its embedded `LayoutSchema` is the editor and validator authority for registered type metadata.
+`ComponentSchema::actionId()` returns a borrowed view into either the selected `LayoutNode` property or schema default; callers copy it before mutating either owner, crossing reentrant work, suspending, or retaining it beyond that synchronous resolution.
 
 The GTK `ActionRegistry` adds each `ActionSchema` to that same schema and retains one handler and optional availability provider.
 It remains the live command authority; layout nodes, keyboard maps, and Gio actions refer to stable action ids instead of duplicating command behavior.
+Every action exported to a longer-lived Gio action map is owned by a scoped registration that retains the exact action and activation connection.
+Registration retirement disconnects handlers before removing only the exact actions it installed, so an independently retained old action is inert and an overlapping replacement with the same id remains installed.
+`ActionActivationContext` is a synchronous borrowed view for one activation or availability query; handlers cannot retain the context or its window and anchor references.
 
 ### Layout construction
 
@@ -198,7 +202,8 @@ layout component, menu, shortcut, or Gio action id
 ```
 
 Gio export includes only actions for which the shell can provide the required anchor/menu context.
-The bridge refreshes enabled state from the live registry.
+The bridge refreshes enabled state from the live registry while its scoped export remains the exact action currently installed under that id.
+Replacing or ending an export first disconnects its activation handlers and then unexports its exact actions.
 
 ### Editor and component state
 
@@ -251,6 +256,7 @@ Within either process, one build borrows explicit session- and coordinator-owned
 ## Structural constraints
 
 - One `ShellLayoutController` and one active `LayoutHost` belong to one GTK `MainWindow`.
+- Every GTK action-map registration retires before both its map and callback target; a self-attached action group closes in its derived owner before member and GTK-base teardown.
 - `LayoutSession` is the active preset/document/state/generation authority; editor working copies, build snapshots, and preview trees are not authoritative.
 - Raw `LayoutDocument` values remain authored/session/persistence values; only `PreparedLayout` may enter GTK construction.
 - `LayoutBuildContext` is created for one recursive build and cannot be retained as shell wiring.
@@ -288,8 +294,9 @@ Document preparation and detached GTK construction happen before active session/
 A failed preparation keeps the old generation live.
 Strict version dispatch, preparation budgets, and rejected-file preservation form the complete layout-document safety boundary; there is no migration or generic candidate framework.
 
-During teardown the controller clears the host while the layout session, stores, registries, and borrowed dependencies are still alive.
+During teardown the controller closes callback admission, releases action-state subscriptions, and retires its Gio export before clearing the host while the layout session, stores, registries, and borrowed dependencies are still alive.
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
+`MainWindow` retires its List-navigation and window-action registrations before their controllers, registry, and inherited action map, while the Layout Editor disconnects and detaches its self-owned action group in the derived destructor.
 Editor theme and callback tokens are released before the controller's collaborators.
 
 WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the borrowed session. The main window retires `ShellBuilder` first; destroying the live generation releases its scoped shell-state and track-list subscriptions while their `ShellBuilder`- and window-owned signal sources still exist. `MainWindow::shutdown()` then unbinds the XAML-owned playback controls, clears the session callback registration, releases the reveal subscription, and only then releases the resource, theme, and track-list consumers. Constructor-bound leaf destructors stop their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
@@ -304,7 +311,7 @@ The selected root is persisted only after successor activation; its initial scan
 - [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), [`LayoutNode`](../../app/include/ao/uimodel/layout/document/LayoutNode.h), and [`LayoutPreparation`](../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) own the platform-neutral document and preparation proof.
 - [`LayoutSchema`](../../app/include/ao/uimodel/layout/component/LayoutSchema.h) owns component and action vocabulary and validation; [`LayoutSession`](../../app/include/ao/uimodel/layout/shell/LayoutSession.h) owns the active layout lifetime, build snapshots, and state bindings.
 - UIModel layout action, component, document, and shell types live under [`app/include/ao/uimodel/layout/`](../../app/include/ao/uimodel/layout/) and [`app/uimodel/layout/`](../../app/uimodel/layout/).
-- [`ShellLayoutController`](../../app/linux-gtk/app/ShellLayoutController.h) is the current GTK shell owner.
+- [`ShellLayoutController`](../../app/linux-gtk/app/ShellLayoutController.h) is the current GTK shell owner; [`GioActionBridge`](../../app/linux-gtk/layout/runtime/GioActionBridge.h) and [`ActionMapRegistration`](../../app/linux-gtk/common/ActionMapRegistration.h) own bounded Gio export and exact-identity registration teardown.
 - [`ComponentRegistry`](../../app/linux-gtk/layout/runtime/ComponentRegistry.h), [`ActionRegistry`](../../app/linux-gtk/layout/runtime/ActionRegistry.h), [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h), and [`LayoutHost`](../../app/linux-gtk/layout/runtime/LayoutHost.h) own GTK construction and activation.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h) and [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h) own customized layouts and component state.
 - [`KeymapModel`](../../app/include/ao/uimodel/input/KeymapModel.h), [`KeymapApplicator.cpp`](../../app/linux-gtk/app/KeymapApplicator.cpp), and [`ShortcutEditorWidget.cpp`](../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) own neutral policy and GTK adaptation.
@@ -321,7 +328,7 @@ The selected root is persisted only after successor activation; its initial scan
 
 - UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, schema, actions, component state, promotion, and session policy.
 - GTK layout runtime and component tests under [`test/unit/linux-gtk/layout/`](../../test/unit/linux-gtk/layout/) protect construction, registry injection, actions, surfaces, editor behavior, and component state.
-- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects shell ownership by the window.
+- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp), [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`ShellLayoutControllerTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp), and [`GioActionBridgeTest.cpp`](../../test/unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp) protect scoped action export, replacement identity, retained-action revocation, and window/controller teardown.
 - Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), and [`TuiKeymapTest.cpp`](../../test/unit/tui/TuiKeymapTest.cpp) protect neutral, GTK, and terminal shortcut boundaries.
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.

@@ -4,12 +4,14 @@
 #pragma once
 
 #include "ActionRegistry.h"
+#include "common/ActionMapRegistration.h"
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 
 #include <giomm/actionmap.h>
+#include <giomm/simpleaction.h>
 #include <glibmm/refptr.h>
 
-#include <memory>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -45,38 +47,56 @@ namespace ao::gtk::layout
     }
   };
 
-  class GioActionBridgeSession final
+  class [[nodiscard]] GioActionBridgeSession final
   {
   public:
     GioActionBridgeSession(ActionRegistry const& registry,
                            Gio::ActionMap& actionMap,
                            ActionContextProvider& contextProvider,
-                           std::vector<std::string> exportedActionIds);
+                           std::size_t expectedActionCount);
+    ~GioActionBridgeSession() = default;
+
+    GioActionBridgeSession(GioActionBridgeSession const&) = delete;
+    GioActionBridgeSession& operator=(GioActionBridgeSession const&) = delete;
+    GioActionBridgeSession(GioActionBridgeSession&& other) noexcept;
+    GioActionBridgeSession& operator=(GioActionBridgeSession&&) = delete;
 
     void refreshStates();
 
   private:
+    friend class GioActionBridge;
+
+    struct ExportedAction final
+    {
+      std::string id;
+      Glib::RefPtr<Gio::SimpleAction> actionPtr;
+    };
+
+    void addExportedAction(std::string id, Glib::RefPtr<Gio::SimpleAction> actionPtr);
+
     ActionRegistry const& _registry;
-    Gio::ActionMap& _actionMap;
     ActionContextProvider& _contextProvider;
-    std::vector<std::string> _exportedActionIds;
+    ActionMapRegistration _registration;
+    std::vector<ExportedAction> _exportedActions;
   };
 
   class GioActionBridge final
   {
   public:
     /**
-     * @brief Exports pure command layout actions into a Gio::ActionMap (e.g. Gtk::Application or Gtk::Window).
+     * @brief Exports layout actions into a Gio::ActionMap (e.g. Gtk::Application or Gtk::Window).
      *
-     * Only actions that do not require an anchor and do not present a menu will be exported in Phase 3a.
+     * Actions that require an anchor or present a menu are exported only when
+     * the context provider can supply the required safe context.
      *
      * @param registry The authoritative layout action registry.
      * @param actionMap The target action map where Gio::SimpleAction objects will be added.
      * @param contextProvider Provider that can construct a ActionActivationContext when the action is triggered.
-     * @return A session object that can be used to refresh the states of the exported actions.
+     * @return A session that owns the exported actions and activation connections.
+     * The session must retire before the action map, registry, and context provider.
      */
-    static std::unique_ptr<GioActionBridgeSession> exportActions(ActionRegistry const& registry,
-                                                                 Gio::ActionMap& actionMap,
-                                                                 ActionContextProvider& contextProvider);
+    static GioActionBridgeSession exportActions(ActionRegistry const& registry,
+                                                Gio::ActionMap& actionMap,
+                                                ActionContextProvider& contextProvider);
   };
 } // namespace ao::gtk::layout

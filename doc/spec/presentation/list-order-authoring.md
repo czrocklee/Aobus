@@ -43,7 +43,8 @@ It currently exposes no order drag adapter.
 - Source state must be live and error-free, and library authoring must be `Available`.
 - An invalid filter on the saved List or any saved ancestor is a source error and disables every order-authoring capability until repaired.
 - A quick filter disables gap and relative moves but leaves absolute moves, Reset Order, and Forget Hidden Positions available.
-- Movement operands and anchors are stable TrackIds; native row positions never cross the runtime authoring boundary.
+- Movement operands and anchors are valid stable TrackIds; `kInvalidTrackId` in an effective sequence or selected span is invalid input, and an engaged gap anchor never contains it.
+- Native row positions never cross the runtime authoring boundary.
 - A dragged selected row moves the complete selection in effective source order.
 - A dragged unselected row becomes the sole dragged selection.
 - One effective movement is one semantic writer command and one library commit.
@@ -75,7 +76,9 @@ Maintenance produces **Library is busy. Manual ordering will be available when m
 GTK displays that state in the track-page status surface, while WinUI displays it in the native Manual Order submenu rather than silently omitting the interaction.
 Live source-error changes refresh exported action state and the page's drag capability surface.
 
-`ListOrderAuthoringSession` owns one `BoundListOrder`, the matching projection, capability snapshot, and subscriptions.
+`ListOrderAuthoringSession::begin()` returns a move-only value facade over shared asynchronous State.
+That State owns one `BoundListOrder`, the matching projection, capability snapshot, subscriptions, and one-pending-submission flag, while borrowing `Library` and `ViewService` from the runtime graph.
+A submitted operation retains State and may settle after the facade is moved or destroyed; composition must keep both borrowed services alive until settlement.
 It becomes invalid when any of these occurs:
 
 - authoring leaves `Available`, runtime identity changes, or committed revision changes;
@@ -105,8 +108,8 @@ At drag start, GTK resolves current selected TrackIds.
 If the dragged row was not selected, it selects that row and moves only it.
 Otherwise UIModel intersects the selection with the bound effective sequence and returns the selected IDs in sequence order.
 
-For a visible gap, UIModel scans forward from that gap to find the next unselected effective TrackId.
-That identity becomes `beforeTrackId`; absence means the end.
+For a visible gap, UIModel rejects an effective sequence or selected span containing `kInvalidTrackId` with `Error::Code::InvalidInput`, then scans forward from that gap to find the next unselected effective TrackId.
+That valid identity becomes `beforeTrackId`; absence means the end.
 Selected rows are skipped, so dropping beside the moving block normalizes to the next meaningful anchor and may become a writer no-op.
 
 GTK accepts only the opaque token created by the same view-local drag.
@@ -158,7 +161,9 @@ Neither desktop frontend clears a quick filter, changes presentation, or prunes 
 Drag callbacks hold weak/shared generation-local state.
 On ColumnView rebuild or page destruction, GTK first closes and destroys `TrackOrderDragController`, detaches the model and widget tree, and only then installs replacement-generation controllers.
 Late callbacks observe `closing`, an invalid token, or expired state and cannot submit against a new view generation.
-WinUI command continuations likewise carry the window coordinator's lifetime token and cannot report into a retired window.
+WinUI command continuations likewise carry the window coordinator's admission token and cannot report into a retired window.
+That token does not protect raw owner memory: the coordinator retires it before cancellation and remains alive until admitted work and dispatcher delivery settle.
+Destroying only the `ListOrderAuthoringSession` facade does not cancel an already-submitted command because that command retains its shared State.
 
 ## Persistence and versioning
 
@@ -181,7 +186,7 @@ Both frontends preserve stable-ID operands, complete-sequence semantics, revisio
 ## Implementation map
 
 - [`ListOrder.h`](../../../app/include/ao/uimodel/library/list/ListOrder.h) defines capability and gap/selection normalization.
-- [`ListOrderSession.h`](../../../app/include/ao/uimodel/library/list/ListOrderSession.h) defines binding and invalidation ownership.
+- [`ListOrderSession.h`](../../../app/include/ao/uimodel/library/list/ListOrderSession.h) defines the move-only value facade; [`ListOrderAuthoringSession.cpp`](../../../app/uimodel/library/list/ListOrderAuthoringSession.cpp) owns shared asynchronous binding, submission, and invalidation State.
 - [`KeyRepeatGuard.h`](../../../app/include/ao/uimodel/input/KeyRepeatGuard.h) defines one-press-per-physical-key-cycle policy.
 - [`TrackOrderDragController.cpp`](../../../app/linux-gtk/track/TrackOrderDragController.cpp) owns the GTK generation-local DnD surface.
 - [`TrackViewPage.cpp`](../../../app/linux-gtk/track/TrackViewPage.cpp) adapts capabilities and order commands.
@@ -190,8 +195,8 @@ Both frontends preserve stable-ID operands, complete-sequence semantics, revisio
 
 ## Test map
 
-- [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, and selection/gap normalization.
-- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, movement, and invalidation.
+- [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, selection/gap normalization, and invalid TrackId rejection.
+- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
 - [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
 - [`KeyRepeatGuardTest.cpp`](../../../test/unit/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.

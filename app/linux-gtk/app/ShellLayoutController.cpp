@@ -278,6 +278,8 @@ namespace ao::gtk
   ShellLayoutController::~ShellLayoutController()
   {
     _callbackScope.close();
+    _actionStateSubscriptions.clear();
+    _optGioBridgeSession.reset();
     _queuedEditorDialogRetirementConnection.disconnect();
     _queuedSoulWindowRetirementConnection.disconnect();
     _soulWindowHideConnection.disconnect();
@@ -601,11 +603,12 @@ namespace ao::gtk
 
   void ShellLayoutController::attachToWindow()
   {
+    _optGioBridgeSession.reset();
     _parentWindow.set_child(_host);
 
     if (auto* actionMap = dynamic_cast<Gio::ActionMap*>(&_parentWindow); actionMap != nullptr)
     {
-      _gioBridgeSessionPtr = layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this);
+      _optGioBridgeSession.emplace(layout::GioActionBridge::exportActions(_actionRegistry, *actionMap, *this));
     }
     else
     {
@@ -615,9 +618,9 @@ namespace ao::gtk
 
   void ShellLayoutController::refreshExportedActions()
   {
-    if (_gioBridgeSessionPtr)
+    if (_optGioBridgeSession)
     {
-      _gioBridgeSessionPtr->refreshStates();
+      _optGioBridgeSession->refreshStates();
     }
   }
 
@@ -679,36 +682,48 @@ namespace ao::gtk
   {
     auto* const asyncRuntime = &_runtime.async();
     // startCancellable invokes the task factory on a worker. Snapshot all
-    // controller-owned inputs before publishing the lazy coroutine.
+    // controller-owned inputs and guard the sole presentation closure before
+    // publishing the lazy coroutine.
     auto schema = _registry.schema();
+    auto present = _callbackScope.guard(
+      [this](std::string presetId,
+             uimodel::LayoutDocument document,
+             uimodel::PreparedLayout preparedLayout,
+             uimodel::LayoutComponentStateDocument componentState)
+      {
+        applyLoadedLayout(
+          std::move(presetId), std::move(document), std::move(preparedLayout), std::move(componentState));
+      });
 
     asyncRuntime->spawnWithLifetime(
       _tasks,
-      [controller = this,
-       asyncRuntime,
+      [asyncRuntime,
        storePtr = _layoutStorePtr,
        componentStateStorePtr = _componentStateStorePtr,
        configStorePtr = _configStorePtr,
-       schema = std::move(schema)](std::stop_token const stopToken) mutable
+       schema = std::move(schema),
+       present = std::move(present)](std::stop_token const stopToken) mutable
       {
-        return loadLayoutWorkflow(controller,
-                                  asyncRuntime,
+        return loadLayoutWorkflow(asyncRuntime,
                                   std::move(storePtr),
                                   std::move(componentStateStorePtr),
                                   std::move(configStorePtr),
                                   std::move(schema),
+                                  std::move(present),
                                   stopToken);
       },
       "shell layout load workflow");
   }
 
   async::Task<void> ShellLayoutController::loadLayoutWorkflow(
-    ShellLayoutController* const controller,
     async::Runtime* const asyncRuntime,
     std::shared_ptr<ShellLayoutStore> layoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     std::shared_ptr<AppConfigStore> configStorePtr,
     uimodel::LayoutSchema schema,
+    std::function<
+      void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>
+      present,
     std::stop_token const stopToken)
   {
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
@@ -730,10 +745,10 @@ namespace ao::gtk
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    controller->applyLoadedLayout(std::move(optRes->presetId),
-                                  std::move(optRes->document),
-                                  std::move(optRes->preparedLayout),
-                                  std::move(optRes->componentState));
+    present(std::move(optRes->presetId),
+            std::move(optRes->document),
+            std::move(optRes->preparedLayout),
+            std::move(optRes->componentState));
   }
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,

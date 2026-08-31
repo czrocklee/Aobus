@@ -16,6 +16,11 @@ namespace ao::audio
   struct Device;
 }
 
+namespace ao::audio::backend::detail
+{
+  struct AlsaProviderMonitorHooks;
+}
+
 namespace ao::audio::backend
 {
   /**
@@ -25,6 +30,7 @@ namespace ao::audio::backend
   {
   public:
     AlsaProvider();
+    explicit AlsaProvider(std::shared_ptr<detail::AlsaProviderMonitorHooks> monitorHooksPtr);
     ~AlsaProvider() override;
 
     AlsaProvider(AlsaProvider const&) = delete;

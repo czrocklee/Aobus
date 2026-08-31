@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include "common/ActionMapRegistration.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -186,6 +187,7 @@ namespace ao::gtk::layout::editor
     Gtk::PopoverMenu _wrapPopover;
 
     Glib::RefPtr<Gio::SimpleActionGroup> _actionGroupPtr;
+    ActionMapRegistration _actionRegistration;
 
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
     Gtk::ScrolledWindow _propertiesScroll;

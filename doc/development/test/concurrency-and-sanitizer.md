@@ -80,6 +80,22 @@ ThreadSanitizer, and resumable coroutine bodies are not fully instrumented.
 Windows `--tsan` therefore fails before configuration rather than silently
 running an unsanitized gate.
 
+The macOS `ao_tui_test` ASan process has one narrower compatibility exception.
+FTXUI 6.1.9 is supplied by an uninstrumented vcpkg archive, while Aobus test
+code instantiates ASan-instrumented libc++ operations over the same FTXUI event
+queue. That mixed boundary produces a false container-overflow report through
+`ScreenInteractive::Exit()`, `Post()`, and `ReceiverImpl::Receive()` even though
+the focused executor contract is valid. The test portal therefore forces
+`detect_container_overflow=0` only for macOS TUI ASan runs, while preserving all
+other caller-supplied `ASAN_OPTIONS`. Linux, non-TUI suites, non-ASan runs, and
+the rest of macOS ASan validation retain container-overflow detection.
+
+Remove this suite-local exception when the macOS FTXUI and libc++ container
+operations use compatible sanitizer instrumentation. Removal requires the
+focused TUI executor test and the full macOS `./ao check --asan` gate to pass
+with container-overflow detection restored; do not widen the exception to
+another suite or disable ASan globally.
+
 The green Linux TSan gate covers core and GTK; the macOS gate covers core:
 
 ```bash

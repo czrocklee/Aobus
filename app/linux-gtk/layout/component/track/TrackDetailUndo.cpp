@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <chrono>
 #include <expected>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -48,13 +47,13 @@ namespace ao::gtk::layout
     return _optPendingCustomMetadataUndo;
   }
 
-  void TrackDetailUndoController::presentCustomMetadataDeletedUndo(
-    std::string key,
-    std::string value,
-    std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr)
+  void TrackDetailUndoController::presentCustomMetadataDeletedUndo(std::string key,
+                                                                   std::string value,
+                                                                   uimodel::TrackAuthoringSession session)
   {
-    _optPendingCustomMetadataUndo = TrackDetailCustomMetadataUndo{
-      .key = std::move(key), .value = std::move(value), .sessionPtr = std::move(sessionPtr)};
+    _optPendingCustomMetadataUndo.reset();
+    _optPendingCustomMetadataUndo.emplace(
+      TrackDetailCustomMetadataUndo{.key = std::move(key), .value = std::move(value), .session = std::move(session)});
     resetTimer();
     _changed.emit();
   }
@@ -70,7 +69,7 @@ namespace ao::gtk::layout
     auto const overlaps = std::ranges::any_of(
       trackIds,
       [this](TrackId const trackId)
-      { return std::ranges::contains(_optPendingCustomMetadataUndo->sessionPtr->targetIds(), trackId); });
+      { return std::ranges::contains(_optPendingCustomMetadataUndo->session.targetIds(), trackId); });
 
     if (overlaps)
     {
@@ -99,7 +98,7 @@ namespace ao::gtk::layout
 
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[_optPendingCustomMetadataUndo->key] = _optPendingCustomMetadataUndo->value;
-    auto submission = _optPendingCustomMetadataUndo->sessionPtr->submitMetadata(std::move(patch));
+    auto submission = _optPendingCustomMetadataUndo->session.submitMetadata(std::move(patch));
     auto clearPending = _presentationCallbacks.guard([this] { clear(); });
 
     auto const replyRes = co_await std::move(submission);

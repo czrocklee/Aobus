@@ -181,29 +181,29 @@ namespace ao::uimodel
     return result;
   }
 
-  struct ListMembershipAuthoringSession::Impl final
+  struct ListMembershipAuthoringSession::State final
   {
     template<typename Submit>
-    static async::Task<Result<ListMembershipEditResult>> finishEditAsync(std::shared_ptr<Impl> implPtr,
+    static async::Task<Result<ListMembershipEditResult>> finishEditAsync(std::shared_ptr<State> statePtr,
                                                                          ListId const listId,
                                                                          ListMembershipOperation const operation,
                                                                          Submit submit)
     {
-      if (implPtr->submitting)
+      if (statePtr->submitting)
       {
         co_return ListMembershipEditResult{.status = rt::AuthoringStatus::Busy, .listId = listId};
       }
 
-      implPtr->submitting = true;
+      statePtr->submitting = true;
       auto deferredException = std::exception_ptr{};
 
       try
       {
-        auto result = co_await submit(*implPtr, listId);
+        auto result = co_await submit(*statePtr, listId);
 
         if (!result)
         {
-          implPtr->submitting = false;
+          statePtr->submitting = false;
           co_return std::unexpected{result.error()};
         }
 
@@ -221,38 +221,38 @@ namespace ao::uimodel
 
         if (completed.optNextTargets)
         {
-          implPtr->targets = std::move(*completed.optNextTargets);
+          statePtr->targets = std::move(*completed.optNextTargets);
         }
 
-        implPtr->submitting = false;
+        statePtr->submitting = false;
         co_return uiResult;
       }
       catch (...)
       {
         deferredException = std::current_exception();
-        implPtr->submitting = false;
+        statePtr->submitting = false;
         async::rethrowException(deferredException);
       }
     }
 
-    static async::Task<Result<ListMembershipEditResult>> editAsync(std::shared_ptr<Impl> implPtr,
+    static async::Task<Result<ListMembershipEditResult>> editAsync(std::shared_ptr<State> statePtr,
                                                                    ListId const listId,
                                                                    ListMembershipOperation const operation)
     {
       if (operation == ListMembershipOperation::Add)
       {
-        return finishEditAsync(std::move(implPtr),
+        return finishEditAsync(std::move(statePtr),
                                listId,
                                operation,
-                               [](Impl& impl, ListId const targetListId)
-                               { return impl.library.commands().addTracksToList(targetListId, impl.targets); });
+                               [](State& state, ListId const targetListId)
+                               { return state.library.commands().addTracksToList(targetListId, state.targets); });
       }
 
-      return finishEditAsync(std::move(implPtr),
+      return finishEditAsync(std::move(statePtr),
                              listId,
                              operation,
-                             [](Impl& impl, ListId const targetListId)
-                             { return impl.library.commands().removeTracksFromList(targetListId, impl.targets); });
+                             [](State& state, ListId const targetListId)
+                             { return state.library.commands().removeTracksFromList(targetListId, state.targets); });
     }
 
     rt::Library& library;
@@ -272,9 +272,8 @@ namespace ao::uimodel
                                        result.forgottenPositionCount);
   }
 
-  Result<std::unique_ptr<ListMembershipAuthoringSession>> ListMembershipAuthoringSession::begin(
-    rt::Library& library,
-    std::span<TrackId const> const trackIds)
+  Result<ListMembershipAuthoringSession> ListMembershipAuthoringSession::begin(rt::Library& library,
+                                                                               std::span<TrackId const> const trackIds)
   {
     auto targetsRes = library.bindTrackTargets(trackIds);
 
@@ -283,29 +282,31 @@ namespace ao::uimodel
       return std::unexpected{targetsRes.error()};
     }
 
-    return std::unique_ptr<ListMembershipAuthoringSession>{new ListMembershipAuthoringSession{
-      std::make_shared<Impl>(Impl{.library = library, .targets = std::move(*targetsRes)})}};
+    return ListMembershipAuthoringSession{
+      std::make_shared<State>(State{.library = library, .targets = std::move(*targetsRes)})};
   }
 
-  ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::shared_ptr<Impl> implPtr)
-    : _implPtr{std::move(implPtr)}
+  ListMembershipAuthoringSession::ListMembershipAuthoringSession(std::shared_ptr<State> statePtr)
+    : _statePtr{std::move(statePtr)}
   {
   }
 
   ListMembershipAuthoringSession::~ListMembershipAuthoringSession() = default;
 
+  ListMembershipAuthoringSession::ListMembershipAuthoringSession(ListMembershipAuthoringSession&&) noexcept = default;
+
   std::span<TrackId const> ListMembershipAuthoringSession::targetIds() const noexcept
   {
-    return _implPtr->targets.trackIds();
+    return _statePtr->targets.trackIds();
   }
 
   async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::addToList(ListId const listId)
   {
-    return Impl::editAsync(_implPtr, listId, ListMembershipOperation::Add);
+    return State::editAsync(_statePtr, listId, ListMembershipOperation::Add);
   }
 
   async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::removeFromList(ListId const listId)
   {
-    return Impl::editAsync(_implPtr, listId, ListMembershipOperation::Remove);
+    return State::editAsync(_statePtr, listId, ListMembershipOperation::Remove);
   }
 } // namespace ao::uimodel

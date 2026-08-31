@@ -253,9 +253,8 @@ namespace ao::gtk
         .onResetRuntimeLayoutState = [this] { resetRuntimeLayoutState(); },
         .onSaveCurrentPanelSizesAsLayoutDefaults = [this] { saveCurrentPanelSizesAsLayoutDefaults(); },
       });
-    _windowActionRegistryPtr->install(*this);
-
-    _implPtr->listNavigationController.addActionsTo(*this);
+    _windowActionsRegistration = _windowActionRegistryPtr->install(*this);
+    _listNavigationActionsRegistration = _implPtr->listNavigationController.addActionsTo(*this);
     _shellLayout.attachToWindow();
 
     auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.resourceBytes(), _runtime.async());
@@ -338,6 +337,12 @@ namespace ao::gtk
     {
       AO_FATAL_EXCEPTION(std::current_exception(), "GTK MainWindow session save during destruction");
     }
+
+    // Close window action callbacks before either their producers or the
+    // inherited action map can retire. Member order provides the same fallback
+    // for constructor unwinding.
+    _listNavigationActionsRegistration.reset();
+    _windowActionsRegistration.reset();
 
     // Stop observing before the collaborators the callbacks read are released.
     // Member order would release them in the same order, but a subscription is

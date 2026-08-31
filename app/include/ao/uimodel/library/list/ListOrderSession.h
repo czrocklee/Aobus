@@ -31,19 +31,25 @@ namespace ao::i18n
 
 namespace ao::uimodel
 {
+  /**
+   * Revision- and view-bound editing for one effective List order.
+   *
+   * Submitted operations retain the session State, but Library and ViewService
+   * remain borrows and must outlive every such operation.
+   */
   class [[nodiscard]] ListOrderAuthoringSession final
   {
   public:
-    static Result<std::unique_ptr<ListOrderAuthoringSession>> begin(rt::Library& library,
-                                                                    rt::ViewService& views,
-                                                                    rt::ViewId viewId,
-                                                                    i18n::MessageCatalog const& textCatalog);
+    static Result<ListOrderAuthoringSession> begin(rt::Library& library,
+                                                   rt::ViewService& views,
+                                                   rt::ViewId viewId,
+                                                   i18n::MessageCatalog const& textCatalog);
 
     ~ListOrderAuthoringSession();
 
     ListOrderAuthoringSession(ListOrderAuthoringSession const&) = delete;
     ListOrderAuthoringSession& operator=(ListOrderAuthoringSession const&) = delete;
-    ListOrderAuthoringSession(ListOrderAuthoringSession&&) = delete;
+    ListOrderAuthoringSession(ListOrderAuthoringSession&&) noexcept;
     ListOrderAuthoringSession& operator=(ListOrderAuthoringSession&&) = delete;
 
     bool isCurrent() const noexcept;
@@ -63,9 +69,9 @@ namespace ao::uimodel
     async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>> forgetHiddenPositions();
 
   private:
-    struct Impl;
-    explicit ListOrderAuthoringSession(std::shared_ptr<Impl> implPtr);
+    struct State;
+    explicit ListOrderAuthoringSession(std::shared_ptr<State> statePtr);
 
-    std::shared_ptr<Impl> _implPtr;
+    std::shared_ptr<State> _statePtr;
   };
 } // namespace ao::uimodel

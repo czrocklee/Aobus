@@ -103,6 +103,37 @@ namespace ao::gtk::platform::test
     CHECK(session.urlFor(kResourceId) == "file:///tmp/synchronous.png");
   }
 
+  TEST_CASE("MprisArtUrlSession - clear invalidates completion before cancelling an active request",
+            "[gtk][regression][mpris][concurrency]")
+  {
+    constexpr auto kResourceId = ResourceId{43};
+    auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
+    std::int32_t cancellationCount = 0;
+    std::int32_t changeCount = 0;
+    auto session =
+      MprisArtUrlSession{[&](ResourceId, MprisArtUrlSession::OnUrlReady complete)
+                         {
+                           capturedCompletion = std::move(complete);
+                           return utility::ScopedRegistration{[&]
+                                                              {
+                                                                ++cancellationCount;
+                                                                capturedCompletion("file:///tmp/unregister-stale.png");
+                                                              }};
+                         },
+                         [&changeCount] { ++changeCount; }};
+    session.refresh(kResourceId);
+
+    session.clear();
+
+    CHECK(cancellationCount == 1);
+    CHECK(changeCount == 0);
+    CHECK(session.urlFor(kResourceId).empty());
+
+    capturedCompletion("file:///tmp/after-clear.png");
+    CHECK(changeCount == 0);
+    CHECK(session.urlFor(kResourceId).empty());
+  }
+
   TEST_CASE("MprisArtUrlSession - destruction invalidates completion before cancelling an active request",
             "[gtk][regression][mpris][concurrency]")
   {

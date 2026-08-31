@@ -180,6 +180,23 @@ namespace ao::library::test
     CHECK(*optValue == "USSM19999999");
   }
 
+  TEST_CASE("TrackView - copied custom metadata survives backing record retirement",
+            "[library][unit][track][custom-metadata]")
+  {
+    auto copiedValue = std::string{};
+
+    {
+      auto const pairs = std::vector{std::pair<std::string, std::string>{"isrc", "USSM19999999"}};
+      auto const data = makeColdTrackViewData({}, pairs, "");
+      auto const view = makeColdTrackView(data);
+      auto const optValue = view.customMetadata().get(DictionaryId{1});
+      REQUIRE(optValue);
+      copiedValue.assign(*optValue);
+    }
+
+    CHECK(copiedValue == "USSM19999999");
+  }
+
   TEST_CASE("TrackView - returns empty custom metadata for missing keys", "[library][unit][track][custom-metadata]")
   {
     auto const pairs = std::vector{std::pair<std::string, std::string>{"replaygain_track_gain_db", "-6.5"}};
@@ -231,7 +248,7 @@ namespace ao::library::test
     CHECK(*optLast == "value99");
     // Not found
     CHECK(view.customMetadata().get(DictionaryId{199}).has_value() == false);
-    // Before first (0 = null, should throw)
+    // Before first (0 = null, returns nullopt)
     CHECK(view.customMetadata().get(kInvalidDictionaryId).has_value() == false);
   }
 

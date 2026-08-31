@@ -223,6 +223,24 @@ def _split_sanitizer_options(value: str) -> list[str]:
     return [option for option in _SANITIZER_OPTION_SEPARATOR.split(value.strip(":")) if option]
 
 
+def _macos_tui_asan_env(name: str, build_dir: Path, *, enabled: bool = False) -> dict[str, str]:
+    """Return the macOS TUI container-annotation compatibility option."""
+    if name != "tui" or builddir.platform_profile().name != "macos" or (not enabled and "asan" not in build_dir.name):
+        return {}
+
+    # The vcpkg FTXUI archive is not ASan-instrumented, while Aobus is. Both
+    # instantiate libc++ deque operations over FTXUI's event queue, so mixed
+    # container annotations produce a false container-overflow report. Keep the
+    # suppression in this one process until both sides use matching instrumentation.
+    retained_options = []
+    for option in _split_sanitizer_options(os.environ.get("ASAN_OPTIONS", "")):
+        key, _, _ = option.partition("=")
+        if key != "detect_container_overflow":
+            retained_options.append(option)
+
+    return {"ASAN_OPTIONS": ":".join((*retained_options, "detect_container_overflow=0"))}
+
+
 def _ubsan_env(build_dir: Path, *, enabled: bool = False) -> dict[str, str]:
     """Preserve caller options while making ASan/UBSan test trees fail closed."""
     if builddir.platform_profile().name == "windows" or (not enabled and "asan" not in build_dir.name):
@@ -308,6 +326,7 @@ def run_suite(
     print("=====================================")
 
     sanitizer_env = {
+        **_macos_tui_asan_env(name, build_dir, enabled=asan),
         **_lsan_env(build_dir, enabled=asan),
         **_ubsan_env(build_dir, enabled=asan),
         **_tsan_env(build_dir, enabled=tsan),
