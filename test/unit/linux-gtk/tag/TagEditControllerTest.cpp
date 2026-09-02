@@ -33,7 +33,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gio/gio.h>
-#include <giomm/simpleactiongroup.h>
 #include <gtk/gtkpopovermenu.h>
 #include <gtk/gtkwidget.h>
 #include <gtkmm/box.h>
@@ -120,7 +119,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditController - binds tag actions and routes submitted tag mutations", "[gtk][unit][tag]")
+  TEST_CASE("TagEditController - routes submitted tag mutations", "[gtk][unit][tag]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto firstTrackId = kInvalidTrackId;
@@ -139,19 +138,6 @@ namespace ao::gtk::test
 
     auto controller = TagEditController{
       window, fixture.runtime(), ao::test::englishMessageCatalog(), std::move(callbacks), themeCoordinator};
-
-    SECTION("registers tag actions")
-    {
-      auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
-
-      auto addActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(groupPtr->lookup_action("track-tag-add"));
-      REQUIRE(addActionPtr);
-
-      addActionPtr->activate(Glib::Variant<Glib::ustring>::create("ActionTag"));
-      drainGtkEvents();
-      CHECK(mutationCallbacks == 0);
-    }
 
     SECTION("submitTagChanges reports the mutation to the controller callback")
     {

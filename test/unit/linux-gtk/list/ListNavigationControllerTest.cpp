@@ -110,7 +110,7 @@ namespace ao::gtk::test
     SmartListDialog* openNewListDialog(ListNavigationController& controller, TrackRowCache& cache)
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const actionPtr = simpleAction(*groupPtr, "list-new-smart-list");
 
       controller.rebuildTree(cache);
@@ -240,7 +240,7 @@ namespace ao::gtk::test
     SECTION("rebuildTree refreshes actions when the restored workspace list is already selected")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const newActionPtr = simpleAction(*groupPtr, "list-new-smart-list");
       REQUIRE(newActionPtr);
       REQUIRE(fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId}));
@@ -256,7 +256,7 @@ namespace ao::gtk::test
     SECTION("registered actions update from the currently selected list")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
 
       auto const newActionPtr = simpleAction(*groupPtr, "list-new-smart-list");
       auto const newPlaylistActionPtr = simpleAction(*groupPtr, "list-new-playlist");
@@ -292,7 +292,7 @@ namespace ao::gtk::test
     SECTION("New Playlist action opens the visible-tag template")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const newPlaylistActionPtr = simpleAction(*groupPtr, "list-new-playlist");
       REQUIRE(newPlaylistActionPtr);
 
@@ -489,7 +489,7 @@ namespace ao::gtk::test
     {
       auto const listId = createList(fixture.runtime(), "Old Name");
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
       REQUIRE(editActionPtr);
       controller.rebuildTree(cache);
@@ -522,7 +522,7 @@ namespace ao::gtk::test
     SECTION("stale edit response keeps the dialog and draft visible")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
       REQUIRE(editActionPtr);
       auto const listId = createList(fixture.runtime(), "Draft to Preserve");
@@ -567,7 +567,7 @@ namespace ao::gtk::test
     SECTION("delete action removes the selected leaf list")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
 
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
@@ -611,7 +611,7 @@ namespace ao::gtk::test
     SECTION("subtree delete previews and atomically removes the selected derived tree")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       auto const deleteSubtreeActionPtr = simpleAction(*groupPtr, "list-delete-subtree");
       REQUIRE(deleteActionPtr);
@@ -662,7 +662,7 @@ namespace ao::gtk::test
     SECTION("failed delete shows a parent-bound dialog and keeps the selected tree row")
     {
       auto groupPtr = Gio::SimpleActionGroup::create();
-      controller.addActionsTo(*groupPtr);
+      auto registration = controller.addActionsTo(*groupPtr);
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
       auto const listId = createList(fixture.runtime(), "Stale Delete Target");
@@ -690,6 +690,73 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("ListNavigationController - registration retirement revokes retained actions", "[gtk][regression][list]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto actionGroupPtr = Gio::SimpleActionGroup::create();
+    auto retainedActionPtr = Glib::RefPtr<Gio::SimpleAction>{};
+
+    {
+      auto themeCoordinator = ThemeCoordinator{};
+      auto controller =
+        ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+      auto registration = controller.addActionsTo(*actionGroupPtr);
+      retainedActionPtr = simpleAction(*actionGroupPtr, "list-new-smart-list");
+      REQUIRE(retainedActionPtr);
+    }
+
+    CHECK(actionGroupPtr->lookup_action("list-new-smart-list") == nullptr);
+    retainedActionPtr->activate();
+    CHECK(actionGroupPtr->lookup_action("list-new-smart-list") == nullptr);
+  }
+
+  TEST_CASE("ListNavigationController - replacement registration preserves current action availability",
+            "[gtk][regression][list]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto themeCoordinator = ThemeCoordinator{};
+    auto controller =
+      ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    window.set_child(controller.widget());
+
+    auto firstGroupPtr = Gio::SimpleActionGroup::create();
+    auto firstRegistration = controller.addActionsTo(*firstGroupPtr);
+    controller.rebuildTree(cache);
+    drainGtkEvents();
+    controller.select(rt::kAllTracksListId);
+    drainGtkEvents();
+
+    auto const firstNewListActionPtr = simpleAction(*firstGroupPtr, "list-new-smart-list");
+    auto const firstDeleteActionPtr = simpleAction(*firstGroupPtr, "list-delete");
+    REQUIRE(firstNewListActionPtr);
+    REQUIRE(firstDeleteActionPtr);
+    CHECK(firstNewListActionPtr->get_enabled());
+    CHECK_FALSE(firstDeleteActionPtr->get_enabled());
+
+    auto replacementGroupPtr = Gio::SimpleActionGroup::create();
+    auto replacementRegistration = controller.addActionsTo(*replacementGroupPtr);
+    auto const replacementNewListActionPtr = simpleAction(*replacementGroupPtr, "list-new-smart-list");
+    auto const replacementNewPlaylistActionPtr = simpleAction(*replacementGroupPtr, "list-new-playlist");
+    auto const replacementDeleteActionPtr = simpleAction(*replacementGroupPtr, "list-delete");
+    auto const replacementDeleteSubtreeActionPtr = simpleAction(*replacementGroupPtr, "list-delete-subtree");
+    auto const replacementEditActionPtr = simpleAction(*replacementGroupPtr, "list-edit");
+    REQUIRE(replacementNewListActionPtr);
+    REQUIRE(replacementNewPlaylistActionPtr);
+    REQUIRE(replacementDeleteActionPtr);
+    REQUIRE(replacementDeleteSubtreeActionPtr);
+    REQUIRE(replacementEditActionPtr);
+    CHECK(replacementNewListActionPtr->get_enabled());
+    CHECK(replacementNewPlaylistActionPtr->get_enabled());
+    CHECK_FALSE(replacementDeleteActionPtr->get_enabled());
+    CHECK_FALSE(replacementDeleteSubtreeActionPtr->get_enabled());
+    CHECK_FALSE(replacementEditActionPtr->get_enabled());
+  }
+
   TEST_CASE("ListNavigationController - writable-tag delete offers optional tag cleanup",
             "[gtk][unit][list-navigation][list-delete]")
   {
@@ -707,7 +774,7 @@ namespace ao::gtk::test
       ListNavigationController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
     window.set_child(controller.widget());
     auto groupPtr = Gio::SimpleActionGroup::create();
-    controller.addActionsTo(*groupPtr);
+    auto registration = controller.addActionsTo(*groupPtr);
     auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
     REQUIRE(deleteActionPtr);
     auto const listId = createList(fixture.runtime(), "Road Trip", kInvalidListId, R"(#"road-trip")");

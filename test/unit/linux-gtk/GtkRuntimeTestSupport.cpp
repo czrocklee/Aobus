@@ -62,15 +62,16 @@ namespace ao::gtk::test
 
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
       auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-      runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-        .executorPtr = std::move(executorPtr),
-        .musicRoot = musicRoot,
-        .databasePath = databasePath,
-        .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
-        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-        .workspaceConfigStorePtr = std::move(configStorePtr),
-        .textOrderingPolicy = textOrderingPolicy,
-      }));
+      runtimePtr =
+        std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+          .executorPtr = std::move(executorPtr),
+          .musicRoot = musicRoot,
+          .databasePath = databasePath,
+          .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
+          .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+          .workspaceConfigStorePtr = std::move(configStorePtr),
+          .textOrderingPolicy = textOrderingPolicy,
+        })));
     }
 
     ao::test::TempDir tempDir;
@@ -113,7 +114,7 @@ namespace ao::gtk::test
     }
 
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-    return ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+    return std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
@@ -121,7 +122,7 @@ namespace ao::gtk::test
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
       .textOrderingPolicy = textOrderingPolicy,
-    }));
+    })));
   }
 
   bool waitForPlaybackSettlement(rt::AppRuntime& runtime,

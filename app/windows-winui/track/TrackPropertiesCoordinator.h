@@ -13,17 +13,17 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
-#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
-#include <variant>
 #include <vector>
 
 namespace ao::async
@@ -40,7 +40,6 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  class TrackAuthoringSession;
   struct TrackPropertiesFormRow;
 }
 
@@ -131,11 +130,10 @@ namespace ao::winui
     void handleClosed();
 
     static async::Task<Result<TrackPropertiesCommitState>> submitChanges(
-      std::shared_ptr<uimodel::TrackAuthoringSession> sessionPtr,
-      rt::TrackPropertiesPatch patch);
+      async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission);
     static async::Task<void> runSaveWorkflow(async::Runtime* runtime,
                                              TrackPropertiesCoordinator* owner,
-                                             std::weak_ptr<std::monostate> lifetimePtr,
+                                             CallbackAdmissionGate::Token token,
                                              async::Task<Result<TrackPropertiesCommitState>> submission,
                                              std::stop_token stopToken);
 
@@ -148,10 +146,10 @@ namespace ao::winui
     std::vector<TrackId> _trackIds;
     uimodel::TrackPropertiesFormModel _formModel;
     rt::TrackDetailSnapshot _snapshot;
-    std::shared_ptr<uimodel::TrackAuthoringSession> _sessionPtr;
+    std::optional<uimodel::TrackAuthoringSession> _optSession;
     async::Subscription _sessionInvalidatedSub;
     async::LifetimeScope _tasks;
-    std::shared_ptr<std::monostate> _callbackLifetimePtr;
+    CallbackAdmissionGate _ownerCallbackGate;
 
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog _dialog{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _errorText{nullptr};

@@ -24,7 +24,6 @@
 #include <fakeit.hpp>
 
 #include <cstdint>
-#include <memory>
 #include <optional>
 
 namespace ao::tui::test
@@ -48,8 +47,7 @@ namespace ao::tui::test
                      fixture.notificationService,
                      fixture.asyncRuntime}
         , playbackBootstrap{fixture.playbackTransport}
-        , playbackPtr{playbackBootstrap.createPlaybackService(fixture.executor, succession)}
-        , playback{*playbackPtr}
+        , playback{playbackBootstrap.createPlaybackService(fixture.executor, succession)}
       {
       }
 
@@ -58,8 +56,7 @@ namespace ao::tui::test
       rt::ViewService views;
       rt::PlaybackSuccession succession;
       rt::PlaybackBootstrap playbackBootstrap;
-      std::unique_ptr<rt::PlaybackService> playbackPtr;
-      rt::PlaybackService& playback;
+      rt::PlaybackService playback;
     };
   } // namespace
 

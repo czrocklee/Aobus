@@ -627,7 +627,7 @@ namespace ao::gtk::layout
         auto const* uiDef = trackFieldUiDefinition(field);
 
         if (uiDef == nullptr || uiDef->parseInlineEdit == nullptr || !uimodel::canWriteTrackFieldPatch(field) ||
-            _editSessionPtr == nullptr)
+            !_optEditSession)
         {
           return false;
         }
@@ -663,7 +663,7 @@ namespace ao::gtk::layout
                     _tasks,
                     *this,
                     "metadata update",
-                    _editSessionPtr->submitMetadata(std::move(patch)),
+                    _optEditSession->submitMetadata(std::move(patch)),
                     [field, newText, oldText, trackIds = std::move(trackIds)](
                       TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
                     {
@@ -690,8 +690,7 @@ namespace ao::gtk::layout
       {
         auto* row = findBuiltInRow(field);
 
-        if (row == nullptr || !row->editable || row->valueEditor.isEditing() || !_optEditSnapshot ||
-            _editSessionPtr == nullptr)
+        if (row == nullptr || !row->editable || row->valueEditor.isEditing() || !_optEditSnapshot || !_optEditSession)
         {
           return;
         }
@@ -721,7 +720,7 @@ namespace ao::gtk::layout
       {
         auto* row = findCompositeBuiltInRow(field);
 
-        if (row == nullptr || !_optEditSnapshot || _editSessionPtr == nullptr)
+        if (row == nullptr || !_optEditSnapshot || !_optEditSession)
         {
           return;
         }
@@ -896,7 +895,7 @@ namespace ao::gtk::layout
       {
         auto* row = findCustomRow(key);
 
-        if (row == nullptr || row->editor.isEditing() || !_optEditSnapshot || _editSessionPtr == nullptr)
+        if (row == nullptr || row->editor.isEditing() || !_optEditSnapshot || !_optEditSession)
         {
           return;
         }
@@ -910,7 +909,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        submitCustomMetadataValue(*_editSessionPtr, std::move(key), newValue, snap.trackIds, false);
+        submitCustomMetadataValue(*_optEditSession, std::move(key), newValue, snap.trackIds, false);
       }
 
       void handleCustomDeleted(std::string key)
@@ -933,30 +932,29 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto sessionPtr = std::move(*sessionRes);
-        auto submission = sessionPtr->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+        auto session = std::move(*sessionRes);
+        auto submission = session.submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
         auto trackIds = snap.trackIds;
-        spawnUiTask(
-          _async,
-          _tasks,
-          *this,
-          "custom metadata delete",
-          std::move(submission),
-          [key = std::move(key), optPrevValue, sessionPtr = std::move(sessionPtr), trackIds = std::move(trackIds)](
-            TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes) mutable
-          {
-            if (owner->reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
-            {
-              return;
-            }
+        spawnUiTask(_async,
+                    _tasks,
+                    *this,
+                    "custom metadata delete",
+                    std::move(submission),
+                    [key = std::move(key), optPrevValue, session = std::move(session), trackIds = std::move(trackIds)](
+                      TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes) mutable
+                    {
+                      if (owner->reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
+                      {
+                        return;
+                      }
 
-            if (replyRes->status == rt::AuthoringStatus::Applied && optPrevValue && owner->selectionMatches(trackIds) &&
-                owner->_detailUndo != nullptr)
-            {
-              owner->_detailUndo->presentCustomMetadataDeletedUndo(
-                std::move(key), *optPrevValue, std::move(sessionPtr));
-            }
-          });
+                      if (replyRes->status == rt::AuthoringStatus::Applied && optPrevValue &&
+                          owner->selectionMatches(trackIds) && owner->_detailUndo != nullptr)
+                      {
+                        owner->_detailUndo->presentCustomMetadataDeletedUndo(
+                          std::move(key), *optPrevValue, std::move(session));
+                      }
+                    });
       }
 
       void handleCustomAdded(std::string key, std::string value)
@@ -986,7 +984,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        submitCustomMetadataValue(**sessionRes, std::move(key), value, snap.trackIds, true);
+        submitCustomMetadataValue(*sessionRes, std::move(key), value, snap.trackIds, true);
       }
 
       bool reportMetadataSubmissionFailure(Result<uimodel::TrackMetadataSubmitResult> const& result,
@@ -1235,14 +1233,14 @@ namespace ao::gtk::layout
         }
 
         _optEditSnapshot.emplace(std::move(snapshot));
-        _editSessionPtr = std::move(*sessionRes);
-        _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated(
+        _optEditSession.emplace(std::move(*sessionRes));
+        _editSessionInvalidatedSubscription = _optEditSession->onInvalidated(
           [this]
           {
             Glib::signal_idle().connect_once(sigc::track_object(
               [this]
               {
-                if (_editSessionPtr != nullptr && !_editSessionPtr->isCurrent())
+                if (_optEditSession && !_optEditSession->isCurrent())
                 {
                   _editCoordinator.cancelActive();
                 }
@@ -1254,7 +1252,7 @@ namespace ao::gtk::layout
       void clearEditSession()
       {
         _editSessionInvalidatedSubscription = {};
-        _editSessionPtr.reset();
+        _optEditSession.reset();
         _optEditSnapshot.reset();
       }
 
@@ -1320,7 +1318,7 @@ namespace ao::gtk::layout
       rt::NotificationService& _notifications;
       TrackDetailScope* _scope;
       TrackDetailUndoController* _detailUndo;
-      std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
+      std::optional<uimodel::TrackAuthoringSession> _optEditSession;
       async::Subscription _editSessionInvalidatedSubscription;
       std::optional<rt::TrackDetailSnapshot> _optEditSnapshot;
       std::deque<BuiltInRow> _metadataRows;

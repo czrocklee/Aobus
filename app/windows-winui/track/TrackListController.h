@@ -104,8 +104,8 @@ namespace ao::winui
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;
-    rt::AppRuntime* _runtime = nullptr;
-    uimodel::TrackColumnLayouts* _columnLayouts = nullptr;
+    rt::AppRuntime& _runtime;
+    uimodel::TrackColumnLayouts& _columnLayouts;
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::shared_ptr<rt::TrackListProjection const> _projectionPtr;
     std::shared_ptr<void> _bindingLifetimePtr;

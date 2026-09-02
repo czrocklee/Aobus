@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "common/ActionMapRegistration.h"
+
 #include <functional>
 #include <string>
 #include <string_view>
@@ -41,7 +43,7 @@ namespace ao::gtk
 
     static std::string detailedWindowAction(std::string_view actionId);
 
-    void install(Gtk::ApplicationWindow& window);
+    ActionMapRegistration install(Gtk::ApplicationWindow& window);
 
   private:
     portal::ImportExportActions& _importExport;

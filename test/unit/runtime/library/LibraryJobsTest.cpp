@@ -140,6 +140,13 @@ namespace ao::rt::test
       return completedPtr->load();
     }
 
+    std::unique_ptr<Library> makeLibrary(async::Runtime& runtime,
+                                         library::MusicLibrary& storage,
+                                         LibraryChanges& changes)
+    {
+      return std::make_unique<Library>(runtime, ao::test::requireValue(Library::prepare(storage)), changes);
+    }
+
     void requireBackgroundTaskLeaseReleased(async::Runtime& runtime, QueuedExecutor& executor, LibraryJobs& jobs)
     {
       auto completedPtr = std::make_shared<std::atomic_bool>(false);
@@ -155,7 +162,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto const result = runQueuedTask(
@@ -176,7 +183,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
@@ -230,7 +237,7 @@ namespace ao::rt::test
       auto executor = QueuedExecutor{};
       auto runtime = async::Runtime{executor};
       auto changes = makeLibraryChanges(executor, libraryFixture.library());
-      auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+      auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
       auto result = runQueuedTask(
         runtime, executor, runtimeLibraryPtr->jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
@@ -241,8 +248,7 @@ namespace ao::rt::test
     auto otherExecutor = QueuedExecutor{};
     auto otherRuntime = async::Runtime{otherExecutor};
     auto otherChanges = makeLibraryChanges(otherExecutor, libraryFixture.library());
-    auto otherLibraryPtr =
-      ao::test::requireValue(Library::create(otherRuntime, libraryFixture.library(), otherChanges));
+    auto otherLibraryPtr = makeLibrary(otherRuntime, libraryFixture.library(), otherChanges);
     auto result = runQueuedTask(
       otherRuntime, otherExecutor, otherLibraryPtr->jobs().applyLibraryImportPlanAsync(std::move(*optPlan)));
 
@@ -257,7 +263,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
     auto stopSource = std::stop_source{};
@@ -296,7 +302,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Prepared");
     auto stopSource = std::stop_source{};
@@ -332,7 +338,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto const yamlPath = libraryFixture.root() / "import.yaml";
     writeImportPayload(yamlPath, "Committed");
@@ -372,7 +378,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto const result =
@@ -389,7 +395,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto events = std::vector<LibraryTaskProgressUpdated>{};
     auto finishedEvents = std::vector<LibraryTaskProgressFinished>{};
@@ -447,7 +453,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     std::int32_t progressFinishedCount = 0;
     auto progressFinishedSub = jobs.onProgressFinished(
@@ -466,7 +472,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     std::int32_t progressCount = 0;
     std::int32_t progressFinishedCount = 0;
@@ -581,7 +587,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     // Scanning progress is phase-coalesced, so a later path under the same
@@ -603,7 +609,7 @@ namespace ao::rt::test
     auto observed = std::vector<LibraryChangeSet>{};
     auto changedSubscription =
       changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
@@ -629,7 +635,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
@@ -663,7 +669,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto bindingRes = runtimeLibraryPtr->bindTrackTargets(std::array{authoringTarget});
     REQUIRE(bindingRes);
     auto preparationStarted = AsyncTestState<bool>::create(false);
@@ -762,7 +768,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
@@ -800,7 +806,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto progressEvents = std::vector<LibraryTaskProgressUpdated>{};
@@ -860,7 +866,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     REQUIRE(plan.size() == kFileCount);
@@ -937,7 +943,7 @@ namespace ao::rt::test
     auto observed = std::vector<LibraryChangeSet>{};
     auto changedSubscription =
       changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto scanService = LibraryScan{libraryFixture.library()};
@@ -990,7 +996,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "song.flac";
@@ -1040,7 +1046,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     std::int32_t callbackCount = 0;
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
@@ -1070,7 +1076,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "song.flac";
@@ -1118,7 +1124,7 @@ namespace ao::rt::test
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
-    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, libraryFixture.library(), changes));
+    auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
     auto stopSource = std::stop_source{};
     auto progressFinished = AsyncTestState<bool>::create(false);

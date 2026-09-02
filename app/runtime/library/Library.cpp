@@ -4,6 +4,7 @@
 #include <ao/rt/library/Library.h>
 
 #include "LibraryWriteLane.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
@@ -25,6 +26,16 @@
 
 namespace ao::rt
 {
+  struct Library::Prepared::Impl final
+  {
+    library::WritableMusicLibrary writableStorage;
+
+    explicit Impl(library::WritableMusicLibrary storage)
+      : writableStorage{std::move(storage)}
+    {
+    }
+  };
+
   struct Library::Impl final
   {
     library::MusicLibrary& storage;
@@ -33,22 +44,17 @@ namespace ao::rt
     LibraryCommands commands;
     LibraryJobs jobs;
 
-    Impl(async::Runtime& asyncRuntime,
-         library::MusicLibrary& libraryStorage,
-         library::WritableMusicLibrary writableStorage,
-         LibraryChanges& changes)
-      : storage{libraryStorage}
+    Impl(async::Runtime& asyncRuntime, library::WritableMusicLibrary writableStorage, LibraryChanges& changes)
+      : storage{writableStorage.library()}
       , changeBus{changes}
       , writeLane{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
-      , commands{libraryStorage, writeLane, asyncRuntime}
-      , jobs{asyncRuntime, libraryStorage, writeLane}
+      , commands{storage, writeLane, asyncRuntime}
+      , jobs{asyncRuntime, storage, writeLane}
     {
     }
   };
 
-  Result<std::unique_ptr<Library>> Library::create(async::Runtime& asyncRuntime,
-                                                   library::MusicLibrary& storage,
-                                                   LibraryChanges& changes)
+  Result<Library::Prepared> Library::prepare(library::MusicLibrary& storage)
   {
     auto writableStorageRes = library::WritableMusicLibrary::acquire(storage);
 
@@ -57,13 +63,22 @@ namespace ao::rt
       return std::unexpected{writableStorageRes.error()};
     }
 
-    auto implPtr = std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorageRes), changes);
-    return std::unique_ptr<Library>{new Library{std::move(implPtr)}};
+    return Prepared{std::make_unique<Prepared::Impl>(std::move(*writableStorageRes))};
   }
 
-  Library::Library(std::unique_ptr<Impl> implPtr)
+  Library::Prepared::Prepared(std::unique_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}
   {
+  }
+
+  Library::Prepared::~Prepared() = default;
+  Library::Prepared::Prepared(Prepared&&) noexcept = default;
+  Library::Prepared& Library::Prepared::operator=(Prepared&&) noexcept = default;
+
+  Library::Library(async::Runtime& asyncRuntime, Prepared prepared, LibraryChanges& changes)
+  {
+    AO_EXPECTS(prepared._implPtr != nullptr);
+    _implPtr = std::make_unique<Impl>(asyncRuntime, std::move(prepared._implPtr->writableStorage), changes);
   }
 
   Library::~Library()

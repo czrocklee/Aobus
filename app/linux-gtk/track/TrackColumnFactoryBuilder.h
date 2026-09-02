@@ -6,18 +6,13 @@
 #include "track/TrackRowObject.h"
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/signallistitemfactory.h>
 
 #include <functional>
-#include <memory>
 #include <string>
-
-namespace ao::uimodel
-{
-  class TrackAuthoringSession;
-}
 
 namespace ao::gtk
 {
@@ -27,7 +22,7 @@ namespace ao::gtk
    * Callback for committing inline metadata edits from the UI.
    */
   using MetadataEditSessionFn =
-    std::function<Result<std::unique_ptr<uimodel::TrackAuthoringSession>>(Glib::RefPtr<TrackRowObject> const& rowPtr)>;
+    std::function<Result<uimodel::TrackAuthoringSession>(Glib::RefPtr<TrackRowObject> const& rowPtr)>;
   using MetadataCommitFn = std::function<void(Glib::RefPtr<TrackRowObject> const& rowPtr,
                                               rt::TrackField field,
                                               std::string newValue,

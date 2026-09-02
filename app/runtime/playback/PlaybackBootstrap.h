@@ -27,7 +27,7 @@ namespace ao::rt
   public:
     explicit PlaybackBootstrap(PlaybackTransport& transport) noexcept;
 
-    std::unique_ptr<PlaybackService> createPlaybackService(async::Executor& executor, PlaybackSuccession& succession);
+    PlaybackService createPlaybackService(async::Executor& executor, PlaybackSuccession& succession);
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void shutdown() noexcept;
 

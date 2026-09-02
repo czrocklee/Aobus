@@ -531,10 +531,10 @@ namespace ao::audio::backend
 
     AlsaMixerSession mixer;
 
-    detail::AlsaGraphRegistry* graphRegistry = nullptr;
+    detail::AlsaGraphPublisher graphPublisher;
 
-    explicit Impl(std::string name, detail::AlsaGraphRegistry* graphRegistryHandle)
-      : deviceName{std::move(name)}, graphRegistry{graphRegistryHandle}
+    explicit Impl(std::string name, detail::AlsaGraphPublisher publisher)
+      : deviceName{std::move(name)}, graphPublisher{std::move(publisher)}
     {
     }
 
@@ -791,11 +791,6 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::publishGraphState() const
   {
-    if (graphRegistry == nullptr)
-    {
-      return;
-    }
-
     auto const mode = mixer.volumeMode();
     float vol = 1.0F;
     bool muted = false;
@@ -818,7 +813,7 @@ namespace ao::audio::backend
       optMode = optOpenedMode;
     }
 
-    graphRegistry->publish(
+    graphPublisher.publish(
       {.routeAnchor = deviceName, .optMode = optMode, .volume = vol, .muted = muted, .volumeMode = mode});
   }
   Result<> AlsaExclusiveBackend::Impl::setVolumeProperty(PropertyValue const& value)
@@ -1011,14 +1006,14 @@ namespace ao::audio::backend
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device, ProfileId const& /*profile*/)
-    : _implPtr{std::make_unique<Impl>(device.id.raw(), nullptr)}
+    : _implPtr{std::make_unique<Impl>(device.id.raw(), detail::AlsaGraphPublisher{})}
   {
   }
 
   AlsaExclusiveBackend::AlsaExclusiveBackend(Device const& device,
                                              ProfileId const& /*profile*/,
-                                             detail::AlsaGraphRegistry& graphRegistry)
-    : _implPtr{std::make_unique<Impl>(device.id.raw(), &graphRegistry)}
+                                             detail::AlsaGraphPublisher graphPublisher)
+    : _implPtr{std::make_unique<Impl>(device.id.raw(), std::move(graphPublisher))}
   {
   }
 
@@ -1176,10 +1171,7 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::close()
   {
-    if (_implPtr->graphRegistry != nullptr)
-    {
-      _implPtr->graphRegistry->clear(_implPtr->deviceName);
-    }
+    _implPtr->graphPublisher.clear(_implPtr->deviceName);
 
     stop();
     _implPtr->pcmPtr.reset();

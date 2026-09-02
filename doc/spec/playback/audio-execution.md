@@ -34,6 +34,7 @@ Application runtime consumes Player through executor-affine playback services an
 - **Buffer target**: a requested buffered duration converted to a rounded-up byte count and capped by the PCM ring capacity.
 - **Predictive block headroom**: writable ring capacity reserved from the previous nonempty decoded block size before requesting the next block.
 - **Render quiescence**: the `Backend::stop()` postcondition that closes render admission and waits for the active render cycle and its render notifications to return.
+- **Provider quiescence**: the shared completion reached after subscription admission is closed, monitor and registry producers are retired, and every admitted device or graph callback has returned.
 
 ## Invariants
 
@@ -60,6 +61,8 @@ Application runtime consumes Player through executor-affine playback services an
 - An idle selected output holds no native playback handle.
 - PCM ring reset runs only while its producer, render consumer, and buffered-duration observer are quiescent.
 - Shutdown closes callback admission and joins producers before their targets are destroyed.
+- Provider callbacks, subscriptions, and returned backends never require provider-facade storage after the facade is destroyed.
+- Concurrent external provider shutdown callers observe one provider-quiescence completion boundary; a callback-thread initiator never waits on its own admitted call.
 
 ## State model
 
@@ -305,6 +308,19 @@ GTK and TUI marshal through their toolkit loops, while CLI drives `LoopExecutor`
 Backends protect native handles against public-method/callback interleavings.
 They do not hold locks needed by public methods while invoking `RenderTarget` callbacks.
 
+A `BackendProvider` facade initiates discovery and graph shutdown but is not the lifetime anchor for asynchronous provider work.
+Concrete providers keep only narrow shared control, monitor, device-registry, graph-registry, and publication state where an independently retained worker, subscription, callback stack, or Backend requires it.
+Device and graph subscriptions may reset after facade destruction and may race a copied publication snapshot.
+A Backend returned before provider destruction may later close or publish properties safely; provider retirement has already made its publication route inert.
+Neither handle keeps the provider facade or its complete PImpl alive.
+
+Subscription registration is concurrency-safe and linearizes its initial snapshot with monitor publication.
+A callback may destroy the provider, including during that initial synchronous snapshot; provider code pins independent control state through return and performs no later facade access.
+Once shutdown starts, new subscription attempts return inert handles without an initial callback.
+Retiring registries during an externally initiated shutdown may synchronously deliver their already-accepted terminal snapshots, and those callbacks count toward the same completion boundary.
+When shutdown begins from inside a provider callback, nested teardown publication for that provider is not admitted, preventing recursive facade destruction.
+After an external `shutdown()` returns, no provider device or graph callback can begin or remain active.
+
 `Backend::prewarmFormatHint(SignalFormat)` is an advisory control-domain query.
 It performs no device open, graph connection, wait, or negotiation; the default predicts the signal's first ordered lossless encoding, while a concrete Backend may use a previously successful same-signal mode or monitor-owned cached evidence.
 Unknown or stale evidence is a performance concern only: Engine either skips prewarming or discards a prepared decoder whose complete mode differs from the later `open()` result.
@@ -392,7 +408,10 @@ stopped state, an empty non-realtime event deque, and an empty realtime ring.
 Those are always-active invariants in every build configuration.
 
 Player public methods and destruction run on its executor, which outlives Player.
-Destruction closes the shared gate and cancels start/lookahead task handles before providers and Engine stop, so already queued tasks return without touching Player state.
+Destruction closes the shared gate and cancels start/lookahead task handles before subscriptions, providers, and Engine stop, so already queued tasks return without touching Player state.
+Each provider's first shutdown caller starts retirement.
+A concurrent caller outside that provider's callback or monitor thread waits for the same provider-quiescence completion; repeated completed shutdown is a no-op.
+A callback- or monitor-thread initiator returns without self-wait after closing admission and starting retirement, while the callback/worker's independent shared control state finishes completion as it unwinds; a later external caller still waits for that completion.
 Decoder open is not forcibly interruptible; a blocked worker may finish after Player teardown, but after cancellation it can only destroy its own isolated preparation value.
 Final runtime teardown stops and joins the worker pool, so the same blocked call
 can extend application shutdown until it returns.
@@ -446,7 +465,8 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`Engine.h`](../../../include/ao/audio/Engine.h) and [`Engine.cpp`](../../../lib/audio/Engine.cpp) own control, event, timeline, render, generation, and shutdown behavior.
 - Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime; source-private [`StreamingSource`](../../../lib/audio/StreamingSource.h), [`PcmRingBuffer`](../../../lib/audio/PcmRingBuffer.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
-- [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own advisory prediction, lossless candidate derivation, native selection, and lifetime.
+- [`BackendProvider.h`](../../../include/ao/audio/BackendProvider.h) owns the common provider facade, callback, subscription, backend-outlives-provider, and shared shutdown-completion contract.
+- [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete providers/backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own advisory prediction, narrow provider control/registry state, lossless candidate derivation, native selection, and lifetime. [`BackendDeviceRegistry`](../../../lib/audio/backend/detail/BackendDeviceRegistry.h), [`BackendGraphRegistry`](../../../lib/audio/backend/detail/BackendGraphRegistry.h), and the ALSA graph publisher provide provider-independent subscription/publication retirement.
 - [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.
 
 ## Test map
@@ -458,6 +478,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
+- [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.
 - [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
 - [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, constant-time reset reuse, and source retirement.
 - Runtime playback tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect executor-affine publication and application metadata.

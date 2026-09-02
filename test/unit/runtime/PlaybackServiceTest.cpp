@@ -268,13 +268,13 @@ namespace ao::rt::test
                                          fixture.notificationService,
                                          fixture.asyncRuntime};
     auto bootstrap = PlaybackBootstrap{fixture.playbackTransport};
-    auto playbackPtr = bootstrap.createPlaybackService(fixture.executor, succession);
-    auto playbackActions = uimodel::PlaybackActions{*playbackPtr, [] {}};
+    auto playback = bootstrap.createPlaybackService(fixture.executor, succession);
+    auto playbackActions = uimodel::PlaybackActions{playback, [] {}};
     std::size_t availabilityChanged = 0;
     auto const availabilitySubscription =
       playbackActions.onAvailabilityChanged([&availabilityChanged] noexcept { ++availabilityChanged; });
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const snapshotSubscription = playbackPtr->events().onSnapshot(
+    auto const snapshotSubscription = playback.events().onSnapshot(
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -287,7 +287,7 @@ namespace ao::rt::test
     fixture.executor.drain();
     REQUIRE(fixture.renderTarget != nullptr);
 
-    auto const before = playbackPtr->snapshot();
+    auto const before = playback.snapshot();
     snapshots.clear();
     availabilityChanged = 0;
     auto output = std::array<std::byte, 4096>{};
@@ -295,7 +295,7 @@ namespace ao::rt::test
     REQUIRE(renderRes.bytesWritten > 0);
     fixture.renderTarget->handlePositionAdvanced(renderRes.positionFrames);
 
-    playbackPtr->commands().setVolume(0.5F);
+    playback.commands().setVolume(0.5F);
 
     REQUIRE(snapshots.size() == 1);
     CHECK(snapshots.back().transport.elapsed > before.transport.elapsed);
@@ -305,7 +305,7 @@ namespace ao::rt::test
 
     auto const afterVolume = snapshots.back();
     snapshots.clear();
-    playbackPtr->commands().setShuffleMode(ShuffleMode::On);
+    playback.commands().setShuffleMode(ShuffleMode::On);
 
     REQUIRE(snapshots.size() == 1);
     CHECK(snapshots.back().succession.shuffle == ShuffleMode::On);
@@ -541,7 +541,7 @@ namespace ao::rt::test
     REQUIRE(fixture.executor.queuedCount() != 0);
 
     snapshotSubscription.reset();
-    fixture.playbackPtr.reset();
+    fixture.playbackStoragePtr.reset();
     fixture.executor.drain();
 
     CHECK(repeatChanges == 0);

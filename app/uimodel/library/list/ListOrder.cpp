@@ -118,6 +118,16 @@ namespace ao::uimodel
       return makeError(Error::Code::InvalidInput, "List order drop gap is outside the effective sequence");
     }
 
+    if (std::ranges::contains(effectiveTrackIds, kInvalidTrackId))
+    {
+      return makeError(Error::Code::InvalidInput, "The effective List sequence contains an invalid track id");
+    }
+
+    if (std::ranges::contains(selectedTrackIds, kInvalidTrackId))
+    {
+      return makeError(Error::Code::InvalidInput, "The dragged selection contains an invalid track id");
+    }
+
     auto const effective = std::unordered_set<TrackId>{effectiveTrackIds.begin(), effectiveTrackIds.end()};
     auto const selected = std::unordered_set<TrackId>{selectedTrackIds.begin(), selectedTrackIds.end()};
 

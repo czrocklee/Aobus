@@ -13,7 +13,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gio/gio.h>
 #include <giomm/actiongroup.h>
+#include <giomm/simpleaction.h>
 #include <gtkmm/applicationwindow.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstdint>
 
@@ -63,7 +65,7 @@ namespace ao::gtk::test
     {
       auto window = Gtk::ApplicationWindow{};
       window.set_application(appPtr);
-      registry.install(window);
+      auto registration = registry.install(window);
 
       auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
       REQUIRE(actions != nullptr);
@@ -88,7 +90,7 @@ namespace ao::gtk::test
     {
       auto window = Gtk::ApplicationWindow{};
       window.set_application(appPtr);
-      registry.install(window);
+      auto registration = registry.install(window);
 
       auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
       REQUIRE(actions != nullptr);
@@ -104,6 +106,47 @@ namespace ao::gtk::test
       actions->activate_action("save-panel-sizes-as-layout-defaults");
       CHECK(savePanelsCalled);
     }
+  }
+
+  TEST_CASE("WindowActionRegistry - ending registration revokes old actions without removing replacements",
+            "[gtk][regression][menu]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto window = Gtk::ApplicationWindow{};
+    window.set_application(appPtr);
+
+    std::int32_t oldActivationCount = 0;
+    std::int32_t replacementActivationCount = 0;
+    auto retainedOldActionPtr = Glib::RefPtr<Gio::Action>{};
+    auto replacementActionPtr = Gio::SimpleAction::create(WindowActionRegistry::kEditLayout);
+    auto replacementConnection = sigc::scoped_connection{replacementActionPtr->signal_activate().connect(
+      [&replacementActivationCount](Glib::VariantBase const&) { ++replacementActivationCount; })};
+
+    {
+      auto importExport = FakeImportExportActions{};
+      auto registry = WindowActionRegistry{importExport,
+                                           WindowActionRegistry::Callbacks{
+                                             .onEditLayout = [&oldActivationCount] { ++oldActivationCount; },
+                                             .onResetRuntimeLayoutState = {},
+                                             .onSaveCurrentPanelSizesAsLayoutDefaults = {},
+                                           }};
+      auto registration = registry.install(window);
+      retainedOldActionPtr = window.lookup_action(WindowActionRegistry::kEditLayout);
+      REQUIRE(retainedOldActionPtr);
+
+      window.add_action(replacementActionPtr);
+      registration.reset();
+
+      auto const currentActionPtr = window.lookup_action(WindowActionRegistry::kEditLayout);
+      REQUIRE(currentActionPtr);
+      CHECK(currentActionPtr.get() == replacementActionPtr.get());
+    }
+
+    retainedOldActionPtr->activate();
+    CHECK(oldActivationCount == 0);
+
+    replacementActionPtr->activate();
+    CHECK(replacementActivationCount == 1);
   }
 
   TEST_CASE("MenuController - builds menu model around window and app actions", "[gtk][unit][menu]")

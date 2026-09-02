@@ -64,7 +64,7 @@ namespace ao::gtk
       return makeError(runtimeRes.error().code, "Failed to open library: " + runtimeRes.error().message);
     }
 
-    auto appRuntimePtr = std::move(*runtimeRes);
+    auto appRuntimePtr = std::make_unique<rt::AppRuntime>(std::move(*runtimeRes));
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {
@@ -77,9 +77,8 @@ namespace ao::gtk
     // Frontend observers are members of MainWindow, while the runtime is attached
     // to its GObject. Finalization therefore releases the observers before the
     // runtime storage borrowed by those observers.
-    windowPtr->set_data("app-runtime",
-                        new std::unique_ptr<rt::AppRuntime>{std::move(appRuntimePtr)},
-                        [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
+    windowPtr->set_data(
+      "app-runtime", appRuntimePtr.release(), [](void* data) { delete static_cast<rt::AppRuntime*>(data); });
 
     if (auto const preparedRes = windowPtr->prepareSession(); !preparedRes)
     {

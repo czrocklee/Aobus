@@ -5,6 +5,7 @@
 
 #include "app/ShellLayoutCollaborators.h"
 #include "app/ShellLayoutController.h"
+#include "common/ActionMapRegistration.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -151,6 +152,8 @@ namespace ao::gtk
     std::unique_ptr<MenuController> _menuControllerPtr;
     ShellLayoutController _shellLayout;
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
+    ActionMapRegistration _windowActionsRegistration;
+    ActionMapRegistration _listNavigationActionsRegistration;
     std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
     uimodel::KeymapModel _keymap;
     uimodel::KeyRepeatGuard _orderKeyRepeatGuard;

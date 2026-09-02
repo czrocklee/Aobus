@@ -18,6 +18,11 @@
 
 namespace ao::audio::backend::detail
 {
+  struct AlsaGraphPublicationState final
+  {
+    BackendGraphRegistry registry{};
+  };
+
   namespace
   {
     bool isUnity(float volume) noexcept
@@ -89,32 +94,65 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
-  struct AlsaGraphRegistry::Impl final
+  AlsaGraphPublisher::AlsaGraphPublisher(std::shared_ptr<AlsaGraphPublicationState> statePtr)
+    : _statePtr{std::move(statePtr)}
   {
-    BackendGraphRegistry registry{};
-  };
+  }
+
+  void AlsaGraphPublisher::publish(AlsaRouteState state) const
+  {
+    if (!_statePtr)
+    {
+      return;
+    }
+
+    auto const anchor = state.routeAnchor;
+    _statePtr->registry.publish(anchor, buildGraph(state));
+  }
+
+  void AlsaGraphPublisher::clear(std::string_view const routeAnchor) const
+  {
+    if (_statePtr)
+    {
+      _statePtr->registry.clear(routeAnchor);
+    }
+  }
 
   AlsaGraphRegistry::AlsaGraphRegistry()
-    : _implPtr{std::make_unique<Impl>()}
+    : _statePtr{std::make_shared<AlsaGraphPublicationState>()}
   {
   }
 
-  AlsaGraphRegistry::~AlsaGraphRegistry() = default;
-
-  Subscription AlsaGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
+  AlsaGraphRegistry::~AlsaGraphRegistry()
   {
+    shutdown();
+  }
+
+  Subscription AlsaGraphRegistry::subscribe(std::string_view const routeAnchor, Callback callback)
+  {
+    auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
-    return _implPtr->registry.subscribe(anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
+    return statePtr->registry.subscribe(anchor, std::move(callback), buildGraph(AlsaRouteState{.routeAnchor = anchor}));
   }
 
-  void AlsaGraphRegistry::publish(AlsaRouteState state)
+  AlsaGraphPublisher AlsaGraphRegistry::publisher() const
   {
-    auto const anchor = state.routeAnchor;
-    _implPtr->registry.publish(anchor, buildGraph(state));
+    return AlsaGraphPublisher{_statePtr};
   }
 
-  void AlsaGraphRegistry::clear(std::string_view routeAnchor)
+  void AlsaGraphRegistry::publish(AlsaRouteState state) const
   {
-    _implPtr->registry.clear(routeAnchor);
+    publisher().publish(std::move(state));
+  }
+
+  void AlsaGraphRegistry::clear(std::string_view const routeAnchor) const
+  {
+    publisher().clear(routeAnchor);
+  }
+
+  void AlsaGraphRegistry::shutdown() noexcept
+  {
+    auto const statePtr = _statePtr;
+    statePtr->registry.shutdown();
   }
 } // namespace ao::audio::backend::detail

@@ -20,5 +20,10 @@ namespace ao::rt::test
     {
       return changes.bindReplica(std::move(replicaName), std::move(apply));
     }
+
+    static void publish(LibraryChanges& changes, LibraryChangeSet changeSet)
+    {
+      changes.publishFromCoordinator(std::move(changeSet), {});
+    }
   };
 } // namespace ao::rt::test

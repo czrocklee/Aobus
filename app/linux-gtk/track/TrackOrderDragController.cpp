@@ -159,7 +159,7 @@ namespace ao::gtk
     {
       clearIndicator();
       invalidatedSubscription.reset();
-      sessionPtr.reset();
+      optSession.reset();
       selectedTrackIds.clear();
       token.clear();
       invalidated = false;
@@ -204,8 +204,8 @@ namespace ao::gtk
       }
 
       clearActiveDrag();
-      sessionPtr = std::move(*sessionRes);
-      selectedTrackIds = uimodel::listOrderDragSelection(rowPtr->trackId(), selected, sessionPtr->effectiveTrackIds());
+      optSession.emplace(std::move(*sessionRes));
+      selectedTrackIds = uimodel::listOrderDragSelection(rowPtr->trackId(), selected, optSession->effectiveTrackIds());
 
       if (selectedTrackIds.empty())
       {
@@ -214,7 +214,7 @@ namespace ao::gtk
       }
 
       token = std::format("aobus-list-order:{}:{}", viewId.raw(), nextDragToken());
-      invalidatedSubscription = sessionPtr->onInvalidated(
+      invalidatedSubscription = optSession->onInvalidated(
         [weakStatePtr = std::weak_ptr<State>{shared_from_this()}] noexcept
         {
           auto statePtr = weakStatePtr.lock();
@@ -227,8 +227,8 @@ namespace ao::gtk
           statePtr->invalidated = true;
           statePtr->token.clear();
           statePtr->clearIndicator();
-          statePtr->showStatus(statePtr->sessionPtr != nullptr
-                                 ? statePtr->sessionPtr->capabilities().disabledReason
+          statePtr->showStatus(statePtr->optSession
+                                 ? statePtr->optSession->capabilities().disabledReason
                                  : gtkText(statePtr->textCatalog, i18n::MessageId::ListOrderChanged));
         });
       clearStatus();
@@ -250,7 +250,7 @@ namespace ao::gtk
 
     void updateIndicator(Gtk::ListItem const& /*listItem*/, Gtk::Widget& cell, double const yPosition)
     {
-      if (closing || sessionPtr == nullptr || invalidated)
+      if (closing || !optSession || invalidated)
       {
         clearIndicator();
         return;
@@ -322,7 +322,7 @@ namespace ao::gtk
               double const yPosition)
     {
       if (auto const optToken = stringFromDropValue(value);
-          closing || invalidated || sessionPtr == nullptr || !optToken || *optToken != token)
+          closing || invalidated || !optSession || !optToken || *optToken != token)
       {
         clearIndicator();
         return false;
@@ -337,7 +337,7 @@ namespace ao::gtk
       }
 
       auto const anchorRes =
-        uimodel::listOrderAnchorForGap(sessionPtr->effectiveTrackIds(), selectedTrackIds, *optGapIndex);
+        uimodel::listOrderAnchorForGap(optSession->effectiveTrackIds(), selectedTrackIds, *optGapIndex);
 
       if (!anchorRes)
       {
@@ -346,9 +346,8 @@ namespace ao::gtk
         return false;
       }
 
-      auto dropSessionPtr = std::move(sessionPtr);
       auto selectedIds = std::move(selectedTrackIds);
-      auto submission = dropSessionPtr->moveBefore(std::move(selectedIds), *anchorRes);
+      auto submission = optSession->moveBefore(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
       spawnUiTask(runtime.async(),
                   tasks,
@@ -394,7 +393,7 @@ namespace ao::gtk
     Gtk::ScrolledWindow& scrolledWindow;
     TrackSelectionController& selectionController;
     Callbacks callbacks;
-    std::unique_ptr<uimodel::ListOrderAuthoringSession> sessionPtr{};
+    std::optional<uimodel::ListOrderAuthoringSession> optSession;
     std::vector<TrackId> selectedTrackIds{};
     std::string token;
     async::Subscription invalidatedSubscription;
@@ -459,8 +458,7 @@ namespace ao::gtk
           [statePtr, listItemRaw = listItemPtr.get(), cell](double, double yPosition)
           {
             statePtr->updateIndicator(*listItemRaw, *cell, yPosition);
-            return statePtr->sessionPtr != nullptr && !statePtr->invalidated ? Gdk::DragAction::MOVE
-                                                                             : Gdk::DragAction::NONE;
+            return statePtr->optSession && !statePtr->invalidated ? Gdk::DragAction::MOVE : Gdk::DragAction::NONE;
           },
           false);
         dropTargetPtr->signal_leave().connect([statePtr] { statePtr->clearIndicator(); });

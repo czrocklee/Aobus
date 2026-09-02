@@ -15,11 +15,6 @@
 #include <type_traits>
 #include <utility>
 
-namespace ao::async
-{
-  class LoopExecutor;
-}
-
 namespace ao::library
 {
   class MusicLibrary;
@@ -95,12 +90,12 @@ namespace ao::cli
       optResultPtr->emplace(co_await std::move(task));
     }
 
+    struct Storage;
+
     CliOptions _options;
     CliIo _io;
     std::uint64_t _musicLibraryPinnedMapBytes = 0;
     std::optional<std::filesystem::path> _optCacheDirectory;
-    // Observes the executor owned through _runtimePtr.
-    async::LoopExecutor* _loopExecutor = nullptr;
-    std::unique_ptr<rt::CoreRuntime> _runtimePtr;
+    std::unique_ptr<Storage> _storagePtr;
   };
 } // namespace ao::cli

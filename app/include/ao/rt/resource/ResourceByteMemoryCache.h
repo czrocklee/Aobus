@@ -89,7 +89,7 @@ namespace ao::rt
     void evictLeastRecentlyUsed();
 
     std::shared_ptr<ReadBytes const> _readBytesPtr;
-    async::Runtime* _asyncRuntime = nullptr;
+    async::Runtime& _asyncRuntime;
     async::LifetimeScope _scope;
     std::size_t _maximumEntries;
     std::size_t _maximumBytes;

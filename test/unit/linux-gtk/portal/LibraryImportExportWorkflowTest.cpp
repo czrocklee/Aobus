@@ -503,13 +503,14 @@ library:
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-      .executorPtr = std::move(executorPtr),
-      .musicRoot = tempDir.path() / "music",
-      .databasePath = tempDir.path() / "db",
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-    }));
+    auto runtimePtr =
+      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+        .executorPtr = std::move(executorPtr),
+        .musicRoot = tempDir.path() / "music",
+        .databasePath = tempDir.path() / "db",
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
+      })));
     auto confirmation = std::function<void(bool)>{};
     auto callbacks = portal::ImportExportCallbacks{
       .requestLibraryRestoreConfirmation = [&confirmation](
@@ -594,13 +595,14 @@ library:
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
-      .executorPtr = std::move(executorPtr),
-      .musicRoot = tempDir.path() / "music",
-      .databasePath = tempDir.path() / "db",
-      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
-      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-    }));
+    auto runtimePtr =
+      std::make_unique<rt::AppRuntime>(ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
+        .executorPtr = std::move(executorPtr),
+        .musicRoot = tempDir.path() / "music",
+        .databasePath = tempDir.path() / "db",
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
+      })));
 
     auto callbacks = portal::ImportExportCallbacks{};
     auto const importPath = tempDir.path() / "missing-import.yaml";

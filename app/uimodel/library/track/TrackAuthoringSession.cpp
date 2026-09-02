@@ -26,9 +26,9 @@
 
 namespace ao::uimodel
 {
-  struct TrackAuthoringSession::Impl final
+  struct TrackAuthoringSession::State final
   {
-    Impl(rt::Library& libraryValue, rt::BoundTrackTargets targetsValue)
+    State(rt::Library& libraryValue, rt::BoundTrackTargets targetsValue)
       : library{libraryValue}, targets{std::move(targetsValue)}
     {
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
@@ -124,32 +124,32 @@ namespace ao::uimodel
     }
 
     template<typename RuntimeResult, typename SubmitResult, typename Operation>
-    static async::Task<Result<SubmitResult>> runSubmissionAsync(std::shared_ptr<Impl> implPtr, Operation operation)
+    static async::Task<Result<SubmitResult>> runSubmissionAsync(std::shared_ptr<State> statePtr, Operation operation)
     {
-      if (!implPtr->current)
+      if (!statePtr->current)
       {
-        co_return SubmitResult{.status = implPtr->invalidStatus};
+        co_return SubmitResult{.status = statePtr->invalidStatus};
       }
 
-      if (implPtr->submitting)
+      if (statePtr->submitting)
       {
         co_return SubmitResult{.status = rt::AuthoringStatus::Busy};
       }
 
-      implPtr->submitting = true;
+      statePtr->submitting = true;
       auto deferredException = std::exception_ptr{};
 
       try
       {
-        auto runtimeRes = co_await std::invoke(std::move(operation), *implPtr);
-        implPtr->submitting = false;
-        co_return implPtr->finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeRes));
+        auto runtimeRes = co_await std::invoke(std::move(operation), *statePtr);
+        statePtr->submitting = false;
+        co_return statePtr->finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeRes));
       }
       catch (...)
       {
         deferredException = std::current_exception();
-        implPtr->submitting = false;
-        implPtr->finishExceptionalSubmission();
+        statePtr->submitting = false;
+        statePtr->finishExceptionalSubmission();
         async::rethrowException(deferredException);
       }
     }
@@ -164,8 +164,7 @@ namespace ao::uimodel
     mutable async::Signal<> invalidated;
   };
 
-  Result<std::unique_ptr<TrackAuthoringSession>> TrackAuthoringSession::begin(rt::Library& library,
-                                                                              std::span<TrackId const> targetIds)
+  Result<TrackAuthoringSession> TrackAuthoringSession::begin(rt::Library& library, std::span<TrackId const> targetIds)
   {
     auto targetsRes = library.bindTrackTargets(targetIds);
 
@@ -174,56 +173,57 @@ namespace ao::uimodel
       return std::unexpected{targetsRes.error()};
     }
 
-    return std::unique_ptr<TrackAuthoringSession>{
-      new TrackAuthoringSession{std::make_shared<Impl>(library, std::move(*targetsRes))}};
+    return TrackAuthoringSession{std::make_shared<State>(library, std::move(*targetsRes))};
   }
 
-  TrackAuthoringSession::TrackAuthoringSession(std::shared_ptr<Impl> implPtr)
-    : _implPtr{std::move(implPtr)}
+  TrackAuthoringSession::TrackAuthoringSession(std::shared_ptr<State> statePtr)
+    : _statePtr{std::move(statePtr)}
   {
   }
 
   TrackAuthoringSession::~TrackAuthoringSession() = default;
 
+  TrackAuthoringSession::TrackAuthoringSession(TrackAuthoringSession&&) noexcept = default;
+
   bool TrackAuthoringSession::isCurrent() const noexcept
   {
-    return _implPtr->current;
+    return _statePtr->current;
   }
 
   std::span<TrackId const> TrackAuthoringSession::targetIds() const noexcept
   {
-    return _implPtr->targets.trackIds();
+    return _statePtr->targets.trackIds();
   }
 
   async::Subscription TrackAuthoringSession::onInvalidated(compat::MoveOnlyFunction<void()> handler) const
   {
-    return _implPtr->invalidated.connect(std::move(handler));
+    return _statePtr->invalidated.connect(std::move(handler));
   }
 
   async::Task<Result<TrackMetadataSubmitResult>> TrackAuthoringSession::submitMetadata(rt::MetadataPatch patch)
   {
-    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackMetadataReply>, TrackMetadataSubmitResult>(
-      _implPtr,
-      [patch = std::move(patch)](Impl& impl) mutable
-      { return impl.library.commands().updateMetadata(impl.targets, std::move(patch)); });
+    return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackMetadataReply>, TrackMetadataSubmitResult>(
+      _statePtr,
+      [patch = std::move(patch)](State& state) mutable
+      { return state.library.commands().updateMetadata(state.targets, std::move(patch)); });
   }
 
   async::Task<Result<TrackTagSubmitResult>> TrackAuthoringSession::submitTags(std::vector<std::string> tagsToAdd,
                                                                               std::vector<std::string> tagsToRemove)
   {
-    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::EditTrackTagsReply>, TrackTagSubmitResult>(
-      _implPtr,
-      [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](Impl& impl) mutable
-      { return impl.library.commands().editTags(impl.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
+    return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::EditTrackTagsReply>, TrackTagSubmitResult>(
+      _statePtr,
+      [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](State& state) mutable
+      { return state.library.commands().editTags(state.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
   }
 
   async::Task<Result<TrackPropertiesSubmitResult>> TrackAuthoringSession::submitProperties(
     rt::TrackPropertiesPatch patch)
   {
-    return Impl::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackPropertiesReply>,
-                                    TrackPropertiesSubmitResult>(
-      _implPtr,
-      [patch = std::move(patch)](Impl& impl) mutable
-      { return impl.library.commands().updateProperties(impl.targets, std::move(patch)); });
+    return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackPropertiesReply>,
+                                     TrackPropertiesSubmitResult>(
+      _statePtr,
+      [patch = std::move(patch)](State& state) mutable
+      { return state.library.commands().updateProperties(state.targets, std::move(patch)); });
   }
 } // namespace ao::uimodel

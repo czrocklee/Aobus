@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include "common/ActionMapRegistration.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
-#include <giomm/actionmap.h>
-#include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/popovermenu.h>
@@ -27,10 +27,6 @@
 namespace ao::rt
 {
   class AppRuntime;
-}
-namespace ao::uimodel
-{
-  class TrackAuthoringSession;
 }
 namespace ao::gtk
 {
@@ -76,9 +72,6 @@ namespace ao::gtk
 
     void setDataProvider(TrackRowCache* provider);
 
-    // Add to action group for menu access
-    void addActionsTo(Gio::ActionMap& actionMap);
-
     void openTrackContextMenu(TrackViewPage& page, TrackSelection const& selection, double xPosition, double yPosition);
 
     void presentProperties(TrackSelection const& selection);
@@ -89,7 +82,6 @@ namespace ao::gtk
                           std::vector<std::string> tagsToRemove);
 
   private:
-    void createActions();
     void buildContextActionsAndMenu(TrackViewPage& page);
     void applyListMembershipToCurrentSelection(ListId listId, bool add);
     void applyListOrderToCurrentSelection(TrackOrderCommand action);
@@ -103,8 +95,6 @@ namespace ao::gtk
     void retireTagPopover();
     void observeTagPopoverAnchor();
 
-    void addTagToCurrentSelection(std::string tag);
-    void removeTagFromCurrentSelection(std::string tag);
     void applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
                                           std::span<std::string const> tagsToRemove);
     bool beginTagEditSession(std::span<TrackId const> trackIds);
@@ -119,16 +109,12 @@ namespace ao::gtk
     // The explicit selection to apply the tags to
     std::optional<TrackSelection> _optActiveSelection;
 
-    // Actions
-    Glib::RefPtr<Gio::SimpleAction> _trackTagAddActionPtr;
-    Glib::RefPtr<Gio::SimpleAction> _trackTagRemoveActionPtr;
-    Glib::RefPtr<Gio::SimpleAction> _trackTagToggleActionPtr;
-
     std::unique_ptr<TagPopover> _tagPopoverPtr;
-    std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
+    std::optional<uimodel::TrackAuthoringSession> _optTagEditSession;
     std::uint64_t _tagEditSessionGeneration = 0;
     std::unique_ptr<Gtk::PopoverMenu> _contextPopoverPtr;
     Glib::RefPtr<Gio::SimpleActionGroup> _contextActionGroupPtr;
+    ActionMapRegistration _contextActionsRegistration;
 
     sigc::scoped_connection _contextPopoverClosedConnection;
     sigc::scoped_connection _contextAnchorUnmapConnection;

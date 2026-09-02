@@ -3,15 +3,19 @@
 
 #include "lib/audio/backend/AlsaExclusiveBackend.h"
 
+#include "lib/audio/backend/detail/AlsaGraphRegistry.h"
 #include "test/unit/audio/BackendTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/Property.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
+#include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <tuple>
 
 namespace ao::audio::backend::test
@@ -79,5 +83,35 @@ namespace ao::audio::backend::test
 
     REQUIRE(optHint);
     CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - retained publisher is inert after graph retirement",
+            "[audio][regression][alsa][concurrency]")
+  {
+    auto registry = detail::AlsaGraphRegistry{};
+    auto graph = flow::Graph{};
+    std::size_t graphUpdateCount = 0U;
+    auto graphSub = registry.subscribe("hw:127,0",
+                                       [&](flow::Graph const& nextGraph)
+                                       {
+                                         graph = nextGraph;
+                                         ++graphUpdateCount;
+                                       });
+    auto const device = Device{
+      .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive, registry.publisher()};
+
+    REQUIRE(backend.set(props::kVolume, 0.5F));
+    REQUIRE(graphUpdateCount == 2U);
+    REQUIRE_FALSE(graph.nodes.empty());
+
+    registry.shutdown();
+    REQUIRE(graphUpdateCount == 3U);
+    CHECK(graph.nodes.empty());
+
+    REQUIRE(backend.set(props::kVolume, 0.25F));
+    backend.close();
+    CHECK(graphUpdateCount == 3U);
+    CHECK(graph.nodes.empty());
   }
 } // namespace ao::audio::backend::test

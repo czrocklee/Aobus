@@ -45,6 +45,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -371,7 +372,7 @@ namespace ao::rt::test
 
     ~Impl()
     {
-      libraryPtr.reset();
+      optLibrary.reset();
       asyncRuntime.requestStop();
       asyncRuntime.join();
     }
@@ -383,19 +384,19 @@ namespace ao::rt::test
 
     Library& ensureLibrary()
     {
-      if (!libraryPtr)
+      if (!optLibrary)
       {
-        libraryPtr = ao::test::requireValue(Library::create(asyncRuntime, storage, changes));
+        optLibrary.emplace(asyncRuntime, ao::test::requireValue(Library::prepare(storage)), changes);
       }
 
-      return *libraryPtr;
+      return *optLibrary;
     }
 
     async::Executor& executor;
     async::Runtime asyncRuntime;
     library::MusicLibrary& storage;
     LibraryChanges& changes;
-    std::unique_ptr<Library> libraryPtr;
+    std::optional<Library> optLibrary;
     std::uint64_t nextFixtureTrack = 0;
   };
 
@@ -425,7 +426,7 @@ namespace ao::rt::test
 
   void LibraryCommandsFixture::releaseLibrary()
   {
-    _implPtr->libraryPtr.reset();
+    _implPtr->optLibrary.reset();
   }
 
   TrackId LibraryCommandsFixture::addTrack(library::test::TrackSpec const& spec)

@@ -20,6 +20,8 @@ namespace Gtk
 
 namespace ao::gtk::layout
 {
+  /// Synchronous borrowed input for one activation or availability query.
+  /// Handlers must not retain the context or its GTK references after the call.
   struct ActionActivationContext final
   {
     Gtk::Window& parentWindow;

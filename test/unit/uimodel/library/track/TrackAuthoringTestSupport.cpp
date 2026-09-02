@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -43,12 +44,12 @@ namespace ao::uimodel::test
       auto readTransaction = musicLibrary.readTransaction();
       auto const revision = musicLibrary.libraryRevision(readTransaction);
       changesPtr = std::make_unique<rt::LibraryChanges>(executor, revision, "test-library");
-      libraryPtr = ao::test::requireValue(rt::Library::create(asyncRuntime, musicLibrary, *changesPtr));
+      optLibrary.emplace(asyncRuntime, ao::test::requireValue(rt::Library::prepare(musicLibrary)), *changesPtr);
     }
 
     ~Impl()
     {
-      libraryPtr.reset();
+      optLibrary.reset();
       changesPtr.reset();
       asyncRuntime.requestStop();
       asyncRuntime.join();
@@ -65,7 +66,7 @@ namespace ao::uimodel::test
     rt::test::ManualExecutor executor;
     async::Runtime asyncRuntime;
     std::unique_ptr<rt::LibraryChanges> changesPtr;
-    std::unique_ptr<rt::Library> libraryPtr;
+    std::optional<rt::Library> optLibrary;
   };
 
   TrackAuthoringFixture::TrackAuthoringFixture(std::size_t const trackCount)
@@ -77,7 +78,7 @@ namespace ao::uimodel::test
 
   rt::Library& TrackAuthoringFixture::library() const
   {
-    return *_implPtr->libraryPtr;
+    return *_implPtr->optLibrary;
   }
 
   rt::LibraryChanges& TrackAuthoringFixture::changes() const

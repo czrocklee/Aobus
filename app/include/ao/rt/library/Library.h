@@ -34,15 +34,38 @@ namespace ao::rt
   // snapshots (consistent point-in-time reads), commands (sequenced
   // asynchronous mutations), jobs (long-running async operations), and changes
   // (the mutation event bus).
-  // Library owns none of its collaborators: the MusicLibrary storage, async
-  // Runtime and LibraryChanges bus are injected by reference and outlive it.
-  // It merely wires them together and hands out the role objects.
+  // Library owns its writable capability and private role graph. The underlying
+  // MusicLibrary storage, async Runtime and LibraryChanges bus are borrowed and
+  // must outlive it.
   class Library final
   {
   public:
-    static Result<std::unique_ptr<Library>> create(async::Runtime& asyncRuntime,
-                                                   library::MusicLibrary& storage,
-                                                   LibraryChanges& changes);
+    /// Short-lived construction token carrying exclusive write authority for
+    /// one final-position MusicLibrary. It is consumed by Library construction.
+    class Prepared final
+    {
+    public:
+      ~Prepared();
+
+      Prepared(Prepared const&) = delete;
+      Prepared& operator=(Prepared const&) = delete;
+      Prepared(Prepared&&) noexcept;
+      Prepared& operator=(Prepared&&) noexcept;
+
+    private:
+      struct Impl;
+      explicit Prepared(std::unique_ptr<Impl> implPtr);
+      std::unique_ptr<Impl> _implPtr;
+
+      friend class Library;
+    };
+
+    /// Acquires the write authority needed to construct a Library against final storage.
+    static Result<Prepared> prepare(library::MusicLibrary& storage);
+
+    /// Consumes prepared write authority. The borrowed MusicLibrary, Runtime,
+    /// and LibraryChanges must outlive this facade and pending tasks.
+    Library(async::Runtime& asyncRuntime, Prepared prepared, LibraryChanges& changes);
     ~Library();
 
     Library(Library const&) = delete;
@@ -68,7 +91,6 @@ namespace ao::rt
     void beginClosing() noexcept;
 
     struct Impl;
-    explicit Library(std::unique_ptr<Impl> implPtr);
     std::unique_ptr<Impl> _implPtr;
 
     friend class CoreRuntime;

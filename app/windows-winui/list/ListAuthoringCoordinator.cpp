@@ -5,6 +5,7 @@
 
 #include "pch.h"
 #include "track/TrackListController.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -116,8 +117,10 @@ namespace ao::winui
     , _textOrderingPolicy{config.textOrderingPolicy}
     , _textCatalog{std::move(config.textCatalog)}
     , _reportStatus{std::move(config.reportStatus)}
-    , _callbackLifetimePtr{std::make_shared<std::monostate>()}
   {
+    // Owner callbacks are admitted for the coordinator's whole lifetime, but
+    // dialog callbacks open only after beginDialogWorkflow creates their scope.
+    _dialogGenerationGate.retire();
   }
 
   ListAuthoringCoordinator::~ListAuthoringCoordinator()
@@ -384,7 +387,7 @@ namespace ao::winui
   {
     args.Cancel(true);
 
-    if (_submitting || !_editorState.canSubmit)
+    if (_submitting || !_editorState.canSubmit || !_optDialogTasks || !_dialogGenerationGate.isOpen())
     {
       return;
     }
@@ -398,16 +401,22 @@ namespace ao::winui
                                              winrt::to_string(_descriptionInput.Text()),
                                              winrt::to_string(_filterInput.Text()));
     auto submission = uimodel::saveList(&_library, std::move(draft));
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
+
+    if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
+    {
+      return;
+    }
+
+    auto const token = _dialogGenerationGate.token();
     _asyncRuntime.spawnWithLifetime(
-      *_dialogTasksPtr,
-      [runtime = &_asyncRuntime, owner = this, lifetimePtr, submission = std::move(submission)](
+      *_optDialogTasks,
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutor(
           runtime,
           owner,
-          lifetimePtr,
+          token,
           std::move(submission),
           [](ListAuthoringCoordinator* target, Result<ListId> result) { target->finishEditorSave(std::move(result)); },
           stopToken);
@@ -479,22 +488,19 @@ namespace ao::winui
 
     beginDialogWorkflow();
     _dialogActive = true;
-    _dialogLifetimePtr = std::make_shared<std::monostate>();
     auto submission = uimodel::previewListDeletion(&_library, listId, includeDescendants);
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
+    AO_INVARIANT(_optDialogTasks.has_value() && _dialogGenerationGate.isOpen(),
+                 "A List deletion preview requires an active dialog workflow");
+    auto const token = _dialogGenerationGate.token();
     _asyncRuntime.spawnWithLifetime(
-      *_dialogTasksPtr,
-      [runtime = &_asyncRuntime,
-       owner = this,
-       lifetimePtr,
-       listId,
-       includeDescendants,
-       submission = std::move(submission)](std::stop_token const stopToken) mutable
+      *_optDialogTasks,
+      [runtime = &_asyncRuntime, owner = this, token, listId, includeDescendants, submission = std::move(submission)](
+        std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutor(
           runtime,
           owner,
-          lifetimePtr,
+          token,
           std::move(submission),
           [listId, includeDescendants](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> result)
           { target->finishDeletePreview(listId, includeDescendants, std::move(result)); },
@@ -515,7 +521,7 @@ namespace ao::winui
     if (!result)
     {
       _dialogActive = false;
-      _dialogLifetimePtr.reset();
+      _dialogGenerationGate.retire();
 
       if (_reportStatus)
       {
@@ -615,7 +621,7 @@ namespace ao::winui
   {
     args.Cancel(true);
 
-    if (_submitting)
+    if (_submitting || !_optDialogTasks || !_dialogGenerationGate.isOpen())
     {
       return;
     }
@@ -625,16 +631,22 @@ namespace ao::winui
     auto const removeTag = _removeTagCheck && _removeTagCheck.IsChecked().GetBoolean();
     auto submission = uimodel::deleteList(
       &_library, _deleteListId, _deleteDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag});
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_dialogLifetimePtr};
+
+    if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
+    {
+      return;
+    }
+
+    auto const token = _dialogGenerationGate.token();
     _asyncRuntime.spawnWithLifetime(
-      *_dialogTasksPtr,
-      [runtime = &_asyncRuntime, owner = this, lifetimePtr, submission = std::move(submission)](
+      *_optDialogTasks,
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutor(
           runtime,
           owner,
-          lifetimePtr,
+          token,
           std::move(submission),
           [](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> result)
           { target->finishDeleteCommit(std::move(result)); },
@@ -701,21 +713,18 @@ namespace ao::winui
       return;
     }
 
-    auto sessionPtr = std::shared_ptr<uimodel::ListMembershipAuthoringSession>{std::move(*sessionRes)};
-    auto submission = add ? sessionPtr->addToList(listId) : sessionPtr->removeFromList(listId);
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_callbackLifetimePtr};
+    auto session = std::move(*sessionRes);
+    auto submission = add ? session.addToList(listId) : session.removeFromList(listId);
+    auto const token = _ownerCallbackGate.token();
     _asyncRuntime.spawnWithLifetime(
       _commandTasks,
-      [runtime = &_asyncRuntime,
-       owner = this,
-       lifetimePtr,
-       sessionPtr = std::move(sessionPtr),
-       submission = std::move(submission)](std::stop_token const stopToken) mutable
+      [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
+        std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutor(
           runtime,
           owner,
-          lifetimePtr,
+          token,
           std::move(submission),
           [](ListAuthoringCoordinator* target, Result<uimodel::ListMembershipEditResult> result)
           { target->finishMembership(std::move(result)); },
@@ -786,24 +795,21 @@ namespace ao::winui
 
     auto stateRes = _views.findTrackListState(_trackList.viewId());
     auto selected = stateRes ? std::move(stateRes->selection) : std::vector<TrackId>{};
-    auto sessionPtr = std::shared_ptr<uimodel::ListOrderAuthoringSession>{std::move(*sessionRes)};
-    auto lifetimePtr = std::weak_ptr<std::monostate>{_callbackLifetimePtr};
+    auto session = std::move(*sessionRes);
+    auto const token = _ownerCallbackGate.token();
 
     if (command == ListOrderCommand::Reset)
     {
-      auto submission = sessionPtr->resetOrder();
+      auto submission = session.resetOrder();
       _asyncRuntime.spawnWithLifetime(
         _commandTasks,
-        [runtime = &_asyncRuntime,
-         owner = this,
-         lifetimePtr,
-         sessionPtr = std::move(sessionPtr),
-         submission = std::move(submission)](std::stop_token const stopToken) mutable
+        [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
+          std::stop_token const stopToken) mutable
         {
           return finishOnCallbackExecutor(
             runtime,
             owner,
-            lifetimePtr,
+            token,
             std::move(submission),
             [](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::ResetListOrderReply>> result)
             { target->finishOrderReset(std::move(result)); },
@@ -817,28 +823,24 @@ namespace ao::winui
     {
       switch (command)
       {
-        case ListOrderCommand::MoveUp: return sessionPtr->moveUp(std::move(selected));
-        case ListOrderCommand::MoveDown: return sessionPtr->moveDown(std::move(selected));
-        case ListOrderCommand::MoveToTop: return sessionPtr->moveToTop(std::move(selected));
-        case ListOrderCommand::MoveToBottom: return sessionPtr->moveToBottom(std::move(selected));
+        case ListOrderCommand::MoveUp: return session.moveUp(std::move(selected));
+        case ListOrderCommand::MoveDown: return session.moveDown(std::move(selected));
+        case ListOrderCommand::MoveToTop: return session.moveToTop(std::move(selected));
+        case ListOrderCommand::MoveToBottom: return session.moveToBottom(std::move(selected));
         case ListOrderCommand::Reset: break;
       }
 
-      return sessionPtr->moveUp({});
+      return session.moveUp({});
     }();
     _asyncRuntime.spawnWithLifetime(
       _commandTasks,
-      [runtime = &_asyncRuntime,
-       owner = this,
-       lifetimePtr,
-       command,
-       sessionPtr = std::move(sessionPtr),
-       submission = std::move(submission)](std::stop_token const stopToken) mutable
+      [runtime = &_asyncRuntime, owner = this, token, command, submission = std::move(submission)](
+        std::stop_token const stopToken) mutable
       {
         return finishOnCallbackExecutor(
           runtime,
           owner,
-          lifetimePtr,
+          token,
           std::move(submission),
           [command](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::MoveListOrderReply>> result)
           { target->finishOrder(command, std::move(result)); },
@@ -920,24 +922,27 @@ namespace ao::winui
 
   void ListAuthoringCoordinator::beginDialogWorkflow()
   {
-    if (_dialogTasksPtr)
+    // Close the old generation before cancellation can publish a completion.
+    // The gate admits callbacks only; task settlement keeps this owner alive.
+    _dialogGenerationGate.retire();
+
+    if (_optDialogTasks)
     {
-      _dialogTasksPtr->cancelAll();
+      _optDialogTasks->cancelAll();
+      _optDialogTasks.reset();
     }
 
     // LifetimeScope cancellation is terminal. Each independently presented
-    // dialog therefore needs a fresh scope after the previous one closes.
-    _dialogTasksPtr = std::make_unique<async::LifetimeScope>();
+    // dialog therefore needs a fresh scope and callback generation.
+    _optDialogTasks.emplace();
+    _dialogGenerationGate.renew();
   }
 
   void ListAuthoringCoordinator::showDialog()
   {
     _dialogActive = true;
-
-    if (!_dialogLifetimePtr)
-    {
-      _dialogLifetimePtr = std::make_shared<std::monostate>();
-    }
+    AO_INVARIANT(_optDialogTasks.has_value() && _dialogGenerationGate.isOpen(),
+                 "A List dialog requires an active task scope and callback generation");
 
     try
     {
@@ -970,11 +975,12 @@ namespace ao::winui
   {
     _dialogActive = false;
     _submitting = false;
-    _dialogLifetimePtr.reset();
+    _dialogGenerationGate.retire();
 
-    if (_dialogTasksPtr)
+    if (_optDialogTasks)
     {
-      _dialogTasksPtr->cancelAll();
+      _optDialogTasks->cancelAll();
+      _optDialogTasks.reset();
     }
 
     if (_previewTimer)
@@ -1010,19 +1016,20 @@ namespace ao::winui
     }
 
     _retired = true;
-    _callbackLifetimePtr.reset();
-    _dialogLifetimePtr.reset();
+    _ownerCallbackGate.retire();
+    _dialogGenerationGate.retire();
 
-    if (_dialogTasksPtr)
+    if (_optDialogTasks)
     {
-      _dialogTasksPtr->cancelAll();
+      _optDialogTasks->cancelAll();
+      _optDialogTasks.reset();
     }
 
     _commandTasks.cancelAll();
 
     if (_dialog)
     {
-      // The callback lifetime is already expired, so native dismissal is
+      // Callback admission is already closed, so native dismissal is
       // presentation-only cleanup rather than an operation invariant.
       runOptionalWinRt("hiding the WinUI list-authoring dialog", [this] { _dialog.Hide(); });
     }

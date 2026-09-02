@@ -102,6 +102,6 @@ namespace ao::rt
     void sealAndRetireFromCoordinator() noexcept;
 
     struct Impl;
-    std::shared_ptr<Impl> _implPtr;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

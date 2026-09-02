@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -66,12 +67,12 @@ namespace ao::rt::test
         auto readTransaction = _musicLibrary.readTransaction();
         auto const revision = _musicLibrary.libraryRevision(readTransaction);
         _changesPtr = std::make_unique<LibraryChanges>(_executor, revision, "test-library");
-        _libraryPtr = ao::test::requireValue(Library::create(_asyncRuntime, _musicLibrary, *_changesPtr));
+        _optLibrary.emplace(_asyncRuntime, ao::test::requireValue(Library::prepare(_musicLibrary)), *_changesPtr);
       }
 
       ~AuthoringFixture()
       {
-        _libraryPtr.reset();
+        _optLibrary.reset();
         _changesPtr.reset();
         _asyncRuntime.requestStop();
         _asyncRuntime.join();
@@ -82,7 +83,7 @@ namespace ao::rt::test
       AuthoringFixture(AuthoringFixture&&) = delete;
       AuthoringFixture& operator=(AuthoringFixture&&) = delete;
 
-      Library& runtimeLibrary() const { return *_libraryPtr; }
+      Library& runtimeLibrary() { return *_optLibrary; }
       TrackId trackId() const noexcept { return _trackId; }
 
       template<typename T>
@@ -107,13 +108,14 @@ namespace ao::rt::test
       async::LoopExecutor _executor;
       async::Runtime _asyncRuntime;
       std::unique_ptr<LibraryChanges> _changesPtr;
-      std::unique_ptr<Library> _libraryPtr;
+      std::optional<Library> _optLibrary;
     };
 
     class WriteLaneFixture final
     {
     public:
-      explicit WriteLaneFixture(std::optional<library::test::TrackSpec> optInitialTrack = std::nullopt)
+      explicit WriteLaneFixture(std::optional<library::test::TrackSpec> optInitialTrack = std::nullopt,
+                                LibraryWriteLane::WriteTransactionFactory writeTransactionFactory = {})
         : _musicLibrary{library::test::makeTestMusicLibrary(_temp.path(), _temp.path() / "db")}
         , _initialTrackId{optInitialTrack ? library::test::addTrackWithUniqueFixtureUri(_musicLibrary, *optInitialTrack)
                                           : kInvalidTrackId}
@@ -121,7 +123,8 @@ namespace ao::rt::test
         , _changes{_executor, currentRevision(_musicLibrary), "test-library"}
         , _writeLane{_asyncRuntime.callbackExecutor(),
                      ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)),
-                     _changes}
+                     _changes,
+                     std::move(writeTransactionFactory)}
       {
       }
 
@@ -379,6 +382,46 @@ namespace ao::rt::test
       REQUIRE(env.run(
         applyInteractive(env.writeLane().captureSubmission(), [](library::LibraryWrite&) -> Result<> { return {}; })));
     }
+  }
+
+  TEST_CASE("Library write lane - transaction construction failure releases command admission",
+            "[runtime][regression][library-authoring]")
+  {
+    bool failNextConstruction = true;
+    auto env = WriteLaneFixture{
+      std::nullopt,
+      LibraryWriteLane::WriteTransactionFactory{[&failNextConstruction](library::WritableMusicLibrary& writableLibrary,
+                                                                        library::WriteTransaction::Options options)
+                                                {
+                                                  if (std::exchange(failNextConstruction, false))
+                                                  {
+                                                    throw std::bad_alloc{};
+                                                  }
+
+                                                  return writableLibrary.writeTransaction(std::move(options));
+                                                }}};
+
+    CHECK_THROWS_AS(
+      env.run(LibraryWriteLane::beginInteractiveMutationAsync(env.writeLane().captureSubmission())), std::bad_alloc);
+
+    REQUIRE(env.run(abortInteractive(env.writeLane().captureSubmission())));
+  }
+
+  TEST_CASE("Library write lane - cancellation after command grant releases command admission",
+            "[runtime][regression][library-authoring][concurrency]")
+  {
+    auto env = WriteLaneFixture{};
+    auto backgroundRes = env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
+    REQUIRE(backgroundRes);
+    auto background = std::move(*backgroundRes);
+
+    CHECK_THROWS_AS(env.run(LibraryWriteLane::beginBackgroundMutationAsync(env.writeLane().captureSubmission(),
+                                                                           background,
+                                                                           [](std::stop_token) -> Result<>
+                                                                           { async::throwOperationCancelled(); })),
+                    async::OperationCancelled);
+
+    REQUIRE(env.run(abortBackground(env.writeLane().captureSubmission(), &background)));
   }
 
   TEST_CASE("Library authoring - semantic no-op preserves the current binding", "[runtime][unit][library-authoring]")

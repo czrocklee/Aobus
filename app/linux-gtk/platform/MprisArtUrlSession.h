@@ -3,17 +3,13 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include <ao/CoreIds.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
-#include <memory>
+#include <optional>
 #include <string>
-
-namespace ao::gtk
-{
-  class MainContextCallbackScope;
-}
 
 namespace ao::gtk::platform
 {
@@ -49,7 +45,7 @@ namespace ao::gtk::platform
     UrlRequester _requestUrl;
     OnUrlChanged _onUrlChanged;
     utility::ScopedRegistration _request;
-    std::unique_ptr<MainContextCallbackScope> _callbackScopePtr;
+    std::optional<MainContextCallbackScope> _optCallbackScope;
     ResourceId _resourceId = kInvalidResourceId;
     std::string _url;
   };

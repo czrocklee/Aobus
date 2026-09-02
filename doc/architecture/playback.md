@@ -95,7 +95,8 @@ Sequence-only operations use a private collaboration surface so ordinary consume
 `PlaybackSessionPersistence` owns the composite restorable playback state rather than either playback authority owning a partial payload.
 It observes the coherent playback snapshot plus internal cursor changes, coordinates debounced and natural-boundary saves, validates stored input, prepares a restore candidate, and installs sequence and deferred transport coherently.
 
-It borrows the runtime library, public `PlaybackService`, both internal playback owners, `ConfigStore`, and `async::Runtime` from `AppRuntime` composition.
+`PlaybackService` and `PlaybackSessionPersistence` are direct mandatory values in the pinned `AppRuntime` implementation; `PlaybackBootstrap::createPlaybackService()` returns the nonmovable service directly into that final member.
+Persistence borrows the runtime library, public `PlaybackService`, both internal playback owners, the resolved required `ConfigStore`, and `async::Runtime` from that composition.
 It does not become a third live playback-state authority: current sequence and transport snapshots remain owned by their services.
 
 ### Player bridge and route authority
@@ -127,6 +128,9 @@ The client mode and every endpoint confirmed by that open must preserve the sour
 Logical source precision belongs to `SignalFormat`; concrete container width, nominal precision, domain, and alignment belong to `SampleEncoding` inside `PcmFormat`.
 
 `BackendProvider` owns platform output discovery and creates `Backend` instances for selected devices and profiles.
+Its public facade owns shutdown initiation, while independently retained narrow control, registry, monitor, and publication state owns any worker, subscription, callback, or backend obligation that may settle after the facade releases it.
+A subscription may reset after provider destruction, and an already-created Backend may close or publish properties after provider destruction; retired registry/publication state makes both operations safe and inert rather than retaining the provider facade.
+A provider callback may destroy the facade that invoked it and then returns without later facade access.
 A provider descriptor carries only stable backend/profile ids and supported-profile structure.
 Device display names and descriptions discovered from the operating system remain external facts, while built-in backend/profile labels, descriptions, and icon meaning do not enter Core audio.
 A Backend owns its native output handles, render/control resources, and platform threads; its realtime callback consumes PCM through the narrow source/render boundary and reports non-realtime state back to Engine.
@@ -356,7 +360,7 @@ Explicit start and restore use silent lower-owner installation, so succession ne
 - The current audio subject may continue after its source membership changes; the audio execution domain is not a live-list replica.
 - Frontends supply identities and commands, never a materialized playback queue or Engine item.
 - A playback session owns its source/projection lifetime and cannot borrow the originating view's lifetime.
-- Player exclusively owns providers and Engine; PlaybackTransport exclusively owns Player.
+- Player exclusively owns provider facades and Engine; PlaybackTransport exclusively owns Player. Subscription handles, provider workers, and returned backends retain only narrow independent provider state and never retain or dereference a destroyed facade.
 - PlaybackBootstrap is composition-only: it registers providers, constructs PlaybackService over the two internal owners, and initiates transport shutdown. It is not a command or state authority.
 - PlaybackService owns public command admission, supersession, coherent snapshot commits, and the deferred-task shutdown gate; its private implementation is not a second domain service.
 - Runtime-visible state and public playback observations are accepted on the callback executor.
@@ -396,11 +400,12 @@ Shutdown proceeds from callback producers toward their dependencies:
 1. `PlaybackSessionPersistence` has one lifecycle in `Dormant`, `Observing`, `WriteSealed`, `Retired`, or `Shutdown`. Ordinary shutdown cancels scheduled work and releases subscriptions while sequence, transport, `ConfigStore`, and async runtime remain alive; only an `Observing` owner performs the final checkpoint. GTK and WinUI library-switch retirement remove the payload and move the owner to `Retired`, making later shutdown idempotent. A desktop successor whose root commit fails moves to `WriteSealed`: it admits no later checkpoint, while a subsequent library-switch retirement may still retry physical group removal and move it to `Retired`.
 2. `PlaybackService::shutdown` closes public command admission, drops pending commands, disconnects lower observations, and revokes deferred service tasks.
 3. `PlaybackBootstrap::shutdown` asks PlaybackTransport and Player to quiesce lower activity while succession and other runtime consumers still exist.
-4. Player closes its callback gate, cancels preparation tasks, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.
+4. Player closes its callback gate, cancels preparation tasks, unsubscribes provider observations, and calls each provider's shared-completion shutdown before shutting down Engine while provider-owned dependencies still exist. Provider shutdown rejects new subscriptions and external callback admission; an external caller waits for workers and admitted callbacks, while a callback-thread initiator returns without self-wait and leaves narrow shared control state to complete after that stack unwinds.
 5. Engine stops and joins its event worker, retires render state, closes the backend, and releases track sources; StreamingSource destruction stops and joins decode workers.
 6. Sequence, transport, view, workspace, and persistence objects are destroyed before `CoreRuntime` stops its worker pool and releases the callback executor, library, and notifications.
 
-A callback already executing may call supported control operations but cannot synchronously destroy or shut down its emitting owner.
+An Engine or Player callback already executing may call supported control operations but cannot synchronously destroy those emitting owners.
+A `BackendProvider` callback has the stronger explicit exception that it may destroy its provider facade; its invocation pins only independent control state, and nested shutdown publication is suppressed so destruction cannot recursively re-enter that callback.
 Queued Player callbacks become no-ops after the gate closes, and every dedicated producer is stopped and joined before the state it may address is destroyed.
 
 ## Implementation map
@@ -419,7 +424,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
   own shared output-device presentation, exact selection intent, and pure persisted-intent resolution.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and the source-private [`StreamingSource`](../../lib/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../lib/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
-- [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary; [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp), [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp), and [`PlatformBackendProvidersMacos.cpp`](../../lib/audio/PlatformBackendProvidersMacos.cpp) own concrete construction and platform preference order.
+- [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output and provider-independent lifetime boundary; concrete ALSA, PipeWire, WASAPI, and Core Audio providers under [`lib/audio/backend/`](../../lib/audio/backend/) own narrow shared monitor/registry control state, callback admission, and shared shutdown completion. [`PlatformBackendProvidersLinux.cpp`](../../lib/audio/PlatformBackendProvidersLinux.cpp), [`PlatformBackendProvidersWindows.cpp`](../../lib/audio/PlatformBackendProvidersWindows.cpp), and [`PlatformBackendProvidersMacos.cpp`](../../lib/audio/PlatformBackendProvidersMacos.cpp) own concrete construction and platform preference order.
 - GTK [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), TUI [`App.cpp`](../../app/tui/App.cpp), and WinUI [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp) transfer the returned providers into their runtime composition.
 
 ## Test map
@@ -437,6 +442,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`EngineTest.cpp`](../../test/unit/audio/EngineTest.cpp) protects explicit-start optimistic preparation, exact-mode reuse, and synchronous mismatch fallback.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.
 - [`StreamingSourceTest.cpp`](../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker ownership, bounded PCM admission, seek, constant-time reset reuse, and teardown.
+- [`AlsaProviderTest.cpp`](../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect provider-facade destruction from callbacks, late subscription/backend teardown, callback admission, and concurrent callers sharing shutdown completion.
 - [`PlatformBackendProvidersTest.cpp`](../../test/unit/audio/PlatformBackendProvidersTest.cpp) protects the native provider set and preference order; frontend composition roots contain only the direct provider-transfer loop.
 
 ## Related documents

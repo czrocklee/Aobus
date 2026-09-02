@@ -17,6 +17,7 @@
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
@@ -35,7 +36,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 
 namespace ao::winui
 {
@@ -74,7 +74,7 @@ namespace ao::winui
 
     template<typename ResultType, typename Finish>
     async::Task<void> finishOnCallbackExecutor(async::Runtime* const runtime,
-                                               std::weak_ptr<std::monostate> lifetimePtr,
+                                               CallbackAdmissionGate::Token token,
                                                async::Task<ResultType> submission,
                                                Finish finish,
                                                std::stop_token const stopToken)
@@ -82,7 +82,7 @@ namespace ao::winui
       auto result = co_await std::move(submission);
       co_await runtime->resumeOnCallbackExecutor(stopToken);
 
-      if (!lifetimePtr.expired())
+      if (token.admits())
       {
         std::invoke(std::move(finish), std::move(result));
       }
@@ -99,7 +99,6 @@ namespace ao::winui
       , notifications{config.notifications}
       , textCatalog{std::move(config.textCatalog)}
       , reportStatus{std::move(config.reportStatus)}
-      , lifetimePtr{std::make_shared<std::monostate>()}
     {
     }
 
@@ -110,8 +109,16 @@ namespace ao::winui
         return;
       }
 
+      auto const root = xamlRoot ? xamlRoot() : XamlRoot{nullptr};
+
+      if (!root)
+      {
+        finishWorkflow();
+        return;
+      }
+
       dialog = ContentDialog{};
-      dialog.XamlRoot(xamlRoot ? xamlRoot() : XamlRoot{nullptr});
+      dialog.XamlRoot(root);
       dialog.MinWidth(kDialogMinWidth);
       dialog.Title(winrt::box_value(
         winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibrarySelectImportMode))));
@@ -142,8 +149,16 @@ namespace ao::winui
         return;
       }
 
+      auto const root = xamlRoot ? xamlRoot() : XamlRoot{nullptr};
+
+      if (!root)
+      {
+        finishWorkflow();
+        return;
+      }
+
       dialog = ContentDialog{};
-      dialog.XamlRoot(xamlRoot ? xamlRoot() : XamlRoot{nullptr});
+      dialog.XamlRoot(root);
       dialog.MinWidth(kDialogMinWidth);
       dialog.Title(winrt::box_value(
         winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibrarySelectExportMode))));
@@ -187,7 +202,7 @@ namespace ao::winui
 
     winrt::fire_and_forget showImportModeDialog()
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       auto exceptionPtr = std::exception_ptr{};
 
       try
@@ -196,7 +211,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (weakLifetimePtr.expired())
+        if (!token.admits())
         {
           co_return;
         }
@@ -222,7 +237,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (!weakLifetimePtr.expired())
+        if (token.admits())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportYaml), hresultMessage(error));
@@ -238,7 +253,7 @@ namespace ao::winui
 
     winrt::fire_and_forget showExportModeDialog()
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       auto exceptionPtr = std::exception_ptr{};
 
       try
@@ -247,7 +262,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (weakLifetimePtr.expired())
+        if (!token.admits())
         {
           co_return;
         }
@@ -273,7 +288,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (!weakLifetimePtr.expired())
+        if (token.admits())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryExportYaml), hresultMessage(error));
@@ -289,7 +304,7 @@ namespace ao::winui
 
     winrt::fire_and_forget pickImportFile(rt::ImportMode const mode)
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       auto exceptionPtr = std::exception_ptr{};
 
       try
@@ -304,7 +319,7 @@ namespace ao::winui
         pickerOperation = operation;
         auto const result = co_await operation;
 
-        if (weakLifetimePtr.expired())
+        if (!token.admits())
         {
           co_return;
         }
@@ -321,7 +336,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (!weakLifetimePtr.expired())
+        if (token.admits())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectBackup), hresultMessage(error));
@@ -337,7 +352,7 @@ namespace ao::winui
 
     winrt::fire_and_forget pickExportFile(rt::ExportMode const mode)
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       auto exceptionPtr = std::exception_ptr{};
 
       try
@@ -357,7 +372,7 @@ namespace ao::winui
         pickerOperation = operation;
         auto const result = co_await operation;
 
-        if (weakLifetimePtr.expired())
+        if (!token.admits())
         {
           co_return;
         }
@@ -374,7 +389,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (!weakLifetimePtr.expired())
+        if (token.admits())
         {
           reportNativeFailure(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectExportFile),
                               hresultMessage(error));
@@ -390,18 +405,18 @@ namespace ao::winui
 
     void startExport(std::filesystem::path path, rt::ExportMode const mode)
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
          service = &jobs,
-         weakLifetimePtr,
+         token,
          path = std::move(path),
          mode,
          finish = [this](Result<> result) { finishExport(std::move(result)); }](std::stop_token const stopToken) mutable
         {
           return finishOnCallbackExecutor(runtime,
-                                          weakLifetimePtr,
+                                          token,
                                           service->exportLibraryAsync(std::move(path), mode, stopToken),
                                           std::move(finish),
                                           stopToken);
@@ -411,19 +426,19 @@ namespace ao::winui
 
     void startImportPreview(std::filesystem::path path, rt::ImportMode const mode)
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
          service = &jobs,
-         weakLifetimePtr,
+         token,
          path = std::move(path),
          mode,
          finish = [this, mode](Result<rt::LibraryImportPlan> result)
          { finishImportPreview(mode, std::move(result)); }](std::stop_token const stopToken) mutable
         {
           return finishOnCallbackExecutor(runtime,
-                                          weakLifetimePtr,
+                                          token,
                                           service->prepareLibraryImportAsync(std::move(path), mode, stopToken),
                                           std::move(finish),
                                           stopToken);
@@ -447,8 +462,16 @@ namespace ao::winui
 
       auto const preview = makeLibraryRestorePreviewState(textCatalog, result->report());
       optPendingImportPlan.emplace(std::move(*result));
+      auto const root = xamlRoot ? xamlRoot() : XamlRoot{nullptr};
+
+      if (!root)
+      {
+        finishWorkflow();
+        return;
+      }
+
       dialog = ContentDialog{};
-      dialog.XamlRoot(xamlRoot ? xamlRoot() : XamlRoot{nullptr});
+      dialog.XamlRoot(root);
       dialog.MinWidth(kDialogMinWidth);
       dialog.Title(winrt::box_value(winrt::to_hstring(preview.title)));
       dialog.PrimaryButtonText(winrt::to_hstring(preview.primaryActionText));
@@ -460,7 +483,7 @@ namespace ao::winui
 
     winrt::fire_and_forget showRestoreConfirmation()
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       auto exceptionPtr = std::exception_ptr{};
 
       try
@@ -469,7 +492,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (weakLifetimePtr.expired())
+        if (!token.admits())
         {
           co_return;
         }
@@ -488,7 +511,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (!weakLifetimePtr.expired())
+        if (token.admits())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryConfirmRestore), hresultMessage(error));
@@ -504,18 +527,18 @@ namespace ao::winui
 
     void startImportApply(rt::LibraryImportPlan plan)
     {
-      auto const weakLifetimePtr = std::weak_ptr<std::monostate>{lifetimePtr};
+      auto const token = ownerCallbackGate.token();
       asyncRuntime.spawnWithLifetime(
         tasks,
         [runtime = &asyncRuntime,
          service = &jobs,
-         weakLifetimePtr,
+         token,
          plan = std::move(plan),
          finish = [this](Result<rt::ImportReport> result)
          { finishImportApply(std::move(result)); }](std::stop_token const stopToken) mutable
         {
           return finishOnCallbackExecutor(runtime,
-                                          weakLifetimePtr,
+                                          token,
                                           service->applyLibraryImportPlanAsync(std::move(plan), stopToken),
                                           std::move(finish),
                                           stopToken);
@@ -618,12 +641,12 @@ namespace ao::winui
       }
 
       retired = true;
-      lifetimePtr.reset();
+      ownerCallbackGate.retire();
       tasks.cancelAll();
 
       if (pickerOperation)
       {
-        // The callback lifetime is already expired, so native cancellation is
+        // Callback admission is already closed, so native cancellation is
         // presentation-only cleanup rather than an operation invariant.
         runOptionalWinRt("cancelling the WinUI library file picker", [this] { pickerOperation.Cancel(); });
       }
@@ -644,7 +667,7 @@ namespace ao::winui
     i18n::MessageCatalog textCatalog;
     std::function<void(std::string)> reportStatus;
     async::LifetimeScope tasks;
-    std::shared_ptr<std::monostate> lifetimePtr;
+    CallbackAdmissionGate ownerCallbackGate;
     ContentDialog dialog{nullptr};
     ComboBox modeInput{nullptr};
     winrt::Windows::Foundation::IAsyncOperation<ContentDialogResult> dialogOperation{nullptr};

@@ -51,12 +51,12 @@ namespace ao::rt::test
       {
         auto executorPtr = std::make_unique<QueuedExecutor>();
         _executor = executorPtr.get();
-        _runtimePtr = std::shared_ptr<CoreRuntime>{
+        _runtimePtr = std::make_shared<CoreRuntime>(
           ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                      _tempDir.path(),
                                                      LibraryPaths{_tempDir.path()}.databasePath(),
                                                      _tempDir.path() / "cache",
-                                                     library::test::kTestMusicLibraryMapBytes))};
+                                                     library::test::kTestMusicLibraryMapBytes)));
       }
 
       ~RuntimeOwner()
@@ -241,14 +241,14 @@ namespace ao::rt::test
     installCacheEntry(tempDir.path() / "cache", expected);
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto runtimePtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = paths.databasePath(),
       .cacheDirectory = tempDir.path() / "cache",
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
-    }));
+    })));
     auto received = std::vector<std::byte>{};
     bool callbackOnExecutor = false;
     auto request = runtimePtr->resourceBytes().request(resourceId,

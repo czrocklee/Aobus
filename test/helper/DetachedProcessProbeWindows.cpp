@@ -51,10 +51,9 @@ int wmain(int argumentCount, wchar_t** arguments)
   // The probe intentionally reconstructs a foreign-process handle value to test whether it is unusable.
   // NOLINTNEXTLINE(performance-no-int-to-ptr)
   auto* const probeHandle = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(probeValue));
-  DWORD flags = 0;
-  auto const inherited = argumentCount >= 4 && ::GetHandleInformation(probeHandle, &flags) != FALSE;
-
-  if (inherited)
+  // Handle values are process-local and may name an unrelated object in this child. The parent
+  // verifies object identity by checking whether this probe byte reaches its pipe.
+  if (DWORD flags = 0; argumentCount >= 4 && ::GetHandleInformation(probeHandle, &flags) != FALSE)
   {
     DWORD written = 0;
     constexpr char kProbe = 'x';
@@ -76,7 +75,6 @@ int wmain(int argumentCount, wchar_t** arguments)
     }
 
     output << "argc=" << argumentCount << '\n';
-    output << "inherited=" << (inherited ? '1' : '0') << '\n';
 
     for (std::int32_t index = 1; index < argumentCount; ++index)
     {

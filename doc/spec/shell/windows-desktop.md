@@ -40,7 +40,8 @@ The [system architecture](../../architecture/system-overview.md) defines the run
 - Soul radius, anchor geometry, brand colors, aura interpretation, gradient stops, and animation periods come from shared UIModel constants. Theme YAML cannot replace them.
 - A shell mode may apply a positive stroke width and inner-glyph scale to fit its allocated control size without changing those shared brand and motion constants.
 - One main window presents at most one track-properties dialog, and the dialog never retargets its captured selection after it opens.
-- One window-owned List coordinator presents at most one List editor or deletion-preview dialog, and every independently opened dialog receives a fresh cancellable lifetime.
+- One window-owned List coordinator presents at most one List editor or deletion-preview dialog, and every independently opened dialog receives a fresh callback-admission generation plus cancellable lifetime.
+- A callback-admission token reports only whether its generation is current; it does not retain raw window, session, coordinator, or dialog memory.
 - One window-owned library-transfer coordinator presents at most one mode dialog, picker, preview, or transfer workflow at a time; it never reuses a workflow after window retirement.
 
 ## State model
@@ -217,8 +218,8 @@ Unicode, and trailing backslashes.
 Target validation, open, and window-activation failures are reported by the successor, which exits without changing the prior durable root.
 A later ordinary launch may therefore reopen that prior root.
 After successor activation, an initial-scan failure produces a visible diagnostic but retains the new active root; explicit-rescan planning or application failure likewise leaves the active session usable and retryable.
-Session teardown requests scan cancellation, and its lifetime guard suppresses later presentation.
-List editor, deletion-preview, membership, and order continuations use window or dialog lifetime guards.
+Session teardown retires callback admission before requesting scan cancellation, and the retired token suppresses later presentation while runtime join keeps the session alive through settlement.
+List editor, deletion-preview, membership, and order continuations use window- or dialog-generation admission tokens; each owner retires its gate before cancellation and remains alive until admitted dispatcher work settles.
 The window cross-queries all three modal workflow owners before opening a dialog or moving workspace history, so a `ContentDialog` never competes with another dialog on the same `XamlRoot` and captured editor targets cannot move underneath an open modal surface.
 Closing a dialog cancels its current work and terminalizes that dialog scope; opening a later dialog allocates a new scope rather than attempting to reuse the cancelled one.
 Recoverable List validation, maintenance, stale-binding, and storage failures remain visible without publishing an optimistic tree or retargeting the captured selection.
@@ -270,7 +271,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 
 - [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
 - [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
-- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one runtime, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using shared [`runLibraryScan`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h).
+- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one nested runtime graph, playback restore/admission, transactional selected-root commit, and the active-session scan workflow using shared [`runLibraryScan`](../../../app/include/ao/uimodel/library/task/LibraryScanOutcome.h). [`CallbackAdmissionGate`](../../../app/windows-winui/include/ao/winui/CallbackAdmissionGate.h) names dispatcher-confined owner/workflow generation admission without claiming owner lifetime.
 - [`ao_desktop_launch`](../../../app/desktop/) owns common root, startup, protocol,
   and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   owns real Win32 argument extraction and exact-executable discovery before
@@ -319,6 +320,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   and [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
   protect preparation failure, release-before-launch ordering, and fail-closed
   root candidate mutation.
+- [`CallbackAdmissionGateTest.cpp`](../../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) protects idempotent retirement and proves that renewing a workflow cannot make an old generation token admissible again.
 - [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
 - WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui/) that
   need a native host are compiled only by the native Windows profile. Windows

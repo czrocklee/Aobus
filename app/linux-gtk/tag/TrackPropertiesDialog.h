@@ -11,6 +11,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
@@ -21,6 +22,7 @@
 #include <gtkmm/widget.h>
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -39,11 +41,6 @@ namespace ao::rt
 namespace ao::async
 {
   class Runtime;
-}
-
-namespace ao::uimodel
-{
-  class TrackAuthoringSession;
 }
 
 namespace ao::gtk
@@ -103,7 +100,7 @@ namespace ao::gtk
     i18n::MessageCatalog _textCatalog;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
-    std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
+    std::optional<uimodel::TrackAuthoringSession> _optEditSession;
     async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;

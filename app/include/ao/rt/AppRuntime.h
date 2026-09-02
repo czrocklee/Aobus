@@ -50,6 +50,8 @@ namespace ao::rt
     std::uint64_t musicLibraryPinnedMapBytes = 0;
     /// Required owning store for workspace persistence and the default playback-session store.
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
+    /// Optional borrowed override. When non-null, the store must outlive AppRuntime;
+    /// null selects the owned workspace store.
     ConfigStore* playbackSessionConfigStore = nullptr;
     async::Sleeper* sleeper = nullptr;
     /// Optional interactive text order selected and owned by the composition root.
@@ -68,14 +70,16 @@ namespace ao::rt
   class AppRuntime final
   {
   public:
-    static Result<std::unique_ptr<AppRuntime>> create(AppRuntimeDependencies dependencies);
+    /// Returns a move-only value with a pinned implementation graph. Complete
+    /// frontend placement before registering providers or publishing facade borrows.
+    static Result<AppRuntime> create(AppRuntimeDependencies dependencies);
     ~AppRuntime();
 
     void shutdown() noexcept;
 
     AppRuntime(AppRuntime const&) = delete;
     AppRuntime& operator=(AppRuntime const&) = delete;
-    AppRuntime(AppRuntime&&) = delete;
+    AppRuntime(AppRuntime&& other) noexcept;
     AppRuntime& operator=(AppRuntime&&) = delete;
 
     Library const& library() const noexcept;
@@ -110,12 +114,10 @@ namespace ao::rt
 
   private:
     struct Impl;
-    AppRuntime(std::unique_ptr<CoreRuntime> corePtr,
+    AppRuntime(CoreRuntime&& core,
                std::unique_ptr<ConfigStore> workspaceConfigStorePtr,
                ConfigStore* playbackSessionConfigStore);
-    // Reverse member destruction retires every interactive borrower, including
-    // ResourceByteMemoryCache, before the CoreRuntime they call into.
-    std::unique_ptr<CoreRuntime> _corePtr;
+    // Impl pins CoreRuntime before every interactive borrower and destroys Core last.
     std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

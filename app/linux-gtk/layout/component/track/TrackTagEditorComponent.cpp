@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -94,7 +95,7 @@ namespace ao::gtk::layout
     private:
       void submitTagsWithoutController(std::vector<std::string> tagsToAdd, std::vector<std::string> tagsToRemove)
       {
-        if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), _currentTrackIds))
+        if (!_optTagEditSession || !std::ranges::equal(_optTagEditSession->targetIds(), _currentTrackIds))
         {
           auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _currentTrackIds);
 
@@ -106,13 +107,14 @@ namespace ao::gtk::layout
             return;
           }
 
-          _tagEditSessionPtr = std::move(*sessionRes);
+          _optTagEditSession.reset();
+          _optTagEditSession.emplace(std::move(*sessionRes));
           ++_tagEditSessionGeneration;
         }
 
         auto const sessionGeneration = _tagEditSessionGeneration;
         auto submission =
-          uimodel::applyTagEdit(*_tagEditSessionPtr, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
+          uimodel::applyTagEdit(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
         spawnUiTask(_async,
                     _tasks,
                     *this,
@@ -147,7 +149,7 @@ namespace ao::gtk::layout
 
           if (_tagEditSessionGeneration == sessionGeneration)
           {
-            _tagEditSessionPtr.reset();
+            _optTagEditSession.reset();
           }
 
           return;
@@ -164,7 +166,7 @@ namespace ao::gtk::layout
       {
         if (!std::ranges::equal(_currentTrackIds, snap.trackIds))
         {
-          _tagEditSessionPtr.reset();
+          _optTagEditSession.reset();
           ++_tagEditSessionGeneration;
         }
 
@@ -179,7 +181,7 @@ namespace ao::gtk::layout
       rt::Library& _library;
       rt::NotificationService& _notifications;
       TagEditController* _tagEditController;
-      std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
+      std::optional<uimodel::TrackAuthoringSession> _optTagEditSession;
       std::uint64_t _tagEditSessionGeneration = 0;
       std::vector<TrackId> _currentTrackIds;
       sigc::scoped_connection _scopeConn;

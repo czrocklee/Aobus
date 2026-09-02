@@ -71,6 +71,7 @@ The core [LMDB operation specification](../spec/storage/lmdb-operation.md) owns 
 
 Every `MusicLibrary` read uses one move-only `ReadTransaction` that directly owns a native LMDB read transaction.
 The wrapper is the library-level snapshot capability: store readers accept it, while its native handle remains private to `MusicLibrary` and the stores.
+Borrowed `string_view` values returned by `CustomMetadataProxy::get()` alias the selected cold-record bytes and cannot cross transaction completion, backing mutation, reentrant work, or coroutine suspension without an explicit owning copy and a separately proved storage lifetime.
 The wrapper and every store carry the same stable implementation-owned library identity, so a snapshot from one `MusicLibrary` is rejected before it can be mixed with another library's DBI.
 This adds no allocation, locking, or another transaction layer to each operation.
 
@@ -162,8 +163,19 @@ It exposes four cooperating roles and owns one private mutation coordinator:
 - `LibraryChanges` is the read-only committed-revision observation boundary.
 - `LibraryWriteLane` exclusively owns the writable core capability and the one live-runtime command lane, including interactive/background/Maintenance admission, commit revision checks, publication settlement, and Closing quiescence.
 
+`LibraryChanges` keeps its publication state machine in one unique owner object.
+Only a narrow shared delivery/admission block survives queued callback dispatch or a late replica-subscription reset, and that block exists only to weakly enter the owner, retain already-admitted delivery stacks, and preserve delivery diagnostics until those stacks retire.
+
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
+`CoreRuntime` allocates and finalizes its `Impl` and direct `MusicLibrary` first, then `Library::prepare()` acquires `WritableMusicLibrary` against that final object and returns a short-lived move-only `Library::Prepared` construction token.
+The token carries only that successfully acquired authority across the typed-error boundary and is consumed when `CoreRuntime` emplaces the nonmovable `Library` directly in phase-local optional storage; it is never published as a runtime role.
+`CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; moving either wrapper transfers only its PImpl and moved-from destruction is inert.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
+
+Lane admission uses move-only value permits rather than heap-allocated lease wrappers.
+A narrow owner permit increments the active-call count and a command guard owns that permit plus the granted request through every pre-transaction or Maintenance control-delivery path.
+Mutation construction transfers only the request, lifetime state, and raw owner after the write transaction has constructed successfully; terminal mutation release calls `releaseCommand()` before releasing the active-call permit.
+Shared request, one-shot, publication, and lifetime states remain shared because their coroutine, queue, and owner lifetimes can end independently.
 
 Library import has a prepared capability boundary rather than a path-based commit command.
 `LibraryJobs` produces a move-only `LibraryImportPlan` after strict parsing and an uncommitted preview, binding it to exact source bytes plus the target runtime, library identity, and committed revision.
@@ -239,7 +251,7 @@ It cannot create a library write transaction.
 The check-owned `aobus_guardrails` target rejects write-transaction, writable-capability, and direct `LibraryCommands` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
 
 `CoreRuntime::create()` and `AppRuntime::create()` are the recoverable composition boundaries.
-They return typed errors from `MusicLibrary::open()` and writable-facade acquisition without a throwing compatibility constructor.
+They return move-only values and typed errors from `MusicLibrary::open()` and writable-facade acquisition without a throwing compatibility constructor.
 Before either factory exposes a runtime, `CoreRuntime` performs the initial complete All Tracks source reload from the validated database; interactive services are added only after that core initialization succeeds.
 
 ## Data and control flow
@@ -353,6 +365,7 @@ A nonempty sort controls projected and playback order without rewriting saved ra
 - Task-progress finalization and frontend workflow callbacks never refresh committed data; consumers derive such refresh only from `LibraryChanges`.
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
 - `LibraryChanges` accepts only the coordinator's exact successor revision and completes that publication before another commit can be admitted.
+- `LibraryChanges` shares only that narrow delivery/admission block; it is not an independent publication owner, and its borrowed callback executor remains the lifetime ceiling for queued delivery work.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
 - Saved rank is a persistence overlay on a saved List, never membership and never All Tracks state.
 - Cached list sources retain stable identity until deletion or cache teardown; a lease keeps its exact source and
@@ -373,6 +386,8 @@ Failure before commit returns through the operation's typed error channel and le
 LMDB mutation faults may use a private `lmdb::detail::TransactionFailure` as short-range unwind control below the library wrapper.
 `WriteTransaction::apply()` and `commit()` are the exact lower containment owners: they explicitly abort and terminalize the root before translating the carried `Error` to `Result`, and no runtime writer, task, scan, or importer catches the marker.
 `LibraryWriteLane::Mutation::apply()` and `executeAsync()` additionally terminalize the live mutation and release its sequencer turn before returning an error or rethrowing an unexpected exception.
+Command admission remains under a value guard until transaction construction succeeds, so cancellation, a rejected pre-transaction step, allocation failure while constructing the transaction, or any other exception releases the command first and then the active-call permit without stranding Closing.
+Moved-from permits and mutations are inactive and have no teardown effect.
 `executeAsync()` is the only live commit boundary; `Unchanged` and preview `apply()` paths explicitly abort and cannot publish.
 No failed root can be continued or committed, even while its C++ wrapper remains alive.
 Once durable commit succeeds, revision-admission, publication admission, or delivery failure in a live runtime is an infrastructure fault and terminates the process.
@@ -388,6 +403,7 @@ Media rescan does not preserve database-only curation, and a damaged database ca
 
 `CoreRuntime::shutdown()` first seals library mutation and publication admission, then closes callback resumption, stops and joins worker tasks while library-backed collaborators still exist.
 A synchronous library observer must not run runtime shutdown or destroy the library on the same callback stack and must defer teardown to a later callback-executor turn.
+`LibraryChanges` destruction waits for already-admitted delivery callbacks to retire, so a queued callback after retirement becomes a safe no-op; that retire-wait itself must not start from the same callback-executor delivery stack.
 `AppRuntime::shutdown()` quiesces playback-session and audio callback producers before shutting down its owned core boundary.
 Subscriptions held by sources and projections release before the `LibraryChanges` owner they observe.
 Batch and projection dictionary caches are destroyed before the `MusicLibrary` that owns their borrowed raw views.
@@ -412,7 +428,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
-- [`LibraryWriteLane`](../../app/runtime/library/LibraryWriteLane.h) owns the live-runtime FIFO command lane, task admission, revision validation, commit, publication settlement, Maintenance, and Closing.
+- [`LibraryWriteLane`](../../app/runtime/library/LibraryWriteLane.h) owns the live-runtime FIFO command lane, move-only value admission permits, task admission, revision validation, commit, publication settlement, Maintenance, and Closing.
 - [`LibrarySnapshot`](../../app/include/ao/rt/library/LibrarySnapshot.h) and [`LibraryCommands`](../../app/include/ao/rt/library/LibraryCommands.h) define scoped reads and owning asynchronous mutation commands.
 - [`LibraryJobs`](../../app/include/ao/rt/library/LibraryJobs.h) defines asynchronous library operations, best-effort progress, and status-free progress finalization.
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
@@ -437,9 +453,9 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`RuntimeFatalProbeTest.cpp`](../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) protects runtime consumers that enforce admitted cross-Store references before producing external output.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects NFC identity, malformed-input rejection, overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
-- [`LibrarySnapshotTest.cpp`](../../test/unit/runtime/library/LibrarySnapshotTest.cpp) and [`LibraryCommandsTest.cpp`](../../test/unit/runtime/library/LibraryCommandsTest.cpp) protect runtime access roles.
-- [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering, callback publication, signal-before-await settlement, Maintenance workflow ordering, and Closing retirement.
-- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, non-terminal contention, all-or-none authoring, pre-transaction Closing cancellation, and reentrant publication closure.
+- [`LibrarySnapshotTest.cpp`](../../test/unit/runtime/library/LibrarySnapshotTest.cpp) and [`LibraryCommandsTest.cpp`](../../test/unit/runtime/library/LibraryCommandsTest.cpp) protect nonmovable facade identity and runtime access roles.
+- [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering, callback publication, signal-before-await settlement, Mutation move chains and exactly-once admission release, Maintenance workflow ordering, queued-delivery retirement, and Closing retirement.
+- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, non-terminal contention, all-or-none authoring, independent post-grant cancellation, transaction-construction unwind, pre-transaction Closing cancellation, and reentrant publication closure.
 - [`LibraryJobsTest.cpp`](../../test/unit/runtime/library/LibraryJobsTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
 - [`ListOrderSourceTest.cpp`](../../test/unit/runtime/source/ListOrderSourceTest.cpp) and [`ListOrderSourceObserverTest.cpp`](../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp) protect rank derivation, hidden ranks, parent changes, and delta translation.

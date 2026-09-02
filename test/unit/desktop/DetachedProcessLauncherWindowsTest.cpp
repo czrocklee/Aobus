@@ -85,7 +85,6 @@ namespace ao::desktop::test
     REQUIRE(output);
     auto const content = std::string{std::istreambuf_iterator{output}, std::istreambuf_iterator<char>{}};
     CHECK(content == std::format("argc=8\n"
-                                 "inherited=0\n"
                                  "1={}\n"
                                  "2=Local\\AobusDetachedProcessProbe-{}\n"
                                  "3={}\n"

@@ -192,6 +192,7 @@ add_executable(ao_core_test
     unit/utility/PathTest.cpp
     unit/utility/PlatformDirectoriesTest.cpp
     unit/utility/ByteViewTest.cpp
+    unit/utility/CallbackStackScopeTest.cpp
     unit/utility/StringTest.cpp
     unit/runtime/projection/StringArenaTest.cpp
     unit/utility/UnicodeTextTest.cpp
@@ -599,6 +600,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/list/ListAuthoringAdapter.cpp
     unit/winui/DesktopSettingsYamlSchemaTest.cpp
     unit/winui/ThemeTest.cpp
+    unit/winui/app/CallbackAdmissionGateTest.cpp
     unit/winui/app/DesktopOutputSelectionTest.cpp
     unit/winui/app/DestructiveLibraryRestartTest.cpp
     unit/winui/app/DispatcherQueueAdmissionTest.cpp
@@ -655,6 +657,7 @@ if(LINUX)
   target_sources(ao_core_test PRIVATE
     unit/audio/backend/PipeWireMonitorTest.cpp
     unit/audio/backend/AlsaExclusiveBackendTest.cpp
+    unit/audio/backend/AlsaProviderTest.cpp
     unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
     unit/audio/backend/detail/AlsaModeSelectorTest.cpp
@@ -824,6 +827,7 @@ endif()
 if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
+    unit/linux-gtk/common/ActionMapRegistrationTest.cpp
     unit/linux-gtk/common/DismissControllerTest.cpp
     unit/linux-gtk/common/MainContextCallbackScopeTest.cpp
     unit/linux-gtk/common/PopoverAttachmentTest.cpp

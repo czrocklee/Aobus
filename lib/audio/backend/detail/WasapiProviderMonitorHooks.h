@@ -16,8 +16,8 @@ namespace ao::audio::backend::detail
    * When enumerateDevices is supplied, the provider does not register an
    * IMMNotificationClient. requestRefresh is populated by the provider after
    * construction and signals the same monitor event used by native endpoint
-   * notifications. The lifecycle callbacks observe monitor completion without
-   * depending on endpoint hardware or timing.
+   * notifications. The lifecycle callbacks observe monitor and shared shutdown
+   * progress without depending on endpoint hardware or timing.
    */
   struct WasapiProviderMonitorHooks final
   {
@@ -27,5 +27,7 @@ namespace ao::audio::backend::detail
     std::function<void()> onRefreshComplete;
     std::function<void()> onMonitorExit;
     std::function<void()> onMonitorStateDestroyed;
+    std::function<void()> onShutdownStarted;
+    std::function<void()> onShutdownWait;
   };
 } // namespace ao::audio::backend::detail

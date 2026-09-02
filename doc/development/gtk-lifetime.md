@@ -48,6 +48,20 @@ Store that closure in the coroutine frame, and after the await invoke only the c
 Closing the scope must make the closure a no-op even if task cleanup still resumes the coroutine.
 Task completion is a presentation boundary, not a data-refresh signal: committed library data continues through `LibraryChanges`.
 
+### Action maps and attached groups
+
+Every action installed into a longer-lived `Gio::ActionMap` or attached action group must have one scoped registration owner.
+The registration lifetime is shorter than both the map/group and every callback target captured by its handlers.
+Retirement disconnects every activation handler first, then removes an action name only when the map still contains the exact object installed by that registration.
+This order makes an externally retained old action inert and prevents an older registration from removing a newer same-name replacement.
+
+Create the registration or rollback guard before the first `add_action()` call so construction failure cleans any actions already exported.
+A derived widget that attaches its own group disconnects the handlers, removes the registered actions, and detaches the group in its derived destructor before member or GTK-base teardown.
+Do not destroy a registration synchronously from one of its dispatching actions; defer retirement until the GTK dispatch stack returns.
+
+An action activation context is a one-call borrowed view.
+Handlers and availability providers must not retain the context or references obtained from its parent window, anchor widget, or component identity after returning.
+
 ### Replaceable dependencies
 
 When a GTK property or host slot can replace an observed object, use an outer watcher plus an inner connection scope:
@@ -105,10 +119,11 @@ Use the mechanism that enforces the actual ownership invariant.
 
 1. Draw the emitter, receiver, GTK parent, C++ owner, and replacement path for each changed connection or attachment.
 2. Classify every object as stable host, disposable generation, or transient attachment.
-3. Store owner-level connections and subscriptions in a scoped member.
-4. Add outer-watcher rebinding for every replaceable observed object.
-5. Make attach and detach operations symmetric and idempotent before adding another presentation path.
-6. Exercise replacement and teardown, not only initial construction.
+3. Store owner-level connections, action registrations, and subscriptions in a scoped member.
+4. For action maps and attached groups, test retained-action revocation and same-name replacement before adding another export path.
+5. Add outer-watcher rebinding for every replaceable observed object.
+6. Make attach and detach operations symmetric and idempotent before adding another presentation path.
+7. Exercise replacement and teardown, not only initial construction.
 
 Do not introduce a global wiring manager merely to centralize connections.
 Prefer explicit ownership in the existing host, generation, or transient class; add a reusable helper only when multiple owners need the same complete lifecycle operation.

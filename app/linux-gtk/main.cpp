@@ -11,6 +11,7 @@
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
+#include "common/ActionMapRegistration.h"
 #include "common/MainContextCallbackScope.h"
 #include "i18n/GtkText.h"
 #include "platform/SuccessorProcessLauncher.h"
@@ -446,48 +447,40 @@ namespace
     preferencesWindowPtr->present();
   }
 
-  void addAppActions(Glib::RefPtr<Gtk::Application>& appPtr,
-                     std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
-                     std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
-                     i18n::MessageCatalog const& textCatalog)
+  ActionMapRegistration addAppActions(Glib::RefPtr<Gtk::Application>& appPtr,
+                                      std::unique_ptr<PreferencesWindow>& preferencesWindowPtr,
+                                      std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
+                                      i18n::MessageCatalog const& textCatalog)
   {
+    auto registration = ActionMapRegistration{*appPtr, 3};
+
     auto const aboutActionPtr = Gio::SimpleAction::create("about");
-    aboutActionPtr->signal_activate().connect(
-      [&appPtr](Glib::VariantBase const& /*variant*/)
-      {
-        auto dialog = Gtk::AboutDialog{};
-        dialog.set_program_name("Aobus");
-        dialog.set_version(kAppVersion);
-        dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
-        dialog.set_license_type(Gtk::License::LGPL_3_0);
+    registration.add(aboutActionPtr,
+                     [&appPtr](Glib::VariantBase const& /*variant*/)
+                     {
+                       auto dialog = Gtk::AboutDialog{};
+                       dialog.set_program_name("Aobus");
+                       dialog.set_version(kAppVersion);
+                       dialog.set_copyright("Copyright 2024-2026 Aobus Contributors");
+                       dialog.set_license_type(Gtk::License::LGPL_3_0);
 
-        if (auto const windows = appPtr->get_windows(); !windows.empty())
-        {
-          dialog.set_transient_for(*windows[0]);
-        }
+                       if (auto const windows = appPtr->get_windows(); !windows.empty())
+                       {
+                         dialog.set_transient_for(*windows[0]);
+                       }
 
-        dialog.present();
-      });
-    appPtr->add_action(aboutActionPtr);
+                       dialog.present();
+                     });
 
     auto const quitActionPtr = Gio::SimpleAction::create("quit");
-    quitActionPtr->signal_activate().connect([&appPtr](Glib::VariantBase const& /*variant*/) { appPtr->quit(); });
-    appPtr->add_action(quitActionPtr);
+    registration.add(quitActionPtr, [&appPtr](Glib::VariantBase const& /*variant*/) { appPtr->quit(); });
 
     auto const preferencesActionPtr = Gio::SimpleAction::create("preferences");
-    preferencesActionPtr->signal_activate().connect(
+    registration.add(
+      preferencesActionPtr,
       [&appPtr, &preferencesWindowPtr, appConfigStorePtr, &textCatalog](Glib::VariantBase const& /*variant*/)
       { presentPreferences(appPtr, preferencesWindowPtr, appConfigStorePtr, textCatalog); });
-    appPtr->add_action(preferencesActionPtr);
-    appPtr->set_accels_for_action("app.preferences", {"<Control>comma"});
-  }
-
-  void removeAppActions(Gtk::Application& app)
-  {
-    app.set_accels_for_action("app.preferences", {});
-    app.remove_action("preferences");
-    app.remove_action("quit");
-    app.remove_action("about");
+    return registration;
   }
 
   std::filesystem::path layoutStateDir()
@@ -758,8 +751,10 @@ namespace
     auto callbackScope =
       MainContextCallbackScope{[&openLibraryIdleRegistration] { openLibraryIdleRegistration.reset(); }};
 
-    addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr, textCatalog);
-    auto appActionsRegistration = utility::ScopedRegistration{[appPtr] { removeAppActions(*appPtr); }};
+    auto appActionsRegistration = addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr, textCatalog);
+    appPtr->set_accels_for_action("app.preferences", {"<Control>comma"});
+    auto appActionAcceleratorsRegistration =
+      utility::ScopedRegistration{[appPtr] { appPtr->set_accels_for_action("app.preferences", {}); }};
 
     auto activateConnection = appPtr->signal_activate().connect(
       [&appPtr,

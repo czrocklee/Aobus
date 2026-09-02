@@ -14,6 +14,7 @@
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
+#include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -22,11 +23,9 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <functional>
-#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
-#include <variant>
 #include <vector>
 
 namespace ao::async
@@ -121,7 +120,7 @@ namespace ao::winui
     template<typename ResultType, typename Finish>
     static async::Task<void> finishOnCallbackExecutor(async::Runtime* runtime,
                                                       ListAuthoringCoordinator* owner,
-                                                      std::weak_ptr<std::monostate> lifetimePtr,
+                                                      CallbackAdmissionGate::Token token,
                                                       async::Task<ResultType> submission,
                                                       Finish finish,
                                                       std::stop_token stopToken)
@@ -129,7 +128,7 @@ namespace ao::winui
       auto result = co_await std::move(submission);
       co_await runtime->resumeOnCallbackExecutor(stopToken);
 
-      if (!lifetimePtr.expired())
+      if (token.admits())
       {
         std::invoke(std::move(finish), owner, std::move(result));
       }
@@ -146,10 +145,10 @@ namespace ao::winui
     rt::TextOrderingPolicy const* _textOrderingPolicy = nullptr;
     i18n::MessageCatalog _textCatalog;
     std::function<void(std::string)> _reportStatus;
-    std::unique_ptr<async::LifetimeScope> _dialogTasksPtr;
+    std::optional<async::LifetimeScope> _optDialogTasks;
     async::LifetimeScope _commandTasks;
-    std::shared_ptr<std::monostate> _callbackLifetimePtr;
-    std::shared_ptr<std::monostate> _dialogLifetimePtr;
+    CallbackAdmissionGate _ownerCallbackGate;
+    CallbackAdmissionGate _dialogGenerationGate;
 
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog _dialog{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox _nameInput{nullptr};

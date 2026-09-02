@@ -74,7 +74,6 @@ namespace ao::rt
   {
     class LibraryMutationLifetimeState;
     class LibraryMutationOwnerLease;
-    class LibraryMutationCommandLease;
     struct LibraryMutationCommandRequest;
     struct LibraryMutationControlDelivery;
     struct LibraryMutationPublicationEvent;
@@ -240,12 +239,15 @@ namespace ao::rt
 
     private:
       Mutation(LibraryWriteLane& owner,
-               std::unique_ptr<detail::LibraryMutationCommandLease> commandLeasePtr,
+               std::shared_ptr<detail::LibraryMutationCommandRequest> requestPtr,
+               std::shared_ptr<detail::LibraryMutationLifetimeState> lifetimeStatePtr,
                library::WriteTransaction transaction) noexcept;
       void finish() noexcept;
+      void releaseAdmission() noexcept;
 
       LibraryWriteLane* _owner = nullptr;
-      std::unique_ptr<detail::LibraryMutationCommandLease> _commandLeasePtr;
+      std::shared_ptr<detail::LibraryMutationCommandRequest> _requestPtr;
+      std::shared_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
       library::WriteTransaction _transaction;
       bool _terminal = false;
       bool _executeEligible = true;
@@ -303,9 +305,16 @@ namespace ao::rt
       std::optional<Mutation> optMutation{};
     };
 
+    // Test seam for forcing write-transaction construction failure before
+    // command admission transfers to Mutation; production leaves it empty.
+    using WriteTransactionFactory =
+      compat::MoveOnlyFunction<library::WriteTransaction(library::WritableMusicLibrary&,
+                                                         library::WriteTransaction::Options)>;
+
     LibraryWriteLane(async::Executor& callbackExecutor,
                      library::WritableMusicLibrary writableLibrary,
-                     LibraryChanges& changes);
+                     LibraryChanges& changes,
+                     WriteTransactionFactory writeTransactionFactory = {});
     ~LibraryWriteLane();
 
     LibraryWriteLane(LibraryWriteLane const&) = delete;
@@ -371,8 +380,6 @@ namespace ao::rt
     };
 
     void beginClosing() noexcept;
-    static async::Task<Result<std::unique_ptr<detail::LibraryMutationCommandLease>>>
-    acquireCommandAsync(Submission submission, CommandKind kind, std::uint64_t generation, std::string operation);
     static async::Task<Result<Mutation>> beginMutationAsync(
       Submission submission,
       CommandKind kind,
@@ -415,6 +422,7 @@ namespace ao::rt
     library::WritableMusicLibrary _writableLibrary;
     library::MusicLibrary& _library;
     LibraryChanges& _changes;
+    WriteTransactionFactory _writeTransactionFactory;
     std::uint64_t const _runtimeInstanceId;
     std::shared_ptr<detail::LibraryMutationLifetimeState> _lifetimeStatePtr;
 
@@ -440,7 +448,7 @@ namespace ao::rt
     friend class Library;
     friend class LibraryJobs;
     friend class detail::LibraryMutationLifetimeState;
-    friend class detail::LibraryMutationCommandLease;
+    friend class detail::LibraryMutationOwnerLease;
     friend struct detail::LibraryMutationCommandRequest;
     friend struct detail::LibraryMutationControlDelivery;
     friend struct detail::LibraryMutationPublicationEvent;

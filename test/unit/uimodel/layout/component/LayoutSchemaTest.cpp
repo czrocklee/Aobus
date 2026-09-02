@@ -303,6 +303,38 @@ namespace ao::uimodel::test
     }
   }
 
+  TEST_CASE("ComponentSchema - copied action ids survive backing value replacement", "[uimodel][unit][layout][schema]")
+  {
+    auto component = buttonSchema();
+    auto authoredNode = LayoutNode{.type = "test.button"};
+    authoredNode.props[std::string{kSecondaryActionProp}] = LayoutValue{std::string{"other.action"}};
+    auto copiedAuthoredId = std::string{};
+
+    {
+      auto const optActionId = component.actionId(authoredNode, ActionSlot::SecondaryClick);
+      REQUIRE(optActionId);
+      copiedAuthoredId.assign(*optActionId);
+    }
+
+    authoredNode.props[std::string{kSecondaryActionProp}] = LayoutValue{std::string{"replacement.action"}};
+
+    auto const defaultNode = LayoutNode{.type = "test.button"};
+    auto copiedDefaultId = std::string{};
+
+    {
+      auto const optActionId = component.actionId(defaultNode, ActionSlot::PrimaryClick);
+      REQUIRE(optActionId);
+      copiedDefaultId.assign(*optActionId);
+    }
+
+    component.defaultActions.clear();
+
+    CHECK(copiedAuthoredId == "other.action");
+    CHECK(copiedDefaultId == "valid.action");
+    CHECK(component.actionId(authoredNode, ActionSlot::SecondaryClick) == "replacement.action");
+    CHECK_FALSE(component.actionId(defaultNode, ActionSlot::PrimaryClick));
+  }
+
   TEST_CASE("LayoutSchema - generated action properties cannot overwrite authored schema",
             "[uimodel][unit][layout][schema]")
   {

@@ -140,13 +140,16 @@ namespace ao::gtk
                            uimodel::LayoutDocument document,
                            uimodel::PreparedLayout preparedLayout,
                            uimodel::LayoutComponentStateDocument componentState);
-    static async::Task<void> loadLayoutWorkflow(ShellLayoutController* controller,
-                                                async::Runtime* asyncRuntime,
-                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
-                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                                                std::shared_ptr<AppConfigStore> configStorePtr,
-                                                uimodel::LayoutSchema schema,
-                                                std::stop_token stopToken);
+    static async::Task<void> loadLayoutWorkflow(
+      async::Runtime* asyncRuntime,
+      std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+      std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+      std::shared_ptr<AppConfigStore> configStorePtr,
+      uimodel::LayoutSchema schema,
+      std::function<
+        void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>
+        present,
+      std::stop_token stopToken);
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
     Result<layout::LayoutHost::PreparedTree> prepareHost(uimodel::PreparedLayout const& layout,
@@ -172,7 +175,7 @@ namespace ao::gtk
     layout::LayoutHost _host;
     PopoverAttachment _outputDevicePopover;
     PopoverAttachment _menuPopover;
-    std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
+    std::optional<layout::GioActionBridgeSession> _optGioBridgeSession;
     std::vector<async::Subscription> _actionStateSubscriptions;
     uimodel::LayoutSession _session;
     std::shared_ptr<AppConfigStore> _configStorePtr;

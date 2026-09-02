@@ -30,6 +30,7 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 - **Component-state binding**: one node's restored state and generation-fenced write authority.
 - **Runtime component state**: interaction state stored separately from authored layout defaults.
 - **Build generation**: one complete `LayoutHost` component tree created from one context and document.
+- **Action registration**: one scoped owner of the exact Gio actions and activation connections installed into an action map or attached group.
 
 ## Invariants
 
@@ -42,6 +43,10 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 - A rebuild prepares a complete detached tree before committing a replacement.
 - Failed document preparation or GTK construction leaves the active session, tree, component state, and generation unchanged.
 - Action handlers and availability come from the live action registry, not from layout YAML or keymap data.
+- Every Gio action-map export or attached action group has a registration that retires before both the map/group and every callback target.
+- Registration retirement disconnects all activation handlers before removing actions, and removes an id only when the map still contains the exact registered action.
+- An independently retained action becomes inert after registration retirement, while a newer same-id replacement remains active.
+- `ActionActivationContext` and its window and anchor references are valid only for the synchronous activation or availability call.
 - Runtime component state never rewrites authored layout unless the explicit panel-size promotion command saves its prepared layout candidate.
 
 ## State model
@@ -96,7 +101,10 @@ Component action props are valid only in slots permitted by the component schema
 Activation validates the action id, required binding context, availability, and safe anchor before calling the handler.
 
 The Gio bridge exports registry actions to the window action map when the shell can provide any required anchor or menu context.
-It initializes and later refreshes enabled state from the action registry.
+It constructs the scoped registration before installing the first action, initializes enabled state from the action registry, and later refreshes only exact actions that remain installed by that session.
+Replacing a bridge session retires the old registration first.
+Ending a session disconnects activation handlers before exact-identity removal, including after partial export failure.
+Window, List-navigation, application, Layout Editor, and private Tag-edit actions use the same scoped or explicit close boundary when their map or attached group can outlive the callback producer.
 
 ### Editor
 
@@ -134,6 +142,7 @@ Template-expansion errors remain bounded preparation failures.
 Invalid stateful ids are diagnosed; duplicate stateful ids block editor save, while anonymous stateful nodes remain non-persistent.
 
 Load work observes the shell lifetime stop token at executor transitions.
+Shell teardown closes callback admission and action-state subscriptions before retiring Gio actions, so no teardown-time state publication can refresh a retired export.
 Component construction and rebuild are callback-executor GTK operations and have no independent cancellation point.
 Preparation, layout load/save/remove, and detached GTK construction return existing typed `Error` values.
 The layout store preserves its prior live document and backing bytes on a returned failure; component-state operations retain their existing optional/Boolean reporting contract.
@@ -162,7 +171,7 @@ GTK responsive and component-specific behavior remains owned by the individual c
 
 ## Implementation map
 
-- [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns orchestration.
+- [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns orchestration; [`GioActionBridge.cpp`](../../../app/linux-gtk/layout/runtime/GioActionBridge.cpp) and [`ActionMapRegistration.cpp`](../../../app/linux-gtk/common/ActionMapRegistration.cpp) own scoped export, disconnection, and exact-identity removal.
 - [`LayoutSession.cpp`](../../../app/uimodel/layout/shell/LayoutSession.cpp) owns session state, immutable build snapshots, generation advancement, component-state bindings, and panel-size promotion preparation.
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) owns authored limits, bounded template expansion, and the prepared proof.
 - [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction; [`ComponentTooltipController.cpp`](../../../app/linux-gtk/layout/runtime/ComponentTooltipController.cpp) owns tooltip scheduling and visible-content lifetime.
@@ -175,7 +184,8 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout/) protect document preparation, state, schema validation, action-slot resolution, promotion, session transitions, immutable snapshots, and generation-fenced writes.
 - [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect construction, activation, shared-widget switching, and failed-handoff rollback.
 - Editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect preview, validation, save, cancel, and template editing.
-- [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention and persistable cancel restoration across the editor/controller boundary.
+- [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention, persistable cancel restoration, repeated action export, and controller teardown across the editor/controller boundary.
+- [`GioActionBridgeTest.cpp`](../../../test/unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp), [`ActionMapRegistrationTest.cpp`](../../../test/unit/linux-gtk/common/ActionMapRegistrationTest.cpp), and [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect retained-action revocation, partial-export rollback, exact replacement identity, and window action teardown.
 - Component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components/) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
 
 ## Related documents

@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -195,6 +196,18 @@ class NativePortalTest(unittest.TestCase):
         self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
         self.assertNotIn("isDarwin", shell)
 
+    def test_stb_resize_overlay_matches_the_linux_source_pin(self):
+        root = Path(__file__).resolve().parents[2]
+        shell = (root / "shell.nix").read_text(encoding="utf-8")
+        portfile = (root / "cmake" / "vcpkg-ports" / "stb" / "portfile.cmake").read_text(encoding="utf-8")
+        source_pattern = r"raw\.githubusercontent\.com/nothings/stb/([0-9a-f]{40})/stb_image_resize2\.h"
+
+        linux_pins = re.findall(source_pattern, shell)
+        vcpkg_pins = re.findall(source_pattern, portfile)
+
+        self.assertEqual(len(linux_pins), 1)
+        self.assertEqual(vcpkg_pins, linux_pins)
+
     def test_macos_managed_python_is_requested_only_for_python_check_commands(self):
         for command in ("format", "tidy", "hygiene"):
             self.assertTrue(buildenv.requires_python_tools(command))
@@ -307,6 +320,9 @@ class WindowsBatchPortalTest(unittest.TestCase):
             "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>",
         )
         base_cache = windows_presets["windows-base"]["cacheVariables"]
+        overlay_ports = "${sourceDir}/cmake/vcpkg-ports"
+        self.assertEqual(base_cache["VCPKG_OVERLAY_PORTS"], overlay_ports)
+        self.assertEqual(winui_cache["VCPKG_OVERLAY_PORTS"], overlay_ports)
         self.assertFalse(any(name.startswith("AOBUS_BUILD_") for name in base_cache))
         self.assertEqual(tidy_preset["inherits"], "windows-release")
         self.assertEqual(tidy_preset["cacheVariables"], {"AOBUS_BUILD_LINT_PLUGIN": "ON"})
@@ -346,6 +362,7 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertEqual(cache["CMAKE_TOOLCHAIN_FILE"], "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
         self.assertEqual(cache["VCPKG_TARGET_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
         self.assertEqual(cache["VCPKG_HOST_TRIPLET"], "$env{AOBUS_VCPKG_TRIPLET}")
+        self.assertEqual(cache["VCPKG_OVERLAY_PORTS"], "${sourceDir}/cmake/vcpkg-ports")
         self.assertEqual(cache["CMAKE_CXX_COMPILER"], "$env{AOBUS_LLVM_ROOT}/bin/clang++")
 
     def test_linux_release_does_not_have_a_separate_ipo_preset(self):
@@ -1405,6 +1422,40 @@ class CliParseTest(unittest.TestCase):
             append=False,
         )
 
+    def test_macos_tui_asan_disables_mixed_ftxui_container_annotations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "custom-build-tree"
+            binary = build_dir / "test" / "ao_tui_test"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                with mock.patch.dict(
+                    "os.environ",
+                    {"ASAN_OPTIONS": ("halt_on_error=1:detect_container_overflow=1:allocator_may_return_null=1")},
+                    clear=True,
+                ):
+                    with mock.patch.object(test_command, "run", return_value=0) as run:
+                        self.assertEqual(test_command.run_suite("tui", build_dir, asan=True), 0)
+
+        run.assert_called_once_with(
+            [str(binary)],
+            env={
+                "ASAN_OPTIONS": "halt_on_error=1:allocator_may_return_null=1:detect_container_overflow=0",
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+            },
+            log=None,
+            append=False,
+        )
+
+    def test_linux_tui_asan_keeps_container_annotations_enabled(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.dict("os.environ", {"ASAN_OPTIONS": "detect_container_overflow=1"}, clear=True):
+                self.assertEqual(
+                    test_command._macos_tui_asan_env("tui", Path("build-asan"), enabled=True),
+                    {},
+                )
+
     def test_tsan_options_preserve_windows_drive_colons(self):
         value = r"history_size=7:suppressions=C:\temp\external.supp:halt_on_error=0"
 
@@ -1465,6 +1516,8 @@ class CliParseTest(unittest.TestCase):
                 "called_from_lib:libgio-2.0.so",
                 "called_from_lib:libgobject-2.0.so",
                 "called_from_lib:libglibmm-2.68.so",
+                "called_from_lib:libgvfscommon.so",
+                "called_from_lib:libgvfsdbus.so",
                 "called_from_lib:libgtk-4.so",
                 "called_from_lib:libgdk_pixbuf-2.0.so",
                 "called_from_lib:libcairo.so",

@@ -1,0 +1,7 @@
+{
+  "name": "stb",
+  "version-string": "2024-07-29+resize2-2c980bb",
+  "description": "Public-domain header-only libraries with stb_image_resize2 v2.18",
+  "homepage": "https://github.com/nothings/stb",
+  "license": "MIT OR CC-PDDC"
+}

@@ -62,16 +62,15 @@ namespace ao::rt::test
                                               ImportMode mode)
     {
       auto runtime = async::Runtime{executor};
-      auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, library, changes));
-      auto planRes = runQueuedTask(runtime, executor, runtimeLibraryPtr->jobs().prepareLibraryImportAsync(path, mode));
+      auto runtimeLibrary = Library{runtime, ao::test::requireValue(Library::prepare(library)), changes};
+      auto planRes = runQueuedTask(runtime, executor, runtimeLibrary.jobs().prepareLibraryImportAsync(path, mode));
 
       if (!planRes)
       {
         return std::unexpected{planRes.error()};
       }
 
-      return runQueuedTask(
-        runtime, executor, runtimeLibraryPtr->jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
+      return runQueuedTask(runtime, executor, runtimeLibrary.jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
     }
   } // namespace
 

@@ -5,9 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Runtime.h>
-#include <ao/async/Subscription.h>
-#include <ao/async/Task.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
@@ -74,20 +71,20 @@ namespace ao::winui
 
     rt::AppRuntime& runtime() const noexcept;
     std::filesystem::path const& musicRoot() const noexcept;
-    bool scanAfterOpen() const noexcept { return _scanAfterOpen; }
-    bool operationActive() const noexcept { return _operationActive; }
+    bool scanAfterOpen() const noexcept;
+    bool operationActive() const noexcept;
     uimodel::PlaybackActions& playbackActions() const noexcept;
-    i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
+    i18n::MessageCatalog const& textCatalog() const noexcept;
 
-    DesktopSettings const& settings() const noexcept { return _settings; }
-    DesktopSettings& settings() noexcept { return _settings; }
-    uimodel::TrackColumnLayouts const& columnLayouts() const noexcept { return _columnLayouts; }
-    uimodel::TrackColumnLayouts& columnLayouts() noexcept { return _columnLayouts; }
-    uimodel::TrackPresentationCatalog& presentationCatalog() const noexcept { return *_presentationCatalogPtr; }
-    uimodel::ListPresentations& listPresentations() const noexcept { return *_listPresentationsPtr; }
+    DesktopSettings const& settings() const noexcept;
+    DesktopSettings& settings() noexcept;
+    uimodel::TrackColumnLayouts const& columnLayouts() const noexcept;
+    uimodel::TrackColumnLayouts& columnLayouts() noexcept;
+    uimodel::TrackPresentationCatalog& presentationCatalog() const noexcept;
+    uimodel::ListPresentations& listPresentations() const noexcept;
     /// The effective keyboard map: the shipped defaults with the user's overrides merged in.
-    uimodel::KeymapModel const& keymap() const noexcept { return _keymap; }
-    std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
+    uimodel::KeymapModel const& keymap() const noexcept;
+    std::filesystem::path const& stateRoot() const noexcept;
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> saveSettings();
     void setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept;
@@ -107,22 +104,11 @@ namespace ao::winui
                    rt::TextOrderingPolicy const& textOrderingPolicy,
                    rt::CompletionAliasPolicy const& completionAliasPolicy);
 
-    struct CallbackLifetime final
-    {};
-
-    enum class PlaybackPersistenceAdmission : std::uint8_t
-    {
-      Ready,
-      AwaitingRootCommit,
-      Sealed,
-      Retired,
-    };
-
     Result<> initialize(std::optional<desktop::LibrarySwitchRequest> optSuccessorRequest);
     /// Quiesce all callback and runtime-facing owners before releasing the runtime.
     void shutdown() noexcept;
 
-    Result<std::unique_ptr<rt::AppRuntime>> createRuntime(std::filesystem::path const& root);
+    Result<> emplaceRuntimeGraph(std::filesystem::path const& root);
     Result<> saveSettingsCandidate(DesktopSettings const& settings);
     void bindRuntimeServices();
     void startActiveScan();
@@ -133,31 +119,7 @@ namespace ao::winui
     void reportReady(std::filesystem::path const& root);
     void requestPlaySelection();
 
-    std::filesystem::path _stateRoot;
-    winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
-    i18n::MessageCatalog _textCatalog;
-    rt::TextOrderingPolicy const& _textOrderingPolicy;
-    rt::CompletionAliasPolicy const& _completionAliasPolicy;
-    std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
-    std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
-    DesktopSettings _settings{};
-    uimodel::TrackColumnLayouts _columnLayouts{};
-    uimodel::ListPresentations::Snapshot _restoredListPresentations{};
-    uimodel::KeymapModel _keymap{};
-    std::optional<std::filesystem::path> _optSelectedRootCommit;
-    std::unique_ptr<rt::AppRuntime> _runtimePtr;
-    DispatcherQueueExecutor* _dispatcherExecutor = nullptr;
-    std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
-    std::unique_ptr<uimodel::ListPresentations> _listPresentationsPtr;
-    async::Subscription _listPresentationsSub;
-    std::unique_ptr<uimodel::PlaybackActions> _playbackActionsPtr;
-    LibrarySessionCallbacks _callbacks{};
-    async::TaskHandle _libraryTask;
-    std::shared_ptr<CallbackLifetime> _callbackLifetimePtr = std::make_shared<CallbackLifetime>();
-    std::string_view _operationStatusKey;
-    bool _operationActive = false;
-    bool _scanAfterOpen = false;
-    bool _shutdown = false;
-    PlaybackPersistenceAdmission _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
+    struct Storage;
+    std::unique_ptr<Storage> _storagePtr;
   };
 } // namespace ao::winui

@@ -3,6 +3,7 @@ add_library(ao_utility STATIC
     AudioCodecText.cpp
     Base64.cpp
     ByteView.cpp
+    CallbackStackScope.cpp
     Fatal.cpp
     FromChars.cpp
     Hash128.cpp

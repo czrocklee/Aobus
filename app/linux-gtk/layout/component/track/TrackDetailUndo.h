@@ -15,7 +15,6 @@
 
 #include <chrono>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -30,7 +29,7 @@ namespace ao::gtk::layout
   {
     std::string key;
     std::string value;
-    std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr;
+    uimodel::TrackAuthoringSession session;
   };
 
   class TrackDetailUndoController final
@@ -46,9 +45,7 @@ namespace ao::gtk::layout
 
     std::optional<TrackDetailCustomMetadataUndo> const& pendingCustomMetadataUndo() const;
 
-    void presentCustomMetadataDeletedUndo(std::string key,
-                                          std::string value,
-                                          std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr);
+    void presentCustomMetadataDeletedUndo(std::string key, std::string value, uimodel::TrackAuthoringSession session);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
     async::Task<Result<>> undo();

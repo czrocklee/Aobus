@@ -565,8 +565,8 @@ namespace ao::winui::layout
     // before reaching into it.
     applyKeymapAccelerators(_config.host,
                             plans,
-                            [this, lifetimePtr = std::weak_ptr{_lifetimePtr}](std::string_view const id)
-                            { return !lifetimePtr.expired() && invokeAction(id); });
+                            [this, token = _ownerCallbackGate.token()](std::string_view const id)
+                            { return token.admits() && invokeAction(id); });
   }
 
   bool ShellBuilder::invokeAction(std::string_view const actionId) const
@@ -581,12 +581,11 @@ namespace ao::winui::layout
       return;
     }
 
-    // Close generation admission before detaching the native root. Components
-    // can therefore observe retirement even if XAML refuses the detach.
+    // Close owner callback admission before detaching the native root. The
+    // token does not protect this object's memory; clearing and host retirement
+    // still settle the dispatcher-confined callbacks before destruction.
     _retired = true;
-    // The accelerators hold a callable into this builder, so they go first.
-    // Clearing cannot throw out of here; the weak lifetime token is what makes
-    // a handler that survives a failed clear inert rather than dangerous.
+    _ownerCallbackGate.retire();
     clearKeymapAccelerators(_config.host);
     _host.retire();
     _optLivePreset.reset();

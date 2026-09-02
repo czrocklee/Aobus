@@ -2,7 +2,10 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -18,7 +21,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <atomic>
+#include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -128,7 +135,7 @@ namespace ao::uimodel::test
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
     REQUIRE(sessionRes);
 
-    auto const result = commandsFixture.runTask((*sessionRes)->removeFromList(listId));
+    auto const result = commandsFixture.runTask(sessionRes->removeFromList(listId));
 
     REQUIRE(result);
     CHECK(result->status == rt::AuthoringStatus::Applied);
@@ -155,7 +162,7 @@ namespace ao::uimodel::test
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
     REQUIRE(sessionRes);
 
-    auto const result = commandsFixture.runTask((*sessionRes)->addToList(listId));
+    auto const result = commandsFixture.runTask(sessionRes->addToList(listId));
 
     REQUIRE(result);
     CHECK(result->status == rt::AuthoringStatus::Applied);
@@ -166,5 +173,53 @@ namespace ao::uimodel::test
 
     auto scope = commandsFixture.library().snapshot();
     CHECK(scope.selectionTags(std::array{trackId}) == std::vector<std::string>{"road-trip"});
+  }
+
+  TEST_CASE("ListMembershipAuthoringSession - pending edit outlives moved and destroyed facades",
+            "[uimodel][regression][list-membership][concurrency]")
+  {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListMembershipAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListMembershipAuthoringSession>);
+    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<ListMembershipAuthoringSession>);
+
+    auto storage = rt::test::MusicLibraryFixture{};
+    auto const trackId = storage.addTrack("Road Song");
+    auto transaction = library::test::writeTransaction(storage.library());
+    auto builder = library::ListBuilder::makeEmpty().name("Road Trip").filter(R"(#"road-trip")");
+    auto createRes =
+      transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
+    REQUIRE(createRes);
+    auto const listId = *createRes;
+    REQUIRE(transaction.commit());
+
+    auto executor = rt::test::ManualExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, storage.library());
+    auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes, executor};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = [&]
+    {
+      auto source =
+        ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
+      auto moved = std::move(source);
+      auto task = moved.addToList(listId);
+      auto pending = commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, std::move(task)));
+      REQUIRE(executor.waitUntilQueued());
+      return pending;
+    }();
+
+    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    auto const result = future.get();
+    REQUIRE(result);
+    CHECK(result->status == rt::AuthoringStatus::Applied);
+    CHECK(result->changedTrackCount == 1);
+    CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}) ==
+          std::vector<std::string>{"road-trip"});
+
+    auto cleanupSession =
+      ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
+    auto const cleanupRes = commandsFixture.runTask(cleanupSession.removeFromList(listId));
+    REQUIRE(cleanupRes);
+    CHECK(cleanupRes->status == rt::AuthoringStatus::Applied);
+    CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}).empty());
   }
 } // namespace ao::uimodel::test

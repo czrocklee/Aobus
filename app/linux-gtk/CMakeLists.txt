@@ -51,6 +51,7 @@ add_library(aobus-gtk-lib STATIC
     preference/PreferencesWindow.cpp
 
     common/AccessibleLabel.cpp
+    common/ActionMapRegistration.cpp
     common/DismissController.cpp
     common/MainContextCallbackScope.cpp
     common/PopoverAttachment.cpp

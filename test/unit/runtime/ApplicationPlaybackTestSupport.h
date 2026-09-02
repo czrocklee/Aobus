@@ -10,6 +10,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/ViewService.h>
@@ -35,6 +36,16 @@ namespace ao::rt::test
   template<typename ExecutorT = InlineExecutor>
   struct ApplicationPlaybackFixtureT final
   {
+    struct PlaybackStorage final
+    {
+      PlaybackStorage(PlaybackBootstrap& bootstrap, async::Executor& executor, PlaybackSuccession& succession)
+        : playback{bootstrap.createPlaybackService(executor, succession)}
+      {
+      }
+
+      PlaybackService playback;
+    };
+
     ApplicationPlaybackFixtureT() = default;
 
     ApplicationPlaybackFixtureT(ApplicationPlaybackFixtureT const&) = delete;
@@ -62,8 +73,11 @@ namespace ao::rt::test
     PlaybackSuccession
       succession{executor, views, sources, libraryFixture.library(), playbackTransport, notifications, asyncRuntime};
     PlaybackBootstrap playbackBootstrap{playbackTransport};
-    std::unique_ptr<PlaybackService> playbackPtr{playbackBootstrap.createPlaybackService(executor, succession)};
-    PlaybackService& playback{*playbackPtr};
+    // The storage box is a test-only destruction seam: production composition
+    // stores the nonmovable service directly in its final owner.
+    std::unique_ptr<PlaybackStorage> playbackStoragePtr{
+      std::make_unique<PlaybackStorage>(playbackBootstrap, executor, succession)};
+    PlaybackService& playback{playbackStoragePtr->playback};
   };
 
   using ApplicationPlaybackFixture = ApplicationPlaybackFixtureT<>;

@@ -3,6 +3,7 @@
 
 #include "backend/PipeWireMonitor.h"
 
+#include "backend/detail/PipeWireMonitorHooks.h"
 #include "backend/detail/PipeWireRuntime.h"
 #include <ao/Contract.h>
 #include <ao/utility/ByteView.h>
@@ -24,6 +25,7 @@ extern "C"
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/CallbackStackScope.h>
 #include <ao/utility/ThreadName.h>
 
 #include <algorithm>
@@ -76,11 +78,28 @@ namespace ao::audio::backend
     {
       return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
     }
+
+    void invokeHook(std::function<void()> const& hook, char const* const context) noexcept
+    {
+      if (!hook)
+      {
+        return;
+      }
+
+      try
+      {
+        hook();
+      }
+      catch (...)
+      {
+        AO_FATAL_EXCEPTION(std::current_exception(), context);
+      }
+    }
   } // namespace
 
-  // --- PipeWireMonitor Impl ---
+  // --- Provider-independent monitor state ---
 
-  struct PipeWireMonitor::Impl final
+  struct PipeWireMonitor::State final : std::enable_shared_from_this<State>
   {
     struct LinkBinding final
     {
@@ -99,14 +118,14 @@ namespace ao::audio::backend
     struct NodeBinding final
     {
       std::uint32_t id = PW_ID_ANY;
-      Impl* impl = nullptr;
+      State* state = nullptr;
       detail::PwProxyPtr<::pw_node> proxyPtr;
       detail::SpaHookGuard listener;
 
       void reset()
       {
         id = PW_ID_ANY;
-        impl = nullptr;
+        state = nullptr;
         listener.reset();
         proxyPtr.reset();
       }
@@ -152,26 +171,59 @@ namespace ao::audio::backend
       std::vector<Device> devices;
     };
 
+    enum class Lifecycle : std::uint8_t
+    {
+      Running,
+      Stopping,
+      Stopped,
+    };
+
     struct [[nodiscard]] CallbackInvocationScope final
     {
-      explicit CallbackInvocationScope(Impl& impl)
-        : impl{impl}
+      explicit CallbackInvocationScope(State& state)
+        : state{state}
       {
-        ++impl.callbackDepth;
+        auto const lock = std::scoped_lock{state.lifecycleMutex};
+
+        if (state.lifecycle == Lifecycle::Running)
+        {
+          ++state.activeCallbackCount;
+          optCallbackStackScope.emplace(&state);
+        }
       }
 
-      ~CallbackInvocationScope() { --impl.callbackDepth; }
+      ~CallbackInvocationScope()
+      {
+        if (!optCallbackStackScope)
+        {
+          return;
+        }
+
+        optCallbackStackScope.reset();
+        auto const lock = std::scoped_lock{state.lifecycleMutex};
+        --state.activeCallbackCount;
+        state.lifecycleChanged.notify_all();
+      }
 
       CallbackInvocationScope(CallbackInvocationScope const&) = delete;
       CallbackInvocationScope& operator=(CallbackInvocationScope const&) = delete;
       CallbackInvocationScope(CallbackInvocationScope&&) = delete;
       CallbackInvocationScope& operator=(CallbackInvocationScope&&) = delete;
 
-      Impl& impl;
+      bool isAdmitted() const noexcept { return optCallbackStackScope.has_value(); }
+
+      State& state;
+      std::optional<utility::CallbackStackScope> optCallbackStackScope;
     };
 
-    Impl()
+    explicit State(std::shared_ptr<detail::PipeWireMonitorHooks> hooksPtr)
+      : monitorHooksPtr{std::move(hooksPtr)}
     {
+      if (monitorHooksPtr)
+      {
+        return;
+      }
+
       threadLoopPtr.reset(::pw_thread_loop_new("PipeWireMonitor", nullptr));
 
       if (!threadLoopPtr)
@@ -202,20 +254,24 @@ namespace ao::audio::backend
       }
     }
 
-    ~Impl()
+    ~State()
     {
-      shutdown();
-      auto const callbackLock = std::scoped_lock{callbackMutex};
-      AO_EXPECTS(callbackDepth == 0);
-      AO_EXPECTS(activeSubscriptionCount == 0);
+      requestShutdown();
+      completeShutdown();
+
+      if (monitorHooksPtr)
+      {
+        invokeHook(monitorHooksPtr->onMonitorStateDestroyed, "PipeWire monitor-state destruction observer");
+      }
     }
 
-    Impl(Impl const&) = delete;
-    Impl& operator=(Impl const&) = delete;
-    Impl(Impl&&) = delete;
-    Impl& operator=(Impl&&) = delete;
+    State(State const&) = delete;
+    State& operator=(State const&) = delete;
+    State(State&&) = delete;
+    State& operator=(State&&) = delete;
 
     detail::PipeWireEnvironmentGuard envGuard;
+    std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr;
     detail::PwThreadLoopPtr threadLoopPtr;
     detail::PwContextPtr contextPtr;
     detail::PwCorePtr corePtr;
@@ -223,7 +279,11 @@ namespace ao::audio::backend
 
     mutable std::mutex mutex;
     std::recursive_mutex callbackMutex;
-    std::uint32_t callbackDepth = 0;
+    mutable std::mutex lifecycleMutex;
+    std::condition_variable lifecycleChanged;
+    Lifecycle lifecycle = Lifecycle::Running;
+    std::size_t activeCallbackCount = 0;
+    bool completingShutdown = false;
     detail::PwRegistryPtr registryPtr;
     detail::SpaHookGuard registryListener;
     detail::SpaHookGuard coreListener;
@@ -238,45 +298,26 @@ namespace ao::audio::backend
 
     std::atomic<bool> stopping{false};
     std::atomic<bool> startCalled{false};
-    std::atomic<bool> shutdownStarted{false};
     std::uint64_t nextSubscriptionId = 1;
-    std::size_t activeSubscriptionCount = 0;
     std::vector<GraphSubscription> graphSubscriptions;
     std::vector<DeviceSubscription> deviceSubscriptions;
     std::shared_ptr<RefreshSignal> refreshSignalPtr = std::make_shared<RefreshSignal>();
-    std::jthread refreshThread;
 
-    void startRefreshThread()
+    void installTestHooks()
     {
-      auto const signalPtr = refreshSignalPtr;
-      refreshThread =
-        std::jthread{[this, signalPtr](std::stop_token const& stopToken)
-                     {
-                       try
-                       {
-                         setCurrentThreadName("PipeWireRefresh");
+      if (!monitorHooksPtr)
+      {
+        return;
+      }
 
-                         while (!stopToken.stop_requested())
-                         {
-                           auto lock = std::unique_lock{signalPtr->mutex};
-                           signalPtr->cv.wait(lock, stopToken, [&signalPtr] { return signalPtr->requested; });
-
-                           if (stopToken.stop_requested())
-                           {
-                             return;
-                           }
-
-                           signalPtr->requested = false;
-                           lock.unlock();
-
-                           refresh();
-                         }
-                       }
-                       catch (...)
-                       {
-                         AO_FATAL_EXCEPTION(std::current_exception(), "PipeWire refresh thread");
-                       }
-                     }};
+      auto const weakStatePtr = weak_from_this();
+      monitorHooksPtr->requestRefresh = [weakStatePtr]
+      {
+        if (auto const statePtr = weakStatePtr.lock(); statePtr)
+        {
+          statePtr->triggerRefresh();
+        }
+      };
     }
 
     void triggerRefresh()
@@ -295,7 +336,11 @@ namespace ao::audio::backend
     }
 
     void start();
-    void shutdown() noexcept;
+    bool isRunning() const noexcept;
+    bool requestShutdown() noexcept;
+    void completeShutdown() noexcept;
+    void waitForShutdown() noexcept;
+    bool isCurrentCallback() const noexcept;
     void refresh();
     std::optional<RefreshBatch> prepareRefreshBatch();
     bool deliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks);
@@ -325,7 +370,7 @@ namespace ao::audio::backend
 
     static void handleCoreDone(void* data, std::uint32_t /*id*/, std::int32_t seq)
     {
-      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto* const impl = static_cast<PipeWireMonitor::State*>(data);
 
       {
         auto const lock = std::scoped_lock{impl->mutex};
@@ -345,7 +390,7 @@ namespace ao::audio::backend
                                      std::uint32_t version,
                                      ::spa_dict const* props)
     {
-      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto* const impl = static_cast<PipeWireMonitor::State*>(data);
       auto const isNode = (std::strcmp(type, PW_TYPE_INTERFACE_Node) == 0);
       auto const isLink = (std::strcmp(type, PW_TYPE_INTERFACE_Link) == 0);
 
@@ -366,7 +411,7 @@ namespace ao::audio::backend
                                                           return;
                                                         }
 
-                                                        auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+                                                        auto* const impl = static_cast<PipeWireMonitor::State*>(data);
 
                                                         {
                                                           auto const lock = std::scoped_lock{impl->mutex};
@@ -412,7 +457,7 @@ namespace ao::audio::backend
 
     static void handleRegistryGlobalRemove(void* data, std::uint32_t id)
     {
-      auto* const impl = static_cast<PipeWireMonitor::Impl*>(data);
+      auto* const impl = static_cast<PipeWireMonitor::State*>(data);
       bool needsRefresh = false;
 
       {
@@ -464,8 +509,8 @@ namespace ao::audio::backend
         return;
       }
 
-      auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
-      auto* const impl = binding->impl;
+      auto* const binding = static_cast<PipeWireMonitor::State::NodeBinding*>(data);
+      auto* const impl = binding->state;
 
       {
         auto const lock = std::scoped_lock{impl->mutex};
@@ -493,8 +538,8 @@ namespace ao::audio::backend
                                 std::uint32_t /*next*/,
                                 ::spa_pod const* param)
     {
-      auto* const binding = static_cast<PipeWireMonitor::Impl::NodeBinding*>(data);
-      auto* const impl = binding->impl;
+      auto* const binding = static_cast<PipeWireMonitor::State::NodeBinding*>(data);
+      auto* const impl = binding->state;
 
       {
         auto const lock = std::scoped_lock{impl->mutex};
@@ -579,58 +624,199 @@ namespace ao::audio::backend
     }();
   };
 
+  struct PipeWireMonitor::Worker final
+  {
+    explicit Worker(std::shared_ptr<State> statePtr)
+      : _statePtr{std::move(statePtr)}
+    {
+      auto const retainedStatePtr = _statePtr;
+      auto const signalPtr = retainedStatePtr->refreshSignalPtr;
+      _refreshThread =
+        std::jthread{[retainedStatePtr, signalPtr](std::stop_token const& stopToken)
+                     {
+                       try
+                       {
+                         setCurrentThreadName("PipeWireRefresh");
+
+                         while (!stopToken.stop_requested())
+                         {
+                           auto lock = std::unique_lock{signalPtr->mutex};
+                           signalPtr->cv.wait(lock, stopToken, [&signalPtr] { return signalPtr->requested; });
+
+                           if (stopToken.stop_requested())
+                           {
+                             break;
+                           }
+
+                           signalPtr->requested = false;
+                           lock.unlock();
+                           retainedStatePtr->refresh();
+
+                           if (retainedStatePtr->monitorHooksPtr)
+                           {
+                             invokeHook(retainedStatePtr->monitorHooksPtr->onRefreshComplete,
+                                        "PipeWire refresh-completion observer");
+                           }
+                         }
+                       }
+                       catch (...)
+                       {
+                         AO_FATAL_EXCEPTION(std::current_exception(), "PipeWire refresh thread");
+                       }
+
+                       if (retainedStatePtr->monitorHooksPtr)
+                       {
+                         invokeHook(retainedStatePtr->monitorHooksPtr->onMonitorExit, "PipeWire monitor-exit observer");
+                       }
+
+                       retainedStatePtr->requestShutdown();
+                       retainedStatePtr->completeShutdown();
+                     }};
+    }
+
+    ~Worker() { shutdown(); }
+
+    Worker(Worker const&) = delete;
+    Worker& operator=(Worker const&) = delete;
+    Worker(Worker&&) = delete;
+    Worker& operator=(Worker&&) = delete;
+
+    void shutdown() noexcept
+    {
+      auto const statePtr = _statePtr;
+      auto const startedShutdown = statePtr->requestShutdown();
+      auto const returnWithoutWaiting = statePtr->isCurrentCallback();
+
+      if (statePtr->monitorHooksPtr)
+      {
+        if (startedShutdown)
+        {
+          invokeHook(statePtr->monitorHooksPtr->onShutdownStarted, "PipeWire shutdown-start observer");
+        }
+        else if (!returnWithoutWaiting)
+        {
+          invokeHook(statePtr->monitorHooksPtr->onShutdownWait, "PipeWire shutdown-wait observer");
+        }
+      }
+
+      auto threadToJoin = std::jthread{};
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        auto const isWorkerThread = _refreshThread.joinable() && std::this_thread::get_id() == _refreshThread.get_id();
+
+        if (_refreshThread.joinable())
+        {
+          _refreshThread.request_stop();
+          statePtr->refreshSignalPtr->cv.notify_all();
+
+          if (returnWithoutWaiting || isWorkerThread)
+          {
+            _refreshThread.detach();
+          }
+          else
+          {
+            threadToJoin = std::move(_refreshThread);
+          }
+        }
+
+        if (returnWithoutWaiting || isWorkerThread)
+        {
+          return;
+        }
+      }
+
+      if (threadToJoin.joinable())
+      {
+        threadToJoin.join();
+      }
+
+      statePtr->waitForShutdown();
+    }
+
+  private:
+    std::shared_ptr<State> _statePtr;
+    std::mutex _mutex;
+    std::jthread _refreshThread;
+  };
+
   // --- PipeWireMonitor Implementation ---
 
   PipeWireMonitor::PipeWireMonitor()
-    : _implPtr{std::make_unique<Impl>()}
+    : PipeWireMonitor{nullptr}
   {
-    _implPtr->startRefreshThread();
+  }
+
+  PipeWireMonitor::PipeWireMonitor(std::shared_ptr<detail::PipeWireMonitorHooks> monitorHooksPtr)
+    : _statePtr{std::make_shared<State>(std::move(monitorHooksPtr))}, _workerPtr{std::make_unique<Worker>(_statePtr)}
+  {
+    _statePtr->installTestHooks();
   }
 
   PipeWireMonitor::~PipeWireMonitor()
   {
-    AO_INVARIANT(_implPtr != nullptr);
-    _implPtr->shutdown();
+    AO_INVARIANT(_statePtr != nullptr);
+    _workerPtr->shutdown();
   }
 
   void PipeWireMonitor::start()
   {
-    _implPtr->start();
+    auto const statePtr = _statePtr;
+    statePtr->start();
   }
 
   void PipeWireMonitor::stop()
   {
-    _implPtr->shutdown();
+    _workerPtr->shutdown();
   }
 
   Subscription PipeWireMonitor::subscribeDevices(DeviceCallback callback)
   {
-    return _implPtr->subscribeDevices(std::move(callback));
+    auto const statePtr = _statePtr;
+    return statePtr->subscribeDevices(std::move(callback));
   }
 
   std::vector<Device> PipeWireMonitor::enumerateSinks() const
   {
-    auto const lock = std::scoped_lock{_implPtr->mutex};
-    return _implPtr->enumerateSinks();
+    auto const statePtr = _statePtr;
+    auto const lock = std::scoped_lock{statePtr->mutex};
+    return statePtr->enumerateSinks();
+  }
+
+  bool PipeWireMonitor::isRunning() const noexcept
+  {
+    auto const statePtr = _statePtr;
+    return statePtr->isRunning();
   }
 
   Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
                                                std::function<void(flow::Graph const&)> callback)
   {
-    return _implPtr->subscribeGraph(routeAnchor, std::move(callback));
+    auto const statePtr = _statePtr;
+    return statePtr->subscribeGraph(routeAnchor, std::move(callback));
   }
 
   void PipeWireMonitor::refresh()
   {
-    _implPtr->refresh();
+    auto const statePtr = _statePtr;
+    statePtr->refresh();
   }
 
-  // --- Impl Implementations ---
+  // --- State implementation ---
 
-  void PipeWireMonitor::Impl::start()
+  void PipeWireMonitor::State::start()
   {
-    if (startCalled.exchange(true, std::memory_order_acq_rel) || !threadLoopPtr ||
-        stopping.load(std::memory_order_acquire))
+    if (startCalled.exchange(true, std::memory_order_acq_rel) || stopping.load(std::memory_order_acquire))
+    {
+      return;
+    }
+
+    if (monitorHooksPtr)
+    {
+      triggerRefresh();
+      return;
+    }
+
+    if (!threadLoopPtr)
     {
       return;
     }
@@ -645,8 +831,8 @@ namespace ao::audio::backend
 
         if (registryPtr)
         {
-          ::pw_registry_add_listener(registryPtr.get(), registryListener.get(), &Impl::registryEvents, this);
-          ::pw_core_add_listener(corePtr.get(), coreListener.get(), &Impl::coreEvents, this);
+          ::pw_registry_add_listener(registryPtr.get(), registryListener.get(), &State::registryEvents, this);
+          ::pw_core_add_listener(corePtr.get(), coreListener.get(), &State::coreEvents, this);
           coreSyncSeq = ::pw_core_sync(corePtr.get(), PW_ID_CORE, 0);
         }
       }
@@ -655,28 +841,45 @@ namespace ao::audio::backend
     triggerRefresh();
   }
 
-  void PipeWireMonitor::Impl::shutdown() noexcept
+  bool PipeWireMonitor::State::isRunning() const noexcept
   {
-    AO_EXPECTS(!refreshThread.joinable() || std::this_thread::get_id() != refreshThread.get_id());
+    auto const lock = std::scoped_lock{lifecycleMutex};
+    return lifecycle == Lifecycle::Running;
+  }
 
+  bool PipeWireMonitor::State::requestShutdown() noexcept
+  {
+    auto const lock = std::scoped_lock{lifecycleMutex};
+
+    if (lifecycle != Lifecycle::Running)
     {
-      auto const callbackLock = std::scoped_lock{callbackMutex};
-      AO_EXPECTS(callbackDepth == 0);
+      return false;
     }
 
-    if (shutdownStarted.exchange(true, std::memory_order_acq_rel))
-    {
-      return;
-    }
-
+    lifecycle = Lifecycle::Stopping;
     stopping.store(true, std::memory_order_release);
-
-    refreshThread.request_stop();
     refreshSignalPtr->cv.notify_all();
+    return true;
+  }
 
-    if (refreshThread.joinable())
+  void PipeWireMonitor::State::completeShutdown() noexcept
+  {
     {
-      refreshThread.join();
+      auto lock = std::unique_lock{lifecycleMutex};
+
+      if (lifecycle == Lifecycle::Stopped)
+      {
+        return;
+      }
+
+      if (completingShutdown)
+      {
+        lifecycleChanged.wait(lock, [this] { return lifecycle == Lifecycle::Stopped; });
+        return;
+      }
+
+      completingShutdown = true;
+      lifecycleChanged.wait(lock, [this] { return activeCallbackCount == 0U; });
     }
 
     if (threadLoopPtr && nativeLoopRunning)
@@ -685,32 +888,50 @@ namespace ao::audio::backend
       nativeLoopRunning = false;
     }
 
-    auto const callbackLock = std::scoped_lock{callbackMutex};
-    auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
-    auto const lock = std::scoped_lock{mutex};
-    deviceSubscriptions.clear();
-    graphSubscriptions.clear();
-    linkBindings.clear();
-    streamNodeBindings.clear();
-    sinkNodeBindings.clear();
-    registryListener.reset();
-    registryPtr.reset();
-    coreListener.reset();
-    nodes.clear();
-    links.clear();
-    nodeFormatMap.clear();
-    sinkPropsMap.clear();
-    corePtr.reset();
-    contextPtr.reset();
+    {
+      auto const callbackLock = std::scoped_lock{callbackMutex};
+      auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
+      auto const lock = std::scoped_lock{mutex};
+      deviceSubscriptions.clear();
+      graphSubscriptions.clear();
+      linkBindings.clear();
+      streamNodeBindings.clear();
+      sinkNodeBindings.clear();
+      registryListener.reset();
+      registryPtr.reset();
+      coreListener.reset();
+      nodes.clear();
+      links.clear();
+      nodeFormatMap.clear();
+      sinkPropsMap.clear();
+      corePtr.reset();
+      contextPtr.reset();
+    }
+
+    auto const lock = std::scoped_lock{lifecycleMutex};
+    lifecycle = Lifecycle::Stopped;
+    lifecycleChanged.notify_all();
   }
 
-  Subscription PipeWireMonitor::Impl::subscribeDevices(DeviceCallback callback)
+  void PipeWireMonitor::State::waitForShutdown() noexcept
+  {
+    auto lock = std::unique_lock{lifecycleMutex};
+    lifecycleChanged.wait(lock, [this] { return lifecycle == Lifecycle::Stopped; });
+  }
+
+  bool PipeWireMonitor::State::isCurrentCallback() const noexcept
+  {
+    return utility::CallbackStackScope::containsIdentity(this);
+  }
+
+  Subscription PipeWireMonitor::State::subscribeDevices(DeviceCallback callback)
   {
     if (!callback)
     {
       return {};
     }
 
+    auto const retainedStatePtr = shared_from_this();
     std::uint64_t id = 0;
     auto devices = std::vector<Device>{};
     auto const callbackLock = std::scoped_lock{callbackMutex};
@@ -731,6 +952,20 @@ namespace ao::audio::backend
     try
     {
       auto const callbackScope = CallbackInvocationScope{*this};
+
+      if (!callbackScope.isAdmitted())
+      {
+        auto const lock = std::scoped_lock{mutex};
+        auto const it = std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
+
+        if (it != deviceSubscriptions.end())
+        {
+          deviceSubscriptions.erase(it);
+        }
+
+        return {};
+      }
+
       callback(devices);
     }
     catch (...)
@@ -756,31 +991,36 @@ namespace ao::audio::backend
       }
     }
 
-    ++activeSubscriptionCount;
-    return Subscription{[this, id]
+    auto const weakStatePtr = std::weak_ptr<State>{retainedStatePtr};
+    return Subscription{[weakStatePtr, id]
                         {
-                          auto const callbackLock = std::scoped_lock{callbackMutex};
-                          auto const lock = std::scoped_lock{mutex};
-                          auto const it = std::ranges::find(deviceSubscriptions, id, &DeviceSubscription::id);
+                          auto const statePtr = weakStatePtr.lock();
 
-                          if (it != deviceSubscriptions.end())
+                          if (!statePtr)
                           {
-                            deviceSubscriptions.erase(it);
+                            return;
                           }
 
-                          AO_INVARIANT(activeSubscriptionCount != 0);
-                          --activeSubscriptionCount;
+                          auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+                          auto const lock = std::scoped_lock{statePtr->mutex};
+                          auto const it = std::ranges::find(statePtr->deviceSubscriptions, id, &DeviceSubscription::id);
+
+                          if (it != statePtr->deviceSubscriptions.end())
+                          {
+                            statePtr->deviceSubscriptions.erase(it);
+                          }
                         }};
   }
 
-  Subscription PipeWireMonitor::Impl::subscribeGraph(std::string_view routeAnchor,
-                                                     std::function<void(flow::Graph const&)> callback)
+  Subscription PipeWireMonitor::State::subscribeGraph(std::string_view routeAnchor,
+                                                      std::function<void(flow::Graph const&)> callback)
   {
     if (!callback)
     {
       return {};
     }
 
+    auto const retainedStatePtr = shared_from_this();
     std::uint64_t id = 0;
     auto const callbackLock = std::scoped_lock{callbackMutex};
 
@@ -797,30 +1037,66 @@ namespace ao::audio::backend
         {.id = id, .routeAnchor = std::string{routeAnchor}, .callback = std::move(callback)});
     }
 
-    ++activeSubscriptionCount;
+    if (monitorHooksPtr)
+    {
+      invokeHook(monitorHooksPtr->onGraphSubscriptionInserted, "PipeWire graph-subscription insertion observer");
+    }
+
     triggerRefresh();
 
-    return Subscription{[this, id]
-                        {
-                          auto const callbackLock = std::scoped_lock{callbackMutex};
-                          {
-                            auto const lock = std::scoped_lock{mutex};
-                            auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
+    {
+      auto const lock = std::scoped_lock{mutex};
 
-                            if (it != graphSubscriptions.end())
+      if (stopping.load(std::memory_order_acquire))
+      {
+        auto const it = std::ranges::find(graphSubscriptions, id, &GraphSubscription::id);
+
+        if (it != graphSubscriptions.end())
+        {
+          graphSubscriptions.erase(it);
+        }
+
+        return {};
+      }
+    }
+
+    auto const weakStatePtr = std::weak_ptr<State>{retainedStatePtr};
+    return Subscription{[weakStatePtr, id]
+                        {
+                          auto const statePtr = weakStatePtr.lock();
+
+                          if (!statePtr)
+                          {
+                            return;
+                          }
+
+                          auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+                          {
+                            auto const lock = std::scoped_lock{statePtr->mutex};
+                            auto const it = std::ranges::find(statePtr->graphSubscriptions, id, &GraphSubscription::id);
+
+                            if (it != statePtr->graphSubscriptions.end())
                             {
-                              graphSubscriptions.erase(it);
+                              statePtr->graphSubscriptions.erase(it);
                             }
                           }
 
-                          AO_INVARIANT(activeSubscriptionCount != 0);
-                          --activeSubscriptionCount;
-                          triggerRefresh();
+                          statePtr->triggerRefresh();
                         }};
   }
 
-  std::vector<Device> PipeWireMonitor::Impl::enumerateSinks() const
+  std::vector<Device> PipeWireMonitor::State::enumerateSinks() const
   {
+    if (stopping.load(std::memory_order_acquire))
+    {
+      return {};
+    }
+
+    if (monitorHooksPtr && monitorHooksPtr->enumerateSinks)
+    {
+      return monitorHooksPtr->enumerateSinks();
+    }
+
     auto devices = std::vector<Device>{};
 
     for (auto const& [id, node] : nodes)
@@ -847,7 +1123,7 @@ namespace ao::audio::backend
     return devices;
   }
 
-  void PipeWireMonitor::Impl::refresh()
+  void PipeWireMonitor::State::refresh()
   {
     if (stopping.load(std::memory_order_acquire))
     {
@@ -861,6 +1137,11 @@ namespace ao::audio::backend
       return;
     }
 
+    if (monitorHooksPtr)
+    {
+      invokeHook(monitorHooksPtr->onRefreshPrepared, "PipeWire refresh-prepared observer");
+    }
+
     if (!deliverGraphCallbacks(optBatch->graphCallbacks))
     {
       return;
@@ -869,7 +1150,7 @@ namespace ao::audio::backend
     deliverDeviceCallbacks(optBatch->deviceCallbacks, optBatch->devices);
   }
 
-  std::optional<PipeWireMonitor::Impl::RefreshBatch> PipeWireMonitor::Impl::prepareRefreshBatch()
+  std::optional<PipeWireMonitor::State::RefreshBatch> PipeWireMonitor::State::prepareRefreshBatch()
   {
     auto batch = RefreshBatch{};
 
@@ -883,27 +1164,45 @@ namespace ao::audio::backend
       return std::nullopt;
     }
 
-    auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
-
-    for (auto const& sub : graphSubscriptions)
+    if (!monitorHooksPtr)
     {
-      if (auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str()); optParsedId)
+      auto subscribedStreamIds = std::unordered_set<std::uint32_t>{};
+
+      for (auto const& sub : graphSubscriptions)
       {
-        subscribedStreamIds.insert(*optParsedId);
+        if (auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str()); optParsedId)
+        {
+          subscribedStreamIds.insert(*optParsedId);
+        }
       }
+
+      syncStreamBindings(subscribedStreamIds);
+      syncSinkBindings();
     }
 
-    syncStreamBindings(subscribedStreamIds);
-    syncSinkBindings();
-
     for (auto const& sub : graphSubscriptions)
     {
-      auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str());
+      auto graph = flow::Graph{};
+      bool publish = false;
 
-      if (optParsedId && *optParsedId != PW_ID_ANY && sub.callback)
+      if (monitorHooksPtr)
       {
-        auto graph = flow::Graph{};
+        publish = true;
+
+        if (monitorHooksPtr->graphForRoute)
+        {
+          graph = monitorHooksPtr->graphForRoute(sub.routeAnchor);
+        }
+      }
+      else if (auto const optParsedId = detail::parsePipeWireUint32(sub.routeAnchor.c_str());
+               optParsedId && *optParsedId != PW_ID_ANY)
+      {
         populateGraph(graph, *optParsedId);
+        publish = true;
+      }
+
+      if (publish && sub.callback)
+      {
         batch.graphCallbacks.push_back({.id = sub.id, .callback = sub.callback, .graph = std::move(graph)});
       }
     }
@@ -924,7 +1223,7 @@ namespace ao::audio::backend
     return batch;
   }
 
-  bool PipeWireMonitor::Impl::deliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks)
+  bool PipeWireMonitor::State::deliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks)
   {
     // Serialize user delivery outside the PipeWire loop lock and state mutex.
     // Rechecking the id after copying lets cancellation suppress stale delivery.
@@ -955,6 +1254,12 @@ namespace ao::audio::backend
         try
         {
           auto const callbackScope = CallbackInvocationScope{*this};
+
+          if (!callbackScope.isAdmitted())
+          {
+            return false;
+          }
+
           pending.callback(pending.graph);
         }
         catch (...)
@@ -967,8 +1272,8 @@ namespace ao::audio::backend
     return true;
   }
 
-  void PipeWireMonitor::Impl::deliverDeviceCallbacks(std::vector<PendingDeviceCallback>& pendingCallbacks,
-                                                     std::vector<Device> const& devices)
+  void PipeWireMonitor::State::deliverDeviceCallbacks(std::vector<PendingDeviceCallback>& pendingCallbacks,
+                                                      std::vector<Device> const& devices)
   {
     for (auto& pending : pendingCallbacks)
     {
@@ -996,6 +1301,12 @@ namespace ao::audio::backend
       try
       {
         auto const callbackScope = CallbackInvocationScope{*this};
+
+        if (!callbackScope.isAdmitted())
+        {
+          return;
+        }
+
         pending.callback(devices);
       }
       catch (...)
@@ -1005,7 +1316,7 @@ namespace ao::audio::backend
     }
   }
 
-  void PipeWireMonitor::Impl::syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds)
+  void PipeWireMonitor::State::syncStreamBindings(std::unordered_set<std::uint32_t> const& subscribedStreamIds)
   {
     for (auto it = streamNodeBindings.begin(); it != streamNodeBindings.end();)
     {
@@ -1047,7 +1358,7 @@ namespace ao::audio::backend
 
       auto bindingPtr = std::make_unique<NodeBinding>();
       bindingPtr->id = streamId;
-      bindingPtr->impl = this;
+      bindingPtr->state = this;
       bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(node));
       auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
       ::pw_node_subscribe_params(
@@ -1060,7 +1371,7 @@ namespace ao::audio::backend
     }
   }
 
-  void PipeWireMonitor::Impl::syncSinkBindings()
+  void PipeWireMonitor::State::syncSinkBindings()
   {
     for (auto const& [id, node] : nodes)
     {
@@ -1076,7 +1387,7 @@ namespace ao::audio::backend
         {
           auto bindingPtr = std::make_unique<NodeBinding>();
           bindingPtr->id = id;
-          bindingPtr->impl = this;
+          bindingPtr->state = this;
           bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(proxy));
 
           auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
@@ -1096,7 +1407,7 @@ namespace ao::audio::backend
     }
   }
 
-  PipeWireMonitor::Impl::StreamGraphSelection PipeWireMonitor::Impl::selectStreamGraphNodes(
+  PipeWireMonitor::State::StreamGraphSelection PipeWireMonitor::State::selectStreamGraphNodes(
     std::uint32_t streamId) const
   {
     auto selection = StreamGraphSelection{};
@@ -1140,7 +1451,7 @@ namespace ao::audio::backend
     return selection;
   }
 
-  flow::Node PipeWireMonitor::Impl::convertToAudioNode(
+  flow::Node PipeWireMonitor::State::convertToAudioNode(
     std::uint32_t id,
     std::uint32_t streamId,
     std::unordered_set<std::uint32_t> const& downstreamNodeIdSet) const
@@ -1210,7 +1521,7 @@ namespace ao::audio::backend
     return node;
   }
 
-  void PipeWireMonitor::Impl::populateGraph(flow::Graph& graph, std::uint32_t streamId) const
+  void PipeWireMonitor::State::populateGraph(flow::Graph& graph, std::uint32_t streamId) const
   {
     auto const selection = selectStreamGraphNodes(streamId);
 

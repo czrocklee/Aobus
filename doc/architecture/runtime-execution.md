@@ -112,7 +112,9 @@ YAML import additionally enters Maintenance through a sequenced control command 
 
 Every live transaction and exact preview enters one private per-library FIFO lane.
 Command arguments own everything retained across suspension.
-A command waiting in the lane consumes no worker; after grant it resumes on a worker, performs any active-turn revalidation, and runs the complete native transaction inside one ordinary non-coroutine call stack.
+A command waiting in the lane consumes no worker; a move-only value permit and cpp-local command guard pin the lane plus granted request without a lease-specific allocation.
+After grant it resumes on a worker, performs any active-turn revalidation, and runs the complete native transaction inside one ordinary non-coroutine call stack.
+The guard transfers admission into `Mutation` only after transaction construction succeeds; cancellation or unwind before that transfer releases the command before the owner permit.
 A committing command dispatches mandatory publication `P(R)` to the callback executor and then suspends on a one-shot publication event, again consuming no worker.
 The event posts continuation back to the awaiter's associated worker executor, so callback completion cannot turn the publication owner into the next transaction owner.
 It supports completion before or after await registration because the callback executor may finish `P(R)` before the worker's dispatch call returns.
@@ -130,6 +132,7 @@ For progress-capable library tasks, successful cancellable callback-executor adm
 The audio subsystem owns threads whose lifetime and scheduling requirements do not fit the general worker pool.
 These include engine event delivery, backend render/device-monitor work, and per-stream decoding.
 They communicate through synchronized queues, snapshots, and callbacks rather than accessing frontend or runtime state directly.
+Each provider closes subscription and callback admission through a narrow shared control state; concurrent external shutdown callers observe one completion boundary, while a callback-thread initiator cannot wait on itself and completion becomes observable after that admitted callback unwinds.
 
 The logging backend may also own its own asynchronous worker, but it is infrastructure rather than an application-control domain.
 After logging initialization, the application registers one Core fatal sink backed by a non-blocking asynchronous logger path; the realtime fatal entry bypasses that sink.
@@ -221,6 +224,7 @@ The current Engine non-realtime queue and Player-to-executor task stream have no
 - A background-task lease serializes long task preparation without closing authoring or granting storage write access; an import maintenance guard separately closes interactive admission.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - A synchronous observer must not destroy the emitting owner or invoke composition-root shutdown on the same callback stack; it defers teardown to a later executor turn.
+- `LibraryChanges` enforces that rule with one unique publication owner plus a narrow shared delivery/admission block: queued callback-executor turns may weakly enter or retire, but the block never owns the publication state machine and cannot outlive its borrowed callback executor.
 - Reentrant notification mutations queue another immutable update, so every contract-fulfilling observer finishes the current snapshot before delivery moves to the next one.
 - Notification expiry tasks never mutate feed state on a worker; a stale, cancelled, or owner-retired expiry callback is rejected on the callback executor.
 - A dedicated audio or device thread cannot become a general application worker.
@@ -242,6 +246,7 @@ path earlier and suppress completion.
 Player closes its callback gate and cancels both handles before Engine teardown; a worker that returns after Player teardown then owns and destroys only its detached preparation value.
 `CoreRuntime::shutdown()` first seals library writer/task admission and retires not-yet-running publication/finalization callbacks.
 It is an outer composition boundary, not an operation permitted from a synchronous runtime observer; an observer that requests teardown defers it to a later callback-executor turn.
+That seal-before-join order gives `LibraryChanges` time to retire queued callback delivery safely before the borrowed callback executor and runtime workers are torn down.
 It then calls `Runtime::requestStop()`, which closes callback admission before stopping the worker
 pool, and teardown then joins it. A callback-executor resumption queued before that boundary is
 discarded instead of resuming application code; destroying its Asio handler
@@ -274,6 +279,7 @@ The application unregisters the fatal sink before destroying the logger backend.
 CLI follows the same producer-first order, then drains already-ready loop turns while `CoreRuntime` callback targets remain alive before releasing that runtime and executor.
 
 Dedicated audio and device owners request stop and join their own threads inside their shutdown or destruction boundary.
+Provider shutdown additionally retires device/graph registries and waits for admitted callbacks; a callback-thread initiator may return before its own stack settles, but independently retained control state—not the provider facade—finishes quiescence and a later external caller waits for it.
 Unexpected coroutine exceptions abort through the Core fatal backend after terminal bookkeeping; expected cancellation does not enter that path.
 
 ## Implementation map
@@ -310,7 +316,7 @@ Unexpected coroutine exceptions abort through the Core fatal backend after termi
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 - [`LibraryJobsTest.cpp`](../../test/unit/runtime/library/LibraryJobsTest.cpp) protects task leases, interactive authoring during scan preparation, publication-before-finalization ordering, and cancellation cleanup.
-- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) and [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protect lane contention, worker affinity, settlement ordering, Maintenance control delivery, and Closing retirement.
+- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) and [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protect value-permit movement and release, transaction-construction and cancellation unwind, lane contention, worker affinity, settlement ordering, Maintenance control delivery, queued-delivery retirement, and Closing.
 
 ## Related documents
 

@@ -16,11 +16,13 @@ Architectural authority remains in the [system](../architecture/system-overview.
 
 Physical target direction is necessary but insufficient: behavior must also be owned by the correct layer.
 
-For every proposed public role, ask three questions:
+For every proposed public role, ask these questions:
 
 1. What does it own?
 2. What does it guarantee beyond the types it contains?
 3. Which correctness contract is lost if it is deleted?
+4. Has the object reached its final address before any callback, observer, provider, restoration, or borrowed reference is published?
+5. If state is shared, which independent participant may retain it, and what borrowed owner or executor is its lifetime ceiling?
 
 If none has an answer, absorb the role into its real owner or use a function.
 These questions are not a score.
@@ -52,6 +54,11 @@ Before editing:
 2. Identify the authoritative state, command owner, observation owner, and platform adapter.
 3. Inspect target dependencies and the matching unit-test layer.
 
+During review, also draw construction and teardown in address order.
+Prefer direct mandatory values and references, optional values for genuine phases, and value-returning factories when an outer box provides no identity.
+Move-only composition roots need `noexcept` move construction, deleted move assignment unless replacement is intentional, and inert moved-from destruction.
+A callback-admission or generation token does not protect a raw owner: verify retire-before-cancel plus the drain/join that keeps the owner alive through every admitted callback.
+
 During review, reject these shapes unless an owning architecture explicitly documents a migration seam:
 
 - GTK/TUI code opening LMDB transactions or constructing storage-backed sources;
@@ -59,7 +66,10 @@ During review, reject these shapes unless an owning architecture explicitly docu
 - public failure observers selecting recovery behavior;
 - frontend timers implementing runtime persistence or retry policy;
 - duplicated GTK and TUI ordering, succession, filtering, or recovery algorithms;
-- a platform type crossing into runtime state.
+- a platform type crossing into runtime state;
+- a whole shared PImpl used only to survive one callback stack;
+- provider registration, restoration, or observer binding before final runtime placement;
+- a weak admission token presented as proof that raw owner memory remains alive.
 
 Known direct-library migration seams are documented in the [presentation architecture](../architecture/presentation.md); their presence is not permission to add new seams.
 
@@ -73,7 +83,9 @@ Review evidence should identify:
 
 - the architecture/specification that owns the behavior;
 - the test that protects the authority boundary;
-- any executor, subscription, cancellation, and teardown ordering involved.
+- the final placement and moved-from behavior of any value-returning lifecycle facade;
+- the independent participant and lifetime ceiling for every shared State;
+- any executor, subscription, admission, cancellation, drain/join, and teardown ordering involved.
 
 ## Troubleshooting
 

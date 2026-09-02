@@ -159,6 +159,41 @@ Manifest overrides are reserved for a small number of single-port, exact pins.
 An override ignores other version constraints and therefore requires an
 explicit reason and removal condition. It is not the default update mechanism.
 
+### Temporary overlay ports
+
+The `cmake/vcpkg-ports/stb` overlay is an active, short-lived exception to the
+normal resolver order. The official vcpkg `stb` port at the approved baseline
+installs `stb_image_resize2` v2.10, whose vertical edge-region calculation
+triggers UndefinedBehaviorSanitizer. The overlay shadows the complete `stb`
+port: its payload freezes every other header at that baseline's upstream source
+revision while replacing only `stb_image_resize2.h` with the
+source-hash-verified v2.18 revision already pinned by `shell.nix`. Future
+changes to the official port recipe or its other headers are not inherited
+while the overlay remains active.
+
+The first five mechanisms in the
+[dependency upgrade resolver order](dependency-upgrade.md#3-resolve-it-on-macos-and-windows)
+were rejected for explicit reasons:
+
+1. The approved default baseline contains only the affected v2.10 header.
+2. A direct `version>=` constraint cannot select a revision absent from the
+   official `stb` versions database.
+3. An exact manifest override has the same limitation.
+4. A package-scoped official registry has no newer maintained `stb` port to
+   select.
+5. No maintained versioned custom registry supplies this header, and creating a
+   permanent project registry for one temporary header replacement would add a
+   second dependency authority without an independent contract.
+
+`stb_image_resize2.h` exposes no version macro. Remove the overlay when the
+selected official vcpkg port installs a header whose leading version banner is
+v2.18 or newer and whose source contains the upstream edge-region fix. Removal
+also means deleting the preset overlay settings and pin-consistency tests, then
+passing the focused cover-art loader under macOS ASan/UBSan, the Windows native
+TUI tests, and both platforms' full checks with the official port. Do not let
+the overlay become an untracked fork or intentionally change unrelated stb
+headers in its frozen payload.
+
 Each vcpkg dependency report preserves the complete
 `version#port-version`, selected features, target triplet, registry baselines,
 and vcpkg tool version.

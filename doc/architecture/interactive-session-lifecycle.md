@@ -45,19 +45,23 @@ TUI creates one runtime for the selected root and does not run either desktop tr
 
 ### Interactive runtime composition
 
-`AppRuntime` owns one `CoreRuntime` and adds `ViewService`, `WorkspaceService`, playback transport and succession, the workspace `ConfigStore`, and playback-session persistence.
+`AppRuntime` owns one `CoreRuntime` and adds direct `ViewService`, `WorkspaceService`, playback transport and succession, `PlaybackService`, the uniquely transferred workspace `ConfigStore`, and direct playback-session persistence.
+Its pinned implementation stores Core first and every Core-borrowing interactive member after it; the resolved playback-session store is a required reference to either the owned workspace store or an explicit borrowed override.
 It forwards the audited application-facing core services without exposing the core owner or raw storage access.
 It is the lifetime root for these services rather than a universal behavioral facade.
 `AppRuntime::create()` requires an owning workspace `ConfigStore` and returns `InvalidInput` for its absence before building the internal service graph.
-It first completes `CoreRuntime` storage validation and initial All Tracks materialization, then constructs interactive services, and exposes ownership only after both stages succeed.
-An omitted playback-session store uses that workspace store; an explicit playback-session store remains a separate override.
+It first completes `CoreRuntime` storage validation and initial All Tracks materialization, moves Core into the final App implementation address, then constructs interactive borrowers there and exposes a move-only value only after both stages succeed.
+The `CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; moving the public wrapper transfers only its unique PImpl and moved-from destruction is inert.
+An omitted playback-session store uses that workspace store; an explicit playback-session store remains a separate override that must outlive the runtime.
 
 `CoreRuntime` remains the smaller composition used by CLI workflows and owns no interactive session lifecycle.
-Its public construction is also a `Result<std::unique_ptr<...>>` factory rather than a throwing constructor.
+Its public construction is also a `Result<CoreRuntime>` value factory rather than a throwing constructor; `CoreRuntime` allocates and finalizes its `Impl` and direct `MusicLibrary` first, uses the short-lived `Library::Prepared` token to acquire write authority against that final object, then emplaces the nonmovable `Library` directly in phase-local optional storage.
 
 ### GTK composition root
 
 GTK owns one main-window/runtime pair for the active library and never constructs a second pair in that process.
+It converts the returned `AppRuntime` value into one final `unique_ptr<AppRuntime>` before constructing `MainWindow`, registering providers, restoring state, or publishing any runtime borrow.
+The released `AppRuntime*` is attached directly to the window GObject with a delete notifier; there is no second heap-allocated smart-pointer holder.
 Application-global configuration, shell layout stores, component state, application preferences, library database, per-library workspace state, views, sources, playback stack, runtime observers, and the window all finish their owned teardown before a successor is launched.
 
 `MainWindow` is the one GTK session owner. It sequences per-library presentation-preference loading, library-backed page initialization, workspace restoration, default-view creation, playback restoration, and checkpoints, and it separates preparation from activation: preparation builds library-backed views and shell layout without restoring playback or starting process-wide adapters, while activation selects ordinary startup restore or successor idle-start behavior and starts MPRIS.
@@ -75,7 +79,8 @@ launcher.
 
 ### TUI composition root
 
-TUI constructs one `AppRuntime` for the command-line-selected root and retains it for the terminal process lifetime.
+TUI constructs one `AppRuntime` value for the command-line-selected root, moves it once into its final stack slot, and retains it for the terminal process lifetime.
+Provider registration, restoration, and controller construction begin only after that placement.
 Before constructing frontend observers, it restores the runtime workspace from the selected TUI store and loads the independent per-library TUI column-layout and list-presentation snapshots into their shared UIModel owners.
 `LibraryController` attaches the exact `WorkspaceSnapshot::activeViewId` created by that restore rather than navigating by list identity; it navigates to All Tracks only when no usable active view exists. A fallback or later plain-list navigation resolves that list's preference or recommendation, while exact restored views are never replaced by that default.
 Same-list filtered views, the active view's exact presentation, and restored custom presets therefore survive frontend attachment without an extra history point.
@@ -87,8 +92,10 @@ The exact requested route is written immediately to the separate global TUI pref
 ### WinUI composition root
 
 WinUI `App` owns the dispatcher and one `LibraryWindowSession`.
-That owner contains one `MainWindow` and one `LibrarySession`; the session owns application-global settings and exactly one `std::unique_ptr<rt::AppRuntime>` from which library reads, playback, resources, commands, and activity state derive.
-Neither the window owner nor the session can replace or retarget its runtime.
+That owner contains one `MainWindow` and one heap-pinned `LibrarySession`; the session's private `Storage` owns application-global settings stores and one phase-local `optional<RuntimeGraph>`.
+`RuntimeGraph` directly owns the returned `AppRuntime` value, borrows its final `DispatcherQueueExecutor`, and emplaces runtime-borrowing presentation/playback objects in a later `optional<InteractiveBorrowers>` phase.
+The graph is emplaced before providers register, workspace or playback restores, or interactive borrowers bind, so every published reference targets the final runtime address.
+Neither the window owner nor the session can replace or retarget that graph.
 
 Opening a different root posts a restart request to the application dispatcher.
 After the picker coroutine returns, `App` checkpoints the old window graph and
@@ -138,7 +145,9 @@ load global application session
   -> shared pure planner selects strict successor, existing durable root, or empty fallback
   -> GTK creates the fallback directory when selected
   -> derive database and per-library workspace paths
-  -> construct stores, providers, and AppRuntime
+  -> construct stores and the AppRuntime factory value
+  -> heap-place AppRuntime at its final address
+  -> register providers
   -> construct MainWindow, UIModel, controllers, and adapters
   -> prepare library pages, workspace, default view, and shell layout
   -> add the window to the application
@@ -199,7 +208,7 @@ folder-picker completion
   -> release LibrarySession, AppRuntime, settings stores, and playback store
   -> shared detached launcher(exact executable, paired private successor request)
   -> parent exits
-  -> successor shared planner validates and constructs its only session with idle playback
+  -> successor shared planner validates and emplaces its only RuntimeGraph with idle playback
   -> register providers, resolve persisted output intent through UIModel, and submit any result
   -> activate native window and process adapters
   -> save a selected-root settings candidate
@@ -218,8 +227,9 @@ still exits. The native default passes no inheritable handle list.
 
 ### Shutdown
 
-GTK requests a final checkpoint, closes callback admission, removes the active window, and releases frontend controllers, widgets, platform adapters, and subscriptions before the associated runtime.
-`AppRuntime::shutdown()` then shuts down playback-session scheduling and audio callback producers before shutting down its owned Core boundary.
+GTK requests a final checkpoint, closes callback admission, removes the active window, and releases frontend controllers, widgets, platform adapters, and subscriptions before the associated heap-pinned runtime.
+Window finalization then invokes the direct GObject delete notifier exactly once.
+`AppRuntime::shutdown()` shuts down direct playback-session scheduling and audio callback producers before shutting down its first-member Core boundary.
 `CoreRuntime::shutdown()` seals library mutation and publication admission before callback resumption closes, then stops and joins asynchronous workers while library-backed collaborators still exist.
 Both boundaries are idempotent so explicit composition-root shutdown and destructor fallback preserve the same order.
 
@@ -228,11 +238,14 @@ The composition root then cancels cover delivery and transient input or pointer 
 Layout/presentation and playback checkpoint failures are logged by the composition root; the workspace checkpoint remains best-effort and log-only.
 Frontend controllers, subscriptions, render adapters, and callback targets are destroyed before a scope guard calls `AppRuntime::shutdown()`.
 Ordinary stop freezes the last-restorable succession and transport snapshots, so the playback shutdown checkpoint can safely rewrite the same intent after live playback becomes Idle.
-The runtime and its screen-borrowing executor are destroyed while `ScreenInteractive` still exists.
+The stack runtime and its screen-borrowing executor are destroyed while `ScreenInteractive` still exists.
 TUI has no GTK-style restart protocol.
 
 WinUI closes the window, detaches session and native-media callbacks, releases XAML controllers, then destroys `LibrarySession`.
-The session invalidates the active scan's guarded presentation closure, requests task stop, and releases its single runtime while stores and dispatcher still exist.
+The session first begins dispatcher closing, retires its owner callback gate, clears outward callbacks, and only then requests task cancellation.
+`RuntimeGraph` resets `InteractiveBorrowers`, shuts down the runtime, completes dispatcher closing, and is finally reset while the settings stores and dispatcher still exist.
+A pure `CallbackAdmissionGate::Token` never protects raw owner memory: dispatcher confinement plus retire-before-cancel, runtime join, final drain, and owner-last destruction provide that proof.
+A replaceable dialog or workflow renews a distinct generation gate only after retiring the prior one; an old token cannot become admissible again.
 A destructive restart in either desktop frontend uses its ordinary shutdown direction before process creation.
 
 ## Structural constraints
@@ -241,6 +254,8 @@ A destructive restart in either desktop frontend uses its ordinary shutdown dire
 - A desktop library transition replaces every library-bound runtime service and observer through a successor process; TUI has no transition command.
 - Application-global and per-library managed state have distinct lifetimes.
 - Frontend observers and callbacks cannot outlive the runtime services they address.
+- A runtime factory value reaches its final frontend storage before provider registration, restoration, subscriptions, callbacks, or borrowing controllers are published.
+- TUI uses final stack placement, GTK uses one deliberate stable allocation attached directly to its GObject owner, CLI uses cpp-local optional Core storage with its phase-local optional `Library`, and WinUI uses a heap-pinned session with nested optional runtime and borrower phases.
 - Runtime callback producers quiesce before their targets are destroyed.
 - On each supported parent-spawned restart path, GTK and WinUI do not construct the successor library graph until that original parent graph and its configuration writers are gone.
 - Both desktop frontends admit a successor's global playback writer only after
@@ -291,7 +306,8 @@ After successor activation, initial-scan or explicit-rescan planning and applica
 What a finished scan is reported as - its verdict, severity, retention, and sentence - is decided once in UIModel and enumerated by the [library scan report reference](../reference/shell/library-scan-report.md); a session posts that decision rather than reaching its own.
 An Open Library request may cancel an active scan through ordinary parent teardown; explicit Rescan still has no public cancellation or supersession command.
 The dispatcher executor is the only route by which runtime callbacks may update XAML.
-The window retires generation controllers and projections and destroys SMTC and artwork consumers before releasing its session; releasing that session destroys its unique `AppRuntime`, whose interactive implementation owns and destroys the shared resource-byte memory cache before the composed `CoreRuntime`.
+Window/session/coordinator callback gates are dispatcher-confined admission generations, not shared owner handles; each retires before cancellation, and its raw owner remains alive through producer settlement and dispatcher drain.
+The window retires generation controllers and projections and destroys SMTC and artwork consumers before releasing its session; releasing that session resets interactive borrowers before the direct `AppRuntime` value, whose pinned implementation destroys the shared resource-byte memory cache before its composed `CoreRuntime`.
 The runtime destructor joins its worker tasks; no deferred runtime release or quarantine owner is used.
 
 ## Implementation map
@@ -309,12 +325,12 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
   callback, and pure restore policy.
 - [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
   adapts that pure policy to the Windows desktop settings value without owning IO.
-- [`App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession.cpp`](../../app/windows-winui/app/LibraryWindowSession.cpp), [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp), [`ProcessLauncher.cpp`](../../app/windows-winui/platform/ProcessLauncher.cpp), and [`DispatcherQueueExecutor.cpp`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) own WinUI composition, destructive restart, process launch, and callback affinity.
+- [`App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession.cpp`](../../app/windows-winui/app/LibraryWindowSession.cpp), [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp), [`CallbackAdmissionGate`](../../app/windows-winui/include/ao/winui/CallbackAdmissionGate.h), [`ProcessLauncher.cpp`](../../app/windows-winui/platform/ProcessLauncher.cpp), and [`DispatcherQueueExecutor.cpp`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) own WinUI final graph placement, phased borrower lifetime, callback admission, destructive restart, process launch, and callback affinity.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
 
 ## Test map
 
-- [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive composition and callback-producer teardown.
+- [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects value-factory movement, stable service identity, interactive composition, and callback-producer teardown.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints, terminal retirement failure, the stale-write guard, failed successor-root commit isolation, workspace and playback restoration, and checkpoint ordering while ordinary window, output, layout, and workspace saves continue.
 - [`MainWindowSessionPresentationTest.cpp`](../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) protects presentation precedence across GTK workspace and playback restoration.
 - [`GtkStartupPlanTest.cpp`](../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp) and [`SuccessorProcessLauncherTest.cpp`](../../test/unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp) protect the paired private `--aobus-successor` protocol, GTK-owned standard replacement passthrough, exact launch plan, activation-environment cleanup, exec failure, and detach.
@@ -333,9 +349,7 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
   Windows and protect shared startup, switch, protocol, argv, detach, and handle
   inheritance behavior.
 - WinUI app-policy tests under [`test/unit/winui/app/`](../../test/unit/winui/app/)
-  protect output-preference lifecycle, transactional explicit-root commit, and
-  destructive preparation/restart order; bounded-cache tests and native WinUI
-  builds protect native composition.
+  protect output-preference lifecycle, transactional explicit-root commit, destructive preparation/restart order, callback-gate retirement, and generation renewal; [`CallbackAdmissionGateTest.cpp`](../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) proves retired tokens remain inert, while bounded-cache tests and native WinUI builds protect final native composition.
 
 ## Related documents
 

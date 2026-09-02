@@ -771,11 +771,9 @@ namespace ao::rt
   {
   }
 
-  std::unique_ptr<PlaybackService> PlaybackBootstrap::createPlaybackService(async::Executor& executor,
-                                                                            PlaybackSuccession& succession)
+  PlaybackService PlaybackBootstrap::createPlaybackService(async::Executor& executor, PlaybackSuccession& succession)
   {
-    return std::unique_ptr<PlaybackService>{
-      new PlaybackService{std::make_unique<PlaybackService::Impl>(executor, _transport, succession)}};
+    return PlaybackService{std::make_unique<PlaybackService::Impl>(executor, _transport, succession)};
   }
 
   void PlaybackBootstrap::addProvider(std::unique_ptr<audio::BackendProvider> providerPtr)

@@ -126,6 +126,7 @@ It derives effective parent relationships, malformed-parent recovery, and stable
 Rows carry one unified saved-List shape; nesting is a parent relationship, not a semantic Folder, Manual, or Smart kind.
 
 UIModel owns List-order eligibility, revision-bound authoring sessions, stable-ID movement intent, keyboard repeat suppression, and shared preference deletion cleanup.
+`ListOrderAuthoringSession` is a move-only value facade over shared asynchronous `State`; a submitted operation may finish after that facade is moved or destroyed, while the State's borrowed `Library` and `ViewService` must remain alive through settlement.
 It permits saved-order writes only for a saved List in a flat presentation with empty `sortBy`; All Tracks, grouping, active presentation sorting, source errors, maintenance, and stale bindings are explicit disabled or cancelled states.
 
 UIModel owns semantic track-field column roles, including sizing, start/end
@@ -134,15 +135,18 @@ GTK, WinUI, and TUI translate those roles to native geometry without maintaining
 independent field classifications.
 
 UIModel owns versioned semantic schemas for its per-library column-layout and list-presentation preference state.
+`ListPresentations::presentationIdForList()` returns a borrowed view into one map entry; callers copy it before replacing/erasing that entry, restoring or clearing the model, crossing reentrant work, suspending, or retaining it beyond the model's proved lifetime.
 The schemas produce and validate platform-neutral documents; they do not choose
 paths or perform frontend lifecycle saves.
 
 UIModel owns the closed application-theme choices and their stable string ids.
 Runtime persists the selected id as opaque application-preference text, while GTK maps the resolved UIModel choice to CSS classes.
 
-Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
+Metadata and tag editors use platform-neutral `TrackAuthoringSession` and `ListMembershipAuthoringSession` value facades.
 Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
-The session owns that evidence and its current/invalid lifetime; it never owns a storage transaction and never silently rebinds a draft after a library change.
+Each move-only facade holds shared asynchronous `State`, not a shared outer wrapper: a submitted operation retains that State and may finish after the facade is moved or destroyed.
+The State owns binding, invalidation, and one-pending-submission policy but only borrows `Library`; composition must settle submitted work before the runtime graph retires.
+A session never owns a storage transaction and never silently rebinds a draft after a library change.
 Maintenance, runtime replacement, any intervening effective commit, or a rejected/missing target makes the corresponding edit non-committable.
 Submission is asynchronous and the session permits only one pending command at a time.
 It retains the draft and binding across non-terminal lane `Busy`, while `Stale` or `Unavailable` invalidates the session according to the owning editor policy.
@@ -253,9 +257,9 @@ Metadata/tag authoring adds an explicit revision boundary:
 
 ```text
 runtime projection target ids
-  -> UIModel TrackAuthoringSession binds (runtime instance, revision, exact ids)
+  -> UIModel TrackAuthoringSession value binds (runtime instance, revision, exact ids)
   -> GTK/TUI edits a local value
-  -> session submits one owning metadata, tag, or combined Properties Task with the retained binding
+  -> session submits one owning metadata, tag, or combined Properties Task whose shared State retains the binding
   -> pending until transaction abort or revision settlement
   -> Applied + next binding | NoOp | Busy | Stale | Unavailable
 ```
@@ -296,6 +300,7 @@ A quick filter narrows the active membership while retaining the active presenta
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
 - Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
 - An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
+- Authoring public facades are move-constructible value handles; only submitted asynchronous work shares State, and that State cannot outlive its borrowed runtime services.
 - A pending authoring session rejects another local submission, and transient `Busy` never destroys its draft or binding.
 - UIModel owns binding invalidation and guarded undo policy; frontend code owns editor lifetime and rendering.
 
@@ -310,6 +315,7 @@ Owner teardown suppresses late completion without cancelling or reinterpreting a
 Multi-stage workflows keep explicit coroutines because their intermediate values and branch-specific result types are part of the workflow rather than a generic one-shot completion.
 
 `TrackAuthoringSession` observes authoring availability and invalidates itself when its runtime instance/revision is no longer current.
+A submission copies the facade's shared State into its coroutine frame, so facade movement or destruction does not cancel already-submitted work; frontend teardown still cancels/drains its workflow and keeps the borrowed runtime alive until that task settles.
 Runtime revalidates the same facts during the command's active transaction turn, so delayed availability delivery cannot permit a stale commit.
 
 GTK main-window teardown releases controllers, widgets, view models, and subscriptions before the window-owned `AppRuntime` is destroyed.
@@ -331,7 +337,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
   [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
   owns pure persisted-selection admission and fallback resolution.
 - [`TrackGroupHeadingPresentation`](../../app/include/ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h) resolves structured runtime group headings.
-- [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns revision-bound metadata/tag interaction lifetime.
+- [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h), `ListMembershipAuthoringSession` in the same header, and [`ListOrderAuthoringSession`](../../app/include/ao/uimodel/library/list/ListOrderSession.h) are move-only value facades whose shared asynchronous State owns binding and submission lifetime while borrowing runtime services.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
 - [`TrackColumnLayoutYamlSchema`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own versioned UIModel presentation documents.
 - [`ListTreeProjection`](../../app/include/ao/uimodel/library/list/ListTreeProjection.h) owns shared list-navigation hierarchy and recovery policy.
@@ -350,7 +356,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
-- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
+- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp), [`ListMembershipAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp), and [`ListOrderAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protect binding invalidation, all-or-none results, guarded follow-up submissions, move-only facade semantics, and pending tasks that outlive moved or destroyed facades.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextFeaturesTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) protects catalog completeness, structured formatting, and open-id fallback across the four feature surfaces.
 - [`MessageCatalogTest.cpp`](../../test/unit/i18n/MessageCatalogTest.cpp), [`CatalogPatternTest.cpp`](../../test/unit/i18n/CatalogPatternTest.cpp), and the native [`WinUiLocalizationProbe.cpp`](../../test/helper/WinUiLocalizationProbe.cpp) protect explicit fallback, format signatures, immutable concurrent use, deterministic generation, and ICU/MRT parity.

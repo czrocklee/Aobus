@@ -45,6 +45,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -61,7 +62,11 @@ namespace ao::rt::test
   concept ExposesMusicLibrary = requires(Runtime& runtime) { runtime.musicLibrary(); };
 
   static_assert(!std::is_base_of_v<CoreRuntime, AppRuntime>);
+  static_assert(std::is_nothrow_move_constructible_v<AppRuntime>);
+  static_assert(!std::is_move_assignable_v<AppRuntime>);
   static_assert(std::is_final_v<CoreRuntime>);
+  static_assert(std::is_nothrow_move_constructible_v<CoreRuntime>);
+  static_assert(!std::is_move_assignable_v<CoreRuntime>);
   static_assert(!ExposesCoreOwner<AppRuntime>);
   static_assert(!ExposesDatabasePath<AppRuntime>);
   static_assert(!ExposesMusicLibrary<AppRuntime>);
@@ -179,6 +184,69 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("CoreRuntime - move construction preserves service identity after the source retires",
+            "[runtime][unit][core-runtime][lifetime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto optRuntime = std::optional<CoreRuntime>{};
+    auto const* libraryAddress = static_cast<void const*>(nullptr);
+    auto const* asyncAddress = static_cast<void const*>(nullptr);
+    auto const* sourcesAddress = static_cast<void const*>(nullptr);
+
+    {
+      auto source = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                                               tempDir.path(),
+                                                               LibraryPaths{tempDir.path()}.databasePath(),
+                                                               tempDir.path() / "cache",
+                                                               library::test::kTestMusicLibraryMapBytes));
+      libraryAddress = &source.library();
+      asyncAddress = &source.async();
+      sourcesAddress = &source.sources();
+      optRuntime.emplace(std::move(source));
+    }
+
+    REQUIRE(optRuntime);
+    CHECK(static_cast<void const*>(&optRuntime->library()) == libraryAddress);
+    CHECK(static_cast<void const*>(&optRuntime->async()) == asyncAddress);
+    CHECK(static_cast<void const*>(&optRuntime->sources()) == sourcesAddress);
+    CHECK_NOTHROW(optRuntime->sources().reloadAllTracks());
+  }
+
+  TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires",
+            "[runtime][unit][app-runtime][lifetime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto optRuntime = std::optional<AppRuntime>{};
+    auto const* libraryAddress = static_cast<void const*>(nullptr);
+    auto const* playbackAddress = static_cast<void const*>(nullptr);
+    auto const* workspaceAddress = static_cast<void const*>(nullptr);
+    auto const* resourcesAddress = static_cast<void const*>(nullptr);
+
+    {
+      auto source = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+        .executorPtr = std::make_unique<InlineExecutor>(),
+        .musicRoot = tempDir.path(),
+        .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+      }));
+      libraryAddress = &source.library();
+      playbackAddress = &source.playback();
+      workspaceAddress = &source.workspace();
+      resourcesAddress = &source.resourceBytes();
+      optRuntime.emplace(std::move(source));
+    }
+
+    REQUIRE(optRuntime);
+    CHECK(static_cast<void const*>(&optRuntime->library()) == libraryAddress);
+    CHECK(static_cast<void const*>(&optRuntime->playback()) == playbackAddress);
+    CHECK(static_cast<void const*>(&optRuntime->workspace()) == workspaceAddress);
+    CHECK(static_cast<void const*>(&optRuntime->resourceBytes()) == resourcesAddress);
+    auto const result = optRuntime->playSelectionInFocusedView();
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+  }
+
   TEST_CASE("AppRuntime - factory materializes All Tracks before exposure", "[runtime][unit][app-runtime][factory]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -189,13 +257,13 @@ namespace ao::rt::test
         library, library::test::TrackSpec{.title = "Already persisted", .uri = "persisted.flac"});
     }
 
-    auto runtimePtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto runtimePtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
-    }));
+    })));
     auto allTracks = ao::test::requireValue(runtimePtr->sources().acquire(kAllTracksListId));
 
     CHECK(allTracks->size() == 1);
@@ -225,14 +293,14 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
 
-    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    }));
+    })));
 
     CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
 
@@ -266,18 +334,18 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
-                                                                 tempDir.path(),
-                                                                 LibraryPaths{tempDir.path()}.databasePath(),
-                                                                 tempDir.path() / "cache",
-                                                                 library::test::kTestMusicLibraryMapBytes));
+    auto runtime = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
+                                                              tempDir.path(),
+                                                              LibraryPaths{tempDir.path()}.databasePath(),
+                                                              tempDir.path() / "cache",
+                                                              library::test::kTestMusicLibraryMapBytes));
 
-    [[maybe_unused]] auto future = runtimePtr->async().spawn(
-      runtimePtr->library().commands().createList(ListDraft{.name = "Committed before close"}));
+    [[maybe_unused]] auto future =
+      runtime.async().spawn(runtime.library().commands().createList(ListDraft{.name = "Committed before close"}));
     REQUIRE(executor->waitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
 
-    runtimePtr->shutdown();
+    runtime.shutdown();
 
     CHECK_NOTHROW(executor->drain());
   }
@@ -289,14 +357,14 @@ namespace ao::rt::test
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    }));
+    })));
 
     appPtr->addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
     REQUIRE(audioStatePtr->onDevicesChanged);
