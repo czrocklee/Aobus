@@ -132,7 +132,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
 
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, columnLayouts, textCatalog, runtime, thumbnailLoader};
     window.set_child(page);
@@ -246,7 +246,7 @@ namespace ao::gtk::test
 
     auto materializedRowsForPage = [&]
     {
-      auto columnLayouts = uimodel::TrackColumnLayouts{};
+      auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
       auto page = TrackViewPage{
         rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
       auto window = Gtk::Window{};
@@ -298,7 +298,7 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{listId,
@@ -371,7 +371,7 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(cache);
     modelPtr->bindProjection(projectionPtr);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{listId,
@@ -469,7 +469,7 @@ namespace ao::gtk::test
     auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto page = TrackViewPage{

@@ -28,6 +28,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
@@ -133,21 +134,24 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto themeCoordinator = ThemeCoordinator{};
-    std::int32_t mutationCallbacks = 0;
-    auto callbacks = TagEditController::Callbacks{.onTagsMutated = [&mutationCallbacks] { ++mutationCallbacks; }};
+    auto controller =
+      TagEditController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
 
-    auto controller = TagEditController{
-      window, fixture.runtime(), ao::test::englishMessageCatalog(), std::move(callbacks), themeCoordinator};
-
-    SECTION("submitTagChanges reports the mutation to the controller callback")
+    SECTION("submitTagChanges publishes the mutated tracks through library changes")
     {
+      auto mutatedIds = std::vector<TrackId>{};
+      auto const changesSub = fixture.runtime().library().changes().onChanged(
+        [&mutatedIds](rt::LibraryChangeSet const& changeSet)
+        { mutatedIds.insert(mutatedIds.end(), changeSet.tracksMutated.begin(), changeSet.tracksMutated.end()); });
+
       auto const selection =
         TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
 
       controller.submitTagChanges(selection, {"ControllerTag"}, {});
 
-      REQUIRE(pumpGtkEventsUntil([&mutationCallbacks] { return mutationCallbacks == 1; }));
-      CHECK(mutationCallbacks == 1);
+      REQUIRE(pumpGtkEventsUntil([&mutatedIds] { return mutatedIds.size() == 2; }));
+      CHECK(std::ranges::contains(mutatedIds, firstTrackId));
+      CHECK(std::ranges::contains(mutatedIds, secondTrackId));
     }
 
     SECTION("submitTagChanges reports a concurrent retry as busy")
@@ -229,7 +233,7 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto page = TrackViewPage{
       rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
@@ -269,7 +273,7 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto page = TrackViewPage{
       rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
@@ -311,7 +315,7 @@ namespace ao::gtk::test
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto allTracksPage = TrackViewPage{
       rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
     auto window = Gtk::Window{};
@@ -386,7 +390,7 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto page = TrackViewPage{listId,
                               modelPtr,
                               columnLayouts,

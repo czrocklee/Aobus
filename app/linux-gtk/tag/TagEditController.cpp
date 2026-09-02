@@ -226,11 +226,6 @@ namespace ao::gtk
           return;
         }
 
-        if (owner->_callbacks.onTagsMutated)
-        {
-          owner->_callbacks.onTagsMutated();
-        }
-
         owner->_runtime.notifications().post(
           rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
       });
@@ -490,11 +485,6 @@ namespace ao::gtk
                     failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
                     notificationText,
                     failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
-
-                  if (result->status == rt::AuthoringStatus::Applied && owner->_callbacks.onTagsMutated)
-                  {
-                    owner->_callbacks.onTagsMutated();
-                  }
                 });
   }
 

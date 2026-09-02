@@ -27,14 +27,9 @@ namespace ao::uimodel
                                    std::function<void(VolumeViewState const&)> onRender)
     : VolumeViewModel{playback}
   {
+    AO_EXPECTS(onRender, "A presenting VolumeViewModel requires a render callback");
     _optTextCatalog = textCatalog;
     _onRender = std::move(onRender);
-
-    if (!_onRender)
-    {
-      return;
-    }
-
     _snapshotSub =
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();

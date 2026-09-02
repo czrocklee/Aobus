@@ -43,6 +43,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -824,7 +825,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -1673,7 +1674,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto changedLists = std::vector<ListId>{};
     auto changedSub =
@@ -1724,7 +1725,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -1771,7 +1772,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -1808,7 +1809,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -1843,7 +1844,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -1892,7 +1893,7 @@ namespace ao::tui::test
                               .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
                               .columns = 20,
                               .availableColumns = 100}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{
       fixture.screen,
@@ -2382,7 +2383,7 @@ namespace ao::tui::test
                               .availableColumns = 100}};
     hitRegions.trackSectionRows = {
       TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     auto resizePreview = TrackColumnResizePreview{};
     auto controller = EventController{fixture.screen,
                                       fixture.shell,

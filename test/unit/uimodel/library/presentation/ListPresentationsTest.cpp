@@ -160,12 +160,38 @@ namespace ao::uimodel::test
     auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
     auto const presentations = std::map<ListId, std::string>{{rt::kAllTracksListId, "albums"}};
 
-    store.restore(presentations);
-    store.restore(presentations);
+    store.restore(presentations, {});
+    store.restore(presentations, {});
 
     REQUIRE(events.size() == 1);
     CHECK(events[0] == kInvalidListId);
     CHECK(store.snapshot().at(rt::kAllTracksListId) == "albums");
+  }
+
+  TEST_CASE("ListPresentations - restore drops preferences whose list the library no longer has",
+            "[uimodel][unit][presentation][restore]")
+  {
+    auto presentationFixture = TrackPresentationFixture{};
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
+    auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const liveId =
+      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Live"})));
+    auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
+    auto const staleId = ListId{liveId.raw() + 1};
+
+    // A list deleted while the frontend was down produces no LibraryChanges
+    // event, so only the restore path can retire its entry.
+    listPresentations.restore(
+      {{liveId, "songs"}, {staleId, "albums"}, {rt::kAllTracksListId, "songs"}}, std::vector{liveId});
+
+    REQUIRE(listPresentations.snapshot().size() == 2);
+    CHECK(listPresentations.snapshot().contains(liveId));
+    CHECK_FALSE(listPresentations.snapshot().contains(staleId));
+    // All Tracks references no user-created list, so no live id vouches for it.
+    CHECK(listPresentations.snapshot().contains(rt::kAllTracksListId));
   }
 
   TEST_CASE("ListPresentations - cascade deletion clears every preference",
@@ -186,15 +212,23 @@ namespace ao::uimodel::test
     auto const unrelatedId =
       ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Unrelated"})));
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
-    listPresentations.restore({
-      {parentId, "songs"},
-      {childId, "albums"},
-      {grandchildId, std::string{rt::kListOrderTrackPresentationId}},
-      {unrelatedId, "songs"},
-    });
+    listPresentations.restore(
+      {
+        {parentId, "songs"},
+        {childId, "albums"},
+        {grandchildId, std::string{rt::kListOrderTrackPresentationId}},
+        {unrelatedId, "songs"},
+      },
+      std::vector{parentId, childId, grandchildId, unrelatedId});
     auto removed = std::vector<ListId>{};
-    auto sub = listPresentations.signalChanged().connect([&removed](ListId const listId) noexcept
-                                                         { removed.push_back(listId); });
+    // A persisting observer snapshots from inside this callback, so the entry
+    // must already be gone by the time the change is announced.
+    auto sub = listPresentations.signalChanged().connect(
+      [&removed, &listPresentations](ListId const listId) noexcept
+      {
+        CHECK_FALSE(listPresentations.snapshot().contains(listId));
+        removed.push_back(listId);
+      });
 
     REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
 
@@ -211,10 +245,16 @@ namespace ao::uimodel::test
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
-    listPresentations.restore({{ListId{42}, "songs"}, {ListId{43}, "albums"}});
+    listPresentations.restore({{ListId{42}, "songs"}, {ListId{43}, "albums"}}, std::vector{ListId{42}, ListId{43}});
     auto removed = std::vector<ListId>{};
-    auto sub = listPresentations.signalChanged().connect([&removed](ListId const listId) noexcept
-                                                         { removed.push_back(listId); });
+    // A persisting observer snapshots from inside this callback, so the entry
+    // must already be gone by the time the change is announced.
+    auto sub = listPresentations.signalChanged().connect(
+      [&removed, &listPresentations](ListId const listId) noexcept
+      {
+        CHECK_FALSE(listPresentations.snapshot().contains(listId));
+        removed.push_back(listId);
+      });
 
     std::ignore = rt::test::addTrackAndPublishReset(
       libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset"}, executor);
@@ -237,7 +277,7 @@ namespace ao::uimodel::test
     auto const childId = ao::test::requireValue(
       commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto presentationsPtr = std::make_unique<ListPresentations>(presentationFixture.catalog, changes);
-    presentationsPtr->restore({{parentId, "songs"}, {childId, "albums"}});
+    presentationsPtr->restore({{parentId, "songs"}, {childId, "albums"}}, std::vector{parentId, childId});
     auto removed = std::vector<ListId>{};
     auto sub = presentationsPtr->signalChanged().connect(
       [&removed, &presentationsPtr](ListId const listId)

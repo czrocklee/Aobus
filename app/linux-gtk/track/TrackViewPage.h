@@ -153,11 +153,15 @@ namespace ao::gtk
     uimodel::CoverArtPlaceholderStyle _groupCoverPlaceholderStyle{
       uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::GroupHeading)};
 
-    sigc::scoped_connection _themeRefreshConnection;
-
     // Controllers (owned)
     std::unique_ptr<TrackColumnViewHost> _viewHostPtr;
     std::unique_ptr<TrackOrderDragController> _orderDragControllerPtr;
+
+    // Bound to the process-level GtkStyleRuntime, whose handler reaches
+    // _viewHostPtr. Declared after it so reverse-order destruction retires the
+    // subscription first. That is the only protection on the constructor's
+    // failure path, where the destructor body never runs.
+    sigc::scoped_connection _themeRefreshConnection;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

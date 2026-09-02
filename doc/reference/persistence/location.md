@@ -84,6 +84,7 @@ It has no shortcut editor and performs no ordinary keymap save; saving the sibli
 | `<root>/.aobus/library/workspace.yaml` | GTK | Runtime workspace and view session | None in the current GTK command surface |
 | `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library desktop track-column and list-presentation preferences | None |
 | `<root>/.aobus/tui_layout.yaml` | TUI | Per-library terminal-cell track-column and list-presentation preferences | None |
+| `<root>/.aobus/winui_layout.yaml` | WinUI | Per-library desktop track-column and list-presentation preferences | None |
 | `<root>/.aobus/tui-workspace.yaml` | TUI | Default workspace and playback-session `ConfigStore` | `--config` selects another file |
 | `<root>/.aobus/logs/` | TUI | TUI operational logs | The library root changes the base location |
 
@@ -93,6 +94,8 @@ The current GTK database path is `<root>/.aobus/library/`.
 TUI passes one store as the owned workspace store and does not inject a separate playback-session store.
 `AppRuntime` therefore uses the selected TUI configuration file for both managed-state groups.
 The TUI layout file is always derived from the selected root and is independent of `--config`; one `TuiLayoutStateStore` writer owns both of its presentation groups.
+
+WinUI derives its layout file from the root it opens, so the store only exists once a library is open; the global `windows-settings.yaml` described by the [Windows desktop state reference](../windows/desktop-state.md) holds no list-keyed state.
 
 ### CLI and interchange files
 
@@ -137,6 +140,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
 - [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store; [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) appends the TUI presentation filename to the canonical managed-data path.
+- [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) resolves the Windows state root and appends the WinUI presentation filename to the canonical per-library managed-data path.
 - [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root and resolves the cache directory it passes to the runtime.
 - [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h), [`PlatformDirectoriesPosix.cpp`](../../../lib/utility/PlatformDirectoriesPosix.cpp), and [`PlatformDirectoriesWindows.cpp`](../../../lib/utility/PlatformDirectoriesWindows.cpp) own the config and cache resolvers.
 - [`LibraryWindowLifecycle.cpp`](../../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`app/tui/App.cpp`](../../../app/tui/App.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) resolve the same cache directory for their frontends.

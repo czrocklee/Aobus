@@ -41,7 +41,8 @@ The declarative shell component only constructs the widget and does not duplicat
 
 `VolumeViewState` contains visibility, normalized level, hardware-assisted flag, explicit mute, semantic `VolumeIndicatorKind`, and tooltip.
 A rendering view model retains runtime subscriptions and its callback.
-An empty callback creates a command-only instance: it skips initial projection, subscriptions, and tooltip construction while retaining the same interaction commands.
+The single-argument constructor creates a command-only instance: it skips initial projection, subscriptions, and tooltip construction while retaining the same interaction commands.
+The presenting constructor requires a callable render callback; an empty one violates that precondition instead of silently producing the command-only form.
 
 GTK retains one icon button, precision popover, vertical scale, mute toggle, scroll bubble, and optional timeout connection.
 

@@ -338,6 +338,12 @@ namespace ao::gtk
 
   TrackViewPage::~TrackViewPage()
   {
+    // GtkStyleRuntime outlives this page, and the refresh handler reaches
+    // _viewHostPtr. Member order retires the subscription before _viewHostPtr,
+    // but only once this body has finished; disconnect first so a refresh
+    // emitted while the main context runs cannot enter a page whose teardown
+    // steps below have already started.
+    _themeRefreshConnection.disconnect();
     _tasks.cancelAll();
     _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});

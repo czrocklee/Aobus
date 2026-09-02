@@ -40,6 +40,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -47,6 +48,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/input/KeymapStore.h>
@@ -84,6 +86,7 @@
 #include <memory>
 #include <optional>
 #include <print>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -825,11 +828,13 @@ namespace ao::tui
     auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
     layoutStateStore.load(restoredColumnLayouts, restoredListPresentations);
 
+    auto const knownListIds =
+      runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) | std::ranges::to<std::vector>();
     auto presentationCatalog = uimodel::TrackPresentationCatalog{runtime.workspace(), textCatalog};
     auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtime.library().changes()};
-    listPresentations.restore(std::move(restoredListPresentations));
+    listPresentations.restore(std::move(restoredListPresentations), knownListIds);
     auto trackColumnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    trackColumnLayouts.restore(std::move(restoredColumnLayouts));
+    trackColumnLayouts.restore(std::move(restoredColumnLayouts), knownListIds);
     // Input dispatch and Runtime library callbacks share the screen executor,
     // keeping this one unsynchronized ConfigStore writer serial. A loop-turn
     // checkpoint folds every per-list signal in one LibraryChangeSet into the

@@ -23,7 +23,9 @@ namespace ao::uimodel::test
 {
   TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes", "[uimodel][unit][library][presentation]")
   {
-    auto store = TrackColumnLayouts{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto store = TrackColumnLayouts{changes};
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
     auto const layout = std::vector{TrackColumnState{.field = rt::TrackField::Album, .width = 230, .weight = -1.0},
@@ -44,6 +46,22 @@ namespace ao::uimodel::test
     CHECK(store.layoutForList(rt::kAllTracksListId)[1].weight == 1.25);
   }
 
+  TEST_CASE("TrackColumnLayouts - an unchanged empty layout creates no entry", "[uimodel][unit][library][presentation]")
+  {
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto store = TrackColumnLayouts{changes};
+    auto events = std::vector<ListId>{};
+    auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
+
+    // Comparing an unmapped id against an empty layout must not map it: the
+    // persisting observer writes whatever the map holds.
+    store.updateLayout(rt::kAllTracksListId, {});
+
+    CHECK(store.snapshot().empty());
+    CHECK(events.empty());
+  }
+
   TEST_CASE("TrackColumnLayouts - cascade deletion clears every layout",
             "[uimodel][unit][presentation][delete-subtree]")
   {
@@ -60,9 +78,17 @@ namespace ao::uimodel::test
       ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Unrelated"})));
     auto layouts = TrackColumnLayouts{changes};
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
-    layouts.restore({{parentId, state}, {childId, state}, {unrelatedId, state}});
+    layouts.restore(
+      {{parentId, state}, {childId, state}, {unrelatedId, state}}, std::vector{parentId, childId, unrelatedId});
     auto removed = std::vector<ListId>{};
-    auto sub = layouts.signalChanged().connect([&removed](ListId const listId) noexcept { removed.push_back(listId); });
+    // A persisting observer snapshots from inside this callback, so the entry
+    // must already be gone by the time the change is announced.
+    auto sub = layouts.signalChanged().connect(
+      [&removed, &layouts](ListId const listId) noexcept
+      {
+        CHECK_FALSE(layouts.snapshot().contains(listId));
+        removed.push_back(listId);
+      });
 
     REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
 
@@ -79,9 +105,16 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
     auto layouts = TrackColumnLayouts{changes};
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
-    layouts.restore({{ListId{42}, state}, {ListId{43}, state}});
+    layouts.restore({{ListId{42}, state}, {ListId{43}, state}}, std::vector{ListId{42}, ListId{43}});
     auto removed = std::vector<ListId>{};
-    auto sub = layouts.signalChanged().connect([&removed](ListId const listId) noexcept { removed.push_back(listId); });
+    // A persisting observer snapshots from inside this callback, so the entry
+    // must already be gone by the time the change is announced.
+    auto sub = layouts.signalChanged().connect(
+      [&removed, &layouts](ListId const listId) noexcept
+      {
+        CHECK_FALSE(layouts.snapshot().contains(listId));
+        removed.push_back(listId);
+      });
 
     std::ignore = rt::test::addTrackAndPublishReset(
       libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset"}, executor);
@@ -104,7 +137,7 @@ namespace ao::uimodel::test
       commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto layoutsPtr = std::make_unique<TrackColumnLayouts>(changes);
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
-    layoutsPtr->restore({{parentId, state}, {childId, state}});
+    layoutsPtr->restore({{parentId, state}, {childId, state}}, std::vector{parentId, childId});
     auto removed = std::vector<ListId>{};
     auto sub = layoutsPtr->signalChanged().connect(
       [&removed, &layoutsPtr](ListId const listId)
@@ -123,17 +156,44 @@ namespace ao::uimodel::test
     CHECK(layoutsPtr == nullptr);
   }
 
+  TEST_CASE("TrackColumnLayouts - restore drops layouts whose list the library no longer has",
+            "[uimodel][unit][presentation][restore]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
+    auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const liveId =
+      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Live"})));
+    auto layouts = TrackColumnLayouts{changes};
+    auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
+    auto const staleId = ListId{liveId.raw() + 1};
+
+    // A list deleted while the frontend was down produces no LibraryChanges
+    // event, so only the restore path can retire its entry.
+    layouts.restore({{liveId, state}, {staleId, state}, {rt::kAllTracksListId, state}}, std::vector{liveId});
+
+    REQUIRE(layouts.snapshot().size() == 2);
+    CHECK(layouts.snapshot().contains(liveId));
+    CHECK_FALSE(layouts.snapshot().contains(staleId));
+    // All Tracks references no user-created list, so no live id vouches for it.
+    CHECK(layouts.snapshot().contains(rt::kAllTracksListId));
+  }
+
   TEST_CASE("TrackColumnLayouts - bulk state emits only when changed", "[uimodel][unit][library][presentation]")
   {
-    auto store = TrackColumnLayouts{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto store = TrackColumnLayouts{changes};
     auto events = std::vector<ListId>{};
     auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
     auto const layouts = std::map<ListId, std::vector<TrackColumnState>>{
       {rt::kAllTracksListId, {TrackColumnState{.field = rt::TrackField::Duration, .width = 95, .weight = -1.0}}},
     };
 
-    store.restore(layouts);
-    store.restore(layouts);
+    store.restore(layouts, {});
+    store.restore(layouts, {});
 
     REQUIRE(events.size() == 1);
     CHECK(events[0] == kInvalidListId);

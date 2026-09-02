@@ -270,8 +270,7 @@ namespace winrt::Aobus::implementation
   {
     constexpr double kMinimumColumnResize = 0.5;
 
-    if (_session == nullptr || _trackListPtr == nullptr || args.Canceled() ||
-        std::abs(args.HorizontalChange()) < kMinimumColumnResize)
+    if (_trackListPtr == nullptr || args.Canceled() || std::abs(args.HorizontalChange()) < kMinimumColumnResize)
     {
       return;
     }
@@ -281,12 +280,6 @@ namespace winrt::Aobus::implementation
     if (auto resizedRes = _trackListPtr->resizeColumn(fieldId, args.HorizontalChange()); !resizedRes)
     {
       updateStatus(ao::winui::formatResource("winui_column_resize_failed", resizedRes.error().message));
-      return;
-    }
-
-    if (auto savedRes = _session->saveSettings(); !savedRes)
-    {
-      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
     }
   }
 
@@ -304,7 +297,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::moveColumn(Windows::Foundation::IInspectable const& sender, std::int32_t const offset)
   {
-    if (_session == nullptr || _trackListPtr == nullptr)
+    if (_trackListPtr == nullptr)
     {
       return;
     }
@@ -314,12 +307,6 @@ namespace winrt::Aobus::implementation
     if (auto movedRes = _trackListPtr->moveColumn(fieldId, offset); !movedRes)
     {
       updateStatus(ao::winui::formatResource("winui_column_move_failed", movedRes.error().message));
-      return;
-    }
-
-    if (auto savedRes = _session->saveSettings(); !savedRes)
-    {
-      updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
     }
   }
 
@@ -360,15 +347,6 @@ namespace winrt::Aobus::implementation
           {
             toggle.IsChecked(!toggle.IsChecked());
             self->updateStatus(ao::winui::formatResource("winui_column_visibility_failed", changedRes.error().message));
-            return;
-          }
-
-          if (self->_session != nullptr)
-          {
-            if (auto savedRes = self->_session->saveSettings(); !savedRes)
-            {
-              self->updateStatus(ao::winui::formatResource("winui_column_settings_failed", savedRes.error().message));
-            }
           }
         });
       flyout.Items().Append(item);

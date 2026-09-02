@@ -18,6 +18,8 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -50,7 +52,7 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
 
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto host = TrackPageHost{stack,
                               runtime,
                               tagEditController,

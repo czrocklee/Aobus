@@ -26,6 +26,6 @@ namespace ao::uimodel::test
     rt::WorkspaceService workspace{executor, viewService, changes};
     i18n::MessageCatalog textCatalog{ao::test::englishMessageCatalog()};
     TrackPresentationCatalog catalog{workspace, textCatalog};
-    ListPresentations listPresentations{catalog};
+    ListPresentations listPresentations{catalog, changes};
   };
 } // namespace ao::uimodel::test

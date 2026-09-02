@@ -53,7 +53,6 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void()> onTagsMutated{};
       std::function<void()> onManageListsRequested{};
     };
 
