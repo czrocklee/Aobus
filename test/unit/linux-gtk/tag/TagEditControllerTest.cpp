@@ -134,8 +134,15 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
 
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller =
-      TagEditController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = TagEditController{window,
+                                        fixture.runtime().async(),
+                                        fixture.runtime().library(),
+                                        fixture.runtime().completion(),
+                                        fixture.runtime().notifications(),
+                                        fixture.runtime().textOrderingPolicy(),
+                                        ao::test::englishMessageCatalog(),
+                                        {},
+                                        themeCoordinator};
 
     SECTION("submitTagChanges publishes the mutated tracks through library changes")
     {
@@ -191,8 +198,15 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller =
-      TagEditController{window, fixture.runtime(), ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = TagEditController{window,
+                                        fixture.runtime().async(),
+                                        fixture.runtime().library(),
+                                        fixture.runtime().completion(),
+                                        fixture.runtime().notifications(),
+                                        fixture.runtime().textOrderingPolicy(),
+                                        ao::test::englishMessageCatalog(),
+                                        {},
+                                        themeCoordinator};
     auto const selection = TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {trackId}};
 
     controller.openTagEditor(selection, anchor);
@@ -234,15 +248,29 @@ namespace ao::gtk::test
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    auto page = TrackViewPage{
-      rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);
     window.present();
     drainGtkEvents();
 
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller = TagEditController{window, runtime, ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = TagEditController{window,
+                                        runtime.async(),
+                                        runtime.library(),
+                                        runtime.completion(),
+                                        runtime.notifications(),
+                                        runtime.textOrderingPolicy(),
+                                        ao::test::englishMessageCatalog(),
+                                        {},
+                                        themeCoordinator};
     auto const selection = TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {trackId}};
     controller.openTrackContextMenu(page, selection, 20.0, 20.0);
     drainGtkEvents();
@@ -274,8 +302,14 @@ namespace ao::gtk::test
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    auto page = TrackViewPage{
-      rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);
 
@@ -283,7 +317,11 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller =
       TagEditController{window,
-                        runtime,
+                        runtime.async(),
+                        runtime.library(),
+                        runtime.completion(),
+                        runtime.notifications(),
+                        runtime.textOrderingPolicy(),
                         ao::test::englishMessageCatalog(),
                         TagEditController::Callbacks{.onManageListsRequested = [&requestCount] { ++requestCount; }},
                         themeCoordinator};
@@ -316,8 +354,14 @@ namespace ao::gtk::test
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-    auto allTracksPage = TrackViewPage{
-      rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+    auto allTracksPage = TrackViewPage{rt::kAllTracksListId,
+                                       modelPtr,
+                                       columnLayouts,
+                                       ao::test::englishMessageCatalog(),
+                                       runtime.async(),
+                                       runtime.library(),
+                                       runtime.views(),
+                                       thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(allTracksPage);
     window.present();
@@ -326,7 +370,11 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     auto controller =
       TagEditController{window,
-                        runtime,
+                        runtime.async(),
+                        runtime.library(),
+                        runtime.completion(),
+                        runtime.notifications(),
+                        runtime.textOrderingPolicy(),
                         ao::test::englishMessageCatalog(),
                         TagEditController::Callbacks{.onManageListsRequested = [&requestCount] { ++requestCount; }},
                         themeCoordinator};
@@ -348,8 +396,14 @@ namespace ao::gtk::test
     CHECK(requestCount == 1);
     drainGtkEvents();
 
-    auto computedPage =
-      TrackViewPage{computedId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+    auto computedPage = TrackViewPage{computedId,
+                                      modelPtr,
+                                      columnLayouts,
+                                      ao::test::englishMessageCatalog(),
+                                      runtime.async(),
+                                      runtime.library(),
+                                      runtime.views(),
+                                      thumbnailLoader};
     window.unset_child();
     window.set_child(computedPage);
     window.present();
@@ -395,7 +449,9 @@ namespace ao::gtk::test
                               modelPtr,
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
-                              runtime,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
                               thumbnailLoader,
                               manual->spec,
                               viewId};
@@ -416,7 +472,15 @@ namespace ao::gtk::test
     window.present();
     drainGtkEvents();
     auto themeCoordinator = ThemeCoordinator{};
-    auto controller = TagEditController{window, runtime, ao::test::englishMessageCatalog(), {}, themeCoordinator};
+    auto controller = TagEditController{window,
+                                        runtime.async(),
+                                        runtime.library(),
+                                        runtime.completion(),
+                                        runtime.notifications(),
+                                        runtime.textOrderingPolicy(),
+                                        ao::test::englishMessageCatalog(),
+                                        {},
+                                        themeCoordinator};
     controller.openTrackContextMenu(page, TrackSelection{.listId = listId, .selectedIds = {trackId}}, 20.0, 20.0);
 
     auto const contextPopovers = collectAll<Gtk::PopoverMenu>(page);

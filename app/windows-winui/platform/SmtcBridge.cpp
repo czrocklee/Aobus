@@ -6,7 +6,6 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -102,10 +101,11 @@ namespace ao::winui
 
   SmtcBridge::SmtcBridge(HWND window,
                          winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
-                         rt::AppRuntime& runtime,
+                         rt::PlaybackService& playback,
                          uimodel::PlaybackActions& actions,
-                         rt::ResourceByteMemoryCache& resourceBytes)
-    : _statePtr{std::make_shared<State>()}, _runtime{runtime}, _resourceBytes{resourceBytes}
+                         rt::ResourceByteMemoryCache& resourceBytes,
+                         async::Runtime& asyncRuntime)
+    : _statePtr{std::make_shared<State>()}, _resourceBytes{resourceBytes}, _asyncRuntime{asyncRuntime}
   {
     _statePtr->dispatcher = std::move(dispatcher);
     _statePtr->actions = &actions;
@@ -151,9 +151,9 @@ namespace ao::winui
         }
       });
 
-    _snapshotSub = runtime.playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
-                                                          { handleSnapshot(snapshot); });
-    handleSnapshot(runtime.playback().snapshot());
+    _snapshotSub =
+      playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+    handleSnapshot(playback.snapshot());
   }
 
   SmtcBridge::~SmtcBridge()
@@ -225,7 +225,7 @@ namespace ao::winui
         if (auto lockedStatePtr = statePtr.lock(); lockedStatePtr && lockedStatePtr->active &&
                                                    lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty())
         {
-          auto* const runtime = &_runtime.async();
+          auto* const runtime = &_asyncRuntime;
           _artworkTask = runtime->spawnCancellable(
             [statePtr, runtime, resourceId, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
             { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); },

@@ -102,9 +102,10 @@ namespace winrt::Aobus::implementation
       _smtcPtr =
         std::make_unique<ao::winui::SmtcBridge>(nativeWindow(*this),
                                                 Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread(),
-                                                runtime,
+                                                runtime.playback(),
                                                 commands,
-                                                runtime.resourceBytes());
+                                                runtime.resourceBytes(),
+                                                runtime.async());
     }
     catch (hresult_error const& error)
     {

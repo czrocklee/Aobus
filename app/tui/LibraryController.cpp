@@ -13,7 +13,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -43,10 +42,14 @@
 
 namespace ao::tui
 {
-  LibraryController::LibraryController(rt::AppRuntime& runtime,
+  LibraryController::LibraryController(rt::Library& library,
+                                       rt::ViewService& views,
+                                       rt::WorkspaceService& workspace,
                                        i18n::MessageCatalog textCatalog,
                                        uimodel::ListPresentations& listPresentations)
-    : _runtime{runtime}
+    : _library{library}
+    , _views{views}
+    , _workspace{workspace}
     , _textCatalog{std::move(textCatalog)}
     , _listPresentations{listPresentations}
     , _libraryEntries{loadLibraryNavigation()}
@@ -71,7 +74,7 @@ namespace ao::tui
     }
 
     publishSelection();
-    _customPresetsSub = _runtime.workspace().onChanged(
+    _customPresetsSub = _workspace.onChanged(
       [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.cause == rt::WorkspaceChangeCause::Presets || changed.cause == rt::WorkspaceChangeCause::Restore)
@@ -79,7 +82,7 @@ namespace ao::tui
           refreshPresentationNavigation();
         }
       });
-    _libraryChangesSub = _runtime.library().changes().onChanged(
+    _libraryChangesSub = _library.changes().onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
         if (changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty())
@@ -100,13 +103,13 @@ namespace ao::tui
   std::string LibraryController::activePresentationId() const
   {
     // Reached from the workspace observer via refreshPresentationNavigation().
-    auto const* presentation = _runtime.views().findTrackListPresentation(_activeViewId);
+    auto const* presentation = _views.findTrackListPresentation(_activeViewId);
     return presentation == nullptr ? std::string{} : presentation->id;
   }
 
   rt::TrackPresentationSpec const& LibraryController::activePresentation() const
   {
-    if (auto const* presentation = _runtime.views().findTrackListPresentation(_activeViewId); presentation != nullptr)
+    if (auto const* presentation = _views.findTrackListPresentation(_activeViewId); presentation != nullptr)
     {
       return *presentation;
     }
@@ -152,12 +155,12 @@ namespace ao::tui
       selection.push_back(_tracks[index].id);
     }
 
-    if (auto result = _runtime.views().setSelection(_activeViewId, std::move(selection)); !result)
+    if (auto result = _views.setSelection(_activeViewId, std::move(selection)); !result)
     {
       APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
     }
 
-    if (auto const focusedRes = _runtime.workspace().focusView(_activeViewId); !focusedRes)
+    if (auto const focusedRes = _workspace.focusView(_activeViewId); !focusedRes)
     {
       APP_LOG_ERROR("Failed to focus TUI track view: {}", focusedRes.error().message);
     }
@@ -276,7 +279,7 @@ namespace ao::tui
     // The projection maintains an indexed track-to-row lookup. _tracks can drift
     // from projection indices when a row's LMDB lookup was skipped, so trust the
     // index only when the materialized row matches and otherwise scan below.
-    if (auto const foundRes = _runtime.views().findTrackListProjection(_activeViewId); foundRes && *foundRes != nullptr)
+    if (auto const foundRes = _views.findTrackListProjection(_activeViewId); foundRes && *foundRes != nullptr)
     {
       if (auto const optIndex = (*foundRes)->indexOf(trackId);
           optIndex && *optIndex < _tracks.size() && _tracks[*optIndex].id == trackId)
@@ -323,7 +326,7 @@ namespace ao::tui
 
     auto const selectedBefore = selectedTrackView();
     auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
-    auto const result = _runtime.workspace().setActivePresentation(presentationId);
+    auto const result = _workspace.setActivePresentation(presentationId);
 
     if (!result)
     {
@@ -398,7 +401,7 @@ namespace ao::tui
     {
       APP_LOG_WARN(
         "TUI active view is no longer available; opening a workspace fallback: {}", reloadRes.error().message);
-      auto const workspaceActiveViewId = _runtime.workspace().snapshot().activeViewId;
+      auto const workspaceActiveViewId = _workspace.snapshot().activeViewId;
 
       if (workspaceActiveViewId != rt::kInvalidViewId && workspaceActiveViewId != _activeViewId)
       {
@@ -433,7 +436,7 @@ namespace ao::tui
     }
 
     auto const resolved = uimodel::resolveTrackFilter(_filterDraft);
-    auto filterRes = _runtime.views().setFilter(_activeViewId, resolved.expression);
+    auto filterRes = _views.setFilter(_activeViewId, resolved.expression);
 
     if (!filterRes)
     {
@@ -469,7 +472,7 @@ namespace ao::tui
 
   std::vector<LibraryNavEntry> LibraryController::loadLibraryNavigation()
   {
-    auto const reader = _runtime.library().snapshot();
+    auto const reader = _library.snapshot();
     return makeLibraryNavigation(_textCatalog, reader.lists());
   }
 
@@ -495,7 +498,7 @@ namespace ao::tui
   std::vector<TrackPresentationNavEntry> LibraryController::loadPresentationNavigation()
   {
     return makeTrackPresentationNavigation(
-      _textCatalog, rt::builtinTrackPresentationPresets(), _runtime.workspace().customPresets());
+      _textCatalog, rt::builtinTrackPresentationPresets(), _workspace.customPresets());
   }
 
   void LibraryController::refreshFilterError()
@@ -507,7 +510,7 @@ namespace ao::tui
       return;
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_activeViewId);
+    auto const stateRes = _views.findTrackListState(_activeViewId);
 
     if (stateRes && stateRes->optFilterError)
     {
@@ -518,7 +521,7 @@ namespace ao::tui
 
   Result<LibraryController::TrackItemsSnapshot> LibraryController::materializeView(rt::ViewId const viewId)
   {
-    auto const foundProjectionRes = _runtime.views().findTrackListProjection(viewId);
+    auto const foundProjectionRes = _views.findTrackListProjection(viewId);
 
     if (!foundProjectionRes)
     {
@@ -531,7 +534,7 @@ namespace ao::tui
     }
 
     auto const& projectionPtr = *foundProjectionRes;
-    auto const reader = _runtime.library().snapshot();
+    auto const reader = _library.snapshot();
     auto snapshot = TrackItemsSnapshot{};
     snapshot.tracks.reserve(projectionPtr->size());
     snapshot.sections.reserve(projectionPtr->groupCount());
@@ -579,7 +582,7 @@ namespace ao::tui
 
   Result<> LibraryController::refreshActiveView()
   {
-    auto const stateRes = _runtime.views().findTrackListState(_activeViewId);
+    auto const stateRes = _views.findTrackListState(_activeViewId);
 
     if (!stateRes)
     {
@@ -614,7 +617,7 @@ namespace ao::tui
 
   Result<> LibraryController::attachView(rt::ViewId const viewId)
   {
-    auto const stateRes = _runtime.views().findTrackListState(viewId);
+    auto const stateRes = _views.findTrackListState(viewId);
 
     if (!stateRes)
     {
@@ -663,7 +666,7 @@ namespace ao::tui
 
   Result<bool> LibraryController::attachActiveWorkspaceView()
   {
-    auto const workspace = _runtime.workspace().snapshot();
+    auto const workspace = _workspace.snapshot();
 
     if (workspace.activeViewId == rt::kInvalidViewId)
     {
@@ -692,7 +695,7 @@ namespace ao::tui
 
     if (!rt::isVirtualListId(listId))
     {
-      if (auto const optNode = _runtime.library().snapshot().listNode(listId); optNode)
+      if (auto const optNode = _library.snapshot().listNode(listId); optNode)
       {
         context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
         context.listExpression = optNode->expression;
@@ -713,12 +716,11 @@ namespace ao::tui
 
     if (listId == rt::kAllTracksListId)
     {
-      navigationRes =
-        _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks, .optPresentation = presentation});
+      navigationRes = _workspace.navigate({.target = rt::GlobalViewKind::AllTracks, .optPresentation = presentation});
     }
     else
     {
-      navigationRes = _runtime.workspace().navigate({.target = listId, .optPresentation = presentation});
+      navigationRes = _workspace.navigate({.target = listId, .optPresentation = presentation});
     }
 
     if (!navigationRes)

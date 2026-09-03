@@ -1090,14 +1090,25 @@ namespace ao::gtk::layout::test
     auto stack = Gtk::Stack{};
     auto themeCoordinator = ThemeCoordinator{};
     auto tagEditCallbacks = TagEditController::Callbacks{};
-    auto tagEditController = TagEditController{
-      window, runtime, ao::test::englishMessageCatalog(), std::move(tagEditCallbacks), themeCoordinator};
+    auto tagEditController = TagEditController{window,
+                                               runtime.async(),
+                                               runtime.library(),
+                                               runtime.completion(),
+                                               runtime.notifications(),
+                                               runtime.textOrderingPolicy(),
+                                               ao::test::englishMessageCatalog(),
+                                               std::move(tagEditCallbacks),
+                                               themeCoordinator};
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto pageHost = TrackPageHost{stack,
-                                  runtime,
+                                  runtime.async(),
+                                  runtime.library(),
+                                  runtime.playback(),
+                                  runtime.views(),
+                                  runtime.workspace(),
                                   tagEditController,
                                   listNavigation,
                                   columnLayouts,

@@ -110,8 +110,8 @@ namespace winrt::Aobus::implementation
     // The window's own runtime consumers. They outlive every shell generation
     // and every dialog the window opens, which is why the window owns them
     // rather than borrowing them from a layer above or below it.
-    _trackListPtr =
-      std::make_unique<ao::winui::TrackListController>(runtime, session.columnLayouts(), session.textCatalog());
+    _trackListPtr = std::make_unique<ao::winui::TrackListController>(
+      runtime.views(), runtime.workspace(), runtime.library(), session.columnLayouts(), session.textCatalog());
     _themePtr = std::make_unique<ao::winui::ThemeCoordinator>(session.stateRoot() / "windows-theme.yaml");
 
     // A reveal request reaches the track list the window owns, not the list a

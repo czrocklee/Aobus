@@ -33,7 +33,10 @@ namespace Gtk
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class CompletionService;
+  class Library;
+  class TrackSourceCache;
+  class ViewService;
   struct ListNode;
 }
 
@@ -51,7 +54,10 @@ namespace ao::gtk
   {
   public:
     SmartListDialog(Gtk::Window& parent,
-                    rt::AppRuntime& runtime,
+                    rt::Library& library,
+                    rt::ViewService& views,
+                    rt::TrackSourceCache& sources,
+                    rt::CompletionService& completion,
                     i18n::MessageCatalog textCatalog,
                     ListId parentListId,
                     TrackRowCache const& provider);
@@ -119,7 +125,9 @@ namespace ao::gtk
     sigc::connection _rebuildConnection;
 
     // Preview infrastructure
-    rt::AppRuntime& _runtime;
+    rt::Library& _library;
+    rt::ViewService& _views;
+    rt::TrackSourceCache& _sources;
     i18n::MessageCatalog _textCatalog;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;

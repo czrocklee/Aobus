@@ -21,7 +21,13 @@ namespace Gtk
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
+  class ViewService;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::gtk
@@ -40,7 +46,9 @@ namespace ao::gtk
       std::function<void()> onClearStatus;
     };
 
-    TrackOrderDragController(rt::AppRuntime& runtime,
+    TrackOrderDragController(async::Runtime& asyncRuntime,
+                             rt::Library& library,
+                             rt::ViewService& views,
                              rt::ViewId viewId,
                              i18n::MessageCatalog const& textCatalog,
                              Gtk::ColumnView& columnView,

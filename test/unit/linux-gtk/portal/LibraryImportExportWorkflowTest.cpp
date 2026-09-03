@@ -14,6 +14,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
@@ -41,6 +42,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -48,6 +50,30 @@ namespace ao::gtk::test
 {
   namespace
   {
+    // The workflow borrows the callbacks for its whole life, so only an lvalue
+    // may name them.
+    static_assert(std::is_constructible_v<portal::LibraryImportExportWorkflow,
+                                          async::Runtime&,
+                                          rt::Library&,
+                                          rt::NotificationService&,
+                                          portal::ImportExportCallbacks const&,
+                                          i18n::MessageCatalog>);
+    static_assert(!std::is_constructible_v<portal::LibraryImportExportWorkflow,
+                                           async::Runtime&,
+                                           rt::Library&,
+                                           rt::NotificationService&,
+                                           portal::ImportExportCallbacks&&,
+                                           i18n::MessageCatalog>);
+
+    portal::LibraryImportExportWorkflow makeWorkflow(GtkRuntimeFixture& fixture,
+                                                     portal::ImportExportCallbacks const& callbacks)
+    {
+      auto& runtime = fixture.runtime();
+
+      return portal::LibraryImportExportWorkflow{
+        runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog()};
+    }
+
     bool hasNotification(GtkRuntimeFixture& fixture, rt::NotificationSeverity severity, std::string_view message)
     {
       auto const feed = fixture.runtime().notifications().feed();
@@ -130,8 +156,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     std::int32_t progressFinishedCount = 0;
     auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
@@ -155,8 +180,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
 
@@ -212,8 +236,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
 
@@ -241,8 +264,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
@@ -265,8 +287,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
@@ -288,8 +309,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
@@ -318,8 +338,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     auto const restrictedDir = fixture.runtime().musicRoot() / "restricted_dir";
     std::filesystem::create_directories(restrictedDir);
@@ -351,8 +370,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
     auto const target = fixture.tempDir().path() / "library_backup.yaml";
 
     copyMetadataFixtureToLibrary(fixture);
@@ -381,10 +399,8 @@ namespace ao::gtk::test
     auto sourceFixture = GtkRuntimeFixture{};
     auto targetFixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto sourceWorkflow =
-      portal::LibraryImportExportWorkflow{sourceFixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
-    auto targetWorkflow =
-      portal::LibraryImportExportWorkflow{targetFixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto sourceWorkflow = makeWorkflow(sourceFixture, callbacks);
+    auto targetWorkflow = makeWorkflow(targetFixture, callbacks);
     auto const target = sourceFixture.tempDir().path() / "roundtrip.yaml";
 
     copyMetadataFixtureToLibrary(sourceFixture);
@@ -429,8 +445,7 @@ namespace ao::gtk::test
         confirmation = std::move(completion);
       },
     };
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
     auto const importPath = fixture.tempDir().path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
@@ -484,8 +499,9 @@ library:
     }
 
     {
+      auto& runtime = fixture.runtime();
       auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(
-        fixture.runtime(), callbacks, ao::test::englishMessageCatalog());
+        runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog());
       workflowPtr->importFrom(importPath);
       REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
     }
@@ -531,8 +547,11 @@ library:
 )";
     }
 
-    auto workflowPtr =
-      std::make_unique<portal::LibraryImportExportWorkflow>(*runtimePtr, callbacks, ao::test::englishMessageCatalog());
+    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtimePtr->async(),
+                                                                             runtimePtr->library(),
+                                                                             runtimePtr->notifications(),
+                                                                             callbacks,
+                                                                             ao::test::englishMessageCatalog());
     workflowPtr->importFrom(importPath);
 
     while (!confirmation)
@@ -575,8 +594,7 @@ library:
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto callbacks = confirmingCallbacks();
-    auto workflow =
-      portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+    auto workflow = makeWorkflow(fixture, callbacks);
 
     workflow.importFrom(fixture.tempDir().path() / "missing.yaml");
 
@@ -608,8 +626,11 @@ library:
     auto const importPath = tempDir.path() / "missing-import.yaml";
 
     {
-      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(
-        *runtimePtr, callbacks, ao::test::englishMessageCatalog());
+      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtimePtr->async(),
+                                                                               runtimePtr->library(),
+                                                                               runtimePtr->notifications(),
+                                                                               callbacks,
+                                                                               ao::test::englishMessageCatalog());
       workflowPtr->importFrom(importPath);
 
       executor->checkQueued();

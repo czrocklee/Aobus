@@ -631,8 +631,9 @@ namespace ao::gtk::layout::test
         .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
         { completion(true); },
       };
-      auto workflow =
-        portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks, ao::test::englishMessageCatalog()};
+      auto& runtime = fixture.runtime();
+      auto workflow = portal::LibraryImportExportWorkflow{
+        runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog()};
       auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
       auto const secondCover = ao::gtk::test::encodePng(ao::gtk::test::makePixbuf(96, 96));
       ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);

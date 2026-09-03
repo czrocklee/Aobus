@@ -869,7 +869,6 @@ root:table {
     tui_pipeline_closed { "Pipeline closed" }
     tui_pipeline_opened { "Audio pipeline" }
     tui_output_closed { "Output devices closed" }
-    tui_output_unavailable { "Output devices unavailable" }
     tui_output_opened { "Output devices" }
     tui_views_closed { "Views closed" }
     tui_views_opened { "Views" }

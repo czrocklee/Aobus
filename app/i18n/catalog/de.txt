@@ -867,7 +867,6 @@ de:table {
     tui_pipeline_closed { "Audiokette geschlossen" }
     tui_pipeline_opened { "Audiokette" }
     tui_output_closed { "Ausgabegeräte geschlossen" }
-    tui_output_unavailable { "Ausgabegeräte nicht verfügbar" }
     tui_output_opened { "Ausgabegeräte" }
     tui_views_closed { "Ansichten geschlossen" }
     tui_views_opened { "Ansichten" }

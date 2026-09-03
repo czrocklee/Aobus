@@ -92,7 +92,11 @@ namespace ao::gtk
       , listPresentations{trackPresentationCatalog, runtime.library().changes()}
       , trackColumnLayouts{runtime.library().changes()}
       , tagEditController{window,
-                          runtime,
+                          runtime.async(),
+                          runtime.library(),
+                          runtime.completion(),
+                          runtime.notifications(),
+                          runtime.textOrderingPolicy(),
                           textCatalog,
                           TagEditController::Callbacks{
                             .onManageListsRequested = [this] { listNavigationController.openNewPlaylistDialog(); },
@@ -117,14 +121,20 @@ namespace ao::gtk
                                    }},
                                  themeCoordinator}
       , trackPageHost{stack,
-                      runtime,
+                      runtime.async(),
+                      runtime.library(),
+                      runtime.playback(),
+                      runtime.views(),
+                      runtime.workspace(),
                       tagEditController,
                       listNavigationController,
                       trackColumnLayouts,
                       textCatalog,
                       runtime.resourceBytes()}
       , importExportCoordinator{window,
-                                runtime,
+                                runtime.async(),
+                                runtime.library(),
+                                runtime.notifications(),
                                 textCatalog,
                                 portal::ImportExportCallbacks{
                                   .onOpenNewLibrary = [](std::filesystem::path const&, bool) {},

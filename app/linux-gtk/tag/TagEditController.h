@@ -26,7 +26,15 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class CompletionService;
+  class Library;
+  class NotificationService;
+  class TextOrderingPolicy;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 namespace ao::gtk
 {
@@ -57,7 +65,11 @@ namespace ao::gtk
     };
 
     TagEditController(Gtk::Window& parent,
-                      rt::AppRuntime& runtime,
+                      async::Runtime& asyncRuntime,
+                      rt::Library& library,
+                      rt::CompletionService& completion,
+                      rt::NotificationService& notifications,
+                      rt::TextOrderingPolicy const* textOrderingPolicy,
                       i18n::MessageCatalog textCatalog,
                       Callbacks callbacks,
                       ThemeCoordinator& themeCoordinator);
@@ -99,7 +111,11 @@ namespace ao::gtk
     bool beginTagEditSession(std::span<TrackId const> trackIds);
 
     Callbacks _callbacks;
-    rt::AppRuntime& _runtime;
+    async::Runtime& _asyncRuntime;
+    rt::Library& _library;
+    rt::CompletionService& _completion;
+    rt::NotificationService& _notifications;
+    rt::TextOrderingPolicy const* _textOrderingPolicy;
     i18n::MessageCatalog _textCatalog;
     TrackRowCache* _dataProvider = nullptr;
     Gtk::Window& _parent;

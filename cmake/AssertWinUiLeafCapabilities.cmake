@@ -3,43 +3,46 @@
 #
 # Keeps high-authority window/session objects at WinUI composition roots.
 
+include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
+
 if(NOT ROOT)
   message(FATAL_ERROR "AssertWinUiLeafCapabilities: ROOT not specified")
 endif()
 
-set(_ao_files)
-foreach(_subdir IN ITEMS layout/component layout/runtime playback status track image)
-  file(GLOB_RECURSE _ao_subdir_files LIST_DIRECTORIES false
-       "${ROOT}/${_subdir}/*.h"
-       "${ROOT}/${_subdir}/*.cpp")
-  list(APPEND _ao_files ${_ao_subdir_files})
-endforeach()
+file(GLOB_RECURSE _ao_files LIST_DIRECTORIES false
+     "${ROOT}/*.h"
+     "${ROOT}/*.hpp"
+     "${ROOT}/*.cpp")
 
-# These files are the explicit composition/coordinator roots for the scanned
-# subtrees. Everything else is a generation component or leaf adapter and must
-# receive exact capabilities.
+# The whole frontend is scanned, so the roots are named rather than implied by
+# which subdirectories the scan happens to cover. These files own the window,
+# the session, and the shell composition; the window's implementation is split
+# across three translation units that are roots for the same reason. Everything
+# else is a generation component or leaf adapter and must receive exact
+# capabilities.
 set(_ao_composition_root_files
+    "${ROOT}/MainWindow.xaml.h"
+    "${ROOT}/MainWindow.xaml.cpp"
+    "${ROOT}/app/LibrarySession.h"
+    "${ROOT}/app/LibrarySession.cpp"
+    "${ROOT}/app/LibraryWindowSession.h"
+    "${ROOT}/app/LibraryWindowSession.cpp"
     "${ROOT}/layout/ShellBuilder.h"
     "${ROOT}/layout/ShellBuilder.cpp"
     "${ROOT}/playback/MainWindowPlayback.cpp"
-    "${ROOT}/track/MainWindowTrack.cpp"
-    "${ROOT}/track/TrackListController.h"
-    "${ROOT}/track/TrackListController.cpp")
+    "${ROOT}/shell/MainWindowShell.cpp"
+    "${ROOT}/track/MainWindowTrack.cpp")
 list(REMOVE_ITEM _ao_files ${_ao_composition_root_files})
 list(REMOVE_DUPLICATES _ao_files)
 list(SORT _ao_files)
 
 foreach(_file IN LISTS _ao_files)
-  file(RELATIVE_PATH _rel "${ROOT}" "${_file}")
-  file(STRINGS "${_file}" _matches REGEX "WinUiDependencies|LibrarySession|AppRuntime")
+  ao_find_code_line(_ao_reach "${_file}" "LibrarySession|AppRuntime")
 
-  foreach(_line IN LISTS _matches)
-    string(REGEX REPLACE "//.*$" "" _code "${_line}")
-
-    if(_code MATCHES "WinUiDependencies|LibrarySession|AppRuntime")
-      message(FATAL_ERROR
-              "AssertWinUiLeafCapabilities: ${_rel} reaches a high-authority dependency: ${_line}\n"
-              "  Keep session/runtime composition at the window or ShellBuilder and pass the exact service or callback.")
-    endif()
-  endforeach()
+  if(NOT _ao_reach STREQUAL "")
+    file(RELATIVE_PATH _rel "${ROOT}" "${_file}")
+    message(FATAL_ERROR
+            "AssertWinUiLeafCapabilities: ${_rel} reaches a high-authority dependency: ${_ao_reach}\n"
+            "  Keep session/runtime composition at the window or ShellBuilder and pass the exact service or callback.")
+  endif()
 endforeach()

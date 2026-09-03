@@ -10,7 +10,6 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -51,10 +50,16 @@ namespace ao::gtk::portal
     }
   } // namespace
 
-  LibraryImportExportWorkflow::LibraryImportExportWorkflow(rt::AppRuntime& runtime,
+  LibraryImportExportWorkflow::LibraryImportExportWorkflow(async::Runtime& asyncRuntime,
+                                                           rt::Library& library,
+                                                           rt::NotificationService& notifications,
                                                            ImportExportCallbacks const& callbacks,
                                                            i18n::MessageCatalog textCatalog)
-    : _runtime{runtime}, _callbacks{callbacks}, _textCatalog{std::move(textCatalog)}
+    : _asyncRuntime{asyncRuntime}
+    , _library{library}
+    , _notifications{notifications}
+    , _callbacks{callbacks}
+    , _textCatalog{std::move(textCatalog)}
   {
   }
 
@@ -68,7 +73,7 @@ namespace ao::gtk::portal
   {
     APP_LOG_INFO("Starting library scan...");
 
-    spawnUiWorkflow(_runtime.async(),
+    spawnUiWorkflow(_asyncRuntime,
                     _tasks,
                     *this,
                     kScanExceptionContext,
@@ -79,7 +84,7 @@ namespace ao::gtk::portal
   void LibraryImportExportWorkflow::importFrom(std::filesystem::path path)
   {
     auto callbacks = _callbacks;
-    spawnUiWorkflow(_runtime.async(),
+    spawnUiWorkflow(_asyncRuntime,
                     _tasks,
                     *this,
                     kImportExceptionContext,
@@ -91,7 +96,7 @@ namespace ao::gtk::portal
   void LibraryImportExportWorkflow::exportTo(std::filesystem::path path, rt::ExportMode mode)
   {
     spawnUiWorkflow(
-      _runtime.async(),
+      _asyncRuntime,
       _tasks,
       *this,
       kExportExceptionContext,
@@ -103,7 +108,7 @@ namespace ao::gtk::portal
   {
     auto presentResult = _presentationCallbacks.guard([this](uimodel::LibraryScanOutcome outcome) mutable
                                                       { presentScanOutcome(outcome); });
-    auto* const jobs = &_runtime.library().jobs();
+    auto* const jobs = &_library.jobs();
     auto outcome = co_await uimodel::runLibraryScan(jobs, mode, stopToken);
     presentResult(std::move(outcome));
   }
@@ -116,27 +121,26 @@ namespace ao::gtk::portal
         if (optError)
         {
           logStructuredError("Audio identity indexing failed", *optError);
-          _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                        gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingFailed),
-                                        rt::NotificationLifetime::history());
+          _notifications.post(rt::NotificationSeverity::Warning,
+                              gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingFailed),
+                              rt::NotificationLifetime::history());
           return;
         }
 
         if (failureCount > 0)
         {
-          _runtime.notifications().post(
-            rt::NotificationSeverity::Warning,
-            gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors),
-            rt::NotificationLifetime::history());
+          _notifications.post(rt::NotificationSeverity::Warning,
+                              gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingCompletedWithErrors),
+                              rt::NotificationLifetime::history());
         }
         else if (completedCount > 0)
         {
-          _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                        gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingComplete),
-                                        rt::NotificationLifetime::transient());
+          _notifications.post(rt::NotificationSeverity::Info,
+                              gtkText(_textCatalog, i18n::MessageId::LibraryAudioIdentityIndexingComplete),
+                              rt::NotificationLifetime::transient());
         }
       });
-    auto* const jobs = &_runtime.library().jobs();
+    auto* const jobs = &_library.jobs();
     auto result = co_await jobs->backfillAudioIdentityAsync(stopToken);
 
     if (!result)
@@ -164,11 +168,11 @@ namespace ao::gtk::portal
           return;
         }
 
-        _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                      gtkText(_textCatalog, i18n::MessageId::LibraryExported),
-                                      rt::NotificationLifetime::transient());
+        _notifications.post(rt::NotificationSeverity::Info,
+                            gtkText(_textCatalog, i18n::MessageId::LibraryExported),
+                            rt::NotificationLifetime::transient());
       });
-    auto* const jobs = &_runtime.library().jobs();
+    auto* const jobs = &_library.jobs();
     auto result = co_await jobs->exportLibraryAsync(std::move(exportPath), mode, stopToken);
     presentResult(std::move(result));
   }
@@ -221,14 +225,14 @@ namespace ao::gtk::portal
                                 applyPreparedImport(std::move(plan));
                               }));
       });
-    auto* const jobs = &_runtime.library().jobs();
+    auto* const jobs = &_library.jobs();
     auto result = co_await jobs->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
     presentResult(std::move(result));
   }
 
   void LibraryImportExportWorkflow::applyPreparedImport(rt::LibraryImportPlan plan)
   {
-    spawnUiWorkflow(_runtime.async(),
+    spawnUiWorkflow(_asyncRuntime,
                     _tasks,
                     *this,
                     kImportExceptionContext,
@@ -251,11 +255,11 @@ namespace ao::gtk::portal
           return;
         }
 
-        _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                      gtkText(_textCatalog, i18n::MessageId::LibraryImported),
-                                      rt::NotificationLifetime::transient());
+        _notifications.post(rt::NotificationSeverity::Info,
+                            gtkText(_textCatalog, i18n::MessageId::LibraryImported),
+                            rt::NotificationLifetime::transient());
       });
-    auto* const jobs = &_runtime.library().jobs();
+    auto* const jobs = &_library.jobs();
     auto result = co_await jobs->applyLibraryImportPlanAsync(std::move(plan), stopToken);
     presentResult(std::move(result));
   }
@@ -265,9 +269,9 @@ namespace ao::gtk::portal
     // The verdict, the sentence, and how long it stays reachable are all
     // decided in uimodel, which is what keeps this window and the Windows one
     // reporting the same scan the same way. Posting it is all that is left.
-    _runtime.notifications().post(uimodel::libraryScanSeverity(outcome.verdict),
-                                  uimodel::formatLibraryScanMessage(_textCatalog, outcome),
-                                  uimodel::libraryScanLifetime(outcome.verdict));
+    _notifications.post(uimodel::libraryScanSeverity(outcome.verdict),
+                        uimodel::formatLibraryScanMessage(_textCatalog, outcome),
+                        uimodel::libraryScanLifetime(outcome.verdict));
 
     if (outcome.shouldBackfillAudioIdentity)
     {
@@ -277,11 +281,11 @@ namespace ao::gtk::portal
 
   void LibraryImportExportWorkflow::startAudioIdentityIndexing()
   {
-    _runtime.notifications().post(rt::NotificationSeverity::Info,
-                                  gtkText(_textCatalog, i18n::MessageId::LibraryReadyIndexingAudioIdentity),
-                                  rt::NotificationLifetime::transient());
+    _notifications.post(rt::NotificationSeverity::Info,
+                        gtkText(_textCatalog, i18n::MessageId::LibraryReadyIndexingAudioIdentity),
+                        rt::NotificationLifetime::transient());
 
-    spawnUiWorkflow(_runtime.async(),
+    spawnUiWorkflow(_asyncRuntime,
                     _tasks,
                     *this,
                     kAudioIdentityExceptionContext,
@@ -294,7 +298,6 @@ namespace ao::gtk::portal
                                                    Error const& error)
   {
     logStructuredError(action, error);
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::history());
+    _notifications.post(rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::history());
   }
 } // namespace ao::gtk::portal

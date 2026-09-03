@@ -16,6 +16,8 @@
 # raw-token revoke would still duplicate teardown state and could skip later
 # revocations after the first failure; it is not an acceptable substitute.
 
+include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
+
 if(NOT ROOT)
   message(FATAL_ERROR "AssertWinUiEventRevokers: ROOT not specified")
 endif()
@@ -28,39 +30,36 @@ file(GLOB_RECURSE _ao_files LIST_DIRECTORIES false
 foreach(_file IN LISTS _ao_files)
   file(RELATIVE_PATH _rel "${ROOT}" "${_file}")
 
-  file(STRINGS "${_file}" _unsupported_auto_revokers
-       REGEX "AppWindow\\(\\)\\.Changed\\(winrt::auto_revoke")
-  foreach(_line IN LISTS _unsupported_auto_revokers)
+  ao_find_code_line(_ao_unsupported "${_file}" "AppWindow\\(\\)\\.Changed\\(winrt::auto_revoke")
+  if(NOT _ao_unsupported STREQUAL "")
     message(FATAL_ERROR
-            "AssertWinUiEventRevokers: ${_rel} uses auto_revoke with AppWindow: ${_line}\n"
+            "AssertWinUiEventRevokers: ${_rel} uses auto_revoke with AppWindow: ${_ao_unsupported}\n"
             "  AppWindow does not support weak references; use the scoped strong-source"
             " subscription adapter instead.")
-  endforeach()
+  endif()
 
-  file(STRINGS "${_file}" _candidates REGEX "event_token")
-
-  foreach(_line IN LISTS _candidates)
-    # Commentary may name the type; reaching for it in code is the defect.
-    string(REGEX REPLACE "//.*$" "" _code "${_line}")
-
-    if(_code MATCHES "^[ \t]*(\\*|/\\*)")
-      set(_code "")
-    endif()
-
-    if(_code MATCHES "event_token")
-      message(FATAL_ERROR
-              "AssertWinUiEventRevokers: ${_rel} holds a raw event_token: ${_line}\n"
-              "  Use the event's _revoker type with winrt::auto_revoke, or a scoped"
-              " strong-source adapter when the source does not support weak references.")
-    endif()
-  endforeach()
-
-  file(STRINGS "${_file}" _ao_owner_callbacks
-       REGEX "\\.[A-Z][A-Za-z0-9_]*\\(\\{this,|\\.[A-Z][A-Za-z0-9_]*\\(\\[this")
-
-  foreach(_line IN LISTS _ao_owner_callbacks)
+  ao_find_code_line(_ao_token "${_file}" "event_token")
+  if(NOT _ao_token STREQUAL "")
     message(FATAL_ERROR
-            "AssertWinUiEventRevokers: ${_rel} registers an owner callback without auto_revoke: ${_line}\n"
+            "AssertWinUiEventRevokers: ${_rel} holds a raw event_token: ${_ao_token}\n"
+            "  Use the event's _revoker type with winrt::auto_revoke, or a scoped"
+            " strong-source adapter when the source does not support weak references.")
+  endif()
+
+  # A registration argument routinely wraps onto its own line, so a line-oriented
+  # scan reports whichever half it happens to see and misses the wrapped form
+  # entirely. The collapsed view reads both spellings the same way.
+  #
+  # Any capture list naming this is an owner callback, however it is spelled:
+  # [this], [=, this] and [&, this] all let the handler enter the owner.
+  # Receiverless self-registration is deliberately absent: the owner is then the
+  # event source itself and cannot be destroyed while the source can still raise.
+  ao_read_code_text(_ao_code "${_file}")
+  string(REGEX MATCHALL "\\.[A-Z][A-Za-z0-9_]*\\( ?(\\{this,|\\[[^]]*this)" _ao_owner_callbacks "${_ao_code}")
+
+  foreach(_registration IN LISTS _ao_owner_callbacks)
+    message(FATAL_ERROR
+            "AssertWinUiEventRevokers: ${_rel} registers an owner callback without auto_revoke: ${_registration}\n"
             "  Store the event's _revoker type and subscribe with winrt::auto_revoke, or use an"
             " approved scoped strong-source adapter, so the callback cannot enter a destroyed owner.")
   endforeach()

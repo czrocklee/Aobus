@@ -301,7 +301,14 @@ namespace ao::gtk
     }
 
     auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, parentListId, *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
+                                                      _runtime.library(),
+                                                      _runtime.views(),
+                                                      _runtime.sources(),
+                                                      _runtime.completion(),
+                                                      _textCatalog,
+                                                      parentListId,
+                                                      *_dataProvider);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->configurePlaylistTemplate();
     dialog->signal_response().connect(
@@ -326,7 +333,14 @@ namespace ao::gtk
       return;
     }
 
-    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, parentListId, *_dataProvider);
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
+                                                      _runtime.library(),
+                                                      _runtime.views(),
+                                                      _runtime.sources(),
+                                                      _runtime.completion(),
+                                                      _textCatalog,
+                                                      parentListId,
+                                                      *_dataProvider);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
     if (!initialExpression.empty())
@@ -368,8 +382,14 @@ namespace ao::gtk
     {
       auto const optPres =
         _callbacks.listPresentationCallback ? _callbacks.listPresentationCallback(listId) : std::nullopt;
-      auto* dialog =
-        Gtk::make_managed<SmartListDialog>(_parent, _runtime, _textCatalog, optNode->parentId, *_dataProvider);
+      auto* dialog = Gtk::make_managed<SmartListDialog>(_parent,
+                                                        _runtime.library(),
+                                                        _runtime.views(),
+                                                        _runtime.sources(),
+                                                        _runtime.completion(),
+                                                        _textCatalog,
+                                                        optNode->parentId,
+                                                        *_dataProvider);
       auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
       dialog->populate(listId, *optNode, optPres);
       dialog->signal_response().connect(

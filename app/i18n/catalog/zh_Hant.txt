@@ -867,7 +867,6 @@ zh_Hant:table {
     tui_pipeline_closed { "音訊鏈路已關閉" }
     tui_pipeline_opened { "音訊鏈路" }
     tui_output_closed { "輸出裝置已關閉" }
-    tui_output_unavailable { "輸出裝置無法使用" }
     tui_output_opened { "輸出裝置" }
     tui_views_closed { "檢視已關閉" }
     tui_views_opened { "檢視" }

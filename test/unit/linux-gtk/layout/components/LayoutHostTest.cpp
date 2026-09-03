@@ -222,13 +222,24 @@ namespace ao::gtk::layout::test
     auto window = Gtk::Window{};
     auto stack = Gtk::Stack{};
     auto themeCoordinator = ThemeCoordinator{};
-    auto tagEditController = TagEditController{
-      window, runtime, ao::test::englishMessageCatalog(), TagEditController::Callbacks{}, themeCoordinator};
+    auto tagEditController = TagEditController{window,
+                                               runtime.async(),
+                                               runtime.library(),
+                                               runtime.completion(),
+                                               runtime.notifications(),
+                                               runtime.textOrderingPolicy(),
+                                               ao::test::englishMessageCatalog(),
+                                               TagEditController::Callbacks{},
+                                               themeCoordinator};
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), ListNavigationController::Callbacks{}, themeCoordinator};
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto trackPageHost = TrackPageHost{stack,
-                                       runtime,
+                                       runtime.async(),
+                                       runtime.library(),
+                                       runtime.playback(),
+                                       runtime.views(),
+                                       runtime.workspace(),
                                        tagEditController,
                                        listNavigation,
                                        columnLayouts,

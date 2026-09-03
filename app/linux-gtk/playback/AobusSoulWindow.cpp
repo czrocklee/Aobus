@@ -4,7 +4,6 @@
 #include "playback/AobusSoulWindow.h"
 
 #include "app/AobusSoul.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
