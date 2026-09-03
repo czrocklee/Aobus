@@ -220,11 +220,9 @@ namespace ao::library
     explicit DictionaryReadContext(DictionaryStore const& dictionary);
     explicit DictionaryReadContext(DictionaryReadCache& cache);
 
-    std::optional<DictionaryId> findId(std::string_view text) const;
     std::uint64_t bind(std::span<std::string const> symbols, std::span<DictionaryId> ids) const;
     std::string_view get(DictionaryId id);
     DictionaryStore const& dictionary() const noexcept;
-    std::uint64_t generation() const;
 
   private:
     DictionaryStore const* _dictionary;

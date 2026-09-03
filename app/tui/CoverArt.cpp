@@ -335,11 +335,6 @@ namespace ao::tui
     return std::move(png.bytes);
   }
 
-  std::string kittyDeleteVisibleImagesEscape()
-  {
-    return "\033_Ga=d,d=A,q=2;\033\\";
-  }
-
   std::string kittyDeleteImageEscape(std::uint32_t const imageId)
   {
     return std::format("\033_Ga=d,i={},q=2;\033\\", imageId);

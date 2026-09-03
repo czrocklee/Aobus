@@ -165,7 +165,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
 - [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns the move-only value facade and stable targets; [`TrackAuthoringSession.cpp`](../../../app/uimodel/library/track/TrackAuthoringSession.cpp) owns shared asynchronous State, current-binding lifetime, invalidation, and result mapping.
-- [`LibraryCommands.cpp`](../../../app/runtime/library/LibraryCommands.cpp) owns mutation commit.
+- [`LibraryCommandsTrackAuthoring.cpp`](../../../app/runtime/library/LibraryCommandsTrackAuthoring.cpp) owns metadata, tag, and combined-properties mutation commit.
 - [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native dialog and guarded asynchronous workflow; [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) maps shared form and vocabulary state without WinRT.
 
 ## Test map

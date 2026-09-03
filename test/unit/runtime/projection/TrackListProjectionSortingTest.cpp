@@ -5,6 +5,7 @@
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>

@@ -38,7 +38,6 @@ namespace ao::media::mp4
     std::string_view type() const noexcept { return _type; }
     std::span<std::byte const> bytes() const noexcept { return _bytes; }
     std::span<std::byte const> payload() const noexcept { return _bytes.subspan(_headerSize); }
-    bool isLeaf() const noexcept { return !_isContainer; }
 
     AtomCursor children() const noexcept;
 
@@ -80,9 +79,8 @@ namespace ao::media::mp4
     AtomView(std::span<std::byte const> bytes,
              std::span<std::byte const> childBytes,
              std::string_view type,
-             std::size_t headerSize,
-             bool isContainer) noexcept
-      : _bytes{bytes}, _childBytes{childBytes}, _type{type}, _headerSize{headerSize}, _isContainer{isContainer}
+             std::size_t headerSize) noexcept
+      : _bytes{bytes}, _childBytes{childBytes}, _type{type}, _headerSize{headerSize}
     {
     }
 
@@ -90,7 +88,6 @@ namespace ao::media::mp4
     std::span<std::byte const> _childBytes;
     std::string_view _type;
     std::size_t _headerSize = 0;
-    bool _isContainer = false;
   };
 
   using OptionalAtom = std::optional<AtomView>;

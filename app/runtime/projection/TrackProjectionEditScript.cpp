@@ -1,58 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/rt/projection/TrackProjectionEditScript.h>
+#include "runtime/projection/TrackProjectionEditScript.h"
 
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
-#include <algorithm>
 #include <concepts>
 #include <cstddef>
-#include <ranges>
 #include <type_traits>
 #include <variant>
-#include <vector>
 
 namespace ao::rt
 {
-  namespace
-  {
-    void sortUnique(std::vector<std::size_t>& rowIndices)
-    {
-      std::ranges::sort(rowIndices);
-      rowIndices.erase(std::ranges::unique(rowIndices).begin(), rowIndices.end());
-    }
-
-    template<typename Range>
-    void appendAscending(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices)
-    {
-      if (rowIndices.empty())
-      {
-        return;
-      }
-
-      sortUnique(rowIndices);
-      auto start = rowIndices.front();
-      auto previous = start;
-
-      for (auto const rowIndex : rowIndices | std::views::drop(1))
-      {
-        if (rowIndex == previous + 1)
-        {
-          previous = rowIndex;
-          continue;
-        }
-
-        batch.deltas.push_back(Range{TrackRowRange{.start = start, .count = previous - start + 1}});
-        start = rowIndex;
-        previous = rowIndex;
-      }
-
-      batch.deltas.push_back(Range{TrackRowRange{.start = start, .count = previous - start + 1}});
-    }
-  } // namespace
-
   TrackListProjectionDeltaBatch eraseTrackIds(delta::RegularTrackEditScript const& script)
   {
     auto batch = TrackListProjectionDeltaBatch{};
@@ -83,44 +43,6 @@ namespace ao::rt
     }
 
     return batch;
-  }
-
-  void appendProjectionInsertRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices)
-  {
-    appendAscending<ProjectionInsertRange>(batch, rowIndices);
-  }
-
-  void appendProjectionRemoveRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices)
-  {
-    if (rowIndices.empty())
-    {
-      return;
-    }
-
-    sortUnique(rowIndices);
-    std::ranges::reverse(rowIndices);
-    auto high = rowIndices.front();
-    auto low = high;
-
-    for (auto const rowIndex : rowIndices | std::views::drop(1))
-    {
-      if (rowIndex + 1 == low)
-      {
-        low = rowIndex;
-        continue;
-      }
-
-      batch.deltas.push_back(ProjectionRemoveRange{TrackRowRange{.start = low, .count = high - low + 1}});
-      high = rowIndex;
-      low = rowIndex;
-    }
-
-    batch.deltas.push_back(ProjectionRemoveRange{TrackRowRange{.start = low, .count = high - low + 1}});
-  }
-
-  void appendProjectionUpdateRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices)
-  {
-    appendAscending<ProjectionUpdateRange>(batch, rowIndices);
   }
 
   namespace

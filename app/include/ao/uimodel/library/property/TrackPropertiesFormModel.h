@@ -54,12 +54,4 @@ namespace ao::uimodel
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackPropertiesFormFieldState> _fields;
   };
-
-  TrackPropertiesFormFieldState makeTrackPropertiesFormFieldState(rt::TrackField field,
-                                                                  rt::TrackFieldRawValue rawValue,
-                                                                  bool editable = true);
-  bool mergeTrackPropertiesFormFieldState(TrackPropertiesFormFieldState& state, rt::TrackFieldRawValue const& rawValue);
-  bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch,
-                                    TrackPropertiesFormFieldState const& state,
-                                    TrackFieldEditValue const& editValue);
 } // namespace ao::uimodel

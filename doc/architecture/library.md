@@ -104,7 +104,9 @@ Store types own physical representation and transaction-scoped read access.
 `MusicLibrary` exposes stores as const read service handles; read capability comes from `ReadTransaction` or `WriteTransaction`.
 Mutation is available only through the `LibraryWrite` operation context supplied by `WriteTransaction::apply()`.
 The Track writer owns dictionary/resource preparation plus every Track/manifest relationship; the List writer owns live parent topology and deletion ordering.
-Physical Store writer factories are implementation details, with one source-private access seam limited to representation, corruption, and isolated Store-backed tests.
+Physical Store writer factories are implementation details reached through two library-private access classes.
+The production one carries a transaction's per-store writers to the logical writers, keeping the five nested writer types out of every translation unit that merely holds a transaction; it is confined to the library's own sources.
+The other is a source-private seam limited to representation, corruption, and isolated Store-backed tests.
 Raw LMDB transactions are not part of the public store operation surface.
 They do not publish application events or construct frontend projections.
 

@@ -6,6 +6,7 @@
 #include "LibraryIdentity.h"
 #include "MetadataState.h"
 #include "MetadataStore.h"
+#include "WriteTransactionAccess.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/Contract.h>
@@ -196,14 +197,6 @@ namespace ao::library
     return *this;
   }
 
-  DictionaryStore::Writer& WriteTransaction::dictionary()
-  {
-    AO_EXPECTS(
-      (_implPtr != nullptr && _implPtr->transaction.isActive()), "Library write transaction is no longer active");
-
-    return _implPtr->dictionaryWriter;
-  }
-
   TrackWriter WriteTransaction::tracks()
   {
     requireOperationActive();
@@ -214,56 +207,6 @@ namespace ao::library
   {
     requireOperationActive();
     return ListWriter{*this};
-  }
-
-  TrackStore::Writer& WriteTransaction::trackStoreWriter()
-  {
-    requireOperationActive();
-
-    if (!_implPtr->optTrackWriter)
-    {
-      _implPtr->optTrackWriter.emplace(_implPtr->tracks->writer(*this));
-    }
-
-    return *_implPtr->optTrackWriter;
-  }
-
-  ListStore::Writer& WriteTransaction::listStoreWriter()
-  {
-    requireOperationActive();
-
-    if (!_implPtr->optListWriter)
-    {
-      _implPtr->optListWriter.emplace(_implPtr->lists->writer(*this));
-    }
-
-    return *_implPtr->optListWriter;
-  }
-
-  FileManifestStore::Writer& WriteTransaction::manifestStoreWriter()
-  {
-    requireOperationActive();
-
-    if (!_implPtr->optManifestWriter)
-    {
-      _implPtr->optManifestWriter.emplace(_implPtr->manifest->writer(*this));
-    }
-
-    return *_implPtr->optManifestWriter;
-  }
-
-  ResourceStore::Writer& WriteTransaction::resourceStoreWriter(ResourceStore const& resources)
-  {
-    AO_EXPECTS(
-      (_implPtr != nullptr && _implPtr->transaction.isActive()), "Library write transaction is no longer active");
-    AO_EXPECTS(_implPtr->resources == &resources, "Resource store belongs to a different MusicLibrary");
-
-    if (!_implPtr->optResourceWriter)
-    {
-      _implPtr->optResourceWriter.emplace(resources.writer(*this));
-    }
-
-    return *_implPtr->optResourceWriter;
   }
 
   ListStore const& WriteTransaction::listStore() const
@@ -445,3 +388,69 @@ namespace ao::library
     return _implPtr->transaction;
   }
 } // namespace ao::library
+
+namespace ao::library::detail
+{
+  DictionaryStore::Writer& WriteTransactionAccess::dictionary(WriteTransaction& transaction)
+  {
+    AO_EXPECTS((transaction._implPtr != nullptr && transaction._implPtr->transaction.isActive()),
+               "Library write transaction is no longer active");
+
+    return transaction._implPtr->dictionaryWriter;
+  }
+
+  TrackStore::Writer& WriteTransactionAccess::trackStoreWriter(WriteTransaction& transaction)
+  {
+    transaction.requireOperationActive();
+    auto& impl = *transaction._implPtr;
+
+    if (!impl.optTrackWriter)
+    {
+      impl.optTrackWriter.emplace(impl.tracks->writer(transaction));
+    }
+
+    return *impl.optTrackWriter;
+  }
+
+  ListStore::Writer& WriteTransactionAccess::listStoreWriter(WriteTransaction& transaction)
+  {
+    transaction.requireOperationActive();
+    auto& impl = *transaction._implPtr;
+
+    if (!impl.optListWriter)
+    {
+      impl.optListWriter.emplace(impl.lists->writer(transaction));
+    }
+
+    return *impl.optListWriter;
+  }
+
+  FileManifestStore::Writer& WriteTransactionAccess::manifestStoreWriter(WriteTransaction& transaction)
+  {
+    transaction.requireOperationActive();
+    auto& impl = *transaction._implPtr;
+
+    if (!impl.optManifestWriter)
+    {
+      impl.optManifestWriter.emplace(impl.manifest->writer(transaction));
+    }
+
+    return *impl.optManifestWriter;
+  }
+
+  ResourceStore::Writer& WriteTransactionAccess::resourceStoreWriter(WriteTransaction& transaction,
+                                                                     ResourceStore const& resources)
+  {
+    AO_EXPECTS((transaction._implPtr != nullptr && transaction._implPtr->transaction.isActive()),
+               "Library write transaction is no longer active");
+    AO_EXPECTS(transaction._implPtr->resources == &resources, "Resource store belongs to a different MusicLibrary");
+    auto& impl = *transaction._implPtr;
+
+    if (!impl.optResourceWriter)
+    {
+      impl.optResourceWriter.emplace(resources.writer(transaction));
+    }
+
+    return *impl.optResourceWriter;
+  }
+} // namespace ao::library::detail

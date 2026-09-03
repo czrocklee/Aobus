@@ -29,6 +29,7 @@ namespace ao::library
   {
     class LibraryIdentity;
     class PhysicalStoreAccess;
+    class WriteTransactionAccess;
     class TrackWriteAccess;
   }
 
@@ -61,8 +62,7 @@ namespace ao::library
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
-    friend class TrackWriter;
-    friend class WriteTransaction;
+    friend class detail::WriteTransactionAccess;
     friend class detail::PhysicalStoreAccess;
   };
 

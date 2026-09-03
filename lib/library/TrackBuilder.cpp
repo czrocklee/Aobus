@@ -4,6 +4,7 @@
 #include <ao/library/TrackBuilder.h>
 
 #include "TextAdmission.h"
+#include "WriteTransactionAccess.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/AudioCodec.h>
@@ -523,7 +524,7 @@ namespace ao::library
 
   DictionaryId TrackBuilder::internDictionaryId(std::string_view const value, WriteTransaction& transaction)
   {
-    auto idRes = transaction.dictionary().intern(value);
+    auto idRes = detail::WriteTransactionAccess::dictionary(transaction).intern(value);
 
     if (!idRes)
     {
@@ -547,21 +548,21 @@ namespace ao::library
                                                   WriteTransaction& transaction,
                                                   ResourceStore const& resources)
   {
-    return transaction.resourceStoreWriter(resources).create(data);
+    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).create(data);
   }
 
   Result<ResourceId> TrackBuilder::declareResource(ResourceDescriptor const& descriptor,
                                                    WriteTransaction& transaction,
                                                    ResourceStore const& resources)
   {
-    return transaction.resourceStoreWriter(resources).getOrCreate(descriptor);
+    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).getOrCreate(descriptor);
   }
 
   Result<ResourceId> TrackBuilder::observeResource(ObservedResourceDescriptor const& observed,
                                                    WriteTransaction& transaction,
                                                    ResourceStore const& resources)
   {
-    return transaction.resourceStoreWriter(resources).getOrCreate(observed);
+    return detail::WriteTransactionAccess::resourceStoreWriter(transaction, resources).getOrCreate(observed);
   }
 
   Result<> TrackBuilder::validateHotSerializable() const

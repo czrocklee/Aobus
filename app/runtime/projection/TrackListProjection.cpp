@@ -5,6 +5,7 @@
 
 #include "runtime/RuntimeOperationProbe.h"
 #include "runtime/projection/StringArena.h"
+#include "runtime/projection/TrackProjectionEditScript.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
@@ -22,7 +23,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
-#include <ao/rt/projection/TrackProjectionEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>

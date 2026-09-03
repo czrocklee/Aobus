@@ -62,6 +62,7 @@ namespace ao::library
       }
 
       auto const text = utility::bytes::stringView(buf);
+
       if (auto validationRes = detail::validatePersistedLibraryText(text, "Dictionary entry"); !validationRes)
       {
         auto error = std::move(validationRes.error());
@@ -190,6 +191,7 @@ namespace ao::library
       }
 
       auto normalizedRes = detail::normalizeLibraryText(value, "Dictionary text");
+
       if (!normalizedRes)
       {
         return std::unexpected{normalizedRes.error()};
@@ -405,11 +407,6 @@ namespace ao::library
   {
   }
 
-  std::optional<DictionaryId> DictionaryReadContext::findId(std::string_view text) const
-  {
-    return _dictionary->findId(text);
-  }
-
   std::uint64_t DictionaryReadContext::bind(std::span<std::string const> symbols, std::span<DictionaryId> ids) const
   {
     return _dictionary->bindSymbols(symbols, ids);
@@ -423,10 +420,5 @@ namespace ao::library
   DictionaryStore const& DictionaryReadContext::dictionary() const noexcept
   {
     return *_dictionary;
-  }
-
-  std::uint64_t DictionaryReadContext::generation() const
-  {
-    return _dictionary->generation();
   }
 } // namespace ao::library

@@ -6,11 +6,6 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/FileManifestStore.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ResourceStore.h>
-#include <ao/library/TrackStore.h>
 
 #include <array>
 #include <cstddef>
@@ -35,6 +30,7 @@ namespace ao::library
     class LibraryIdentity;
     class MetadataState;
     class PhysicalStoreAccess;
+    class WriteTransactionAccess;
 
     template<typename Type>
     struct IsResult : std::false_type
@@ -45,6 +41,7 @@ namespace ao::library
     {};
   } // namespace detail
 
+  class DictionaryStore;
   class FileManifestStore;
   class LibraryWrite;
   class ListWriter;
@@ -152,10 +149,6 @@ namespace ao::library
 
     lmdb::WriteTransaction& native(detail::LibraryIdentity const& identity);
     lmdb::WriteTransaction const& native(detail::LibraryIdentity const& identity) const;
-    TrackStore::Writer& trackStoreWriter();
-    ListStore::Writer& listStoreWriter();
-    FileManifestStore::Writer& manifestStoreWriter();
-    ResourceStore::Writer& resourceStoreWriter(ResourceStore const& resources);
     ListStore const& listStore() const;
     ResourceStore const& resourceStore() const;
     TrackWriter tracks();
@@ -163,7 +156,6 @@ namespace ao::library
     Result<> restoreLibraryIdentity(std::array<std::byte, 16> const& libraryId);
     std::uint64_t libraryRevision(detail::LibraryIdentity const& identity) const;
     MetadataHeader metadataHeader(detail::LibraryIdentity const& identity) const;
-    DictionaryStore::Writer& dictionary();
     void requireOperationActive() const;
 
     std::unique_ptr<Impl> _implPtr;
@@ -174,10 +166,12 @@ namespace ao::library
     friend class MetadataStore;
     friend class MusicLibrary;
     friend class ResourceStore;
-    friend class TrackBuilder;
     friend class TrackStore;
     friend class TrackWriter;
     friend class ListWriter;
     friend class detail::PhysicalStoreAccess;
+    // Reaches the per-store writers, whose nested return types would otherwise
+    // pull every store header into this one.
+    friend class detail::WriteTransactionAccess;
   };
 } // namespace ao::library

@@ -197,6 +197,91 @@ ao_write_guardrail_regex(
   "library-open-validation-metrics-owners"
   "${AO_LIBRARY_OPEN_VALIDATION_METRICS_OWNER_REGEX}"
 )
+# PhysicalStoreAccess.h is a sanctioned test seam that includes this class, so a
+# test already holds its definition and can call it through an alias that spells
+# no include, no definition and no qualified name. The scan therefore matches the
+# identifier, and the two declarations that must stay legal are deleted from the
+# text first, by the scanner's own allowed stage.
+set(AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX
+    "(friend[ \t\r\n]+)?class[ \t\r\n]+(::)?([A-Za-z_][A-Za-z0-9_]*::)*WriteTransactionAccess[ \t\r\n]*;"
+)
+set(AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX
+    "(^|[^A-Za-z0-9_])WriteTransactionAccess([^A-Za-z0-9_]|$)"
+)
+foreach(AO_FORBIDDEN_WRITE_TRANSACTION_ACCESS_SPELLING IN ITEMS
+    "#include \"lib/library/WriteTransactionAccess.h\""
+    "#include \"WriteTransactionAccess.h\""
+    "class WriteTransactionAccess final {"
+    "detail::WriteTransactionAccess::trackStoreWriter(transaction)"
+    "using Access = ao::library::detail::WriteTransactionAccess;")
+  string(REGEX REPLACE "${AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX}" ""
+         AO_SCANNED_WRITE_TRANSACTION_ACCESS_SPELLING
+         "${AO_FORBIDDEN_WRITE_TRANSACTION_ACCESS_SPELLING}")
+  if(NOT "${AO_SCANNED_WRITE_TRANSACTION_ACCESS_SPELLING}" MATCHES
+     "${AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX}")
+    message(FATAL_ERROR
+      "Library write-transaction access guardrail does not reject '${AO_FORBIDDEN_WRITE_TRANSACTION_ACCESS_SPELLING}'")
+  endif()
+endforeach()
+foreach(AO_ALLOWED_WRITE_TRANSACTION_ACCESS_SPELLING IN ITEMS
+    "class WriteTransactionAccess;"
+    "friend class detail::WriteTransactionAccess;"
+    "friend class ::ao::library::detail::WriteTransactionAccess;"
+    "WriteTransactionAccessibility")
+  string(REGEX REPLACE "${AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX}" ""
+         AO_SCANNED_WRITE_TRANSACTION_ACCESS_SPELLING
+         "${AO_ALLOWED_WRITE_TRANSACTION_ACCESS_SPELLING}")
+  if("${AO_SCANNED_WRITE_TRANSACTION_ACCESS_SPELLING}" MATCHES
+     "${AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX}")
+    message(FATAL_ERROR
+      "Library write-transaction access guardrail rejects '${AO_ALLOWED_WRITE_TRANSACTION_ACCESS_SPELLING}'")
+  endif()
+endforeach()
+ao_write_guardrail_regex(
+  AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX_FILE
+  "library-write-transaction-access-allowed"
+  "${AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX_FILE
+  "library-write-transaction-access"
+  "${AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX}"
+)
+# Tests are scanned here because they put the repository root on their include
+# path and could otherwise spell the private path directly. The owner pattern is
+# therefore anchored to this checkout's own library directory: a bare
+# /lib/library/ substring also names foreign directories such as
+# test/fixture/lib/library, and an exclusion that is too wide retires the guard
+# while still exiting zero.
+string(REGEX REPLACE "([][.^$+*?()|\\])" "\\\\\\1" AO_SOURCE_DIR_REGEX "${CMAKE_SOURCE_DIR}")
+set(AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX
+    "^${AO_SOURCE_DIR_REGEX}/lib/library/(detail/)?[^/]+\\.(h|cpp)$"
+)
+foreach(AO_OWNED_WRITE_TRANSACTION_ACCESS_PATH IN ITEMS
+    "${CMAKE_SOURCE_DIR}/lib/library/WriteTransactionAccess.h"
+    "${CMAKE_SOURCE_DIR}/lib/library/TrackWriter.cpp"
+    "${CMAKE_SOURCE_DIR}/lib/library/detail/LibraryError.cpp")
+  if(NOT "${AO_OWNED_WRITE_TRANSACTION_ACCESS_PATH}" MATCHES
+         "${AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX}")
+    message(FATAL_ERROR
+      "Library write-transaction access owners do not cover '${AO_OWNED_WRITE_TRANSACTION_ACCESS_PATH}'")
+  endif()
+endforeach()
+foreach(AO_FOREIGN_WRITE_TRANSACTION_ACCESS_PATH IN ITEMS
+    "${CMAKE_SOURCE_DIR}/test/fixture/lib/library/Escape.cpp"
+    "${CMAKE_SOURCE_DIR}/lib/library/nested/Deep.cpp"
+    "${CMAKE_SOURCE_DIR}/app/runtime/library/LibraryCommands.cpp")
+  if("${AO_FOREIGN_WRITE_TRANSACTION_ACCESS_PATH}" MATCHES
+     "${AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX}")
+    message(FATAL_ERROR
+      "Library write-transaction access owners wrongly cover '${AO_FOREIGN_WRITE_TRANSACTION_ACCESS_PATH}'")
+  endif()
+endforeach()
+ao_write_guardrail_regex(
+  AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX_FILE
+  "library-write-transaction-access-owners"
+  "${AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX}"
+)
 add_custom_target(ao_library_logical_writer_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
@@ -220,6 +305,13 @@ add_custom_target(ao_library_logical_writer_boundary_check
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
           "-DFORBIDDEN_REGEX_FILE=${AO_LIBRARY_FORBIDDEN_OPEN_VALIDATION_METRICS_REGEX_FILE}"
           "-DEXCLUDE_REGEX_FILE=${AO_LIBRARY_OPEN_VALIDATION_METRICS_OWNER_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app;${AO_PUBLIC_INCLUDE_DIR};${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool;${CMAKE_SOURCE_DIR}/test"
+          "-DFORBIDDEN_REGEX_FILE=${AO_LIBRARY_FORBIDDEN_WRITE_TRANSACTION_ACCESS_REGEX_FILE}"
+          "-DALLOWED_REGEX_FILE=${AO_LIBRARY_ALLOWED_WRITE_TRANSACTION_ACCESS_REGEX_FILE}"
+          "-DEXCLUDE_REGEX_FILE=${AO_LIBRARY_WRITE_TRANSACTION_ACCESS_OWNER_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMENT "Checking production library writes use logical transaction ports"
