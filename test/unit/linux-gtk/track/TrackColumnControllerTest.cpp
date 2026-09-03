@@ -5,6 +5,7 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -71,7 +72,9 @@ namespace ao::gtk::test
   TEST_CASE("TrackColumnController - builds and updates visible track columns", "[gtk][unit][track][column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
 
     auto columnView = Gtk::ColumnView{};
     auto controller =
@@ -143,7 +146,8 @@ namespace ao::gtk::test
         {{rt::kAllTracksListId,
           {
             uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.0, .visible = false},
-          }}});
+          }}},
+        {});
       controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
       controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album});
 
@@ -247,7 +251,9 @@ namespace ao::gtk::test
             "[gtk][regression][track-column][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
     auto columnView = Gtk::ColumnView{};
     auto controller =
       TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};

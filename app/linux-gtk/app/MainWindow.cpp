@@ -70,10 +70,12 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -93,7 +95,6 @@ namespace ao::gtk
                           runtime,
                           textCatalog,
                           TagEditController::Callbacks{
-                            .onTagsMutated = [] {},
                             .onManageListsRequested = [this] { listNavigationController.openNewPlaylistDialog(); },
                           },
                           themeCoordinator}
@@ -641,8 +642,10 @@ namespace ao::gtk
     _implPtr->layoutStateStore.load(columnState, prefState);
     _implPtr->restoringLayoutState = true;
     auto const restoreGuard = utility::ScopedRegistration{[this] { _implPtr->restoringLayoutState = false; }};
-    _implPtr->trackColumnLayouts.restore(columnState);
-    _implPtr->listPresentations.restore(prefState);
+    auto const knownListIds =
+      _runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) | std::ranges::to<std::vector>();
+    _implPtr->trackColumnLayouts.restore(columnState, knownListIds);
+    _implPtr->listPresentations.restore(prefState, knownListIds);
 
     // App prefs (playback restoration)
     auto prefs = rt::AppPrefsState{};

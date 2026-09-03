@@ -36,7 +36,6 @@ namespace ao::uimodel
   public:
     using Snapshot = std::map<ListId, std::vector<TrackColumnState>>;
 
-    TrackColumnLayouts() = default;
     explicit TrackColumnLayouts(rt::LibraryChanges const& changes);
     ~TrackColumnLayouts();
 
@@ -46,7 +45,19 @@ namespace ao::uimodel
     TrackColumnLayouts& operator=(TrackColumnLayouts&&) = delete;
 
     Snapshot snapshot() const { return _listLayouts; }
-    void restore(Snapshot layouts);
+    /**
+     * Installs a persisted snapshot, dropping every entry whose list the
+     * library no longer has. @p knownListIds enumerates the live lists; a
+     * virtual id (rt::isVirtualListId) is kept without appearing there.
+     *
+     * LibraryChanges retires an entry when its list is deleted while this owner
+     * is alive, so within a session the map cannot outlive its lists. A
+     * snapshot read back from disk carries no such guarantee: it can name a
+     * list deleted while the frontend was down, or one whose cleanup write
+     * never reached the file. Restoring performs the same removal against the
+     * live library so a reused ListId cannot inherit the stale entry.
+     */
+    void restore(Snapshot layouts, std::span<ListId const> knownListIds);
 
     std::vector<TrackColumnState> const& layoutForList(ListId listId) const noexcept;
     void updateLayout(ListId listId, std::vector<TrackColumnState> const& layout);

@@ -43,7 +43,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
 
     auto window = Gtk::Window{};
     auto button = TrackPresentationButton{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
@@ -90,8 +90,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{catalog};
-    auto replacementPreferences = uimodel::ListPresentations{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
+    auto replacementPreferences = uimodel::ListPresentations{catalog, runtime.library().changes()};
     auto window = Gtk::Window{};
 
     auto const activeViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
@@ -127,7 +127,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto themeCoordinator = ThemeCoordinator{};
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
     auto window = Gtk::Window{};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
@@ -166,7 +166,7 @@ namespace ao::gtk::test
     auto themeCoordinator = ThemeCoordinator{};
     themeCoordinator.setTheme(uimodel::ThemePreset::Modern);
     auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace(), ao::test::englishMessageCatalog()};
-    auto listPresentations = uimodel::ListPresentations{catalog};
+    auto listPresentations = uimodel::ListPresentations{catalog, runtime.library().changes()};
     auto window = Gtk::Window{};
 
     auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));

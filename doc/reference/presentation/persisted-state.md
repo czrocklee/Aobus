@@ -11,7 +11,7 @@ summary: Enumerates versioned interactive presentation documents, stable token a
 
 This reference owns the exact version-2 `trackView.columnLayouts` payload and
 version-1 `trackView.presentations` payload stored by interactive frontends.
-GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them alongside its desktop group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml`.
+GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them per library in `winui_layout.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
 The [workspace session-state reference](../workspace/session-state.md) owns the exact workspace group.
@@ -27,6 +27,7 @@ This surface spans the application runtime, UIModel, and interactive-frontend pe
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
 The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
 `GtkLayoutStateStore`, `TuiLayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
+Every writer keys entries by a list id that is only meaningful inside one library, which is why all three documents are per-library.
 
 ## Stable vocabulary
 
@@ -140,10 +141,11 @@ It is not a complete workspace root schema version.
 - A missing or rejected group leaves the caller's seeded state unchanged.
 - The two groups are independent on load, so rejection of one does not reject a valid sibling group.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
-- WinUI loads each group into a temporary typed candidate during stable-session construction and retains the corresponding default when a candidate is missing or rejected.
+- WinUI loads each group into a temporary typed candidate when the runtime graph binds, once the library is open, and retains the corresponding default when a candidate is missing or rejected.
 - TUI loads each group independently before connecting model-save observers, preserving a seeded group when its sibling succeeds or it is rejected.
 - Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
-- GTK, TUI, and the combined WinUI settings checkpoint submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI may save an isolated presentation-preference change as a single-group transaction.
+- GTK and TUI submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI writes each group by itself, from the persist port of the store that changed.
+- Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, so a reused list id cannot inherit it.
 - Layout documents are frontend-local: no writer converts or copies a positive `width` between desktop pixel units and terminal cells.
 
 ## Compatibility and versioning
@@ -157,7 +159,7 @@ Changing a stable token's meaning or spelling requires an explicit compatibility
 Adding a token does not change the meaning of existing documents, but older
 readers reject a document that uses the new unknown value.
 
-The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `windows-settings.yaml` files have no shared envelope version.
+The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `winui_layout.yaml` files have no shared envelope version.
 Each literal group carries and gates its own payload version.
 
 ## Implementation authority
@@ -168,6 +170,7 @@ Each literal group carries and gates its own payload version.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns GTK group selection, load policy, and the file save boundary.
 - [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns TUI group selection, independent-load policy, and the terminal file save boundary.
 - [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI group selection, load policy, and atomic file save boundary.
+- [`RetainKnownLists.h`](../../../app/uimodel/library/presentation/RetainKnownLists.h) owns the rule both stores apply when restoring a document.
 
 ## Test authority
 

@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
+#include "RetainKnownLists.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -60,8 +61,10 @@ namespace ao::uimodel
 
   TrackColumnLayouts::~TrackColumnLayouts() = default;
 
-  void TrackColumnLayouts::restore(Snapshot layouts)
+  void TrackColumnLayouts::restore(Snapshot layouts, std::span<ListId const> const knownListIds)
   {
+    retainKnownLists(layouts, knownListIds);
+
     if (_listLayouts == layouts)
     {
       return;
@@ -90,7 +93,11 @@ namespace ao::uimodel
       return;
     }
 
-    if (_listLayouts[listId] == layout)
+    // An absent entry and an empty layout are the same state to every reader,
+    // so neither direction between them is a change. find() rather than
+    // operator[]: comparing through the subscript maps the id as a side effect,
+    // and the persisting observer writes whatever the map holds.
+    if (auto const it = _listLayouts.find(listId); it == _listLayouts.end() ? layout.empty() : it->second == layout)
     {
       return;
     }

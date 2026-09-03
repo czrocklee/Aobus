@@ -42,7 +42,17 @@ namespace ao::uimodel
   class VolumeViewModel final
   {
   public:
+    /**
+     * Command-only model: applies volume intents without subscribing to
+     * playback snapshots or producing view state. Shells that redraw from their
+     * own frame loop use this form.
+     */
     explicit VolumeViewModel(rt::PlaybackService& playback);
+
+    /**
+     * Presenting model: subscribes to playback snapshots and renders through
+     * @p onRender, which must be callable.
+     */
     VolumeViewModel(rt::PlaybackService& playback,
                     i18n::MessageCatalog const& textCatalog,
                     std::function<void(VolumeViewState const&)> onRender);

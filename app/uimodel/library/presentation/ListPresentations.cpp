@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 
+#include "RetainKnownLists.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
@@ -12,6 +13,7 @@
 #include <map>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,11 +21,6 @@
 
 namespace ao::uimodel
 {
-  ListPresentations::ListPresentations(TrackPresentationCatalog& catalog)
-    : _catalog{catalog}
-  {
-  }
-
   ListPresentations::ListPresentations(TrackPresentationCatalog& catalog, rt::LibraryChanges const& changes)
     : _catalog{catalog}
   {
@@ -70,8 +67,10 @@ namespace ao::uimodel
 
   ListPresentations::~ListPresentations() = default;
 
-  void ListPresentations::restore(Snapshot presentations)
+  void ListPresentations::restore(Snapshot presentations, std::span<ListId const> const knownListIds)
   {
+    retainKnownLists(presentations, knownListIds);
+
     if (_presentations == presentations)
     {
       return;

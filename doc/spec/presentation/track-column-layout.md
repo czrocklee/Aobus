@@ -72,6 +72,10 @@ for a field.
 When constructed with `LibraryChanges`, it removes every layout named by a committed list deletion and emits each removed id only after the complete deletion set has been pruned.
 A full library reset carries no incremental List ids, so it clears the complete layout map and emits every removed key.
 
+That lifecycle only covers deletions the owner observed while it was alive.
+`restore()` therefore takes the library's live list ids and drops every entry naming a list that no longer exists, so a document written before a deletion, or one whose cleanup write never landed, cannot reintroduce a layout that a reused list id would inherit.
+A virtual list id references no user-created list and is retained without appearing among the live ids.
+
 The invalid list id cannot receive an update.
 
 ## Commands and transitions
@@ -127,8 +131,8 @@ Persistence I/O failures belong to the [persistence and managed-state architectu
 ## Persistence and versioning
 
 Column state is UI-local per-library managed state keyed by list id.
-GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in
-`%LOCALAPPDATA%\Aobus\windows-settings.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
+GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in `winui_layout.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
+All three are per-library documents, so a list id keyed in one is only ever read back against the library that produced it.
 The `trackView.columnLayouts` group carries required `version: 2` and stores
 field id, canonical dimensions, and visibility.
 The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
@@ -137,8 +141,7 @@ Loading uses strict recursive structure plus semantic validation and never insta
 Unversioned numeric layouts and unsupported versions are rejected without an automatic rewrite.
 The explicit schema returns `NotSupported` for a future version before interpreting its layouts.
 GTK suppresses layout/preference persistence callbacks while installing deserialized startup candidates, so a valid sibling group cannot rewrite a rejected layout merely because bulk state changed.
-WinUI loads a complete typed candidate before installing it and saves the
-desktop and presentation groups as one atomic candidate.
+WinUI loads a complete typed candidate before installing it, once the library that gives its list ids meaning is open, and saves the group by itself from the store's persist port.
 TUI loads each group independently before connecting save observers, and its single store writer saves column layouts and presentation preferences through one atomic `saveTogether()` candidate.
 The solver owns no file format and accepts only deserialized `TrackColumnState` values.
 

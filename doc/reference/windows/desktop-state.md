@@ -11,9 +11,7 @@ summary: Enumerates the native Windows desktop settings and theme YAML surfaces.
 
 This reference exhaustively defines the Windows-owned `desktop` group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml` and the complete `%LOCALAPPDATA%\Aobus\windows-theme.yaml` document for the unpackaged native Windows frontend.
 The `desktop` group is version 3.
-The same settings file also contains the shared version-2
-`trackView.columnLayouts` group and version-1 `trackView.presentations` group
-defined by the [persisted presentation-state reference](../presentation/persisted-state.md).
+The shared version-2 `trackView.columnLayouts` and version-1 `trackView.presentations` groups defined by the [persisted presentation-state reference](../presentation/persisted-state.md) are not in this file: they are keyed by list id and live in the per-library `winui_layout.yaml` document instead.
 The theme document is strict and unversioned.
 
 ## Code boundary
@@ -42,7 +40,7 @@ The four window coordinates encode the native normal-position rectangle in
 Windows workspace coordinates. `window.maximized` is applied independently.
 
 Presentation choice and column layout are deliberately not members of `desktop`.
-They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK, TUI, and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies; each frontend keeps a separate document for its geometry units.
+They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK, TUI, and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies; each frontend keeps a separate per-library document for its geometry units, which also keeps its list ids from reaching another library through this global file.
 Column layout includes stable field order, canonical sizing, and visibility.
 Workspace owns the active view's current presentation and sort state.
 `windows-theme.yaml` requires exactly three maps. `shared` requires `fontFamily`, `accent`, `windowBackground`, `surface`, `textPrimary`, `textSecondary`, `divider`, and `selection`. `modern` requires `navigationBackground`, `inspectorBackground`, and `nowPlayingBackground`. `classic` requires `chrome`, `toolbarBackground`, `treeBackground`, and `statusBackground`. `chrome` is `system` or `retro` and defaults to `system` when the file is absent.
@@ -83,7 +81,7 @@ version below 2 is rejected as well, because no document was ever written that
 way; the value marks a missing or malformed marker, and reading it under current
 field semantics would dress a corrupt document up as an old one.
 A rejected group leaves typed defaults in effect.
-Each settings group is loaded independently, so rejection of `desktop` does not reject a valid shared presentation group and vice versa.
+Each settings group is loaded independently, so rejection of `desktop` does not reject a valid sibling group and vice versa.
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
 Reload installs only a completely valid candidate.
 
@@ -91,9 +89,9 @@ Selecting an output row updates the in-memory exact requested backend, device,
 and profile tuple even when the engine cannot currently confirm that route.
 The selector performs no synchronous file write. The next ordinary Windows
 settings checkpoint retains that preferred tuple instead of replacing it from
-the coherent Runtime snapshot, then serializes `desktop`,
-`trackView.columnLayouts`, and `trackView.presentations` into one
-`saveTogether()` candidate and replaces the file atomically.
+the coherent Runtime snapshot, then serializes `desktop` and replaces the file
+atomically. Presentation state is not part of that candidate; each presentation
+store writes its own group to the per-library layout document when it changes.
 A destructive library restart destroys the parent `LibrarySession` and its settings writer before process creation.
 The successor initially retains the loaded `lastLibraryPath`; an explicit requested root replaces that in-memory value and becomes eligible for `saveTogether()` only after successor activation.
 That candidate inherits the latest in-memory preferred output tuple, including a selection requested after startup.
@@ -113,12 +111,6 @@ desktop:
   lastOutputDeviceId: '{0.0.0.00000000}.example'
   navigationPaneWidth: 240
   inspectorPaneWidth: 320
-trackView.columnLayouts:
-  version: 2
-  layouts: []
-trackView.presentations:
-  version: 1
-  preferences: []
 ```
 
 ```yaml

@@ -1095,7 +1095,7 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{
       window, runtime, ao::test::englishMessageCatalog(), std::move(navCallbacks), themeCoordinator};
-    auto columnLayouts = uimodel::TrackColumnLayouts{};
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto pageHost = TrackPageHost{stack,
                                   runtime,
                                   tagEditController,

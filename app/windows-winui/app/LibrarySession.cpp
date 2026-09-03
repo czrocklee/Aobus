@@ -19,6 +19,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -58,11 +59,13 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::winui
 {
@@ -107,24 +110,47 @@ namespace ao::winui
     Retired,
   };
 
+  // Restored state and persistence ports for the runtime-bound presentation
+  // stores. Named fields so the two std::function<void(ListId)> persist ports
+  // cannot be confused at the call site.
+  //
+  // These ports are the only writers of their config groups. Column edits also
+  // went through LibrarySession::saveSettings(), which rewrote the whole
+  // settings file a second time for every gesture once the stores persisted
+  // themselves; those call sites are gone.
+  struct InteractiveBorrowerBindings final
+  {
+    uimodel::ListPresentations::Snapshot restoredListPresentations{};
+    uimodel::TrackColumnLayouts::Snapshot restoredColumnLayouts{};
+    std::vector<ListId> knownListIds{};
+    std::function<void(ListId)> persistListPresentations{};
+    std::function<void(ListId)> persistColumnLayouts{};
+    std::function<void()> requestPlaySelection{};
+  };
+
   struct InteractiveBorrowers final
   {
     InteractiveBorrowers(rt::AppRuntime& runtime,
                          i18n::MessageCatalog const& textCatalog,
-                         uimodel::ListPresentations::Snapshot restoredListPresentations,
-                         std::function<void(ListId)> persistListPresentations,
-                         std::function<void()> requestPlaySelection)
+                         InteractiveBorrowerBindings bindings)
       : presentationCatalog{runtime.workspace(), textCatalog}
       , listPresentations{presentationCatalog, runtime.library().changes()}
-      , playbackActions{runtime.playback(), std::move(requestPlaySelection)}
+      , columnLayouts{runtime.library().changes()}
+      , playbackActions{runtime.playback(), std::move(bindings.requestPlaySelection)}
     {
-      listPresentations.restore(std::move(restoredListPresentations));
-      listPresentationsSub = listPresentations.signalChanged().connect(std::move(persistListPresentations));
+      // Restore before subscribing so replaying stored state does not write it
+      // straight back out.
+      listPresentations.restore(std::move(bindings.restoredListPresentations), bindings.knownListIds);
+      listPresentationsSub = listPresentations.signalChanged().connect(std::move(bindings.persistListPresentations));
+      columnLayouts.restore(std::move(bindings.restoredColumnLayouts), bindings.knownListIds);
+      columnLayoutsSub = columnLayouts.signalChanged().connect(std::move(bindings.persistColumnLayouts));
     }
 
     uimodel::TrackPresentationCatalog presentationCatalog;
     uimodel::ListPresentations listPresentations;
     async::Subscription listPresentationsSub;
+    uimodel::TrackColumnLayouts columnLayouts;
+    async::Subscription columnLayoutsSub;
     uimodel::PlaybackActions playbackActions;
   };
 
@@ -178,9 +204,12 @@ namespace ao::winui
     rt::CompletionAliasPolicy const& completionAliasPolicy;
     std::unique_ptr<rt::ConfigStore> settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> playbackStorePtr;
+
+    // Per-library, so a ListId keyed here can only ever be read back against
+    // the library that produced it. Declared before optRuntimeGraph: the
+    // persist ports reach it from inside the borrowers' subscriptions.
+    std::unique_ptr<rt::ConfigStore> layoutStorePtr;
     DesktopSettings settings{};
-    uimodel::TrackColumnLayouts columnLayouts{};
-    uimodel::ListPresentations::Snapshot restoredListPresentations{};
     uimodel::KeymapModel keymap{};
     std::optional<std::filesystem::path> optSelectedRootCommit;
     std::optional<RuntimeGraph> optRuntimeGraph;
@@ -243,27 +272,6 @@ namespace ao::winui
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loadedRes.error().message);
-    }
-
-    auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
-
-    if (auto loadedRes = storage.settingsStorePtr->load(
-          uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
-        loadedRes)
-    {
-      storage.columnLayouts.restore(std::move(columnLayouts));
-    }
-    else if (loadedRes.error().code != Error::Code::NotFound)
-    {
-      APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
-    }
-
-    if (auto loadedRes = storage.settingsStorePtr->load(uimodel::kListPresentationsConfigGroup,
-                                                        storage.restoredListPresentations,
-                                                        uimodel::ListPresentationPreferenceYamlSchema{});
-        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
-    {
-      APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
     }
 
     // Shortcuts share the settings file: one store, one process, so the whole
@@ -445,12 +453,12 @@ namespace ao::winui
 
   uimodel::TrackColumnLayouts const& LibrarySession::columnLayouts() const noexcept
   {
-    return _storagePtr->columnLayouts;
+    return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->columnLayouts;
   }
 
   uimodel::TrackColumnLayouts& LibrarySession::columnLayouts() noexcept
   {
-    return _storagePtr->columnLayouts;
+    return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->columnLayouts;
   }
 
   uimodel::TrackPresentationCatalog& LibrarySession::presentationCatalog() const noexcept
@@ -513,17 +521,13 @@ namespace ao::winui
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
   {
     auto& storage = *_storagePtr;
-    AO_INVARIANT(storage.optRuntimeGraph && storage.optRuntimeGraph->optInteractiveBorrowers,
-                 "LibrarySession cannot save settings before List presentations are bound");
+    AO_INVARIANT(storage.optRuntimeGraph, "LibrarySession cannot save settings before the runtime graph exists");
     auto& graph = *storage.optRuntimeGraph;
     graph.runtime.workspace().saveSession(graph.runtime.workspaceConfigStore());
-    auto const columnLayouts = storage.columnLayouts.snapshot();
-    auto const listPresentations = graph.optInteractiveBorrowers->listPresentations.snapshot();
-    return storage.settingsStorePtr->saveTogether(
-      rt::configWrite("desktop", settings, winui::DesktopSettingsYamlSchema{}),
-      rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
-      rt::configWrite(
-        uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));
+
+    // The two presentation groups moved to the per-library layout document and
+    // are written only by the stores' own persist ports.
+    return storage.settingsStorePtr->save("desktop", settings, winui::DesktopSettingsYamlSchema{});
   }
 
   Result<> LibrarySession::commitSelectedRoot()
@@ -621,6 +625,10 @@ namespace ao::winui
       return std::unexpected{runtimeRes.error()};
     }
 
+    // Opening the library created the managed-data directory, so the layout
+    // document can be placed beside it now that the root is known and valid.
+    storage.layoutStorePtr = std::make_unique<rt::ConfigStore>(paths.managedDataPath() / "winui_layout.yaml");
+
     // This is the sole post-factory move. Nothing may publish a callback or a
     // provider borrow until the runtime has reached this final storage address.
     storage.optRuntimeGraph.emplace(std::move(*runtimeRes), dispatcherExecutor);
@@ -632,25 +640,67 @@ namespace ao::winui
     auto& storage = *_storagePtr;
     auto& graph = *storage.optRuntimeGraph;
     AO_INVARIANT(!graph.optInteractiveBorrowers, "LibrarySession cannot bind interactive runtime borrowers twice");
+
+    // Both groups are read here rather than during initialize(): they are keyed
+    // by ListId, which only means anything against the library that is open by
+    // now. A rejected or absent group leaves the seeded default in place.
+    auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
+
+    if (auto const loadedRes = storage.layoutStorePtr->load(
+          uimodel::kTrackColumnLayoutsConfigGroup, restoredColumnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
+    }
+
+    auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
+
+    if (auto const loadedRes = storage.layoutStorePtr->load(uimodel::kListPresentationsConfigGroup,
+                                                            restoredListPresentations,
+                                                            uimodel::ListPresentationPreferenceYamlSchema{});
+        !loadedRes && loadedRes.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
+    }
+
+    auto knownListIds = graph.runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) |
+                        std::ranges::to<std::vector>();
     graph.optInteractiveBorrowers.emplace(
       graph.runtime,
       storage.textCatalog,
-      std::move(storage.restoredListPresentations),
-      [this](ListId const)
-      {
-        auto& callbackStorage = *_storagePtr;
-        auto const listPresentations =
-          callbackStorage.optRuntimeGraph->optInteractiveBorrowers->listPresentations.snapshot();
-        auto const savedRes = callbackStorage.settingsStorePtr->save(
-          uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
-
-        if (!savedRes)
+      InteractiveBorrowerBindings{
+        .restoredListPresentations = std::move(restoredListPresentations),
+        .restoredColumnLayouts = std::move(restoredColumnLayouts),
+        .knownListIds = std::move(knownListIds),
+        .persistListPresentations =
+          [this](ListId const)
         {
-          APP_LOG_WARN("LibrarySession: failed to persist presentation preference: {}", savedRes.error().message);
-        }
-      },
-      [this] { requestPlaySelection(); });
-    storage.restoredListPresentations.clear();
+          auto& callbackStorage = *_storagePtr;
+          auto const listPresentations =
+            callbackStorage.optRuntimeGraph->optInteractiveBorrowers->listPresentations.snapshot();
+          auto const savedRes = callbackStorage.layoutStorePtr->save(
+            uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
+
+          if (!savedRes)
+          {
+            APP_LOG_WARN("LibrarySession: failed to persist presentation preference: {}", savedRes.error().message);
+          }
+        },
+        .persistColumnLayouts =
+          [this](ListId const)
+        {
+          auto& callbackStorage = *_storagePtr;
+          auto const columnLayouts = callbackStorage.optRuntimeGraph->optInteractiveBorrowers->columnLayouts.snapshot();
+          auto const savedRes = callbackStorage.layoutStorePtr->save(
+            uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+
+          if (!savedRes)
+          {
+            APP_LOG_WARN("LibrarySession: failed to persist column layout: {}", savedRes.error().message);
+          }
+        },
+        .requestPlaySelection = [this] { requestPlaySelection(); },
+      });
   }
 
   void LibrarySession::rescan() noexcept

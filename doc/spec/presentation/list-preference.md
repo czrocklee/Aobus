@@ -89,6 +89,7 @@ GTK playback restoration submits the same `NewViewDefault` request as ordinary G
 Changing the presentation through a normal user-selection path installs the new runtime spec and, after runtime acceptance, updates the base list's saved preference.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 A full library reset carries no incremental List ids, so it clears the complete preference map and emits every removed key.
+That lifecycle covers only deletions the owner observed while it was alive, so `restore()` takes the library's live list ids and drops every preference naming a list that no longer exists; a virtual list id is retained without appearing among them.
 
 WinUI retains one `ListPresentations` for the active library session and resolves every saved id through `presentationForList()` before applying it to a newly bound or navigated view.
 An unavailable id therefore applies the source-aware recommendation without deleting or rewriting the opaque saved id.
@@ -118,7 +119,8 @@ TUI likewise installs both startup candidates before connecting save observers; 
 
 GTK persists the preference map with other per-library track-view layout state through `GtkLayoutStateStore` in the library-specific `gtk_layout.yaml` store.
 TUI persists the same semantic group with terminal column-layout state through its library-specific `tui_layout.yaml` store.
-WinUI persists the group in its platform application settings, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
+WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
+It loads that store when the runtime graph binds rather than at startup, because the list ids the group is keyed by only mean anything against an open library.
 The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
