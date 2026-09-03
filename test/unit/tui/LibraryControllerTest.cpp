@@ -48,7 +48,11 @@ namespace ao::tui::test
 
       LibraryController makeController()
       {
-        return LibraryController{*runtimePtr, ao::test::englishMessageCatalog(), listPresentations};
+        return LibraryController{runtimePtr->library(),
+                                 runtimePtr->views(),
+                                 runtimePtr->workspace(),
+                                 ao::test::englishMessageCatalog(),
+                                 listPresentations};
       }
 
       TrackId addTrack(std::string_view title) const
@@ -106,7 +110,11 @@ namespace ao::tui::test
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
 
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
 
     CHECK(controller.activePresentationId() == "albums");
     CHECK(presentations.snapshot().empty());
@@ -123,7 +131,11 @@ namespace ao::tui::test
     presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
     presentations.setPresentationIdForList(listId, "albums");
 
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
 
     CHECK(controller.activePresentationId() == "artists");
     auto const listIt = std::ranges::find(controller.libraryEntries(), listId, &LibraryNavEntry::id);
@@ -142,7 +154,11 @@ namespace ao::tui::test
     auto catalog =
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
 
     CHECK(controller.setPresentation("albums") == "View: albums");
 
@@ -158,7 +174,11 @@ namespace ao::tui::test
       uimodel::TrackPresentationCatalog{fixture.runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
     presentations.setPresentationIdForList(rt::kAllTracksListId, "albums");
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
     auto const activeBefore = controller.activePresentationId();
 
     CHECK(controller.setPresentation("missing-presentation") == "Unknown view missing-presentation");
@@ -187,7 +207,11 @@ namespace ao::tui::test
     auto presentations = uimodel::ListPresentations{catalog, fixture.runtimePtr->library().changes()};
     presentations.setPresentationIdForList(rt::kAllTracksListId, "artists");
 
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
 
     CHECK(controller.activeViewId() == activeViewId);
     CHECK(controller.activePresentationId() == "albums");
@@ -247,7 +271,11 @@ namespace ao::tui::test
     auto presentationCatalog =
       uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto controller = LibraryController{*runtimePtr, ao::test::englishMessageCatalog(), listPresentations};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
 
     CHECK(controller.activeViewId() == expectedActiveViewId);
     CHECK(runtimePtr->workspace().snapshot() == before);
@@ -292,7 +320,11 @@ namespace ao::tui::test
     auto presentationCatalog =
       uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto controller = LibraryController{*runtimePtr, ao::test::englishMessageCatalog(), listPresentations};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
 
     CHECK(controller.activeViewId() == expectedActiveViewId);
     CHECK(runtimePtr->workspace().snapshot() == before);
@@ -386,7 +418,11 @@ namespace ao::tui::test
     auto columnLayouts = uimodel::TrackColumnLayouts{fixture.runtimePtr->library().changes()};
     columnLayouts.updateLayout(
       temporaryListId, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17, .weight = -1.0}});
-    auto controller = LibraryController{*fixture.runtimePtr, ao::test::englishMessageCatalog(), presentations};
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        presentations};
     auto const allTracksViewId = controller.activeViewId();
     auto const listIt = std::ranges::find(controller.libraryEntries(), temporaryListId, &LibraryNavEntry::id);
     REQUIRE(listIt != controller.libraryEntries().end());
@@ -612,7 +648,11 @@ namespace ao::tui::test
     auto presentationCatalog =
       uimodel::TrackPresentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
     auto listPresentations = uimodel::ListPresentations{presentationCatalog, runtimePtr->library().changes()};
-    auto controller = LibraryController{*runtimePtr, ao::test::englishMessageCatalog(), listPresentations};
+    auto controller = LibraryController{runtimePtr->library(),
+                                        runtimePtr->views(),
+                                        runtimePtr->workspace(),
+                                        ao::test::englishMessageCatalog(),
+                                        listPresentations};
 
     auto const entryIt =
       std::ranges::find(controller.presentationEntries(), customSpec.id, &TrackPresentationNavEntry::id);

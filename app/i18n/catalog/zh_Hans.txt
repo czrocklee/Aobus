@@ -868,7 +868,6 @@ zh_Hans:table {
     tui_pipeline_closed { "音频链路已关闭" }
     tui_pipeline_opened { "音频链路" }
     tui_output_closed { "输出设备已关闭" }
-    tui_output_unavailable { "输出设备不可用" }
     tui_output_opened { "输出设备" }
     tui_views_closed { "视图已关闭" }
     tui_views_opened { "视图" }

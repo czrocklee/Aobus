@@ -10,7 +10,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
@@ -63,13 +62,13 @@ namespace ao::winui
     class TrackItemMaterializer final
     {
     public:
-      TrackItemMaterializer(rt::AppRuntime& inputRuntime,
+      TrackItemMaterializer(rt::Library const& inputLibrary,
                             rt::TrackListProjection const& inputProjection,
                             i18n::MessageCatalog textCatalog,
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns,
                             std::weak_ptr<void> lifetimePtr)
-        : _runtime{&inputRuntime}
+        : _libraryPtr{&inputLibrary}
         , _projection{&inputProjection}
         , _textCatalog{std::move(textCatalog)}
         , _displayIndex{std::move(displayIndex)}
@@ -77,17 +76,17 @@ namespace ao::winui
         , _lifetimePtr{std::move(lifetimePtr)}
       {
         auto const* const projection = _projection;
-        auto* const runtime = _runtime;
+        auto const* const libraryPtr = _libraryPtr;
         auto const bindingPtr = _lifetimePtr;
         _rows.reset(projection->size(),
-                    [projection, runtime, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
+                    [projection, libraryPtr, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
                       if (bindingPtr.expired() || index >= projection->size())
                       {
                         return std::nullopt;
                       }
 
-                      return runtime->library().snapshot().trackRow(projection->trackIdAt(index));
+                      return libraryPtr->snapshot().trackRow(projection->trackIdAt(index));
                     });
       }
 
@@ -139,7 +138,7 @@ namespace ao::winui
       }
 
     private:
-      rt::AppRuntime* _runtime = nullptr;
+      rt::Library const* _libraryPtr = nullptr;
       rt::TrackListProjection const* _projection = nullptr;
       i18n::MessageCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
@@ -196,17 +195,21 @@ namespace ao::winui
     }
   } // namespace
 
-  TrackListController::TrackListController(rt::AppRuntime& runtime,
+  TrackListController::TrackListController(rt::ViewService& views,
+                                           rt::WorkspaceService& workspace,
+                                           rt::Library& library,
                                            uimodel::TrackColumnLayouts& columnLayouts,
                                            i18n::MessageCatalog textCatalog)
     : _textCatalog{std::move(textCatalog)}
-    , _runtime{runtime}
+    , _views{views}
+    , _workspace{workspace}
+    , _library{library}
     , _columnLayouts{columnLayouts}
     , _items{makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries)}
     , _headers{winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>()}
   {
     resetPresentation();
-    _viewProjectionSub = _runtime.views().onProjectionChanged(
+    _viewProjectionSub = _views.onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& changed)
       {
         if (changed.viewId == _viewId)
@@ -214,7 +217,7 @@ namespace ao::winui
           resetProjection(changed.projectionPtr);
         }
       });
-    _workspaceSub = _runtime.workspace().onChanged(
+    _workspaceSub = _workspace.onChanged(
       [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.snapshot.activeViewId != _viewId)
@@ -246,7 +249,7 @@ namespace ao::winui
 
   void TrackListController::reload()
   {
-    auto const restoredView = _runtime.workspace().snapshot().activeViewId;
+    auto const restoredView = _workspace.snapshot().activeViewId;
 
     if (restoredView != rt::kInvalidViewId)
     {
@@ -254,7 +257,7 @@ namespace ao::winui
       return;
     }
 
-    auto viewRes = _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
+    auto viewRes = _workspace.navigate({.target = rt::GlobalViewKind::AllTracks});
 
     if (!viewRes)
     {
@@ -365,7 +368,7 @@ namespace ao::winui
 
     _displayIndex = displayIndex;
     auto const displayCount = displayIndex.displayCount();
-    auto materializerPtr = std::make_shared<TrackItemMaterializer>(_runtime,
+    auto materializerPtr = std::make_shared<TrackItemMaterializer>(_library,
                                                                    *_projectionPtr,
                                                                    _textCatalog,
                                                                    std::move(displayIndex),
@@ -391,7 +394,7 @@ namespace ao::winui
       return;
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
@@ -566,7 +569,7 @@ namespace ao::winui
       return choices;
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
@@ -602,7 +605,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoConfigurableColumn"));
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
@@ -674,8 +677,8 @@ namespace ao::winui
     }
 
     auto selection = std::vector<TrackId>{trackIds.begin(), trackIds.end()};
-    std::ignore = _runtime.views().setSelection(_viewId, std::move(selection));
-    std::ignore = _runtime.workspace().focusView(_viewId);
+    std::ignore = _views.setSelection(_viewId, std::move(selection));
+    std::ignore = _workspace.focusView(_viewId);
   }
 
   std::vector<TrackId> TrackListController::selection() const
@@ -685,7 +688,7 @@ namespace ao::winui
       return {};
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
     return stateRes ? stateRes->selection : std::vector<TrackId>{};
   }
 
@@ -718,7 +721,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidState, resourceString("NoTrackViewActive"));
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
@@ -730,7 +733,7 @@ namespace ao::winui
       spec.sortBy.empty() || spec.sortBy.front().field != field ? true : !spec.sortBy.front().ascending;
     spec.id = "windows-column-sort";
     spec.sortBy = {{.field = field, .ascending = ascending}};
-    return _runtime.views().setPresentation(_viewId, spec);
+    return _views.setPresentation(_viewId, spec);
   }
 
   Result<> TrackListController::selectPresentation(std::string_view presentationId)
@@ -776,7 +779,7 @@ namespace ao::winui
       return makeError(Error::Code::InvalidInput, eligibility.disabledReason);
     }
 
-    return _runtime.views().setPresentation(_viewId, presentation);
+    return _views.setPresentation(_viewId, presentation);
   }
 
   Result<> TrackListController::navigateTo(ListId const listId)
@@ -784,7 +787,7 @@ namespace ao::winui
     auto request = rt::NavigationRequest{};
     request.target = listId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
                                                     : rt::NavigationTarget{listId};
-    auto viewRes = _runtime.workspace().navigate(request);
+    auto viewRes = _workspace.navigate(request);
 
     if (!viewRes)
     {
@@ -809,7 +812,7 @@ namespace ao::winui
       return;
     }
 
-    auto const foundProjectionRes = _runtime.views().findTrackListProjection(viewId);
+    auto const foundProjectionRes = _views.findTrackListProjection(viewId);
     resetProjection(foundProjectionRes ? *foundProjectionRes : nullptr);
   }
 
@@ -822,11 +825,11 @@ namespace ao::winui
       return {};
     }
 
-    auto const snapshot = _runtime.workspace().snapshot();
+    auto const snapshot = _workspace.snapshot();
     auto targetViewId = rt::kInvalidViewId;
 
     if (preferredViewId != rt::kInvalidViewId && std::ranges::contains(snapshot.openViews, preferredViewId) &&
-        _runtime.views().findTrackListState(preferredViewId))
+        _views.findTrackListState(preferredViewId))
     {
       targetViewId = preferredViewId;
     }
@@ -835,8 +838,7 @@ namespace ao::winui
     {
       for (auto const viewId : snapshot.openViews)
       {
-        if (auto const stateRes = _runtime.views().findTrackListState(viewId);
-            stateRes && stateRes->listId == preferredListId)
+        if (auto const stateRes = _views.findTrackListState(viewId); stateRes && stateRes->listId == preferredListId)
         {
           targetViewId = viewId;
           break;
@@ -848,7 +850,7 @@ namespace ao::winui
         auto request = rt::NavigationRequest{};
         request.target = preferredListId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
                                                                  : rt::NavigationTarget{preferredListId};
-        auto viewRes = _runtime.workspace().navigate(request);
+        auto viewRes = _workspace.navigate(request);
 
         if (!viewRes)
         {
@@ -864,7 +866,7 @@ namespace ao::winui
       return {};
     }
 
-    if (auto focusedRes = _runtime.workspace().focusView(targetViewId); !focusedRes)
+    if (auto focusedRes = _workspace.focusView(targetViewId); !focusedRes)
     {
       return focusedRes;
     }
@@ -874,7 +876,7 @@ namespace ao::winui
       adoptWorkspaceView(targetViewId);
     }
 
-    if (auto selectedRes = _runtime.views().setSelection(targetViewId, {trackId}); !selectedRes)
+    if (auto selectedRes = _views.setSelection(targetViewId, {trackId}); !selectedRes)
     {
       return selectedRes;
     }
@@ -902,7 +904,7 @@ namespace ao::winui
       return kInvalidListId;
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
     return stateRes ? stateRes->listId : kInvalidListId;
   }
 
@@ -913,7 +915,7 @@ namespace ao::winui
       return {};
     }
 
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
     return stateRes ? stateRes->presentation.id : std::string{};
   }
 

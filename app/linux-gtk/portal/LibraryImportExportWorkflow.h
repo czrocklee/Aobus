@@ -20,7 +20,13 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
+  class NotificationService;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::gtk::portal
@@ -38,9 +44,18 @@ namespace ao::gtk::portal
   class LibraryImportExportWorkflow final
   {
   public:
-    LibraryImportExportWorkflow(rt::AppRuntime& runtime,
+    LibraryImportExportWorkflow(async::Runtime& asyncRuntime,
+                                rt::Library& library,
+                                rt::NotificationService& notifications,
                                 ImportExportCallbacks const& callbacks,
                                 i18n::MessageCatalog textCatalog);
+    // The callbacks are borrowed for the workflow's whole life, so a temporary
+    // would leave _callbacks dangling before the first operation starts.
+    LibraryImportExportWorkflow(async::Runtime&,
+                                rt::Library&,
+                                rt::NotificationService&,
+                                ImportExportCallbacks&&,
+                                i18n::MessageCatalog) = delete;
     ~LibraryImportExportWorkflow();
 
     LibraryImportExportWorkflow(LibraryImportExportWorkflow const&) = delete;
@@ -68,7 +83,9 @@ namespace ao::gtk::portal
     // Presents a Result error: structured log of the error plus an error-severity notification.
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);
 
-    rt::AppRuntime& _runtime;
+    async::Runtime& _asyncRuntime;
+    rt::Library& _library;
+    rt::NotificationService& _notifications;
     // Borrowed so callback updates made by the owning coordinator remain visible
     // to operations started after construction.
     ImportExportCallbacks const& _callbacks;

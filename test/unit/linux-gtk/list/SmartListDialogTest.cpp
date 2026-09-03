@@ -40,10 +40,17 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
 
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     // Rebuild happens in idle task
     drainGtkEvents();
@@ -77,8 +84,16 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog = SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), ListId{999999}, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  ListId{999999},
+                                  cache};
 
     drainGtkEvents();
 
@@ -101,9 +116,16 @@ namespace ao::gtk::test
     addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
     addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Haystack"});
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     drainGtkEvents();
     dialog.setLocalExpression(R"($title = "Needle")");
@@ -128,9 +150,16 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     addRuntimeTrack(fixture.runtime(), library::test::TrackSpec{.title = "Needle"});
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     drainGtkEvents();
     dialog.setLocalExpression("(");
@@ -170,8 +199,16 @@ namespace ao::gtk::test
                           REQUIRE(transaction.commit());
                         }};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog = SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), parentListId, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  parentListId,
+                                  cache};
 
     drainGtkEvents();
     dialog.setLocalExpression("true");
@@ -199,10 +236,17 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
 
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     drainGtkEvents();
 
@@ -235,9 +279,16 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     drainGtkEvents();
 
@@ -281,9 +332,17 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
 
-    auto dialog = SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), kInvalidListId, cache};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  kInvalidListId,
+                                  cache};
 
     drainGtkEvents();
 
@@ -325,9 +384,16 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
-    auto dialog =
-      SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto dialog = SmartListDialog{window,
+                                  runtime.library(),
+                                  runtime.views(),
+                                  runtime.sources(),
+                                  runtime.completion(),
+                                  ao::test::englishMessageCatalog(),
+                                  rt::kAllTracksListId,
+                                  cache};
 
     dialog.configurePlaylistTemplate("Road Trip");
     drainGtkEvents();
@@ -347,13 +413,20 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto window = Gtk::Window{};
-    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto callback = std::function<void()>{};
     std::size_t presentationCount = 0;
 
     {
-      auto dialog =
-        SmartListDialog{window, fixture.runtime(), ao::test::englishMessageCatalog(), rt::kAllTracksListId, cache};
+      auto dialog = SmartListDialog{window,
+                                    runtime.library(),
+                                    runtime.views(),
+                                    runtime.sources(),
+                                    runtime.completion(),
+                                    ao::test::englishMessageCatalog(),
+                                    rt::kAllTracksListId,
+                                    cache};
       drainGtkEvents();
       callback = dialog.guardPresentationCallback([&presentationCount] { ++presentationCount; });
       callback();

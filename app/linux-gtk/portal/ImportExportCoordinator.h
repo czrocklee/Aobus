@@ -26,7 +26,13 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
+  class NotificationService;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::gtk
@@ -60,7 +66,9 @@ namespace ao::gtk::portal
   {
   public:
     ImportExportCoordinator(Gtk::Window& parent,
-                            rt::AppRuntime& runtime,
+                            async::Runtime& asyncRuntime,
+                            rt::Library& library,
+                            rt::NotificationService& notifications,
                             i18n::MessageCatalog textCatalog,
                             ImportExportCallbacks callbacks,
                             ThemeCoordinator& themeCoordinator);

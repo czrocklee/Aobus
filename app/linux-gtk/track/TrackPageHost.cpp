@@ -11,7 +11,6 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
@@ -43,29 +42,35 @@
 namespace ao::gtk
 {
   TrackPageHost::TrackPageHost(Gtk::Stack& stack,
-                               rt::AppRuntime& runtime,
+                               async::Runtime& asyncRuntime,
+                               rt::Library& library,
+                               rt::PlaybackService& playback,
+                               rt::ViewService& views,
+                               rt::WorkspaceService& workspace,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
                                uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
                                rt::ResourceByteMemoryCache& byteCache)
     : _stack{stack}
-    , _runtime{runtime}
+    , _asyncRuntime{asyncRuntime}
+    , _library{library}
+    , _playback{playback}
+    , _views{views}
+    , _workspace{workspace}
     , _textCatalog{std::move(textCatalog)}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _columnLayouts{columnLayouts}
-    , _thumbnailLoader{byteCache, _thumbnailCache, _runtime.async()}
+    , _thumbnailLoader{byteCache, _thumbnailCache, _asyncRuntime}
   {
-    _revealSub =
-      _runtime.playback().events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
+    _revealSub = _playback.events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
-    auto& playback = _runtime.playback();
-    setPlayingTrack(playback.snapshot().transport.nowPlaying.trackId);
-    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
-                                                { setPlayingTrack(snapshot.transport.nowPlaying.trackId); });
+    setPlayingTrack(_playback.snapshot().transport.nowPlaying.trackId);
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
+                                                 { setPlayingTrack(snapshot.transport.nowPlaying.trackId); });
 
-    _focusSub = _runtime.workspace().onChanged(
+    _focusSub = _workspace.onChanged(
       [this](rt::WorkspaceChanged const& changed)
       {
         if (changed.cause != rt::WorkspaceChangeCause::Presentation &&
@@ -75,7 +80,7 @@ namespace ao::gtk
         }
       });
 
-    _projectionChangedSub = _runtime.views().onProjectionChanged(
+    _projectionChangedSub = _views.onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& ev)
       {
         auto* entry = find(ev.viewId);
@@ -94,7 +99,7 @@ namespace ao::gtk
         }
       });
 
-    _presentationChangedSub = _runtime.views().onPresentationChanged(
+    _presentationChangedSub = _views.onPresentationChanged(
       [this](rt::ViewService::PresentationChanged const& ev)
       {
         auto* entry = find(ev.viewId);
@@ -112,7 +117,7 @@ namespace ao::gtk
         }
       });
 
-    _filterErrorChangedSub = _runtime.views().onFilterErrorChanged(
+    _filterErrorChangedSub = _views.onFilterErrorChanged(
       [this](rt::ViewService::FilterErrorChanged const& changed)
       {
         if (auto* const entry = find(changed.viewId); entry != nullptr && entry->pagePtr != nullptr)
@@ -136,7 +141,7 @@ namespace ao::gtk
 
   void TrackPageHost::tryRevealTrackInView(rt::ViewId viewId, TrackId trackId)
   {
-    if (auto const focusedRes = _runtime.workspace().focusView(viewId); !focusedRes)
+    if (auto const focusedRes = _workspace.focusView(viewId); !focusedRes)
     {
       APP_LOG_DEBUG("TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focusedRes.error().message);
       return;
@@ -184,7 +189,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const state = _runtime.workspace().snapshot();
+    auto const state = _workspace.snapshot();
 
     // Remove closed views
     for (auto it = _trackPages.begin(); it != _trackPages.end();)
@@ -244,7 +249,7 @@ namespace ao::gtk
     _activeDataProvider = &dataProvider;
 
     // Force layout state re-evaluation now that dataProvider is ready
-    auto const layout = _runtime.workspace().snapshot();
+    auto const layout = _workspace.snapshot();
 
     for (auto const viewId : layout.openViews)
     {
@@ -354,8 +359,8 @@ namespace ao::gtk
 
     // Reached from the workspace observer, so the snapshot may name a view that
     // has already been destroyed; the find form reports that instead of throwing.
-    auto const foundProjectionRes = _runtime.views().findTrackListProjection(viewId);
-    auto const foundStateRes = _runtime.views().findTrackListState(viewId);
+    auto const foundProjectionRes = _views.findTrackListProjection(viewId);
+    auto const foundStateRes = _views.findTrackListState(viewId);
 
     if (!foundProjectionRes || *foundProjectionRes == nullptr || !foundStateRes)
     {
@@ -368,8 +373,16 @@ namespace ao::gtk
     auto modelPtr = TrackListModel::create(dataProvider);
     modelPtr->bindProjection(projPtr);
 
-    auto trackPagePtr = std::make_unique<TrackViewPage>(
-      listId, modelPtr, _columnLayouts, _textCatalog, _runtime, _thumbnailLoader, foundStateRes->presentation, viewId);
+    auto trackPagePtr = std::make_unique<TrackViewPage>(listId,
+                                                        modelPtr,
+                                                        _columnLayouts,
+                                                        _textCatalog,
+                                                        _asyncRuntime,
+                                                        _library,
+                                                        _views,
+                                                        _thumbnailLoader,
+                                                        foundStateRes->presentation,
+                                                        viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
@@ -377,7 +390,7 @@ namespace ao::gtk
 
     if (!rt::isVirtualListId(listId))
     {
-      auto scope = _runtime.library().snapshot();
+      auto scope = _library.snapshot();
 
       if (auto optNode = scope.listNode(listId); optNode)
       {
@@ -425,7 +438,7 @@ namespace ao::gtk
       });
 
     page->signalTrackActivated().connect([this, viewId](TrackId id)
-                                         { std::ignore = _runtime.playback().commands().startFromView(viewId, id); });
+                                         { std::ignore = _playback.commands().startFromView(viewId, id); });
 
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)
@@ -448,12 +461,12 @@ namespace ao::gtk
       return;
     }
 
-    if (auto result = _runtime.views().setSelection(viewId, page.selectionController().selectedTrackIds()); !result)
+    if (auto result = _views.setSelection(viewId, page.selectionController().selectedTrackIds()); !result)
     {
       APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
     }
 
-    if (auto const focusedRes = _runtime.workspace().focusView(viewId); !focusedRes)
+    if (auto const focusedRes = _workspace.focusView(viewId); !focusedRes)
     {
       APP_LOG_ERROR("Failed to focus selected track view: {}", focusedRes.error().message);
     }

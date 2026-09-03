@@ -21,7 +21,6 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -191,15 +190,16 @@ namespace ao::tui
   EventController::EventController(ftxui::ScreenInteractive& screen,
                                    ShellInteractionModel& shell,
                                    LibraryController& library,
-                                   rt::AppRuntime& runtime,
+                                   async::Runtime& asyncRuntime,
+                                   rt::PlaybackService& playback,
                                    TuiKeymapPlan const& keymapPlan,
                                    EventControllerBindings bindings)
     : _screen{screen}
     , _shell{shell}
     , _library{library}
     , _keymapPlan{keymapPlan}
-    , _asyncRuntime{runtime.async()}
-    , _playback{runtime.playback()}
+    , _asyncRuntime{asyncRuntime}
+    , _playback{playback}
     , _playbackActions{_playback, [this] { playSelectedTrack(); }}
     , _seekViewModel{_playback, {}}
     , _volumeViewModel{_playback}
@@ -216,13 +216,10 @@ namespace ao::tui
 
   void EventController::postActivityNotification(rt::NotificationSeverity const severity, std::string message)
   {
-    if (_notifications != nullptr)
-    {
-      auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
-                                                                       : rt::NotificationLifetime::history();
-      _notifications->post(
-        rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
-    }
+    auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
+                                                                     : rt::NotificationLifetime::history();
+    _notifications.post(
+      rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
   }
 
   void EventController::openSelectedList()
@@ -335,15 +332,7 @@ namespace ao::tui
       return;
     }
 
-    if (_outputDevices == nullptr)
-    {
-      postActivityNotification(
-        rt::NotificationSeverity::Warning,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputUnavailable)});
-      return;
-    }
-
-    _outputDevices->refresh();
+    _outputDevices.refresh();
     openOverlay(Overlay::OutputDevices);
     postActivityNotification(rt::NotificationSeverity::Info,
                              std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputOpened)});
@@ -376,12 +365,7 @@ namespace ao::tui
       return;
     }
 
-    if (_activityStatusViewModel == nullptr)
-    {
-      return;
-    }
-
-    if (auto const& view = _activityStatusViewModel->viewState();
+    if (auto const& view = _activityStatusViewModel.viewState();
         view.compact.kind == uimodel::ActivityStatusKind::Idle && !uimodel::hasDetailContent(view.detail))
     {
       return;
@@ -395,15 +379,7 @@ namespace ao::tui
 
   void EventController::selectOutputDevice()
   {
-    if (_outputDevices == nullptr)
-    {
-      postActivityNotification(
-        rt::NotificationSeverity::Warning,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputUnavailable)});
-      return;
-    }
-
-    _outputDevices->selectSelected();
+    _outputDevices.selectSelected();
     closeOverlay();
   }
 
@@ -609,13 +585,13 @@ namespace ao::tui
 
   bool EventController::selectTrackFromScrollbar(std::int32_t const row)
   {
-    if (_hitRegions == nullptr || _library.tracks().empty())
+    if (_library.tracks().empty())
     {
       return false;
     }
 
     auto const target =
-      scrollbarTrackIndex(_hitRegions->trackTableBox, row, _library.tracks().size(), _library.sections());
+      scrollbarTrackIndex(_hitRegions.trackTableBox, row, _library.tracks().size(), _library.sections());
     _library.setSelectedTrackIndex(target);
     return true;
   }
@@ -628,11 +604,6 @@ namespace ao::tui
 
   std::chrono::milliseconds EventController::seekRailElapsed(std::int32_t const column) const
   {
-    if (_hitRegions == nullptr)
-    {
-      return std::chrono::milliseconds{0};
-    }
-
     auto const duration = _playback.snapshot().transport.duration;
 
     if (duration <= std::chrono::milliseconds{0})
@@ -640,7 +611,7 @@ namespace ao::tui
       return std::chrono::milliseconds{0};
     }
 
-    auto const& seekRailBox = _hitRegions->seekRailBox;
+    auto const& seekRailBox = _hitRegions.seekRailBox;
     auto const railColumns = std::max(1, seekRailBox.x_max - seekRailBox.x_min + 1);
     auto const denominator = std::max(1, railColumns - 1);
     auto const relativeColumn = std::clamp(column - seekRailBox.x_min, 0, denominator);
@@ -679,11 +650,7 @@ namespace ao::tui
   void EventController::cancelColumnResize()
   {
     _optTrackColumnResizeDrag.reset();
-
-    if (_trackColumnResizePreview != nullptr)
-    {
-      *_trackColumnResizePreview = {};
-    }
+    _trackColumnResizePreview = {};
   }
 
   bool EventController::hasWorkspaceGesture() const noexcept
@@ -721,33 +688,32 @@ namespace ao::tui
     AO_EXPECTS(_optTrackColumnResizeDrag);
     auto const drag = *_optTrackColumnResizeDrag;
 
-    if (_library.currentListId() != drag.listId || _hitRegions == nullptr || _trackColumnLayouts == nullptr ||
-        _trackColumnResizePreview == nullptr)
+    if (_library.currentListId() != drag.listId)
     {
       cancelColumnResize();
       return false;
     }
 
     auto const handleIt =
-      std::ranges::find(_hitRegions->trackColumnResizeHandles, drag.field, &TrackColumnResizeHandle::field);
+      std::ranges::find(_hitRegions.trackColumnResizeHandles, drag.field, &TrackColumnResizeHandle::field);
 
-    if (handleIt == _hitRegions->trackColumnResizeHandles.end())
+    if (handleIt == _hitRegions.trackColumnResizeHandles.end())
     {
       cancelColumnResize();
       return false;
     }
 
     auto const columns = drag.startColumns + mouse.x - drag.startX;
-    _trackColumnResizePreview->listId = drag.listId;
-    _trackColumnResizePreview->layout = resizeTerminalTrackColumnLayout(_library.activePresentation(),
-                                                                        _trackColumnLayouts->layoutForList(drag.listId),
-                                                                        drag.field,
-                                                                        columns,
-                                                                        handleIt->availableColumns);
+    _trackColumnResizePreview.listId = drag.listId;
+    _trackColumnResizePreview.layout = resizeTerminalTrackColumnLayout(_library.activePresentation(),
+                                                                       _trackColumnLayouts.layoutForList(drag.listId),
+                                                                       drag.field,
+                                                                       columns,
+                                                                       handleIt->availableColumns);
 
     if (mouse.motion == ftxui::Mouse::Released)
     {
-      _trackColumnLayouts->updateLayout(drag.listId, _trackColumnResizePreview->layout);
+      _trackColumnLayouts.updateLayout(drag.listId, _trackColumnResizePreview.layout);
       cancelColumnResize();
     }
 
@@ -808,8 +774,7 @@ namespace ao::tui
     if ((mouse.button == ftxui::Mouse::WheelUp || mouse.button == ftxui::Mouse::WheelDown) &&
         mouse.motion == ftxui::Mouse::Pressed)
     {
-      if (!isModalOverlay(_shell.overlay()) && _hitRegions != nullptr &&
-          contains(_hitRegions->trackTableBox, mouse.x, mouse.y))
+      if (!isModalOverlay(_shell.overlay()) && contains(_hitRegions.trackTableBox, mouse.x, mouse.y))
       {
         auto const delta =
           mouse.button == ftxui::Mouse::WheelUp ? -kMouseWheelSelectionDelta : kMouseWheelSelectionDelta;
@@ -826,12 +791,10 @@ namespace ao::tui
   bool EventController::handleMouseMove(ftxui::Mouse const& mouse)
   {
     auto const buttonHit =
-      _hitRegions == nullptr
-        ? ButtonHitTestResult{}
-        : _hitRegions->hitTestButton(mouse.x,
-                                     mouse.y,
-                                     HitTestContext{.isTextInputActive = _shell.isInputActive(),
-                                                    .isOverlayActive = isOverlayActive(_shell.overlay())});
+      _hitRegions.hitTestButton(mouse.x,
+                                mouse.y,
+                                HitTestContext{.isTextInputActive = _shell.isInputActive(),
+                                               .isOverlayActive = isOverlayActive(_shell.overlay())});
     bool handled = false;
 
     if (_hoveredButton != buttonHit.hoveredButton)
@@ -851,7 +814,7 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleSeekRailPress(ftxui::Mouse const& mouse, bool const modalInputActive)
   {
-    if (modalInputActive || _hitRegions == nullptr || !contains(_hitRegions->seekRailBox, mouse.x, mouse.y))
+    if (modalInputActive || !contains(_hitRegions.seekRailBox, mouse.x, mouse.y))
     {
       return std::nullopt;
     }
@@ -870,22 +833,21 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleColumnResizePress(ftxui::Mouse const& mouse)
   {
-    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr || _trackColumnLayouts == nullptr ||
-        _trackColumnResizePreview == nullptr)
+    if (isModalOverlay(_shell.overlay()))
     {
       return std::nullopt;
     }
 
-    auto const handleIt = std::ranges::find_if(_hitRegions->trackColumnResizeHandles,
+    auto const handleIt = std::ranges::find_if(_hitRegions.trackColumnResizeHandles,
                                                [&](TrackColumnResizeHandle const& handle)
                                                { return containsTrackColumnResizeEdge(handle, mouse.x, mouse.y); });
 
-    if (handleIt == _hitRegions->trackColumnResizeHandles.end())
+    if (handleIt == _hitRegions.trackColumnResizeHandles.end())
     {
       return std::nullopt;
     }
 
-    *_trackColumnResizePreview = {};
+    _trackColumnResizePreview = {};
     _optTrackColumnResizeDrag = TrackColumnResizeDrag{
       .field = handleIt->field,
       .startX = mouse.x,
@@ -897,8 +859,7 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleScrollbarPress(ftxui::Mouse const& mouse)
   {
-    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr ||
-        !containsTrackScrollbar(_hitRegions->trackTableBox, mouse.x, mouse.y))
+    if (isModalOverlay(_shell.overlay()) || !containsTrackScrollbar(_hitRegions.trackTableBox, mouse.x, mouse.y))
     {
       return std::nullopt;
     }
@@ -916,16 +877,16 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleSectionPress(ftxui::Mouse const& mouse)
   {
-    if (isModalOverlay(_shell.overlay()) || _hitRegions == nullptr)
+    if (isModalOverlay(_shell.overlay()))
     {
       return std::nullopt;
     }
 
-    auto const hitRegionIt = std::ranges::find_if(_hitRegions->trackSectionRows,
+    auto const hitRegionIt = std::ranges::find_if(_hitRegions.trackSectionRows,
                                                   [&](TrackSectionRowHitRegion const& hitRegion)
                                                   { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-    if (hitRegionIt == _hitRegions->trackSectionRows.end())
+    if (hitRegionIt == _hitRegions.trackSectionRows.end())
     {
       return std::nullopt;
     }
@@ -945,38 +906,33 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
   {
-    if (_hitRegions != nullptr && contains(_hitRegions->outputDeviceButtonBox, mouse.x, mouse.y))
+    if (contains(_hitRegions.outputDeviceButtonBox, mouse.x, mouse.y))
     {
       toggleOutputDevices();
       return true;
     }
 
-    if (_hitRegions != nullptr && contains(_hitRegions->soulButtonBox, mouse.x, mouse.y))
+    if (contains(_hitRegions.soulButtonBox, mouse.x, mouse.y))
     {
       executePlaybackCommand(uimodel::PlaybackCommand::PlayPause);
       return true;
     }
 
-    if (_hitRegions != nullptr && contains(_hitRegions->libraryButtonBox, mouse.x, mouse.y))
+    if (contains(_hitRegions.libraryButtonBox, mouse.x, mouse.y))
     {
       toggleListChooser();
       return true;
     }
 
-    if (_hitRegions != nullptr && contains(_hitRegions->presentationButtonBox, mouse.x, mouse.y))
+    if (contains(_hitRegions.presentationButtonBox, mouse.x, mouse.y))
     {
       togglePresentationPanel();
       return true;
     }
 
-    if (_hitRegions != nullptr && contains(_hitRegions->activityStatusBox, mouse.x, mouse.y))
+    if (contains(_hitRegions.activityStatusBox, mouse.x, mouse.y))
     {
-      if (_activityStatusViewModel == nullptr)
-      {
-        return true;
-      }
-
-      auto const& view = _activityStatusViewModel->viewState();
+      auto const& view = _activityStatusViewModel.viewState();
 
       if (uimodel::hasDetailContent(view.detail) || view.compact.hasDetails)
       {
@@ -986,7 +942,7 @@ namespace ao::tui
 
       if (view.compact.dismissible)
       {
-        _activityStatusViewModel->dismissCompact();
+        _activityStatusViewModel.dismissCompact();
         return true;
       }
 
@@ -998,13 +954,13 @@ namespace ao::tui
 
   bool EventController::handleOverlayPress(ftxui::Mouse const& mouse)
   {
-    if (_shell.overlay() == Overlay::PresentationPanel && _hitRegions != nullptr)
+    if (_shell.overlay() == Overlay::PresentationPanel)
     {
-      auto const hitRegionIt = std::ranges::find_if(_hitRegions->presentationRows,
+      auto const hitRegionIt = std::ranges::find_if(_hitRegions.presentationRows,
                                                     [&](PresentationRowHitRegion const& hitRegion)
                                                     { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-      if (hitRegionIt != _hitRegions->presentationRows.end())
+      if (hitRegionIt != _hitRegions.presentationRows.end())
       {
         if (_library.setSelectedPresentation(hitRegionIt->rowIndex))
         {
@@ -1016,17 +972,17 @@ namespace ao::tui
       return false;
     }
 
-    if (_shell.overlay() == Overlay::Notifications && _activityStatusViewModel != nullptr && _hitRegions != nullptr)
+    if (_shell.overlay() == Overlay::Notifications)
     {
-      auto const hitRegionIt = std::ranges::find_if(_hitRegions->notificationDetailRows,
+      auto const hitRegionIt = std::ranges::find_if(_hitRegions.notificationDetailRows,
                                                     [&](NotificationDetailRowHitRegion const& hitRegion)
                                                     { return contains(hitRegion.box, mouse.x, mouse.y); });
 
-      if (hitRegionIt != _hitRegions->notificationDetailRows.end())
+      if (hitRegionIt != _hitRegions.notificationDetailRows.end())
       {
         if (hitRegionIt->dismissible)
         {
-          _activityStatusViewModel->hideDetailNotification(hitRegionIt->id);
+          _activityStatusViewModel.hideDetailNotification(hitRegionIt->id);
           return true;
         }
 
@@ -1036,32 +992,32 @@ namespace ao::tui
       return false;
     }
 
-    if (_shell.overlay() != Overlay::OutputDevices || _outputDevices == nullptr || _hitRegions == nullptr)
+    if (_shell.overlay() != Overlay::OutputDevices)
     {
       return false;
     }
 
     auto const hitRegionIt = std::ranges::find_if(
-      _hitRegions->outputDeviceRows,
+      _hitRegions.outputDeviceRows,
       [&](OutputDeviceRowHitRegion const& hitRegion)
       { return contains(hitRegion.box, mouse.x, mouse.y) || contains(hitRegion.secondaryBox, mouse.x, mouse.y); });
 
-    if (hitRegionIt != _hitRegions->outputDeviceRows.end())
+    if (hitRegionIt != _hitRegions.outputDeviceRows.end())
     {
       if (hitRegionIt->rowIndex < 0 ||
-          static_cast<std::size_t>(hitRegionIt->rowIndex) >= _outputDevices->viewState().rows.size())
+          static_cast<std::size_t>(hitRegionIt->rowIndex) >= _outputDevices.viewState().rows.size())
       {
         return true;
       }
 
-      auto const& row = _outputDevices->viewState().rows[static_cast<std::size_t>(hitRegionIt->rowIndex)];
+      auto const& row = _outputDevices.viewState().rows[static_cast<std::size_t>(hitRegionIt->rowIndex)];
 
       if (!matchesOutputDeviceRow(row, *hitRegionIt))
       {
         return true;
       }
 
-      if (_outputDevices->selectRow(hitRegionIt->rowIndex))
+      if (_outputDevices.selectRow(hitRegionIt->rowIndex))
       {
         closeOverlay();
       }
@@ -1268,8 +1224,7 @@ namespace ao::tui
 
         return true;
       case Overlay::OutputDevices:
-        if (_outputDevices != nullptr &&
-            handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices->moveSelection(delta); }))
+        if (handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices.moveSelection(delta); }))
         {
           return true;
         }
@@ -1308,9 +1263,9 @@ namespace ao::tui
       case Overlay::Notifications:
         if (event == ftxui::Event::Character("x"))
         {
-          if (_activityStatusViewModel != nullptr && _activityStatusViewModel->viewState().compact.dismissible)
+          if (_activityStatusViewModel.viewState().compact.dismissible)
           {
-            _activityStatusViewModel->dismissCompact();
+            _activityStatusViewModel.dismissCompact();
           }
 
           return true;

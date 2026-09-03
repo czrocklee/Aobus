@@ -867,7 +867,6 @@ ja:table {
     tui_pipeline_closed { "パイプラインが閉じられました" }
     tui_pipeline_opened { "オーディオパイプライン" }
     tui_output_closed { "出力デバイスが閉じられました" }
-    tui_output_unavailable { "出力デバイス利用不可" }
     tui_output_opened { "出力デバイス" }
     tui_views_closed { "表示が閉じられました" }
     tui_views_opened { "表示" }

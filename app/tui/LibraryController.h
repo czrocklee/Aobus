@@ -22,7 +22,9 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
+  class ViewService;
+  class WorkspaceService;
 } // namespace ao::rt
 
 namespace ao::uimodel
@@ -47,7 +49,9 @@ namespace ao::tui
   class LibraryController final
   {
   public:
-    LibraryController(rt::AppRuntime& runtime,
+    LibraryController(rt::Library& library,
+                      rt::ViewService& views,
+                      rt::WorkspaceService& workspace,
                       i18n::MessageCatalog textCatalog,
                       uimodel::ListPresentations& listPresentations);
 
@@ -109,7 +113,9 @@ namespace ao::tui
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> navigateToList(ListId listId);
 
-    rt::AppRuntime& _runtime;
+    rt::Library& _library;
+    rt::ViewService& _views;
+    rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
     uimodel::ListPresentations& _listPresentations;
     std::vector<LibraryNavEntry> _libraryEntries{};

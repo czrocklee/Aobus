@@ -22,7 +22,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -272,7 +271,9 @@ namespace ao::gtk
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::TrackColumnLayouts& columnLayouts,
                                i18n::MessageCatalog textCatalog,
-                               rt::AppRuntime& runtime,
+                               async::Runtime& asyncRuntime,
+                               rt::Library& library,
+                               rt::ViewService& views,
                                ResourceImageLoader& thumbnailLoader,
                                rt::TrackPresentationSpec const& presentation,
                                rt::ViewId const viewId)
@@ -283,7 +284,9 @@ namespace ao::gtk
 
     , _columnLayouts{columnLayouts}
     , _textCatalog{std::move(textCatalog)}
-    , _runtime{runtime}
+    , _asyncRuntime{asyncRuntime}
+    , _library{library}
+    , _views{views}
     , _thumbnailLoader{thumbnailLoader}
     , _selectionModelPtr{Gtk::MultiSelection::create(_modelPtr)}
     , _viewHostPtr{
@@ -311,7 +314,7 @@ namespace ao::gtk
           [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
           {
             auto const trackIds = std::array{rowPtr->trackId()};
-            return uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+            return uimodel::TrackAuthoringSession::begin(_library, trackIds);
           },
           std::bind_front(&TrackViewPage::commitMetadataChange, this),
           *_modelPtr);
@@ -524,7 +527,7 @@ namespace ao::gtk
         [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
         {
           auto const trackIds = std::array{rowPtr->trackId()};
-          return uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+          return uimodel::TrackAuthoringSession::begin(_library, trackIds);
         },
         std::bind_front(&TrackViewPage::commitMetadataChange, this),
         *_modelPtr);
@@ -587,10 +590,10 @@ namespace ao::gtk
 
     if (auto const capabilities = orderCapabilities(); !capabilities.canGapMove)
     {
-      auto const stateRes = _runtime.views().findTrackListState(_viewId);
-      auto const sourceStateRes = _runtime.views().listSourceState(_viewId);
+      auto const stateRes = _views.findTrackListState(_viewId);
+      auto const sourceStateRes = _views.listSourceState(_viewId);
       auto const savedList = stateRes && !rt::isVirtualListId(stateRes->listId);
-      auto const authoring = _runtime.library().authoringAvailability();
+      auto const authoring = _library.authoringAvailability();
       auto const shouldExplain =
         savedList && (capabilities.canAuthorOrder || stateRes->presentation.id == rt::kListOrderTrackPresentationId ||
                       authoring.state == rt::LibraryAuthoringState::Maintenance || stateRes->optFilterError ||
@@ -610,7 +613,9 @@ namespace ao::gtk
 
     clearOrderCapabilityStatus();
     _orderDragControllerPtr = std::make_unique<TrackOrderDragController>(
-      _runtime,
+      _asyncRuntime,
+      _library,
+      _views,
       _viewId,
       _textCatalog,
       _viewHostPtr->columnView(),
@@ -625,7 +630,7 @@ namespace ao::gtk
 
   uimodel::ListOrderCapabilityState TrackViewPage::orderCapabilities() const
   {
-    auto const stateRes = _runtime.views().findTrackListState(_viewId);
+    auto const stateRes = _views.findTrackListState(_viewId);
 
     if (!stateRes)
     {
@@ -634,7 +639,7 @@ namespace ao::gtk
       };
     }
 
-    auto const sourceStateRes = _runtime.views().listSourceState(_viewId);
+    auto const sourceStateRes = _views.listSourceState(_viewId);
     return uimodel::describeListOrderCapabilities(
       _textCatalog,
       uimodel::ListOrderCapabilityInput{
@@ -643,14 +648,13 @@ namespace ao::gtk
         .quickFilterExpression = stateRes->filterExpression,
         .sourceLive = sourceStateRes && *sourceStateRes == rt::TrackSourceState::Live,
         .sourceHasError = stateRes->optFilterError.has_value(),
-        .authoring = _runtime.library().authoringAvailability(),
+        .authoring = _library.authoringAvailability(),
       });
   }
 
   void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
   {
-    auto sessionRes =
-      uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId, _textCatalog);
+    auto sessionRes = uimodel::ListOrderAuthoringSession::begin(_library, _views, _viewId, _textCatalog);
 
     if (!sessionRes)
     {
@@ -661,7 +665,7 @@ namespace ao::gtk
     auto submit = [this](auto task, i18n::MessageId const appliedMessage)
     {
       spawnUiTask(
-        _runtime.async(),
+        _asyncRuntime,
         _tasks,
         *this,
         "list order command",
@@ -785,7 +789,7 @@ namespace ao::gtk
       return;
     }
 
-    spawnUiTask(_runtime.async(),
+    spawnUiTask(_asyncRuntime,
                 _tasks,
                 *this,
                 "inline metadata edit",

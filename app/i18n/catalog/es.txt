@@ -867,7 +867,6 @@ es:table {
     tui_pipeline_closed { "Cadena de audio cerrada" }
     tui_pipeline_opened { "Cadena de audio" }
     tui_output_closed { "Dispositivos de salida cerrados" }
-    tui_output_unavailable { "Dispositivos de salida no disponibles" }
     tui_output_opened { "Dispositivos de salida" }
     tui_views_closed { "Vistas cerradas" }
     tui_views_opened { "Vistas" }

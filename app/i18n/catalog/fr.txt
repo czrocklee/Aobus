@@ -867,7 +867,6 @@ fr:table {
     tui_pipeline_closed { "Chaîne audio fermée" }
     tui_pipeline_opened { "Chaîne audio" }
     tui_output_closed { "Périphériques de sortie fermés" }
-    tui_output_unavailable { "Périphériques de sortie indisponibles" }
     tui_output_opened { "Périphériques de sortie" }
     tui_views_closed { "Vues fermées" }
     tui_views_opened { "Vues" }

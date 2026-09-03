@@ -4,7 +4,6 @@
 #include "track/SelectionInfoLabel.h"
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 

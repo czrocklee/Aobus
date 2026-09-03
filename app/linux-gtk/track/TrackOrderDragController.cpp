@@ -13,7 +13,6 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -114,13 +113,17 @@ namespace ao::gtk
 
   struct TrackOrderDragController::State final : std::enable_shared_from_this<State>
   {
-    State(rt::AppRuntime& runtimeValue,
+    State(async::Runtime& asyncRuntimeValue,
+          rt::Library& libraryValue,
+          rt::ViewService& viewsValue,
           rt::ViewId const viewIdValue,
           i18n::MessageCatalog textCatalogValue,
           Gtk::ScrolledWindow& scrolledWindowValue,
           TrackSelectionController& selectionControllerValue,
           Callbacks callbacksValue)
-      : runtime{runtimeValue}
+      : asyncRuntime{asyncRuntimeValue}
+      , library{libraryValue}
+      , views{viewsValue}
       , viewId{viewIdValue}
       , textCatalog{std::move(textCatalogValue)}
       , scrolledWindow{scrolledWindowValue}
@@ -194,8 +197,7 @@ namespace ao::gtk
         selected = selectionController.selectedTrackIds();
       }
 
-      auto sessionRes =
-        uimodel::ListOrderAuthoringSession::begin(runtime.library(), runtime.views(), viewId, textCatalog);
+      auto sessionRes = uimodel::ListOrderAuthoringSession::begin(library, views, viewId, textCatalog);
 
       if (!sessionRes)
       {
@@ -349,7 +351,7 @@ namespace ao::gtk
       auto selectedIds = std::move(selectedTrackIds);
       auto submission = optSession->moveBefore(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
-      spawnUiTask(runtime.async(),
+      spawnUiTask(asyncRuntime,
                   tasks,
                   *this,
                   "track order drop",
@@ -387,7 +389,9 @@ namespace ao::gtk
       return true;
     }
 
-    rt::AppRuntime& runtime;
+    async::Runtime& asyncRuntime;
+    rt::Library& library;
+    rt::ViewService& views;
     rt::ViewId viewId = rt::kInvalidViewId;
     i18n::MessageCatalog textCatalog;
     Gtk::ScrolledWindow& scrolledWindow;
@@ -403,14 +407,18 @@ namespace ao::gtk
     async::LifetimeScope tasks;
   };
 
-  TrackOrderDragController::TrackOrderDragController(rt::AppRuntime& runtime,
+  TrackOrderDragController::TrackOrderDragController(async::Runtime& asyncRuntime,
+                                                     rt::Library& library,
+                                                     rt::ViewService& views,
                                                      rt::ViewId const viewId,
                                                      i18n::MessageCatalog const& textCatalog,
                                                      Gtk::ColumnView& /*columnView*/,
                                                      Gtk::ScrolledWindow& scrolledWindow,
                                                      TrackSelectionController& selectionController,
                                                      Callbacks callbacks)
-    : _statePtr{std::make_shared<State>(runtime,
+    : _statePtr{std::make_shared<State>(asyncRuntime,
+                                        library,
+                                        views,
                                         viewId,
                                         textCatalog,
                                         scrolledWindow,

@@ -29,8 +29,10 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
   class TrackListProjection;
+  class ViewService;
+  class WorkspaceService;
   struct TrackPresentationSpec;
   struct TrackListProjectionDeltaBatch;
 }
@@ -46,7 +48,9 @@ namespace ao::winui
   class TrackListController final
   {
   public:
-    TrackListController(rt::AppRuntime& runtime,
+    TrackListController(rt::ViewService& views,
+                        rt::WorkspaceService& workspace,
+                        rt::Library& library,
                         uimodel::TrackColumnLayouts& columnLayouts,
                         i18n::MessageCatalog textCatalog);
     ~TrackListController();
@@ -91,7 +95,7 @@ namespace ao::winui
     double contentWidth() const noexcept { return _contentWidth; }
 
   private:
-    /// Establish empty native vectors before adopting the constructor-bound runtime's active view.
+    /// Establish empty native vectors before adopting the constructor-bound workspace's active view.
     void resetPresentation();
 
     static constexpr std::int32_t kDefaultViewportWidth = 1200;
@@ -104,7 +108,9 @@ namespace ao::winui
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection const> projectionPtr);
     i18n::MessageCatalog _textCatalog;
-    rt::AppRuntime& _runtime;
+    rt::ViewService& _views;
+    rt::WorkspaceService& _workspace;
+    rt::Library& _library;
     uimodel::TrackColumnLayouts& _columnLayouts;
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::shared_ptr<rt::TrackListProjection const> _projectionPtr;

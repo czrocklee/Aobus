@@ -134,7 +134,14 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(cache);
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
 
-    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, columnLayouts, textCatalog, runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              textCatalog,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader};
     window.set_child(page);
 
     SECTION("initial state")
@@ -247,8 +254,14 @@ namespace ao::gtk::test
     auto materializedRowsForPage = [&]
     {
       auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
-      auto page = TrackViewPage{
-        rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+      auto page = TrackViewPage{rt::kAllTracksListId,
+                                modelPtr,
+                                columnLayouts,
+                                ao::test::englishMessageCatalog(),
+                                runtime.async(),
+                                runtime.library(),
+                                runtime.views(),
+                                thumbnailLoader};
       auto window = Gtk::Window{};
       window.set_child(page);
       window.set_default_size(600, 320);
@@ -305,7 +318,9 @@ namespace ao::gtk::test
                               modelPtr,
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
-                              runtime,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
                               thumbnailLoader,
                               manual->spec,
                               viewId};
@@ -378,7 +393,9 @@ namespace ao::gtk::test
                               modelPtr,
                               columnLayouts,
                               ao::test::englishMessageCatalog(),
-                              runtime,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
                               thumbnailLoader,
                               manual->spec,
                               viewId};
@@ -472,8 +489,14 @@ namespace ao::gtk::test
     auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
-    auto page = TrackViewPage{
-      rt::kAllTracksListId, modelPtr, columnLayouts, ao::test::englishMessageCatalog(), runtime, thumbnailLoader};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              ao::test::englishMessageCatalog(),
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);
     window.set_default_size(720, 320);

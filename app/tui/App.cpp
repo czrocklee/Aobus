@@ -865,7 +865,8 @@ namespace ao::tui
       trackColumnLayouts.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
     auto listPresentationsSub =
       listPresentations.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
-    auto library = LibraryController{runtime, textCatalog, listPresentations};
+    auto library =
+      LibraryController{runtime.library(), runtime.views(), runtime.workspace(), textCatalog, listPresentations};
     runtime.startPlaybackSessionPersistence();
 
     if (auto const restoredRes = runtime.restorePlaybackSession(); !restoredRes)
@@ -933,15 +934,16 @@ namespace ao::tui
     auto events = EventController{screen,
                                   shell,
                                   library,
-                                  runtime,
+                                  runtime.async(),
+                                  runtime.playback(),
                                   keymapPlan,
                                   EventControllerBindings{
-                                    .outputDevices = &outputDevices,
-                                    .hitRegions = &hitRegions,
-                                    .trackColumnLayouts = &trackColumnLayouts,
-                                    .trackColumnResizePreview = &trackColumnResizePreview,
-                                    .activityStatusViewModel = &activityStatusViewModel,
-                                    .notifications = &runtime.notifications(),
+                                    .outputDevices = outputDevices,
+                                    .hitRegions = hitRegions,
+                                    .trackColumnLayouts = trackColumnLayouts,
+                                    .trackColumnResizePreview = trackColumnResizePreview,
+                                    .activityStatusViewModel = activityStatusViewModel,
+                                    .notifications = runtime.notifications(),
                                     .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
                                     { return commandCompletions.completeCommand(draft); },
                                     .filterCompletionCallback = [&commandCompletions](std::string_view const draft)

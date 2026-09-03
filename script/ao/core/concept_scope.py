@@ -106,12 +106,15 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
     ConstructionChain(
         leaf="winui.TrackListController",
         path="app/windows-winui/track/TrackListController.h",
-        steps=("TrackListController(AppRuntime&, TrackColumnLayouts&, MessageCatalog)",),
+        steps=("TrackListController(ViewService&, WorkspaceService&, Library&, TrackColumnLayouts&, MessageCatalog)",),
     ),
     ConstructionChain(
         leaf="winui.SmtcBridge",
         path="app/windows-winui/platform/SmtcBridge.h",
-        steps=("SmtcBridge(HWND, DispatcherQueue, AppRuntime&, PlaybackActions&, ResourceByteMemoryCache&)",),
+        steps=(
+            "SmtcBridge(HWND, DispatcherQueue, PlaybackService&, PlaybackActions&, ResourceByteMemoryCache&,"
+            " async::Runtime&)",
+        ),
     ),
 )
 

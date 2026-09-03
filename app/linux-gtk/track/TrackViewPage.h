@@ -43,7 +43,13 @@ namespace Gtk
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class Library;
+  class ViewService;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::uimodel
@@ -70,7 +76,9 @@ namespace ao::gtk
                            Glib::RefPtr<TrackListModel> modelPtr,
                            uimodel::TrackColumnLayouts& columnLayouts,
                            i18n::MessageCatalog textCatalog,
-                           rt::AppRuntime& runtime,
+                           async::Runtime& asyncRuntime,
+                           rt::Library& library,
+                           rt::ViewService& views,
                            ResourceImageLoader& thumbnailLoader,
                            rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec(),
                            rt::ViewId viewId = rt::kInvalidViewId);
@@ -145,7 +153,9 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayouts& _columnLayouts;
     i18n::MessageCatalog _textCatalog;
-    rt::AppRuntime& _runtime;
+    async::Runtime& _asyncRuntime;
+    rt::Library& _library;
+    rt::ViewService& _views;
     ResourceImageLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;

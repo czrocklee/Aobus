@@ -12,7 +12,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
@@ -70,12 +69,17 @@ namespace ao::gtk
   }
 
   SmartListDialog::SmartListDialog(Gtk::Window& parent,
-                                   rt::AppRuntime& runtime,
+                                   rt::Library& library,
+                                   rt::ViewService& views,
+                                   rt::TrackSourceCache& sources,
+                                   rt::CompletionService& completion,
                                    i18n::MessageCatalog textCatalog,
                                    ListId parentListId,
                                    TrackRowCache const& provider)
-    : _exprBox{runtime.completion(), textCatalog}
-    , _runtime{runtime}
+    : _exprBox{completion, textCatalog}
+    , _library{library}
+    , _views{views}
+    , _sources{sources}
     , _textCatalog{textCatalog}
     , _parentListId{parentListId}
     , _trackRowCache{provider}
@@ -412,7 +416,7 @@ namespace ao::gtk
 
     if (auto const isAllTracks = rt::isVirtualListId(_parentListId); !isAllTracks)
     {
-      auto scope = _runtime.library().snapshot();
+      auto scope = _library.snapshot();
 
       if (auto optNode = scope.listNode(_parentListId); optNode)
       {
@@ -468,7 +472,7 @@ namespace ao::gtk
   uimodel::SmartListEditorViewState SmartListDialog::editorViewState() const
   {
     auto const hasPreviewSource = _optPreviewSourceLease.has_value();
-    auto const optError = hasPreviewSource ? _runtime.sources().sourceError(*_optPreviewSourceLease) : std::nullopt;
+    auto const optError = hasPreviewSource ? _sources.sourceError(*_optPreviewSourceLease) : std::nullopt;
 
     return ao::uimodel::makeSmartListEditorViewState(
       _textCatalog,
@@ -506,7 +510,7 @@ namespace ao::gtk
 
     auto const expr = std::string{_exprBox.entry().get_text()};
     auto const sourceListId = rt::resolveParentSourceId(_parentListId);
-    auto sourceRes = _runtime.sources().acquire(rt::SourceSpec{.baseListId = sourceListId, .filterExpression = expr});
+    auto sourceRes = _sources.acquire(rt::SourceSpec{.baseListId = sourceListId, .filterExpression = expr});
 
     if (!sourceRes)
     {
@@ -522,7 +526,7 @@ namespace ao::gtk
 
     _optPreviewSourceLease.emplace(std::move(*sourceRes));
     _previewModelPtr->bindProjection(
-      _runtime.views().createTransientTrackListProjection(*_optPreviewSourceLease, rt::TrackOrderSpec{}));
+      _views.createTransientTrackListProjection(*_optPreviewSourceLease, rt::TrackOrderSpec{}));
 
     auto const state = editorViewState();
 

@@ -10,7 +10,6 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -25,8 +24,17 @@ namespace Gtk
 
 namespace ao::rt
 {
+  class Library;
+  class PlaybackService;
   class ResourceByteMemoryCache;
+  class ViewService;
+  class WorkspaceService;
   struct PlaybackRevealTrackRequest;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::gtk
@@ -35,7 +43,6 @@ namespace ao::gtk
   class TagEditController;
   class TrackRowCache;
   class TrackListModel;
-  class TrackViewPage;
 
   /**
    * TrackPageEntry holds the per-page state for a track list.
@@ -54,7 +61,11 @@ namespace ao::gtk
   {
   public:
     TrackPageHost(Gtk::Stack& stack,
-                  rt::AppRuntime& runtime,
+                  async::Runtime& asyncRuntime,
+                  rt::Library& library,
+                  rt::PlaybackService& playback,
+                  rt::ViewService& views,
+                  rt::WorkspaceService& workspace,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
                   uimodel::TrackColumnLayouts& columnLayouts,
@@ -101,7 +112,11 @@ namespace ao::gtk
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
-    rt::AppRuntime& _runtime;
+    async::Runtime& _asyncRuntime;
+    rt::Library& _library;
+    rt::PlaybackService& _playback;
+    rt::ViewService& _views;
+    rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;

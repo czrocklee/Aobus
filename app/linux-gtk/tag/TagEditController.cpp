@@ -17,7 +17,6 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -63,12 +62,20 @@ namespace ao::gtk
   }
 
   TagEditController::TagEditController(Gtk::Window& parent,
-                                       rt::AppRuntime& runtime,
+                                       async::Runtime& asyncRuntime,
+                                       rt::Library& library,
+                                       rt::CompletionService& completion,
+                                       rt::NotificationService& notifications,
+                                       rt::TextOrderingPolicy const* textOrderingPolicy,
                                        i18n::MessageCatalog textCatalog,
                                        Callbacks callbacks,
                                        ThemeCoordinator& themeCoordinator)
     : _callbacks{std::move(callbacks)}
-    , _runtime{runtime}
+    , _asyncRuntime{asyncRuntime}
+    , _library{library}
+    , _completion{completion}
+    , _notifications{notifications}
+    , _textOrderingPolicy{textOrderingPolicy}
     , _textCatalog{std::move(textCatalog)}
     , _parent{parent}
     , _themeCoordinator{themeCoordinator}
@@ -129,13 +136,8 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.async(),
-                                                                  _runtime.library(),
-                                                                  _runtime.completion(),
-                                                                  _textCatalog,
-                                                                  *_dataProvider,
-                                                                  selection.selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _asyncRuntime, _library, _completion, _textCatalog, *_dataProvider, selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -156,8 +158,7 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr = std::make_unique<TagPopover>(
-      _runtime.library(), _textCatalog, selection.selectedIds, _runtime.textOrderingPolicy());
+    _tagPopoverPtr = std::make_unique<TagPopover>(_library, _textCatalog, selection.selectedIds, _textOrderingPolicy);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -187,7 +188,7 @@ namespace ao::gtk
 
     auto const sessionGeneration = _tagEditSessionGeneration;
     spawnUiTask(
-      _runtime.async(),
+      _asyncRuntime,
       _tasks,
       *this,
       "tag edit",
@@ -196,21 +197,21 @@ namespace ao::gtk
       {
         if (!result)
         {
-          owner->_runtime.notifications().post(
+          owner->_notifications.post(
             rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
           return;
         }
 
         if (result->status == rt::AuthoringStatus::Busy)
         {
-          owner->_runtime.notifications().post(
+          owner->_notifications.post(
             rt::NotificationSeverity::Warning, result->notificationText, rt::NotificationLifetime::transient());
           return;
         }
 
         if (result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable)
         {
-          owner->_runtime.notifications().post(
+          owner->_notifications.post(
             rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
 
           if (owner->_tagEditSessionGeneration == sessionGeneration)
@@ -226,7 +227,7 @@ namespace ao::gtk
           return;
         }
 
-        owner->_runtime.notifications().post(
+        owner->_notifications.post(
           rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
       });
   }
@@ -272,8 +273,8 @@ namespace ao::gtk
                 presentPropertiesDialog();
               });
 
-    auto const lists = _runtime.library().snapshot().lists();
-    auto const targets = uimodel::writableTagListTargets(lists, _runtime.textOrderingPolicy());
+    auto const lists = _library.snapshot().lists();
+    auto const targets = uimodel::writableTagListTargets(lists, _textOrderingPolicy);
     auto addToListMenuPtr = Gio::Menu::create();
     std::size_t addTargetCount = 0;
     auto const activeListId = _optActiveSelection ? _optActiveSelection->listId : rt::kAllTracksListId;
@@ -443,19 +444,18 @@ namespace ao::gtk
       return;
     }
 
-    auto sessionRes =
-      uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), _optActiveSelection->selectedIds);
+    auto sessionRes = uimodel::ListMembershipAuthoringSession::begin(_library, _optActiveSelection->selectedIds);
 
     if (!sessionRes)
     {
-      _runtime.notifications().post(
+      _notifications.post(
         rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
       return;
     }
 
     auto session = std::move(*sessionRes);
     auto submission = add ? session.addToList(listId) : session.removeFromList(listId);
-    spawnUiTask(_runtime.async(),
+    spawnUiTask(_asyncRuntime,
                 _tasks,
                 *this,
                 "list membership edit",
@@ -464,7 +464,7 @@ namespace ao::gtk
                 {
                   if (!result)
                   {
-                    owner->_runtime.notifications().post(
+                    owner->_notifications.post(
                       rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
                     return;
                   }
@@ -474,14 +474,14 @@ namespace ao::gtk
 
                   if (result->status == rt::AuthoringStatus::Busy)
                   {
-                    owner->_runtime.notifications().post(
+                    owner->_notifications.post(
                       rt::NotificationSeverity::Warning, notificationText, rt::NotificationLifetime::transient());
                     return;
                   }
 
                   auto const failed =
                     result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable;
-                  owner->_runtime.notifications().post(
+                  owner->_notifications.post(
                     failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
                     notificationText,
                     failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
@@ -515,8 +515,7 @@ namespace ao::gtk
     }
 
     retireTagPopover();
-    _tagPopoverPtr =
-      std::make_unique<TagPopover>(_runtime.library(), _textCatalog, selectedIds, _runtime.textOrderingPolicy());
+    _tagPopoverPtr = std::make_unique<TagPopover>(_library, _textCatalog, selectedIds, _textOrderingPolicy);
 
     _tagsChangedConnection = _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -533,13 +532,8 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.async(),
-                                                                  _runtime.library(),
-                                                                  _runtime.completion(),
-                                                                  _textCatalog,
-                                                                  *_dataProvider,
-                                                                  _optActiveSelection->selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _asyncRuntime, _library, _completion, _textCatalog, *_dataProvider, _optActiveSelection->selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -637,12 +631,12 @@ namespace ao::gtk
 
   bool TagEditController::beginTagEditSession(std::span<TrackId const> trackIds)
   {
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, trackIds);
 
     if (!sessionRes)
     {
       _optTagEditSession.reset();
-      _runtime.notifications().post(
+      _notifications.post(
         rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
       return false;
     }

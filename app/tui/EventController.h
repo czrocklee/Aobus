@@ -37,7 +37,6 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
   class NotificationService;
   class PlaybackService;
 }
@@ -52,16 +51,21 @@ namespace ao::tui
     std::vector<uimodel::TrackColumnState> layout{};
   };
 
+  /**
+   * The collaborators an EventController drives. Every field is mandatory; the
+   * aggregate exists because eight of them do not read as positional
+   * constructor arguments, not to make any of them optional.
+   */
   struct EventControllerBindings final
   {
-    OutputDeviceController* outputDevices = nullptr;
-    TuiHitRegions* hitRegions = nullptr;
-    uimodel::TrackColumnLayouts* trackColumnLayouts = nullptr;
-    TrackColumnResizePreview* trackColumnResizePreview = nullptr;
-    uimodel::ActivityStatusViewModel* activityStatusViewModel = nullptr;
-    rt::NotificationService* notifications = nullptr;
-    InputCompletionCallback commandCompletionCallback{};
-    InputCompletionCallback filterCompletionCallback{};
+    OutputDeviceController& outputDevices;
+    TuiHitRegions& hitRegions;
+    uimodel::TrackColumnLayouts& trackColumnLayouts;
+    TrackColumnResizePreview& trackColumnResizePreview;
+    uimodel::ActivityStatusViewModel& activityStatusViewModel;
+    rt::NotificationService& notifications;
+    InputCompletionCallback commandCompletionCallback;
+    InputCompletionCallback filterCompletionCallback;
   };
 
   class EventController final
@@ -70,9 +74,10 @@ namespace ao::tui
     EventController(ftxui::ScreenInteractive& screen,
                     ShellInteractionModel& shell,
                     LibraryController& library,
-                    rt::AppRuntime& runtime,
+                    async::Runtime& asyncRuntime,
+                    rt::PlaybackService& playback,
                     TuiKeymapPlan const& keymapPlan,
-                    EventControllerBindings bindings = {});
+                    EventControllerBindings bindings);
 
     bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
@@ -164,18 +169,18 @@ namespace ao::tui
     uimodel::PlaybackActions _playbackActions;
     uimodel::PlaybackPositionViewModel _seekViewModel;
     uimodel::VolumeViewModel _volumeViewModel;
-    OutputDeviceController* _outputDevices = nullptr;
-    TuiHitRegions* _hitRegions = nullptr;
-    uimodel::TrackColumnLayouts* _trackColumnLayouts = nullptr;
-    TrackColumnResizePreview* _trackColumnResizePreview = nullptr;
+    OutputDeviceController& _outputDevices;
+    TuiHitRegions& _hitRegions;
+    uimodel::TrackColumnLayouts& _trackColumnLayouts;
+    TrackColumnResizePreview& _trackColumnResizePreview;
     std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
     std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
     std::optional<SeekRailDrag> _optSeekRailDrag{};
     uimodel::SeekInteraction _seekSlider{};
-    uimodel::ActivityStatusViewModel* _activityStatusViewModel = nullptr;
-    rt::NotificationService* _notifications = nullptr;
-    InputCompletionCallback _commandCompletionCallback{};
-    InputCompletionCallback _filterCompletionCallback{};
+    uimodel::ActivityStatusViewModel& _activityStatusViewModel;
+    rt::NotificationService& _notifications;
+    InputCompletionCallback _commandCompletionCallback;
+    InputCompletionCallback _filterCompletionCallback;
     bool _qualityHoverVisible = false;
     HoveredButton _hoveredButton = HoveredButton::None;
     std::uint64_t _filterDebounceGeneration = 0;

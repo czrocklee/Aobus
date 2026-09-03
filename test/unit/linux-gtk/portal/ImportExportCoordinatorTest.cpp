@@ -61,8 +61,14 @@ namespace ao::gtk::test
         ++openCallbackCount;
       },
     };
-    auto coordinator =
-      portal::ImportExportCoordinator{parent, fixture.runtime(), ao::test::englishMessageCatalog(), callbacks, theme};
+    auto& runtime = fixture.runtime();
+    auto coordinator = portal::ImportExportCoordinator{parent,
+                                                       runtime.async(),
+                                                       runtime.library(),
+                                                       runtime.notifications(),
+                                                       ao::test::englishMessageCatalog(),
+                                                       callbacks,
+                                                       theme};
 
     SECTION("default open does not request a scan")
     {
@@ -94,8 +100,14 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto parent = Gtk::Window{};
     auto theme = ThemeCoordinator{};
-    auto coordinator = portal::ImportExportCoordinator{
-      parent, fixture.runtime(), ao::test::englishMessageCatalog(), portal::ImportExportCallbacks{}, theme};
+    auto& runtime = fixture.runtime();
+    auto coordinator = portal::ImportExportCoordinator{parent,
+                                                       runtime.async(),
+                                                       runtime.library(),
+                                                       runtime.notifications(),
+                                                       ao::test::englishMessageCatalog(),
+                                                       portal::ImportExportCallbacks{},
+                                                       theme};
     auto const importPath = fixture.tempDir().path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
@@ -142,8 +154,14 @@ library:
     auto fixture = GtkRuntimeFixture{};
     auto parent = Gtk::Window{};
     auto theme = ThemeCoordinator{};
-    auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(
-      parent, fixture.runtime(), ao::test::englishMessageCatalog(), portal::ImportExportCallbacks{}, theme);
+    auto& runtime = fixture.runtime();
+    auto coordinatorPtr = std::make_unique<portal::ImportExportCoordinator>(parent,
+                                                                            runtime.async(),
+                                                                            runtime.library(),
+                                                                            runtime.notifications(),
+                                                                            ao::test::englishMessageCatalog(),
+                                                                            portal::ImportExportCallbacks{},
+                                                                            theme);
 
     coordinatorPtr->exportLibrary();
 
