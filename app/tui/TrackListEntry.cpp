@@ -12,7 +12,6 @@
 #include <format>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace ao::tui
 {
@@ -90,18 +89,5 @@ namespace ao::tui
                        trackDisplayTitle(textCatalog, row),
                        row.artist.empty() ? "-" : row.artist,
                        row.album.empty() ? "-" : row.album);
-  }
-
-  std::vector<std::string> menuLabels(std::vector<TrackListEntry> const& tracks)
-  {
-    auto labels = std::vector<std::string>{};
-    labels.reserve(tracks.size());
-
-    for (auto const& track : tracks)
-    {
-      labels.push_back(track.label);
-    }
-
-    return labels;
   }
 } // namespace ao::tui

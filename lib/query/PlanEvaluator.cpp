@@ -469,7 +469,7 @@ namespace ao::query
         return;
       }
 
-      generation = readContext->bind(sourcePlan.dictionarySymbols, dictionaryIds);
+      readContext->bind(sourcePlan.dictionarySymbols, dictionaryIds);
 
       for (std::size_t index = 0; index < sourcePlan.inSets.size(); ++index)
       {
@@ -520,7 +520,6 @@ namespace ao::query
     std::vector<DictionaryId> dictionaryIds;
     std::vector<boost::unordered_flat_set<std::int64_t>> dictionarySets;
     mutable CaselessTextCache caselessTextCache;
-    std::uint64_t generation = 0;
     std::uint32_t tagBloomMask = 0;
   };
 

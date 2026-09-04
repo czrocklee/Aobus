@@ -53,8 +53,6 @@ namespace ao::uimodel
 
     double asDouble(double defaultValue = 0.0) const;
 
-    std::vector<std::string> asStringList() const;
-
     Value data{};
   };
 

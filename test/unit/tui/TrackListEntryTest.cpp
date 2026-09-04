@@ -12,7 +12,6 @@
 #include <chrono>
 #include <filesystem>
 #include <string>
-#include <vector>
 
 namespace ao::tui::test
 {
@@ -45,13 +44,5 @@ namespace ao::tui::test
 
     auto const german = ao::test::messageCatalog("de-AT");
     CHECK(makeTrackListEntry(german, row).label == "--  Titel 99  A. Composer  Keyboard Works");
-  }
-
-  TEST_CASE("TrackListEntry - menu labels preserve track order", "[tui][unit][track-list]")
-  {
-    auto tracks =
-      std::vector<TrackListEntry>{{.id = TrackId{1}, .label = "First"}, {.id = TrackId{2}, .label = "Second"}};
-
-    CHECK(menuLabels(tracks) == std::vector<std::string>{"First", "Second"});
   }
 } // namespace ao::tui::test

@@ -51,6 +51,49 @@ namespace ao::uimodel
       return TrackFieldEditValue{};
     }
 
+    TrackPropertiesFormFieldState makeTrackPropertiesFormFieldState(rt::TrackField field,
+                                                                    rt::TrackFieldRawValue rawValue,
+                                                                    bool const editable)
+    {
+      auto currentEditValue = editValueFromRawValue(rawValue);
+      return TrackPropertiesFormFieldState{
+        .field = field,
+        .originalRawValue = std::move(rawValue),
+        .currentEditValue = std::move(currentEditValue),
+        .mixed = false,
+        .editable = editable,
+      };
+    }
+
+    bool mergeTrackPropertiesFormFieldState(TrackPropertiesFormFieldState& state,
+                                            rt::TrackFieldRawValue const& rawValue)
+    {
+      if (state.mixed || rawValue == state.originalRawValue)
+      {
+        return false;
+      }
+
+      state.mixed = true;
+      return true;
+    }
+
+    bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch,
+                                      TrackPropertiesFormFieldState const& state,
+                                      TrackFieldEditValue const& editValue)
+    {
+      if (state.mixed || !state.editable || !canWriteTrackFieldPatch(state.field))
+      {
+        return false;
+      }
+
+      if (rawValueFromEditValue(editValue) == state.originalRawValue)
+      {
+        return false;
+      }
+
+      return writeTrackFieldPatch(patch, state.field, editValue);
+    }
+
     bool hasFieldChange(TrackPropertiesFormFieldState const& state)
     {
       auto patch = rt::MetadataPatch{};
@@ -156,47 +199,5 @@ namespace ao::uimodel
     }
 
     return &*iter;
-  }
-
-  TrackPropertiesFormFieldState makeTrackPropertiesFormFieldState(rt::TrackField field,
-                                                                  rt::TrackFieldRawValue rawValue,
-                                                                  bool editable)
-  {
-    auto currentEditValue = editValueFromRawValue(rawValue);
-    return TrackPropertiesFormFieldState{
-      .field = field,
-      .originalRawValue = std::move(rawValue),
-      .currentEditValue = std::move(currentEditValue),
-      .mixed = false,
-      .editable = editable,
-    };
-  }
-
-  bool mergeTrackPropertiesFormFieldState(TrackPropertiesFormFieldState& state, rt::TrackFieldRawValue const& rawValue)
-  {
-    if (state.mixed || rawValue == state.originalRawValue)
-    {
-      return false;
-    }
-
-    state.mixed = true;
-    return true;
-  }
-
-  bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch,
-                                    TrackPropertiesFormFieldState const& state,
-                                    TrackFieldEditValue const& editValue)
-  {
-    if (state.mixed || !state.editable || !canWriteTrackFieldPatch(state.field))
-    {
-      return false;
-    }
-
-    if (rawValueFromEditValue(editValue) == state.originalRawValue)
-    {
-      return false;
-    }
-
-    return writeTrackFieldPatch(patch, state.field, editValue);
   }
 } // namespace ao::uimodel

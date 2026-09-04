@@ -13,7 +13,6 @@
 namespace ao::library
 {
   class TrackView;
-  class DictionaryStore;
 } // namespace ao::library
 
 namespace ao::query
@@ -97,17 +96,6 @@ namespace ao::query
    * that owns @p field must be valid.
    */
   DictionaryId dictionaryFieldId(library::TrackView const& track, Field field);
-
-  /**
-   * Resolves a dictionary-backed metadata field (ArtistId, AlbumId, ...) to its
-   * interned string. Returns an empty view for non-dictionary fields or an
-   * invalid/unset id. The TrackView tier that owns @p field must be valid. The
-   * returned view borrows from @p dictionary and is valid for as long as the
-   * dictionary entry lives.
-   */
-  std::string_view dictionaryFieldValue(library::TrackView const& track,
-                                        Field field,
-                                        library::DictionaryStore const& dictionary);
 
   std::string_view fieldDisplayName(Field field);
   char variablePrefix(VariableType type);

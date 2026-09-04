@@ -259,7 +259,6 @@ namespace ao::tui::test
     auto const data = std::vector{std::byte{1}, std::byte{2}, std::byte{3}};
     auto const escape = kittyImageEscape(data, 24, 12);
 
-    CHECK(kittyDeleteVisibleImagesEscape() == "\033_Ga=d,d=A,q=2;\033\\");
     CHECK(kittyDeleteImageEscape(kKittyCoverArtImageId) == "\033_Ga=d,i=1,q=2;\033\\");
     CHECK(escape.starts_with("\033_Ga=T,i=1,f=100,t=d,c=24,r=12,q=2,m=0;"));
     CHECK(escape.ends_with("\033\\"));

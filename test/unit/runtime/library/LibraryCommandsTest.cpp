@@ -7,6 +7,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>

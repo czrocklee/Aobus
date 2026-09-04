@@ -42,6 +42,10 @@ add_library(ao_app_runtime STATIC
     playback/ProjectionAnchor.cpp
     playback/ShuffleHistory.cpp
     library/LibraryCommands.cpp
+    library/LibraryCommandsListAuthoring.cpp
+    library/LibraryCommandsListMembership.cpp
+    library/LibraryCommandsTrackAuthoring.cpp
+    library/LibraryCommandsTrackLifecycle.cpp
     library/AudioIdentityBatchWriter.cpp
     library/AudioIdentityIndexer.cpp
     library/LibraryScan.cpp
@@ -88,6 +92,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     SOURCE
       library/LibraryJobs.cpp
       library/LibraryCommands.cpp
+      library/LibraryCommandsListAuthoring.cpp
+      library/LibraryCommandsListMembership.cpp
+      library/LibraryCommandsTrackAuthoring.cpp
+      library/LibraryCommandsTrackLifecycle.cpp
     APPEND PROPERTY COMPILE_OPTIONS -Wno-mismatched-new-delete)
 endif()
 

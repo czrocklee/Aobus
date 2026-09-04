@@ -260,7 +260,8 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`Library.h`](../../../../app/include/ao/rt/library/Library.h) composes the runtime roles.
 - [`LibrarySnapshot.h`](../../../../app/include/ao/rt/library/LibrarySnapshot.h) defines the scoped read surface.
 - [`LibraryCommands.h`](../../../../app/include/ao/rt/library/LibraryCommands.h) defines commands and reply values.
-- [`LibraryCommands.cpp`](../../../../app/runtime/library/LibraryCommands.cpp) owns command validation and transaction orchestration.
+- [`LibraryCommands.cpp`](../../../../app/runtime/library/LibraryCommands.cpp) owns the public command surface and write-lane submission; [`LibraryCommandsInternal.h`](../../../../app/runtime/library/LibraryCommandsInternal.h) holds the shared execution scaffolding.
+- Command validation and transaction orchestration are partitioned by domain across [`LibraryCommandsTrackAuthoring.cpp`](../../../../app/runtime/library/LibraryCommandsTrackAuthoring.cpp), [`LibraryCommandsListMembership.cpp`](../../../../app/runtime/library/LibraryCommandsListMembership.cpp), [`LibraryCommandsListAuthoring.cpp`](../../../../app/runtime/library/LibraryCommandsListAuthoring.cpp), and [`LibraryCommandsTrackLifecycle.cpp`](../../../../app/runtime/library/LibraryCommandsTrackLifecycle.cpp).
 - [`LibraryAuthoring.h`](../../../../app/include/ao/rt/library/LibraryAuthoring.h) defines availability, target bindings, and typed outcomes.
 - [`LibraryWriteLane.h`](../../../../app/runtime/library/LibraryWriteLane.h) owns live-runtime admission, root-body execution, terminalization, commit, and publication completion.
 - [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.

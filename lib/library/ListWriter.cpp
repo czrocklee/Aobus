@@ -3,6 +3,7 @@
 
 #include <ao/library/ListWriter.h>
 
+#include "WriteTransactionAccess.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -30,7 +31,7 @@ namespace ao::library
   std::optional<ListView> ListWriter::get(ListId const id) const
   {
     requireActiveOperation();
-    return _transaction->listStoreWriter().get(id);
+    return detail::WriteTransactionAccess::listStoreWriter(*_transaction).get(id);
   }
 
   Result<> ListWriter::validateParent(ListId const targetId, ListId const parentId) const
@@ -45,7 +46,7 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, "list parent cannot be the list itself");
     }
 
-    auto& writer = _transaction->listStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
     auto visited = std::unordered_set<ListId>{};
     auto current = parentId;
     bool isDirectCandidateParent = true;
@@ -94,7 +95,7 @@ namespace ao::library
       return std::unexpected{validationRes.error()};
     }
 
-    return _transaction->listStoreWriter().create(*preparedRes);
+    return detail::WriteTransactionAccess::listStoreWriter(*_transaction).create(*preparedRes);
   }
 
   Result<> ListWriter::update(ListId const id, ListBuilder const& list)
@@ -110,7 +111,7 @@ namespace ao::library
 
     auto const view = ListView{preparedRes->bytes()};
     AO_INVARIANT(view.isValid(), "Successful List preparation produced an invalid record");
-    auto& writer = _transaction->listStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
 
     if (!writer.get(id))
     {
@@ -129,7 +130,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->listStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
 
     if (!writer.get(id))
     {
@@ -211,7 +212,7 @@ namespace ao::library
       }
     }
 
-    auto& writer = _transaction->listStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::listStoreWriter(*_transaction);
 
     for (auto const id : rootFirst | std::views::reverse)
     {
@@ -225,7 +226,7 @@ namespace ao::library
   Result<> ListWriter::clear()
   {
     requireActiveOperation();
-    return _transaction->listStoreWriter().clear();
+    return detail::WriteTransactionAccess::listStoreWriter(*_transaction).clear();
   }
 
   void ListWriter::requireActiveOperation() const

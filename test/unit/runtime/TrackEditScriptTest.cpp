@@ -3,9 +3,9 @@
 
 #include <ao/rt/TrackEditScript.h>
 
+#include "runtime/projection/TrackProjectionEditScript.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/projection/TrackProjectionEditScript.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>

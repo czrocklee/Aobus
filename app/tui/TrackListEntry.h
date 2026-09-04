@@ -8,7 +8,6 @@
 #include <ao/rt/TrackRow.h>
 
 #include <string>
-#include <vector>
 
 namespace ao::tui
 {
@@ -25,5 +24,4 @@ namespace ao::tui
   std::string trackDisplayDetail(rt::TrackRow const& row);
   TrackListEntry makeTrackListEntry(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
   std::string trackTableLabel(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
-  std::vector<std::string> menuLabels(std::vector<TrackListEntry> const& tracks);
 } // namespace ao::tui

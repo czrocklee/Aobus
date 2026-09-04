@@ -5,6 +5,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>

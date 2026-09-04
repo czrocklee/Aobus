@@ -9,6 +9,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/Library.h>

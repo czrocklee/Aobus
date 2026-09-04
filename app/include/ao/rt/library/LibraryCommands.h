@@ -61,8 +61,6 @@ namespace ao::rt
                                                             std::vector<std::string> tagsToRemove);
     async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> updateProperties(BoundTrackTargets targets,
                                                                                            TrackPropertiesPatch patch);
-    async::Task<Result<UpdateTrackPropertiesReply>> previewUpdateProperties(std::vector<TrackId> trackIds,
-                                                                            TrackPropertiesPatch patch);
     async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> addTracksToList(ListId listId,
                                                                                     BoundTrackTargets targets);
     async::Task<Result<AddTracksToListReply>> previewAddTracksToList(ListId listId, std::vector<TrackId> trackIds);

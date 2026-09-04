@@ -56,7 +56,7 @@ namespace ao::media::mp4
 
   AtomView AtomView::root(std::span<std::byte const> bytes) noexcept
   {
-    return AtomView{bytes, bytes, "root", 0, true};
+    return AtomView{bytes, bytes, "root", 0};
   }
 
   AtomCursor AtomView::children() const noexcept
@@ -131,16 +131,14 @@ namespace ao::media::mp4
     auto const atomBytes = _remaining.first(length);
     auto const type = utility::bytes::stringView(utility::bytes::view(layout->type));
     auto childBytes = std::span<std::byte const>{};
-    bool isContainer = false;
 
     if (auto const optSkip = childHeaderSkip(_parentType, type); optSkip && length >= headerSize + *optSkip)
     {
       childBytes = atomBytes.subspan(headerSize + *optSkip);
-      isContainer = true;
     }
 
     _remaining = _remaining.subspan(length);
-    auto atom = AtomView{atomBytes, childBytes, type, headerSize, isContainer};
+    auto atom = AtomView{atomBytes, childBytes, type, headerSize};
     return OptionalAtom{atom};
   }
 

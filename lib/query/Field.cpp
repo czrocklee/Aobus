@@ -5,7 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/FieldCatalog.h>
@@ -363,19 +362,5 @@ namespace ao::query
       case Field::SoloistId: return track.classical().soloistId();
       default: return kInvalidDictionaryId;
     }
-  }
-
-  std::string_view dictionaryFieldValue(library::TrackView const& track,
-                                        Field field,
-                                        library::DictionaryStore const& dictionary)
-  {
-    auto const dictionaryId = dictionaryFieldId(track, field);
-
-    if (dictionaryId == kInvalidDictionaryId)
-    {
-      return {};
-    }
-
-    return dictionary.get(dictionaryId);
   }
 } // namespace ao::query

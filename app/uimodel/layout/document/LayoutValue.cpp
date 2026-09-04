@@ -14,7 +14,6 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace ao::uimodel
 {
@@ -160,21 +159,6 @@ namespace ao::uimodel
         }
       },
       data);
-  }
-
-  std::vector<std::string> LayoutValue::asStringList() const
-  {
-    if (auto const* ptr = std::get_if<std::vector<std::string>>(&data); ptr != nullptr)
-    {
-      return *ptr;
-    }
-
-    if (auto const* ptr = std::get_if<std::string>(&data); ptr != nullptr && !ptr->empty())
-    {
-      return {*ptr};
-    }
-
-    return {};
   }
 
   BoxedLayoutNode::BoxedLayoutNode() = default;

@@ -43,29 +43,38 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackPropertiesFormModel - merges multi-track field state", "[uimodel][unit][library][property]")
   {
-    auto state = makeTrackPropertiesFormFieldState(rt::TrackField::Title, textRaw("Same"));
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("Same"));
 
-    CHECK_FALSE(state.mixed);
-    CHECK_FALSE(mergeTrackPropertiesFormFieldState(state, textRaw("Same")));
-    CHECK_FALSE(state.mixed);
+    CHECK_FALSE(model.rowView(rt::TrackField::Title).mixed);
+    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Same")));
+    CHECK_FALSE(model.rowView(rt::TrackField::Title).mixed);
 
-    CHECK(mergeTrackPropertiesFormFieldState(state, textRaw("Different")));
-    CHECK(state.mixed);
-    CHECK_FALSE(mergeTrackPropertiesFormFieldState(state, textRaw("Another")));
-    CHECK(state.mixed);
+    // Only the transition into mixed is reported; later disagreements are not.
+    CHECK(model.mergeTrackField(rt::TrackField::Title, textRaw("Different")));
+    CHECK(model.rowView(rt::TrackField::Title).mixed);
+    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Another")));
+    CHECK(model.rowView(rt::TrackField::Title).mixed);
   }
 
   TEST_CASE("TrackPropertiesFormModel - writes changed metadata edits", "[uimodel][unit][library][property]")
   {
-    auto patch = rt::MetadataPatch{};
-    auto const titleState = makeTrackPropertiesFormFieldState(rt::TrackField::Title, textRaw("Old Title"));
-    auto const yearState = makeTrackPropertiesFormFieldState(rt::TrackField::Year, numberRaw(1999));
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.addField(rt::TrackField::Year, true);
 
-    CHECK(writeTrackPropertiesFormEdit(patch, titleState, textEdit("New Title")));
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("Old Title"));
+    model.loadFirstTrackField(rt::TrackField::Year, numberRaw(1999));
+
+    model.setEditValue(rt::TrackField::Title, textEdit("New Title"));
+    model.setEditValue(rt::TrackField::Year, numberEdit(2024));
+
+    CHECK(model.canSave());
+
+    auto const patch = model.buildPatch();
     REQUIRE(patch.optTitle);
     CHECK(*patch.optTitle == "New Title");
-
-    CHECK(writeTrackPropertiesFormEdit(patch, yearState, numberEdit(2024)));
     REQUIRE(patch.optYear);
     CHECK(*patch.optYear == 2024);
   }
@@ -115,22 +124,29 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optTitle);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - skips unchanged mixed and incompatible edits",
+  TEST_CASE("TrackPropertiesFormModel - skips unchanged, read-only, and incompatible edits",
             "[uimodel][unit][library][property]")
   {
-    auto patch = rt::MetadataPatch{};
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.addField(rt::TrackField::Artist, false);
+    model.addField(rt::TrackField::Year, true);
 
-    auto const unchanged = makeTrackPropertiesFormFieldState(rt::TrackField::Title, textRaw("Title"));
-    CHECK_FALSE(writeTrackPropertiesFormEdit(patch, unchanged, textEdit("Title")));
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("Title"));
+    model.loadFirstTrackField(rt::TrackField::Artist, textRaw("Artist"));
+    model.loadFirstTrackField(rt::TrackField::Year, numberRaw(2000));
+
+    // An edit equal to the loaded value, an edit to a read-only row, and an
+    // edit whose variant does not match the field all leave the patch alone.
+    model.setEditValue(rt::TrackField::Title, textEdit("Title"));
+    model.setEditValue(rt::TrackField::Artist, textEdit("Another Artist"));
+    model.setEditValue(rt::TrackField::Year, textEdit("not a number"));
+
+    CHECK_FALSE(model.canSave());
+
+    auto const patch = model.buildPatch();
     CHECK_FALSE(patch.optTitle);
-
-    auto mixed = makeTrackPropertiesFormFieldState(rt::TrackField::Title, textRaw("First"));
-    REQUIRE(mergeTrackPropertiesFormFieldState(mixed, textRaw("Second")));
-    CHECK_FALSE(writeTrackPropertiesFormEdit(patch, mixed, textEdit("Replacement")));
-    CHECK_FALSE(patch.optTitle);
-
-    auto const wrongVariant = makeTrackPropertiesFormFieldState(rt::TrackField::Year, numberRaw(2000));
-    CHECK_FALSE(writeTrackPropertiesFormEdit(patch, wrongVariant, textEdit("not a number")));
+    CHECK_FALSE(patch.optArtist);
     CHECK_FALSE(patch.optYear);
   }
 } // namespace ao::uimodel::test

@@ -68,6 +68,17 @@ namespace ao::rt
 
   namespace
   {
+    /**
+     * One waiter, one signal, one terminal value.
+     *
+     * wait() deliberately does not bind the handler's cancellation slot: the
+     * lane is the only authority that may end a wait, and it ends one by
+     * signalling a terminal value (retire()/grant()) rather than by cancelling.
+     * A second authority could only race the first, and both a second waiter
+     * and a second signal are fatal here, so an Asio cancellation would have to
+     * be sequenced against the lane rather than merely connected. Nothing asks
+     * for per-command cancellation; closing the lane retires every waiter.
+     */
     template<typename Value>
     class OneShotEvent final
     {

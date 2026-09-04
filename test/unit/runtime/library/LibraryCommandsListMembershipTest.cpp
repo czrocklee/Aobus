@@ -197,6 +197,38 @@ namespace ao::rt::test
     CHECK(fixture.storedOrder(listId).empty());
   }
 
+  TEST_CASE("LibraryCommands List membership - a repeated Track is named once in the reply",
+            "[runtime][unit][library][list-membership]")
+  {
+    auto fixture = ListMembershipFixture{};
+    auto const first = fixture.addTrack("First");
+    auto const second = fixture.addTrack("Second");
+    auto const listId = fixture.seedList("Road Trip", R"(#"road-trip")", kInvalidListId, std::array{first, second});
+    auto const repeated = std::array{first, second, first};
+
+    auto const addRes = fixture.run(fixture.commands().addTracksToList(listId, fixture.bind(repeated)));
+
+    REQUIRE(addRes);
+    CHECK(addRes->reply.targetTrackIds == std::vector{first, second});
+    CHECK(addRes->reply.tagEdit.changes.size() == 2);
+
+    auto const removeRes = fixture.run(fixture.commands().removeTracksFromList(listId, fixture.bind(repeated)));
+
+    REQUIRE(removeRes);
+    CHECK(removeRes->reply.targetTrackIds == std::vector{first, second});
+    CHECK(removeRes->reply.forgottenPositionTrackIds == std::vector{first, second});
+    CHECK(removeRes->reply.tagEdit.changes.size() == 2);
+
+    // Ids are handed out in creation order, so the request above cannot tell
+    // first-seen order from a sort. Ask again with the ids reversed.
+    auto const reversed = std::array{second, first, second};
+
+    auto const reversedRes = fixture.run(fixture.commands().addTracksToList(listId, fixture.bind(reversed)));
+
+    REQUIRE(reversedRes);
+    CHECK(reversedRes->reply.targetTrackIds == std::vector{second, first});
+  }
+
   TEST_CASE("LibraryCommands List membership - nested Add rejects the whole selection outside the parent",
             "[runtime][unit][library][list-membership]")
   {

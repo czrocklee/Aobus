@@ -108,7 +108,6 @@ namespace ao::tui
                                                           std::int32_t pixelHeight,
                                                           CoverArtDecodeLimits limits = {});
 
-  std::string kittyDeleteVisibleImagesEscape();
   std::string kittyDeleteImageEscape(std::uint32_t imageId);
   std::string kittyImageEscape(std::span<std::byte const> pngBytes,
                                std::int32_t columns,

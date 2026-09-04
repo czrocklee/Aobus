@@ -4,6 +4,7 @@
 #include <ao/library/TrackWriter.h>
 
 #include "TrackWrite.h"
+#include "WriteTransactionAccess.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -12,6 +13,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
 
 #include <expected>
@@ -85,7 +87,7 @@ namespace ao::library
 
   Result<> TrackWriter::validateResourceReferences(TrackBuilder const& track) const
   {
-    auto& writer = _transaction->resourceStoreWriter(_transaction->resourceStore());
+    auto& writer = detail::WriteTransactionAccess::resourceStoreWriter(*_transaction, _transaction->resourceStore());
 
     for (auto const& pending : track.coverArt().entries())
     {
@@ -103,13 +105,13 @@ namespace ao::library
   std::optional<TrackView> TrackWriter::get(TrackId const id, TrackStore::Reader::LoadMode const mode) const
   {
     requireActiveOperation();
-    return _transaction->trackStoreWriter().get(id, mode);
+    return detail::WriteTransactionAccess::trackStoreWriter(*_transaction).get(id, mode);
   }
 
   std::optional<FileManifestView> TrackWriter::manifest(std::string_view const uri) const
   {
     requireActiveOperation();
-    return _transaction->manifestStoreWriter().get(uri);
+    return detail::WriteTransactionAccess::manifestStoreWriter(*_transaction).get(uri);
   }
 
   Result<TrackId> TrackWriter::create(TrackBuilder const& track, FileManifestBuilder manifestBuilder)
@@ -121,7 +123,7 @@ namespace ao::library
       return std::unexpected{resourceRes.error()};
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
     // Manifest validation does not depend on the Track id that creation
     // allocates, so it completes before Track preparation can stage effects and
     // binds the real id only once the Track record exists.
@@ -146,7 +148,7 @@ namespace ao::library
 
     auto const& [hot, cold] = *preparedTrackRes;
     AO_INVARIANT(cold.uri() == unboundManifestRes->uri(), "Track and manifest URI validation disagreed");
-    auto& trackWriter = _transaction->trackStoreWriter();
+    auto& trackWriter = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto idRes = createPreparedTrackRecord(trackWriter, hot, cold);
 
     if (!idRes)
@@ -166,7 +168,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto currentUriRes = requireTrackUri(writer, id);
 
     if (!currentUriRes)
@@ -179,7 +181,7 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, "A normal Track update cannot change its URI; use relink");
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
@@ -204,7 +206,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto currentUriRes = requireTrackUri(writer, id);
 
     if (!currentUriRes)
@@ -212,7 +214,7 @@ namespace ao::library
       return std::unexpected{currentUriRes.error()};
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
@@ -230,7 +232,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto currentUriRes = requireTrackUri(writer, id);
 
     if (!currentUriRes)
@@ -243,7 +245,7 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, "A normal Track update cannot change its URI; use relink");
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
@@ -267,7 +269,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto currentUriRes = requireTrackUri(writer, id);
 
     if (!currentUriRes)
@@ -280,7 +282,7 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, "A Track replacement cannot change its URI; use relink");
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
@@ -323,7 +325,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto currentUriRes = requireTrackUri(writer, id);
 
     if (!currentUriRes)
@@ -331,7 +333,7 @@ namespace ao::library
       return std::unexpected{currentUriRes.error()};
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *currentUriRes, id);
 
@@ -349,7 +351,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto oldUriRes = requireTrackUri(writer, id);
 
     if (!oldUriRes)
@@ -362,7 +364,7 @@ namespace ao::library
       return replace(id, track, std::move(manifestBuilder));
     }
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     requireManifestBinding(manifestWriter, *oldUriRes, id);
 
@@ -413,7 +415,7 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& writer = _transaction->trackStoreWriter();
+    auto& writer = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
     auto const optView = writer.get(id, TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
@@ -422,7 +424,7 @@ namespace ao::library
     }
 
     auto const uri = std::string{optView->property().uri()};
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
     requireManifestBinding(manifestWriter, uri, id);
 
     auto const removedManifest = manifestWriter.remove(uri);
@@ -436,14 +438,14 @@ namespace ao::library
   {
     requireActiveOperation();
 
-    auto& manifestWriter = _transaction->manifestStoreWriter();
+    auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
 
     if (auto manifestRes = manifestWriter.clear(); !manifestRes)
     {
       return manifestRes;
     }
 
-    auto& trackWriter = _transaction->trackStoreWriter();
+    auto& trackWriter = detail::WriteTransactionAccess::trackStoreWriter(*_transaction);
 
     if (auto trackRes = trackWriter.clear(); !trackRes)
     {

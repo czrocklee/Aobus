@@ -6,6 +6,7 @@
 #include "CommandError.h"
 #include "QueryHelp.h"
 #include <ao/CoreIds.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/Field.h>

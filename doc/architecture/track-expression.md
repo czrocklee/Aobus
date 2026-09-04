@@ -231,7 +231,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
 - [`FieldCatalog.h`](../../include/ao/query/FieldCatalog.h) defines typed variable descriptors and lookup.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) defines the application capability catalog and typed query bridge.
-- [`LibraryCommands.cpp`](../../app/runtime/library/LibraryCommands.cpp) validates persisted List definitions.
+- [`LibraryCommandsListAuthoring.cpp`](../../app/runtime/library/LibraryCommandsListAuthoring.cpp) validates persisted List definitions.
 - Source-private [`SmartListSource`](../../app/runtime/source/SmartListSource.h) and [`SmartListEvaluator`](../../app/runtime/source/SmartListEvaluator.h), behind [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h), materialize predicate membership.
 - Source-private [`ListOrderSource`](../../app/runtime/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.

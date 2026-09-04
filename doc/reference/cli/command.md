@@ -114,7 +114,7 @@ Mutation/administrative shapes:
 | `list show` | collection rows use `id,name,description,parentId,filter,order`; detail additionally uses effective `tracks[{id,title,artist,album}]` |
 | `list create` | `action, dryRun, listId?, name, parentId, filter` |
 | `list update` | `action, dryRun, listId, changed, fields` |
-| `list add/remove` | `action, dryRun, listId, listName, tag, changed, targetTrackIds, changes, forgottenPositionTrackIds`; Add leaves the final vector empty |
+| `list add/remove` | `action, dryRun, listId, listName, tag, changed, targetTrackIds, changes, forgottenPositionTrackIds`; `targetTrackIds` names each requested Track once; Add leaves `forgottenPositionTrackIds` empty |
 | `list order move` | `action, listId, status, selectedTrackIds, beforeTrackId?` |
 | `list order reset/forget-hidden` | `action, listId, status, selectedTrackIds, forgottenPositionCount` |
 | `list delete` | ordinary: `action, dryRun, listId, name, forgottenPositionCount`; descendants: `action, dryRun, rootListId, deletedLists` |

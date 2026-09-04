@@ -7,6 +7,7 @@
 #include "runtime/source/SmartListSource.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/query/ExecutionPlan.h>

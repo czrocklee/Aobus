@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "WriteTransactionAccess.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -111,9 +112,15 @@ namespace ao::library::detail
       return writer(store, transaction(write));
     }
 
-    static DictionaryStore::Writer& dictionary(WriteTransaction& transaction) { return transaction.dictionary(); }
+    static DictionaryStore::Writer& dictionary(WriteTransaction& transaction)
+    {
+      return WriteTransactionAccess::dictionary(transaction);
+    }
 
-    static DictionaryStore::Writer& dictionary(LibraryWrite& write) { return write.transaction().dictionary(); }
+    static DictionaryStore::Writer& dictionary(LibraryWrite& write)
+    {
+      return WriteTransactionAccess::dictionary(write.transaction());
+    }
 
     static Result<> overwriteListRecordForTest(ListStore const& store,
                                                LibraryWrite& write,
