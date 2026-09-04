@@ -2,15 +2,21 @@
 
 import argparse
 import os
+import random
 import re
+import shlex
 import subprocess
-from collections.abc import Generator, Sequence
+import sys
+import tempfile
+import xml.etree.ElementTree as ElementTree
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import IO, Literal
 
-from ..core import builddir, buildlock, linttest, tooltest
+from ..core import builddir, buildlock, linttest, proc, tooltest
+from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 from . import build
 
@@ -18,6 +24,17 @@ HELP = "Build incrementally and run C++ and tooling test suites with optional Ca
 NAME = "test"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = True
+
+SHARD_ENV = "AOBUS_TEST_SHARDS"
+# The core suite keeps getting faster past this point -- 34.0s to 23.7s between
+# eight and sixteen shards on a sixteen-vCPU Windows guest, 8.6s to 5.9s between
+# eight and thirty-one on a thirty-two core Linux host -- so the cap is not
+# where the curve flattens. It is a bound on process count: unlike a compiler
+# job, a shard is a whole test process with its own fixtures, temporary tree,
+# and, for the GTK suite, its own X server. Sixteen keeps nearly all of the win
+# without letting a large machine start a hundred of them for a suite of a few
+# hundred tests. AOBUS_TEST_SHARDS overrides it in both directions.
+SHARD_CAP = 16
 
 
 def requires_build_environment(arguments: Sequence[str]) -> bool:
@@ -101,10 +118,9 @@ def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
     return suites
 
 
-@contextmanager
-def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
+def _start_xvfb() -> "subprocess.Popen[str]":
     try:
-        server = subprocess.Popen(
+        return subprocess.Popen(
             ["Xvfb", "-displayfd", "1", "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -115,33 +131,60 @@ def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
             "GTK tests require Xvfb. Enter the project nix-shell, or run through ./ao after shell.nix is updated."
         ) from exc
 
-    try:
-        assert server.stdout is not None
-        display_number = server.stdout.readline().strip()
-        if not display_number:
-            output = server.stdout.read()
-            raise die(f"Xvfb failed to start.{(' Output: ' + output.strip()) if output.strip() else ''}")
 
-        display = f":{display_number}"
-        print(f"GTK display: Xvfb {display}")
-        # GTK may select its accessibility and input-method backends before the
-        # test binary reaches main().  Set the complete headless profile on the
-        # child process rather than relying on GtkTestMain's fallback defaults.
-        yield {
-            "DISPLAY": display,
-            "GTK_A11Y": "test",
-            "GTK_IM_MODULE": "simple",
-            "GDK_BACKEND": "x11",
-            "GDK_DISABLE": "gl,vulkan",
-            "GSK_RENDERER": "cairo",
-        }
+def _gtk_display_environment(display: str) -> dict[str, str]:
+    # GTK may select its accessibility and input-method backends before the
+    # test binary reaches main().  Set the complete headless profile on the
+    # child process rather than relying on GtkTestMain's fallback defaults.
+    return {
+        "DISPLAY": display,
+        "GTK_A11Y": "test",
+        "GTK_IM_MODULE": "simple",
+        "GDK_BACKEND": "x11",
+        "GDK_DISABLE": "gl,vulkan",
+        "GSK_RENDERER": "cairo",
+    }
+
+
+@contextmanager
+def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None, None]:
+    """Start one Xvfb per GTK test process.
+
+    Sharing one display across shards is not merely untidy, it is unreliable.
+    Several tests present a window and then drain only the events already
+    pending, so a popover that is still waiting on an X round trip has not been
+    created yet when the assertion runs. One busy server serving eight clients
+    made that race real: eight shards on a shared display failed 5 of 13 runs,
+    and 0 of 14 with a display each.
+    """
+    servers: list[subprocess.Popen[str]] = []
+
+    try:
+        # Started inside the block: a failure on the third Xvfb must still shut
+        # down the first two.
+        for _ in range(count):
+            servers.append(_start_xvfb())
+
+        displays = []
+        for server in servers:
+            assert server.stdout is not None
+            display_number = server.stdout.readline().strip()
+            if not display_number:
+                output = server.stdout.read()
+                raise die(f"Xvfb failed to start.{(' Output: ' + output.strip()) if output.strip() else ''}")
+            displays.append(f":{display_number}")
+
+        print(f"GTK display{'s' if count > 1 else ''}: Xvfb {' '.join(displays)}")
+        yield [_gtk_display_environment(display) for display in displays]
     finally:
-        server.terminate()
-        try:
-            server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server.kill()
-            server.wait()
+        for server in servers:
+            server.terminate()
+        for server in servers:
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait()
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -204,6 +247,245 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("repeat count must be at least 1")
     return parsed
+
+
+def shard_count(*, environ: Mapping[str, str] | None = None) -> int:
+    """Return how many parallel shards one Catch2 suite runs."""
+    environment = os.environ if environ is None else environ
+    configured = environment.get(SHARD_ENV)
+    if configured is None:
+        return min(SHARD_CAP, max(1, (os.cpu_count() or 1) - 1))
+    try:
+        shards = int(configured)
+    except ValueError:
+        raise die(f"{SHARD_ENV} must be a positive integer.") from None
+    if shards < 1:
+        raise die(f"{SHARD_ENV} must be a positive integer.")
+    return shards
+
+
+def suite_shards(*, list_only: bool = False, repeat: int = 1, tsan: bool = False, concurrency: bool = False) -> int:
+    """Return the shard count for one invocation, or 1 where sharding would distort it.
+
+    Listing has nothing to parallelize. The other three exclusions are about
+    meaning rather than speed: concurrency and repeat runs measure how the code
+    behaves under contention, and TSan needs one process to own the machine, so
+    filling every core with sibling test processes would change the very thing
+    those runs exist to observe.
+    """
+    if list_only or repeat > 1 or tsan or concurrency:
+        return 1
+    return shard_count()
+
+
+_OVERALL_KEYS = ("successes", "failures", "expectedFailures", "skips")
+
+
+@dataclass
+class _Shard:
+    """One shard process, how it was started, and the files it writes."""
+
+    index: int
+    argv: Sequence[str]
+    environment: Mapping[str, str]
+    process: "subprocess.Popen[bytes]"
+    sink: IO[bytes]
+    output: Path
+    report: Path
+
+
+def _read_shard_totals(report: Path) -> tuple[dict[str, int], dict[str, int]] | None:
+    """Return one shard's (assertion, test case) tallies, or None when unreadable."""
+    try:
+        root = ElementTree.parse(report).getroot()
+    except (OSError, ElementTree.ParseError):
+        return None
+
+    assertions = root.find("OverallResults")
+    cases = root.find("OverallResultsCases")
+    if assertions is None or cases is None:
+        return None
+
+    try:
+        return (
+            {key: int(assertions.get(key, "0")) for key in _OVERALL_KEYS},
+            {key: int(cases.get(key, "0")) for key in _OVERALL_KEYS},
+        )
+    except ValueError:
+        return None
+
+
+def _shard_summary(label: str, assertions: dict[str, int], cases: dict[str, int], shards: int) -> str:
+    """Render the combined Catch2 tally the individual shards no longer print."""
+    ran = cases["successes"] + cases["failures"] + cases["expectedFailures"]
+    checks = assertions["successes"] + assertions["failures"] + assertions["expectedFailures"]
+    parts = [f"{ran} test cases", f"{checks} assertions", f"{assertions['failures']} failed"]
+    if cases["skips"]:
+        parts.append(f"{cases['skips']} skipped")
+    return f"{label}: {', '.join(parts)} across {shards} shards"
+
+
+def _echo(text: bytes) -> None:
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text)
+    sys.stdout.buffer.flush()
+
+
+def _shard_argv(command: Sequence[str], shard: int, shards: int, seed: int, report: Path) -> list[str]:
+    return [
+        *command,
+        # Catch2 shards the run order, and that order defaults to random, so the
+        # shards only partition the suite when every process draws the same one.
+        # Left to their own seeds, eight core shards ran 1773 of 2682 tests --
+        # 692 of them twice, 909 not at all -- while still summing to 2682 cases
+        # and looking exactly like a complete run.
+        "--rng-seed",
+        str(seed),
+        # A filter can match fewer tests than there are shards, which leaves the
+        # trailing shards empty. Empty shards are expected here, so the caller
+        # checks the combined tally instead of each process's own opinion.
+        "--allow-running-no-tests",
+        "--shard-count",
+        str(shards),
+        "--shard-index",
+        str(shard),
+        "--reporter",
+        "console::out=-",
+        "--reporter",
+        f"xml::out={report}",
+    ]
+
+
+def _run_sharded(
+    command: Sequence[str],
+    *,
+    label: str,
+    environments: Sequence[dict[str, str]],
+    log: Path | None,
+    allow_no_tests: bool,
+) -> int:
+    """Run one Catch2 binary as parallel shards and report a single combined tally.
+
+    Each shard also writes an XML report, so the totals are summed exactly rather
+    than scraped back out of the console summaries. Every shard's console output
+    reaches the log, which is where a post-mortem looks, but only failing shards
+    are replayed to the terminal: eight passing summaries per suite would bury
+    the one line a reader came for.
+    """
+    shards = len(environments)
+    # Catch2 reserves 0 for "pick one for me", which is what the shards must not do.
+    seed = random.randrange(1, 2**32)
+    print(f"Randomness seeded to: {seed}")
+
+    with tempfile.TemporaryDirectory(prefix="aobus-shard-") as directory:
+        root = Path(directory)
+        running: list[_Shard] = []
+        sinks: list[IO[bytes]] = []
+        try:
+            for index, environment in enumerate(environments):
+                report = root / f"shard-{index}.xml"
+                output = root / f"shard-{index}.out"
+                argv = _shard_argv(command, index, shards, seed, report)
+                sink = output.open("wb")
+                sinks.append(sink)
+                process = subprocess.Popen(
+                    argv,
+                    cwd=PROJECT_ROOT,
+                    env={**os.environ, **environment} if environment else None,
+                    stdout=sink,
+                    stderr=subprocess.STDOUT,
+                )
+                running.append(_Shard(index, argv, environment, process, sink, output, report))
+        finally:
+            # Also reached when a later Popen fails: the shards already started
+            # must be collected before this function can report anything.
+            for shard in running:
+                shard.process.wait()
+            # Closed from `sinks` rather than `running`, because the sink of a
+            # failed Popen never reached `running`. Windows cannot remove a
+            # directory holding an open handle, so leaving one open would fail
+            # the cleanup of this TemporaryDirectory and replace the launch
+            # exception with an unrelated WinError 32.
+            for opened in sinks:
+                opened.close()
+
+        status = next((shard.process.returncode for shard in running if shard.process.returncode != 0), 0)
+
+        assertions = dict.fromkeys(_OVERALL_KEYS, 0)
+        cases = dict.fromkeys(_OVERALL_KEYS, 0)
+        unreported = []
+        for shard in running:
+            _report_shard_output(shard, shards, log=log)
+            totals = _read_shard_totals(shard.report)
+            if totals is None:
+                unreported.append(shard.index)
+                continue
+            for accumulator, shard_totals in zip((assertions, cases), totals, strict=True):
+                for key in _OVERALL_KEYS:
+                    accumulator[key] += shard_totals[key]
+
+    if unreported:
+        # A shard that produced no readable report cannot be counted, so say so
+        # rather than print a total that silently omits the tests it ran.
+        indices = ", ".join(str(index + 1) for index in unreported)
+        print(f"{label}: no readable report from shard(s) {indices} of {shards}; the tally below is incomplete")
+        status = status or 1
+
+    print(_shard_summary(label, assertions, cases, shards))
+
+    if not allow_no_tests and not unreported and not sum(cases.values()):
+        raise die(f"no {label} tests matched the supplied filter.")
+    return status
+
+
+def _repro_command(shard: _Shard) -> str:
+    """Return the command that reruns this shard.
+
+    Printed rather than described because the reader would otherwise have to
+    translate "shard 3 of 8" into Catch2's zero-based --shard-index 2. The
+    reporter arguments are dropped: they only redirect output the rerun wants on
+    the terminal anyway.
+
+    The shard's environment is carried along, because part of it decides whether
+    the failure reproduces at all rather than merely how the run is configured:
+    on an ASan tree UBSAN_OPTIONS is what makes undefined behaviour halt instead
+    of log and continue. DISPLAY is the deliberate exception -- it names an Xvfb
+    that this run tears down on the way out, so the rerun picks up whatever
+    display the caller has.
+    """
+    argv = list(shard.argv)
+    kept = [
+        argument
+        for index, argument in enumerate(argv)
+        if argument != "--reporter" and (index == 0 or argv[index - 1] != "--reporter")
+    ]
+    if builddir.platform_profile().name == "windows":
+        # No prefix to add: the GTK suite is Linux-only and every sanitizer
+        # helper returns nothing on Windows, so a Windows shard runs with the
+        # inherited environment. cmd.exe would also not read the single quotes
+        # shlex.join emits as quoting, and a Windows build path would come back
+        # as a program named "'C:\...'".
+        return subprocess.list2cmdline(kept)
+
+    exported = {key: value for key, value in shard.environment.items() if key != "DISPLAY"}
+    prefix = ["env", *(f"{key}={value}" for key, value in sorted(exported.items()))] if exported else []
+    return shlex.join([*prefix, *kept])
+
+
+def _report_shard_output(shard: _Shard, shards: int, *, log: Path | None) -> None:
+    """Log every shard's output; echo only the shards that failed."""
+    banner = f"--- shard {shard.index + 1} of {shards} (exit {shard.process.returncode}) ---\n".encode()
+    with shard.output.open("rb") as source:
+        lines = [line for line in source if not proc.is_suppressed_output(line)]
+
+    if log is not None:
+        with log.open("ab") as sink:
+            sink.write(banner)
+            sink.writelines(lines)
+
+    if shard.process.returncode != 0:
+        repro = f"rerun this shard: {_repro_command(shard)}\n".encode()
+        _echo(banner + b"".join(lines) + repro)
 
 
 _LSAN_SUPP_PATH = Path(__file__).resolve().parent.parent / "lsan.supp"
@@ -303,6 +585,7 @@ def run_suite(
     asan: bool = False,
     tsan: bool = False,
     log: Path | None = None,
+    shards: int = 1,
 ) -> int:
     spec = SUITES[name]
     if spec.kind != "catch2" or spec.target is None:
@@ -320,9 +603,10 @@ def run_suite(
     if test_filter:
         command.append(test_filter)
 
+    sharded = shards > 1 and not list_only
     print("=====================================")
     print(f"Running {spec.label} Tests")
-    print(f"CMD: {' '.join(command)}")
+    print(f"CMD: {' '.join(command)}" + (f" (in {shards} shards)" if sharded else ""))
     print("=====================================")
 
     sanitizer_env = {
@@ -332,11 +616,18 @@ def run_suite(
         **_tsan_env(build_dir, enabled=tsan),
     }
 
-    if name == "gtk" and not list_only:
-        with virtual_gtk_display() as env:
-            return run(command, env={**sanitizer_env, **env}, log=log, append=log is not None)
+    def execute(environments: list[dict[str, str]]) -> int:
+        if sharded:
+            return _run_sharded(
+                command, label=spec.label, environments=environments, log=log, allow_no_tests=allow_no_tests
+            )
+        return run(command, env=environments[0] or None, log=log, append=log is not None)
 
-    return run(command, env=sanitizer_env or None, log=log, append=log is not None)
+    if name == "gtk" and not list_only:
+        with virtual_gtk_displays(shards if sharded else 1) as displays:
+            return execute([{**sanitizer_env, **display} for display in displays])
+
+    return execute([sanitizer_env] * (shards if sharded else 1))
 
 
 def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False, log: Path | None = None) -> int:
@@ -368,8 +659,10 @@ def run_suites(
     repeat: int = 1,
     asan: bool = False,
     tsan: bool = False,
+    concurrency: bool = False,
     log: Path | None = None,
 ) -> int:
+    shards = suite_shards(list_only=list_only, repeat=repeat, tsan=tsan, concurrency=concurrency)
     iterations = 1 if list_only else repeat
     for iteration in range(iterations):
         if iterations > 1:
@@ -390,6 +683,7 @@ def run_suites(
                     asan=asan,
                     tsan=tsan,
                     log=log,
+                    shards=shards,
                 )
                 if spec.kind == "catch2"
                 else run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
@@ -436,4 +730,5 @@ def run_command(args: argparse.Namespace) -> int:
     }
     if args.suite == "concurrency":
         options["allow_no_tests"] = True
+        options["concurrency"] = True
     return run_suites(suites, build_dir, **options)

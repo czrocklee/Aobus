@@ -14,6 +14,15 @@ def die(message: str, code: int = 1) -> "SystemExit":
     return SystemExit(code)
 
 
+_SUPPRESSED_MARKERS = ("Fontconfig warning:", "Fontconfig error:")
+
+
+def is_suppressed_output(line: bytes) -> bool:
+    """Return whether a child output line is noise the portal hides."""
+    text = line.decode("utf-8", errors="ignore")
+    return any(marker in text for marker in _SUPPRESSED_MARKERS)
+
+
 def run(
     argv: list[str],
     *,
@@ -47,8 +56,7 @@ def run(
             def _drain() -> None:
                 try:
                     for line in stdout:
-                        line_str = line.decode("utf-8", errors="ignore")
-                        if "Fontconfig warning:" in line_str or "Fontconfig error:" in line_str:
+                        if is_suppressed_output(line):
                             continue
                         sys.stdout.buffer.write(line)
                         sys.stdout.buffer.flush()

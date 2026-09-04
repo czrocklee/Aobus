@@ -92,3 +92,66 @@ checker execution policy in `ao tidy` and avoids a second shell-based test orche
 
 Coverage keeps its narrower `all` definition of core, TUI, and GTK because tooling and standalone integration
 tests are not part of the application source coverage calculation.
+
+## Sharded Catch2 execution
+
+Every Catch2 suite runs as several parallel shards of one binary. The default
+shard count is `min(16, cores - 1)`; `AOBUS_TEST_SHARDS` overrides it in either
+direction, and `AOBUS_TEST_SHARDS=1` restores a single process. On the core
+suite this takes 104.8s to 23.7s on the sixteen-vCPU Windows guest and 23.9s to
+6.2s on a thirty-two core Linux host. The cap bounds process count rather than
+diminishing returns: a shard is a whole test process with its own fixtures,
+temporary tree, and, for GTK, its own X server.
+
+Four kinds of run stay single-process, because parallel siblings would change
+what they measure rather than only how long they take: `--list`, `--repeat N`,
+`--tsan`, and the `concurrency` group. `ao coverage` is also unsharded; parallel
+processes would interleave writes to the same gcov counters.
+
+Sharding multiplies memory as well as throughput, which matters only for the
+sanitizer trees: a core ASan shard holds about 1.2 GB, so sixteen of them peak
+near 19 GB. Lower `AOBUS_TEST_SHARDS` on a smaller machine.
+
+The GTK suite starts one Xvfb per shard. Several GTK tests present a window and
+then drain only the events already pending, so a popover still waiting on an X
+round trip has not been created when the assertion runs. One server shared by
+eight shards made that race real: 5 of 13 runs failed, against 0 of 14 with a
+display per shard.
+
+Every shard of one run receives the same `--rng-seed`. This is a correctness
+requirement, not a tidiness one. Catch2 orders test cases randomly by default
+and `--shard-index` slices that order, so shards that each pick their own seed
+slice *different* orderings: measured on the core suite, eight independently
+seeded shards ran 1773 of 2682 tests, 692 of them twice and 909 not at all,
+while still reporting exactly 2682 cases. With one shared seed the shards
+partition the suite exactly, and the totals match an unsharded run assertion for
+assertion.
+
+The portal prints the seed, then one combined tally per suite in place of the
+per-shard summaries. Every shard's console output goes to the gate log; only
+shards that failed are echoed to the terminal, each followed by the command
+that reruns it:
+
+```text
+--- shard 3 of 8 (exit 42) ---
+...
+rerun this shard: /tmp/build/Aobus/debug/test/ao_core_test --rng-seed 2914 --allow-running-no-tests --shard-count 8 --shard-index 2
+```
+
+Copy that line rather than assembling one. Shards are counted from one when
+reported and from zero by Catch2, so the third shard of eight is
+`--shard-index 2`.
+
+On a sanitizer tree the line is prefixed with the shard's environment, because
+part of it decides whether the failure reproduces rather than only how the run
+is configured -- `UBSAN_OPTIONS=halt_on_error=1` is what makes undefined
+behaviour stop the run instead of logging and continuing:
+
+```text
+rerun this shard: env LSAN_OPTIONS=suppressions=... UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 /tmp/build/Aobus/debug-asan/test/ao_core_test --rng-seed 2914 ...
+```
+
+`DISPLAY` is the one variable left out. It names an Xvfb that the run tears
+down on the way out, so a GTK rerun uses whatever display the caller has: a
+desktop session works as is, and on a headless host start an `Xvfb` first and
+export its display.
