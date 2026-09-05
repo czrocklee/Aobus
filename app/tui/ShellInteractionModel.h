@@ -50,6 +50,8 @@ namespace ao::tui
     SetPresentation,
     ClearFilter,
     Reload,
+    Scan,
+    ScanCancel,
     Play,
     TogglePlayback,
     Stop,

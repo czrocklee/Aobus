@@ -13,8 +13,8 @@ You can browse an existing Aobus library, play tracks, filter the current view, 
 
 ## Before you start
 
-The TUI opens an Aobus database; it does not replace the library initialization and scan workflow.
-Initialize and scan the root with the GTK application or CLI first.
+The TUI opens an Aobus database; it does not create one.
+Initialize the root with the GTK application or CLI first, then scan from any shell.
 
 ## Steps
 
@@ -39,12 +39,16 @@ Initialize and scan the root with the GTK application or CLI first.
    ```
 
    Tab accepts a highlighted command completion; Enter runs only a complete known command.
+   `:scan` and `:rescan` start an eager library scan; `:scan cancel` requests cooperative cancellation.
+   A scan already in progress, or a cancellation still settling, posts a short notice instead of starting a second flight.
+   Progress uses the existing status line; the finished scan uses the same outcome sentence as the other shells.
 6. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `v` for presentations, and `n` for notifications.
 7. Press `d` and keep browsing: the detail pane stays open beside the track table and follows your selection, so arrows, pages, wheel, scrollbar, group jumps, playback, and filtering all keep working while you read it.
    Press `d` again or Escape to close it.
 8. With mouse tracking enabled, drag a track-header column edge to preview a new width and release to keep it for that list.
    Opening a panel, entering text input, changing lists, or quitting before release cancels the preview.
 9. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit normally.
+   Quit, `:quit`, terminal Ctrl-C, and handleable platform signals share one graceful exit path: they retire scan presentation and unfinished input, then leave the loop.
 
 These are the shipped shortcuts.
 The TUI loads global overrides from the `shortcuts` group in `<config>/tui.yaml`; supported changes update both behavior and the key shown in status chips, panels, Help, and the Command Palette.
@@ -61,13 +65,14 @@ Per-list column layouts and preferred presentations are stored separately in `<r
 Column widths in that file are terminal cells; fixed widths are projected within the supported 8-through-160-cell range, while flexible columns reflow when the terminal size changes. The TUI does not reuse GTK desktop widths.
 Opening a list uses its remembered presentation, while startup still keeps the exact presentation of the restored active view.
 
-Normal quit cancels unfinished input and pointer interactions, saves committed layout/presentation preferences plus workspace and playback state, and then stops playback.
+Normal quit retires an in-flight scan without presenting a late outcome, cancels unfinished input and pointer interactions, saves committed layout/presentation preferences plus workspace and playback state, and then stops playback.
 Track selection, an unfinished Quick Filter draft, open panels, pointer state, and an unfinished column-width preview are not restored.
 The output device you select is remembered separately as a global TUI preference in `<config>/tui.yaml` rather than in the per-library session file; saving it preserves the load-only `shortcuts` sibling.
 
 ## Verify the result
 
 - The library and track rows correspond to the requested root.
+- `:scan` posts scan progress and a finished outcome; `:scan cancel` stops a running scan without treating cancellation as a failed scan.
 - Playing a selection updates the one-row playback dock and seek rail.
 - A filter changes the visible projection, and `c` clears it.
 - Opening the detail pane leaves the track table usable, and the pane's contents change as the selection moves.

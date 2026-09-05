@@ -206,14 +206,11 @@ namespace ao::tui
       }
     }
 
-    if (draft.find_first_of(" \t") == std::string_view::npos)
-    {
-      appendCommandItems(items, textCatalog, draft, limit);
+    appendCommandItems(items, textCatalog, draft, limit);
 
-      if (!items.empty())
-      {
-        return buildResult(0, draft.size(), std::move(items));
-      }
+    if (!items.empty())
+    {
+      return buildResult(0, draft.size(), std::move(items));
     }
 
     return std::nullopt;

@@ -4,6 +4,7 @@
 #include "EventController.h"
 
 #include "LibraryController.h"
+#include "LibraryScanController.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
@@ -187,15 +188,13 @@ namespace ao::tui
     }
   } // namespace
 
-  EventController::EventController(ftxui::ScreenInteractive& screen,
-                                   ShellInteractionModel& shell,
+  EventController::EventController(ShellInteractionModel& shell,
                                    LibraryController& library,
                                    async::Runtime& asyncRuntime,
                                    rt::PlaybackService& playback,
                                    TuiKeymapPlan const& keymapPlan,
                                    EventControllerBindings bindings)
-    : _screen{screen}
-    , _shell{shell}
+    : _shell{shell}
     , _library{library}
     , _keymapPlan{keymapPlan}
     , _asyncRuntime{asyncRuntime}
@@ -209,6 +208,8 @@ namespace ao::tui
     , _trackColumnResizePreview{bindings.trackColumnResizePreview}
     , _activityStatusViewModel{bindings.activityStatusViewModel}
     , _notifications{bindings.notifications}
+    , _libraryScan{bindings.libraryScan}
+    , _requestExit{std::move(bindings.requestExit)}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
     , _filterCompletionCallback{std::move(bindings.filterCompletionCallback)}
   {
@@ -449,6 +450,8 @@ namespace ao::tui
       case RevealCurrentTrack:
       case ClearFilter:
       case Reload:
+      case Scan:
+      case ScanCancel:
       case PlaySelection:
       case PlaybackPlayPause:
       case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
@@ -493,10 +496,12 @@ namespace ao::tui
         applyFilter();
         break;
       case CommandAction::Reload: reloadActiveList(); break;
+      case CommandAction::Scan: _libraryScan.start(); break;
+      case CommandAction::ScanCancel: _libraryScan.cancel(); break;
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
-      case CommandAction::Quit: _screen.ExitLoopClosure()(); break;
+      case CommandAction::Quit: _requestExit(); break;
     }
   }
 
@@ -1302,16 +1307,21 @@ namespace ao::tui
 
   bool EventController::handleEvent(ftxui::Event const& event)
   {
+    if (event == ftxui::Event::CtrlC)
+    {
+      _requestExit();
+      return true;
+    }
+
+    if (event == ftxui::Event::Custom)
+    {
+      return false;
+    }
+
     if (event.is_mouse())
     {
       auto mouseEvent = event;
       return handleMouse(mouseEvent.mouse());
-    }
-
-    if (event == ftxui::Event::CtrlC)
-    {
-      _screen.ExitLoopClosure()();
-      return true;
     }
 
     if (_shell.isInputActive())

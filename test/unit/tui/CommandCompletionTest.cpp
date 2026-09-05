@@ -85,6 +85,30 @@ namespace ao::tui::test
                            CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()}));
   }
 
+  TEST_CASE("CommandCompletion - offers multi-word exact aliases from a prefix", "[tui][unit][completion]")
+  {
+    auto const optScan = completeCommandDraft(ao::test::englishMessageCatalog(), "scan", CommandCompletionContext{});
+
+    REQUIRE(optScan);
+    CHECK(optScan->replaceBegin == 0);
+    CHECK(optScan->replaceEnd == 4);
+    CHECK(insertTexts(*optScan) == std::vector<std::string>{"scan", "scan cancel"});
+
+    auto const optTrailingSpace =
+      completeCommandDraft(ao::test::englishMessageCatalog(), "scan ", CommandCompletionContext{});
+
+    REQUIRE(optTrailingSpace);
+    CHECK(optTrailingSpace->replaceBegin == 0);
+    CHECK(optTrailingSpace->replaceEnd == 5);
+    CHECK(insertTexts(*optTrailingSpace) == std::vector<std::string>{"scan cancel"});
+
+    auto const optPartial =
+      completeCommandDraft(ao::test::englishMessageCatalog(), "scan c", CommandCompletionContext{});
+
+    REQUIRE(optPartial);
+    CHECK(insertTexts(*optPartial) == std::vector<std::string>{"scan cancel"});
+  }
+
   TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")
   {
     auto const optResult = completeCommandDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{}, 1);

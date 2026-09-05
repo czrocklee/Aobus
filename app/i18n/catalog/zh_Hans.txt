@@ -448,6 +448,8 @@ zh_Hans:table {
     tui_shell_detail_toggle_playback { "切换播放/暂停" }
     tui_shell_detail_stop { "停止" }
     tui_shell_detail_quit { "退出" }
+    tui_shell_detail_scan { "扫描音乐库" }
+    tui_shell_detail_scan_cancel { "取消扫描" }
     tui_shell_output_devices_title { "输出设备" }
     tui_playback_no_active_track { "无活动曲目" }
     tui_playback_volume { "音量 {percent}%" }
@@ -466,6 +468,7 @@ zh_Hans:table {
     tui_shell_help_previous_next_group { "上一组 / 下一组" }
     tui_shell_help_clear_filter { "清除筛选" }
     tui_shell_help_reload_list { "重新加载活动列表" }
+    tui_shell_help_scan { "扫描音乐库" }
     tui_shell_help_playback { "播放控制" }
     tui_shell_help_quit { "退出" }
     tui_shell_help_footer { "{closeKey} 关闭" }
@@ -483,6 +486,8 @@ zh_Hans:table {
     tui_library_no_tracks_found { "未找到曲目。请先在此音乐库中运行 `aobus init`。" }
     tui_library_no_lists_found { "未找到列表" }
     tui_library_ready { "就绪" }
+    tui_library_scan_already_running { "音乐库扫描已在进行中" }
+    tui_library_scan_cancelling { "正在取消扫描" }
     tui_library_section { "分节：{name}" }
     tui_library_revealed_track { "已定位 {track}" }
     tui_library_unknown_view { "未知视图 {id}" }

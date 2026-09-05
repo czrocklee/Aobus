@@ -53,6 +53,10 @@ namespace ao::tui::test
     CHECK(requiredCommand("reveal").action == CommandAction::RevealCurrentTrack);
     CHECK(requiredCommand("clear").action == CommandAction::ClearFilter);
     CHECK(requiredCommand("reload").action == CommandAction::Reload);
+    CHECK(requiredCommand("scan").action == CommandAction::Scan);
+    CHECK(requiredCommand("rescan").action == CommandAction::Scan);
+    CHECK(requiredCommand("scan cancel").action == CommandAction::ScanCancel);
+    CHECK(requiredCommand(":scan cancel").action == CommandAction::ScanCancel);
     CHECK(requiredCommand("play").action == CommandAction::Play);
     CHECK(requiredCommand("pause").action == CommandAction::TogglePlayback);
     CHECK(requiredCommand("stop").action == CommandAction::Stop);
@@ -73,6 +77,8 @@ namespace ao::tui::test
       {CommandAction::RevealCurrentTrack, TuiKeyAction::RevealCurrentTrack},
       {CommandAction::ClearFilter, TuiKeyAction::ClearFilter},
       {CommandAction::Reload, TuiKeyAction::Reload},
+      {CommandAction::Scan, TuiKeyAction::Scan},
+      {CommandAction::ScanCancel, TuiKeyAction::ScanCancel},
       {CommandAction::Play, TuiKeyAction::PlaySelection},
       {CommandAction::TogglePlayback, TuiKeyAction::PlaybackPlayPause},
       {CommandAction::Stop, TuiKeyAction::PlaybackStop},
@@ -99,6 +105,9 @@ namespace ao::tui::test
     CHECK_FALSE(parseCommand("/lists"));
     CHECK_FALSE(parseCommand("/filter live acoustic"));
     CHECK_FALSE(parseCommand("unknown"));
+    CHECK_FALSE(parseCommand("scan foo"));
+    CHECK_FALSE(parseCommand("scan  cancel"));
+    CHECK_FALSE(parseCommand("select"));
     CHECK_FALSE(parseCommand("  "));
 
     auto command = requiredCommand(":filter live acoustic");

@@ -43,7 +43,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Detail pane width follows locale and terminal width only. Selection, cover presence, and optional-field presence cannot change it.
 - Render code writes hit regions into the one `TuiHitRegions` owner; input reads that same frame state.
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
-- Fixed input, list, modal-overlay, notification, mouse, and escape protocol is resolved before configurable root actions; Ctrl-C remains an unconditional emergency exit.
+- Fixed input, list, modal-overlay, notification, mouse, and escape protocol is resolved before configurable root actions; Ctrl-C, `:quit`, the quit shortcut, and handleable platform signals share one graceful App exit gate.
 - One prepared `TuiKeymapPlan` drives root dispatch and every hint for a configurable action, so rebinding or unbinding cannot leave a hard-coded execution or display path behind.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
@@ -95,7 +95,9 @@ Escape cancels the command draft and closes the palette.
 The modes intentionally assign different submission semantics to Return and Escape.
 Quick Filter is a live value editor, so Return accepts its highlighted value while Escape preserves the literal text already typed; Command Palette input is not live, so Return executes only the typed command and Escape cancels it without allowing a highlight to replace that command implicitly.
 
-The palette completes command names and aliases, presentation ids, and filter candidates only within an explicit `filter` argument.
+The palette completes command names and aliases, including multi-word exact aliases such as `scan cancel`, presentation ids, and filter candidates only within an explicit `filter` argument.
+A `scan` prefix may list `scan` and `scan cancel`; a trailing space after `scan` converges to `scan cancel`.
+Enter on bare `select` remains an unknown command.
 The Command Palette is a centered bounded fraction of terminal width and height and renders its title, prompt, footer, and completion detail.
 Quick Filter replaces the bottom status-bar content with its draft and inline completion suffix; its completion list, footer, and current expression error occupy a bounded popup anchored directly above that row.
 Runtime/query completions without TUI category metadata retain their core detail.
@@ -172,8 +174,18 @@ Replacing, closing, or destroying Quick Filter input requests stop on the pendin
 Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 An interrupted column drag instead discards its preview. Overlay changes, text input, list changes, unrelated pointer presses, and teardown therefore produce no column-layout model change or save.
 
-The effective quit shortcut (shipped as `q`), the `quit` command, Ctrl-C, and signal exit only request that the event loop end; input dispatch does not stop playback early.
-Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, and cover work before persistence captures state.
+`:scan` and `:rescan` start one eager `LibraryScanController` flight through `uimodel::runLibraryScan`.
+`:scan cancel` requests stop on that flight.
+Start, cancel, retire, and completion bookkeeping run on the TUI callback executor, which is the FTXUI dispatch lane; `phase` is unsynchronized.
+A start while Running posts a transient already-running notice; a start while Cancelling posts a transient cancellation-in-progress notice.
+`async::OperationCancelled` is silent; a returned `LibraryScanOutcome`, including Failed, is presented even if cancellation is in progress.
+Retirement suppresses late presentation.
+Scan progress continues to use `ActivityStatusViewModel` observing `LibraryJobs`.
+
+The effective quit shortcut (shipped as `q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
+The first request retires scan presentation and transient input, then posts loop exit.
+Input dispatch does not stop playback early.
+Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, cover work, and scan presentation before persistence captures state.
 Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
 Teardown then checkpoints workspace, checkpoints playback, and requests playback stop.
 Frontend observers and controllers are destroyed before runtime shutdown, while `ScreenInteractive` outlives the runtime executor that borrows it.
@@ -213,7 +225,9 @@ The notification center can be opened explicitly even when compact status is not
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input, command parsing, and overlay state.
 - [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) owns stable terminal action descriptors, TUI-local defaults, the FTXUI projection whitelist, collision selection, and the immutable dispatch/hint plan.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`CommandCompletionProvider.cpp`](../../../app/tui/CommandCompletionProvider.cpp) separates Command Palette and live Quick Filter providers.
-- [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation.
+- [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation, and forwards graceful exit without owning `ScreenInteractive`.
+- [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single restartable scan task.
+- [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate; [`SignalExitWatcherPosix.cpp`](../../../app/tui/SignalExitWatcherPosix.cpp) and [`SignalExitWatcherWindows.cpp`](../../../app/tui/SignalExitWatcherWindows.cpp) post those requests from platform signals.
 - [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
@@ -224,7 +238,10 @@ The notification center can be opened explicitly even when compact status is not
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
 - [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects action identities, shared/local defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
-- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, and exit without early playback stop.
+- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, and exit without early playback stop.
+- [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
+- [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.
+- [`TuiSignalProbeTest.cpp`](../../../test/unit/tui/TuiSignalProbeTest.cpp) drives [`ao_tui_signal_probe`](../../../test/fatal/TuiSignalProbeScenario.cpp) to protect watcher signal routing and previous-handler restoration outside the ordinary unit-test process.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, and list-deletion recovery.
 - [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal-cell projection, sections, viewport, persisted widths, and selection.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.

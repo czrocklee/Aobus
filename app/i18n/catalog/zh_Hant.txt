@@ -447,6 +447,8 @@ zh_Hant:table {
     tui_shell_detail_toggle_playback { "切換播放/暫停" }
     tui_shell_detail_stop { "停止" }
     tui_shell_detail_quit { "結束" }
+    tui_shell_detail_scan { "掃描音樂庫" }
+    tui_shell_detail_scan_cancel { "取消掃描" }
     tui_shell_output_devices_title { "輸出裝置" }
     tui_playback_no_active_track { "無活動曲目" }
     tui_playback_volume { "音量 {percent}%" }
@@ -465,6 +467,7 @@ zh_Hant:table {
     tui_shell_help_previous_next_group { "上一組 / 下一組" }
     tui_shell_help_clear_filter { "清除篩選" }
     tui_shell_help_reload_list { "重新載入目前列表" }
+    tui_shell_help_scan { "掃描音樂庫" }
     tui_shell_help_playback { "播放控制" }
     tui_shell_help_quit { "結束" }
     tui_shell_help_footer { "{closeKey} 關閉" }
@@ -482,6 +485,8 @@ zh_Hant:table {
     tui_library_no_tracks_found { "找不到曲目。請先在此音樂庫執行 `aobus init`。" }
     tui_library_no_lists_found { "未找到列表" }
     tui_library_ready { "就緒" }
+    tui_library_scan_already_running { "音樂庫掃描已在進行中" }
+    tui_library_scan_cancelling { "正在取消掃描" }
     tui_library_section { "分節：{name}" }
     tui_library_revealed_track { "已定位 {track}" }
     tui_library_unknown_view { "未知檢視 {id}" }

@@ -447,6 +447,8 @@ ja:table {
     tui_shell_detail_toggle_playback { "再生/一時停止の切り替え" }
     tui_shell_detail_stop { "停止" }
     tui_shell_detail_quit { "終了" }
+    tui_shell_detail_scan { "ライブラリーをスキャン" }
+    tui_shell_detail_scan_cancel { "スキャンをキャンセル" }
     tui_shell_output_devices_title { "出力デバイス" }
     tui_playback_no_active_track { "アクティブな曲はありません" }
     tui_playback_volume { "音量 {percent}%" }
@@ -465,6 +467,7 @@ ja:table {
     tui_shell_help_previous_next_group { "前 / 次のグループ" }
     tui_shell_help_clear_filter { "フィルターをクリア" }
     tui_shell_help_reload_list { "アクティブなリストを再読み込み" }
+    tui_shell_help_scan { "ライブラリーをスキャン" }
     tui_shell_help_playback { "再生" }
     tui_shell_help_quit { "終了" }
     tui_shell_help_footer { "{closeKey} 閉じる" }
@@ -482,6 +485,8 @@ ja:table {
     tui_library_no_tracks_found { "曲が見つかりません。まずこのライブラリで `aobus init` を実行してください。" }
     tui_library_no_lists_found { "リストが見つかりません" }
     tui_library_ready { "準備完了" }
+    tui_library_scan_already_running { "ライブラリーのスキャンは既に実行中です" }
+    tui_library_scan_cancelling { "スキャンのキャンセルは既に進行中です" }
     tui_library_section { "セクション: {name}" }
     tui_library_revealed_track { "{track} を表示しました" }
     tui_library_unknown_view { "不明な表示 {id}" }

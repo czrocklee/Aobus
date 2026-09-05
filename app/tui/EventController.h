@@ -24,7 +24,6 @@
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
-#include <ftxui/component/screen_interactive.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -43,6 +42,8 @@ namespace ao::rt
 
 namespace ao::tui
 {
+  class LibraryScanController;
+
   using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
 
   struct TrackColumnResizePreview final
@@ -53,8 +54,8 @@ namespace ao::tui
 
   /**
    * The collaborators an EventController drives. Every field is mandatory; the
-   * aggregate exists because eight of them do not read as positional
-   * constructor arguments, not to make any of them optional.
+   * aggregate exists because they do not read as positional constructor
+   * arguments, not to make any of them optional.
    */
   struct EventControllerBindings final
   {
@@ -64,6 +65,8 @@ namespace ao::tui
     TrackColumnResizePreview& trackColumnResizePreview;
     uimodel::ActivityStatusViewModel& activityStatusViewModel;
     rt::NotificationService& notifications;
+    LibraryScanController& libraryScan;
+    std::function<void()> requestExit;
     InputCompletionCallback commandCompletionCallback;
     InputCompletionCallback filterCompletionCallback;
   };
@@ -71,8 +74,7 @@ namespace ao::tui
   class EventController final
   {
   public:
-    EventController(ftxui::ScreenInteractive& screen,
-                    ShellInteractionModel& shell,
+    EventController(ShellInteractionModel& shell,
                     LibraryController& library,
                     async::Runtime& asyncRuntime,
                     rt::PlaybackService& playback,
@@ -160,7 +162,6 @@ namespace ao::tui
     struct SeekRailDrag final
     {};
 
-    ftxui::ScreenInteractive& _screen;
     ShellInteractionModel& _shell;
     LibraryController& _library;
     TuiKeymapPlan const& _keymapPlan;
@@ -179,6 +180,8 @@ namespace ao::tui
     uimodel::SeekInteraction _seekSlider{};
     uimodel::ActivityStatusViewModel& _activityStatusViewModel;
     rt::NotificationService& _notifications;
+    LibraryScanController& _libraryScan;
+    std::function<void()> _requestExit;
     InputCompletionCallback _commandCompletionCallback;
     InputCompletionCallback _filterCompletionCallback;
     bool _qualityHoverVisible = false;

@@ -110,6 +110,8 @@ The resulting additional defaults are:
 | `tui.library.openQuickFilter` | `/` |
 | `tui.library.clearFilter` | `C` |
 | `tui.library.reloadActiveList` | `R` |
+| `tui.library.scan` | none |
+| `tui.library.scanCancel` | none |
 | `tui.library.playSelection` | `Enter`, `P` |
 | `tui.library.previousSection` | `{` |
 | `tui.library.nextSection` | `}` |
@@ -167,7 +169,7 @@ List, output, and presentation overlays therefore skip Return when selecting the
 This request-scoped selection keeps dispatch and hints aligned without removing a chord that remains executable at the root or in another scope.
 
 Fixed terminal protocol has precedence over this root plan.
-Ctrl-C always requests emergency exit; active text input owns its editing, completion, submission, and cancellation keys; list and modal-overlay scopes own navigation, Return, and Escape; notification `x`, mouse sequences, and modal escape remain fixed.
+Ctrl-C always requests graceful application exit; active text input owns its editing, completion, submission, and cancellation keys; list and modal-overlay scopes own navigation, Return, and Escape; notification `x`, mouse sequences, and modal escape remain fixed.
 The same event may therefore be configurable at the root while remaining protocol-owned in a narrower active scope.
 
 ## Override surface

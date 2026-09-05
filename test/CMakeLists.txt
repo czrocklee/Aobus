@@ -712,6 +712,14 @@ add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_pro
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
 if(AOBUS_BUILD_TUI)
+add_executable(ao_tui_signal_probe
+    fatal/TuiSignalProbeMain.cpp
+    fatal/TuiSignalProbeScenario.cpp
+)
+aobus_enable_windows_utf8_manifest(ao_tui_signal_probe)
+target_include_directories(ao_tui_signal_probe PRIVATE "${CMAKE_SOURCE_DIR}/app")
+target_link_libraries(ao_tui_signal_probe PRIVATE ao_fatal_probe_support aobus-tui-lib)
+
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
@@ -724,8 +732,10 @@ add_executable(ao_tui_test
     unit/tui/CoverArtTest.cpp
     unit/tui/EventControllerTest.cpp
     unit/tui/ExecutorTest.cpp
+    unit/tui/ExitControllerTest.cpp
     unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
+    unit/tui/LibraryScanControllerTest.cpp
     unit/tui/LibraryNavigationTest.cpp
     unit/tui/PlaybackStatusFormatterTest.cpp
     unit/tui/SelectionNavigationTest.cpp
@@ -745,6 +755,7 @@ add_executable(ao_tui_test
     unit/tui/TuiHitRegionsTest.cpp
     unit/tui/TuiKeymapTest.cpp
     unit/tui/TuiLayoutStateStoreTest.cpp
+    unit/tui/TuiSignalProbeTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 
@@ -752,12 +763,14 @@ target_link_libraries(ao_tui_test PRIVATE
     aobus-tui-lib
     ao_app_uimodel
     ao_app_runtime
+    ao_fatal_probe_support
     ao_test_support_i18n
     ao_test_support_runtime
     ao_test_options
     Catch2::Catch2WithMain
     FakeIt::FakeIt-catch
 )
+add_dependencies(ao_tui_test ao_tui_signal_probe)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
 # ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
