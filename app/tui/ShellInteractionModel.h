@@ -53,7 +53,7 @@ namespace ao::tui
     Scan,
     ScanCancel,
     SelectToggle,
-    SelectRange,
+    SelectVisual,
     SelectAll,
     SelectClear,
     Play,
@@ -78,7 +78,7 @@ namespace ao::tui
      * @brief The action whose key this entry advertises, when not its own.
      *
      * A prefix can lead to a related interactive path: `/` opens Quick Filter
-     * editing for `:filter`, while `v` opens the chooser for `:view <name>`.
+     * editing for `:filter`, while `p` opens the chooser for `:view <name>`.
      * Naming that action rather than its key keeps the hint from drifting: a
      * rebound key moves the hint with it, and an unbound one shows nothing.
      */

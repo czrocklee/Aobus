@@ -65,7 +65,7 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `detail`, `details`, `d` | open/toggle detail |
 | `quality`, `audio`, `pipeline`, `a` | open/toggle quality pipeline |
 | `output`, `outputs`, `device`, `devices`, `o` | open/toggle output devices |
-| `views`, `v` | open/toggle presentation panel |
+| `views`, `p` | open/toggle presentation panel |
 | `notifications`, `notification`, `n` | open/toggle notification center |
 | `close`, `hide`, `esc` | close overlay |
 | `help`, `h`, `?` | help |
@@ -75,10 +75,10 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `scan`, `rescan` | start an eager library scan |
 | `scan cancel` | request cooperative cancellation of the running scan |
 | `select toggle` | mark or unmark the focused track |
-| `select range` | mark from the range anchor to the focused track |
+| `select visual` | start a visual selection at the focused track, or confirm the running one |
 | `select all` | mark every track in the current view |
 | `select clear` | clear marked tracks |
-| `play`, `p` | play the focused track |
+| `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop`, `s` | stop playback |
 | `quit`, `q` | request normal checkpoint-and-stop exit |
@@ -93,26 +93,27 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `Up`, `Down` | previous/next track or active panel row | fixed protocol |
 | `PageUp`, `PageDown` | page selection | fixed protocol |
 | `Home`, `End` | first/last selection | fixed protocol |
-| `Return`, `p` | play the focused track | configurable at root; Return is fixed activation inside supported overlays |
+| `Return` | play the focused track | configurable at root; Return is fixed activation inside supported overlays |
+| `j` / `k` | next/previous track | configurable |
 | `Space` | toggle play/pause | configurable |
 | `s` | stop | configurable |
 | `[` / `]` | seek -/+ 5 seconds | configurable |
 | `{` / `}` | previous/next presentation group | configurable |
 | `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
-| `l`, `d`, `a`, `o`, `v`, `n` | toggle corresponding overlay | configurable |
+| `l`, `d`, `a`, `o`, `p`, `n` | toggle corresponding overlay | configurable |
 | `?` | open help | configurable |
 | `Ctrl+L` | reveal current track | configurable |
 | `c` | clear filter | configurable |
 | `r` | reload active list | configurable |
 | `m` | mark or unmark the focused track | configurable |
-| `Shift+V` | mark the inclusive range from the mark-anchor to the focus | configurable |
+| `v`, `Shift+V` | start a visual selection at the focus, or confirm the running one | configurable |
 | `Shift+A` | mark every track in the current view | configurable |
 | `u` | clear marked tracks | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
 | `:` | open an empty Command Palette input | configurable |
 | `q` | request normal exit | configurable |
 | `Ctrl-C` | graceful exit request through the App exit gate | fixed protocol |
-| `Esc` | close overlay or cancel active text input according to its mode | fixed protocol |
+| `Esc` | close overlay, cancel active text input, or cancel a running visual selection according to its mode | fixed protocol |
 
 ### Quick Filter keys
 
@@ -154,7 +155,7 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 | Detail | effective toggle (default `d`), `Esc` close; every workspace key and mouse gesture below stays available while it is open |
 | Pipeline | effective toggle (default `a`), `Esc` close |
 | Output | effective toggle (default `o`), `Return` select, `Esc` close |
-| Views | effective toggle (default `v`), `Return` select, `Esc` close |
+| Views | effective toggle (default `p`), `Return` select, `Esc` close |
 | Notifications | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close |
 | Help | `Esc` close; its root open shortcut is not a toggle inside the modal panel |
 

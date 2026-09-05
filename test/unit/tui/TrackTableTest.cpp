@@ -16,6 +16,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/node.hpp>
+#include <ftxui/screen/color.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
 
@@ -27,6 +28,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -535,6 +537,108 @@ namespace ao::tui::test
     checkInteractiveSurface(rendered.screen.PixelAt(2, row));
     CHECK_FALSE(rendered.screen.PixelAt(90, row).inverted);
     checkInteractiveSurface(rendered.screen.PixelAt(90, row));
+  }
+
+  TEST_CASE("TrackTable - an unfocused marked row reverses the terminal's own pair", "[tui][unit][track-table]")
+  {
+    auto const tracks = std::vector{
+      trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
+      trackEntry(TrackId{2}, "Beta", "Artist Two", "Album Two", 8, std::chrono::seconds{125}),
+    };
+    auto const markedIds = std::unordered_set{TrackId{1}};
+
+    auto const rendered = renderElement(trackTableView(tracks,
+                                                       -1,
+                                                       kInvalidTrackId,
+                                                       rt::defaultTrackPresentationSpec(),
+                                                       TrackTableViewOptions{.markedTrackIds = &markedIds}),
+                                        96);
+    auto const markedRow = lineIndexContaining(rendered.text, "Alpha");
+    auto const plainRow = lineIndexContaining(rendered.text, "Beta");
+
+    REQUIRE(markedRow >= 0);
+    REQUIRE(plainRow >= 0);
+    checkMarkedSurface(rendered.screen.PixelAt(2, markedRow));
+    checkMarkedSurface(rendered.screen.PixelAt(90, markedRow));
+    checkDefaultSurface(rendered.screen.PixelAt(2, plainRow));
+    CHECK_FALSE(rendered.screen.PixelAt(2, plainRow).inverted);
+  }
+
+  TEST_CASE("TrackTable - a marked focused row reverses the interactive pair", "[tui][unit][track-table]")
+  {
+    auto const tracks = std::vector{
+      trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
+      trackEntry(TrackId{2}, "Beta", "Artist Two", "Album Two", 8, std::chrono::seconds{125}),
+    };
+    auto const markedIds = std::unordered_set{TrackId{1}};
+
+    auto const rendered = renderElement(trackTableView(tracks,
+                                                       0,
+                                                       kInvalidTrackId,
+                                                       rt::defaultTrackPresentationSpec(),
+                                                       TrackTableViewOptions{.markedTrackIds = &markedIds}),
+                                        96);
+    auto const row = lineIndexContaining(rendered.text, "Alpha");
+
+    auto const plainRow = lineIndexContaining(rendered.text, "Beta");
+
+    REQUIRE(row >= 0);
+    REQUIRE(plainRow >= 0);
+
+    // The interactive surface still owns the pair, and the reversal flips it, so
+    // the focused row reports its own mark state without a dedicated cell.
+    checkInteractiveSurface(rendered.screen.PixelAt(2, row));
+    CHECK(rendered.screen.PixelAt(2, row).inverted);
+    checkDefaultSurface(rendered.screen.PixelAt(2, plainRow));
+    CHECK_FALSE(rendered.screen.PixelAt(2, plainRow).inverted);
+  }
+
+  TEST_CASE("TrackTable - the playing caret drops its accent on the focused row", "[tui][unit][track-table]")
+  {
+    auto const tracks = std::vector{
+      trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
+      trackEntry(TrackId{2}, "Beta", "Artist Two", "Album Two", 8, std::chrono::seconds{125}),
+    };
+
+    auto const focused = renderElement(trackTableView(tracks, 0, TrackId{1}, rt::defaultTrackPresentationSpec()), 96);
+    auto const focusedRow = lineIndexContaining(focused.text, "Alpha");
+
+    REQUIRE(focusedRow >= 0);
+    CHECK(focused.screen.PixelAt(0, focusedRow).character == ">");
+    checkInteractiveSurface(focused.screen.PixelAt(0, focusedRow));
+
+    auto const unfocused = renderElement(trackTableView(tracks, 1, TrackId{1}, rt::defaultTrackPresentationSpec()), 96);
+    auto const unfocusedRow = lineIndexContaining(unfocused.text, "Alpha");
+
+    REQUIRE(unfocusedRow >= 0);
+    CHECK(unfocused.screen.PixelAt(0, unfocusedRow).character == ">");
+    CHECK(unfocused.screen.PixelAt(0, unfocusedRow).foreground_color == ftxui::Color::Green);
+  }
+
+  TEST_CASE("TrackTable - a playing marked focused row keeps one readable pair", "[tui][unit][track-table]")
+  {
+    auto const tracks = std::vector{
+      trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
+      trackEntry(TrackId{2}, "Beta", "Artist Two", "Album Two", 8, std::chrono::seconds{125}),
+    };
+    auto const markedIds = std::unordered_set{TrackId{1}};
+
+    auto const rendered = renderElement(
+      trackTableView(
+        tracks, 0, TrackId{1}, rt::defaultTrackPresentationSpec(), TrackTableViewOptions{.markedTrackIds = &markedIds}),
+      96);
+    auto const row = lineIndexContaining(rendered.text, "Alpha");
+
+    REQUIRE(row >= 0);
+    CHECK(rendered.screen.PixelAt(0, row).character == ">");
+
+    // All three states land on the same cell: the caret drops its own accent to
+    // the interactive pair, and the mark reverses that pair rather than adding a
+    // third color.
+    checkInteractiveSurface(rendered.screen.PixelAt(0, row));
+    CHECK(rendered.screen.PixelAt(0, row).inverted);
+    checkInteractiveSurface(rendered.screen.PixelAt(2, row));
+    CHECK(rendered.screen.PixelAt(2, row).inverted);
   }
 
   TEST_CASE("TrackTable - selected row is scrolled into a short viewport", "[tui][unit][track-table]")

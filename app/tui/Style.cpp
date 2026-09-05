@@ -161,6 +161,14 @@ namespace ao::tui::style
     return interactiveSurface();
   }
 
+  ftxui::Decorator markedSurface()
+  {
+    // Reverse video swaps whichever foreground and background the terminal theme
+    // already resolved for the row, so the mark surface pins no palette slot and
+    // cannot land on a pair the active theme renders without contrast.
+    return [](ftxui::Element elementPtr) { return std::move(elementPtr) | ftxui::inverted; };
+  }
+
   ftxui::Decorator buttonHover()
   {
     return interactiveSurface();

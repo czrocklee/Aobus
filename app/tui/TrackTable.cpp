@@ -218,7 +218,8 @@ namespace ao::tui
     ftxui::Element trackRow(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const& track,
                             TrackId const playingTrackId,
-                            std::vector<TrackColumn> const& columns)
+                            std::vector<TrackColumn> const& columns,
+                            bool const focused)
     {
       using namespace ftxui;
 
@@ -229,7 +230,14 @@ namespace ao::tui
 
       if (playing)
       {
-        playingMarkerPtr = std::move(playingMarkerPtr) | style::success() | bold;
+        playingMarkerPtr = std::move(playingMarkerPtr) | bold;
+
+        // The focused row is painted with the interactive surface afterwards, and a
+        // cell that keeps its own foreground would render the caret green on yellow.
+        if (!focused)
+        {
+          playingMarkerPtr = std::move(playingMarkerPtr) | style::success();
+        }
       }
 
       cells.push_back(std::move(playingMarkerPtr));
@@ -257,11 +265,15 @@ namespace ao::tui
                                          std::unordered_set<TrackId> const* const markedTrackIds,
                                          bool const focused)
     {
-      auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns);
+      auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns, focused);
 
-      if (markedTrackIds != nullptr && markedTrackIds->contains(track.id) && !focused)
+      if (markedTrackIds != nullptr && markedTrackIds->contains(track.id))
       {
-        rowPtr = std::move(rowPtr) | style::accent();
+        // The interactive surface is applied to the focused row afterwards, so the
+        // same reversal flips the terminal's own pair on an unfocused row and the
+        // interactive pair on the focused one. Both stay distinguishable without
+        // spending a gutter cell.
+        rowPtr = std::move(rowPtr) | style::markedSurface();
       }
 
       return rowPtr;

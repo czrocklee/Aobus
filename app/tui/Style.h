@@ -21,6 +21,7 @@ namespace ao::tui::style
   ftxui::Decorator danger();
   ftxui::Decorator interactiveSurface();
   ftxui::Decorator selected();
+  ftxui::Decorator markedSurface();
   ftxui::Decorator buttonHover();
   ftxui::Element shortcutChip(std::string_view key, std::string_view label);
   ftxui::Element mutedSeparator(std::string_view separator = " · ");

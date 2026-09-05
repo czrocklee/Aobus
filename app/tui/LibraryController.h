@@ -68,7 +68,7 @@ namespace ao::tui
     std::int32_t selectedPresentation() const noexcept { return _selectedPresentation; }
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
     std::unordered_set<TrackId> const& markedIds() const noexcept { return _markedIds; }
-    std::optional<TrackId> optRangeAnchor() const noexcept { return _optRangeAnchor; }
+    bool isVisualSelectionActive() const noexcept { return _optVisualAnchor.has_value(); }
     // Marked ids in current materialized track order, or the focused track when
     // none are marked.
     std::vector<TrackId> selectedTrackIds() const;
@@ -90,7 +90,8 @@ namespace ao::tui
     bool setSelectedPresentation(std::int32_t index);
     void setSelectedTrackIndex(std::int32_t index);
     void toggleFocusedMark();
-    void markRangeToFocus();
+    void toggleVisualSelection();
+    void cancelVisualSelection();
     void markAllTracks();
     void clearMarks();
 
@@ -107,10 +108,14 @@ namespace ao::tui
     bool setSelectedTrackById(TrackId trackId);
     TrackId focusedTrackId() const noexcept;
     bool containsTrackId(TrackId trackId) const noexcept;
-    void clearMarksAndAnchor();
+    void clearMarkState();
     void reconcileMarks();
+    std::unordered_set<TrackId> liveSubset(std::unordered_set<TrackId> const& ids) const;
+    void applyVisualRange();
+    void endVisualSelection();
     void publishSelection();
     void publishFocusMove();
+    void afterFocusMove();
     void focusActiveView();
     void syncSelectedPresentation(std::string_view presentationId);
     void refreshPresentationNavigation();
@@ -146,7 +151,10 @@ namespace ao::tui
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
     std::unordered_set<TrackId> _markedIds{};
-    std::optional<TrackId> _optRangeAnchor{};
+    // Set while a visual selection is running; the base holds the mark set the
+    // selection started from so cancelling can restore it exactly.
+    std::optional<TrackId> _optVisualAnchor{};
+    std::unordered_set<TrackId> _visualBaseIds{};
     std::string _filterDraft{};
     std::string _filterError{};
     async::Subscription _customPresetsSub;

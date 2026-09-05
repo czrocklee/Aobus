@@ -25,6 +25,8 @@ namespace ao::tui::test
     CHECK(selectionSummary(textCatalog, 12, 99) == "12 / 12 tracks");
     CHECK(selectionSummary(textCatalog, 12, -4) == "1 / 12 tracks");
     CHECK(selectionSummary(textCatalog, 12, 0, 3) == "3 marked · 1 / 12 tracks");
+    CHECK(selectionSummary(textCatalog, 12, 0, 3, true) == "VISUAL · 3 marked · 1 / 12 tracks");
+    CHECK(selectionSummary(textCatalog, 12, 0, 0, true) == "VISUAL · 1 / 12 tracks");
   }
 
   TEST_CASE("SelectionNavigation - movement is bounded", "[tui][unit][selection]")

@@ -450,7 +450,7 @@ zh_Hant:table {
     tui_shell_detail_scan { "掃描音樂庫" }
     tui_shell_detail_scan_cancel { "取消掃描" }
     tui_shell_detail_select_toggle { "標記或取消標記目前曲目" }
-    tui_shell_detail_select_range { "從錨點標記到目前曲目" }
+    tui_shell_detail_select_visual { "從目前曲目開始或確認視覺選取" }
     tui_shell_detail_select_all { "標記此檢視中的全部曲目" }
     tui_shell_detail_select_clear { "清除標記" }
     tui_shell_output_devices_title { "輸出裝置" }
@@ -489,6 +489,7 @@ zh_Hant:table {
     tui_library_filter_applied { "篩選已套用" }
     tui_library_no_tracks_found { "找不到曲目。請先在此音樂庫執行 `aobus init`。" }
     tui_library_marked_count { "{count, plural, other {已標記 # 首}}" }
+    tui_library_visual_mode { "可視選擇" }
     tui_library_no_lists_found { "未找到列表" }
     tui_library_ready { "就緒" }
     tui_library_scan_already_running { "音樂庫掃描已在進行中" }

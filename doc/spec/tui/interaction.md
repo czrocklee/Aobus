@@ -158,6 +158,9 @@ Shortening cuts only between whole clusters, so a joined emoji sequence, a flag,
 Cover art is shown only when its fixed rows, the pane chrome, and the worst-case metadata row count all fit the available main-content rows, so artwork visibility does not change as selection moves; short terminals give the rows to metadata.
 The workspace lower frame edge carries list/view identity on the left and selection/count state on the right.
 Selected rows and hovered controls use one centralized yellow/black/bold interactive style.
+Marked track rows use a reverse-video mark surface; it pins no palette slot, so it reverses whichever pair the row already resolved.
+An unfocused marked row therefore reverses the terminal's own colors and a focused marked row reverses the interactive pair, which reports mark state in both focus states without a dedicated cell.
+The now-playing caret keeps its accent only on unfocused rows, because a cell that holds its own foreground over the interactive surface renders an unreadable pair.
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
 Opening, Buffering, Playing, and Seeking keep periodic animation refresh active; elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackPositionViewModel`.
@@ -183,17 +186,25 @@ A start while Running posts a transient already-running notice; a start while Ca
 Retirement suppresses late presentation.
 Scan progress continues to use `ActivityStatusViewModel` observing `LibraryJobs`.
 
-`m` toggles the focused track in the marked set and sets the range anchor to that id.
-`Shift+V` adds the inclusive flattened-track range from a valid anchor to the focus; without a valid in-view anchor it marks the focus and establishes the anchor.
+`m` toggles the focused track in the marked set.
+`v` starts a visual selection anchored at the focused track, and pressing it again confirms the range into the marked set.
+While a visual selection runs, every focus move re-derives the marked set as the selection's starting set plus the inclusive flattened-track range from the anchor to the focus, so the range is visible as it grows rather than only after it is committed.
+Escape cancels a running visual selection and restores the marked set exactly as it was when the selection started.
+A modal overlay is closed first, because it holds the keys that grow the range; the detail panel is not modal and leaves those keys to the workspace, so Escape cancels the selection and the panel stays open.
+Confirming, `m`, `Shift+A`, any mark reset, and an anchor that leaves the materialized view all end the visual selection; `m` commits the current range before toggling the focused track, so neither edit is lost.
+Ending a selection because its anchor disappeared keeps the rows the range had already reached; only Escape restores the starting set.
+While a selection runs, the workspace footer names the mode ahead of the mark count, because the count alone does not say whether the next motion still grows the range.
 `Shift+A` marks every materialized track in the current view.
-`u` clears marks and the anchor.
-Moving the cursor does not add or remove marks.
+`u` clears the marked set.
+`j` and `k` move the focused track the same way the arrow keys do.
+Marking is reported by the mark surface in every focus state.
+Moving the cursor does not add or remove marks unless a visual selection is running.
 A successful effective filter change, or navigation to another list/view, clears marks.
 Reattaching the same view, including confirming the current List in the chooser, reconciles marks and focus rather than resetting them; only attaching a different view starts at the top.
-A same-view reload or presentation change intersects marks with remaining track ids and drops the anchor only if that id disappeared.
+A same-view reload or presentation change intersects marks with remaining track ids, and a still-running visual selection derives its range again from the reconciled starting set, the anchor, and the reconciled focus, because the range is defined by row order rather than by the ids it happened to cover.
 A successful no-op filter keeps marks.
 Mouse input still only moves focus.
-`publishSelection()` publishes `selectedTrackIds()`. Playback Enter/P and Detail/cover remain focus-based: marks change the published selection and the status count, not which track Enter/P starts.
+`publishSelection()` publishes `selectedTrackIds()`. Playback Enter and Detail/cover remain focus-based: marks change the published selection and the status count, not which track Enter starts.
 
 The effective quit shortcut (shipped as `q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
 The first request retires scan presentation and transient input, then posts loop exit.

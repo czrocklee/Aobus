@@ -17,7 +17,8 @@ namespace ao::tui
   std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t const trackCount,
                                std::int32_t const selectedIndex,
-                               std::size_t const markedCount)
+                               std::size_t const markedCount,
+                               bool const visualSelectionActive)
   {
     auto summary = std::string{};
 
@@ -33,15 +34,22 @@ namespace ao::tui
                             i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", trackCount}}));
     }
 
-    if (markedCount == 0)
+    if (markedCount > 0)
+    {
+      summary =
+        std::format("{} · {}",
+                    i18n::requiredFormat(textCatalog, i18n::MessageId::TuiLibraryMarkedCount, {{"count", markedCount}}),
+                    summary);
+    }
+
+    if (!visualSelectionActive)
     {
       return summary;
     }
 
-    return std::format(
-      "{} · {}",
-      i18n::requiredFormat(textCatalog, i18n::MessageId::TuiLibraryMarkedCount, {{"count", markedCount}}),
-      summary);
+    // The mark count alone cannot say whether the next motion still grows the
+    // range, so the running selection names itself ahead of the counts.
+    return std::format("{} · {}", i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryVisualMode), summary);
   }
 
   std::int32_t moveSelection(std::int32_t const selectedIndex, std::int32_t const delta, std::size_t const itemCount)

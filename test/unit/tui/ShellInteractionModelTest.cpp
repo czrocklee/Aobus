@@ -35,7 +35,7 @@ namespace ao::tui::test
     CHECK(requiredCommand(":output").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":devices").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":views").action == CommandAction::OpenPresentationPanel);
-    CHECK(requiredCommand(":v").action == CommandAction::OpenPresentationPanel);
+    CHECK(requiredCommand(":p").action == CommandAction::OpenPresentationPanel);
     CHECK(requiredCommand(":notifications").action == CommandAction::OpenNotifications);
     CHECK(requiredCommand(":n").action == CommandAction::OpenNotifications);
     CHECK(requiredCommand("help").action == CommandAction::ShowHelp);
@@ -58,7 +58,7 @@ namespace ao::tui::test
     CHECK(requiredCommand("scan cancel").action == CommandAction::ScanCancel);
     CHECK(requiredCommand(":scan cancel").action == CommandAction::ScanCancel);
     CHECK(requiredCommand("select toggle").action == CommandAction::SelectToggle);
-    CHECK(requiredCommand("select range").action == CommandAction::SelectRange);
+    CHECK(requiredCommand("select visual").action == CommandAction::SelectVisual);
     CHECK(requiredCommand("select all").action == CommandAction::SelectAll);
     CHECK(requiredCommand("select clear").action == CommandAction::SelectClear);
     CHECK(requiredCommand("play").action == CommandAction::Play);
@@ -84,7 +84,7 @@ namespace ao::tui::test
       {CommandAction::Scan, TuiKeyAction::Scan},
       {CommandAction::ScanCancel, TuiKeyAction::ScanCancel},
       {CommandAction::SelectToggle, TuiKeyAction::SelectToggle},
-      {CommandAction::SelectRange, TuiKeyAction::SelectRange},
+      {CommandAction::SelectVisual, TuiKeyAction::SelectVisual},
       {CommandAction::SelectAll, TuiKeyAction::SelectAll},
       {CommandAction::SelectClear, TuiKeyAction::SelectClear},
       {CommandAction::Play, TuiKeyAction::PlaySelection},
@@ -213,7 +213,7 @@ namespace ao::tui::test
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::DetailPanel) == "d toggle  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel) == "a toggle  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices) == "o toggle  Enter select  Esc close");
-    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel) == "v toggle  Enter select  Esc close");
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel) == "p toggle  Enter select  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Notifications) == "n toggle  x hide compact  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Help) == "Esc close");
   }

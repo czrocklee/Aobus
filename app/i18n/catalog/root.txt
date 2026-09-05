@@ -452,7 +452,7 @@ root:table {
     tui_shell_detail_scan { "scan library" }
     tui_shell_detail_scan_cancel { "cancel library scan" }
     tui_shell_detail_select_toggle { "mark or unmark the focused track" }
-    tui_shell_detail_select_range { "mark from the range anchor to the focused track" }
+    tui_shell_detail_select_visual { "start or confirm a visual selection from the focused track" }
     tui_shell_detail_select_all { "mark every track in this view" }
     tui_shell_detail_select_clear { "clear marked tracks" }
     tui_shell_output_devices_title { "Output Devices" }
@@ -491,6 +491,7 @@ root:table {
     tui_library_filter_applied { "Filter applied" }
     tui_library_no_tracks_found { "No tracks found. Run `aobus init` in this library first." }
     tui_library_marked_count { "{count, plural, one {# marked} other {# marked}}" }
+    tui_library_visual_mode { "VISUAL" }
     tui_library_no_lists_found { "No lists found" }
     tui_library_ready { "Ready" }
     tui_library_scan_already_running { "A library scan is already running" }
