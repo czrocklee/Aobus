@@ -131,9 +131,9 @@ namespace ao::gtk
     return uimodel::loadKeymap(*_storePtr, std::move(defaults));
   }
 
-  void AppConfigStore::saveKeymap(uimodel::KeymapModel const& keymap)
+  Result<> AppConfigStore::saveKeymap(uimodel::KeymapModel const& keymap)
   {
-    uimodel::saveKeymap(*_storePtr, keymap);
+    return uimodel::saveKeymap(*_storePtr, keymap);
   }
 
   uimodel::OutputDeviceIntent preferredOutputDeviceRecorder(std::shared_ptr<AppConfigStore> configStorePtr)

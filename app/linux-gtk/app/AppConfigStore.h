@@ -60,7 +60,7 @@ namespace ao::gtk
     /// Loads the effective keyboard map: persisted overrides merged onto @p defaults.
     uimodel::KeymapModel loadKeymap(uimodel::KeymapBindings defaults) const;
     /// Persists the keymap's delta-from-defaults into the `shortcuts` group.
-    void saveKeymap(uimodel::KeymapModel const& keymap);
+    Result<> saveKeymap(uimodel::KeymapModel const& keymap);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

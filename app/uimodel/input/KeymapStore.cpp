@@ -65,13 +65,9 @@ namespace ao::uimodel
     return keymap;
   }
 
-  void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap)
+  Result<> saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap)
   {
     auto const overrides = keymap.toOverrides();
-
-    if (auto const resRes = store.save(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !resRes)
-    {
-      APP_LOG_ERROR("KeymapStore: failed to save keymap overrides: {}", resRes.error().message);
-    }
+    return store.save(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{});
   }
 } // namespace ao::uimodel

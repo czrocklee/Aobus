@@ -347,7 +347,7 @@ zh_Hant:table {
     gtk_preferences_layout_preset_classic { "經典" }
     gtk_preferences_layout_preset_modern { "現代" }
     gtk_preferences_actions { "操作" }
-    gtk_shortcut_title { "自訂快速鍵" }
+    gtk_shortcut_title { "自訂快捷鍵" }
     gtk_shortcut_reset_all { "全部重設" }
     gtk_shortcut_reset_all_tooltip { "將所有快捷鍵重設為預設值" }
     gtk_shortcut_other_category { "其他" }
@@ -364,6 +364,11 @@ zh_Hant:table {
     gtk_shortcut_capture_title { "設定快捷鍵" }
     gtk_shortcut_capture_prompt { "請按下新的快捷鍵組合。" }
     gtk_shortcut_capture_cancel_hint { "按 {key} 取消" }
+    gtk_shortcut_save_failed { "無法儲存快捷鍵：{diagnostic}" }
+    gtk_shortcut_retry { "重試" }
+    gtk_shortcut_discard { "捨棄" }
+    gtk_shortcut_pending_close_title { "未儲存的快捷鍵變更" }
+    gtk_shortcut_pending_close_message { "上次快捷鍵變更未能儲存。請重試儲存、捨棄變更，或繼續編輯。" }
     gtk_action_category_playback { "播放" }
     gtk_action_category_shell { "視窗/介面" }
     gtk_action_category_workspace { "工作區" }

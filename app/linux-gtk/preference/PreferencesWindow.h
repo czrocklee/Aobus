@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include "preference/ShortcutEditorWidget.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppState.h>
@@ -38,6 +39,8 @@ namespace ao::rt
 
 namespace ao::gtk
 {
+  class AppDialog;
+
   class PreferencesWindow final : public Gtk::Window
   {
   public:
@@ -58,6 +61,10 @@ namespace ao::gtk
     PreferencesWindow(PreferencesWindow&&) = delete;
     PreferencesWindow& operator=(PreferencesWindow&&) = delete;
 
+    /// Rebuilds the Keyboard page from @p schema and @p keymap. Does nothing while the existing
+    /// editor still holds a failed save candidate, so reopening Preferences never discards it.
+    /// That skip keeps the editor's original @p onChanged, so the callback must resolve its target
+    /// when it runs rather than capturing the window that was active when it was wired.
     void refreshKeyboardPage(uimodel::LayoutSchema const& schema,
                              uimodel::KeymapModel keymap,
                              ShortcutEditorWidget::ChangedCallback onChanged);
@@ -81,6 +88,8 @@ namespace ao::gtk
     void buildPlaybackPage();
     void buildLayoutPage();
     void dismiss();
+    void promptPendingShortcutClose();
+    void retirePendingClosePrompt();
     void clearWindowScopedState();
     void clearKeyboardPage();
     void handleLayoutPresetChanged();
@@ -112,5 +121,8 @@ namespace ao::gtk
     Gtk::Label _outputDeviceLabel;
     std::unique_ptr<ShortcutEditorWidget> _shortcutEditorPtr;
     std::unique_ptr<uimodel::OutputDeviceViewModel> _outputDeviceViewModelPtr;
+    /// The live pending-shortcut close prompt, so a second close reuses it and dismiss() retires it.
+    AppDialog* _pendingClosePrompt = nullptr;
+    MainContextCallbackScope _callbackScope;
   };
 } // namespace ao::gtk

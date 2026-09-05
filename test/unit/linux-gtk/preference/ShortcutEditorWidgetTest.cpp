@@ -7,6 +7,7 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/Error.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -192,10 +193,11 @@ namespace ao::gtk::test
     auto editor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                        makeSchema(),
                                        uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                       [&](uimodel::KeymapModel const& model)
+                                       [&](uimodel::KeymapModel const& model) -> Result<>
                                        {
                                          ++changeCount;
                                          optLastModel = model;
+                                         return {};
                                        },
                                        host};
     drainGtkEvents();
@@ -268,10 +270,11 @@ namespace ao::gtk::test
       auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                                makeSchema(),
                                                std::move(editedKeymap),
-                                               [&](uimodel::KeymapModel const& model)
+                                               [&](uimodel::KeymapModel const& model) -> Result<>
                                                {
                                                  ++changeCount;
                                                  optLastModel = model;
+                                                 return {};
                                                },
                                                host};
 
@@ -290,10 +293,11 @@ namespace ao::gtk::test
       auto editedEditor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
                                                makeSchema(),
                                                std::move(editedKeymap),
-                                               [&](uimodel::KeymapModel const& model)
+                                               [&](uimodel::KeymapModel const& model) -> Result<>
                                                {
                                                  ++changeCount;
                                                  optLastModel = model;
+                                                 return {};
                                                },
                                                host};
 
@@ -318,7 +322,11 @@ namespace ao::gtk::test
       ao::test::englishMessageCatalog(),
       makeSchema(),
       uimodel::KeymapModel{uimodel::defaultKeymap()},
-      [&](uimodel::KeymapModel const&) { ++changeCount; },
+      [&](uimodel::KeymapModel const&) -> Result<>
+      {
+        ++changeCount;
+        return {};
+      },
       host);
     editorPtr->setConflictConfirmer([&](std::string const&, std::string const&, std::function<void(bool)> callback)
                                     { respond = std::move(callback); });
@@ -373,5 +381,80 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(editor.captureWindow() == secondCapture);
+  }
+
+  TEST_CASE("ShortcutEditorWidget - failed persistence keeps the candidate and live applied model",
+            "[gtk][unit][preferences][shortcut]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    bool persistShouldFail = true;
+    std::int32_t persistCount = 0;
+    auto host = Gtk::Window{};
+    auto editor = ShortcutEditorWidget{ao::test::englishMessageCatalog(),
+                                       makeSchema(),
+                                       uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                       [&](uimodel::KeymapModel const&) -> Result<>
+                                       {
+                                         ++persistCount;
+
+                                         if (persistShouldFail)
+                                         {
+                                           return makeError(Error::Code::IoError, "disk full");
+                                         }
+
+                                         return {};
+                                       },
+                                       host};
+    drainGtkEvents();
+
+    clickButtonByLabel(editor, "✕");
+    drainGtkEvents();
+
+    CHECK(persistCount == 1);
+    CHECK(editor.hasPendingCandidate());
+    CHECK(findLabelByText(editor, "Could not save shortcuts: disk full") != nullptr);
+    CHECK(findLabelByText(editor, "Ctrl+P") == nullptr);
+    CHECK(findButtonByLabel(editor, "Retry") != nullptr);
+    CHECK(findButtonByLabel(editor, "Discard") != nullptr);
+
+    SECTION("Retry succeeds and clears the unapplied state")
+    {
+      persistShouldFail = false;
+      clickButtonByLabel(editor, "Retry");
+      drainGtkEvents();
+
+      CHECK(persistCount == 2);
+      CHECK_FALSE(editor.hasPendingCandidate());
+      CHECK(findLabelByText(editor, "Could not save shortcuts: disk full") == nullptr);
+      CHECK(findLabelByText(editor, "Ctrl+P") == nullptr);
+    }
+
+    SECTION("Discard restores the last applied model")
+    {
+      clickButtonByLabel(editor, "Discard");
+      drainGtkEvents();
+
+      CHECK(persistCount == 1);
+      CHECK_FALSE(editor.hasPendingCandidate());
+      CHECK(findLabelByText(editor, "Ctrl+P") != nullptr);
+    }
+  }
+
+  TEST_CASE("ShortcutEditorWidget - deferred list rebuild does not destroy the dispatching button",
+            "[gtk][regression][shortcut][lifetime]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto host = Gtk::Window{};
+    auto editor = ShortcutEditorWidget{
+      ao::test::englishMessageCatalog(), makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, host};
+    drainGtkEvents();
+
+    clickButtonByLabel(editor, "✕");
+    CHECK(findLabelByText(editor, "Ctrl+P") != nullptr);
+
+    drainGtkEvents();
+    CHECK(findLabelByText(editor, "Ctrl+P") == nullptr);
   }
 } // namespace ao::gtk::test

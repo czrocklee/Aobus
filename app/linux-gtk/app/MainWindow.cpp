@@ -532,9 +532,13 @@ namespace ao::gtk
     _shellLayout.saveCurrentPanelSizesAsLayoutDefaults();
   }
 
-  void MainWindow::applyKeymap(uimodel::KeymapModel const& keymap)
+  Result<> MainWindow::applyKeymap(uimodel::KeymapModel const& keymap)
   {
-    _configStorePtr->saveKeymap(keymap);
+    if (auto const savedRes = _configStorePtr->saveKeymap(keymap); !savedRes)
+    {
+      return savedRes;
+    }
+
     _keymap = keymap;
     _orderKeyRepeatGuard.reset();
 
@@ -542,6 +546,8 @@ namespace ao::gtk
     {
       applyKeymapAccelerators(*appPtr, keymap);
     }
+
+    return {};
   }
 
   void MainWindow::applyTheme(uimodel::ThemePreset const theme)

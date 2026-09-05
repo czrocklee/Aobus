@@ -4,6 +4,7 @@
 #include <ao/uimodel/input/KeymapStore.h>
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -53,7 +54,7 @@ namespace ao::uimodel::test
       auto store = rt::ConfigStore{configPath};
       auto keymap = KeymapModel{sampleDefaults()};
       keymap.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N", "Media:Next"}}});
-      saveKeymap(store, keymap);
+      REQUIRE(saveKeymap(store, keymap));
     }
 
     auto store = rt::ConfigStore{configPath};
@@ -71,7 +72,7 @@ namespace ao::uimodel::test
 
     {
       auto store = rt::ConfigStore{configPath};
-      saveKeymap(store, KeymapModel{sampleDefaults()}); // no customization
+      REQUIRE(saveKeymap(store, KeymapModel{sampleDefaults()}));
     }
 
     // Reload with *different* defaults: since nothing was persisted, the new defaults win.
@@ -89,7 +90,9 @@ namespace ao::uimodel::test
     auto keymap = KeymapModel{sampleDefaults()};
     REQUIRE(keymap.bind("", chord("Ctrl+E")));
 
-    saveKeymap(store, keymap);
+    auto const savedRes = saveKeymap(store, keymap);
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::InvalidState);
 
     CHECK_FALSE(std::filesystem::exists(configPath));
   }

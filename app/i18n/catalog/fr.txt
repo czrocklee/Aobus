@@ -364,6 +364,11 @@ fr:table {
     gtk_shortcut_capture_title { "Définir le raccourci" }
     gtk_shortcut_capture_prompt { "Appuyez sur la nouvelle combinaison de touches." }
     gtk_shortcut_capture_cancel_hint { "{key} pour annuler" }
+    gtk_shortcut_save_failed { "Impossible d''enregistrer les raccourcis : {diagnostic}" }
+    gtk_shortcut_retry { "Réessayer" }
+    gtk_shortcut_discard { "Abandonner" }
+    gtk_shortcut_pending_close_title { "Raccourcis non enregistrés" }
+    gtk_shortcut_pending_close_message { "Le dernier changement de raccourci n''a pas été enregistré. Réessayer l''enregistrement, abandonner le changement, ou continuer l''édition." }
     gtk_action_category_playback { "Lecture" }
     gtk_action_category_shell { "Interface" }
     gtk_action_category_workspace { "Espace de travail" }

@@ -96,7 +96,7 @@ namespace ao::gtk
     void openLayoutEditor();
     void resetRuntimeLayoutState();
     void saveCurrentPanelSizesAsLayoutDefaults();
-    void applyKeymap(uimodel::KeymapModel const& keymap);
+    Result<> applyKeymap(uimodel::KeymapModel const& keymap);
     void applyTheme(uimodel::ThemePreset theme);
     rt::PlaybackService& playback();
     uimodel::LayoutSchema const& layoutSchema() const;

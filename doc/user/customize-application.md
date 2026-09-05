@@ -19,6 +19,11 @@ The application uses your selected appearance, shell layout, output device, and 
 4. On **Layout**, choose the Classic or Modern default preset.
 5. On **Keyboard**, add or remove bindings for the listed actions.
    Resolve any reported conflicts before relying on the new chord.
+   A failed save keeps the change as a candidate, leaves the running shortcuts unchanged, and shows Retry and Discard at the top of the page.
+   Closing Preferences with that failed candidate asks whether to retry, discard, or keep editing; quitting the application does not open that prompt.
+   Recognized key names are matched whatever their case, so `pgdn` and `PageDown` are the same key.
+   A name Aobus does not recognize is kept exactly as written, so if you edit the configuration by hand, `F25` and `f25` remain two different bindings.
+   The first save after upgrading rewrites the file, and spellings that used to differ can merge or fall back to the default binding.
 6. To change shell structure, choose **View → Edit Layout...** or use **Edit Layout...** on the Layout preference page.
    Apply changes to preview them, save to make the authored layout durable, or cancel to restore the pre-editor runtime state.
 7. To change a missing-cover design, select the corresponding `track.table`, `track.coverArt`, or `playback.image` component in the Layout Editor and choose `monogram`, `note`, `vinyl`, `equalizer`, or `soul` for its placeholder property.
@@ -35,6 +40,7 @@ Panel state and authored layout are different authorities: ordinary resizing cha
 - Theme and layout changes appear in the active window immediately.
 - The selected output device appears in the playback/output surface.
 - A changed shortcut invokes the intended action and no conflict remains in the Keyboard page.
+- If shortcut save fails, Retry either stores the candidate or leaves the banner, and Discard restores the last saved bindings.
 - Missing covers use the selected style in each edited location; existing cover art still replaces the placeholder.
 - Restarting Aobus restores saved preferences and state; canceled layout-editor changes do not reappear.
 

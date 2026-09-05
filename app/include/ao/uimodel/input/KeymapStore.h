@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <string_view>
@@ -28,6 +29,9 @@ namespace ao::uimodel
 
   /**
    * @brief Persists the keymap's delta-from-defaults into the "shortcuts" group.
+   *
+   * Failure is returned to the caller. Presentation owners report it once; this
+   * helper does not log the same error.
    */
-  void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap);
+  Result<> saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap);
 } // namespace ao::uimodel
