@@ -358,6 +358,26 @@ namespace ao::tui::test
     fixture.executor->drain();
   }
 
+  TEST_CASE("EventController - select commands mark and clear tracks", "[tui][unit][event][selection]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.tracks().size() >= 2);
+
+    enterCommand(controller, "select toggle");
+    CHECK(library.markedIds().size() == 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().empty());
+
+    enterCommand(controller, "select all");
+    CHECK(library.markedIds().size() == library.tracks().size());
+
+    enterCommand(controller, "select clear");
+    CHECK(library.markedIds().empty());
+  }
+
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")
   {
     auto fixture = EventControllerFixture{};

@@ -449,6 +449,10 @@ de:table {
     tui_shell_detail_quit { "Beenden" }
     tui_shell_detail_scan { "Bibliothek scannen" }
     tui_shell_detail_scan_cancel { "Scan abbrechen" }
+    tui_shell_detail_select_toggle { "fokussierten Titel markieren oder lösen" }
+    tui_shell_detail_select_range { "vom Bereichsanker bis zum Fokus markieren" }
+    tui_shell_detail_select_all { "alle Titel dieser Ansicht markieren" }
+    tui_shell_detail_select_clear { "Markierungen löschen" }
     tui_shell_output_devices_title { "Ausgabegeräte" }
     tui_playback_no_active_track { "Kein aktiver Titel" }
     tui_playback_volume { "Lautst. {percent}%" }
@@ -468,6 +472,7 @@ de:table {
     tui_shell_help_clear_filter { "Filter löschen" }
     tui_shell_help_reload_list { "Aktive Liste neu laden" }
     tui_shell_help_scan { "Bibliothek scannen" }
+    tui_shell_help_select { "Titel markieren" }
     tui_shell_help_playback { "Wiedergabe" }
     tui_shell_help_quit { "Beenden" }
     tui_shell_help_footer { "{closeKey} schließen" }
@@ -483,6 +488,7 @@ de:table {
     tui_library_filter_cleared { "Filter gelöscht" }
     tui_library_filter_applied { "Filter angewendet" }
     tui_library_no_tracks_found { "Keine Titel gefunden. Führen Sie zuerst `aobus init` in dieser Bibliothek aus." }
+    tui_library_marked_count { "{count, plural, one {# markiert} other {# markiert}}" }
     tui_library_no_lists_found { "Keine Listen gefunden" }
     tui_library_ready { "Bereit" }
     tui_library_scan_already_running { "Ein Bibliotheksscan läuft bereits" }

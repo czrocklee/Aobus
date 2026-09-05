@@ -112,6 +112,10 @@ The resulting additional defaults are:
 | `tui.library.reloadActiveList` | `R` |
 | `tui.library.scan` | none |
 | `tui.library.scanCancel` | none |
+| `tui.library.selectToggle` | `M` |
+| `tui.library.selectRange` | `Shift+V` |
+| `tui.library.selectAll` | `Shift+A` |
+| `tui.library.selectClear` | `U` |
 | `tui.library.playSelection` | `Enter`, `P` |
 | `tui.library.previousSection` | `{` |
 | `tui.library.nextSection` | `}` |

@@ -16,16 +16,32 @@ namespace ao::tui
 {
   std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t const trackCount,
-                               std::int32_t const selectedIndex)
+                               std::int32_t const selectedIndex,
+                               std::size_t const markedCount)
   {
+    auto summary = std::string{};
+
     if (trackCount == 0)
     {
-      return i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", trackCount}});
+      summary = i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", trackCount}});
+    }
+    else
+    {
+      auto const visibleIndex = clampSelection(static_cast<std::size_t>(std::max(0, selectedIndex)), trackCount) + 1;
+      summary = std::format("{} / {}",
+                            visibleIndex,
+                            i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", trackCount}}));
     }
 
-    auto const visibleIndex = clampSelection(static_cast<std::size_t>(std::max(0, selectedIndex)), trackCount) + 1;
+    if (markedCount == 0)
+    {
+      return summary;
+    }
+
     return std::format(
-      "{} / {}", visibleIndex, i18n::requiredFormat(textCatalog, i18n::MessageId::TrackCount, {{"count", trackCount}}));
+      "{} · {}",
+      i18n::requiredFormat(textCatalog, i18n::MessageId::TuiLibraryMarkedCount, {{"count", markedCount}}),
+      summary);
   }
 
   std::int32_t moveSelection(std::int32_t const selectedIndex, std::int32_t const delta, std::size_t const itemCount)

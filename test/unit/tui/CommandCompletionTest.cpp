@@ -107,6 +107,12 @@ namespace ao::tui::test
 
     REQUIRE(optPartial);
     CHECK(insertTexts(*optPartial) == std::vector<std::string>{"scan cancel"});
+
+    auto const optSelect =
+      completeCommandDraft(ao::test::englishMessageCatalog(), "select", CommandCompletionContext{});
+    REQUIRE(optSelect);
+    CHECK(insertTexts(*optSelect) ==
+          std::vector<std::string>{"select toggle", "select range", "select all", "select clear"});
   }
 
   TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")

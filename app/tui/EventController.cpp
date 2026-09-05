@@ -452,6 +452,10 @@ namespace ao::tui
       case Reload:
       case Scan:
       case ScanCancel:
+      case SelectToggle:
+      case SelectRange:
+      case SelectAll:
+      case SelectClear:
       case PlaySelection:
       case PlaybackPlayPause:
       case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
@@ -498,6 +502,10 @@ namespace ao::tui
       case CommandAction::Reload: reloadActiveList(); break;
       case CommandAction::Scan: _libraryScan.start(); break;
       case CommandAction::ScanCancel: _libraryScan.cancel(); break;
+      case CommandAction::SelectToggle: _library.toggleFocusedMark(); break;
+      case CommandAction::SelectRange: _library.markRangeToFocus(); break;
+      case CommandAction::SelectAll: _library.markAllTracks(); break;
+      case CommandAction::SelectClear: _library.clearMarks(); break;
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;

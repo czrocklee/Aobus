@@ -18,6 +18,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ftxui
@@ -54,6 +55,7 @@ namespace ao::tui
     // Upper bound on the visible viewport height. 0 disables windowing and builds
     // every row for full-build comparisons.
     std::int32_t viewportRows = 0;
+    std::unordered_set<TrackId> const* markedTrackIds = nullptr;
   };
 
   // Overscan rows padded onto each side of the virtualized track-table window so

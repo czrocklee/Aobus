@@ -57,6 +57,10 @@ namespace ao::tui::test
     CHECK(requiredCommand("rescan").action == CommandAction::Scan);
     CHECK(requiredCommand("scan cancel").action == CommandAction::ScanCancel);
     CHECK(requiredCommand(":scan cancel").action == CommandAction::ScanCancel);
+    CHECK(requiredCommand("select toggle").action == CommandAction::SelectToggle);
+    CHECK(requiredCommand("select range").action == CommandAction::SelectRange);
+    CHECK(requiredCommand("select all").action == CommandAction::SelectAll);
+    CHECK(requiredCommand("select clear").action == CommandAction::SelectClear);
     CHECK(requiredCommand("play").action == CommandAction::Play);
     CHECK(requiredCommand("pause").action == CommandAction::TogglePlayback);
     CHECK(requiredCommand("stop").action == CommandAction::Stop);
@@ -79,6 +83,10 @@ namespace ao::tui::test
       {CommandAction::Reload, TuiKeyAction::Reload},
       {CommandAction::Scan, TuiKeyAction::Scan},
       {CommandAction::ScanCancel, TuiKeyAction::ScanCancel},
+      {CommandAction::SelectToggle, TuiKeyAction::SelectToggle},
+      {CommandAction::SelectRange, TuiKeyAction::SelectRange},
+      {CommandAction::SelectAll, TuiKeyAction::SelectAll},
+      {CommandAction::SelectClear, TuiKeyAction::SelectClear},
       {CommandAction::Play, TuiKeyAction::PlaySelection},
       {CommandAction::TogglePlayback, TuiKeyAction::PlaybackPlayPause},
       {CommandAction::Stop, TuiKeyAction::PlaybackStop},
