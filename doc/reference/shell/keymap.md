@@ -40,8 +40,34 @@ Parsing accepts case-insensitive aliases:
 
 Single ASCII letters canonicalize to uppercase.
 Digits and punctuation are stored verbatim.
-Named keys use stable spellings such as `Right`, `Space`, `Enter`, `PageUp`, and `F5`.
-Media keys use the `Media:` prefix, such as `Media:Play` and `Media:Next`.
+Named keys and function keys F1 through F24 are matched case-insensitively:
+
+| Canonical | Accepted aliases |
+|---|---|
+| `Enter` | `Enter`, `Return` |
+| `Escape` | `Escape`, `Esc` |
+| `Delete` | `Delete`, `Del` |
+| `Backspace` | `Backspace` |
+| `Tab` | `Tab` |
+| `Space` | `Space` |
+| `Insert` | `Insert`, `Ins` |
+| `Left` `Right` `Up` `Down` | those names |
+| `Home` `End` | those names |
+| `PageUp` | `PageUp`, `PgUp` |
+| `PageDown` | `PageDown`, `PgDown`, `PgDn` |
+| `F1`–`F24` | `F1`–`F24` in any case, such as `f12` |
+
+Media keys use the `Media:` prefix followed by a name.
+Known names `Play`, `Pause`, `Stop`, `Next`, and `Prev` are canonicalized with that prefix; unknown suffixes and unrelated tokens survive verbatim, including GTK- or WinUI-specific names a given shell cannot execute.
+A bare `Media:` names no transport key: canonicalization leaves it alone and the media-key test
+rejects it, so it is treated as an ordinary token wherever transport keys are skipped.
+
+Case folding reaches only the spellings listed above. Everything else is an unknown token that keeps
+the case it was written in, so two spellings of the same key stay distinct chords: `F25` and `f25`
+are different bindings, as are `Media:Rewind` and `media:rewind`. This matters when editing the
+configuration by hand, where nothing reports the near-miss.
+Formerly distinct spellings may collide or collapse into defaults on the next save.
+There is no spelling-migration rewrite.
 
 The literal plus key is `+` without modifiers or a trailing doubled plus after modifiers, such as `Ctrl++`.
 `Ctrl+` is invalid because it names a modifier without a key.
