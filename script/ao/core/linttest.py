@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -390,7 +391,20 @@ def _run_compiler_error_smoke(build_dir: Path, run_dir: Path) -> tuple[bool, Pat
     return not errors, log
 
 
-def _report_results(label: str, fixtures: list[Fixture], results: list[tuple[bool, Path]], reporter: Reporter) -> bool:
+def _report_results(
+    label: str,
+    fixtures: list[Fixture],
+    results: Iterable[tuple[bool, Path]],
+    reporter: Reporter,
+) -> bool:
+    """Report fixtures in submission order, without waiting for the whole stage.
+
+    The pool's iterator is consumed lazily, so the first line appears once the
+    first fixture finishes rather than once the last one does -- a stage that is
+    silent for a minute is otherwise indistinguishable from a hang. Order stays
+    the submission order, which keeps two runs comparable line by line; the cost
+    is that a slow first fixture still holds back the finished ones behind it.
+    """
     passed = True
     for fixture, (success, log) in zip(fixtures, results, strict=True):
         reporter.write(f"  [{'PASS' if success else 'FAIL'}] {fixture.check}/{fixture.path.name}")
@@ -423,18 +437,24 @@ def run(build_dir: Path, *, log: Path | None = None, jobs: int | None = None) ->
         fix_paths = {fixture.path for fixture in fix_fixtures}
         diagnostic_fixtures = [fixture for fixture in fixtures if fixture.path not in fix_paths]
 
-        reporter.write("=== Diagnostic Verification ===")
+        reporter.write(f"=== Diagnostic Verification ({len(diagnostic_fixtures)} fixtures) ===")
         worker_count = min(jobs or max((os.cpu_count() or 1) - 1, 1), len(fixtures))
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-            diagnostic_results = list(
-                pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir), diagnostic_fixtures)
+            diagnostics_passed = _report_results(
+                "Diagnostics",
+                diagnostic_fixtures,
+                pool.map(lambda fixture: _run_diagnostic(fixture, build_dir, run_dir), diagnostic_fixtures),
+                reporter,
             )
-        diagnostics_passed = _report_results("Diagnostics", diagnostic_fixtures, diagnostic_results, reporter)
 
-        reporter.write("=== Diagnostic + Auto-Fix Verification ===")
+        reporter.write(f"=== Diagnostic + Auto-Fix Verification ({len(fix_fixtures)} fixtures) ===")
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-            fix_results = list(pool.map(lambda fixture: _run_fix(fixture, build_dir, run_dir), fix_fixtures))
-        fixes_passed = _report_results("Diagnostics + auto-fixes", fix_fixtures, fix_results, reporter)
+            fixes_passed = _report_results(
+                "Diagnostics + auto-fixes",
+                fix_fixtures,
+                pool.map(lambda fixture: _run_fix(fixture, build_dir, run_dir), fix_fixtures),
+                reporter,
+            )
 
         reporter.write("=== Replacement Application Smoke ===")
         smoke_passed, smoke_log = _run_replacement_smoke(run_dir)

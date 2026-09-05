@@ -3,6 +3,7 @@
 import contextlib
 import io
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -378,6 +379,64 @@ class LintTestRunnerTest(unittest.TestCase):
                 command = linttest._syntax_command(Path("fixture.cpp"), Path("case"))
 
         self.assertEqual(command[0], "clang++")
+
+    def test_a_stage_reports_its_first_fixture_before_the_next_one_finishes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "build"
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").touch()
+            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+            plugin.parent.mkdir(parents=True)
+            plugin.touch()
+            result_log = Path(temp_dir) / "case.log"
+            result_log.touch()
+            # Neither fixture carries a FIX-TO annotation, so both belong to the
+            # diagnostic stage and share one pool.
+            fixtures: list[linttest.Fixture] = []
+            for name in ("First", "Second"):
+                path = Path(temp_dir) / f"{name}.cpp"
+                path.write_text("int original;\n", encoding="utf-8")
+                fixtures.append(linttest.Fixture(path, "aobus-example"))
+            first, second = fixtures
+
+            reported: list[str] = []
+            first_reported = threading.Event()
+            released: list[bool] = []
+
+            class RecordingReporter(linttest.Reporter):
+                def write(self, message: str = "") -> None:
+                    reported.append(message)
+                    if first.path.name in message:
+                        first_reported.set()
+
+            def run_diagnostic(fixture: linttest.Fixture, *_: Path) -> tuple[bool, Path]:
+                if fixture is second:
+                    # Far longer than appending one line takes, and short
+                    # enough to keep a regression cheap: a stage that collects
+                    # its results before reporting any of them can never set
+                    # this event, so it times out here instead of deadlocking.
+                    released.append(first_reported.wait(timeout=5))
+                return True, result_log
+
+            with (
+                mock.patch.object(linttest, "discover_fixtures", return_value=fixtures),
+                mock.patch.object(linttest, "Reporter", RecordingReporter),
+                mock.patch.object(linttest, "_run_diagnostic", side_effect=run_diagnostic),
+                mock.patch.object(linttest, "_run_replacement_smoke", return_value=(True, result_log)),
+                mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, result_log)),
+            ):
+                self.assertEqual(linttest.run(build_dir, jobs=1), 0)
+
+            self.assertEqual(released, [True])
+            self.assertEqual(
+                reported[:4],
+                [
+                    "=== Diagnostic Verification (2 fixtures) ===",
+                    "  [PASS] aobus-example/First.cpp",
+                    "  [PASS] aobus-example/Second.cpp",
+                    "Diagnostics: passed",
+                ],
+            )
 
     def test_runner_aggregates_all_stages_and_removes_success_workspace(self):
         with tempfile.TemporaryDirectory() as temp_dir:
