@@ -37,6 +37,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -130,6 +131,34 @@ namespace ao::tui
     return {.track = &_tracks[selectedIndex], .coverArtId = _tracks[selectedIndex].coverArtId};
   }
 
+  std::vector<TrackId> LibraryController::selectedTrackIds() const
+  {
+    auto ids = std::vector<TrackId>{};
+
+    if (_tracks.empty())
+    {
+      return ids;
+    }
+
+    if (_markedIds.empty())
+    {
+      ids.push_back(_tracks[clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size())].id);
+      return ids;
+    }
+
+    ids.reserve(_markedIds.size());
+
+    for (auto const& entry : _tracks)
+    {
+      if (_markedIds.contains(entry.id))
+      {
+        ids.push_back(entry.id);
+      }
+    }
+
+    return ids;
+  }
+
   void LibraryController::setFilterDraft(std::string value)
   {
     _filterDraft = std::move(value);
@@ -138,32 +167,6 @@ namespace ao::tui
   void LibraryController::clearFilterDraft()
   {
     _filterDraft.clear();
-  }
-
-  void LibraryController::publishSelection()
-  {
-    if (_activeViewId == rt::kInvalidViewId)
-    {
-      return;
-    }
-
-    auto selection = std::vector<TrackId>{};
-
-    if (!_tracks.empty())
-    {
-      auto const index = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
-      selection.push_back(_tracks[index].id);
-    }
-
-    if (auto result = _views.setSelection(_activeViewId, std::move(selection)); !result)
-    {
-      APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
-    }
-
-    if (auto const focusedRes = _workspace.focusView(_activeViewId); !focusedRes)
-    {
-      APP_LOG_ERROR("Failed to focus TUI track view: {}", focusedRes.error().message);
-    }
   }
 
   void LibraryController::moveFocusedSelection(bool const listChooserFocused, std::int32_t const delta)
@@ -175,7 +178,7 @@ namespace ao::tui
     }
 
     _selectedTrack = moveSelection(_selectedTrack, delta, _tracks.size());
-    publishSelection();
+    publishFocusMove();
   }
 
   void LibraryController::movePresentationSelection(std::int32_t const delta)
@@ -197,6 +200,92 @@ namespace ao::tui
   void LibraryController::setSelectedTrackIndex(std::int32_t const index)
   {
     _selectedTrack = moveSelection(index, 0, _tracks.size());
+    publishFocusMove();
+  }
+
+  void LibraryController::toggleFocusedMark()
+  {
+    auto const trackId = focusedTrackId();
+
+    if (trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    if (!_markedIds.insert(trackId).second)
+    {
+      _markedIds.erase(trackId);
+    }
+
+    _optRangeAnchor = trackId;
+    publishSelection();
+  }
+
+  void LibraryController::markRangeToFocus()
+  {
+    auto const focusId = focusedTrackId();
+
+    if (focusId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    auto optAnchor = std::optional<std::size_t>{};
+    auto optFocus = std::optional<std::size_t>{};
+
+    for (std::size_t index = 0; index < _tracks.size(); ++index)
+    {
+      if (_optRangeAnchor && _tracks[index].id == *_optRangeAnchor)
+      {
+        optAnchor = index;
+      }
+
+      if (_tracks[index].id == focusId)
+      {
+        optFocus = index;
+      }
+    }
+
+    if (!optAnchor || !optFocus)
+    {
+      _markedIds.insert(focusId);
+      _optRangeAnchor = focusId;
+      publishSelection();
+      return;
+    }
+
+    auto const begin = std::min(*optAnchor, *optFocus);
+    auto const end = std::max(*optAnchor, *optFocus);
+
+    for (auto index = begin; index <= end; ++index)
+    {
+      _markedIds.insert(_tracks[index].id);
+    }
+
+    publishSelection();
+  }
+
+  void LibraryController::markAllTracks()
+  {
+    _markedIds.clear();
+    _markedIds.reserve(_tracks.size());
+
+    for (auto const& entry : _tracks)
+    {
+      _markedIds.insert(entry.id);
+    }
+
+    if (_optRangeAnchor && !containsTrackId(*_optRangeAnchor))
+    {
+      _optRangeAnchor.reset();
+    }
+
+    publishSelection();
+  }
+
+  void LibraryController::clearMarks()
+  {
+    clearMarksAndAnchor();
     publishSelection();
   }
 
@@ -265,7 +354,7 @@ namespace ao::tui
     auto const& section = _sections[static_cast<std::size_t>(sectionIndex)];
     std::size_t const lastTrackIndex = _tracks.empty() ? 0 : _tracks.size() - 1;
     _selectedTrack = static_cast<std::int32_t>(std::min(section.rowBegin, lastTrackIndex));
-    publishSelection();
+    publishFocusMove();
     return librarySection(_textCatalog, trackSectionDisplayName(_textCatalog, section));
   }
 
@@ -301,6 +390,93 @@ namespace ao::tui
     return false;
   }
 
+  TrackId LibraryController::focusedTrackId() const noexcept
+  {
+    if (_tracks.empty())
+    {
+      return kInvalidTrackId;
+    }
+
+    return _tracks[clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size())].id;
+  }
+
+  bool LibraryController::containsTrackId(TrackId const trackId) const noexcept
+  {
+    return std::ranges::any_of(_tracks, [trackId](TrackListEntry const& entry) { return entry.id == trackId; });
+  }
+
+  void LibraryController::clearMarksAndAnchor()
+  {
+    _markedIds.clear();
+    _optRangeAnchor.reset();
+  }
+
+  void LibraryController::reconcileMarks()
+  {
+    if (!_markedIds.empty())
+    {
+      auto live = std::unordered_set<TrackId>{};
+      live.reserve(_markedIds.size());
+
+      for (auto const& entry : _tracks)
+      {
+        if (_markedIds.contains(entry.id))
+        {
+          live.insert(entry.id);
+        }
+      }
+
+      _markedIds = std::move(live);
+    }
+
+    if (_optRangeAnchor && !containsTrackId(*_optRangeAnchor))
+    {
+      _optRangeAnchor.reset();
+    }
+  }
+
+  void LibraryController::publishSelection()
+  {
+    if (_activeViewId == rt::kInvalidViewId)
+    {
+      return;
+    }
+
+    if (auto result = _views.setSelection(_activeViewId, selectedTrackIds()); !result)
+    {
+      APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
+    }
+
+    focusActiveView();
+  }
+
+  void LibraryController::publishFocusMove()
+  {
+    // Marked ids are focus-independent, so moving the cursor can only change the
+    // effective selection while nothing is marked. Republishing a select-all set
+    // on every cursor step would rebuild and re-emit the whole list.
+    if (_markedIds.empty())
+    {
+      publishSelection();
+      return;
+    }
+
+    if (_activeViewId == rt::kInvalidViewId)
+    {
+      return;
+    }
+
+    focusActiveView();
+  }
+
+  void LibraryController::focusActiveView()
+  {
+    if (auto const focusedRes = _workspace.focusView(_activeViewId); !focusedRes)
+    {
+      APP_LOG_ERROR("Failed to focus TUI track view: {}", focusedRes.error().message);
+    }
+  }
+
   std::string LibraryController::revealTrack(TrackId const trackId)
   {
     if (trackId == kInvalidTrackId)
@@ -310,7 +486,7 @@ namespace ao::tui
 
     if (setSelectedTrackById(trackId))
     {
-      publishSelection();
+      publishFocusMove();
       return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
     }
 
@@ -348,6 +524,7 @@ namespace ao::tui
     syncSelectedPresentation(spec.id);
 
     _listPresentations.setPresentationIdForList(_currentListId, spec.id);
+    reconcileMarks();
 
     if (!setSelectedTrackById(previousTrackId))
     {
@@ -435,6 +612,13 @@ namespace ao::tui
       return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoActiveTrackView);
     }
 
+    auto previousExpression = std::string{};
+
+    if (auto const stateRes = _views.findTrackListState(_activeViewId); stateRes)
+    {
+      previousExpression = stateRes->filterExpression;
+    }
+
     auto const resolved = uimodel::resolveTrackFilter(_filterDraft);
     auto filterRes = _views.setFilter(_activeViewId, resolved.expression);
 
@@ -457,7 +641,20 @@ namespace ao::tui
 
     _tracks = std::move(snapshotRes->tracks);
     _sections = std::move(snapshotRes->sections);
-    _selectedTrack = 0;
+
+    if (resolved.expression == previousExpression)
+    {
+      // Re-materializing a no-op filter can still drop rows, so the kept focus
+      // needs the same clamp every other reload path applies.
+      reconcileMarks();
+      _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
+    }
+    else
+    {
+      clearMarksAndAnchor();
+      _selectedTrack = 0;
+    }
+
     publishSelection();
 
     switch (resolved.mode)
@@ -612,6 +809,7 @@ namespace ao::tui
     _filterError = std::move(filterError);
     _tracks = std::move(snapshotRes->tracks);
     _sections = std::move(snapshotRes->sections);
+    reconcileMarks();
     return {};
   }
 
@@ -652,6 +850,9 @@ namespace ao::tui
         _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", stateRes->optFilterError->message}});
     }
 
+    auto const sameView = viewId == _activeViewId;
+    auto const previousTrackId = sameView ? focusedTrackId() : kInvalidTrackId;
+    auto const previousSelectedTrack = _selectedTrack;
     _activeViewId = viewId;
     _currentListId = stateRes->listId;
     _selectedList = static_cast<std::int32_t>(std::distance(_libraryEntries.begin(), listIt));
@@ -661,6 +862,22 @@ namespace ao::tui
     _filterError = std::move(filterError);
     _tracks = std::move(snapshotRes->tracks);
     _sections = std::move(snapshotRes->sections);
+
+    if (!sameView)
+    {
+      clearMarksAndAnchor();
+      return {};
+    }
+
+    // Reattaching the open view reconciles focus alongside marks; only a
+    // different view starts at the top.
+    reconcileMarks();
+
+    if (!setSelectedTrackById(previousTrackId))
+    {
+      _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
+    }
+
     return {};
   }
 

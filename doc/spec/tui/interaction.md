@@ -46,6 +46,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - Fixed input, list, modal-overlay, notification, mouse, and escape protocol is resolved before configurable root actions; Ctrl-C, `:quit`, the quit shortcut, and handleable platform signals share one graceful App exit gate.
 - One prepared `TuiKeymapPlan` drives root dispatch and every hint for a configurable action, so rebinding or unbinding cannot leave a hard-coded execution or display path behind.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
+- Explicit marks are a transient TUI set distinct from the focused row. The effective edit/publication selection is the marked ids in current view order when any marks exist, otherwise the focused track.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
 - Startup attaches the exact active runtime view restored by `WorkspaceService`; a valid empty projection does not cause replacement navigation.
@@ -104,10 +105,10 @@ Runtime/query completions without TUI category metadata retain their core detail
 
 ### Workspace and overlays
 
-Track navigation moves selection by row/page/endpoints; group navigation selects the first track in the previous/next section.
-Mouse wheel moves selection by three tracks.
-Dragging the table scrollbar maps its visual position to a selectable track.
-Clicking a section header selects its first track; dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list.
+Track navigation moves focus by row/page/endpoints; group navigation focuses the first track in the previous/next section.
+Mouse wheel moves focus by three tracks.
+Dragging the table scrollbar maps its visual position to a focused track.
+Clicking a section header focuses its first track; dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list.
 
 After runtime workspace restore, `LibraryController` reads the active process-local `ViewId` and materializes that view directly.
 It does not navigate by `ListId`, so multiple filtered views over one list remain distinct and construction adds no history entry.
@@ -182,6 +183,18 @@ A start while Running posts a transient already-running notice; a start while Ca
 Retirement suppresses late presentation.
 Scan progress continues to use `ActivityStatusViewModel` observing `LibraryJobs`.
 
+`m` toggles the focused track in the marked set and sets the range anchor to that id.
+`Shift+V` adds the inclusive flattened-track range from a valid anchor to the focus; without a valid in-view anchor it marks the focus and establishes the anchor.
+`Shift+A` marks every materialized track in the current view.
+`u` clears marks and the anchor.
+Moving the cursor does not add or remove marks.
+A successful effective filter change, or navigation to another list/view, clears marks.
+Reattaching the same view, including confirming the current List in the chooser, reconciles marks and focus rather than resetting them; only attaching a different view starts at the top.
+A same-view reload or presentation change intersects marks with remaining track ids and drops the anchor only if that id disappeared.
+A successful no-op filter keeps marks.
+Mouse input still only moves focus.
+`publishSelection()` publishes `selectedTrackIds()`. Playback Enter/P and Detail/cover remain focus-based: marks change the published selection and the status count, not which track Enter/P starts.
+
 The effective quit shortcut (shipped as `q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
 The first request retires scan presentation and transient input, then posts loop exit.
 Input dispatch does not stop playback early.
@@ -238,11 +251,11 @@ The notification center can be opened explicitly even when compact status is not
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, command/overlay state, and parsing.
 - [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects action identities, shared/local defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
-- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, and exit without early playback stop.
+- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, selection commands, and exit without early playback stop.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.
 - [`TuiSignalProbeTest.cpp`](../../../test/unit/tui/TuiSignalProbeTest.cpp) drives [`ao_tui_signal_probe`](../../../test/fatal/TuiSignalProbeScenario.cpp) to protect watcher signal routing and previous-handler restoration outside the ordinary unit-test process.
-- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, and list-deletion recovery.
+- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, list-deletion recovery, and mark/range/select-all reconciliation.
 - [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal-cell projection, sections, viewport, persisted widths, and selection.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.

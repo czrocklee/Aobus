@@ -64,6 +64,10 @@ namespace ao::tui::test
       {TuiKeyAction::Reload, "tui.library.reloadActiveList"},
       {TuiKeyAction::Scan, "tui.library.scan"},
       {TuiKeyAction::ScanCancel, "tui.library.scanCancel"},
+      {TuiKeyAction::SelectToggle, "tui.library.selectToggle"},
+      {TuiKeyAction::SelectRange, "tui.library.selectRange"},
+      {TuiKeyAction::SelectAll, "tui.library.selectAll"},
+      {TuiKeyAction::SelectClear, "tui.library.selectClear"},
       {TuiKeyAction::PlaySelection, "tui.library.playSelection"},
       {TuiKeyAction::PreviousSection, "tui.library.previousSection"},
       {TuiKeyAction::NextSection, "tui.library.nextSection"},
@@ -137,10 +141,17 @@ namespace ao::tui::test
     auto const plan = TuiKeymapPlan{model};
 
     CHECK(plan.actionFor(ftxui::Event::Character("l")) == TuiKeyAction::ToggleListChooser);
+    CHECK(plan.actionFor(ftxui::Event::Character("m")) == TuiKeyAction::SelectToggle);
+    CHECK(plan.actionFor(ftxui::Event::Character("A")) == TuiKeyAction::SelectAll);
+    CHECK(plan.actionFor(ftxui::Event::Character("a")) == TuiKeyAction::ToggleAudioPipeline);
+    CHECK(plan.actionFor(ftxui::Event::Character("V")) == TuiKeyAction::SelectRange);
+    CHECK(plan.actionFor(ftxui::Event::Character("v")) == TuiKeyAction::TogglePresentations);
     CHECK(plan.actionFor(ftxui::Event::Character(" ")) == TuiKeyAction::PlaybackPlayPause);
     CHECK(plan.actionFor(ftxui::Event::CtrlP) == TuiKeyAction::PlaybackPlayPause);
     CHECK(plan.actionFor(ftxui::Event::CtrlL) == TuiKeyAction::RevealCurrentTrack);
     CHECK(plan.shortcutFor(TuiKeyAction::ToggleListChooser) == "l");
+    CHECK(plan.shortcutFor(TuiKeyAction::SelectToggle) == "m");
+    CHECK(plan.shortcutFor(TuiKeyAction::SelectClear) == "u");
     CHECK(plan.shortcutFor(TuiKeyAction::PlaybackPlayPause) == "Space");
     CHECK(plan.shortcutFor(TuiKeyAction::PlaybackStop) == "s");
 
@@ -169,6 +180,8 @@ namespace ao::tui::test
   TEST_CASE("TuiKeymap - terminal projection is explicit and accounts for protocol aliases", "[tui][unit][keymap]")
   {
     CHECK(tuiEventForChord(chord("Q")) == ftxui::Event::Character("q"));
+    CHECK(tuiEventForChord(chord("M")) == ftxui::Event::Character("m"));
+    CHECK(tuiEventForChord(chord("U")) == ftxui::Event::Character("u"));
     CHECK(tuiEventForChord(chord("7")) == ftxui::Event::Character("7"));
     CHECK(tuiEventForChord(chord("=")) == ftxui::Event::Character("="));
     CHECK(tuiEventForChord(chord("Shift+Q")) == ftxui::Event::Character("Q"));

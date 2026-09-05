@@ -74,6 +74,8 @@ namespace ao::tui
       {.descriptionId = i18n::MessageId::TuiShellHelpClearFilter, .command = ":clear"},
       {.descriptionId = i18n::MessageId::TuiShellHelpReloadList, .command = ":reload"},
       {.descriptionId = i18n::MessageId::TuiShellHelpScan, .command = ":scan / :scan cancel"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpSelect,
+       .command = ":select toggle / :select range / :select all / :select clear"},
       {.descriptionId = i18n::MessageId::TuiShellHelpPlayback, .command = ":play :pause :stop"},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuit, .command = ":quit"},
     });

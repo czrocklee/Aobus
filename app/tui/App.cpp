@@ -433,7 +433,8 @@ namespace ao::tui
                                                .sectionRowHitRegions = &hitRegions.trackSectionRows,
                                                .tableBox = &hitRegions.trackTableBox,
                                                .availableColumns = availableTrackColumns,
-                                               .viewportRows = terminalRows});
+                                               .viewportRows = terminalRows,
+                                               .markedTrackIds = &library.markedIds()});
         auto const presentationTitle = trackPresentationDisplayId(textCatalog, presentation.id);
         auto workspaceElementPtr =
           style::titledPanel(
@@ -450,7 +451,8 @@ namespace ao::tui
                                        .value = presentationTitle,
                                        .box = &hitRegions.presentationButtonBox,
                                        .hovered = hoveredButton == HoveredButton::Presentation},
-              .rightFooter = selectionSummary(textCatalog, library.tracks().size(), library.selectedTrack())}) |
+              .rightFooter = selectionSummary(
+                textCatalog, library.tracks().size(), library.selectedTrack(), library.markedIds().size())}) |
           flex;
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};

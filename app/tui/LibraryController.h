@@ -16,8 +16,10 @@
 #include <ao/rt/VirtualListIds.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace ao::rt
@@ -65,6 +67,11 @@ namespace ao::tui
     std::int32_t selectedList() const noexcept { return _selectedList; }
     std::int32_t selectedPresentation() const noexcept { return _selectedPresentation; }
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
+    std::unordered_set<TrackId> const& markedIds() const noexcept { return _markedIds; }
+    std::optional<TrackId> optRangeAnchor() const noexcept { return _optRangeAnchor; }
+    // Marked ids in current materialized track order, or the focused track when
+    // none are marked.
+    std::vector<TrackId> selectedTrackIds() const;
     std::string const& filterDraft() const noexcept { return _filterDraft; }
     std::string const& filterError() const noexcept { return _filterError; }
     i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
@@ -78,11 +85,14 @@ namespace ao::tui
 
     void setFilterDraft(std::string value);
     void clearFilterDraft();
-    void publishSelection();
     void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);
     void movePresentationSelection(std::int32_t delta);
     bool setSelectedPresentation(std::int32_t index);
     void setSelectedTrackIndex(std::int32_t index);
+    void toggleFocusedMark();
+    void markRangeToFocus();
+    void markAllTracks();
+    void clearMarks();
 
     std::string jumpToAdjacentSection(std::int32_t delta);
     std::string selectSection(std::int32_t sectionIndex);
@@ -95,6 +105,13 @@ namespace ao::tui
 
   private:
     bool setSelectedTrackById(TrackId trackId);
+    TrackId focusedTrackId() const noexcept;
+    bool containsTrackId(TrackId trackId) const noexcept;
+    void clearMarksAndAnchor();
+    void reconcileMarks();
+    void publishSelection();
+    void publishFocusMove();
+    void focusActiveView();
     void syncSelectedPresentation(std::string_view presentationId);
     void refreshPresentationNavigation();
     std::vector<LibraryNavEntry> loadLibraryNavigation();
@@ -128,6 +145,8 @@ namespace ao::tui
     std::int32_t _selectedList = 0;
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
+    std::unordered_set<TrackId> _markedIds{};
+    std::optional<TrackId> _optRangeAnchor{};
     std::string _filterDraft{};
     std::string _filterError{};
     async::Subscription _customPresetsSub;

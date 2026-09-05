@@ -40,6 +40,10 @@ namespace ao::tui
     constexpr auto kOpenQuickFilterDefaults = std::to_array<std::string_view>({"/"});
     constexpr auto kClearFilterDefaults = std::to_array<std::string_view>({"C"});
     constexpr auto kReloadDefaults = std::to_array<std::string_view>({"R"});
+    constexpr auto kSelectToggleDefaults = std::to_array<std::string_view>({"M"});
+    constexpr auto kSelectRangeDefaults = std::to_array<std::string_view>({"Shift+V"});
+    constexpr auto kSelectAllDefaults = std::to_array<std::string_view>({"Shift+A"});
+    constexpr auto kSelectClearDefaults = std::to_array<std::string_view>({"U"});
     constexpr auto kPlaySelectionDefaults = std::to_array<std::string_view>({"Enter", "P"});
     constexpr auto kPreviousSectionDefaults = std::to_array<std::string_view>({"{"});
     constexpr auto kNextSectionDefaults = std::to_array<std::string_view>({"}"});
@@ -90,6 +94,16 @@ namespace ao::tui
         {.actionId = "tui.library.reloadActiveList", .action = TuiKeyAction::Reload, .defaultChords = kReloadDefaults},
         {.actionId = "tui.library.scan", .action = TuiKeyAction::Scan, .defaultChords = kNoDefaults},
         {.actionId = "tui.library.scanCancel", .action = TuiKeyAction::ScanCancel, .defaultChords = kNoDefaults},
+        {.actionId = "tui.library.selectToggle",
+         .action = TuiKeyAction::SelectToggle,
+         .defaultChords = kSelectToggleDefaults},
+        {.actionId = "tui.library.selectRange",
+         .action = TuiKeyAction::SelectRange,
+         .defaultChords = kSelectRangeDefaults},
+        {.actionId = "tui.library.selectAll", .action = TuiKeyAction::SelectAll, .defaultChords = kSelectAllDefaults},
+        {.actionId = "tui.library.selectClear",
+         .action = TuiKeyAction::SelectClear,
+         .defaultChords = kSelectClearDefaults},
         {.actionId = "tui.library.playSelection",
          .action = TuiKeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},

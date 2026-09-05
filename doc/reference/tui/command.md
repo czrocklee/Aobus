@@ -74,7 +74,11 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `reload`, `refresh`, `r` | reload active list |
 | `scan`, `rescan` | start an eager library scan |
 | `scan cancel` | request cooperative cancellation of the running scan |
-| `play`, `p` | play selected track |
+| `select toggle` | mark or unmark the focused track |
+| `select range` | mark from the range anchor to the focused track |
+| `select all` | mark every track in the current view |
+| `select clear` | clear marked tracks |
+| `play`, `p` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop`, `s` | stop playback |
 | `quit`, `q` | request normal checkpoint-and-stop exit |
@@ -89,7 +93,7 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `Up`, `Down` | previous/next track or active panel row | fixed protocol |
 | `PageUp`, `PageDown` | page selection | fixed protocol |
 | `Home`, `End` | first/last selection | fixed protocol |
-| `Return`, `p` | play selected track | configurable at root; Return is fixed activation inside supported overlays |
+| `Return`, `p` | play the focused track | configurable at root; Return is fixed activation inside supported overlays |
 | `Space` | toggle play/pause | configurable |
 | `s` | stop | configurable |
 | `[` / `]` | seek -/+ 5 seconds | configurable |
@@ -100,6 +104,10 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `Ctrl+L` | reveal current track | configurable |
 | `c` | clear filter | configurable |
 | `r` | reload active list | configurable |
+| `m` | mark or unmark the focused track | configurable |
+| `Shift+V` | mark the inclusive range from the mark-anchor to the focus | configurable |
+| `Shift+A` | mark every track in the current view | configurable |
+| `u` | clear marked tracks | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
 | `:` | open an empty Command Palette input | configurable |
 | `q` | request normal exit | configurable |
@@ -215,6 +223,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
 - [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
+- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase transitions.
 
 ## Related documents

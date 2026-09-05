@@ -451,6 +451,10 @@ root:table {
     tui_shell_detail_quit { "quit" }
     tui_shell_detail_scan { "scan library" }
     tui_shell_detail_scan_cancel { "cancel library scan" }
+    tui_shell_detail_select_toggle { "mark or unmark the focused track" }
+    tui_shell_detail_select_range { "mark from the range anchor to the focused track" }
+    tui_shell_detail_select_all { "mark every track in this view" }
+    tui_shell_detail_select_clear { "clear marked tracks" }
     tui_shell_output_devices_title { "Output Devices" }
     tui_playback_no_active_track { "No active track" }
     tui_playback_volume { "Vol {percent}%" }
@@ -470,6 +474,7 @@ root:table {
     tui_shell_help_clear_filter { "clear filter" }
     tui_shell_help_reload_list { "reload active list" }
     tui_shell_help_scan { "scan library" }
+    tui_shell_help_select { "mark tracks" }
     tui_shell_help_playback { "playback" }
     tui_shell_help_quit { "exit" }
     tui_shell_help_footer { "{closeKey} close" }
@@ -485,6 +490,7 @@ root:table {
     tui_library_filter_cleared { "Filter cleared" }
     tui_library_filter_applied { "Filter applied" }
     tui_library_no_tracks_found { "No tracks found. Run `aobus init` in this library first." }
+    tui_library_marked_count { "{count, plural, one {# marked} other {# marked}}" }
     tui_library_no_lists_found { "No lists found" }
     tui_library_ready { "Ready" }
     tui_library_scan_already_running { "A library scan is already running" }

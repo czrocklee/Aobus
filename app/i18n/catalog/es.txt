@@ -449,6 +449,10 @@ es:table {
     tui_shell_detail_quit { "salir" }
     tui_shell_detail_scan { "escanear biblioteca" }
     tui_shell_detail_scan_cancel { "cancelar el escaneo" }
+    tui_shell_detail_select_toggle { "marcar o desmarcar la pista enfocada" }
+    tui_shell_detail_select_range { "marcar del ancla al foco" }
+    tui_shell_detail_select_all { "marcar todas las pistas de esta vista" }
+    tui_shell_detail_select_clear { "borrar las marcas" }
     tui_shell_output_devices_title { "Dispositivos de salida" }
     tui_playback_no_active_track { "Ninguna pista activa" }
     tui_playback_volume { "Vol {percent}%" }
@@ -468,6 +472,7 @@ es:table {
     tui_shell_help_clear_filter { "borrar filtro" }
     tui_shell_help_reload_list { "recargar lista activa" }
     tui_shell_help_scan { "escanear biblioteca" }
+    tui_shell_help_select { "marcar pistas" }
     tui_shell_help_playback { "reproducción" }
     tui_shell_help_quit { "salir" }
     tui_shell_help_footer { "{closeKey} cerrar" }
@@ -483,6 +488,7 @@ es:table {
     tui_library_filter_cleared { "Filtro borrado" }
     tui_library_filter_applied { "Filtro aplicado" }
     tui_library_no_tracks_found { "No se encontraron pistas. Ejecuta primero `aobus init` en esta biblioteca." }
+    tui_library_marked_count { "{count, plural, one {# marcada} other {# marcadas}}" }
     tui_library_no_lists_found { "No se encontraron listas" }
     tui_library_ready { "Listo" }
     tui_library_scan_already_running { "Ya hay un escaneo de la biblioteca en curso" }

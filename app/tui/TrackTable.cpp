@@ -31,6 +31,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -247,6 +248,23 @@ namespace ao::tui
 
       cells.push_back(filler());
       return hbox(std::move(cells));
+    }
+
+    ftxui::Element trackRowWithMarkStyle(i18n::MessageCatalog const& textCatalog,
+                                         TrackListEntry const& track,
+                                         TrackId const playingTrackId,
+                                         std::vector<TrackColumn> const& columns,
+                                         std::unordered_set<TrackId> const* const markedTrackIds,
+                                         bool const focused)
+    {
+      auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns);
+
+      if (markedTrackIds != nullptr && markedTrackIds->contains(track.id) && !focused)
+      {
+        rowPtr = std::move(rowPtr) | style::accent();
+      }
+
+      return rowPtr;
     }
 
     std::string sectionDetailText(i18n::MessageCatalog const& textCatalog, TrackSection const& section)
@@ -562,7 +580,12 @@ namespace ao::tui
         }
         else
         {
-          rows.push_back(trackRow(textCatalog, tracks[ref.trackIndex], playingTrackId, columns));
+          rows.push_back(trackRowWithMarkStyle(textCatalog,
+                                               tracks[ref.trackIndex],
+                                               playingTrackId,
+                                               columns,
+                                               options.markedTrackIds,
+                                               std::cmp_equal(ref.trackIndex, selected)));
         }
       }
 

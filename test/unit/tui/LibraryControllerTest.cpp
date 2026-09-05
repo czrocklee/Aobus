@@ -33,7 +33,9 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -497,7 +499,8 @@ namespace ao::tui::test
     CHECK(controller.filterError().empty());
   }
 
-  TEST_CASE("LibraryController - filter error preserves visible controller state", "[tui][regression][library]")
+  TEST_CASE("LibraryController - filter error preserves visible controller state",
+            "[tui][regression][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstTrackId = fixture.addTrack("Needle");
@@ -505,8 +508,13 @@ namespace ao::tui::test
 
     auto controller = fixture.makeController();
     auto const activeViewId = controller.activeViewId();
-    auto const selectedTrack = controller.selectedTrack();
     auto const sectionCount = controller.sections().size();
+    controller.toggleFocusedMark();
+    controller.moveFocusedSelection(false, 1);
+    auto const selectedTrack = controller.selectedTrack();
+    REQUIRE(selectedTrack == 1);
+    REQUIRE(controller.markedIds().contains(firstTrackId));
+    REQUIRE(controller.optRangeAnchor() == firstTrackId);
     controller.setFilterDraft("Needle");
     REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
 
@@ -522,6 +530,8 @@ namespace ao::tui::test
     REQUIRE(controller.tracks().size() == 2);
     CHECK(controller.tracks().front().id == firstTrackId);
     CHECK(controller.activePresentation() == rt::defaultTrackPresentationSpec());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstTrackId});
+    CHECK(controller.optRangeAnchor() == firstTrackId);
   }
 
   TEST_CASE("LibraryController - empty track views clear the published selection", "[tui][regression][library]")
@@ -772,5 +782,220 @@ namespace ao::tui::test
     CHECK(controller.selectSection(0) == "No section selected");
     CHECK(controller.selectSection(-1) == "No section selected");
     CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - marks are independent of focus and publish effective ids",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 3);
+
+    controller.toggleFocusedMark();
+    CHECK(controller.markedIds().contains(firstId));
+    CHECK(controller.optRangeAnchor() == firstId);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.moveFocusedSelection(false, 1);
+    CHECK(controller.selectedTrack() == 1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.toggleFocusedMark();
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    controller.moveFocusedSelection(false, 1);
+    CHECK(controller.selectedTrackView().track->id == thirdId);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+
+    auto const& published = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    CHECK(published == std::vector<TrackId>{firstId, secondId});
+  }
+
+  TEST_CASE("LibraryController - range select adds inclusive ids without toggling existing marks",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto const thirdId = fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.moveFocusedSelection(false, 2);
+    controller.markRangeToFocus();
+
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId, thirdId});
+    CHECK(controller.optRangeAnchor() == firstId);
+
+    controller.setSelectedTrackIndex(1);
+    controller.toggleFocusedMark();
+    CHECK_FALSE(controller.markedIds().contains(secondId));
+    controller.moveFocusedSelection(false, 1);
+    controller.markRangeToFocus();
+    CHECK(controller.markedIds().contains(secondId));
+    CHECK(controller.markedIds().contains(thirdId));
+  }
+
+  TEST_CASE("LibraryController - select all marks every materialized row and clear restores focus selection",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    fixture.addTrack("Second");
+    fixture.addTrack("Third");
+    auto controller = fixture.makeController();
+
+    controller.markAllTracks();
+    CHECK(controller.markedIds().size() == 3);
+    CHECK(controller.selectedTrackIds().size() == 3);
+
+    controller.clearMarks();
+    CHECK(controller.markedIds().empty());
+    CHECK_FALSE(controller.optRangeAnchor());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+  }
+
+  TEST_CASE("LibraryController - successful filter change clears marks; a no-op filter keeps them",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("Alpha");
+    fixture.addTrack("Beta");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.setFilterDraft("Alpha");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    CHECK(controller.markedIds().empty());
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+
+    controller.toggleFocusedMark();
+    controller.setFilterDraft("Alpha");
+    CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
+    CHECK(controller.markedIds().contains(firstId));
+  }
+
+  TEST_CASE("LibraryController - presentation change keeps marks in the new row order",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const olderId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "older.flac", .year = 2000});
+    auto const newerId = fixture.addTrack(library::test::TrackSpec{
+      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "newer.flac", .year = 2025});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().size() == 2);
+    REQUIRE(controller.tracks()[0].id == newerId);
+    REQUIRE(controller.tracks()[1].id == olderId);
+
+    controller.toggleFocusedMark();
+    controller.moveFocusedSelection(false, 1);
+    controller.toggleFocusedMark();
+    REQUIRE(controller.selectedTrack() == 1);
+    REQUIRE(controller.optRangeAnchor() == olderId);
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{newerId, olderId});
+
+    CHECK(controller.setPresentation("artists") == "View: artists");
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == olderId);
+    CHECK(controller.optRangeAnchor() == olderId);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{olderId, newerId});
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+          std::vector<TrackId>{olderId, newerId});
+  }
+
+  TEST_CASE("LibraryController - same-view reload reconciles vanished marks", "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.moveFocusedSelection(false, 1);
+    controller.toggleFocusedMark();
+    REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
+    REQUIRE(controller.optRangeAnchor() == secondId);
+
+    SECTION("deleting the anchor track drops that mark and resets the anchor")
+    {
+      REQUIRE(
+        rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(secondId)));
+      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      CHECK(controller.reloadActiveList() == "Reloaded 1 track");
+      CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstId});
+      CHECK_FALSE(controller.optRangeAnchor());
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+            std::vector<TrackId>{firstId});
+    }
+
+    SECTION("deleting a non-anchor marked track keeps the remaining mark and anchor")
+    {
+      REQUIRE(
+        rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(firstId)));
+      rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+      CHECK(controller.reloadActiveList() == "Reloaded 1 track");
+      CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondId});
+      CHECK(controller.optRangeAnchor() == secondId);
+      CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+            std::vector<TrackId>{secondId});
+    }
+  }
+
+  TEST_CASE("LibraryController - list navigation clears marks; same-view reload keeps live ids",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("Keep");
+    fixture.addTrack("Other");
+    auto const listId = fixture.addList("Side");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    CHECK(controller.reloadActiveList().contains("2"));
+    CHECK(controller.markedIds().contains(firstId));
+
+    auto const listIt = std::ranges::find(controller.libraryEntries(), listId, &LibraryNavEntry::id);
+    REQUIRE(listIt != controller.libraryEntries().end());
+    controller.moveFocusedSelection(
+      true, static_cast<std::int32_t>(listIt - controller.libraryEntries().begin()) - controller.selectedList());
+    REQUIRE(controller.openSelectedList().opened);
+    CHECK(controller.markedIds().empty());
+  }
+
+  TEST_CASE("LibraryController - reopening the current list keeps marks, focus, and published selection",
+            "[tui][regression][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addTrack("First");
+    auto const secondId = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+
+    controller.toggleFocusedMark();
+    controller.moveFocusedSelection(false, 1);
+    controller.toggleFocusedMark();
+    auto const viewId = controller.activeViewId();
+    auto const marked = controller.selectedTrackIds();
+    auto const optAnchor = controller.optRangeAnchor();
+    REQUIRE(viewId != rt::kInvalidViewId);
+    REQUIRE(marked == std::vector<TrackId>{firstId, secondId});
+    REQUIRE(optAnchor == secondId);
+
+    REQUIRE(controller.openSelectedList().opened);
+
+    CHECK(controller.activeViewId() == viewId);
+    CHECK(controller.markedIds().contains(firstId));
+    CHECK(controller.markedIds().contains(secondId));
+    CHECK(controller.optRangeAnchor() == optAnchor);
+    CHECK(controller.selectedTrackIds() == marked);
+    CHECK(fixture.runtimePtr->views().trackListState(viewId).selection == marked);
+    CHECK(controller.selectedTrack() == 1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    CHECK(controller.selectedTrackView().track->id == secondId);
   }
 } // namespace ao::tui::test

@@ -280,6 +280,7 @@ namespace ao::tui::test
     CHECK(text.contains(":views"));
     CHECK(text.contains(":notifications"));
     CHECK(text.contains(":scan / :scan cancel"));
+    CHECK(text.contains(":select toggle / :select range / :select all / :select clear"));
     CHECK(text.contains("{ / }"));
   }
 
