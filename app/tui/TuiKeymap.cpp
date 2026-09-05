@@ -88,6 +88,8 @@ namespace ao::tui
          .action = TuiKeyAction::ClearFilter,
          .defaultChords = kClearFilterDefaults},
         {.actionId = "tui.library.reloadActiveList", .action = TuiKeyAction::Reload, .defaultChords = kReloadDefaults},
+        {.actionId = "tui.library.scan", .action = TuiKeyAction::Scan, .defaultChords = kNoDefaults},
+        {.actionId = "tui.library.scanCancel", .action = TuiKeyAction::ScanCancel, .defaultChords = kNoDefaults},
         {.actionId = "tui.library.playSelection",
          .action = TuiKeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},

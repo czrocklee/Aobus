@@ -214,8 +214,10 @@ namespace ao::tui
     }
 
     std::shared_ptr<State> _statePtr;
+    SignalAction _oldInt{};
     SignalAction _oldTerm{};
     SignalAction _oldHup{};
+    bool _intInstalled = false;
     bool _termInstalled = false;
     bool _hupInstalled = false;
     bool _ownsSignalHandlers = false;
@@ -237,6 +239,7 @@ namespace ao::tui
 
     if (_ownsSignalHandlers)
     {
+      _intInstalled = install(SIGINT, _oldInt);
       _termInstalled = install(SIGTERM, _oldTerm);
       _hupInstalled = install(SIGHUP, _oldHup);
     }
@@ -246,6 +249,7 @@ namespace ao::tui
   {
     if (_ownsSignalHandlers)
     {
+      restore(SIGINT, _oldInt, _intInstalled);
       restore(SIGTERM, _oldTerm, _termInstalled);
       restore(SIGHUP, _oldHup, _hupInstalled);
       auto expected = _statePtr->writeFd();

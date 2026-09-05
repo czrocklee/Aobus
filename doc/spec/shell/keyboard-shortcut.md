@@ -81,7 +81,7 @@ Unknown action ids remain valid mapping keys but do not become schema-backed edi
 
 The TUI adapter similarly diagnoses and omits Alt, Super, media, Unicode, mixed-modifier, and otherwise unsupported terminal chords without falling back the whole keymap.
 Terminal aliases such as Ctrl-I/Tab and Ctrl-M/Return are compared after projection; the earlier TUI descriptor and chord wins, and later claims are diagnosed.
-Ctrl-C is representable by the adapter but never installable in the executable root plan because it belongs to emergency-exit protocol.
+Ctrl-C is representable by the adapter but never installable in the executable root plan because it belongs to the fixed graceful-exit protocol.
 
 The editor never silently steals a conflicting binding.
 The grouped store makes each requested save a fail-closed complete-document replacement.

@@ -10,8 +10,10 @@
 #include "CoverArtLoader.h"
 #include "EventController.h"
 #include "Executor.h"
+#include "ExitController.h"
 #include "FrameTimer.h"
 #include "LibraryController.h"
+#include "LibraryScanController.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
@@ -787,6 +789,10 @@ namespace ao::tui
     // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
     screen.TrackMouse(true);
+    // Keyboard Ctrl-C is Event::CtrlC while ISIG is off. Keep FTXUI from
+    // exiting after the shell consumes that event so the App exit gate can
+    // retire scan presentation and leave the loop.
+    screen.ForceHandleCtrlC(false);
     auto executorPtr = std::make_unique<Executor>(screen);
     auto* const executor = executorPtr.get();
     auto runtimeRes = rt::AppRuntime::create(rt::AppRuntimeDependencies{
@@ -931,8 +937,21 @@ namespace ao::tui
     auto outputDevices =
       OutputDeviceController{playback, textCatalog, makeOutputDeviceIntent(*appConfigStorePtr), requestRefresh};
     auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace(), textCatalog};
-    auto events = EventController{screen,
-                                  shell,
+    auto libraryScan =
+      LibraryScanController{runtime.async(), runtime.library().jobs(), runtime.notifications(), textCatalog};
+    EventController* activeEvents = nullptr;
+    auto exitController = ExitController{{
+      .retire =
+        [&]
+      {
+        libraryScan.retire();
+        activeEvents->cancelTransientInteractions();
+        shell.closeInput();
+      },
+      .postExit = [&screen] { screen.Post(screen.ExitLoopClosure()); },
+    }};
+    auto requestGracefulExit = [&exitController] { exitController.requestExit(); };
+    auto events = EventController{shell,
                                   library,
                                   runtime.async(),
                                   runtime.playback(),
@@ -944,11 +963,14 @@ namespace ao::tui
                                     .trackColumnResizePreview = trackColumnResizePreview,
                                     .activityStatusViewModel = activityStatusViewModel,
                                     .notifications = runtime.notifications(),
+                                    .libraryScan = libraryScan,
+                                    .requestExit = requestGracefulExit,
                                     .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
                                     { return commandCompletions.completeCommand(draft); },
                                     .filterCompletionCallback = [&commandCompletions](std::string_view const draft)
                                     { return commandCompletions.completeFilter(draft); },
                                   }};
+    activeEvents = &events;
 
     auto frameTimer = FrameTimer{};
     auto frameRenderer = AppFrameRenderer{
@@ -977,12 +999,19 @@ namespace ao::tui
     auto componentPtr =
       ftxui::CatchEvent(rendererPtr, [&](ftxui::Event const& event) { return events.handleEvent(event); });
 
+    // FTXUI Loop::Loop calls ScreenInteractive::Install, which disables ISIG
+    // (terminal Ctrl-C is Event::CtrlC, not SIGINT) and installs std::signal
+    // handlers that exit the loop. Declare the Loop and periodic refresh
+    // before the watcher so the watcher installs last: SIGINT/SIGTERM/SIGHUP
+    // and Windows CTRL_C_EVENT then post through the App exit gate instead of
+    // FTXUI's bypass. Watcher destruction restores those handlers before
+    // Loop::~Loop uninstalls terminal mode.
     auto loop = ftxui::Loop{&screen, componentPtr};
-    auto signalExit = SignalExitWatcher{[&screen] { screen.Post(screen.ExitLoopClosure()); }};
     auto refreshTick = PeriodicRefresh{screen,
                                        kPlaybackTickInterval,
                                        [&clockTickActive, &activityAutoDismissActive]
                                        { return clockTickActive.load() || activityAutoDismissActive.load(); }};
+    auto signalExit = SignalExitWatcher{[&screen, requestGracefulExit] { screen.Post(requestGracefulExit); }};
 
     executor->drainPendingTasks();
 
@@ -1011,7 +1040,9 @@ namespace ao::tui
     }
 
     coverArt.cancel();
+    libraryScan.retire();
     events.cancelTransientInteractions();
+    shell.closeInput();
 
     if (layoutStateDirty)
     {

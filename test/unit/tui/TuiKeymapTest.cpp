@@ -62,6 +62,8 @@ namespace ao::tui::test
       {TuiKeyAction::RevealCurrentTrack, "workspace.revealCurrentTrack"},
       {TuiKeyAction::ClearFilter, "tui.library.clearFilter"},
       {TuiKeyAction::Reload, "tui.library.reloadActiveList"},
+      {TuiKeyAction::Scan, "tui.library.scan"},
+      {TuiKeyAction::ScanCancel, "tui.library.scanCancel"},
       {TuiKeyAction::PlaySelection, "tui.library.playSelection"},
       {TuiKeyAction::PreviousSection, "tui.library.previousSection"},
       {TuiKeyAction::NextSection, "tui.library.nextSection"},
@@ -144,9 +146,17 @@ namespace ao::tui::test
 
     for (auto const& descriptor : tuiActionDescriptors())
     {
+      auto const& chords = model.bindings().at(descriptor.actionId);
+
+      if (chords.empty())
+      {
+        CHECK(plan.shortcutFor(descriptor.action).empty());
+        continue;
+      }
+
       CHECK_FALSE(plan.shortcutFor(descriptor.action).empty());
 
-      for (auto const& candidate : model.bindings().at(descriptor.actionId))
+      for (auto const& candidate : chords)
       {
         if (auto const optEvent = tuiEventForChord(candidate); optEvent)
         {

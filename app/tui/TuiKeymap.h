@@ -33,6 +33,8 @@ namespace ao::tui
     RevealCurrentTrack,
     ClearFilter,
     Reload,
+    Scan,
+    ScanCancel,
     PlaySelection,
     PreviousSection,
     NextSection,

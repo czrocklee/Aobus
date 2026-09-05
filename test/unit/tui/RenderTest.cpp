@@ -279,6 +279,7 @@ namespace ao::tui::test
     CHECK(text.contains(":output"));
     CHECK(text.contains(":views"));
     CHECK(text.contains(":notifications"));
+    CHECK(text.contains(":scan / :scan cancel"));
     CHECK(text.contains("{ / }"));
   }
 

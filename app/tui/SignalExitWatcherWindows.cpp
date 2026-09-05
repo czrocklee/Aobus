@@ -71,17 +71,18 @@ namespace ao::tui
     compat::AtomicSharedPtr<ExitCallbackState>
       gActiveStatePtr{}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
-    // Mirrors the POSIX watcher, which handles SIGTERM/SIGHUP and leaves
-    // SIGINT to ftxui. On Windows, Ctrl-C must reach the CRT's own console
-    // handler (return FALSE below): the CRT raises SIGINT, which ftxui's
-    // std::signal handler turns into a graceful loop exit.
+    // When a watcher owns the request, claim Ctrl-C/Ctrl-Break so the App
+    // exit gate can retire scan presentation and leave the loop. Returning
+    // FALSE would let the CRT raise SIGINT, which FTXUI turns into a loop
+    // exit that bypasses that gate. With no active watcher, retain FALSE so
+    // the previous handler runs.
     BOOL WINAPI consoleControlHandler(DWORD const controlType)
     {
       auto const statePtr = gActiveStatePtr.load(std::memory_order_acquire);
 
       switch (controlType)
       {
-        case CTRL_C_EVENT: return FALSE;
+        case CTRL_C_EVENT:
         case CTRL_BREAK_EVENT:
           if (statePtr != nullptr)
           {

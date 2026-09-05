@@ -15,6 +15,7 @@
 #include "test/unit/tui/TuiKeymapTestSupport.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryNavigation.h"
+#include "tui/LibraryScanController.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/OutputDevicePanel.h"
@@ -59,13 +60,13 @@
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
-#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/screen.hpp>
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <memory>
@@ -94,7 +95,6 @@ namespace ao::tui::test
       std::unique_ptr<rt::AppRuntime> runtimePtr;
       uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
       uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
-      ftxui::ScreenInteractive screen{ftxui::ScreenInteractive::FixedSize(80, 24)};
       ShellInteractionModel shell{};
       TuiHitRegions hitRegions{};
       uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
@@ -105,6 +105,8 @@ namespace ao::tui::test
       uimodel::ActivityStatusViewModel activityStatusViewModel{runtimePtr->notifications(),
                                                                ao::test::englishMessageCatalog(),
                                                                [](uimodel::ActivityStatusViewState const&) {}};
+      std::unique_ptr<LibraryScanController> libraryScanPtr{};
+      std::size_t exitRequestCount = 0;
 
       explicit EventControllerFixture(bool const useControlledSleeper = false)
         : sleeperPtr{useControlledSleeper ? std::make_unique<rt::test::ControlledSleeper>() : nullptr}
@@ -133,8 +135,15 @@ namespace ao::tui::test
                                  InputCompletionCallback commandCompletion = {},
                                  InputCompletionCallback filterCompletion = {})
       {
-        return EventController{screen,
-                               shell,
+        if (libraryScanPtr == nullptr)
+        {
+          libraryScanPtr = std::make_unique<LibraryScanController>(runtimePtr->async(),
+                                                                   runtimePtr->library().jobs(),
+                                                                   runtimePtr->notifications(),
+                                                                   ao::test::englishMessageCatalog());
+        }
+
+        return EventController{shell,
                                library,
                                runtimePtr->async(),
                                runtimePtr->playback(),
@@ -146,6 +155,8 @@ namespace ao::tui::test
                                  .trackColumnResizePreview = trackColumnResizePreview,
                                  .activityStatusViewModel = activityStatusViewModel,
                                  .notifications = runtimePtr->notifications(),
+                                 .libraryScan = *libraryScanPtr,
+                                 .requestExit = [this] { ++exitRequestCount; },
                                  .commandCompletionCallback = std::move(commandCompletion),
                                  .filterCompletionCallback = std::move(filterCompletion),
                                }};
@@ -316,6 +327,49 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("q")));
 
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == trackId);
+    CHECK(fixture.exitRequestCount == 1);
+  }
+
+  TEST_CASE("EventController - Ctrl-C and quit request the shared exit callback", "[tui][unit][event][exit]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("q")));
+    CHECK(fixture.exitRequestCount == 1);
+
+    CHECK(controller.handleEvent(ftxui::Event::CtrlC));
+    CHECK(fixture.exitRequestCount == 2);
+    CHECK_FALSE(controller.handleEvent(ftxui::Event::Custom));
+  }
+
+  TEST_CASE("EventController - scan commands start and cancel the library scan", "[tui][unit][event][scan]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    enterCommand(controller, "scan");
+    CHECK(fixture.libraryScanPtr->phase() == LibraryScanController::Phase::Running);
+
+    enterCommand(controller, "scan cancel");
+    CHECK(fixture.libraryScanPtr->phase() == LibraryScanController::Phase::Cancelling);
+    fixture.executor->drain();
+  }
+
+  TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    enterCommand(controller, "select");
+    CHECK(fixture.shell.isInputActive());
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    auto const& message = std::get<std::string>(feed.entries.back().message);
+    CHECK(message.contains("select"));
   }
 
   TEST_CASE("EventController - cancelling untouched Quick Filter preserves the active filter",
