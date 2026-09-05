@@ -396,5 +396,44 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
         )
 
 
+class NinjaDependencyRecordParsingTest(unittest.TestCase):
+    def test_each_distinct_path_spelling_is_resolved_once(self):
+        # A whole-project dump repeats the same headers under every translation
+        # unit. Resolving a spelling walks the filesystem, so the parser must
+        # pay that cost per distinct spelling rather than per line.
+        build_dir = Path("/build")
+        shared = ["include/Common.h", "include/Types.h"]
+        blocks = []
+        for index in range(50):
+            blocks.append(f"object-{index}.o: #deps 3, deps mtime 1 (VALID)")
+            blocks.extend(f"    {spelling}" for spelling in [f"src/Unit{index}.cpp", *shared])
+            blocks.append("")
+        output = "\n".join(blocks)
+
+        real_record_path = tidyengine._ninja_record_path
+        with mock.patch.object(
+            tidyengine,
+            "_ninja_record_path",
+            side_effect=real_record_path,
+        ) as record_path:
+            records = list(tidyengine._parse_ninja_dependency_records(output, build_dir))
+
+        self.assertEqual(len(records), 50)
+        distinct_spellings = (
+            {f"src/Unit{index}.cpp" for index in range(50)} | set(shared) | {f"object-{index}.o" for index in range(50)}
+        )
+        self.assertEqual(record_path.call_count, len(distinct_spellings))
+        # Every dependency list is still complete: memoization must return the
+        # same resolved path, not drop the repeats.
+        for index, (_, dependencies) in enumerate(records):
+            self.assertEqual(
+                [str(path) for path in dependencies],
+                [
+                    str(real_record_path(f"src/Unit{index}.cpp", build_dir)),
+                    *(str(real_record_path(spelling, build_dir)) for spelling in shared),
+                ],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
