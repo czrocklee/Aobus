@@ -96,10 +96,13 @@ external spelling.
 
 ### Pointer, optional, and time names
 
-A nullable raw pointer or smart pointer variable ends in `Ptr`:
-`runtimePtr`, `_storePtr`. A reference, span, iterator, handle, callback,
-or value wrapper does not. A factory returning a pointer still describes what
-it creates: `makeRuntime()`, not `makeRuntimePtr()`.
+A `std::unique_ptr`, `std::shared_ptr`, `std::weak_ptr`, or `Glib::RefPtr`
+variable ends in `Ptr`: `_storePtr`, `providerPtr`. A raw pointer does not,
+because the suffix is what distinguishes an owning or counted handle from a
+plain observer: `_saveButton`, `targetWindow`. Neither does a reference, span,
+iterator, handle, callback, or value wrapper. Hungarian prefixes are rejected on
+both: no `pWindow`, no `_pWindow`. A factory returning a pointer still describes
+what it creates: `makeRuntime()`, not `makeRuntimePtr()`.
 
 An `std::optional` variable begins with `opt`: `optTrackId`.
 A function or type name describes the semantic result and does not acquire that
