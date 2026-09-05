@@ -378,6 +378,68 @@ namespace ao::tui::test
     CHECK(library.markedIds().empty());
   }
 
+  TEST_CASE("EventController - Escape cancels a visual selection unless a modal overlay holds the keys",
+            "[tui][unit][event][selection]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.tracks().size() >= 2);
+
+    SECTION("with no overlay open the selection is cancelled and the marks it started from return")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+      CHECK(controller.handleEvent(ftxui::Event::Character("j")));
+      REQUIRE(library.isVisualSelectionActive());
+      REQUIRE(library.selectedTrack() == 1);
+      REQUIRE(library.markedIds().size() == 2);
+
+      CHECK(controller.handleEvent(ftxui::Event::Character("k")));
+      CHECK(library.selectedTrack() == 0);
+      CHECK(library.markedIds().size() == 1);
+
+      CHECK(controller.handleEvent(ftxui::Event::Escape));
+      CHECK_FALSE(library.isVisualSelectionActive());
+      CHECK(library.markedIds().empty());
+      CHECK(fixture.shell.overlay() == Overlay::None);
+    }
+
+    SECTION("the detail panel leaves the keys to the workspace, so the selection is cancelled first")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::Character("d")));
+      REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+      CHECK(controller.handleEvent(ftxui::Event::Character("j")));
+      REQUIRE(library.isVisualSelectionActive());
+
+      CHECK(controller.handleEvent(ftxui::Event::Escape));
+      CHECK_FALSE(library.isVisualSelectionActive());
+      CHECK(library.markedIds().empty());
+      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+
+      CHECK(controller.handleEvent(ftxui::Event::Escape));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+    }
+
+    SECTION("a modal overlay took those keys, so it closes first and the selection survives")
+    {
+      CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+      CHECK(controller.handleEvent(ftxui::Event::Character("j")));
+      REQUIRE(library.isVisualSelectionActive());
+      CHECK(controller.handleEvent(ftxui::Event::Character("l")));
+      REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
+
+      CHECK(controller.handleEvent(ftxui::Event::Escape));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+      CHECK(library.isVisualSelectionActive());
+      CHECK(library.markedIds().size() == 2);
+
+      CHECK(controller.handleEvent(ftxui::Event::Escape));
+      CHECK_FALSE(library.isVisualSelectionActive());
+      CHECK(library.markedIds().empty());
+    }
+  }
+
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")
   {
     auto fixture = EventControllerFixture{};
@@ -1011,23 +1073,16 @@ namespace ao::tui::test
     REQUIRE(fixture.shell.overlay() == Overlay::QualityPanel);
 
     auto const workspaceEvents = std::vector{
-      ftxui::Event::PageDown,
-      ftxui::Event::End,
-      ftxui::Event::Return,
-      ftxui::Event::Character("p"),
-      ftxui::Event::Character(" "),
-      ftxui::Event::Character("s"),
-      ftxui::Event::Character("["),
-      ftxui::Event::Character("]"),
-      ftxui::Event::Character("+"),
-      ftxui::Event::Character("-"),
-      ftxui::Event::Character("="),
-      ftxui::Event::Character("c"),
-      ftxui::Event::Character("r"),
-      ftxui::Event::Character("{"),
-      ftxui::Event::Character("}"),
-      ftxui::Event::CtrlL,
-      ftxui::Event::F2,
+      ftxui::Event::PageDown,       ftxui::Event::End,
+      ftxui::Event::Return,         ftxui::Event::Character("p"),
+      ftxui::Event::Character("v"), ftxui::Event::Character("j"),
+      ftxui::Event::Character("k"), ftxui::Event::Character(" "),
+      ftxui::Event::Character("s"), ftxui::Event::Character("["),
+      ftxui::Event::Character("]"), ftxui::Event::Character("+"),
+      ftxui::Event::Character("-"), ftxui::Event::Character("="),
+      ftxui::Event::Character("c"), ftxui::Event::Character("r"),
+      ftxui::Event::Character("{"), ftxui::Event::Character("}"),
+      ftxui::Event::CtrlL,          ftxui::Event::F2,
     };
 
     for (auto const& event : workspaceEvents)
@@ -1082,10 +1137,10 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
-    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
     CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
 
-    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
@@ -1095,7 +1150,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
-    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
     CHECK(fixture.shell.overlay() == Overlay::PresentationPanel);
 
     auto const albumsIndex = presentationIndex(library, "albums");
@@ -1120,7 +1175,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
-    CHECK(controller.handleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
     CHECK(controller.handleEvent(ftxui::Event::End));
     CHECK(library.selectedPresentation() == static_cast<std::int32_t>(library.presentationEntries().size()) - 1);
 
@@ -2280,7 +2335,7 @@ namespace ao::tui::test
     REQUIRE(library.selectedTrack() == 0);
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
     REQUIRE(library.selectedTrack() == 1);
-    CHECK(controller.handleEvent(ftxui::Event::Character("p")));
+    CHECK(controller.handleEvent(ftxui::Event::Return));
     REQUIRE(fixture.waitForPlayback(library.tracks()[1].id));
     REQUIRE(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[1].id);
 

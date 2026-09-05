@@ -451,8 +451,11 @@ namespace ao::tui
                                        .value = presentationTitle,
                                        .box = &hitRegions.presentationButtonBox,
                                        .hovered = hoveredButton == HoveredButton::Presentation},
-              .rightFooter = selectionSummary(
-                textCatalog, library.tracks().size(), library.selectedTrack(), library.markedIds().size())}) |
+              .rightFooter = selectionSummary(textCatalog,
+                                              library.tracks().size(),
+                                              library.selectedTrack(),
+                                              library.markedIds().size(),
+                                              library.isVisualSelectionActive())}) |
           flex;
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};

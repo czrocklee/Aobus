@@ -33,7 +33,7 @@ namespace ao::tui
     constexpr auto kToggleDetailsDefaults = std::to_array<std::string_view>({"D"});
     constexpr auto kToggleAudioPipelineDefaults = std::to_array<std::string_view>({"A"});
     constexpr auto kToggleOutputDevicesDefaults = std::to_array<std::string_view>({"O"});
-    constexpr auto kTogglePresentationsDefaults = std::to_array<std::string_view>({"V"});
+    constexpr auto kTogglePresentationsDefaults = std::to_array<std::string_view>({"P"});
     constexpr auto kToggleNotificationsDefaults = std::to_array<std::string_view>({"N"});
     constexpr auto kShowHelpDefaults = std::to_array<std::string_view>({"?"});
     constexpr auto kOpenCommandPaletteDefaults = std::to_array<std::string_view>({":"});
@@ -41,10 +41,12 @@ namespace ao::tui
     constexpr auto kClearFilterDefaults = std::to_array<std::string_view>({"C"});
     constexpr auto kReloadDefaults = std::to_array<std::string_view>({"R"});
     constexpr auto kSelectToggleDefaults = std::to_array<std::string_view>({"M"});
-    constexpr auto kSelectRangeDefaults = std::to_array<std::string_view>({"Shift+V"});
+    constexpr auto kSelectVisualDefaults = std::to_array<std::string_view>({"V", "Shift+V"});
     constexpr auto kSelectAllDefaults = std::to_array<std::string_view>({"Shift+A"});
     constexpr auto kSelectClearDefaults = std::to_array<std::string_view>({"U"});
-    constexpr auto kPlaySelectionDefaults = std::to_array<std::string_view>({"Enter", "P"});
+    constexpr auto kPlaySelectionDefaults = std::to_array<std::string_view>({"Enter"});
+    constexpr auto kPreviousTrackDefaults = std::to_array<std::string_view>({"K"});
+    constexpr auto kNextTrackDefaults = std::to_array<std::string_view>({"J"});
     constexpr auto kPreviousSectionDefaults = std::to_array<std::string_view>({"{"});
     constexpr auto kNextSectionDefaults = std::to_array<std::string_view>({"}"});
     constexpr auto kSeekBackwardDefaults = std::to_array<std::string_view>({"["});
@@ -97,9 +99,9 @@ namespace ao::tui
         {.actionId = "tui.library.selectToggle",
          .action = TuiKeyAction::SelectToggle,
          .defaultChords = kSelectToggleDefaults},
-        {.actionId = "tui.library.selectRange",
-         .action = TuiKeyAction::SelectRange,
-         .defaultChords = kSelectRangeDefaults},
+        {.actionId = "tui.library.selectVisual",
+         .action = TuiKeyAction::SelectVisual,
+         .defaultChords = kSelectVisualDefaults},
         {.actionId = "tui.library.selectAll", .action = TuiKeyAction::SelectAll, .defaultChords = kSelectAllDefaults},
         {.actionId = "tui.library.selectClear",
          .action = TuiKeyAction::SelectClear,
@@ -107,6 +109,10 @@ namespace ao::tui
         {.actionId = "tui.library.playSelection",
          .action = TuiKeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},
+        {.actionId = "tui.library.previousTrack",
+         .action = TuiKeyAction::PreviousTrack,
+         .defaultChords = kPreviousTrackDefaults},
+        {.actionId = "tui.library.nextTrack", .action = TuiKeyAction::NextTrack, .defaultChords = kNextTrackDefaults},
         {.actionId = "tui.library.previousSection",
          .action = TuiKeyAction::PreviousSection,
          .defaultChords = kPreviousSectionDefaults},

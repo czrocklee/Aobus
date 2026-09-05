@@ -178,7 +178,7 @@ namespace ao::tui
     }
 
     _selectedTrack = moveSelection(_selectedTrack, delta, _tracks.size());
-    publishFocusMove();
+    afterFocusMove();
   }
 
   void LibraryController::movePresentationSelection(std::int32_t const delta)
@@ -200,7 +200,7 @@ namespace ao::tui
   void LibraryController::setSelectedTrackIndex(std::int32_t const index)
   {
     _selectedTrack = moveSelection(index, 0, _tracks.size());
-    publishFocusMove();
+    afterFocusMove();
   }
 
   void LibraryController::toggleFocusedMark()
@@ -212,16 +212,19 @@ namespace ao::tui
       return;
     }
 
+    // A running visual range would recompute the mark set on the next motion and
+    // discard this toggle, so committing the range first keeps both edits.
+    endVisualSelection();
+
     if (!_markedIds.insert(trackId).second)
     {
       _markedIds.erase(trackId);
     }
 
-    _optRangeAnchor = trackId;
     publishSelection();
   }
 
-  void LibraryController::markRangeToFocus()
+  void LibraryController::toggleVisualSelection()
   {
     auto const focusId = focusedTrackId();
 
@@ -230,43 +233,72 @@ namespace ao::tui
       return;
     }
 
-    auto optAnchor = std::optional<std::size_t>{};
-    auto optFocus = std::optional<std::size_t>{};
-
-    for (std::size_t index = 0; index < _tracks.size(); ++index)
+    if (_optVisualAnchor)
     {
-      if (_optRangeAnchor && _tracks[index].id == *_optRangeAnchor)
-      {
-        optAnchor = index;
-      }
-
-      if (_tracks[index].id == focusId)
-      {
-        optFocus = index;
-      }
-    }
-
-    if (!optAnchor || !optFocus)
-    {
-      _markedIds.insert(focusId);
-      _optRangeAnchor = focusId;
+      // Confirming leaves the range in the mark set, where any later edit treats
+      // it exactly like marks made one at a time.
+      endVisualSelection();
       publishSelection();
       return;
     }
 
-    auto const begin = std::min(*optAnchor, *optFocus);
-    auto const end = std::max(*optAnchor, *optFocus);
+    _visualBaseIds = _markedIds;
+    _optVisualAnchor = focusId;
+    applyVisualRange();
+    publishSelection();
+  }
+
+  void LibraryController::cancelVisualSelection()
+  {
+    if (!_optVisualAnchor)
+    {
+      return;
+    }
+
+    _markedIds = std::move(_visualBaseIds);
+    endVisualSelection();
+    publishSelection();
+  }
+
+  void LibraryController::applyVisualRange()
+  {
+    if (!_optVisualAnchor || _tracks.empty())
+    {
+      return;
+    }
+
+    auto const anchorIt = std::ranges::find(_tracks, *_optVisualAnchor, &TrackListEntry::id);
+
+    if (anchorIt == _tracks.end())
+    {
+      return;
+    }
+
+    // Only the anchor has to be located: the focus is already a row index, and
+    // this runs on every step of a held motion key.
+    auto const anchor = static_cast<std::size_t>(std::distance(_tracks.begin(), anchorIt));
+    auto const focus = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
+    auto const begin = std::min(anchor, focus);
+    auto const end = std::max(anchor, focus);
+
+    _markedIds = _visualBaseIds;
+    _markedIds.reserve(_visualBaseIds.size() + (end - begin) + 1);
 
     for (auto index = begin; index <= end; ++index)
     {
       _markedIds.insert(_tracks[index].id);
     }
+  }
 
-    publishSelection();
+  void LibraryController::endVisualSelection()
+  {
+    _optVisualAnchor.reset();
+    _visualBaseIds.clear();
   }
 
   void LibraryController::markAllTracks()
   {
+    endVisualSelection();
     _markedIds.clear();
     _markedIds.reserve(_tracks.size());
 
@@ -275,17 +307,12 @@ namespace ao::tui
       _markedIds.insert(entry.id);
     }
 
-    if (_optRangeAnchor && !containsTrackId(*_optRangeAnchor))
-    {
-      _optRangeAnchor.reset();
-    }
-
     publishSelection();
   }
 
   void LibraryController::clearMarks()
   {
-    clearMarksAndAnchor();
+    clearMarkState();
     publishSelection();
   }
 
@@ -354,7 +381,7 @@ namespace ao::tui
     auto const& section = _sections[static_cast<std::size_t>(sectionIndex)];
     std::size_t const lastTrackIndex = _tracks.empty() ? 0 : _tracks.size() - 1;
     _selectedTrack = static_cast<std::int32_t>(std::min(section.rowBegin, lastTrackIndex));
-    publishFocusMove();
+    afterFocusMove();
     return librarySection(_textCatalog, trackSectionDisplayName(_textCatalog, section));
   }
 
@@ -405,34 +432,57 @@ namespace ao::tui
     return std::ranges::any_of(_tracks, [trackId](TrackListEntry const& entry) { return entry.id == trackId; });
   }
 
-  void LibraryController::clearMarksAndAnchor()
+  void LibraryController::clearMarkState()
   {
+    endVisualSelection();
     _markedIds.clear();
-    _optRangeAnchor.reset();
+  }
+
+  std::unordered_set<TrackId> LibraryController::liveSubset(std::unordered_set<TrackId> const& ids) const
+  {
+    auto live = std::unordered_set<TrackId>{};
+
+    if (ids.empty())
+    {
+      return live;
+    }
+
+    live.reserve(ids.size());
+
+    for (auto const& entry : _tracks)
+    {
+      if (ids.contains(entry.id))
+      {
+        live.insert(entry.id);
+      }
+    }
+
+    return live;
   }
 
   void LibraryController::reconcileMarks()
   {
-    if (!_markedIds.empty())
+    _markedIds = liveSubset(_markedIds);
+
+    if (!_optVisualAnchor)
     {
-      auto live = std::unordered_set<TrackId>{};
-      live.reserve(_markedIds.size());
-
-      for (auto const& entry : _tracks)
-      {
-        if (_markedIds.contains(entry.id))
-        {
-          live.insert(entry.id);
-        }
-      }
-
-      _markedIds = std::move(live);
+      return;
     }
 
-    if (_optRangeAnchor && !containsTrackId(*_optRangeAnchor))
+    if (!containsTrackId(*_optVisualAnchor))
     {
-      _optRangeAnchor.reset();
+      // A range without its anchor cannot be extended or cancelled coherently,
+      // so the selection ends and the rows it had already reached stay marked.
+      endVisualSelection();
+      return;
     }
+
+    _visualBaseIds = liveSubset(_visualBaseIds);
+
+    // The range is defined by row order, so a rematerialized view has to derive
+    // it again; keeping the previous ids would show a range that is no longer
+    // contiguous until the next motion snapped it back.
+    applyVisualRange();
   }
 
   void LibraryController::publishSelection()
@@ -448,6 +498,18 @@ namespace ao::tui
     }
 
     focusActiveView();
+  }
+
+  void LibraryController::afterFocusMove()
+  {
+    if (_optVisualAnchor)
+    {
+      applyVisualRange();
+      publishSelection();
+      return;
+    }
+
+    publishFocusMove();
   }
 
   void LibraryController::publishFocusMove()
@@ -486,7 +548,7 @@ namespace ao::tui
 
     if (setSelectedTrackById(trackId))
     {
-      publishFocusMove();
+      afterFocusMove();
       return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
     }
 
@@ -524,13 +586,15 @@ namespace ao::tui
     syncSelectedPresentation(spec.id);
 
     _listPresentations.setPresentationIdForList(_currentListId, spec.id);
-    reconcileMarks();
 
     if (!setSelectedTrackById(previousTrackId))
     {
       _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     }
 
+    // Marks are reconciled against the final focus, because a running visual
+    // range is derived from the anchor and the focused row.
+    reconcileMarks();
     publishSelection();
     return libraryView(_textCatalog, spec.id);
   }
@@ -596,9 +660,16 @@ namespace ao::tui
         return libraryReloadedTracks(_textCatalog, _tracks.size());
       }
     }
-    else if (!setSelectedTrackById(previousTrackId))
+    else
     {
-      _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
+      if (!setSelectedTrackById(previousTrackId))
+      {
+        _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
+      }
+
+      // The recovery paths above attach or navigate, which reconcile marks
+      // themselves; only the plain reload still owes that to the restored focus.
+      reconcileMarks();
     }
 
     publishSelection();
@@ -619,6 +690,9 @@ namespace ao::tui
       previousExpression = stateRes->filterExpression;
     }
 
+    auto const selectedBefore = selectedTrackView();
+    auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
+    auto const previousSelectedTrack = _selectedTrack;
     auto const resolved = uimodel::resolveTrackFilter(_filterDraft);
     auto filterRes = _views.setFilter(_activeViewId, resolved.expression);
 
@@ -645,13 +719,18 @@ namespace ao::tui
     if (resolved.expression == previousExpression)
     {
       // Re-materializing a no-op filter can still drop rows, so the kept focus
-      // needs the same clamp every other reload path applies.
+      // follows its track the way every other rematerialize path does, and marks
+      // are reconciled only once that focus is settled.
+      if (!setSelectedTrackById(previousTrackId))
+      {
+        _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
+      }
+
       reconcileMarks();
-      _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     }
     else
     {
-      clearMarksAndAnchor();
+      clearMarkState();
       _selectedTrack = 0;
     }
 
@@ -809,7 +888,10 @@ namespace ao::tui
     _filterError = std::move(filterError);
     _tracks = std::move(snapshotRes->tracks);
     _sections = std::move(snapshotRes->sections);
-    reconcileMarks();
+
+    // Marks stay for the caller to reconcile: a running visual range is derived
+    // from the focused row, and the focus this view keeps is only restored once
+    // the caller has decided which track it follows.
     return {};
   }
 
@@ -865,19 +947,18 @@ namespace ao::tui
 
     if (!sameView)
     {
-      clearMarksAndAnchor();
+      clearMarkState();
       return {};
     }
 
     // Reattaching the open view reconciles focus alongside marks; only a
     // different view starts at the top.
-    reconcileMarks();
-
     if (!setSelectedTrackById(previousTrackId))
     {
       _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
     }
 
+    reconcileMarks();
     return {};
   }
 

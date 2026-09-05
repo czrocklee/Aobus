@@ -38,5 +38,7 @@ namespace ao::tui::test
 
   void checkInteractiveSurface(ftxui::Pixel const& pixel);
 
+  void checkMarkedSurface(ftxui::Pixel const& pixel);
+
   void checkDefaultSurface(ftxui::Pixel const& pixel);
 } // namespace ao::tui::test

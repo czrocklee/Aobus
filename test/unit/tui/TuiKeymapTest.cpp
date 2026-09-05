@@ -65,10 +65,12 @@ namespace ao::tui::test
       {TuiKeyAction::Scan, "tui.library.scan"},
       {TuiKeyAction::ScanCancel, "tui.library.scanCancel"},
       {TuiKeyAction::SelectToggle, "tui.library.selectToggle"},
-      {TuiKeyAction::SelectRange, "tui.library.selectRange"},
+      {TuiKeyAction::SelectVisual, "tui.library.selectVisual"},
       {TuiKeyAction::SelectAll, "tui.library.selectAll"},
       {TuiKeyAction::SelectClear, "tui.library.selectClear"},
       {TuiKeyAction::PlaySelection, "tui.library.playSelection"},
+      {TuiKeyAction::PreviousTrack, "tui.library.previousTrack"},
+      {TuiKeyAction::NextTrack, "tui.library.nextTrack"},
       {TuiKeyAction::PreviousSection, "tui.library.previousSection"},
       {TuiKeyAction::NextSection, "tui.library.nextSection"},
       {TuiKeyAction::SeekBackward, "tui.playback.seekBackward"},
@@ -144,14 +146,20 @@ namespace ao::tui::test
     CHECK(plan.actionFor(ftxui::Event::Character("m")) == TuiKeyAction::SelectToggle);
     CHECK(plan.actionFor(ftxui::Event::Character("A")) == TuiKeyAction::SelectAll);
     CHECK(plan.actionFor(ftxui::Event::Character("a")) == TuiKeyAction::ToggleAudioPipeline);
-    CHECK(plan.actionFor(ftxui::Event::Character("V")) == TuiKeyAction::SelectRange);
-    CHECK(plan.actionFor(ftxui::Event::Character("v")) == TuiKeyAction::TogglePresentations);
+    CHECK(plan.actionFor(ftxui::Event::Character("V")) == TuiKeyAction::SelectVisual);
+    CHECK(plan.actionFor(ftxui::Event::Character("v")) == TuiKeyAction::SelectVisual);
+    CHECK(plan.actionFor(ftxui::Event::Character("p")) == TuiKeyAction::TogglePresentations);
+    CHECK(plan.actionFor(ftxui::Event::Character("j")) == TuiKeyAction::NextTrack);
+    CHECK(plan.actionFor(ftxui::Event::Character("k")) == TuiKeyAction::PreviousTrack);
+    CHECK(plan.actionFor(ftxui::Event::Return) == TuiKeyAction::PlaySelection);
     CHECK(plan.actionFor(ftxui::Event::Character(" ")) == TuiKeyAction::PlaybackPlayPause);
     CHECK(plan.actionFor(ftxui::Event::CtrlP) == TuiKeyAction::PlaybackPlayPause);
     CHECK(plan.actionFor(ftxui::Event::CtrlL) == TuiKeyAction::RevealCurrentTrack);
     CHECK(plan.shortcutFor(TuiKeyAction::ToggleListChooser) == "l");
     CHECK(plan.shortcutFor(TuiKeyAction::SelectToggle) == "m");
     CHECK(plan.shortcutFor(TuiKeyAction::SelectClear) == "u");
+    CHECK(plan.shortcutFor(TuiKeyAction::SelectVisual) == "v");
+    CHECK(plan.shortcutFor(TuiKeyAction::TogglePresentations) == "p");
     CHECK(plan.shortcutFor(TuiKeyAction::PlaybackPlayPause) == "Space");
     CHECK(plan.shortcutFor(TuiKeyAction::PlaybackStop) == "s");
 

@@ -125,6 +125,13 @@ namespace ao::tui::test
     CHECK(pixel.bold);
   }
 
+  void checkMarkedSurface(ftxui::Pixel const& pixel)
+  {
+    CHECK(pixel.inverted);
+    CHECK(pixel.foreground_color == ftxui::Color::Default);
+    CHECK(pixel.background_color == ftxui::Color::Default);
+  }
+
   void checkDefaultSurface(ftxui::Pixel const& pixel)
   {
     CHECK(pixel.foreground_color == ftxui::Color::Default);

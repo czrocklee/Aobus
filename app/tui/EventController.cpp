@@ -433,6 +433,8 @@ namespace ao::tui
         _shell.beginInput(action == OpenQuickFilter ? ShellInputMode::QuickFilter : ShellInputMode::Command);
         refreshCommandCompletion();
         break;
+      case PreviousTrack: _library.moveFocusedSelection(false, -1); break;
+      case NextTrack: _library.moveFocusedSelection(false, 1); break;
       case PreviousSection: _library.jumpToAdjacentSection(-1); break;
       case NextSection: _library.jumpToAdjacentSection(1); break;
       case SeekBackward: _seekViewModel.seekBy(-kKeyboardSeekDelta); break;
@@ -453,7 +455,7 @@ namespace ao::tui
       case Scan:
       case ScanCancel:
       case SelectToggle:
-      case SelectRange:
+      case SelectVisual:
       case SelectAll:
       case SelectClear:
       case PlaySelection:
@@ -503,7 +505,7 @@ namespace ao::tui
       case CommandAction::Scan: _libraryScan.start(); break;
       case CommandAction::ScanCancel: _libraryScan.cancel(); break;
       case CommandAction::SelectToggle: _library.toggleFocusedMark(); break;
-      case CommandAction::SelectRange: _library.markRangeToFocus(); break;
+      case CommandAction::SelectVisual: _library.toggleVisualSelection(); break;
       case CommandAction::SelectAll: _library.markAllTracks(); break;
       case CommandAction::SelectClear: _library.clearMarks(); break;
       case CommandAction::Play: playSelectedTrack(); break;
@@ -1338,9 +1340,18 @@ namespace ao::tui
     }
 
     // Escape is protocol-owned before any overlay sees it, so rebinding cannot
-    // strand the user inside a modal surface.
+    // strand the user inside a modal surface. A running visual selection is the
+    // innermost transient state of the workspace, so it wins whenever the
+    // workspace is still drivable; a modal overlay took the keys that grow the
+    // selection, so it is closed first and the selection survives.
     if (event == ftxui::Event::Escape)
     {
+      if (!isModalOverlay(_shell.overlay()) && _library.isVisualSelectionActive())
+      {
+        _library.cancelVisualSelection();
+        return true;
+      }
+
       runCommand({.action = CommandAction::CloseOverlay});
       return true;
     }

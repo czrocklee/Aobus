@@ -103,7 +103,7 @@ The resulting additional defaults are:
 | `tui.shell.toggleTrackDetail` | `D` |
 | `tui.shell.toggleAudioQuality` | `A` |
 | `tui.shell.toggleOutputDevices` | `O` |
-| `tui.shell.togglePresentationChooser` | `V` |
+| `tui.shell.togglePresentationChooser` | `P` |
 | `tui.shell.toggleNotifications` | `N` |
 | `tui.shell.showHelp` | `?` |
 | `tui.shell.openCommandPalette` | `:` |
@@ -113,10 +113,12 @@ The resulting additional defaults are:
 | `tui.library.scan` | none |
 | `tui.library.scanCancel` | none |
 | `tui.library.selectToggle` | `M` |
-| `tui.library.selectRange` | `Shift+V` |
+| `tui.library.selectVisual` | `V`, `Shift+V` |
 | `tui.library.selectAll` | `Shift+A` |
 | `tui.library.selectClear` | `U` |
-| `tui.library.playSelection` | `Enter`, `P` |
+| `tui.library.playSelection` | `Enter` |
+| `tui.library.previousTrack` | `K` |
+| `tui.library.nextTrack` | `J` |
 | `tui.library.previousSection` | `{` |
 | `tui.library.nextSection` | `}` |
 | `tui.playback.seekBackward` | `[` |

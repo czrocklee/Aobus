@@ -14,7 +14,8 @@ namespace ao::tui
   std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t trackCount,
                                std::int32_t selectedIndex,
-                               std::size_t markedCount = 0);
+                               std::size_t markedCount = 0,
+                               bool visualSelectionActive = false);
   std::int32_t moveSelection(std::int32_t selectedIndex, std::int32_t delta, std::size_t itemCount);
   std::size_t clampSelection(std::size_t selection, std::size_t itemCount);
 } // namespace ao::tui

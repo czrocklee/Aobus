@@ -280,7 +280,7 @@ namespace ao::tui::test
     CHECK(text.contains(":views"));
     CHECK(text.contains(":notifications"));
     CHECK(text.contains(":scan / :scan cancel"));
-    CHECK(text.contains(":select toggle / :select range / :select all / :select clear"));
+    CHECK(text.contains(":select toggle / :select visual / :select all / :select clear"));
     CHECK(text.contains("{ / }"));
   }
 
@@ -787,7 +787,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("/ Filter"));
     CHECK(rendered.text.contains(": command"));
     CHECK(rendered.text.contains("l lists"));
-    CHECK(rendered.text.contains("v view"));
+    CHECK(rendered.text.contains("p view"));
     CHECK(rendered.text.contains("d detail"));
     CHECK(rendered.text.contains("? help"));
     CHECK_FALSE(rendered.text.contains("n notif"));
@@ -864,7 +864,7 @@ namespace ao::tui::test
       {.overlay = Overlay::DetailPanel, .label = "Detail", .hint = "d toggle  Esc close"},
       {.overlay = Overlay::QualityPanel, .label = "Pipeline", .hint = "a toggle  Esc close"},
       {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "o toggle  Enter select  Esc close"},
-      {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "v toggle  Enter select  Esc close"},
+      {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "p toggle  Enter select  Esc close"},
       {.overlay = Overlay::Notifications, .label = "Notifications", .hint = "n toggle  x hide compact  Esc close"},
       {.overlay = Overlay::Help, .label = "Help", .hint = "Esc close"},
     };

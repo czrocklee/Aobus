@@ -25,7 +25,7 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
    ```
 
 2. Move the cursor with Up/Down, PageUp/PageDown, Home, and End.
-3. Press Enter or `p` to play the focused track.
+3. Press Enter to play the focused track.
    Use Space for play/pause, `s` to stop, `[` and `]` to seek by five seconds, and `-`/`+` to change volume by five percentage points.
 4. Press `/` to open Quick Filter in the bottom status bar, then type to filter the current view live; suggestions open directly above the input.
    Up/Down selects a suggestion, Tab accepts it while you keep editing, and Enter accepts it and closes Quick Filter.
@@ -42,10 +42,11 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
    `:scan` and `:rescan` start an eager library scan; `:scan cancel` requests cooperative cancellation.
    A scan already in progress, or a cancellation still settling, posts a short notice instead of starting a second flight.
    Progress uses the existing status line; the finished scan uses the same outcome sentence as the other shells.
-   `m` marks or unmarks the focused track without moving the cursor. `Shift+V` marks the inclusive range from the last mark-anchor to the focus. `Shift+A` marks every track in the current view, including rows off screen. `u` clears marks so the effective selection falls back to the focused track.
-   Playback, Detail, and cover art still follow the cursor. Enter and `p` play the focused track even when other rows are marked. When marks exist, the status line shows how many tracks are marked.
+   `m` marks or unmarks the focused track without moving the cursor. `v` starts a vim-style visual selection at the cursor: move with `j`/`k` or the arrow keys and the range grows as you go, `v` again keeps it, Escape throws it away and restores the marks you had before. While the selection runs the status line shows `VISUAL` in front of the counts, and Escape cancels it even with the detail pane open, which stays open. `Shift+A` marks every track in the current view, including rows off screen. `u` clears marks so the effective selection falls back to the focused track.
+   A marked row reverses its own foreground and background, so it follows your terminal color scheme instead of a fixed color; the cursor row reverses its yellow highlight the same way when it is marked.
+   Playback, Detail, and cover art still follow the cursor. Enter plays the focused track even when other rows are marked. When marks exist, the status line shows how many tracks are marked.
    Opening a different List or applying a new filter clears marks and returns the cursor to the top; confirming the current List or reloading keeps both the marked ids that are still in the view and the cursor.
-6. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `v` for presentations, and `n` for notifications.
+6. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `p` for presentations, and `n` for notifications.
 7. Press `d` and keep browsing: the detail pane stays open beside the track table and follows the cursor, so arrows, pages, wheel, scrollbar, group jumps, playback, and filtering all keep working while you read it.
    Press `d` again or Escape to close it.
 8. With mouse tracking enabled, drag a track-header column edge to preview a new width and release to keep it for that list.

@@ -112,7 +112,7 @@ namespace ao::tui::test
       completeCommandDraft(ao::test::englishMessageCatalog(), "select", CommandCompletionContext{});
     REQUIRE(optSelect);
     CHECK(insertTexts(*optSelect) ==
-          std::vector<std::string>{"select toggle", "select range", "select all", "select clear"});
+          std::vector<std::string>{"select toggle", "select visual", "select all", "select clear"});
   }
 
   TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")
