@@ -1323,6 +1323,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="[concurrency]",
             list_only=False,
             allow_no_tests=True,
+            concurrency=True,
             repeat=3,
             asan=False,
             tsan=False,
@@ -1341,6 +1342,7 @@ class CliParseTest(unittest.TestCase):
             test_filter="[concurrency]",
             list_only=False,
             allow_no_tests=True,
+            concurrency=True,
             repeat=1,
             asan=False,
             tsan=True,
@@ -1898,6 +1900,264 @@ class CliParseTest(unittest.TestCase):
             for app in ("cli", "tui", "gtk"):
                 with self.subTest(app=app):
                     self.assertEqual(self.parse(["run", app, "-n"]).app, app)
+
+    def test_shard_count_leaves_one_core_free_and_stops_at_the_cap(self):
+        with mock.patch("os.cpu_count", return_value=4):
+            self.assertEqual(test_command.shard_count(environ={}), 3)
+        with mock.patch("os.cpu_count", return_value=64):
+            self.assertEqual(test_command.shard_count(environ={}), test_command.SHARD_CAP)
+        with mock.patch("os.cpu_count", return_value=1):
+            self.assertEqual(test_command.shard_count(environ={}), 1)
+
+    def test_shard_count_environment_override_is_validated(self):
+        self.assertEqual(test_command.shard_count(environ={test_command.SHARD_ENV: "3"}), 3)
+        # The override deliberately escapes the cap; a bisecting run may want one shard per core.
+        self.assertEqual(test_command.shard_count(environ={test_command.SHARD_ENV: "64"}), 64)
+        for invalid in ("0", "-2", "many", ""):
+            with self.subTest(value=invalid), self.assertRaisesRegex(SystemExit, "1"):
+                test_command.shard_count(environ={test_command.SHARD_ENV: invalid})
+
+    def test_runs_that_measure_contention_are_never_sharded(self):
+        with mock.patch.object(test_command, "shard_count", return_value=8):
+            self.assertEqual(test_command.suite_shards(), 8)
+            self.assertEqual(test_command.suite_shards(list_only=True), 1)
+            self.assertEqual(test_command.suite_shards(repeat=2), 1)
+            self.assertEqual(test_command.suite_shards(tsan=True), 1)
+            self.assertEqual(test_command.suite_shards(concurrency=True), 1)
+
+    def test_every_shard_shares_one_seed_and_owns_one_index(self):
+        argv = [
+            test_command._shard_argv(["ao_core_test"], index, 4, 1234, Path(f"/tmp/shard-{index}.xml"))
+            for index in range(4)
+        ]
+
+        for index, command in enumerate(argv):
+            self.assertEqual(command[command.index("--rng-seed") + 1], "1234")
+            self.assertEqual(command[command.index("--shard-count") + 1], "4")
+            self.assertEqual(command[command.index("--shard-index") + 1], str(index))
+            # Empty trailing shards are expected whenever a filter matches fewer
+            # tests than there are shards.
+            self.assertIn("--allow-running-no-tests", command)
+
+    @staticmethod
+    def _catch2_shard_stub(results):
+        """Return a Popen stand-in that writes what a real Catch2 shard would."""
+
+        def spawn(argv, *, cwd=None, env=None, stdout=None, stderr=None):
+            index = int(argv[argv.index("--shard-index") + 1])
+            assertions, cases, failures = results[index]
+            report = next(Path(arg[len("xml::out=") :]) for arg in argv if arg.startswith("xml::out="))
+            report.write_text(
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<Catch2TestRun name="stub">\n'
+                f'  <OverallResults successes="{assertions}" failures="{failures}"'
+                ' expectedFailures="0" skips="0"/>\n'
+                f'  <OverallResultsCases successes="{cases}" failures="{failures}"'
+                ' expectedFailures="0" skips="0"/>\n'
+                "</Catch2TestRun>\n",
+                encoding="utf-8",
+            )
+            stdout.write(f"shard {index} console output\n".encode())
+            return mock.Mock(returncode=3 if failures else 0, wait=mock.Mock(return_value=0))
+
+        return spawn
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _captured_stdout():
+        """Capture stdout through a stream that has the byte buffer a terminal has."""
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="utf-8", write_through=True)
+        with contextlib.redirect_stdout(stream):
+            yield raw
+        stream.flush()
+        # Detach first: collecting the wrapper would otherwise close the buffer
+        # the caller is about to read.
+        stream.detach()
+
+    def _run_sharded_core(self, spawn, shards):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
+            binary.parent.mkdir()
+            binary.touch()
+
+            with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                with self._captured_stdout() as raw:
+                    status = test_command.run_suite("core", build_dir, shards=shards)
+        return status, raw.getvalue().decode("utf-8")
+
+    def test_sharded_run_reports_one_tally_summed_over_every_shard(self):
+        status, output = self._run_sharded_core(self._catch2_shard_stub([(10, 2, 0), (7, 1, 0)]), shards=2)
+
+        self.assertEqual(status, 0)
+        self.assertIn("Core: 3 test cases, 17 assertions, 0 failed across 2 shards", output)
+        # A passing shard's console output belongs in the log, not on the terminal.
+        self.assertNotIn("shard 0 console output", output)
+
+    def test_sharded_run_surfaces_the_failing_shard_and_its_exit_code(self):
+        status, output = self._run_sharded_core(self._catch2_shard_stub([(10, 2, 0), (7, 1, 1)]), shards=2)
+
+        self.assertEqual(status, 3)
+        self.assertIn("Core: 4 test cases, 18 assertions, 1 failed across 2 shards", output)
+        self.assertIn("shard 1 console output", output)
+        self.assertNotIn("shard 0 console output", output)
+
+    def test_sharded_run_refuses_to_report_a_tally_it_could_not_read(self):
+        def spawn(argv, *, cwd=None, env=None, stdout=None, stderr=None):
+            stdout.write(b"crashed before writing a report\n")
+            return mock.Mock(returncode=0, wait=mock.Mock(return_value=0))
+
+        status, output = self._run_sharded_core(spawn, shards=2)
+
+        self.assertNotEqual(status, 0)
+        self.assertIn("no readable report from shard(s) 1, 2 of 2", output)
+
+    def test_listing_is_never_sharded(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
+            binary.parent.mkdir()
+            binary.touch()
+
+            with mock.patch.object(test_command, "run", return_value=0) as run:
+                self.assertEqual(test_command.run_suite("core", build_dir, list_only=True, shards=8), 0)
+
+        run.assert_called_once_with(
+            [str(binary), "--list-tests", "--verbosity", "high"], env=None, log=None, append=False
+        )
+
+    def test_a_failed_xvfb_start_shuts_down_the_servers_already_running(self):
+        started = []
+
+        def spawn(argv, **kwargs):
+            if len(started) == 2:
+                raise FileNotFoundError("Xvfb")
+            server = mock.Mock(stdout=io.StringIO(f"{40 + len(started)}\n"), wait=mock.Mock(return_value=0))
+            started.append(server)
+            return server
+
+        with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                with test_command.virtual_gtk_displays(4):
+                    self.fail("the context body must not run")
+
+        self.assertEqual(len(started), 2)
+        for server in started:
+            server.terminate.assert_called_once()
+
+    def test_a_failing_shard_prints_the_command_that_reruns_it(self):
+        status, output = self._run_sharded_core(self._catch2_shard_stub([(1, 1, 0), (1, 1, 1)]), shards=2)
+
+        self.assertNotEqual(status, 0)
+        rerun = next(line for line in output.splitlines() if line.startswith("rerun this shard:"))
+        # Catch2 counts shards from zero while the banner counts from one, so the
+        # command is printed rather than left for the reader to assemble.
+        self.assertIn("--shard-index 1", rerun)
+        self.assertIn("--shard-count 2", rerun)
+        self.assertRegex(rerun, r"--rng-seed \d+")
+        self.assertNotIn("--reporter", rerun)
+        self.assertNotIn("xml::out=", rerun)
+
+    def test_the_rerun_command_is_quoted_for_the_shell_that_will_paste_it(self):
+        shard = test_command._Shard(
+            index=1,
+            argv=(r"C:\build\Aobus\debug\test\ao_core_test.exe", "--rng-seed", "7", "--reporter", "xml::out=x"),
+            environment={},
+            process=mock.Mock(returncode=42),
+            sink=mock.Mock(),
+            output=Path("out"),
+            report=Path("report"),
+        )
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            windows = test_command._repro_command(shard)
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            posix = test_command._repro_command(shard)
+
+        # cmd.exe does not treat single quotes as quoting, so the POSIX spelling
+        # would paste back as a program named "'C:\...'".
+        self.assertEqual(windows, r"C:\build\Aobus\debug\test\ao_core_test.exe --rng-seed 7")
+        self.assertEqual(posix, r"'C:\build\Aobus\debug\test\ao_core_test.exe' --rng-seed 7")
+
+    def test_the_rerun_command_carries_the_environment_that_decides_the_outcome(self):
+        shard = test_command._Shard(
+            index=2,
+            argv=("/build/test/ao_gtk_test", "--rng-seed", "7"),
+            environment={
+                "DISPLAY": ":9",
+                "GDK_BACKEND": "x11",
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+            },
+            process=mock.Mock(returncode=42),
+            sink=mock.Mock(),
+            output=Path("out"),
+            report=Path("report"),
+        )
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            command = test_command._repro_command(shard)
+
+        # UBSAN_OPTIONS decides whether the failure reproduces at all, so it has
+        # to travel with the command.
+        self.assertIn("UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1", command)
+        self.assertIn("GDK_BACKEND=x11", command)
+        self.assertTrue(command.startswith("env "), command)
+        # DISPLAY names an Xvfb the run has already torn down.
+        self.assertNotIn("DISPLAY", command)
+
+    def test_a_failed_shard_launch_closes_the_outputs_already_opened(self):
+        opened = []
+        real_open = Path.open
+
+        def tracking_open(self, *args, **kwargs):
+            stream = real_open(self, *args, **kwargs)
+            opened.append(stream)
+            return stream
+
+        def spawn(argv, *, cwd=None, env=None, stdout=None, stderr=None):
+            if "--shard-index 1" in " ".join(argv) or argv[argv.index("--shard-index") + 1] == "1":
+                raise OSError("cannot start the second shard")
+            return mock.Mock(returncode=0, wait=mock.Mock(return_value=0))
+
+        with mock.patch.object(Path, "open", tracking_open):
+            with self.assertRaises(OSError) as caught:
+                self._run_sharded_core(spawn, shards=2)
+
+        # The launch failure must survive: an output left open would fail this
+        # TemporaryDirectory's cleanup on Windows and replace it with WinError 32.
+        self.assertIn("cannot start the second shard", str(caught.exception))
+        self.assertTrue(opened)
+        self.assertTrue(all(stream.closed for stream in opened), opened)
+
+    def test_every_gtk_shard_gets_a_display_of_its_own(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = build_dir / "test" / "ao_gtk_test"
+            binary.parent.mkdir()
+            binary.touch()
+
+            displays = iter(("40\n", "41\n", "42\n", "43\n"))
+            servers = []
+
+            def spawn(argv, **kwargs):
+                if argv[0] == "Xvfb":
+                    server = mock.Mock(stdout=io.StringIO(next(displays)), wait=mock.Mock(return_value=0))
+                    servers.append(server)
+                    return server
+                return self._catch2_shard_stub([(1, 1, 0)] * 4)(argv, **kwargs)
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+                with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn) as popen:
+                    with self._captured_stdout():
+                        self.assertEqual(test_command.run_suite("gtk", build_dir, shards=4), 0)
+
+        shard_environments = [
+            call.kwargs["env"]["DISPLAY"] for call in popen.call_args_list if call.args[0][0] != "Xvfb"
+        ]
+        self.assertEqual(shard_environments, [":40", ":41", ":42", ":43"])
+        for server in servers:
+            server.terminate.assert_called_once()
 
     def test_help_exits_zero(self):
         for argv in (["--help"], ["build", "--help"], ["tidy", "--help"], ["run", "--help"]):

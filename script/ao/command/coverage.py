@@ -261,6 +261,8 @@ def run_coverage_tests(suites: tuple[str, ...], build_dir: Path, test_filter: st
     """Run every selected suite so the report is useful, while preserving failure."""
     first_failure = 0
     for suite in suites:
+        # Deliberately unsharded (run_suite defaults to one shard): parallel
+        # processes would interleave writes to the same gcov counter files.
         status = run_suite(suite, build_dir, test_filter=test_filter)
         if status != 0:
             if first_failure == 0:
