@@ -44,7 +44,7 @@ No FTXUI event or escape-sequence value enters UIModel.
 
 `KeymapModel` retains immutable-by-policy defaults and one mutable effective map.
 The preference editor holds a working model, displays pre-existing conflicts, and invokes a change callback after confirmed mutations.
-GTK application accelerator state is a platform projection of the current effective map rather than another keymap authority.
+GTK application accelerator state is a platform projection of the last successfully persisted effective map rather than another keymap authority.
 The TUI starts from the shared defaults, adds frontend-local defaults without mutating them, applies the global override group, and prepares an immutable `TuiKeymapPlan` before constructing dispatch and rendering owners.
 
 ## Commands and transitions
@@ -59,7 +59,8 @@ The TUI starts from the shared defaults, adds frontend-local defaults without mu
 The preferences keyboard page enumerates eligible actions from `LayoutSchema` and edits live.
 When a requested chord belongs to another action, the GTK editor names the current owner and asks for Reassign or Cancel.
 Reassign removes the old binding and adds the new one; cancel changes neither action.
-Every accepted add, remove, reset, or reassignment reapplies accelerators immediately and requests persistence of the delta.
+Every accepted add, remove, reset, or reassignment persists the candidate first, then replaces the live model and accelerators.
+A persistence failure keeps the candidate, leaves live bindings unchanged, and shows Retry/Discard in a top banner.
 
 GTK application first clears `win.*` accelerator descriptions absent from the new mapping, then translates and applies the effective chords for each action.
 This reconciliation prevents removed or reset shortcuts from remaining active until restart.
@@ -83,8 +84,15 @@ Terminal aliases such as Ctrl-I/Tab and Ctrl-M/Return are compared after project
 Ctrl-C is representable by the adapter but never installable in the executable root plan because it belongs to emergency-exit protocol.
 
 The editor never silently steals a conflicting binding.
-The grouped store makes each requested save a fail-closed complete-document replacement, but the application wrapper reports failure only through logging.
-A live accelerator update can therefore precede proof of durable storage; this workflow-level acknowledgement and reporting policy remains owned by the shell rather than the generic store.
+The grouped store makes each requested save a fail-closed complete-document replacement.
+`saveKeymap` returns that result; the GTK Keyboard page is the presentation owner and reports a failure once.
+A callback without an active application window returns an error instead of silent success.
+Live accelerators are not published until persistence succeeds.
+Retry retries the current candidate; Discard restores the last successfully applied model.
+Ordinary Preferences close protects a failed candidate; cancelling that close continues editing.
+Reopening Preferences while that candidate is pending keeps the existing editor instead of rebuilding the page.
+Application exit does not open a new confirmation against a disappearing parent.
+A successful retry clears both the error and the unapplied state.
 The store does not expose a generic commit-receipt system.
 
 Shortcut operations are synchronous and expose no cancellation.
@@ -119,7 +127,7 @@ TUI bare Space is a frontend-local default for shared `playback.playPause`; prot
 - [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and the explicit override schema.
 - [`KeyRepeatGuard.cpp`](../../../app/uimodel/input/KeyRepeatGuard.cpp) owns physical-key repeat suppression for mutation-sensitive actions.
 - [`KeymapApplicator.cpp`](../../../app/linux-gtk/app/KeymapApplicator.cpp) and [`GtkAccelTranslator.cpp`](../../../app/linux-gtk/app/GtkAccelTranslator.cpp) own GTK projection.
-- [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing and conflict confirmation.
+- [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing, conflict confirmation, failed-candidate Retry/Discard, and deferred list rebuild.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.
 - [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) owns TUI descriptors, local defaults, terminal projection, collision resolution, and the immutable dispatch/hint plan; [`app/tui/App.cpp`](../../../app/tui/App.cpp) loads that plan from the global TUI store.
 
@@ -127,7 +135,7 @@ TUI bare Space is a frontend-local default for shared `playback.playPause`; prot
 
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
-- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, localized chrome, and teardown.
+- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
 - [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
 
 ## Related documents

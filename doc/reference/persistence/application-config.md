@@ -145,6 +145,7 @@ An empty sequence explicitly unbinds it; an absent action id retains its current
 Saving writes only bindings whose effective chord sequence differs from the defaults supplied to `KeymapModel`.
 
 GTK and WinUI expose mutation surfaces and persist those deltas in their own global documents.
+GTK persists a shortcut candidate before publishing live accelerators, and the Keyboard page reports a failed `saveKeymap` result once.
 TUI loads the same group from `<config>/tui.yaml` over its shared-plus-terminal defaults, but exposes no editor and does not save the keymap during ordinary shutdown.
 Its normal output-preference checkpoint writes the `runtime` sibling through the same live `ConfigStore`, preserving the shortcut group already present in the store snapshot.
 

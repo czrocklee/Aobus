@@ -7,6 +7,7 @@
 #include "app/GtkAccelTranslator.h"
 #include "common/AccessibleLabel.h"
 #include "i18n/GtkText.h"
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -28,10 +29,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -70,6 +73,7 @@ namespace ao::gtk
     , _textCatalog{std::move(textCatalog)}
     , _hostForDialogs{hostForDialogs}
     , _keymap{std::move(keymap)}
+    , _appliedKeymap{_keymap}
     , _onChanged{std::move(onChanged)}
   {
     // Default reassignment prompt: a modal AppDialog parented to the injected host. Tests replace
@@ -124,6 +128,25 @@ namespace ao::gtk
     header->append(*resetAllButton);
     append(*header);
 
+    _failureBanner = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+
+    auto* const failureLabel = Gtk::make_managed<Gtk::Label>();
+    failureLabel->set_xalign(0.0F);
+    failureLabel->set_hexpand(true);
+    failureLabel->set_wrap(true);
+    _failureLabel = failureLabel;
+    _failureBanner->append(*failureLabel);
+
+    auto* const retryButton = Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShortcutRetry));
+    retryButton->signal_clicked().connect([this] { std::ignore = retryPending(); });
+    _failureBanner->append(*retryButton);
+
+    auto* const discardButton = Gtk::make_managed<Gtk::Button>(gtkText(_textCatalog, MessageId::GtkShortcutDiscard));
+    discardButton->signal_clicked().connect([this] { discardPending(); });
+    _failureBanner->append(*discardButton);
+    _failureBanner->set_visible(false);
+    append(*_failureBanner);
+
     auto* const scroller = Gtk::make_managed<Gtk::ScrolledWindow>();
     scroller->set_vexpand(true);
     scroller->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
@@ -141,6 +164,7 @@ namespace ao::gtk
     _callbackScope.close();
 
     // Cancel a still-pending capture teardown and mark delayed conflict responses as stale.
+    _rebuildConn.disconnect();
     _captureCloseConn.disconnect();
     _unmapConn.disconnect();
   }
@@ -251,14 +275,101 @@ namespace ao::gtk
     commit();
   }
 
+  Result<> ShortcutEditorWidget::persistCandidate()
+  {
+    if (!_onChanged)
+    {
+      return {};
+    }
+
+    return _onChanged(_keymap);
+  }
+
   void ShortcutEditorWidget::commit()
   {
-    rebuild();
-
-    if (_onChanged)
+    if (auto const persistRes = persistCandidate(); persistRes)
     {
-      _onChanged(_keymap);
+      _appliedKeymap = _keymap;
+      _optPendingError.reset();
     }
+    else
+    {
+      _optPendingError = persistRes.error();
+    }
+
+    scheduleRebuild();
+  }
+
+  Result<> ShortcutEditorWidget::retryPending()
+  {
+    if (!_optPendingError)
+    {
+      return {};
+    }
+
+    commit();
+
+    if (_optPendingError)
+    {
+      return std::unexpected{*_optPendingError};
+    }
+
+    return {};
+  }
+
+  void ShortcutEditorWidget::discardPending()
+  {
+    if (!_optPendingError)
+    {
+      return;
+    }
+
+    _keymap = _appliedKeymap;
+    _optPendingError.reset();
+    scheduleRebuild();
+  }
+
+  void ShortcutEditorWidget::updateFailureBanner()
+  {
+    if (_failureBanner == nullptr || _failureLabel == nullptr)
+    {
+      return;
+    }
+
+    if (!_optPendingError)
+    {
+      _failureLabel->set_text({});
+      _failureBanner->set_visible(false);
+      return;
+    }
+
+    _failureLabel->set_text(i18n::requiredFormat(
+      _textCatalog, MessageId::GtkShortcutSaveFailed, {{"diagnostic", _optPendingError->message}}));
+    _failureBanner->set_visible(true);
+  }
+
+  void ShortcutEditorWidget::scheduleRebuild()
+  {
+    if (_rebuildQueued)
+    {
+      return;
+    }
+
+    _rebuildQueued = true;
+    _rebuildConn.disconnect();
+    auto rebuildUi = _callbackScope.guard(
+      [this]
+      {
+        _rebuildQueued = false;
+        this->rebuild();
+        updateFailureBanner();
+      });
+    _rebuildConn = Glib::signal_idle().connect(
+      [rebuildUi = std::move(rebuildUi)] mutable
+      {
+        rebuildUi();
+        return false;
+      });
   }
 
   void ShortcutEditorWidget::rebuild()

@@ -3,6 +3,7 @@
 
 #include "preference/PreferencesWindow.h"
 
+#include "app/AppDialog.h"
 #include "app/FormBuilder.h"
 #include "i18n/GtkText.h"
 #include "layout/document/LayoutPresets.h"
@@ -26,6 +27,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/comboboxtext.h>
+#include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/menubutton.h>
@@ -37,6 +39,7 @@
 #include <sigc++/connection.h>
 #include <sigc++/functors/mem_fun.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -114,6 +117,12 @@ namespace ao::gtk
     signal_close_request().connect(
       [this]
       {
+        if (_shortcutEditorPtr != nullptr && _shortcutEditorPtr->hasPendingCandidate())
+        {
+          promptPendingShortcutClose();
+          return true;
+        }
+
         dismiss();
         return true;
       },
@@ -122,6 +131,7 @@ namespace ao::gtk
 
   PreferencesWindow::~PreferencesWindow()
   {
+    _callbackScope.close();
     clearKeyboardPage();
     clearWindowScopedState();
   }
@@ -262,6 +272,11 @@ namespace ao::gtk
                                               uimodel::KeymapModel keymap,
                                               ShortcutEditorWidget::ChangedCallback onChanged)
   {
+    if (_shortcutEditorPtr != nullptr && _shortcutEditorPtr->hasPendingCandidate())
+    {
+      return;
+    }
+
     clearKeyboardPage();
     _shortcutEditorPtr =
       std::make_unique<ShortcutEditorWidget>(_textCatalog, schema, std::move(keymap), std::move(onChanged), *this);
@@ -294,6 +309,7 @@ namespace ao::gtk
 
   void PreferencesWindow::dismiss()
   {
+    retirePendingClosePrompt();
     clearKeyboardPage();
     clearWindowScopedState();
     set_visible(false);
@@ -302,6 +318,74 @@ namespace ao::gtk
     {
       appPtr->remove_window(*this);
     }
+  }
+
+  void PreferencesWindow::retirePendingClosePrompt()
+  {
+    // Hiding rather than close(): close() re-enters the dialog's own response protocol, which would
+    // deliver a synthetic response back into the handler below. Clearing the pointer is what makes
+    // the retired prompt inert.
+    if (auto* const prompt = std::exchange(_pendingClosePrompt, nullptr); prompt != nullptr)
+    {
+      prompt->set_visible(false);
+    }
+  }
+
+  void PreferencesWindow::promptPendingShortcutClose()
+  {
+    // A second close request must not stack another modal on top of the live one.
+    if (_pendingClosePrompt != nullptr)
+    {
+      _pendingClosePrompt->present();
+      return;
+    }
+
+    // The failure banner lives on the Keyboard page; a retry that fails again has to be visible.
+    _stack.set_visible_child("keyboard");
+
+    _pendingClosePrompt =
+      AppDialog::presentMessage(*this,
+                                gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseTitle),
+                                gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseMessage),
+                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonCancel),
+                                                 .responseId = Gtk::ResponseType::CANCEL,
+                                                 .role = AppDialogActionRole::Cancel},
+                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutDiscard),
+                                                 .responseId = Gtk::ResponseType::REJECT,
+                                                 .role = AppDialogActionRole::Cancel},
+                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutRetry),
+                                                 .responseId = Gtk::ResponseType::OK,
+                                                 .role = AppDialogActionRole::Primary}},
+                                Gtk::ResponseType::CANCEL,
+                                _callbackScope.guard(
+                                  [this](std::int32_t const responseId)
+                                  {
+                                    // A retired prompt (dismiss() already ran) must never steer the
+                                    // session that replaced it. Only the live prompt owns this handler.
+                                    if (_pendingClosePrompt == nullptr)
+                                    {
+                                      return;
+                                    }
+
+                                    _pendingClosePrompt = nullptr;
+
+                                    if (_shortcutEditorPtr == nullptr)
+                                    {
+                                      return;
+                                    }
+
+                                    if (responseId == Gtk::ResponseType::REJECT)
+                                    {
+                                      _shortcutEditorPtr->discardPending();
+                                      dismiss();
+                                      return;
+                                    }
+
+                                    if (responseId == Gtk::ResponseType::OK && _shortcutEditorPtr->retryPending())
+                                    {
+                                      dismiss();
+                                    }
+                                  }));
   }
 
   void PreferencesWindow::clearWindowScopedState()

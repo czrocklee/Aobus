@@ -435,15 +435,18 @@ namespace
     auto prefs = rt::AppPrefsState{};
     appConfigStorePtr->loadAppPrefs(prefs);
     preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playback(), targetWindow);
-    preferencesWindowPtr->refreshKeyboardPage(targetWindow->layoutSchema(),
-                                              appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()),
-                                              [appPtr](uimodel::KeymapModel const& keymap)
-                                              {
-                                                if (auto* const window = activeMainWindow(appPtr); window != nullptr)
-                                                {
-                                                  window->applyKeymap(keymap);
-                                                }
-                                              });
+    preferencesWindowPtr->refreshKeyboardPage(
+      targetWindow->layoutSchema(),
+      appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()),
+      [appPtr](uimodel::KeymapModel const& keymap) -> Result<>
+      {
+        if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+        {
+          return window->applyKeymap(keymap);
+        }
+
+        return makeError(Error::Code::InvalidState, "No active application window can apply the keyboard map.");
+      });
     preferencesWindowPtr->present();
   }
 

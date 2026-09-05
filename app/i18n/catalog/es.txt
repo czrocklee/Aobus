@@ -364,6 +364,11 @@ es:table {
     gtk_shortcut_capture_title { "Establecer atajo" }
     gtk_shortcut_capture_prompt { "Pulsa la nueva combinación de atajo." }
     gtk_shortcut_capture_cancel_hint { "{key} para cancelar" }
+    gtk_shortcut_save_failed { "No se pudieron guardar los atajos: {diagnostic}" }
+    gtk_shortcut_retry { "Reintentar" }
+    gtk_shortcut_discard { "Descartar" }
+    gtk_shortcut_pending_close_title { "Atajos sin guardar" }
+    gtk_shortcut_pending_close_message { "El último cambio de atajo no se guardó. Reintenta el guardado, descarta el cambio o sigue editando." }
     gtk_action_category_playback { "Reproducción" }
     gtk_action_category_shell { "Interfaz" }
     gtk_action_category_workspace { "Espacio de trabajo" }

@@ -365,6 +365,11 @@ zh_Hans:table {
     gtk_shortcut_capture_title { "设置快捷键" }
     gtk_shortcut_capture_prompt { "请按下新的快捷键组合。" }
     gtk_shortcut_capture_cancel_hint { "按 {key} 取消" }
+    gtk_shortcut_save_failed { "无法保存快捷键：{diagnostic}" }
+    gtk_shortcut_retry { "重试" }
+    gtk_shortcut_discard { "放弃" }
+    gtk_shortcut_pending_close_title { "未保存的快捷键更改" }
+    gtk_shortcut_pending_close_message { "上次快捷键更改未能保存。请重试保存、放弃更改，或继续编辑。" }
     gtk_action_category_playback { "播放" }
     gtk_action_category_shell { "窗口/界面" }
     gtk_action_category_workspace { "工作区" }

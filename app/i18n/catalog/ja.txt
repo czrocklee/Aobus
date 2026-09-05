@@ -364,6 +364,11 @@ ja:table {
     gtk_shortcut_capture_title { "ショートカットを設定" }
     gtk_shortcut_capture_prompt { "新しいショートカットの組み合わせを押してください。" }
     gtk_shortcut_capture_cancel_hint { "{key} でキャンセル" }
+    gtk_shortcut_save_failed { "ショートカットを保存できませんでした: {diagnostic}" }
+    gtk_shortcut_retry { "再試行" }
+    gtk_shortcut_discard { "破棄" }
+    gtk_shortcut_pending_close_title { "未保存のショートカット" }
+    gtk_shortcut_pending_close_message { "最後のショートカット変更は保存されていません。保存を再試行するか、変更を破棄するか、編集を続けてください。" }
     gtk_action_category_playback { "再生" }
     gtk_action_category_shell { "シェル" }
     gtk_action_category_workspace { "ワークスペース" }

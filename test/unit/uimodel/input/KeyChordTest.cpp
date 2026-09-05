@@ -5,8 +5,30 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+#include <string_view>
+
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    /// Marks a token the parser rejected, so a canonicalization regression reports a readable
+    /// mismatch instead of dereferencing an empty optional.
+    constexpr auto kUnparsed = std::string_view{"<unparsed>"};
+
+    std::string parsedKey(std::string_view const text)
+    {
+      auto const optChord = KeyChord::parse(text);
+      return optChord ? optChord->key : std::string{kUnparsed};
+    }
+
+    std::string parsedString(std::string_view const text)
+    {
+      auto const optChord = KeyChord::parse(text);
+      return optChord ? optChord->toString() : std::string{kUnparsed};
+    }
+  } // namespace
+
   TEST_CASE("KeyChord - parse returns modifiers and key", "[uimodel][unit][input][keychord]")
   {
     SECTION("plain key")
@@ -133,5 +155,68 @@ namespace ao::uimodel::test
     CHECK(KeyChord::parse("Ctrl+P") == KeyChord::parse("primary+p"));
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Shift+P"));
     CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Q"));
+  }
+
+  TEST_CASE("KeyChord - canonicalizes named keys, function keys, and media aliases", "[uimodel][unit][input][keychord]")
+  {
+    SECTION("named editing and navigation keys")
+    {
+      CHECK(parsedKey("return") == "Enter");
+      CHECK(parsedKey("ENTER") == "Enter");
+      CHECK(parsedKey("esc") == "Escape");
+      CHECK(parsedKey("Del") == "Delete");
+      CHECK(parsedKey("pgup") == "PageUp");
+      CHECK(parsedKey("PgDn") == "PageDown");
+      CHECK(parsedKey("pageDown") == "PageDown");
+      CHECK(parsedKey("ins") == "Insert");
+      CHECK(parsedKey("INSERT") == "Insert");
+      CHECK(parsedString("Ctrl+Backspace") == "Ctrl+Backspace");
+    }
+
+    SECTION("function keys F1 through F24")
+    {
+      CHECK(parsedKey("f1") == "F1");
+      CHECK(parsedKey("F12") == "F12");
+      CHECK(parsedString("f24") == "F24");
+      CHECK(parsedKey("F25") == "F25");
+      CHECK(parsedKey("f25") == "f25");
+    }
+
+    SECTION("known media names and unknown suffixes")
+    {
+      CHECK(parsedString("media:play") == "Media:Play");
+      CHECK(parsedString("MEDIA:PREV") == "Media:Prev");
+      CHECK(parsedString("Media:Rewind") == "Media:Rewind");
+      CHECK(parsedString("media:rewind") == "Media:rewind");
+
+      // A bare prefix names no transport key. Canonicalization leaves the token alone, and
+      // isMediaKey() agrees with it whichever way the prefix was spelled.
+      CHECK(parsedKey("Media:") == "Media:");
+      CHECK(parsedKey("media:") == "media:");
+
+      for (auto const* const bare : {"Media:", "media:"})
+      {
+        auto const optBare = KeyChord::parse(bare);
+        REQUIRE(optBare);
+        CHECK_FALSE(optBare->isMediaKey());
+      }
+
+      auto const optPlay = KeyChord::parse("media:play");
+      REQUIRE(optPlay);
+      CHECK(optPlay->isMediaKey());
+    }
+
+    SECTION("unknown tokens survive verbatim")
+    {
+      CHECK(parsedKey("Hyper") == "Hyper");
+      CHECK(parsedKey("GTK_KEY_VoidSymbol") == "GTK_KEY_VoidSymbol");
+    }
+
+    SECTION("formerly distinct spellings compare equal after parse")
+    {
+      CHECK(KeyChord::parse("Return") == KeyChord::parse("enter"));
+      CHECK(KeyChord::parse("Esc") == KeyChord::parse("Escape"));
+      CHECK(KeyChord::parse("Ctrl+PgUp") == KeyChord::parse("ctrl+pageup"));
+    }
   }
 } // namespace ao::uimodel::test

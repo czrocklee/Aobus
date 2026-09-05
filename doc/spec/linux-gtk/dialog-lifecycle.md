@@ -48,6 +48,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 ## State model
 
 Preferences retains current application preference models while visible and applies supported settings through their owners.
+The Keyboard page additionally retains the last successfully applied keymap and any failed save candidate.
 The layout editor retains a document draft, preview state, and the theme that was active when it opened.
 The native folder chooser retains GTK async operation state until completion.
 `ImportExportCoordinator` retains one callback scope for its export-mode response and native folder, open, and save completions, plus one cancellable shared by the native operations.
@@ -56,8 +57,14 @@ The native folder chooser retains GTK async operation state until completion.
 
 Preferences opens from `app.preferences`, `Ctrl+,`, or the Edit menu.
 Appearance changes apply immediately and persist through application preferences.
+Keyboard changes persist the candidate before publishing live accelerators.
 Output changes persist only after the playback path confirms the selected device.
 Default layout-preset choice affects the next layout load; structural edits use the layout editor.
+Ordinary close of Preferences with a failed shortcut candidate switches to the Keyboard page and prompts Retry, Discard, or keep editing.
+Repeated close requests reuse the live prompt rather than stacking another one.
+Closing the prompt itself answers it with keep editing, never with Discard.
+Reopening Preferences while that candidate is pending keeps the existing Keyboard editor.
+Hiding the target application window dismisses Preferences without that prompt and retires any live prompt, whose later response no longer steers the window.
 
 Open Library launches a native folder chooser.
 A successful folder selection is normalized and handed to the single active-library host.
@@ -83,6 +90,7 @@ Saved-List create or edit rejection retains the draft and editor, while delete r
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
 Active-pair terminal-retirement failure presents a parent-bound transient message and leaves the old pair visible.
 After retirement, process-launch or successor-startup failure presents a standalone native diagnostic without reconstructing the old pair, as specified by the active-library lifecycle.
+A Keyboard-page shortcut persistence failure retains the candidate, leaves live accelerators unchanged, and reports the error once on that page.
 Layout-editor validation or persistence failure retains the draft and keeps the editor open.
 A persistence failure presents a transient error message; partial multi-preset persistence and retry behavior belong to the [shell layout lifecycle](../shell/layout-lifecycle.md).
 
@@ -109,7 +117,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 ## Implementation map
 
 - [`AppDialog.cpp`](../../../app/linux-gtk/app/AppDialog.cpp) owns custom-dialog chrome, actions, and parent-bound destruction.
-- [`PreferencesWindow.cpp`](../../../app/linux-gtk/preference/PreferencesWindow.cpp) owns the non-modal preferences surface.
+- [`PreferencesWindow.cpp`](../../../app/linux-gtk/preference/PreferencesWindow.cpp) owns the non-modal preferences surface and pending-shortcut close confirmation.
 - [`ImportExportCoordinator.cpp`](../../../app/linux-gtk/portal/ImportExportCoordinator.cpp) owns native chooser handoff.
 - [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) owns guarded post-await task presentation and delegates committed refresh to `LibraryChanges`.
 - [`MainContextCallbackScope.h`](../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
@@ -118,6 +126,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 
 ## Test map
 
+- [`PreferencesWindowTest.cpp`](../../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp) protects page construction, preference persistence, pending-candidate retention on reopen, the close prompt's Retry, Discard, Cancel, and close-request responses, single-prompt reuse and retirement on dismissal, and shortcut-candidate close versus target-hide dismissal.
 - [`AppDialogTest.cpp`](../../../test/unit/linux-gtk/app/AppDialogTest.cpp) protects common window composition, parent-bound destruction configuration, and messages.
 - [`MainContextCallbackScopeTest.cpp`](../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
 - [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.

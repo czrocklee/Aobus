@@ -364,6 +364,11 @@ de:table {
     gtk_shortcut_capture_title { "Tastaturkürzel festlegen" }
     gtk_shortcut_capture_prompt { "Drücken Sie die neue Tastenkombination." }
     gtk_shortcut_capture_cancel_hint { "Mit {key} abbrechen" }
+    gtk_shortcut_save_failed { "Tastaturkürzel konnten nicht gespeichert werden: {diagnostic}" }
+    gtk_shortcut_retry { "Erneut versuchen" }
+    gtk_shortcut_discard { "Verwerfen" }
+    gtk_shortcut_pending_close_title { "Ungespeicherte Tastaturkürzel" }
+    gtk_shortcut_pending_close_message { "Die letzte Tastaturkürzel-Änderung wurde nicht gespeichert. Speichern erneut versuchen, die Änderung verwerfen oder weiter bearbeiten?" }
     gtk_action_category_playback { "Wiedergabe" }
     gtk_action_category_shell { "Oberfläche" }
     gtk_action_category_workspace { "Arbeitsbereich" }

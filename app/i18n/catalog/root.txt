@@ -366,6 +366,11 @@ root:table {
     gtk_shortcut_capture_title { "Set Shortcut" }
     gtk_shortcut_capture_prompt { "Press the new shortcut combination." }
     gtk_shortcut_capture_cancel_hint { "{key} to cancel" }
+    gtk_shortcut_save_failed { "Could not save shortcuts: {diagnostic}" }
+    gtk_shortcut_retry { "Retry" }
+    gtk_shortcut_discard { "Discard" }
+    gtk_shortcut_pending_close_title { "Unsaved shortcut changes" }
+    gtk_shortcut_pending_close_message { "The last shortcut change was not saved. Retry the save, discard the change, or keep editing." }
     gtk_action_category_playback { "Playback" }
     gtk_action_category_shell { "Shell" }
     gtk_action_category_workspace { "Workspace" }
