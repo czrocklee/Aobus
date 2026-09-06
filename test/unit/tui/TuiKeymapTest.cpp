@@ -68,6 +68,7 @@ namespace ao::tui::test
       {TuiKeyAction::SelectVisual, "tui.library.selectVisual"},
       {TuiKeyAction::SelectAll, "tui.library.selectAll"},
       {TuiKeyAction::SelectClear, "tui.library.selectClear"},
+      {TuiKeyAction::EditProperties, "tui.library.editProperties"},
       {TuiKeyAction::PlaySelection, "tui.library.playSelection"},
       {TuiKeyAction::PreviousTrack, "tui.library.previousTrack"},
       {TuiKeyAction::NextTrack, "tui.library.nextTrack"},

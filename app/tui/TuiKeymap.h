@@ -39,6 +39,7 @@ namespace ao::tui
     SelectVisual,
     SelectAll,
     SelectClear,
+    EditProperties,
     PlaySelection,
     PreviousTrack,
     NextTrack,

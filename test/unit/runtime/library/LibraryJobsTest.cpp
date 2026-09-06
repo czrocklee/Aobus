@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -60,6 +61,10 @@ namespace ao::rt::test
 {
   namespace
   {
+    // These exception/cleanup contracts use a hang guard, not a wall-clock latency assertion.
+    // Keep generous bounded scheduling headroom for loaded native CI rather than adding a fixed delay.
+    constexpr auto kBackgroundTaskSettlementTimeout = std::chrono::seconds{10};
+
     template<typename Future>
     void requireCancellation(Future& future, async::Runtime& runtime)
     {
@@ -151,7 +156,7 @@ namespace ao::rt::test
     {
       auto completedPtr = std::make_shared<std::atomic_bool>(false);
       auto future = spawnFuture(runtime, jobs.backfillAudioIdentityAsync(), completedPtr);
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
       REQUIRE(future.get());
     }
   } // namespace
@@ -1002,23 +1007,25 @@ namespace ao::rt::test
     auto const targetFile = libraryFixture.root() / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
-    std::int32_t callbackCount = 0;
+    auto callbackCount = AsyncTestState<std::int32_t>::create(0);
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future =
       spawnFuture(runtime,
                   jobs.applyScanPlanAsync(std::move(plan),
                                           {},
                                           {},
-                                          [&callbackCount](ScanApplyProgress const&)
+                                          [callbackCount](ScanApplyProgress const&)
                                           {
-                                            ++callbackCount;
+                                            callbackCount.increment();
                                             throw std::runtime_error{"injected library task callback failure"};
                                           }),
                   completedPtr);
 
-    REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
+    auto const completed = executor.drainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
+    CAPTURE(callbackCount.load(), executor.queuedCount());
+    REQUIRE(completed);
     CHECK_THROWS_AS(future.get(), std::runtime_error);
-    CHECK(callbackCount > 0);
+    CHECK(callbackCount.load() > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     requireBackgroundTaskLeaseReleased(runtime, executor, jobs);
     runtime.requestStop();
@@ -1048,21 +1055,23 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
-    std::int32_t callbackCount = 0;
+    auto callbackCount = AsyncTestState<std::int32_t>::create(0);
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future =
       spawnFuture(runtime,
                   jobs.backfillAudioIdentityAsync({},
-                                                  [&callbackCount](AudioIdentityIndexProgress const&)
+                                                  [callbackCount](AudioIdentityIndexProgress const&)
                                                   {
-                                                    ++callbackCount;
+                                                    callbackCount.increment();
                                                     throw std::runtime_error{"injected library task callback failure"};
                                                   }),
                   completedPtr);
 
-    REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
+    auto const completed = executor.drainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
+    CAPTURE(callbackCount.load(), executor.queuedCount());
+    REQUIRE(completed);
     CHECK_THROWS_AS(future.get(), std::runtime_error);
-    CHECK(callbackCount > 0);
+    CHECK(callbackCount.load() > 0);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     requireBackgroundTaskLeaseReleased(runtime, executor, jobs);
     runtime.requestStop();

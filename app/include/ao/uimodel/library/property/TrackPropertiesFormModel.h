@@ -19,6 +19,7 @@ namespace ao::uimodel
     rt::TrackField field = rt::TrackField::Title;
     rt::TrackFieldRawValue originalRawValue{};
     TrackFieldEditValue currentEditValue{};
+    bool explicitReplacement = false;
     bool mixed = false;
     bool editable = false;
   };
@@ -42,7 +43,10 @@ namespace ao::uimodel
     void loadFirstTrackField(rt::TrackField field, rt::TrackFieldRawValue rawValue);
     bool mergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
     void setEditValue(rt::TrackField field, TrackFieldEditValue editValue);
+    /// Replaces even a mixed baseline; a later setEditValue restores ordinary mixed-field preservation.
+    void setExplicitFieldEdit(rt::TrackField field, TrackFieldEditValue value);
 
+    /// The captured baseline, independent of pending edits.
     TrackPropertiesFormRowView rowView(rt::TrackField field) const;
     bool canSave() const;
     rt::MetadataPatch buildPatch() const;

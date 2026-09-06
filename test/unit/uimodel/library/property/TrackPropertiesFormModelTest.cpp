@@ -149,4 +149,88 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optArtist);
     CHECK_FALSE(patch.optYear);
   }
+
+  TEST_CASE("TrackPropertiesFormModel - explicit replacement writes mixed fields including first-target equality",
+            "[uimodel][unit][library][property]")
+  {
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.addField(rt::TrackField::Album, true);
+    model.addField(rt::TrackField::Year, true);
+
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("First"));
+    model.loadFirstTrackField(rt::TrackField::Album, textRaw("Old"));
+    model.loadFirstTrackField(rt::TrackField::Year, numberRaw(2001));
+    CHECK(model.mergeTrackField(rt::TrackField::Title, textRaw("Second")));
+    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Album, textRaw("Old")));
+    CHECK(model.mergeTrackField(rt::TrackField::Year, numberRaw(2002)));
+
+    model.setExplicitFieldEdit(rt::TrackField::Title, textEdit("First"));
+    model.setExplicitFieldEdit(rt::TrackField::Album, textEdit("New"));
+    model.setExplicitFieldEdit(rt::TrackField::Year, numberEdit(0));
+
+    CHECK(model.canSave());
+
+    auto const patch = model.buildPatch();
+    REQUIRE(patch.optTitle);
+    CHECK(*patch.optTitle == "First");
+    REQUIRE(patch.optAlbum);
+    CHECK(*patch.optAlbum == "New");
+    REQUIRE(patch.optYear);
+    CHECK(*patch.optYear == 0);
+  }
+
+  TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields",
+            "[uimodel][unit][library][property]")
+  {
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.addField(rt::TrackField::Artist, false);
+
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("Same"));
+    model.loadFirstTrackField(rt::TrackField::Artist, textRaw("Original Artist"));
+    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Same")));
+
+    model.setExplicitFieldEdit(rt::TrackField::Title, textEdit("Same"));
+    model.setExplicitFieldEdit(rt::TrackField::Artist, textEdit("Changed Artist"));
+
+    CHECK_FALSE(model.canSave());
+
+    auto const patch = model.buildPatch();
+    CHECK_FALSE(patch.optTitle);
+    CHECK_FALSE(patch.optArtist);
+  }
+
+  TEST_CASE("TrackPropertiesFormModel - later edits replace explicit intent without changing the baseline",
+            "[uimodel][regression][library][property]")
+  {
+    auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    model.addField(rt::TrackField::Title, true);
+    model.loadFirstTrackField(rt::TrackField::Title, textRaw("Original"));
+    model.setExplicitFieldEdit(rt::TrackField::Title, textEdit("Explicit"));
+    REQUIRE(model.buildPatch().optTitle == "Explicit");
+
+    SECTION("An ordinary edit replaces the previous explicit value")
+    {
+      model.setEditValue(rt::TrackField::Title, textEdit("Later"));
+      CHECK(model.buildPatch().optTitle == "Later");
+      CHECK(model.rowView(rt::TrackField::Title).text == "Original");
+    }
+
+    SECTION("Restoring a common value clears the patch")
+    {
+      model.setEditValue(rt::TrackField::Title, textEdit("Original"));
+      CHECK_FALSE(model.canSave());
+      CHECK_FALSE(model.buildPatch().optTitle);
+    }
+
+    SECTION("An ordinary edit resumes preservation of a mixed baseline")
+    {
+      REQUIRE(model.mergeTrackField(rt::TrackField::Title, textRaw("Different")));
+      model.setEditValue(rt::TrackField::Title, textEdit("Later"));
+      CHECK_FALSE(model.canSave());
+      CHECK_FALSE(model.buildPatch().optTitle);
+      CHECK(model.rowView(rt::TrackField::Title).mixed);
+    }
+  }
 } // namespace ao::uimodel::test

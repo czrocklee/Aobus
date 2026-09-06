@@ -13,6 +13,7 @@
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
 #include "TerminalTrackColumnLayout.h"
+#include "TrackEditController.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
@@ -209,7 +210,9 @@ namespace ao::tui
     , _activityStatusViewModel{bindings.activityStatusViewModel}
     , _notifications{bindings.notifications}
     , _libraryScan{bindings.libraryScan}
+    , _trackEdit{bindings.trackEdit}
     , _requestExit{std::move(bindings.requestExit)}
+    , _isExitWaiting{std::move(bindings.isExitWaiting)}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
     , _filterCompletionCallback{std::move(bindings.filterCompletionCallback)}
   {
@@ -458,11 +461,30 @@ namespace ao::tui
       case SelectVisual:
       case SelectAll:
       case SelectClear:
+      case EditProperties:
       case PlaySelection:
       case PlaybackPlayPause:
       case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
       case Count: break;
     }
+  }
+
+  void EventController::editSelectedTrackProperties()
+  {
+    if (!_trackEdit.open(_library.selectedTrackIds()))
+    {
+      return;
+    }
+
+    // The editor takes the whole surface, so whatever the workspace was in the
+    // middle of ends here instead of finishing against a layout nobody can see.
+    cancelTransientInteractions();
+    // The editor captured the range the moment it opened. Leaving the range
+    // armed would let the next motion key after the modal closes reshape the
+    // marks the user comes back to, and a library change under the modal would
+    // re-derive it against rows the edit itself reordered.
+    _library.commitVisualSelection();
+    _shell.closeInput();
   }
 
   void EventController::runCommand(Command const& command)
@@ -508,6 +530,7 @@ namespace ao::tui
       case CommandAction::SelectVisual: _library.toggleVisualSelection(); break;
       case CommandAction::SelectAll: _library.markAllTracks(); break;
       case CommandAction::SelectClear: _library.clearMarks(); break;
+      case CommandAction::EditProperties: editSelectedTrackProperties(); break;
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
@@ -1326,6 +1349,20 @@ namespace ao::tui
     if (event == ftxui::Event::Custom)
     {
       return false;
+    }
+
+    // Waiting for a submitted write swallows ordinary input; only the Ctrl-C
+    // above can stop the wait.
+    if (_isExitWaiting && _isExitWaiting())
+    {
+      return true;
+    }
+
+    // An open editor owns the whole surface, including keys and mouse events
+    // it has no use for, so nothing behind it can act on stale geometry.
+    if (_trackEdit.handleEvent(event))
+    {
+      return true;
     }
 
     if (event.is_mouse())

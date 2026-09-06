@@ -21,6 +21,8 @@ add_library(aobus-tui-lib STATIC
     StatusBar.cpp
     Style.cpp
     TerminalTrackColumnLayout.cpp
+    TrackEditController.cpp
+    TrackPropertiesEditor.cpp
     TrackTable.cpp
     TuiHitRegions.cpp
     LibraryNavigation.cpp
@@ -33,6 +35,7 @@ add_library(aobus-tui-lib STATIC
     TuiLayoutStateStore.cpp
     TuiKeymap.cpp
     TuiText.cpp
+    TuiTextFieldModel.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp

@@ -3,7 +3,7 @@ id: text.unicode-operations
 type: spec
 status: current
 domain: utility
-summary: Defines strict UTF-8 validation, NFC normalization, caseless keys, and extended grapheme boundaries.
+summary: Defines strict UTF-8 validation, NFC normalization, caseless keys, and offset-aware extended grapheme boundaries.
 ---
 # Unicode text operations
 
@@ -11,8 +11,8 @@ summary: Defines strict UTF-8 validation, NFC normalization, caseless keys, and 
 
 This specification owns the reusable Aobus operations for strict UTF-8
 validation, NFC normalization, locale-independent caseless keys, and the
-previous extended grapheme-cluster boundary. It also defines where those
-operations may be used.
+extended grapheme-cluster boundary on either side of a byte offset. It also
+defines where those operations may be used.
 
 It does not declare that bytes produced inside every media decoder are valid
 before they reach library admission. Each non-library ingestion, grouping, and
@@ -59,6 +59,8 @@ Unicode normalization operation merely because a UTF-8 rendering is needed.
   display spelling.
 - Grapheme boundaries follow the root Unicode extended-grapheme rules and are
   returned as UTF-8 byte offsets.
+- A boundary search is relative to a caller-supplied byte offset, so a caller
+  editing in the middle of a value does not have to split its own text first.
 - Filesystem paths are not normalized, case-folded, or segmented by this API.
 - Unicode operations do not run on a realtime audio thread.
 - Behavior is governed by ICU 78.3 with Unicode 17.0 data on both supported
@@ -89,10 +91,23 @@ Unicode default case-fold mapping, then normalizes the result again. It does
 not apply language-specific lowercasing, accent removal, transliteration, or
 collation.
 
-`previousUtf8GraphemeBoundary(text)` validates the complete input and returns
-the byte offset immediately before its final extended grapheme cluster. Empty
-input returns zero. The returned offset is always a boundary suitable for
-`std::string::resize()`.
+`isUtf8GraphemeBoundary(text, offset)` validates the complete input before
+checking an offset. Both text edges are boundaries, including offset zero in
+empty text. Offsets inside a scalar or an extended grapheme cluster return
+false; an offset past the end returns `InvalidInput`.
+
+`previousUtf8GraphemeBoundary(text, offset)` and
+`nextUtf8GraphemeBoundary(text, offset)` validate the complete input and return
+the extended grapheme boundary immediately before or after `offset`. Searching
+away from the text returns that same edge, so a cursor at either end stays
+there instead of failing. An `offset` inside a cluster resolves to that
+cluster's start or end respectively, which keeps a cursor recovered from
+concatenated text on a real boundary; an `offset` inside a multi-byte scalar
+resolves the same way, so a byte index recovered from a non-character-oriented
+source cannot skip the cluster it points into. An `offset` past the end of the input is
+rejected rather than clamped, because a stale index is a caller defect rather
+than an editing position. Every returned offset is a boundary suitable for
+`std::string::resize()` or substring construction.
 
 ## Failure and cancellation
 
@@ -101,6 +116,7 @@ All operations are synchronous and have no cancellation point.
 | Condition | Result |
 |---|---|
 | Malformed UTF-8 | `InvalidInput`, with the first invalid byte offset where available. |
+| Boundary offset past the end of the input | `InvalidInput`, naming the offset and the validated length. |
 | Input or generated intermediate exceeds ICU's signed 32-bit operation limit | `ValueTooLarge`. |
 | ICU data or service initialization fails | `InitFailed`. |
 | ICU reports allocation failure | `ResourceExhausted`. |
@@ -129,9 +145,10 @@ collation keys.
 ## Frontend observations
 
 The TUI command draft removes one complete extended grapheme cluster for each
-Backspace. Combining marks, variation selectors, emoji modifiers, regional
-indicator pairs, and joined emoji sequences therefore remain intact during
-normal editing.
+Backspace, and the TUI metadata editor's single-line fields move, insert, and
+delete on the same boundaries at an interior cursor. Combining marks, variation
+selectors, emoji modifiers, regional indicator pairs, and joined emoji
+sequences therefore remain intact during normal editing.
 
 This facade does not prescribe rendered width. Frontends continue to use their
 layout engine for cell or pixel measurement.
@@ -144,6 +161,10 @@ layout engine for cell or pixel measurement.
   reusable Unicode results into library admission and corruption semantics.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp)
   consumes the previous-boundary operation for command editing.
+- [`TuiTextFieldModel.cpp`](../../../app/tui/TuiTextFieldModel.cpp) consumes
+  both boundary directions for interior cursor movement and deletion, and the
+  boundary predicate for range replacement. Replacement refuses failed boundary
+  checks; cursor recovery falls back to the text end if segmentation fails.
 - [`dependency-contract.json`](../../../dependency-contract.json),
   [`shell.nix`](../../../shell.nix), and [`vcpkg.json`](../../../vcpkg.json)
   align the ICU version across native resolvers.
@@ -155,7 +176,8 @@ layout engine for cell or pixel measurement.
   malformed-sequence rejection, NFC equivalence and idempotence,
   quick checks, multi-code-point case folds, sigma equivalence, and byte-indexed
   grapheme boundaries for combining marks, variation selectors, flags, and ZWJ
-  emoji.
+  emoji, including interior offsets, both text edges, and a rejected
+  out-of-range offset.
 - Library builder, Store, and open-integrity tests under
   [`test/unit/library/`](../../../test/unit/library/) protect NFC admission,
   canonical dictionary identity, malformed-input rejection, and persisted-row

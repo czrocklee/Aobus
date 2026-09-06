@@ -87,4 +87,37 @@ namespace ao::rt::test
     CHECK(optTrack->metadata().title() == "Before");
     CHECK(optTrack->tags().empty());
   }
+
+  TEST_CASE("LibraryCommands - conflicting Properties tag edits reject the whole patch",
+            "[runtime][regression][library-authoring]")
+  {
+    auto storage = MusicLibraryFixture{};
+    auto const trackId = storage.addTrack("Before");
+    auto changes = makeStateOnlyLibraryChanges(storage.library());
+    auto commandsFixture = LibraryCommandsFixture{storage.library(), changes};
+    std::size_t publicationCount = 0;
+    [[maybe_unused]] auto subscription =
+      changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
+    auto targets = commandsFixture.bind(std::array{trackId});
+
+    auto const revision = targets.revision();
+    auto const result = commandsFixture.runTask(
+      commandsFixture.commands().updateProperties(std::move(targets),
+                                                  TrackPropertiesPatch{
+                                                    .metadata = MetadataPatch{.optTitle = "Must not commit"},
+                                                    .tagsToAdd = {"résumé"},
+                                                    .tagsToRemove = {"re\u0301sume\u0301"},
+                                                  }));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(publicationCount == 0);
+    CHECK(commandsFixture.bind(std::array{trackId}).revision() == revision);
+    auto transaction = storage.library().readTransaction();
+    auto const optTrack =
+      storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().title() == "Before");
+    CHECK(optTrack->tags().empty());
+  }
 } // namespace ao::rt::test

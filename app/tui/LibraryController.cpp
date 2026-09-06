@@ -235,16 +235,26 @@ namespace ao::tui
 
     if (_optVisualAnchor)
     {
-      // Confirming leaves the range in the mark set, where any later edit treats
-      // it exactly like marks made one at a time.
-      endVisualSelection();
-      publishSelection();
+      commitVisualSelection();
       return;
     }
 
     _visualBaseIds = _markedIds;
     _optVisualAnchor = focusId;
     applyVisualRange();
+    publishSelection();
+  }
+
+  void LibraryController::commitVisualSelection()
+  {
+    if (!_optVisualAnchor)
+    {
+      return;
+    }
+
+    // The range stays in the mark set, where any later edit treats it exactly
+    // like marks made one at a time.
+    endVisualSelection();
     publishSelection();
   }
 

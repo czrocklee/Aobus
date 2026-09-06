@@ -31,6 +31,14 @@ namespace ao::tui
     std::int32_t height = 0;
     std::string_view emptyText{};
     bool framed = true;
+    /**
+     * @brief Whether the window may scroll horizontally as well as vertically.
+     *
+     * A frame lays its child out on an unbounded canvas, so a list whose rows
+     * own their own horizontal viewport turns this off and gets laid out
+     * against the visible width instead.
+     */
+    bool horizontalScroll = true;
     bool scrollIndicator = true;
     bool flex = false;
     bool centerEmpty = false;

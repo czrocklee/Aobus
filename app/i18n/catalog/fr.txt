@@ -449,6 +449,7 @@ fr:table {
     tui_shell_detail_quit { "quitter" }
     tui_shell_detail_scan { "analyser la bibliothèque" }
     tui_shell_detail_scan_cancel { "annuler l''analyse" }
+    tui_shell_detail_edit_properties { "modifier les propriétés du morceau" }
     tui_shell_detail_select_toggle { "marquer ou démarquer le morceau focalisé" }
     tui_shell_detail_select_visual { "démarrer ou confirmer une sélection visuelle depuis le morceau focalisé" }
     tui_shell_detail_select_all { "marquer tous les morceaux de cette vue" }
@@ -506,6 +507,48 @@ fr:table {
     tui_presentation_custom_from { "personnalisée à partir de {id}" }
     tui_presentation_default { "par défaut" }
     tui_presentation_badge { "vue:{id}" }
+    tui_editor_title { "Propriétés du morceau" }
+    tui_editor_title_multiple { "Modifier {count, plural, one {# morceau} other {# morceaux}}" }
+    tui_editor_applies_to_all { "Les modifications s’appliquent à {count, plural, one {# morceau} other {tous les # morceaux}}" }
+    tui_editor_tab_metadata { "Métadonnées" }
+    tui_editor_tab_tags { "Tags" }
+    tui_editor_tab_properties { "Propriétés" }
+    tui_editor_tab_tracks { "Morceaux" }
+    tui_editor_clear_for_all { "Vider pour {count, plural, one {# morceau} other {les # morceaux}}" }
+    tui_editor_apply_action { "Appliquer à {count, plural, one {# morceau} other {# morceaux}}" }
+    tui_editor_invalid_number { "Nombre entier requis" }
+    tui_editor_discard_prompt { "Abandonner les modifications ? Entrée pour abandonner, Échap pour continuer" }
+    tui_editor_hint_page { "page" }
+    tui_editor_hint_select { "sélectionner" }
+    tui_editor_hint_clear { "effacer" }
+    tui_editor_hint_restore { "rétablir" }
+    tui_editor_hint_complete { "compléter" }
+    tui_editor_hint_toggle { "basculer" }
+    tui_editor_hint_add { "ajouter" }
+    tui_editor_hint_accept { "accepter" }
+    tui_editor_hint_close { "fermer" }
+    tui_editor_hint_dismiss { "masquer" }
+    tui_editor_status_submitting { "Application…" }
+    tui_editor_status_stale { "La bibliothèque a changé ; rechargez pour reprendre l’édition" }
+    tui_editor_summary_fields { "{count, plural, one {# champ} other {# champs}}" }
+    tui_editor_summary_clears { "{count, plural, one {# effacement} other {# effacements}}" }
+    tui_editor_summary_tags_add { "{count, plural, one {Ajouter # tag} other {Ajouter # tags}}" }
+    tui_editor_summary_tags_remove { "{count, plural, one {Supprimer # tag} other {Supprimer # tags}}" }
+    tui_editor_summary_targets { "{count, plural, one {S’applique à # morceau} other {S’applique à # morceaux}}" }
+    tui_editor_tags_state_add { "Ajouter" }
+    tui_editor_tags_state_remove { "Supprimer" }
+    tui_editor_tags_action_add_new { "Ajouter le nouveau tag « {name} »" }
+    tui_editor_tags_filter_hint { "saisir pour filtrer ou ajouter un tag" }
+    tui_editor_tags_more_hidden { "{count, plural, one {# tag de plus non affiché} other {# tags de plus non affichés}}" }
+    tui_editor_hint_reload { "recharger" }
+    tui_editor_reload_prompt { "Recharger et perdre les modifications ? Entrée pour recharger, Échap pour continuer" }
+    tui_editor_open_no_targets { "Aucun morceau sélectionné" }
+    tui_editor_open_unavailable { "La bibliothèque change ou est indisponible ; réessayez" }
+    tui_editor_open_incomplete { "La sélection complète n’a pas pu être ouverte" }
+    tui_editor_applied { "{count, plural, one {# morceau mis à jour} other {# morceaux mis à jour}}" }
+    tui_editor_no_change { "Aucune modification nécessaire" }
+    tui_editor_busy { "La bibliothèque est occupée ; réessayez" }
+    tui_editor_exit_waiting { "Finalisation de l’enregistrement… Ctrl-C pour ne plus attendre" }
     winui_shell_menu_file { "Fichier" }
     winui_shell_open_library { "Ouvrir la bibliothèque..." }
     winui_shell_rescan { "Réanalyser" }

@@ -449,6 +449,7 @@ zh_Hant:table {
     tui_shell_detail_quit { "結束" }
     tui_shell_detail_scan { "掃描音樂庫" }
     tui_shell_detail_scan_cancel { "取消掃描" }
+    tui_shell_detail_edit_properties { "編輯曲目屬性" }
     tui_shell_detail_select_toggle { "標記或取消標記目前曲目" }
     tui_shell_detail_select_visual { "從目前曲目開始或確認視覺選取" }
     tui_shell_detail_select_all { "標記此檢視中的全部曲目" }
@@ -506,6 +507,48 @@ zh_Hant:table {
     tui_presentation_custom_from { "以 {id} 為基礎的自訂檢視" }
     tui_presentation_default { "預設" }
     tui_presentation_badge { "檢視:{id}" }
+    tui_editor_title { "曲目屬性" }
+    tui_editor_title_multiple { "編輯 {count, plural, other {# 首曲目}}" }
+    tui_editor_applies_to_all { "變更將套用至全部 {count, plural, other {# 首曲目}}" }
+    tui_editor_tab_metadata { "中繼資料" }
+    tui_editor_tab_tags { "標籤" }
+    tui_editor_tab_properties { "屬性" }
+    tui_editor_tab_tracks { "曲目" }
+    tui_editor_clear_for_all { "清空全部 {count, plural, other {# 首曲目}}" }
+    tui_editor_apply_action { "套用至 {count, plural, other {# 首曲目}}" }
+    tui_editor_invalid_number { "需要輸入整數" }
+    tui_editor_discard_prompt { "放棄變更？Enter 放棄，Escape 繼續編輯" }
+    tui_editor_hint_page { "頁面" }
+    tui_editor_hint_select { "選取" }
+    tui_editor_hint_clear { "清除" }
+    tui_editor_hint_restore { "還原" }
+    tui_editor_hint_complete { "補全" }
+    tui_editor_hint_toggle { "切換" }
+    tui_editor_hint_add { "加入" }
+    tui_editor_hint_accept { "採用" }
+    tui_editor_hint_close { "關閉" }
+    tui_editor_hint_dismiss { "收合" }
+    tui_editor_status_submitting { "正在套用…" }
+    tui_editor_status_stale { "音樂庫已變更；重新載入後可繼續編輯" }
+    tui_editor_summary_fields { "{count, plural, other {# 個欄位}}" }
+    tui_editor_summary_clears { "{count, plural, other {# 項清空}}" }
+    tui_editor_summary_tags_add { "{count, plural, other {加入 # 個標籤}}" }
+    tui_editor_summary_tags_remove { "{count, plural, other {移除 # 個標籤}}" }
+    tui_editor_summary_targets { "{count, plural, other {套用於 # 首曲目}}" }
+    tui_editor_tags_state_add { "加入" }
+    tui_editor_tags_state_remove { "移除" }
+    tui_editor_tags_action_add_new { "加入新標籤「{name}」" }
+    tui_editor_tags_filter_hint { "輸入以篩選或加入標籤" }
+    tui_editor_tags_more_hidden { "{count, plural, other {另有 # 個標籤未顯示}}" }
+    tui_editor_hint_reload { "重新載入" }
+    tui_editor_reload_prompt { "重新載入並放棄變更？Enter 重新載入，Escape 繼續編輯" }
+    tui_editor_open_no_targets { "未選擇任何曲目" }
+    tui_editor_open_unavailable { "音樂庫正在變更或無法使用，請重試" }
+    tui_editor_open_incomplete { "無法開啟完整的選取範圍" }
+    tui_editor_applied { "已更新 {count, plural, other {# 首曲目}}" }
+    tui_editor_no_change { "無需變更" }
+    tui_editor_busy { "音樂庫忙碌中，請重試" }
+    tui_editor_exit_waiting { "正在完成儲存… Ctrl-C 停止等待" }
     winui_shell_menu_file { "檔案" }
     winui_shell_open_library { "開啟音樂庫..." }
     winui_shell_rescan { "重新掃描" }

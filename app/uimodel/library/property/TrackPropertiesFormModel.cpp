@@ -21,19 +21,21 @@ namespace ao::uimodel
 {
   namespace
   {
-    rt::TrackFieldRawValue rawValueFromEditValue(TrackFieldEditValue const& editValue)
+    bool editMatchesOriginal(TrackPropertiesFormFieldState const& state)
     {
-      if (auto const* text = std::get_if<std::string>(&editValue); text != nullptr)
+      if (auto const* text = std::get_if<std::string>(&state.currentEditValue); text != nullptr)
       {
-        return rt::TrackFieldRawValue{std::in_place_type<std::string>, *text};
+        auto const* original = std::get_if<std::string>(&state.originalRawValue);
+        return original != nullptr && *text == *original;
       }
 
-      if (auto const* number = std::get_if<std::uint16_t>(&editValue); number != nullptr)
+      if (auto const* number = std::get_if<std::uint16_t>(&state.currentEditValue); number != nullptr)
       {
-        return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, *number};
+        auto const* original = std::get_if<std::uint16_t>(&state.originalRawValue);
+        return original != nullptr && *number == *original;
       }
 
-      return rt::TrackFieldRawValue{};
+      return std::holds_alternative<std::monostate>(state.originalRawValue);
     }
 
     TrackFieldEditValue editValueFromRawValue(rt::TrackFieldRawValue const& rawValue)
@@ -77,27 +79,25 @@ namespace ao::uimodel
       return true;
     }
 
-    bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch,
-                                      TrackPropertiesFormFieldState const& state,
-                                      TrackFieldEditValue const& editValue)
+    bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch, TrackPropertiesFormFieldState const& state)
     {
-      if (state.mixed || !state.editable || !canWriteTrackFieldPatch(state.field))
+      if (!state.editable || !canWriteTrackFieldPatch(state.field) || (state.mixed && !state.explicitReplacement))
       {
         return false;
       }
 
-      if (rawValueFromEditValue(editValue) == state.originalRawValue)
+      if (!state.mixed && editMatchesOriginal(state))
       {
         return false;
       }
 
-      return writeTrackFieldPatch(patch, state.field, editValue);
+      return writeTrackFieldPatch(patch, state.field, state.currentEditValue);
     }
 
     bool hasFieldChange(TrackPropertiesFormFieldState const& state)
     {
       auto patch = rt::MetadataPatch{};
-      return writeTrackPropertiesFormEdit(patch, state, state.currentEditValue);
+      return writeTrackPropertiesFormEdit(patch, state);
     }
   } // namespace
 
@@ -139,6 +139,16 @@ namespace ao::uimodel
     if (auto* const state = findField(field); state != nullptr)
     {
       state->currentEditValue = std::move(editValue);
+      state->explicitReplacement = false;
+    }
+  }
+
+  void TrackPropertiesFormModel::setExplicitFieldEdit(rt::TrackField field, TrackFieldEditValue value)
+  {
+    if (auto* const state = findField(field); state != nullptr)
+    {
+      state->currentEditValue = std::move(value);
+      state->explicitReplacement = true;
     }
   }
 
@@ -169,7 +179,7 @@ namespace ao::uimodel
 
     for (auto const& state : _fields)
     {
-      std::ignore = writeTrackPropertiesFormEdit(patch, state, state.currentEditValue);
+      std::ignore = writeTrackPropertiesFormEdit(patch, state);
     }
 
     return patch;

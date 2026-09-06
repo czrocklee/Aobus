@@ -207,6 +207,14 @@ namespace ao::tui
        .action = CommandAction::SelectClear,
        .detail = i18n::MessageId::TuiShellDetailSelectClear,
        .category = i18n::MessageId::TuiShellCategoryLibrary},
+      {.alias = "edit",
+       .action = CommandAction::EditProperties,
+       .detail = i18n::MessageId::TuiShellDetailEditProperties,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
+      {.alias = "properties",
+       .action = CommandAction::EditProperties,
+       .detail = i18n::MessageId::TuiShellDetailEditProperties,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "play",
        .action = CommandAction::Play,
        .detail = i18n::MessageId::TuiShellDetailPlay,
@@ -264,6 +272,7 @@ namespace ao::tui
       {.command = CommandAction::SelectVisual, .key = TuiKeyAction::SelectVisual},
       {.command = CommandAction::SelectAll, .key = TuiKeyAction::SelectAll},
       {.command = CommandAction::SelectClear, .key = TuiKeyAction::SelectClear},
+      {.command = CommandAction::EditProperties, .key = TuiKeyAction::EditProperties},
       {.command = CommandAction::Play, .key = TuiKeyAction::PlaySelection},
       {.command = CommandAction::TogglePlayback, .key = TuiKeyAction::PlaybackPlayPause},
       {.command = CommandAction::Stop, .key = TuiKeyAction::PlaybackStop},
@@ -502,7 +511,7 @@ namespace ao::tui
     }
 
     _inputTouched = true;
-    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_inputDraft);
+    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_inputDraft, _inputDraft.size());
 
     if (boundaryRes)
     {

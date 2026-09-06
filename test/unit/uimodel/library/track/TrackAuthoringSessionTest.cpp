@@ -36,6 +36,8 @@ namespace ao::uimodel::test
 
     CHECK(std::ranges::equal(session.targetIds(), targetIds));
     CHECK(session.isCurrent());
+    auto const openedRevision = session.boundRevision();
+    CHECK(openedRevision == fixture.library().authoringAvailability().libraryRevision);
 
     std::size_t invalidatedCount = 0;
     auto subscription = session.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
@@ -45,6 +47,8 @@ namespace ao::uimodel::test
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Applied);
     CHECK(session.isCurrent());
+    CHECK(session.boundRevision() == fixture.library().authoringAvailability().libraryRevision);
+    CHECK(session.boundRevision() != openedRevision);
     CHECK(invalidatedCount == 0);
     CHECK(fixture.title(targetIds[0]) == "Applied");
     CHECK(fixture.title(targetIds[1]) == "Applied");

@@ -30,6 +30,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -171,10 +172,69 @@ namespace ao::rt
   {
     library::MusicLibrary const& library;
     library::ReadTransaction transaction;
+    std::uint64_t revision = 0;
 
     explicit Impl(library::MusicLibrary const& library)
-      : library{library}, transaction{library.readTransaction()}
+      : library{library}, transaction{library.readTransaction()}, revision{library.libraryRevision(transaction)}
     {
+    }
+
+    /**
+     * @brief Counts how many of @p trackIds carry each tag they collectively hold.
+     *
+     * A track that no longer exists is skipped rather than reported, so it
+     * increments no counter: every count then falls below the selection size,
+     * which is what collapses a shared-tag intersection to empty.
+     */
+    std::vector<std::pair<std::string, std::size_t>> aggregateSelectionTags(
+      std::span<TrackId const> const trackIds) const
+    {
+      if (trackIds.empty())
+      {
+        return {};
+      }
+
+      auto const reader = library.tracks().reader(transaction);
+      auto const& dictionary = library.dictionary();
+      auto membershipCounts = std::unordered_map<DictionaryId, std::size_t>{};
+      auto tagsOnTrack = std::vector<DictionaryId>{};
+
+      for (auto const trackId : trackIds)
+      {
+        auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+
+        if (!optView || !optView->isHotValid())
+        {
+          continue;
+        }
+
+        tagsOnTrack.clear();
+
+        for (auto const tagId : optView->tags())
+        {
+          if (!std::ranges::contains(tagsOnTrack, tagId))
+          {
+            tagsOnTrack.push_back(tagId);
+            ++membershipCounts[tagId];
+          }
+        }
+      }
+
+      // Dictionary identities are unique. Resolve each name only once after
+      // counting, and keep the byte-order presentation independent of hashing.
+      auto counts = std::vector<std::pair<std::string, std::size_t>>{};
+      counts.reserve(membershipCounts.size());
+
+      for (auto const& [tagId, count] : membershipCounts)
+      {
+        if (auto const tag = dictionary.getOrDefault(tagId); !tag.empty())
+        {
+          counts.emplace_back(tag, count);
+        }
+      }
+
+      std::ranges::sort(counts, {}, &std::pair<std::string, std::size_t>::first);
+      return counts;
     }
   };
 
@@ -186,6 +246,11 @@ namespace ao::rt
   LibrarySnapshot::LibrarySnapshot(LibrarySnapshot&&) noexcept = default;
   LibrarySnapshot& LibrarySnapshot::operator=(LibrarySnapshot&&) noexcept = default;
   LibrarySnapshot::~LibrarySnapshot() = default;
+
+  std::uint64_t LibrarySnapshot::revision() const noexcept
+  {
+    return _implPtr->revision;
+  }
 
   std::optional<TrackRow> LibrarySnapshot::trackRow(TrackId id) const
   {
@@ -291,60 +356,34 @@ namespace ao::rt
     return ids;
   }
 
-  std::vector<std::string> LibrarySnapshot::selectionTags(std::span<TrackId const> trackIds) const
+  std::vector<std::string> LibrarySnapshot::selectionTags(std::span<TrackId const> const trackIds) const
   {
     if (trackIds.empty())
     {
       return {};
     }
 
-    auto const& library = _implPtr->library;
-    auto const reader = library.tracks().reader(_implPtr->transaction);
-    auto const& dictionary = library.dictionary();
+    auto membershipCounts = _implPtr->aggregateSelectionTags(trackIds);
     auto const selectionCount = trackIds.size();
-
-    // Count how many selected tracks carry each tag; a tag shared by the whole
-    // selection has a count equal to the selection size. Missing tracks never
-    // increment any counter, so any stale id drives every count below the
-    // threshold and the intersection collapses to empty.
-    auto membershipCounts = std::map<std::string, std::size_t>{};
-
-    for (auto const trackId : trackIds)
-    {
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-
-      if (!optView || !optView->isHotValid())
-      {
-        continue;
-      }
-
-      auto tagsOnTrack = std::vector<std::string>{};
-
-      for (auto const tagId : optView->tags())
-      {
-        if (auto tag = std::string{dictionary.get(tagId)}; !tag.empty() && !std::ranges::contains(tagsOnTrack, tag))
-        {
-          tagsOnTrack.push_back(std::move(tag));
-        }
-      }
-
-      for (auto const& tag : tagsOnTrack)
-      {
-        ++membershipCounts[tag];
-      }
-    }
-
     auto shared = std::vector<std::string>{};
 
-    for (auto const& [tag, count] : membershipCounts)
+    // A tag shared by the whole selection is carried by exactly as many tracks
+    // as the selection holds; anything less is carried by only some of them.
+    for (auto& [tag, count] : membershipCounts)
     {
       if (count == selectionCount)
       {
-        shared.push_back(tag);
+        shared.push_back(std::move(tag));
       }
     }
 
     return shared;
+  }
+
+  std::vector<std::pair<std::string, std::size_t>> LibrarySnapshot::selectionTagCounts(
+    std::span<TrackId const> const trackIds) const
+  {
+    return _implPtr->aggregateSelectionTags(trackIds);
   }
 
   std::vector<std::pair<std::string, std::size_t>> LibrarySnapshot::allTagsByFrequency() const

@@ -312,6 +312,22 @@ namespace ao::rt::test
     CHECK(scope.listOrderTrackIds(ListId{999999}).empty());
   }
 
+  TEST_CASE("LibrarySnapshot - caches the committed revision observed at construction",
+            "[runtime][unit][library][readmodel]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
+    auto runtimePtr = makeCoreRuntime(tempDir);
+    auto& library = runtimePtr->library();
+
+    auto const snapshot = library.snapshot();
+    CHECK(snapshot.revision() == library.authoringAvailability().libraryRevision);
+
+    auto const boundRes = library.bindTrackTargets(std::array{seeded.trackId});
+    REQUIRE(boundRes);
+    CHECK(boundRes->revision() == snapshot.revision());
+  }
+
   TEST_CASE("LibrarySnapshot - snapshots tag DTOs", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -325,6 +341,9 @@ namespace ao::rt::test
     // Only "Favorite" is shared by both selected tracks.
     CHECK(scope.selectionTags(selectedIds) == std::vector<std::string>{"Favorite"});
 
+    auto const tagCounts = scope.selectionTagCounts(selectedIds);
+    CHECK(tagCounts == std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 2}, {"Jazz", 1}, {"Live", 1}});
+
     auto const byFrequency = scope.allTagsByFrequency();
     REQUIRE(byFrequency.size() >= 3);
     auto const firstThree =
@@ -334,7 +353,10 @@ namespace ao::rt::test
     // A stale id in the selection contributes no tags, collapsing the intersection.
     auto const selectionWithMissing = std::array{seeded.trackId, TrackId{999999}};
     CHECK(scope.selectionTags(selectionWithMissing).empty());
+    CHECK(scope.selectionTagCounts(selectionWithMissing) ==
+          std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 1}, {"Live", 1}});
 
     CHECK(scope.selectionTags(std::span<TrackId const>{}).empty());
+    CHECK(scope.selectionTagCounts(std::span<TrackId const>{}).empty());
   }
 } // namespace ao::rt::test

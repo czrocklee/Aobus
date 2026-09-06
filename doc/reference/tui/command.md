@@ -20,6 +20,7 @@ Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translati
 The immutable plan built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
+`TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns the editor's own keys and rendering.
 
 ## Surface
 
@@ -78,6 +79,7 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `select visual` | start a visual selection at the focused track, or confirm the running one |
 | `select all` | mark every track in the current view |
 | `select clear` | clear marked tracks |
+| `edit`, `properties` | open the Track Properties editor over the current selection |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop`, `s` | stop playback |
@@ -109,6 +111,7 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `v`, `Shift+V` | start a visual selection at the focus, or confirm the running one | configurable |
 | `Shift+A` | mark every track in the current view | configurable |
 | `u` | clear marked tracks | configurable |
+| `e` | open the Track Properties editor over the current selection | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
 | `:` | open an empty Command Palette input | configurable |
 | `q` | request normal exit | configurable |
@@ -147,6 +150,32 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 | `Return` | run a known command without implicitly applying the selected completion |
 | `Esc` | discard the command draft and close |
 
+### Track Properties editor keys
+
+The editor is composed as a centered modal overlay over the live workspace and consumes every event it does not use, trapping keyboard and mouse interactions while open.
+It provides pages for `Metadata`, `Tags`, read-only `Properties`, and (for multi-track selections) `Tracks`.
+
+| Key | Action |
+| --- | --- |
+| `Tab`, `Shift-Tab` | switch to the next or previous page (`Metadata`, `Tags`, `Properties`, `Tracks`) |
+| `Up`, `Down` | move focused row; navigate completion candidates or tag rows; scroll read-only pages |
+| `PageUp`, `PageDown` | scroll read-only pages; navigate completion candidates or tag rows by page |
+| `Left`, `Right` | move the caret by one extended grapheme cluster (dismisses completion popup) |
+| `Home`, `End` | move the caret to the start or end of the text field (dismisses completion popup) |
+| printable UTF-8, `Backspace` | edit focused metadata field (refreshes completion candidates); edit the always-live tag query |
+| `Ctrl-N` | explicitly open metadata value completion popup for supported fields |
+| `Return` | accept selected completion candidate; cycle the selected tag's intent or create the tag the query names; confirm discard or reload prompt |
+| `Ctrl-U` | explicitly clear the focused metadata field across all targets |
+| `Ctrl-G` | restore focused metadata field or tag to its baseline value |
+| `Delete` | delete forward in text inputs, including the tag query |
+| `Ctrl-S` | submit unified properties patch (metadata and tags) for every captured target |
+| `Ctrl-R` | re-read every captured target and replace the draft baselines |
+| `Esc` | close completion popup; clear a non-empty tag query; close editor (prompts confirmation if dirty) |
+
+`Ctrl-R` and `Esc` ask for confirmation while the draft is dirty; `Return` confirms, `Esc` keeps editing, and every other key leaves the question open.
+`Ctrl-R` is accepted in every state but advertised only in Stale, Unavailable, and error states, where it is the way forward.
+While a write is in flight the surface stays visible and inert: `Ctrl-S`, `Esc`, and every other key are consumed without effect, and there is no Cancel Save control.
+
 ### Overlay-specific keys
 
 | Overlay | Keys |
@@ -184,6 +213,8 @@ All track-table gestures below remain available while the detail inspector is op
 - An explicit leading query variable produces structured query suggestions; otherwise a non-empty active term produces frequency-ranked live Quick-filter value suggestions.
 - Presentation completion includes built-in and custom preset ids.
 - Quick-filter values come from live titles, artist, album, album artist, genre, composer, work, and tags; list names and other fields are excluded.
+- `:edit`, `:properties`, and the effective edit shortcut open one editor over the whole captured selection; with no marks that is the focused track alone.
+- Opening the editor is refused with a warning when the selection is empty, when the library is changing or unavailable, or when any captured target is already gone.
 - Both text-input modes and modal overlays disable workspace seek/table gestures; the detail inspector does not.
 - Opening or closing an overlay, entering text input, changing lists, another pointer press, or teardown cancels an unfinished column drag without saving it.
 - A duration-zero seek rail is inert.
@@ -204,6 +235,7 @@ Changing a default key, alias, option, or default path requires updating this re
 :view classical-works
 :scan
 :scan cancel
+:edit
 :notifications
 ```
 
@@ -216,6 +248,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) applies the prepared root plan after fixed scoped protocol and maps mouse events.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single scan flight.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate.
+- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns editor preparation, the retained authoring session, and submission; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns the editor's fixed keys and rendering.
 
 ## Test authority
 
@@ -226,6 +259,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase transitions.
+- [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, batch submission, staleness, reload, and a submission outliving its editor.
 
 ## Related documents
 

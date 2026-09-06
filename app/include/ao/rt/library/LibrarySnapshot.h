@@ -10,6 +10,7 @@
 #include <ao/rt/TrackRow.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -39,6 +40,9 @@ namespace ao::rt
     LibrarySnapshot& operator=(LibrarySnapshot const&) = delete;
     ~LibrarySnapshot();
 
+    /// Committed library revision observed when this snapshot's transaction began.
+    std::uint64_t revision() const noexcept;
+
     // Tracks
     std::optional<TrackRow> trackRow(TrackId id) const;
     bool containsTrack(TrackId id) const;
@@ -59,6 +63,10 @@ namespace ao::rt
     // that do not exist contribute no tags, so a stale id in the selection
     // narrows the result to empty. Order is unspecified.
     std::vector<std::string> selectionTags(std::span<TrackId const> trackIds) const;
+
+    // Tags carried by any track in the selection paired with how many selected
+    // tracks carry it. Tracks that do not exist contribute no tags.
+    std::vector<std::pair<std::string, std::size_t>> selectionTagCounts(std::span<TrackId const> trackIds) const;
 
     // Every distinct tag in the library paired with how many tracks carry it,
     // ordered by descending frequency then ascending name.

@@ -449,6 +449,7 @@ ja:table {
     tui_shell_detail_quit { "終了" }
     tui_shell_detail_scan { "ライブラリーをスキャン" }
     tui_shell_detail_scan_cancel { "スキャンをキャンセル" }
+    tui_shell_detail_edit_properties { "曲のプロパティを編集" }
     tui_shell_detail_select_toggle { "フォーカス中の曲のマークを切り替え" }
     tui_shell_detail_select_visual { "フォーカス中の曲からビジュアル選択を開始または確定" }
     tui_shell_detail_select_all { "この表示のすべての曲をマーク" }
@@ -506,6 +507,48 @@ ja:table {
     tui_presentation_custom_from { "{id} からのカスタム" }
     tui_presentation_default { "デフォルト" }
     tui_presentation_badge { "表示:{id}" }
+    tui_editor_title { "曲のプロパティ" }
+    tui_editor_title_multiple { "{count, plural, other {# 曲}}を編集" }
+    tui_editor_applies_to_all { "変更は{count, plural, other {# 曲}}すべてに適用されます" }
+    tui_editor_tab_metadata { "メタデータ" }
+    tui_editor_tab_tags { "タグ" }
+    tui_editor_tab_properties { "プロパティ" }
+    tui_editor_tab_tracks { "トラック" }
+    tui_editor_clear_for_all { "{count, plural, other {# 曲}}すべてを空にする" }
+    tui_editor_apply_action { "{count, plural, other {# 曲}}に適用" }
+    tui_editor_invalid_number { "整数を入力してください" }
+    tui_editor_discard_prompt { "変更を破棄しますか? Enter で破棄、Escape で編集を続行" }
+    tui_editor_hint_page { "ページ" }
+    tui_editor_hint_select { "選択" }
+    tui_editor_hint_clear { "クリア" }
+    tui_editor_hint_restore { "復元" }
+    tui_editor_hint_complete { "補完" }
+    tui_editor_hint_toggle { "切り替え" }
+    tui_editor_hint_add { "追加" }
+    tui_editor_hint_accept { "確定" }
+    tui_editor_hint_close { "閉じる" }
+    tui_editor_hint_dismiss { "候補を閉じる" }
+    tui_editor_status_submitting { "適用中…" }
+    tui_editor_status_stale { "ライブラリが変更されました。再読み込みして編集を続けてください" }
+    tui_editor_summary_fields { "{count, plural, other {#項目}}" }
+    tui_editor_summary_clears { "{count, plural, other {#件のクリア}}" }
+    tui_editor_summary_tags_add { "{count, plural, other {# 個のタグを追加}}" }
+    tui_editor_summary_tags_remove { "{count, plural, other {# 個のタグを削除}}" }
+    tui_editor_summary_targets { "{count, plural, other {# 曲に適用}}" }
+    tui_editor_tags_state_add { "追加" }
+    tui_editor_tags_state_remove { "削除" }
+    tui_editor_tags_action_add_new { "新しいタグを追加: 「{name}」" }
+    tui_editor_tags_filter_hint { "入力して絞り込み、またはタグを追加" }
+    tui_editor_tags_more_hidden { "{count, plural, other {他 # 個のタグは非表示}}" }
+    tui_editor_hint_reload { "再読み込み" }
+    tui_editor_reload_prompt { "変更を破棄して再読み込みしますか？ Enter で再読み込み、Escape で編集を続行" }
+    tui_editor_open_no_targets { "曲が選択されていません" }
+    tui_editor_open_unavailable { "ライブラリが変更中または利用できません。再試行してください" }
+    tui_editor_open_incomplete { "選択した曲をすべて開けませんでした" }
+    tui_editor_applied { "{count, plural, other {# 曲}}を更新しました" }
+    tui_editor_no_change { "変更は必要ありませんでした" }
+    tui_editor_busy { "ライブラリがビジー状態です。再試行してください" }
+    tui_editor_exit_waiting { "保存を完了しています… Ctrl-C で待機を中止" }
     winui_shell_menu_file { "ファイル" }
     winui_shell_open_library { "ライブラリを開く..." }
     winui_shell_rescan { "再スキャン" }
