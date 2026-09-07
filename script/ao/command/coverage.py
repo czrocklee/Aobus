@@ -9,6 +9,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from ..core import builddir, buildlock
@@ -25,7 +26,7 @@ REQUIRES_BUILD_ENV = False
 EPILOG = """\
 examples:
   ./ao coverage                          # core suite, full report
-  ./ao coverage "rt::SmartListEvaluator" # coverage for a test subset
+  ./ao coverage "SmartListEvaluator*"   # coverage for a test subset
   ./ao coverage --tui --scope app/tui
   ./ao coverage --gtk "[layout]"         # GTK suite with a Catch2 filter
   ./ao coverage --gtk --scope app/linux-gtk
@@ -190,40 +191,45 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
         raise die("no coverage data generated. Did the tests run successfully?")
 
     merged: dict[str, dict[int, tuple[int | None, str]]] = {}
-    for gcda in gcda_files:
-        subprocess.run(["gcov", str(gcda)], cwd=build_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for gcov_file in build_dir.glob("*.gcov"):
-            source, lines = parse_gcov_text(gcov_file.read_text(encoding="utf-8", errors="replace"))
-            gcov_file.unlink()
-            if source is None:
-                continue
-            source_path = Path(source)
-            if not source_path.is_absolute():
-                source_path = absolute_path(build_dir / source_path)
-            try:
-                rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
-            except ValueError:
-                continue
-            if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
-                continue
-            merge_report(merged.setdefault(rel, {}), lines)
+    with tempfile.TemporaryDirectory(prefix="ao-gcov-") as temporary:
+        report_dir = Path(temporary)
+        for gcda in gcda_files:
+            result = subprocess.run(["gcov", str(absolute_path(gcda))], cwd=report_dir, capture_output=True, text=True)
+            if result.returncode != 0:
+                detail = (result.stdout + result.stderr).strip()
+                raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
+            reports = list(report_dir.glob("*.gcov"))
+            if not reports:
+                raise die(f"gcov produced no reports for {gcda}; coverage is incomplete.")
+            for gcov_file in reports:
+                source, lines = parse_gcov_text(gcov_file.read_text(encoding="utf-8", errors="replace"))
+                gcov_file.unlink()
+                if source is None:
+                    raise die(f"gcov report {gcov_file.name} has no source; coverage is incomplete.")
+                source_path = Path(source)
+                if not source_path.is_absolute():
+                    source_path = absolute_path(build_dir / source_path)
+                try:
+                    rel = absolute_path(source_path).relative_to(PROJECT_ROOT).as_posix()
+                except ValueError:
+                    continue
+                if not rel.startswith(tuple(f"{top}/" for top in REPORTED_TOP_DIRS)):
+                    continue
+                merge_report(merged.setdefault(rel, {}), lines)
     return merged
 
 
 def print_scoped_summary(
-    merged: dict[str, dict[int, tuple[int | None, str]]], scopes: list[str] | None, summary_limit: int
+    rows: list[tuple[str, int, int, int, float]], scopes: list[str] | None, summary_limit: int
 ) -> None:
     if not scopes:
         return
-    rows = scoped_stats(merged, scopes)
     covered = sum(row[1] for row in rows)
     total = sum(row[2] for row in rows)
     missing = sum(row[3] for row in rows)
-    percent = covered / total * 100 if total else 100.0
+    percent = covered / total * 100
     scope_text = ", ".join(_normalized_scope(scope) for scope in scopes)
     print(f"Scoped coverage ({scope_text}): {percent:.2f}% ({covered}/{total} lines), {missing} missing")
-    if not rows:
-        return
     print("Lowest coverage files:")
     for rel, file_covered, file_total, file_missing, file_percent in sorted(
         rows, key=lambda row: (row[4], -row[3], row[0])
@@ -238,14 +244,16 @@ def report(
     scopes: list[str] | None = None,
     summary_limit: int = 20,
 ) -> None:
-    print_scoped_summary(merged, scopes, summary_limit)
-    for rel in sorted(merged):
-        if not _matches_scope(rel, scopes):
-            continue
+    rows = scoped_stats(merged, None)
+    if not rows:
+        raise die("no executable project coverage data; measurement is unavailable.")
+    for scope in scopes or []:
+        if not any(_matches_scope(row[0], [scope]) for row in rows):
+            raise die(f"no executable coverage data for scope: {scope}")
+    rows = [row for row in rows if _matches_scope(row[0], scopes)]
+    print_scoped_summary(rows, scopes, summary_limit)
+    for rel, _, total, missing_count, percent in rows:
         lines = merged[rel]
-        _, total, missing_count, percent = file_stats(lines)
-        if not total:
-            continue
         missing = sorted(lineno for lineno, (hits, _) in lines.items() if hits == 0)
         if missing:
             print(f"{YELLOW}{rel}: {percent:.2f}% ({total} lines) -> {missing_count} missing lines{RESET}")

@@ -23,12 +23,19 @@ rem Command modules in script\ao\command declare REQUIRES_BUILD_ENV; ask the
 rem portal package instead of keeping a second copy of the command list here.
 rem Query directly so forwarded application arguments are parsed by cmd.exe
 rem only once. Exit code 10 means the native build environment is required.
+set "AOBUS_PREFLIGHT_SCOPE=%TEMP%\aobus-preflight-%RANDOM%-%RANDOM%.json"
 "%PYTHON%" -m ao.core.buildenv --exit-code %*
 set "BUILDENV_STATUS=%ERRORLEVEL%"
 if "%BUILDENV_STATUS%"=="0" goto environment_ready
-if not "%BUILDENV_STATUS%"=="10" exit /b %BUILDENV_STATUS%
+if not "%BUILDENV_STATUS%"=="10" (
+  set "STATUS=%BUILDENV_STATUS%"
+  goto finished
+)
 call :ensure_build_environment
-if errorlevel 1 exit /b %ERRORLEVEL%
+if errorlevel 1 (
+  set "STATUS=%ERRORLEVEL%"
+  goto finished
+)
 
 :environment_ready
 
@@ -37,6 +44,8 @@ pushd "%ROOT%"
 "%PYTHON%" -m ao %*
 set "STATUS=%ERRORLEVEL%"
 popd
+:finished
+if exist "%AOBUS_PREFLIGHT_SCOPE%" del /q "%AOBUS_PREFLIGHT_SCOPE%" >nul 2>nul
 exit /b %STATUS%
 
 :ensure_python_environment

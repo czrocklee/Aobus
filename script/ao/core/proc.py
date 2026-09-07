@@ -1,9 +1,10 @@
 """Subprocess helpers shared by every command."""
 
 import os
+import selectors
 import subprocess
 import sys
-import threading
+import time
 from pathlib import Path
 
 from .paths import PROJECT_ROOT
@@ -33,15 +34,15 @@ def run(
 ) -> int:
     """Run a command, optionally teeing combined stdout/stderr to a log file.
 
-    On Windows, child processes can spawn grandchildren that inherit the
-    stdout pipe write handle.  If a grandchild does not exit promptly the pipe
-    never reaches EOF and a plain ``for line in child.stdout`` blocks forever.
-    A daemon reader thread drains the pipe while the main thread waits for the
-    *direct* child with ``child.wait()``, which does not depend on pipe EOF.
+    Drain output until EOF, allowing at most five seconds after the direct
+    child exits for descendants that inherited its pipe. The calling thread
+    owns the unbuffered, nonblocking reader and closes it before returning;
+    no background reader can retain the pipe or write to a closed log.
     """
     full_env = {**os.environ, **env} if env else None
 
     sink = open(log, "ab" if append else "wb") if log is not None else None
+    selector = selectors.DefaultSelector() if os.name != "nt" else None
     try:
         with subprocess.Popen(
             argv,
@@ -49,28 +50,55 @@ def run(
             env=full_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            bufsize=0,
         ) as child:
             stdout = child.stdout
             assert stdout is not None
 
-            def _drain() -> None:
-                try:
-                    for line in stdout:
-                        if is_suppressed_output(line):
-                            continue
-                        sys.stdout.buffer.write(line)
-                        sys.stdout.buffer.flush()
-                        if sink is not None:
-                            sink.write(line)
-                except (OSError, ValueError):
-                    pass  # stdout closed while draining after child exit
+            os.set_blocking(stdout.fileno(), False)
+            if selector is not None:
+                selector.register(stdout, selectors.EVENT_READ)
 
-            reader = threading.Thread(target=_drain, daemon=True)
-            reader.start()
-            child.wait()
-            reader.join(timeout=5)
-            return child.returncode
+            def emit(line: bytes) -> None:
+                if not is_suppressed_output(line):
+                    sys.stdout.buffer.write(line)
+                    sys.stdout.buffer.flush()
+                    if sink is not None:
+                        sink.write(line)
+
+            pending = b""
+            drain_deadline = None
+            idle_delay = 0.01
+            while True:
+                chunk = stdout.read(65536)
+                if chunk == b"":
+                    break
+                if chunk:
+                    idle_delay = 0.01
+                    lines = (pending + chunk).split(b"\n")
+                    pending = lines.pop()
+                    for line in lines:
+                        emit(line + b"\n")
+                if child.poll() is not None:
+                    if drain_deadline is None:
+                        drain_deadline = time.monotonic() + 5
+                    if time.monotonic() >= drain_deadline:
+                        break
+                if chunk is None:
+                    if selector is not None:
+                        # Bound process-status checks while the kernel waits for output.
+                        selector.select(timeout=0.25)
+                    else:
+                        # Windows selectors cannot wait on anonymous pipes. Back off
+                        # while quiet and reset immediately when output resumes.
+                        time.sleep(idle_delay)
+                        idle_delay = min(idle_delay * 2, 0.1)
+            if pending:
+                emit(pending)
+            return child.wait()
     finally:
+        if selector is not None:
+            selector.close()
         if sink is not None:
             sink.close()
 

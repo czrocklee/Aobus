@@ -105,13 +105,16 @@ def _git_ok(*args: str) -> bool:
 
 
 def diff_base(commit: str | None = None) -> str:
-    """Default to the local main branch; when already on main, use the previous commit."""
+    """Default to the topic's merge base with main; on main, use the previous commit."""
     if commit:
         return commit
     branches = _git_lines("branch", "--show-current")
     current = branches[0] if branches else ""
     if current != "main" and _git_ok("rev-parse", "--verify", "--quiet", "main"):
-        return "main"
+        bases = _git_lines("merge-base", "main", "HEAD")
+        if not bases:
+            raise die("git merge-base main HEAD returned no revision; select a base explicitly with --commit")
+        return bases[0]
     return "HEAD~1"
 
 

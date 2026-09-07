@@ -136,7 +136,8 @@ For a replaceable source, prove that the replacement drives updates and the reti
 For a transient attachment, open or close it and then retire its anchor or generation; assert the semantic result and run without GTK finalization warnings or sanitizer failures.
 For delayed callbacks or awaited workflows, destroy the owner before completion and prove the guarded presentation becomes harmless while runtime cleanup still completes.
 
-Run the focused GTK test only while diagnosing the lifecycle path, then run the repository's normal `./ao check` completion gate.
+Run the focused GTK regression while changing or diagnosing the lifecycle path.
+Use [validation and review](test/validation-and-review.md) for completion and reuse of existing evidence.
 Use the sanitizer workflow from the testing policy when the defect can dereference retired storage or a finalized GObject.
 
 ## Troubleshooting

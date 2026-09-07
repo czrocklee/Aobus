@@ -37,8 +37,12 @@ CMake or invoke vcpkg manually for a normal build.
 Nix is a Linux-only resolver: `shell.nix` deliberately rejects Darwin, and the
 macOS portal must not grow a second Nix bootstrap path.
 
-For a normal Git checkout, the portal also configures the repository-local
-`core.hooksPath` as `script/git-hook` after entering the native environment.
+Git hooks are an explicit setup action; see the
+[contributor workflow](../../CONTRIBUTING.md#development-workflow).
+Help and Python-only checks do not require the C++/vcpkg environment.
+For source checks, the preflight passes its selected file list to the command
+in a temporary invocation file, preserving the original scope and avoiding
+a second Git scan. The portal removes the file on success or failure.
 
 `script/ao/macos-toolchain.json` owns the Clang major version, deployment
 target, vcpkg tool revision, archive URL, and archive SHA-256.
@@ -132,14 +136,16 @@ two writers against the same source files.
 
 ## Validation
 
-A normal macOS change completes with `./ao check` followed by `./ao hygiene`.
+Select the completion route in [validation and review](test/validation-and-review.md).
+A macOS C++ change completes with `./ao check` followed by scoped `./ao hygiene`.
 Changes to Release configuration, dependency resolution, or
 optimizer-sensitive code also run `./ao check release`. Sanitizer-sensitive changes follow
 [concurrency and sanitizer validation](test/concurrency-and-sanitizer.md) and
 run the relevant `--asan` or `--tsan` gate.
 
-The GitHub Actions matrix runs that normal completion gate natively on Intel
-and Apple Silicon. These jobs validate the shared libraries, CLI, TUI, Core
+The GitHub Actions matrix runs that native gate on Intel and Apple Silicon
+for changes requiring product validation. Documentation-only changes use the
+documentation route described by the completion authority. Native jobs validate the shared libraries, CLI, TUI, Core
 Audio provider, tests, and native lint integration; they do not claim a Cocoa
 desktop frontend.
 

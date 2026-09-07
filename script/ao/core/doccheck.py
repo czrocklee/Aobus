@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import nameaudit
 from .paths import PROJECT_ROOT, absolute_path
 
 GOVERNED_ROOT_TYPES: dict[str, frozenset[str]] = {
@@ -176,7 +177,44 @@ def check_tree(root: Path = PROJECT_ROOT) -> list[Issue]:
     issues.extend(_check_rfc_dependencies(documents, root))
     issues.extend(_check_links(documents, root))
     issues.extend(_check_reachability(documents, root))
+    issues.extend(_check_naming_contract(documents, root))
     return sorted(issues, key=lambda issue: (issue.path.as_posix(), issue.line, issue.kind, issue.message))
+
+
+def _check_naming_contract(documents: dict[Path, Document], root: Path) -> list[Issue]:
+    """Validate executable naming vocabulary even in Markdown-only CI."""
+    path = root / "doc/development/naming-convention.md"
+    document = documents.get(path)
+    checks = root / "tool/lint/check"
+    if document is None:
+        return [Issue(path, 1, "naming-contract", "naming convention document is missing")] if checks.is_dir() else []
+    match = re.search(r"^## Enforcement$(.*?)(?=^## |\Z)", "\n".join(document.lines), re.MULTILINE | re.DOTALL)
+    if match is None:
+        return [Issue(path, 1, "naming-contract", "missing '## Enforcement' section")]
+    section = match.group(1)
+    bullets = [
+        " ".join(bullet.splitlines())
+        for bullet in re.findall(r"^- .*?(?:\n  .*?)*(?=\n(?!  )|\Z)", section, re.MULTILINE)
+    ]
+    issues = []
+    for phrase, expected in (
+        ("Layer placement for role suffixes", set(nameaudit.ROLE_ALLOWED_PREFIXES)),
+        ("catch-all file name suffixes", set(nameaudit.GENERIC_SUFFIXES)),
+        ("must live under `test/`", {"Fake*", "Mock*", "Spy*", "Stub*", "test/"}),
+    ):
+        bullet = next((item for item in bullets if phrase in item), "")
+        actual = set(re.findall(r"`([^`]+)`", bullet))
+        if actual != expected:
+            issues.append(
+                Issue(path, 1, "naming-contract", f"{phrase}: expected {sorted(expected)}, found {sorted(actual)}")
+            )
+    referenced_checks = {name for name in re.findall(r"`([^`]+)`", section) if name.endswith("Check")}
+    if not referenced_checks:
+        issues.append(Issue(path, 1, "naming-contract", "Enforcement must reference the naming lint checks"))
+    for name in sorted(referenced_checks):
+        if not (checks / f"{name}.h").is_file():
+            issues.append(Issue(path, 1, "naming-contract", f"unknown naming lint check: {name}"))
+    return issues
 
 
 def _check_directory_names(paths: Iterable[Path], root: Path) -> list[Issue]:

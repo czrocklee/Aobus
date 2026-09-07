@@ -103,7 +103,7 @@ tag second, and optional subsystem tags follow. Keep the total at 3–4 tags. Th
 only five-tag form is `[layer][type][component][concurrency][stress]`, which
 preserves the component while identifying a repeated race window. Put
 `[concurrency]` last, or immediately before `[stress]`, when present. See
-`concurrency-and-sanitizers.md` for the required contract matrix.
+[concurrency and sanitizer validation](concurrency-and-sanitizer.md) for the required contract matrix.
 
 Use singular form for all tags: `[component]` not `[components]`, `[shortcut]`
 not `[shortcuts]`.

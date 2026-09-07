@@ -17,8 +17,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Change scope / documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      base: ${{ steps.scope.outputs.sha }}
+      docs-only: ${{ steps.scope.outputs.docs-only }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve validation scope
+        id: scope
+        uses: ./.github/actions/resolve-hygiene-base
+      - name: Read documentation Python version
+        id: python-version
+        if: ${{ steps.scope.outputs.docs-only == 'true' }}
+        run: |
+          python3 -c 'import json; print("version=" + json.load(open("script/ao/toolchain.json"))["python"])' >> "$GITHUB_OUTPUT"
+      - name: Set up documentation Python
+        if: ${{ steps.scope.outputs.docs-only == 'true' }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: ${{ steps.python-version.outputs.version }}
+      - name: Check documentation
+        if: ${{ steps.scope.outputs.docs-only == 'true' }}
+        env:
+          PYTHONPATH: script
+        run: python -m ao docs check
+
   linux:
     name: Linux / check
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -27,6 +63,9 @@ jobs:
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
     steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -74,13 +113,9 @@ jobs:
         id: build
         run: ./ao check
 
-      - name: Resolve hygiene base
-        id: hygiene-base
-        uses: ./.github/actions/resolve-hygiene-base
-
       - name: Run hygiene
         env:
-          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
         run: ./ao hygiene --commit "$BASE_SHA"
 
       - name: Show compiler cache statistics
@@ -96,6 +131,10 @@ jobs:
 
   macos:
     name: macOS ${{ matrix.label }} / check
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     strategy:
@@ -118,6 +157,9 @@ jobs:
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
     steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        run: exit 1
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -300,13 +342,9 @@ jobs:
         id: build
         run: ./ao check
 
-      - name: Resolve hygiene base
-        id: hygiene-base
-        uses: ./.github/actions/resolve-hygiene-base
-
       - name: Run hygiene
         env:
-          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
         run: ./ao hygiene --commit "$BASE_SHA"
 
       - name: Show compiler cache statistics
@@ -322,6 +360,10 @@ jobs:
 
   windows:
     name: Windows / check
+    needs: changes
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.changes.result != 'success' || needs.changes.outputs.docs-only != 'true') }}
     runs-on: windows-2025-vs2026
     timeout-minutes: 180
     env:
@@ -337,6 +379,10 @@ jobs:
       VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite
 
     steps:
+      - name: Require successful scope and documentation validation
+        if: ${{ needs.changes.result != 'success' }}
+        shell: pwsh
+        run: exit 1
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -511,14 +557,10 @@ jobs:
         shell: pwsh
         run: '& $env:SCCACHE_PATH --show-stats'
 
-      - name: Resolve hygiene base
-        id: hygiene-base
-        uses: ./.github/actions/resolve-hygiene-base
-
       - name: Run hygiene
         shell: pwsh
         env:
-          BASE_SHA: ${{ steps.hygiene-base.outputs.sha }}
+          BASE_SHA: ${{ needs.changes.outputs.base }}
         run: .\ao.bat hygiene --commit $env:BASE_SHA
 
       - name: Inspect Windows LLVM SDK

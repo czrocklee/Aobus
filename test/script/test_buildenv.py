@@ -3,11 +3,17 @@
 import argparse
 import contextlib
 import io
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from ao.__main__ import make_parser
 from ao.command import COMMAND_MODULES
-from ao.core import buildenv
+from ao.core import builddir, buildenv, gitfiles, tidyengine
 
 
 class BuildEnvTest(unittest.TestCase):
@@ -45,6 +51,74 @@ class BuildEnvTest(unittest.TestCase):
         self.assertFalse(buildenv.requires_build_env("test", ["--no-build", "--tooling"]))
         self.assertTrue(buildenv.requires_build_env("test", ["--core"]))
         self.assertTrue(buildenv.requires_build_env("test", ["--", "-n"]))
+
+    def test_tooling_selection_does_not_need_the_cpp_toolchain(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            for arguments in (["--tooling"], ["--suite", "tooling"], ["--suite=tooling"]):
+                self.assertFalse(buildenv.requires_build_env("test", arguments))
+            self.assertTrue(buildenv.requires_build_env("test", ["--all"]))
+
+    def test_help_needs_neither_cpp_nor_managed_python_tools(self):
+        for module in COMMAND_MODULES:
+            for flag in ("-h", "--help"):
+                self.assertFalse(buildenv.requires_build_env(module.NAME, [flag]), module.NAME)
+                self.assertFalse(buildenv.requires_python_tools(module.NAME, [flag]), module.NAME)
+        self.assertTrue(buildenv.requires_build_env("run", ["cli", "--", "--help"]))
+
+    def test_python_and_empty_source_scopes_skip_native_cpp_preparation(self):
+        from ao.command import format as format_command
+
+        for command in ("format", "hygiene", "tidy"):
+            for files, expected in (([], False), (["script/ao/core/proc.py"], False), (["lib/Foo.cpp"], True)):
+                with mock.patch.object(format_command, "resolve_files", return_value=files):
+                    with mock.patch.object(tidyengine, "resolve_scope", return_value=(files, False)):
+                        with mock.patch.object(Path, "is_file", return_value=True):
+                            self.assertEqual(buildenv.requires_build_env(command), expected, (command, files))
+
+    def test_invalid_arguments_have_the_real_portal_diagnostic(self):
+        root = Path(__file__).resolve().parents[2]
+        env = {**os.environ, "PYTHONPATH": str(root / "script")}
+        for arguments in (["test", "--bogus"], ["tidy", "--jobs", "invalid"], ["hygiene", "--folder"]):
+            expected = subprocess.run([sys.executable, "-m", "ao", *arguments], env=env, capture_output=True, text=True)
+            for mode in ([], ["--python-tools"]):
+                actual = subprocess.run(
+                    [sys.executable, "-m", "ao.core.buildenv", *mode, *arguments],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(actual.returncode, 2, actual.stderr)
+                self.assertEqual(actual.stderr, expected.stderr)
+
+    def test_tidy_probe_includes_sources_outside_format_folders(self):
+        with mock.patch.object(gitfiles, "changed_files", return_value=["extras/probe.cpp"]):
+            with mock.patch.object(Path, "is_file", return_value=True):
+                self.assertTrue(buildenv.requires_build_env("tidy"))
+
+    def test_native_scope_handoff_avoids_rescanning_and_rejects_a_different_scope(self):
+        from ao.command import format as format_command
+        from ao.command import tidy
+
+        for command in ("format", "hygiene", "tidy"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary:
+                destination = str(Path(temporary) / "scope.json")
+                arguments = []
+                selected = ["script/ao/core/proc.py"]
+                with mock.patch.object(gitfiles, "changed_files", return_value=selected):
+                    with mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": destination}):
+                        self.assertFalse(buildenv.requires_build_env(command, arguments))
+                args = buildenv.parse_command_arguments(command, arguments)
+                buildenv.load_source_scope(args, destination)
+                with mock.patch.object(gitfiles, "changed_files", side_effect=AssertionError("scope scanned again")):
+                    if command == "tidy":
+                        self.assertEqual(
+                            tidyengine.resolve_scope(args, tidy.ALL_FOLDERS, "Checking"), (selected, False)
+                        )
+                    else:
+                        self.assertEqual(format_command.resolve_files(args), selected)
+                different = buildenv.parse_command_arguments(command, ["--all"])
+                with self.assertRaises(SystemExit):
+                    buildenv.load_source_scope(different, destination)
 
     def test_main_prints_a_batch_consumable_flag(self):
         for arguments, expected in (

@@ -3,9 +3,10 @@
 import argparse
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-from ..core import builddir, gitfiles, pythoncheck, tidyengine
+from ..core import builddir, buildenv, gitfiles, pythoncheck, tidyengine
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die
 
@@ -18,7 +19,7 @@ REQUIRES_PYTHON_TOOLS = True
 
 EPILOG = """\
 examples:
-  ./ao format                   # format files changed against local main
+  ./ao format                   # format changes since the merge base with local main
   ./ao format --check           # dry run: fail if anything needs reformatting
   ./ao format lib/audio/Foo.cpp # format explicit files
   ./ao format --folder script   # format one folder
@@ -44,6 +45,8 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def resolve_files(args: argparse.Namespace) -> list[str]:
+    if (prepared := getattr(args, "_resolved_sources", None)) is not None:
+        return list(prepared)
     if args.files:
         return list(args.files)
     if args.all:
@@ -63,6 +66,11 @@ def _file_exists(name: str) -> bool:
     if not path.is_absolute():
         path = PROJECT_ROOT / path
     return path.is_file()
+
+
+def requires_build_environment(arguments: Sequence[str]) -> bool:
+    args = buildenv.parse_command_arguments(NAME, arguments)
+    return buildenv.requires_source_build_env(args, resolve_files(args))
 
 
 def run_clang_format(files: list[str], *, check: bool) -> int:
@@ -107,8 +115,9 @@ def run_ruff_format(files: list[str], *, check: bool) -> int:
     return 1 if result.returncode != 0 else 0
 
 
-def run_command(args: argparse.Namespace) -> int:
-    files = resolve_files(args)
+def run_command(args: argparse.Namespace, *, files: list[str] | None = None) -> int:
+    if files is None:
+        files = resolve_files(args)
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and _file_exists(name)]
     python_files = [name for name in files if name.endswith(gitfiles.PYTHON_SUFFIXES) and _file_exists(name)]
     if not cpp_files and not python_files:

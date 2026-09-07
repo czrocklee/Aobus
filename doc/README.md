@@ -216,4 +216,5 @@ Run the documentation gate from the repository root:
 ```
 
 The gate validates metadata, ids, lifecycle states, required document sections, index ownership, architecture portfolio roles, relationships and coverage, RFC dependency fields, sections, targets, links and cycles, unchanged template placeholders, internal inline and reference-style links, anchors across repository-owned Markdown, forbidden plan links, and reachability from this index.
+It also checks the naming guide's enforced vocabulary and lint-check references against their implementation owners.
 Documentation changes that also modify code follow the normal implementation validation in the [testing policy](development/test.md).

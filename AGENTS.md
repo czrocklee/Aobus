@@ -1,87 +1,46 @@
 # Aobus Agent Guide
 
-Aobus is a C++26 music application: a GTK4 (gtkmm) desktop frontend, a TUI, and
-a CLI tool over a shared core library. CMake builds the project. Linux
-dependencies come from `nix-shell`; macOS and Windows use the shared vcpkg
-manifest. Always work from the project root. Read `doc/development/macos.md`
-before native macOS work. On native Windows, use `ao.bat` with the same command
-vocabulary and read `doc/development/windows.md` first.
+Aobus is a C++26 music application with GTK4, TUI, and CLI frontends over a
+shared core. Work from the repository root through `./ao`; on Windows use
+`ao.bat`. The portal owns CMake, tools, dependencies, and build-tree selection.
+`./ao help` and `./ao <command> --help` describe the available native commands.
 
-> [!TIP]
-> On Linux, external headers live in the Nix store; use `nix-shell --run
-> "pkg-config --cflags <lib>"` when needed. On macOS and Windows, inspect the
-> configured vcpkg installation under the active build tree.
+## Project constraints
 
-## Human References
+- Use English for code comments, commit messages, and documentation.
+- Put throwaway artifacts in `/tmp`, outside the repository.
+- Preserve build trees when diagnosing failures; build/check output is in the
+  selected build tree's `build.log`.
+- Keep abstractions tied to current consumers and an independent contract.
+  Keep one-consumer helpers local; do not add speculative registries or policies.
 
-Read the human docs for project policy instead of duplicating them here:
+## Read by task
 
-- `CONTRIBUTING.md` for contributor rules and review references.
-- `doc/README.md` for where documentation belongs.
-- `doc/development/coding-style.md` for C++ style.
-- `doc/development/naming-convention.md` for identifier, type, file, and helper naming.
-- `doc/development/test.md` for testing policy.
-- `doc/development/linting.md` for lint policy (warning fix/suppress rules, NOLINT playbook).
-- `doc/development/commit-message.md` for commit message rules.
-- `doc/development/macos.md` for the native macOS support boundary and workflow.
+These are authority pointers, not a prerequisite reading list. Read the
+sections relevant to the change; reuse material already read in this session.
 
-## Working Rules
+| Task | Authority |
+|---|---|
+| Contributor or Git workflow | `CONTRIBUTING.md`; `doc/development/commit-message.md` before committing |
+| C++ implementation | `doc/development/coding-style.md`; `doc/development/naming-convention.md` |
+| Documentation ownership, templates, or migration | `doc/README.md` |
+| Test design and fixtures | `doc/development/test.md` and the linked task-specific reference |
+| Lint findings or suppressions | `doc/development/linting.md` |
+| Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |
+| Native macOS work | `doc/development/macos.md` before using the native environment |
+| Native Windows work | `doc/development/windows.md` before using the native environment |
 
-1. **Language:** English for all code comments, commit messages, and docs.
-2. **Search:** Use `rg`, prefer narrow scopes.
-3. **Assumptions:** State technical assumptions in your response.
-4. **No TACO:** Do not over-promise and under-deliver; no shortcuts when things get difficult.
-5. **Docs:** When behavior or architecture changes, use `doc/README.md` to
-   select the authoritative documentation type and owner.
-6. **Tests:** Cover changed behavior at the lowest owning layer. When behavior did not change, use
-   the owning validator; do not add test-only production seams or duplicate tests to satisfy a
-   blanket coverage rule.
-7. **Scratch files:** Agent throwaway artifacts go to `/tmp`, never into the repo.
-8. **Hygiene:** Do not run format or tidy tools mid-session unless the user
-   explicitly asks for linting. The final check-only `./ao hygiene` pass is
-   part of completed-work validation.
-9. **Validation:** Follow `doc/development/test/validation-and-review.md`; completed
-   work normally runs one full `./ao check`, then `./ao hygiene`.
-10. **Concurrency:** Follow `doc/development/test/concurrency-and-sanitizer.md` for
-    concurrency-sensitive changes.
-11. **Proportionality:** Aobus is a music application, not a flight-control or
-    life-support system. Match engineering rigor to actual product risk and do
-    not over-design for speculative hazards.
-12. **Abstraction budget:** Before adding a public role, wrapper, registry, map,
-    skill, or policy document, identify its owner, current consumers, and
-    independent correctness contract. If it has one consumer and no independent
-    invariant, keep it local or inline it. Extend an existing authority instead
-    of adding a parallel mechanism for hypothetical reuse.
+Linux dependencies come from the pinned `nix-shell`; use it for manual compiler
+or dependency inspection. Native macOS and Windows use the shared vcpkg
+manifest and their documented bootstrap paths.
 
-> [!TIP]
-> Heavy development, no compatibility/migration constraints. Propose the best approach without historical baggage.
+## Completion and authorization
 
-## Build and Validation
+Use `doc/development/test/validation-and-review.md` to select validation for the
+changed behavior. It owns check/hygiene scope, lint boundaries, and result reuse.
+Run local checks, fix failures caused by the authorized change, and rerun affected
+checks without asking for approval at each step. Continue through the requested
+implementation and validation; report any remaining failure or unvalidated boundary.
 
-On Linux and macOS, everything goes through the `./ao` portal (Python package
-in `script/ao/`). It re-enters Nix on Linux and prepares Homebrew plus pinned
-vcpkg state on macOS. Platform suite groups and available frontends differ;
-`./ao help` lists commands and `./ao <cmd> --help` has all options.
-
-```bash
-./ao check                    # build/test gate: everything + all native suites (--clang/--asan/--tsan)
-./ao build [release] [--clean] [--target <t>]    # incremental build, no tests
-./ao run <app> [release] [-n] [-- args]           # apps follow the native platform profile
-./ao test [--core|--gtk|--all|...] "[tag]"       # suite groups are platform-specific
-./ao test --tooling           # Linux tooling gate; use ao.bat on Windows; unavailable on macOS
-./ao test --concurrency       # all native Catch2 [concurrency] contracts
-./ao hygiene                  # completion hygiene gate: format/audits/tidy on changed files
-./ao tidy [paths|--folder <d>|--all]             # C++ clang-tidy + Python Ruff/mypy (opt-in, rule 8)
-./ao analyze                  # Clang Static Analyzer, report-only
-./ao coverage "rt::Foo"       # gcov coverage for a test subset
-./ao deps report|verify       # governed dependency report / verification
-./ao deps report --concepts   # public concept baseline into concept-report.json
-./ao docs check               # documentation metadata, links, anchors, and reachability
-./ao format                   # clang-format + ruff format (gate fixes / explicit request only)
-```
-
-Manual CMake is rarely needed. On Linux, enter `nix-shell` first; on macOS,
-source `script/ao/macos-vcpkg-bootstrap.sh` and prepare the build environment
-before using the native preset. Prefer `./ao build -p <tree>` in both cases.
-
-Preserve `/tmp/build/...` trees when chasing failures; `./ao build`/`check` tee all output to `$BUILD_DIR/build.log`.
+Git history and PR mutations use the `manage-git-flow` skill. Existing user
+authorization persists; publishing a branch does not authorize merging its PR.

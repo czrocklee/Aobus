@@ -1,31 +1,19 @@
 ---
 name: managing-gtk-lifetimes
-description: Reviews and changes Aobus GTK ownership, signal wiring, replaceable-source rebinding, widget generations, transient parenting, and delayed callback lifetimes. Use when modifying linux-gtk connections, popovers, models, adjustments, rebuild paths, or teardown.
+description: Review or change Aobus GTK signal ownership, dependency rebinding, transient attachments, and widget teardown.
 ---
 
-# Managing GTK lifetimes
+# Manage GTK lifetimes
 
-Review is read-only unless the user also asks for fixes.
+Review is read-only unless fixes are requested. Use the affected sections of
+`doc/development/gtk-lifetime.md`: signal connections, replaceable dependencies,
+view generations, transient attachments, or cross-lifetime data.
 
-Use lifetime-aligned wiring for every GTK connection and attachment.
+Establish the emitter, receiver, owner, parent, and replacement/teardown graph.
+A raw `this` capture alone is not a defect; prove whether the emitter can outlive
+the receiver. Blanket scoped connections or weak pointers do not establish that
+contract.
 
-## Required reading
-
-Read `doc/development/gtk-lifetime.md` completely before acting.
-When tests change, also read `doc/development/test/uimodel-and-gtk.md` and `doc/development/test/validation-and-review.md`.
-
-## Workflow
-
-1. Trace the emitter, receiver, C++ owner, GTK parent, and every replacement or teardown path.
-2. Classify objects as stable hosts, disposable view generations, or transient attachment sessions.
-3. Keep owner-level signal connections scoped to the shorter endpoint lifetime.
-4. For replaceable dependencies, observe the owning property or slot and reconnect an inner signal scope to the current object.
-5. For `set_parent()`, implement one symmetric, idempotent detach path covering close, replacement, cancellation, and destruction.
-6. For a simple one-shot popover, use `PopoverAttachment`; keep stable or multi-stage popovers in their owning controller.
-7. Defer any operation that would destroy its currently dispatching widget, gesture, action, or view generation, and bind that deferred callback to its owner.
-8. Keep generation-local widgets and pointers out of longer-lived controllers; communicate across generations with stable ids, values, commands, or host signals.
-9. When changing code, add a GTK regression that performs replacement or teardown,
-   then run the repository completion gate.
-
-Do not treat blanket `scoped_connection`, weak pointers, refresh calls, or a global wiring registry as substitutes for a proven ownership graph.
-Do not report a raw `this` capture as a bug until emitter ownership and destruction order show it can outlive the receiver.
+For GTK-specific regressions, use `doc/development/test/uimodel-and-gtk.md`.
+Completion and evidence reuse follow
+`doc/development/test/validation-and-review.md`.

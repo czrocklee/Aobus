@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
 
-from ..core import builddir, buildlock, linttest, proc, tooltest
+from ..core import builddir, buildenv, buildlock, linttest, proc, tooltest
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 from . import build
@@ -39,8 +39,10 @@ SHARD_CAP = 16
 
 def requires_build_environment(arguments: Sequence[str]) -> bool:
     """Return whether this invocation can build before running tests."""
-    portal_arguments = arguments[: arguments.index("--")] if "--" in arguments else arguments
-    return not any(argument in {"-n", "--no-build"} for argument in portal_arguments)
+    args = buildenv.parse_command_arguments(NAME, arguments)
+    return not args.no_build and any(
+        SUITES[suite].kind != "tooling" for suite in suites_for(args.suite, tsan=args.tsan)
+    )
 
 
 EPILOG = """\

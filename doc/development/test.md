@@ -106,20 +106,9 @@ For split guidelines and the review checklist, see
 
 ## Validation
 
-Completed work is validated with the build/test gate followed by the check-only
-hygiene gate:
-
-```bash
-./ao check
-./ao hygiene
-```
-
-Focused filters such as `./ao test --core "Component - behavior"` are debugging
-tools for reproducing a concrete failure or testing one hypothesis; they are
-not routine validation and a ladder of suite filters is not a substitute for
-the two-stage completion gate.
-
-Do not run format or tidy mid-session unless explicitly requested or preparing a
-commit gate.
+Use [validation and review](test/validation-and-review.md) for the change-specific
+completion route, native host coverage, result reuse, and lint boundaries.
+That document is the single completion authority; focused checks during
+implementation supplement any full gate it requires.
 
 For coverage-specific workflow, see `doc/development/test/coverage-workflow.md`.

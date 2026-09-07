@@ -69,6 +69,8 @@ def resolve_scope(
     suffixes: tuple[str, ...] = gitfiles.CPP_SUFFIXES,
 ) -> tuple[list[str], bool]:
     """Return (files, explicit) where files are repo-relative or absolute paths."""
+    if (prepared := getattr(args, "_resolved_sources", None)) is not None:
+        return list(prepared), bool(args.files)
     if args.files:
         return list(args.files), True
     if args.all:
@@ -83,7 +85,7 @@ def resolve_scope(
             f"No files specified — using git diff {base}..HEAD + working tree + staged + untracked",
             file=sys.stderr,
         )
-        files = gitfiles.changed_files(args.commit, suffixes=suffixes)
+        files = gitfiles.changed_files(base, suffixes=suffixes)
     return files, False
 
 
