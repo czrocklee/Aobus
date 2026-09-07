@@ -58,7 +58,11 @@ selection and `--repeat` behavior.
 
 ## Sanitizer findings
 
-Run the full native AddressSanitizer gate on each supported host:
+Reproduce a sanitizer finding on the affected native host before expanding validation.
+For a C++ memory-safety fix, run the full native AddressSanitizer gate on affected
+supported hosts, following [validation and review](validation-and-review.md).
+Reading this reference for a review or Python process change does not require a
+C++ sanitizer build.
 
 ```bash
 # Linux and macOS

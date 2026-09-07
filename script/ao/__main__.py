@@ -5,9 +5,11 @@ The repository shim prepares the platform's native environment before dispatchin
 """
 
 import argparse
+import os
 import sys
 
 from .command import COMMAND_MODULES
+from .core import buildenv
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -46,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     args = parse_arguments(parser, arguments)
+    buildenv.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
     return args.func(args) or 0
 
 

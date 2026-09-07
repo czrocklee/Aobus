@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,7 +32,7 @@ REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\
-scope: with no arguments, checks files changed against local main + working tree +
+scope: with no arguments, checks files changed since the merge base with local main + working tree +
 staged + untracked. Explicit files, --folder, --commit, or --all override that.
 
 examples:
@@ -736,9 +737,23 @@ def apply_fixes(tmpdir: Path, clang_apply_replacements: str = "clang-apply-repla
     return True
 
 
-def run_command(args: argparse.Namespace) -> int:
+def requires_build_environment(arguments: Sequence[str]) -> bool:
+    from ..core import buildenv
+
+    args = buildenv.parse_command_arguments(NAME, arguments)
+    if args.no_build:
+        return False
+    files, _ = tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)
+    return buildenv.requires_source_build_env(args, files)
+
+
+def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bool] | None = None) -> int:
     build_dir = Path(args.path) if args.path else builddir.tidy_dir()
-    files, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)
+    files, explicit = (
+        resolved_scope
+        if resolved_scope is not None
+        else tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)
+    )
     if explicit:
         missing_files = missing_explicit_files(files)
         if missing_files:

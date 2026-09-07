@@ -15,20 +15,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Resolve repository-relative hook and compiler-cache paths consistently.
 cd "$ROOT"
 
-aobus_configure_git_hooks() {
-    if [[ -d "$ROOT/.git" ]]; then
-        git -C "$ROOT" config --local core.hooksPath script/git-hook
-    fi
-}
-
 if [[ "$(uname -s)" == "Darwin" ]]; then
     # Do not let Python modules from an ambient virtual environment shadow the
     # portal package. The Homebrew interpreter is selected by the macOS lock.
     unset PYTHONHOME PYTHONPATH
     source "$ROOT/script/ao/macos-vcpkg-bootstrap.sh"
     aobus_macos_prepare_python "$ROOT" || exit $?
-    aobus_configure_git_hooks
     export PYTHONPATH="$ROOT/script"
+    AOBUS_PREFLIGHT_SCOPE="$(mktemp "${TMPDIR:-/tmp}/aobus-preflight.XXXXXXXX")"
+    export AOBUS_PREFLIGHT_SCOPE
+    trap 'rm -f -- "$AOBUS_PREFLIGHT_SCOPE"' EXIT
 
     NEEDS_BUILD_ENV=0
     NEEDS_PYTHON_TOOLS=0
@@ -42,7 +38,8 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     if [[ "$NEEDS_BUILD_ENV" == "1" ]]; then
         aobus_macos_prepare_build_environment "$ROOT" || exit $?
     fi
-    exec "$AOBUS_PYTHON" -m ao "$@"
+    "$AOBUS_PYTHON" -m ao "$@"
+    exit $?
 fi
 
 if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
@@ -52,6 +49,5 @@ if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 
-aobus_configure_git_hooks
 export PYTHONPATH="$ROOT/script${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m ao "$@"

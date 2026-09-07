@@ -5,8 +5,10 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -174,24 +176,53 @@ class NativePortalTest(unittest.TestCase):
         self.assertIn('-m ao.core.buildenv --python-tools "$@"', content)
         self.assertNotIn("darwin-nix-bootstrap.sh", content)
 
-    def test_unix_portal_configures_hooks_after_each_native_environment_entry(self):
+    @unittest.skipUnless(os.name == "posix" and os.uname().sysname == "Linux", "Linux portal fixture")
+    def test_portal_help_preserves_existing_hook_configuration(self):
         root = Path(__file__).resolve().parents[2]
-        portal = (root / "ao").read_text(encoding="utf-8")
-        shell = (root / "shell.nix").read_text(encoding="utf-8")
-
-        darwin_offset = portal.index('if [[ "$(uname -s)" == "Darwin" ]]')
-        nix_offset = portal.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
-        macos_hook_offset = portal.index("aobus_configure_git_hooks", darwin_offset)
-        linux_hook_offset = portal.index("aobus_configure_git_hooks", nix_offset)
-
-        self.assertLess(macos_hook_offset, nix_offset)
-        self.assertGreater(linux_hook_offset, nix_offset)
-        self.assertEqual(portal.count("aobus_configure_git_hooks"), 3)
-        self.assertNotIn("core.hooksPath", shell)
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Path(temporary)
+            shutil.copy2(root / "ao", fixture / "ao")
+            package = fixture / "script" / "ao"
+            package.mkdir(parents=True)
+            (package / "__init__.py").touch()
+            (package / "__main__.py").write_text("print('help fixture')", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(fixture)], check=True)
+            subprocess.run(["git", "-C", str(fixture), "config", "core.hooksPath", "custom-hooks"], check=True)
+            (package / "core").mkdir()
+            (package / "core/__init__.py").touch()
+            (package / "core/buildenv.py").write_text("print('0')", encoding="utf-8")
+            (package / "macos-vcpkg-bootstrap.sh").write_text(
+                f"aobus_macos_prepare_python() {{ AOBUS_PYTHON={shlex.quote(sys.executable)}; }}\n",
+                encoding="utf-8",
+            )
+            for platform in ("Linux", "Darwin"):
+                with self.subTest(platform=platform):
+                    temp_state = fixture / f"temporary-{platform}"
+                    temp_state.mkdir()
+                    result = subprocess.run(
+                        [
+                            "bash",
+                            "-c",
+                            f'uname() {{ echo {platform}; }}; export -f uname; bash "$1" help',
+                            "fixture",
+                            str(fixture / "ao"),
+                        ],
+                        env={**os.environ, "AO_IN_NIX_PORTAL": "1", "TMPDIR": str(temp_state)},
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(list(temp_state.iterdir()), [])
+                    configured = subprocess.check_output(
+                        ["git", "-C", str(fixture), "config", "--get", "core.hooksPath"], text=True
+                    ).strip()
+                    self.assertEqual(configured, "custom-hooks")
 
     def test_shell_nix_rejects_non_linux_hosts(self):
         shell = (Path(__file__).resolve().parents[2] / "shell.nix").read_text(encoding="utf-8")
 
+        self.assertNotIn("core.hooksPath", shell)
         self.assertIn("pkgs.stdenv.isLinux", shell)
         self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
         self.assertNotIn("isDarwin", shell)
@@ -211,8 +242,15 @@ class NativePortalTest(unittest.TestCase):
     def test_macos_managed_python_is_requested_only_for_python_check_commands(self):
         for command in ("format", "tidy", "hygiene"):
             self.assertTrue(buildenv.requires_python_tools(command))
-        for command in ("build", "check", "deps", "docs", "run", "test"):
-            self.assertFalse(buildenv.requires_python_tools(command))
+        for command, arguments in (
+            ("build", []),
+            ("check", []),
+            ("deps", ["report"]),
+            ("docs", ["check"]),
+            ("run", ["cli"]),
+            ("test", []),
+        ):
+            self.assertFalse(buildenv.requires_python_tools(command, arguments))
 
         bootstrap = (Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh").read_text(
             encoding="utf-8"
@@ -272,7 +310,8 @@ class WindowsBatchPortalTest(unittest.TestCase):
         # ao.bat asks the portal package which commands need MSVC/vcpkg instead
         # of keeping its own command list.
         self.assertIn("-m ao.core.buildenv --exit-code %*", content)
-        self.assertIn('if not "%buildenv_status%"=="10" exit /b %buildenv_status%', content)
+        self.assertIn('if not "%buildenv_status%"=="10" (', content)
+        self.assertIn("goto finished", content)
         self.assertNotIn('for /f "usebackq delims="', content)
         self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
 
@@ -1553,9 +1592,9 @@ class CliParseTest(unittest.TestCase):
                 self.parse(["test", "--core", "--gtk"])
 
     def test_coverage_defaults_to_core_suite(self):
-        args = self.parse(["coverage", "rt::SmartListEvaluator"])
+        args = self.parse(["coverage", "SmartListEvaluator*"])
         self.assertEqual(args.suite, "core")
-        self.assertEqual(args.filter, "rt::SmartListEvaluator")
+        self.assertEqual(args.filter, "SmartListEvaluator*")
 
     def test_coverage_accepts_scopes_and_summary_limit(self):
         args = self.parse(

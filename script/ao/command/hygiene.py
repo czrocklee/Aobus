@@ -4,18 +4,15 @@ Deliberately never modifies files: rewriting sources mid-session disturbs in-fli
 and most clang-tidy findings have no safe auto-fix. The gate reports; fixes are applied
 explicitly (./ao format for formatting, manual edits for lint findings).
 
-Resolution order matters: format before acting on tidy findings. clang-format shifts
-line numbers, so lint findings collected against unformatted code go stale once you
-format, which forces another expensive clang-tidy pass. Formatting first holds
-clang-tidy to two runs (discover + verify); the failure message below spells this
-out.
+Stop on formatting failure before collecting diagnostics whose locations would
+be invalidated by formatting. Every stage uses the same resolved source scope.
 """
 
 import argparse
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
-from ..core import tidyengine
+from ..core import buildenv, gitfiles, tidyengine
 from . import format as format_command
 from . import name_audit, test_audit, tidy
 
@@ -27,7 +24,8 @@ REQUIRES_PYTHON_TOOLS = True
 
 
 EPILOG = """\
-With no paths, checks files changed against local main + working tree + staged + untracked.
+With no paths, checks files changed since the merge base with local main, plus
+working tree, staged, and untracked files. Empty stage subsets are skipped.
 
 examples:
   ./ao hygiene
@@ -65,14 +63,10 @@ def _subcommand_defaults(register_command: Register, name: str, **overrides: obj
     return namespace
 
 
-def _format_args(args: argparse.Namespace) -> argparse.Namespace:
+def _format_args() -> argparse.Namespace:
     return _subcommand_defaults(
         format_command.register,
         "format",
-        files=args.files,
-        all=args.all,
-        folder=args.folder,
-        commit=args.commit,
         check=True,
     )
 
@@ -81,53 +75,60 @@ def _tidy_args(args: argparse.Namespace) -> argparse.Namespace:
     return _subcommand_defaults(
         tidy.register,
         "tidy",
-        files=args.files,
-        all=args.all,
-        folder=args.folder,
-        commit=args.commit,
         jobs=args.jobs,
         path=args.path,
     )
 
 
-def _test_audit_args() -> argparse.Namespace:
-    return _subcommand_defaults(test_audit.register, "test-audit", paths=[], fail_on_issue=True)
+def _test_audit_args(paths: list[str]) -> argparse.Namespace:
+    return _subcommand_defaults(test_audit.register, "test-audit", paths=paths, fail_on_issue=True)
 
 
-def _name_audit_args() -> argparse.Namespace:
-    return _subcommand_defaults(name_audit.register, "name-audit", paths=[], fail_on_issue=True)
+def _name_audit_args(paths: list[str]) -> argparse.Namespace:
+    return _subcommand_defaults(name_audit.register, "name-audit", paths=paths, fail_on_issue=True)
+
+
+def requires_build_environment(arguments: Sequence[str]) -> bool:
+    args = buildenv.parse_command_arguments(NAME, arguments)
+    return buildenv.requires_source_build_env(args, format_command.resolve_files(args))
 
 
 def run_command(args: argparse.Namespace) -> int:
+    files = format_command.resolve_files(args)
+    if not files:
+        print("No files to check.")
+        return 0
+
     print("=== format --check ===")
-    format_failed = format_command.run_command(_format_args(args)) != 0
+    if format_command.run_command(_format_args(), files=files) != 0:
+        print("Hygiene stopped after formatting failure; this gate is check-only.", file=sys.stderr)
+        print("Run ./ao format on the same scope, review the diff, then rerun ./ao hygiene.", file=sys.stderr)
+        return 1
+
+    cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and format_command._file_exists(name)]
+    test_files = [name for name in cpp_files if name.endswith("Test.cpp")]
 
     print()
     print("=== test-audit ===")
-    test_audit_failed = test_audit.run_command(_test_audit_args()) != 0
+    test_audit_failed = bool(test_files) and test_audit.run_command(_test_audit_args(test_files)) != 0
+    if not test_files:
+        print("No applicable test files in scope.")
 
     print()
     print("=== name-audit ===")
-    name_audit_failed = name_audit.run_command(_name_audit_args()) != 0
+    name_audit_failed = bool(cpp_files) and name_audit.run_command(_name_audit_args(cpp_files)) != 0
+    if not cpp_files:
+        print("No C++ files in scope.")
 
     print()
     print("=== tidy ===")
-    tidy_failed = tidy.run_command(_tidy_args(args)) != 0
+    tidy_failed = tidy.run_command(_tidy_args(args), resolved_scope=(files, bool(args.files))) != 0
 
-    if not (format_failed or test_audit_failed or name_audit_failed or tidy_failed):
+    if not (test_audit_failed or name_audit_failed or tidy_failed):
         return 0
 
     print("Hygiene issues found. This gate is check-only; fix and re-run.", file=sys.stderr)
-    if format_failed and tidy_failed:
-        print("  Order matters - format FIRST, then lint:", file=sys.stderr)
-        print("    1. Run ./ao format on the same scope, then review and re-stage the diff.", file=sys.stderr)
-        print("       Formatting shifts line numbers; fixing lint first strands the tidy", file=sys.stderr)
-        print("       findings on stale lines and forces an extra clang-tidy pass.", file=sys.stderr)
-        print("    2. Fix the lint findings manually against the now-current lines.", file=sys.stderr)
-        print("  Then re-run ./ao hygiene to verify.", file=sys.stderr)
-    elif format_failed:
-        print("  - Formatting: run ./ao format on the same scope, then review and re-stage the diff.", file=sys.stderr)
-    elif tidy_failed:
+    if tidy_failed:
         print("  - Lint findings: formatting is already clean, so line numbers are stable -", file=sys.stderr)
         print("    fix the findings manually, re-run scoped validation, then ./ao hygiene.", file=sys.stderr)
 

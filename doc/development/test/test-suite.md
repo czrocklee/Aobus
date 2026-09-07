@@ -90,6 +90,15 @@ diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expe
 `FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage. This keeps
 checker execution policy in `ao tidy` and avoids a second shell-based test orchestration layer.
 
+Place fixtures in `test/integration/lint/fixture/<check-alias>/`; the directory
+selects the check. Put each marker immediately before the source line:
+`// POSITIVE` requires a diagnostic, `// NEGATIVE` forbids one, and
+`// POSITIVE: FIX-TO: <fixed line>` also specifies the replacement.
+The runner syntax-checks fixed temporary copies. Markers assert locations and
+FixIt output, not diagnostic wording; a wording-only correction can reuse the
+existing fixture and inspect the emitted message. Extend an owning fixture for
+new behavior rather than creating a parallel case for an already covered contract.
+
 Coverage keeps its narrower `all` definition of core, TUI, and GTK because tooling and standalone integration
 tests are not part of the application source coverage calculation.
 

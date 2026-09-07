@@ -1,5 +1,9 @@
 """Tests for ao.command.coverage gcov parsing and union-merge."""
 
+import contextlib
+import io
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -139,6 +143,56 @@ class CoverageSuiteStatusTest(unittest.TestCase):
         self.assertEqual(status, 7)
         self.assertEqual(run_suite.call_count, 3)
         run_suite.assert_any_call("gtk", Path("/tmp/coverage-test"), test_filter="[concurrency]")
+
+
+class CoverageMeasurementTest(unittest.TestCase):
+    def test_empty_and_unmeasured_scopes_cannot_report_success(self):
+        measured = {"lib/audio/Foo.cpp": {2: (1, "covered")}}
+        for merged, scopes in (
+            ({}, None),
+            ({"lib/audio/Foo.cpp": {1: (None, "comment")}}, None),
+            (measured, ["missing"]),
+            (measured, ["lib/audio", "missing"]),
+        ):
+            with self.subTest(scopes=scopes), contextlib.redirect_stdout(io.StringIO()) as output:
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    coverage.report(merged, 40, scopes)
+                self.assertNotIn("100.00%", output.getvalue())
+
+    def test_gcov_failure_preserves_diagnostics_and_rejects_stale_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build = Path(temporary)
+            (build / "lib").mkdir()
+            (build / "lib" / "foo.gcda").touch()
+            stale = build / "stale.gcov"
+            stale.write_text(GCOV_B, encoding="utf-8")
+            for status in (0, 1):
+                errors = io.StringIO()
+                result = subprocess.CompletedProcess([], status, "", "invalid gcno version")
+                with mock.patch.object(coverage.subprocess, "run", return_value=result):
+                    with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit):
+                        coverage.collect_coverage(build)
+                self.assertIn("incomplete", errors.getvalue())
+                if status:
+                    self.assertIn("invalid gcno version", errors.getvalue())
+                self.assertTrue(stale.exists())
+
+    def test_successful_extraction_merges_only_fresh_project_reports(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build = Path(temporary)
+            (build / "lib").mkdir()
+            (build / "lib" / "first.gcda").touch()
+            (build / "lib" / "second.gcda").touch()
+            source = coverage.PROJECT_ROOT / "lib" / "audio" / "Foo.cpp"
+
+            def extract(argv, *, cwd, **kwargs):
+                text = GCOV_A if "first.gcda" in argv[1] else GCOV_B
+                (cwd / "Foo.cpp.gcov").write_text(text.replace("lib/audio/Foo.cpp", str(source)), encoding="utf-8")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with mock.patch.object(coverage.subprocess, "run", side_effect=extract):
+                merged = coverage.collect_coverage(build)
+            self.assertEqual(coverage.file_stats(merged["lib/audio/Foo.cpp"]), (2, 2, 0, 100.0))
 
 
 if __name__ == "__main__":

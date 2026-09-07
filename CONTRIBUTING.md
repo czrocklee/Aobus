@@ -26,9 +26,18 @@ network-backed, but generated state must remain on the native host's local
 disk. Read `doc/development/macos.md` or `doc/development/windows.md` before
 overriding platform state locations.
 
-Complete a change with the native `check` command followed by `hygiene`; see
-`doc/development/test/validation-and-review.md` for the exact contract and
-platform-specific additions.
+Select completion checks by the changed behavior using
+[validation and review](doc/development/test/validation-and-review.md).
+
+Install the repository's commit hooks explicitly with `./ao setup git-hooks`
+(`ao.bat setup git-hooks` on Windows).
+This assigns `core.hooksPath=script/git-hook` in the repository's local Git
+configuration, replacing any previous hook path; linked worktrees share that
+local configuration and resolve the relative hook path from their own checkout.
+Ordinary portal commands leave hook configuration unchanged.
+The Git environment must provide Python 3 to execute the commit-message hook.
+Hook installation is optional local setup. Repository rules still apply when
+hooks are absent; a local hook is not a server-side enforcement boundary.
 
 ## Coding Style Highlights
 

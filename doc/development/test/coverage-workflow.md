@@ -12,7 +12,7 @@ summary: Defines the coverage measurement, analysis, and verification workflow.
 Do not blindly guess which lines are uncovered, and do not manually run gcov or cmake. Run the coverage script with an optional test filter:
 
 ```bash
-./ao coverage "rt::SmartListEvaluator"
+./ao coverage "SmartListEvaluator*"
 ```
 
 This script will automatically:
@@ -26,11 +26,14 @@ This script will automatically:
 The command may still print a partial report after a test failure, but it
 returns the first failing suite's non-zero status. A partial report is never a
 green coverage result.
+Failed gcov extraction, missing executable project data, or any explicitly
+requested scope without measurable lines also fails the command.
+An unavailable measurement is never reported as 100% coverage.
 
 The project goal is `> 95%` line coverage.
 
 Line coverage is not evidence of thread safety; use
-`concurrency-and-sanitizers.md` for that validation.
+[concurrency and sanitizer validation](concurrency-and-sanitizer.md).
 
 ## Core philosophy
 

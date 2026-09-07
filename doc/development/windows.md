@@ -172,6 +172,11 @@ The portal initializes the Visual Studio x64 environment when a build-capable
 command is selected; each command declares that need in its module under
 `script/ao/command/`, and Visual Studio discovery is shared with
 `start-msbuild-env.bat` through `script/ao/windows-vsenv.bat`.
+Help, tooling-only tests, and Python-only format/tidy/hygiene scopes skip this
+C++ environment preparation. Managed Python/tool provisioning remains separate.
+Source-check preflight passes the selected files through a temporary invocation
+file so the command reuses the same scope without rescanning Git. The portal
+removes the file when the command or environment preparation finishes.
 `ao.bat run <app> --no-build` skips that native build-environment setup and launches an existing executable through the managed portal directly.
 `start-msbuild-env.bat <command> [args...]` remains useful when another
 development tool needs to run inside that environment; it honors a preset

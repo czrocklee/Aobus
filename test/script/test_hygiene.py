@@ -737,86 +737,77 @@ def _hygiene_args(**overrides):
 
 
 class HygieneCommandTest(unittest.TestCase):
-    def test_runs_format_check_then_tidy_for_the_same_scope(self):
-        args = _hygiene_args(files=["script/foo.py"])
+    def setUp(self):
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        self.files = ["test/unit/audio/FooTest.cpp", "lib/audio/Foo.h", "script/foo.py"]
+        self.resolve = self.stack.enter_context(
+            mock.patch.object(hygiene.format_command, "resolve_files", return_value=self.files)
+        )
+        self.stack.enter_context(mock.patch.object(hygiene.format_command, "_file_exists", return_value=True))
+        self.format = self.stack.enter_context(mock.patch.object(hygiene.format_command, "run_command", return_value=0))
+        self.test_audit = self.stack.enter_context(mock.patch.object(hygiene.test_audit, "run_command", return_value=0))
+        self.name_audit = self.stack.enter_context(mock.patch.object(hygiene.name_audit, "run_command", return_value=0))
+        self.tidy = self.stack.enter_context(mock.patch.object(hygiene.tidy, "run_command", return_value=0))
+        self.stderr = self.stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
 
-        with mock.patch.object(hygiene.format_command, "run_command", return_value=0) as format_run:
-            with mock.patch.object(hygiene.test_audit, "run_command", return_value=0) as audit_run:
-                with mock.patch.object(hygiene.name_audit, "run_command", return_value=0) as name_audit_run:
-                    with mock.patch.object(hygiene.tidy, "run_command", return_value=0) as tidy_run:
-                        with contextlib.redirect_stdout(io.StringIO()):
-                            self.assertEqual(hygiene.run_command(args), 0)
+    def test_resolves_once_and_preserves_implicit_scope_for_native_deferrals(self):
+        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        self.resolve.assert_called_once()
+        self.assertTrue(self.format.call_args.args[0].check)
+        self.assertEqual(self.format.call_args.kwargs["files"], self.files)
+        self.assertEqual(self.test_audit.call_args.args[0].paths, self.files[:1])
+        self.assertEqual(self.name_audit.call_args.args[0].paths, self.files[:2])
+        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
+        self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (self.files, False))
 
-        self.assertTrue(format_run.call_args.args[0].check)
-        self.assertEqual(format_run.call_args.args[0].files, ["script/foo.py"])
-        self.assertEqual(format_run.call_args.args[0].folder, [])
-        self.assertTrue(audit_run.call_args.args[0].fail_on_issue)
-        self.assertEqual(audit_run.call_args.args[0].paths, [])
-        self.assertTrue(name_audit_run.call_args.args[0].fail_on_issue)
-        self.assertEqual(name_audit_run.call_args.args[0].paths, [])
-        self.assertEqual(tidy_run.call_args.args[0].files, ["script/foo.py"])
+    def test_python_scope_skips_cpp_audits_and_preserves_explicit_selection(self):
+        self.resolve.return_value = ["script/foo.py"]
+        self.assertEqual(hygiene.run_command(_hygiene_args(files=["script/foo.py"])), 0)
+        self.test_audit.assert_not_called()
+        self.name_audit.assert_not_called()
+        self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (["script/foo.py"], True))
 
-    def test_subcommand_args_cannot_drift_from_the_real_parsers(self):
+    def test_empty_scope_does_not_expand_to_a_repository_scan(self):
+        self.resolve.return_value = []
+        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        for stage in (self.format, self.test_audit, self.name_audit, self.tidy):
+            stage.assert_not_called()
+
+    def test_format_failure_stops_before_audits_and_tidy(self):
+        self.format.return_value = 1
+        self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+        self.test_audit.assert_not_called()
+        self.name_audit.assert_not_called()
+        self.tidy.assert_not_called()
+        self.assertIn("check-only", self.stderr.getvalue())
+        self.assertIn("./ao format", self.stderr.getvalue())
+
+    def test_audit_failures_propagate_without_claiming_tidy_failed(self):
+        for stage, label in ((self.test_audit, "Test names/tags"), (self.name_audit, "Class/file names")):
+            with self.subTest(label=label):
+                stage.return_value = 1
+                self.assertEqual(hygiene.run_command(_hygiene_args()), 1)
+                self.assertIn(label, self.stderr.getvalue())
+                self.assertNotIn("Lint findings", self.stderr.getvalue())
+                stage.return_value = 0
+
+    def test_subcommand_args_use_the_real_parser_defaults(self):
         args = _hygiene_args(jobs=4)
         for register_command, name, build in (
-            (format_command.register, "format", hygiene._format_args),
-            (hygiene.test_audit.register, "test-audit", lambda _: hygiene._test_audit_args()),
-            (hygiene.name_audit.register, "name-audit", lambda _: hygiene._name_audit_args()),
+            (format_command.register, "format", lambda _: hygiene._format_args()),
+            (hygiene.test_audit.register, "test-audit", lambda _: hygiene._test_audit_args([])),
+            (hygiene.name_audit.register, "name-audit", lambda _: hygiene._name_audit_args([])),
             (tidy.register, "tidy", hygiene._tidy_args),
         ):
             parser = argparse.ArgumentParser()
             register_command(parser.add_subparsers())
-            expected = vars(parser.parse_args([name])).keys()
-            self.assertEqual(vars(build(args)).keys(), expected, name)
+            self.assertEqual(vars(build(args)).keys(), vars(parser.parse_args([name])).keys(), name)
 
     def test_unknown_override_is_rejected(self):
         with self.assertRaises(AttributeError):
             hygiene._subcommand_defaults(tidy.register, "tidy", not_a_tidy_argument=1)
-
-    def test_failure_is_check_only_and_prints_fix_reminders(self):
-        args = _hygiene_args()
-        stderr = io.StringIO()
-
-        with mock.patch.object(hygiene.format_command, "run_command", return_value=1):
-            with mock.patch.object(hygiene.test_audit, "run_command", return_value=1):
-                with mock.patch.object(hygiene.name_audit, "run_command", return_value=1):
-                    with mock.patch.object(hygiene.tidy, "run_command", return_value=1):
-                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-                            self.assertEqual(hygiene.run_command(args), 1)
-
-        self.assertIn("check-only", stderr.getvalue())
-        self.assertIn("./ao format", stderr.getvalue())
-        self.assertIn("Fix the lint findings manually", stderr.getvalue())
-        self.assertIn("./ao test-audit --fail-on-issue", stderr.getvalue())
-        self.assertIn("./ao name-audit --fail-on-issue", stderr.getvalue())
-
-    def test_test_audit_failure_does_not_claim_tidy_failed(self):
-        args = _hygiene_args()
-        stderr = io.StringIO()
-
-        with mock.patch.object(hygiene.format_command, "run_command", return_value=0):
-            with mock.patch.object(hygiene.test_audit, "run_command", return_value=1):
-                with mock.patch.object(hygiene.name_audit, "run_command", return_value=0):
-                    with mock.patch.object(hygiene.tidy, "run_command", return_value=0):
-                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-                            self.assertEqual(hygiene.run_command(args), 1)
-
-        self.assertIn("Test names/tags", stderr.getvalue())
-        self.assertNotIn("Lint findings", stderr.getvalue())
-
-    def test_name_audit_failure_does_not_claim_tidy_failed(self):
-        args = _hygiene_args()
-        stderr = io.StringIO()
-
-        with mock.patch.object(hygiene.format_command, "run_command", return_value=0):
-            with mock.patch.object(hygiene.test_audit, "run_command", return_value=0):
-                with mock.patch.object(hygiene.name_audit, "run_command", return_value=1):
-                    with mock.patch.object(hygiene.tidy, "run_command", return_value=0):
-                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-                            self.assertEqual(hygiene.run_command(args), 1)
-
-        self.assertIn("Class/file names", stderr.getvalue())
-        self.assertNotIn("Lint findings", stderr.getvalue())
 
 
 class TidyFixesDeduplicationTest(unittest.TestCase):

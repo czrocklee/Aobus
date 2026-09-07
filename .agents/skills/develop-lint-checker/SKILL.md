@@ -1,111 +1,26 @@
 ---
 name: develop-lint-checker
-description: Guides the development of custom Clang-Tidy lint checkers for Aobus. Use this skill when asked to create, debug, or extend a lint checker.
+description: Create, debug, or extend Aobus custom Clang-Tidy checkers and their integration fixtures.
 ---
 
-# Developing Lint Checkers in Aobus
+# Develop an Aobus lint checker
 
-This skill is an explicit linting workflow. It is the exception to the repository's session-level clang-tidy opt-in rule because the user has asked to create, debug, or extend lint behavior.
+Checker review or diagnosis is read-only unless implementation or fixes are
+requested. A checker implementation request authorizes the required lint runs.
 
-Use fixture-driven AST matcher development for Aobus custom Clang-Tidy checks.
+`tool/lint/check/` owns checkers and AST helpers. Follow the matching check's
+namespace and register new checks in `tool/lint/AobusLintModule.cpp` and
+`tool/lint/CMakeLists.txt`.
 
-Checker diagnosis and review are read-only unless the user also asks to create, extend, or fix the
-checker. The implementation workflow below applies only when code changes were requested.
+Use `doc/development/test/test-suite.md` for fixture markers and runner behavior.
+Fixtures live under `test/integration/lint/fixture/<check-alias>/`.
+`./ao test --lint` owns diagnostic, FixIt, and fixed-output compilation checks.
+Extend the owning fixture for new behavior; wording-only edits can reuse it and
+inspect the emitted text because markers do not assert diagnostic wording.
 
-## 1. Test-Driven Development (TDD) Workflow
+For symbol identity, macro safety, and uncertain AST shapes, consult
+`doc/development/linting.md` under **Custom checker development**. Use the native
+compile database and toolchain; the portal's `--no-build --check <alias>` route
+allows focused fixture diagnosis with an already prepared plugin.
 
-Define the expected behavior in an integration fixture before writing the AST matcher.
-
-1.  **Create the Fixture**: Add a file such as `BasicFixture.cpp` under
-    `test/integration/lint/fixture/<check-alias>/` — one subdirectory per check alias, and the
-    directory name is what binds the fixture to the check.
-2.  **Define Expected Diagnostics** (markers go on the line *immediately preceding* the code):
-    -   `// POSITIVE: FIX-TO: <fixed line>` — diagnostic must fire AND the auto-fix output must match.
-    -   `// POSITIVE` (bare) — diagnostic must fire; no fix verification. Use for diag-only cases, e.g. a FixIt deliberately suppressed at a macro location.
-    -   `// NEGATIVE` — must *not* trigger the checker (avoids false positives).
-3.  **Run and Fail**: Run the lint integration suite and verify the new fixture fails (the check
-    isn't built yet):
-    ```bash
-    ./ao test --lint
-    ```
-    The suite runs every fixture. To iterate on one fixture's diagnostics, invoke tidy directly:
-    ```bash
-    ./ao tidy --no-build --check aobus-your-check-alias \
-      test/integration/lint/fixture/aobus-your-check-alias/BasicFixture.cpp
-    ```
-    Suite mechanics live in `doc/development/test/test-suite.md`; the runner is
-    `script/ao/core/linttest.py`.
-
-## Shared Helpers — Check These Before Writing Your Own
-
-Header-only helpers live in `tool/lint/check/*.h` under `namespace clang::tidy::aobus` (no CMake changes needed). Reuse them; do not re-implement per-check copies:
-
-- **`AstHelpers.h`**: `getExprSourceText`, `stripImplicitNodes` (implicit cast/construct/materialize chains), `isInMacro` (FixIt safety), `refersToVarDecl` (canonical-decl identity), `isWithinRewrittenOperator` (C++20 rewritten comparisons), `getRangesCpoName` (ranges niebloid identification), `isEndCall` / `verifyEndObject` (algo-vs-end comparison checks).
-- **`CalleeQualificationHelpers.h`**: C standard library function list, callee extraction for qualification FixIts.
-- **`RaiiHeuristics.h`**: RAII-type detection.
-
-Move a helper to `AstHelpers.h` only when at least two current checks need the same stable contract;
-otherwise keep it local. Do not extract for hypothetical reuse.
-
-## Hardening Checklist for FixIt-Emitting Checks
-
-Every check that emits a `FixItHint` must satisfy these, each locked by a fixture case:
-
-1. **Macro guard**: reject when the replaced range is in a macro expansion (`aobus::isInMacro`) — a FixIt there edits the macro *definition*. For insertion-style fixes you may keep the diagnostic and drop only the FixIt (bare `// POSITIVE`). Fixture: a macro-spelled occurrence as `// NEGATIVE` (or bare `// POSITIVE`).
-2. **Identify symbols by qualified name, never by source-text substrings**: `decl->getQualifiedNameAsString()` with exact match (`"std::remove_if"`) or prefix match (`starts_with("std::ranges::")` — exact CPO names break on implementation-detail inline namespaces like `__cpo`). Text heuristics like `calleeText.find("end")` flag `legend()`. Fixture: a same-named function in another namespace as `// NEGATIVE`.
-3. **Object/container identity via decls, not text**: use `aobus::refersToVarDecl` or `equalsBoundNode` on `varDecl`. Fixture: a cross-container case (e.g. `find(v, x) != w.end()`) as `// NEGATIVE`.
-4. **Cheap AST filters before `Lexer::getSourceText`**: order `check()` so name/kind/null filters run before any source-text extraction.
-
-## 2. AST Debugging — MANDATORY: `clang-query` First
-
-**Never implement `check()` before the matcher is confirmed in `clang-query`.** Guessing AST structure is the #1 cause of "compiles but silently doesn't fire."
-
-### Workflow
-
-1. Create a scratch file with the target pattern.
-2. Create `/tmp/query.txt` with the editing tool (`clang-query` only parses single-line `match`
-   interactively):
-    ```text
-    enable output dump
-    match cxxMemberCallExpr(callee(cxxMethodDecl(hasName("erase")))).bind("root")
-    ```
-3. Add one clause at a time, re-run after each change:
-    ```bash
-    TIDY_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug-clang-tidy}"
-    nix-shell -p clang-tools --run "clang-query -p $TIDY_BUILD_DIR -f /tmp/query.txt /tmp/scratch.cpp"
-    ```
-4. Also test against your fixture file to catch include path differences.
-5. Only write C++ once the full matcher hits in `clang-query`.
-
-### Raw AST Dump (supplement)
-
-```bash
-nix-shell -p clang-tools --run "clang++ -std=c++26 -fsyntax-only -Xclang -ast-dump /tmp/scratch.cpp" > /tmp/ast.txt 2>&1
-```
-
-### ⚠️ Common Pitfalls
-
-- **`ignoringParenImpCasts` only strips `ImplicitCastExpr`**: Arguments are often wrapped in deeper chains (`ImplicitCastExpr → CXXConstructExpr → MaterializeTemporaryExpr → ...`). Use `hasDescendant(...)` in the matcher, or manually strip these nodes in `check()`.
-- **Bind type MUST match GetNodeAs type**: `.bind("x")` on `varDecl()` means `getNodeAs<VarDecl>("x")`. Writing `getNodeAs<DeclRefExpr>("x")` silently returns null — the #1 reason "matcher works in clang-query but check doesn't fire."
-- **`equalsBoundNode` on `varDecl`, not `declRefExpr`**: Two `DeclRefExpr` nodes are different AST nodes even if they reference the same variable. Bind `varDecl` for container identity checks.
-- **Niebloids**: `std::ranges` algorithms are function objects, matched via `CXXOperatorCallExpr` + `hasOverloadedOperatorName("()")`. Arguments start at index 1.
-- **`getNumArgs()` counts defaulted arguments**: `std::ranges::find(v, 5)` has FOUR operator() arguments (CPO object + range + value + a `CXXDefaultArgExpr` for the defaulted projection). Exact arg-count checks silently reject everything; count only non-`CXXDefaultArgExpr` arguments.
-- **C++20 rewritten comparisons double-match**: source `a != b` lowers to a `CXXRewrittenBinaryOperator` containing a *synthesized* `operator==` call. In AsIs traversal an `==` matcher also hits that inner node (source operator is actually `!=`), producing duplicate/wrong diagnostics. Guard with `aobus::isWithinRewrittenOperator`; `binaryOperation(...)` matches the rewritten node itself with the correct operator name.
-- **Clang AST API traps**: `CXXConstructorDecl::isInitListConstructor()` is not a Decl API — check the first parameter type for `std::initializer_list` manually. `context.getParents(...)` needs `#include <clang/AST/ParentMapContext.h>`.
-
-## 3. Implementation Steps
-
-1.  **Create Source Files**: Add your `MyCheck.h` and `MyCheck.cpp` in `tool/lint/check/`.
-2.  **Namespace**: Place your check in the correct namespace (usually `clang::tidy::readability` or `clang::tidy::modernize`).
-3.  **Register the Check**:
-    -   Include your header and register it via `checkFactories.registerCheck<MyCheck>("aobus-your-alias");` in `tool/lint/AobusLintModule.cpp`.
-    -   Add `check/MyCheck.cpp` to the `tool/lint/CMakeLists.txt`.
-4.  **Verify**: Re-run `./ao test --lint`. The suite builds the `AobusLintPlugin` target, verifies
-    every fixture's diagnostics against the `POSITIVE`/`NEGATIVE` markers through `./ao tidy
-    --no-build`, applies `--fix` on a temporary copy of each fixture that declares `FIX-TO`
-    expectations, and syntax-checks the fixed output so the auto-fix cannot generate invalid C++.
-
-The shell examples above are Linux-specific because they enter `nix-shell`. On macOS use the
-portal-selected Homebrew LLVM tools; on Windows use the governed LLVM SDK and substitute `ao.bat`
-for `./ao`. Completed checker changes follow
-`doc/development/test/validation-and-review.md`.
+Completion follows `doc/development/test/validation-and-review.md`.
