@@ -22,9 +22,9 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
@@ -109,7 +109,7 @@ namespace ao::rt::test
           [onDevicesChangedCbAddress](audio::BackendProvider::OnDevicesChangedCallback cb)
           {
             *onDevicesChangedCbAddress = std::move(cb);
-            return audio::Subscription{};
+            return utility::ScopedRegistration{};
           });
 
       fakeit::When(Method(mockProvider, subscribeGraph))
@@ -117,7 +117,7 @@ namespace ao::rt::test
           [onGraphChangedCbAddress](std::string_view, audio::BackendProvider::OnGraphChangedCallback cb)
           {
             *onGraphChangedCbAddress = std::move(cb);
-            return audio::Subscription{};
+            return utility::ScopedRegistration{};
           });
 
       fakeit::When(Method(mockProvider, status)).AlwaysReturn(status);

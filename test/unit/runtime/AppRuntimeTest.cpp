@@ -4,6 +4,8 @@
 #include <ao/rt/AppRuntime.h>
 
 #include "lib/audio/NullBackend.h"
+#include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -16,6 +18,7 @@
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/Backend.h>
@@ -25,7 +28,6 @@
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -39,11 +41,13 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -113,7 +117,7 @@ namespace ao::rt::test
 
       void shutdown() noexcept override { _statePtr->providerShutdownStarted.set(true); }
 
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         _statePtr->onDevicesChanged = std::move(callback);
         return {};
@@ -127,7 +131,8 @@ namespace ao::rt::test
         return std::make_unique<AppRuntimeBackend>(_statePtr);
       }
 
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         return {};
       }
@@ -192,16 +197,22 @@ namespace ao::rt::test
     auto const* libraryAddress = static_cast<void const*>(nullptr);
     auto const* asyncAddress = static_cast<void const*>(nullptr);
     auto const* sourcesAddress = static_cast<void const*>(nullptr);
+    auto const musicRoot = tempDir.path() / ".";
+    auto const databasePath = LibraryPaths{musicRoot}.databasePath();
+    std::filesystem::path const* musicRootAddress = nullptr;
+    std::filesystem::path const* databasePathAddress = nullptr;
 
     {
       auto source = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
-                                                               tempDir.path(),
-                                                               LibraryPaths{tempDir.path()}.databasePath(),
+                                                               musicRoot,
+                                                               databasePath,
                                                                tempDir.path() / "cache",
                                                                library::test::kTestMusicLibraryMapBytes));
       libraryAddress = &source.library();
       asyncAddress = &source.async();
       sourcesAddress = &source.sources();
+      musicRootAddress = &source.musicRoot();
+      databasePathAddress = &source.databasePath();
       optRuntime.emplace(std::move(source));
     }
 
@@ -210,6 +221,16 @@ namespace ao::rt::test
     CHECK(static_cast<void const*>(&optRuntime->async()) == asyncAddress);
     CHECK(static_cast<void const*>(&optRuntime->sources()) == sourcesAddress);
     CHECK_NOTHROW(optRuntime->sources().reloadAllTracks());
+    CHECK(optRuntime->musicRoot() == musicRoot);
+    CHECK(optRuntime->databasePath() == databasePath);
+    CHECK(&optRuntime->musicRoot() == musicRootAddress);
+    CHECK(&optRuntime->databasePath() == databasePathAddress);
+
+    optRuntime->shutdown();
+    CHECK(*musicRootAddress == musicRoot);
+    CHECK(*databasePathAddress == databasePath);
+    CHECK(&optRuntime->musicRoot() == musicRootAddress);
+    CHECK(&optRuntime->databasePath() == databasePathAddress);
   }
 
   TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires",
@@ -269,22 +290,38 @@ namespace ao::rt::test
     CHECK(allTracks->size() == 1);
   }
 
-  TEST_CASE("AppRuntime - playback session store uses fallback and explicit override", "[runtime][unit][app-runtime]")
+  TEST_CASE("AppRuntime - playback discard mutates only the selected store", "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
     auto overrideStore = ConfigStore{tempDir.path() / "playback.yaml"};
+    auto const sentinel =
+      PlaybackSessionState{.sourceListId = kAllTracksListId, .currentTrackId = TrackId{7}, .volume = 0.25F};
+    REQUIRE(overrideStore.save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
 
     SECTION("null override uses the workspace store")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
-      CHECK(&runtimePtr->playbackSessionConfigStore() == &runtimePtr->workspaceConfigStore());
+      REQUIRE(
+        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
+      CHECK_FALSE(ao::test::requireValue(runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup)));
+      auto retained = PlaybackSessionState{};
+      REQUIRE(
+        ao::test::requireValue(overrideStore.load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
+      CHECK(retained == sentinel);
     }
 
-    SECTION("explicit override is preserved")
+    SECTION("explicit override leaves the workspace store untouched")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir, &overrideStore);
-      CHECK(&runtimePtr->playbackSessionConfigStore() == &overrideStore);
-      CHECK(&runtimePtr->playbackSessionConfigStore() != &runtimePtr->workspaceConfigStore());
+      REQUIRE(
+        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
+      CHECK_FALSE(ao::test::requireValue(overrideStore.contains(kPlaybackSessionConfigGroup)));
+      auto retained = PlaybackSessionState{};
+      REQUIRE(ao::test::requireValue(
+        runtimePtr->workspaceConfigStore().load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
+      CHECK(retained == sentinel);
     }
   }
 

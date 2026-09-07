@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
 #include <memory>
@@ -26,7 +26,7 @@ namespace ao::audio::backend::detail
     BackendDeviceRegistry(BackendDeviceRegistry&&) = delete;
     BackendDeviceRegistry& operator=(BackendDeviceRegistry&&) = delete;
 
-    Subscription subscribe(Callback callback);
+    utility::ScopedRegistration subscribe(Callback callback);
     std::vector<Device> snapshot() const;
     void publish(std::vector<Device> devices);
 

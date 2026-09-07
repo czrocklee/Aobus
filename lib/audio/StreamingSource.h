@@ -72,7 +72,6 @@ namespace ao::audio
                     std::stop_token const* threadStopToken);
 
     std::unique_ptr<DecoderSession> _decoderPtr;
-    DecodedStreamInfo _streamInfo;
     std::function<void(Error const&)> _onError;
     PcmRingBuffer _ringBuffer;
     std::jthread _decodeThread;

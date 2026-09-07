@@ -63,10 +63,6 @@ namespace ao::audio
       Quality quality = Quality::Unknown;
       bool qualityFullyVerified = true;
       std::vector<NodeQualityAssessment> qualityAssessments{};
-      float volume = 1.0F;
-      bool muted = false;
-      bool volumeAvailable = false;
-      bool volumeIsHardwareAssisted = false;
       bool isReady = false;
 
       bool operator==(Status const&) const = default;

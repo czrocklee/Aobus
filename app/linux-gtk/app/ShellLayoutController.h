@@ -116,7 +116,6 @@ namespace ao::gtk
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
     void activateAction(std::string_view id);
-    layout::ActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
     Gtk::Window* soulWindow() const noexcept;

@@ -4,7 +4,7 @@
 #include "App.h"
 
 #include "AnchoredOverlay.h"
-#include "CommandCompletionProvider.h"
+#include "CommandCompletion.h"
 #include "CommandPalettePanel.h"
 #include "CoverArt.h"
 #include "CoverArtLoader.h"
@@ -47,6 +47,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -58,6 +59,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/output/OutputSelection.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
@@ -1009,7 +1011,20 @@ namespace ao::tui
       playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
     auto outputDevices =
       OutputDeviceController{playback, textCatalog, makeOutputDeviceIntent(*appConfigStorePtr), requestRefresh};
-    auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace(), textCatalog};
+    auto filterCompleter = uimodel::TrackFilterCompleter{runtime.completion()};
+    auto const completeCommand = [&runtime, &textCatalog, &filterCompleter](std::string_view const draft)
+    {
+      return completeCommandDraft(
+        textCatalog,
+        draft,
+        CommandCompletionContext{
+          .builtinPresentations = rt::builtinTrackPresentationPresets(),
+          .customPresentations = runtime.workspace().customPresets(),
+          .filterCompleter = [&filterCompleter](
+                               std::string_view const text, std::size_t const cursor, std::size_t const limit)
+          { return filterCompleter.complete(text, cursor, limit); },
+        });
+    };
     auto libraryScan =
       LibraryScanController{runtime.async(), runtime.library().jobs(), runtime.notifications(), textCatalog};
     EventController* activeEvents = nullptr;
@@ -1062,10 +1077,9 @@ namespace ao::tui
                         .trackEdit = trackEdit,
                         .requestExit = requestGracefulExit,
                         .isExitWaiting = [&exitController] { return exitController.isWaitingForSubmittedWrite(); },
-                        .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
-                        { return commandCompletions.completeCommand(draft); },
-                        .filterCompletionCallback = [&commandCompletions](std::string_view const draft)
-                        { return commandCompletions.completeFilter(draft); },
+                        .commandCompletionCallback = completeCommand,
+                        .filterCompletionCallback = [&filterCompleter](std::string_view const draft)
+                        { return filterCompleter.complete(draft, draft.size(), kInputCompletionResultLimit); },
                       }};
     activeEvents = &events;
 

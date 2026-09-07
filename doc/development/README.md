@@ -8,7 +8,7 @@ summary: Routes contributor setup, standards, testing, tooling, and repository w
 # Development documentation
 
 This area tells contributors how to work in the Aobus repository.
-It owns platform setup, coding and naming standards, testing, validation, linting, dependency governance, application-layer review, and project tooling.
+It owns platform setup, coding and naming standards, testing, validation, linting, dependency governance, design and application-layer review, and project tooling.
 
 Product behavior does not belong here even when contributors are the primary readers.
 Link to architecture, specifications, and reference for the contract being implemented.
@@ -18,6 +18,7 @@ Use the [development guide template](../template/development.md) for a new contr
 ## Repository workflow
 
 - [C++ coding style](coding-style.md) defines language, formatting, include, class-design, const, and threading rules.
+- [Design review](design-review.md) guides proportionate review of ownership, public boundaries, abstractions, and structural refactors.
 - [Naming convention](naming-convention.md) owns identifiers, type and contract roles, vocabulary, files, and support-code allocation.
 - [Commit message](commit-message.md) defines commit structure, scopes, subjects, bodies, and review expectations.
 - [Linting](linting.md) defines warning triage, suppression, cleanup, Python hygiene, and automatic-fix policy.

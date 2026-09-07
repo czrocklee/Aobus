@@ -12,6 +12,7 @@
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -129,9 +130,8 @@ namespace ao::uimodel::test
     CHECK(log.states.size() == 1);
   }
 
-  TEST_CASE("AobusSoul - brand tokens match the asset source of truth", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - rendering palette matches specified colors", "[uimodel][unit][playback][soul]")
   {
-    CHECK(kAobusSoulBrandCyan == AobusSoulRgb{.red = 0x06, .green = 0xB6, .blue = 0xD4});
     CHECK(kAobusSoulUiCyan == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
     CHECK(kAobusSoulAnchorAmber == AobusSoulRgb{.red = 0xF9, .green = 0x73, .blue = 0x16});
     CHECK(aobusSoulAuraRgb(SoulAura::Dormant) == kAobusSoulUiCyan);
@@ -140,17 +140,17 @@ namespace ao::uimodel::test
     CHECK(aobusSoulAuraRgb(SoulAura::Flowing) == AobusSoulRgb{.red = 0x10, .green = 0xB9, .blue = 0x81});
     CHECK(aobusSoulAuraRgb(SoulAura::Turbulent) == AobusSoulRgb{.red = 0xF5, .green = 0x9E, .blue = 0x0B});
     CHECK(aobusSoulAuraRgb(SoulAura::Burning) == AobusSoulRgb{.red = 0xEF, .green = 0x44, .blue = 0x44});
-    CHECK(kAobusSoulNightField == AobusSoulRgb{.red = 0x11, .green = 0x18, .blue = 0x27});
   }
 
   TEST_CASE("AobusSoul - gradient keeps a cyan core and counter-shifted quality body",
             "[uimodel][unit][playback][soul]")
   {
-    auto const stationary = aobusSoulGradientColors(kAobusSoulTurbulent, 0.0);
+    auto const stationary = aobusSoulVisualFrame(kAobusSoulTurbulent, AobusSoulMotionFrame{}).gradientColors;
     CHECK(stationary.core == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
     CHECK(stationary.body == AobusSoulRgb{.red = 0xF5, .green = 0x9E, .blue = 0x0B});
 
-    auto const flowing = aobusSoulGradientColors(kAobusSoulTurbulent, 10.0);
+    auto const flowing =
+      aobusSoulVisualFrame(kAobusSoulTurbulent, AobusSoulMotionFrame{.hueShiftDegrees = 10.0}).gradientColors;
     CHECK(flowing.core == AobusSoulRgb{.red = 0x00, .green = 0xBA, .blue = 0xFF});
     CHECK(flowing.body == AobusSoulRgb{.red = 0xF5, .green = 0x77, .blue = 0x0B});
   }
@@ -198,7 +198,13 @@ namespace ao::uimodel::test
 
     auto const recolored = animation.visualFrame(kAobusSoulRadiant);
     CHECK(recolored.motion == frozen.motion);
-    CHECK(recolored.gradientColors == aobusSoulGradientColors(kAobusSoulRadiant, frozen.motion.hueShiftDegrees));
+    CAPTURE(frozen.motion.hueShiftDegrees);
+    CHECK(recolored.gradientColors.core.red == 0x00);
+    CHECK(recolored.gradientColors.core.green == 0xBA);
+    CHECK(recolored.gradientColors.core.blue == 0xFF);
+    CHECK(recolored.gradientColors.body.red == 0x8D);
+    CHECK(recolored.gradientColors.body.green == 0x55);
+    CHECK(recolored.gradientColors.body.blue == 0xF7);
     CHECK_FALSE(recolored.gradientColors.body == frozen.gradientColors.body);
 
     auto const frozenElapsed = animation.elapsed();

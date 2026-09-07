@@ -76,6 +76,8 @@ combine routes when a change spans several rows.
 | Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run `./ao test --core "[catalog]"` and any affected message-specific tests identified by the [text-catalog reference](../../reference/presentation/text-catalog.md#test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
 | UI, localization, or audio behavior | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation. |
 
+Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
+
 Run commands from the project root through `./ao`, or `ao.bat` on Windows.
 For changes requiring the full native gate, run it in this order:
 

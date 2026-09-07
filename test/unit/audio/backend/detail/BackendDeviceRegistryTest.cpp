@@ -4,6 +4,7 @@
 #include "lib/audio/backend/detail/BackendDeviceRegistry.h"
 
 #include <ao/audio/Device.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -63,7 +64,7 @@ namespace ao::audio::backend::detail::test
     std::size_t firstCalls = 0;
     std::size_t secondCalls = 0;
     bool cancelSecond = false;
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = registry.subscribe(
       [&](std::vector<Device> const&)
       {

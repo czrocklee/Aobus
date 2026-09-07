@@ -28,9 +28,9 @@
 #include <ao/audio/RouteAnchor.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -197,7 +197,7 @@ namespace ao::audio::test
 
       void shutdown() noexcept override {}
 
-      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback(devices());
         _probePtr->setDevicesCallback(std::move(callback));
@@ -215,7 +215,8 @@ namespace ao::audio::test
         return std::make_unique<BarrierBackend>(_probePtr);
       }
 
-      Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         _probePtr->recordRoute(routeAnchor);
         return {};
@@ -350,7 +351,7 @@ namespace ao::audio::test
 
       void shutdown() noexcept override {}
 
-      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback(devices());
         return {};
@@ -367,7 +368,7 @@ namespace ao::audio::test
         return std::make_unique<SynchronousGraphBackend>(_probePtr, device.id.raw());
       }
 
-      Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override
+      utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override
       {
         auto const route = std::string{routeAnchor};
         std::uint64_t subscription = 0;
@@ -382,20 +383,20 @@ namespace ao::audio::test
         }
 
         _probePtr->graphSubscribed.release();
-        return Subscription{[weakProbePtr = std::weak_ptr{_probePtr}, subscription]
-                            {
-                              if (auto probePtr = weakProbePtr.lock(); probePtr)
-                              {
-                                auto const lock = std::scoped_lock{probePtr->mutex};
+        return utility::ScopedRegistration{[weakProbePtr = std::weak_ptr{_probePtr}, subscription]
+                                           {
+                                             if (auto probePtr = weakProbePtr.lock(); probePtr)
+                                             {
+                                               auto const lock = std::scoped_lock{probePtr->mutex};
 
-                                if (probePtr->activeSubscription == subscription)
-                                {
-                                  probePtr->activeSubscription = 0;
-                                  probePtr->activeRoute.clear();
-                                  probePtr->graphCallback = {};
-                                }
-                              }
-                            }};
+                                               if (probePtr->activeSubscription == subscription)
+                                               {
+                                                 probePtr->activeSubscription = 0;
+                                                 probePtr->activeRoute.clear();
+                                                 probePtr->graphCallback = {};
+                                               }
+                                             }
+                                           }};
       }
 
     private:
@@ -434,7 +435,7 @@ namespace ao::audio::test
                                   .backendId = kBackendNone}});
           }
 
-          return Subscription{};
+          return utility::ScopedRegistration{};
         });
 
     When(Method(mockProvider, createBackend))
@@ -446,7 +447,7 @@ namespace ao::audio::test
         [&](std::string_view, BackendProvider::OnGraphChangedCallback const& cb)
         {
           onGraphChanged = cb;
-          return Subscription{[] {}};
+          return utility::ScopedRegistration{[] {}};
         });
     When(Method(mockProvider, status)).AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendNone}});
 
@@ -609,7 +610,7 @@ namespace ao::audio::test
         {
           onOutputDevicesChanged = cb;
 
-          return Subscription{};
+          return utility::ScopedRegistration{};
         });
 
     When(Method(mockProvider, createBackend))
@@ -666,7 +667,7 @@ namespace ao::audio::test
     Fake(Method(mockProvider, shutdown));
 
     When(Method(mockProvider, subscribeDevices))
-      .AlwaysDo([](BackendProvider::OnDevicesChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](BackendProvider::OnDevicesChangedCallback const&) { return utility::ScopedRegistration{}; });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
 
     auto executor = rt::test::InlineExecutor{};
@@ -691,14 +692,15 @@ namespace ao::audio::test
         [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
-          return Subscription{};
+          return utility::ScopedRegistration{};
         });
 
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
-      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&)
+                { return utility::ScopedRegistration{}; });
 
     auto executor = QueuedExecutor{};
     auto player = Player{executor};
@@ -743,14 +745,15 @@ namespace ao::audio::test
         [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
-          return Subscription{};
+          return utility::ScopedRegistration{};
         });
 
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status)).AlwaysReturn(pipeWireStatus());
     When(Method(mockProvider, subscribeGraph))
-      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&) { return Subscription{}; });
+      .AlwaysDo([](std::string_view, BackendProvider::OnGraphChangedCallback const&)
+                { return utility::ScopedRegistration{}; });
 
     auto executor = QueuedExecutor{};
     std::int32_t deviceSignals = 0;
@@ -836,7 +839,7 @@ namespace ao::audio::test
 
       void shutdown() noexcept override {}
 
-      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback({Device{.id = DeviceId{"reentrant-device"},
                          .displayName = "Reentrant Device",
@@ -856,7 +859,8 @@ namespace ao::audio::test
         return std::make_unique<ReentrantBackend>(probePtr);
       }
 
-      Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         return {};
       }
@@ -1030,7 +1034,7 @@ namespace ao::audio::test
         [&](BackendProvider::OnDevicesChangedCallback const& cb)
         {
           onOutputDevicesChanged = cb;
-          return Subscription{};
+          return utility::ScopedRegistration{};
         });
 
     When(Method(mockProvider, createBackend))
@@ -1043,7 +1047,7 @@ namespace ao::audio::test
         [&](std::string_view, BackendProvider::OnGraphChangedCallback const& cb)
         {
           onGraphChanged = cb;
-          return Subscription{[] {}};
+          return utility::ScopedRegistration{[] {}};
         });
 
     auto executor = QueuedExecutor{};
@@ -2011,21 +2015,20 @@ namespace ao::audio::test
     SECTION("Volume and mute are propagated to engine and status")
     {
       CHECK(player.setVolume(0.6F));
-      CHECK(player.status().volume == Catch::Approx{0.6F});
       CHECK(player.status().engine.volume == Catch::Approx{0.6F});
 
       CHECK(player.setMuted(true));
-      CHECK(player.status().muted == true);
+      CHECK(player.status().engine.muted == true);
 
       CHECK(player.toggleMute());
-      CHECK(player.status().muted == false);
+      CHECK(player.status().engine.muted == false);
     }
   }
 
   TEST_CASE("Player - subscription unsubscribe removes callback", "[audio][unit][player][subscription]")
   {
     bool called = false;
-    auto sub = Subscription{[&] { called = true; }};
+    auto sub = utility::ScopedRegistration{[&] { called = true; }};
 
     {
       auto tempSub = std::move(sub);
@@ -2100,7 +2103,7 @@ namespace ao::audio::test
 
       void shutdown() noexcept override { events.recordEvent("provider shutdown"); }
 
-      Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback({Device{.id = DeviceId{"alsa-device"},
                          .displayName = "ALSA Device",
@@ -2123,7 +2126,8 @@ namespace ao::audio::test
         return std::make_unique<LifetimeBackend>(events);
       }
 
-      Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         return {};
       }

@@ -15,10 +15,10 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <filesystem>
 #include <memory>
@@ -59,7 +59,7 @@ namespace ao::rt::test
 
       void shutdown() noexcept override {}
 
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         if (callback)
         {
@@ -77,7 +77,8 @@ namespace ao::rt::test
         return std::make_unique<ReadyAudioBackend>(device.backendId, profile);
       }
 
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         return {};
       }

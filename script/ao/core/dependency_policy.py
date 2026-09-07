@@ -315,10 +315,6 @@ def effective_policy(
     return result
 
 
-def upstream_vcpkg_version(version: str) -> str:
-    return version.split("#", maxsplit=1)[0]
-
-
 def parse_vcpkg_status(text: str) -> dict[str, VcpkgPackage]:
     identities: dict[str, tuple[str, str]] = {}
     features_by_name: dict[str, set[str]] = {}

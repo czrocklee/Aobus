@@ -6,8 +6,8 @@
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
 #include <ao/audio/NodeFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <cmath>
 #include <memory>
@@ -128,7 +128,7 @@ namespace ao::audio::backend::detail
     shutdown();
   }
 
-  Subscription AlsaGraphRegistry::subscribe(std::string_view const routeAnchor, Callback callback)
+  utility::ScopedRegistration AlsaGraphRegistry::subscribe(std::string_view const routeAnchor, Callback callback)
   {
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};

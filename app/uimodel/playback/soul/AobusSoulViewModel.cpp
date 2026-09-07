@@ -36,6 +36,90 @@ namespace ao::uimodel
       auto const cycleElapsed = std::fmod(clamped, period.count());
       return kHalfScale * std::numbers::pi * cycleElapsed / period.count();
     }
+
+    AobusSoulRgb aobusSoulShiftRgb(AobusSoulRgb const color, double const shiftDegrees) noexcept
+    {
+      constexpr double kMinShiftDegrees = 0.01;
+
+      if (std::abs(shiftDegrees) < kMinShiftDegrees)
+      {
+        return color;
+      }
+
+      double const red = static_cast<double>(color.red) / kMaxChannelValue;
+      double const green = static_cast<double>(color.green) / kMaxChannelValue;
+      double const blue = static_cast<double>(color.blue) / kMaxChannelValue;
+      double const maxValue = std::max({red, green, blue});
+      double const minValue = std::min({red, green, blue});
+      double const delta = maxValue - minValue;
+      double const saturation = maxValue == 0.0 ? 0.0 : delta / maxValue;
+      double hue = 0.0;
+
+      if (delta > 0.0)
+      {
+        if (maxValue == red)
+        {
+          hue = ((green - blue) / delta) + (green < blue ? kHueSectorWrap : 0.0);
+        }
+        else if (maxValue == green)
+        {
+          hue = ((blue - red) / delta) + kHueSectorGreenOffset;
+        }
+        else
+        {
+          hue = ((red - green) / delta) + kHueSectorBlueOffset;
+        }
+
+        hue /= kHueSectorWrap;
+      }
+
+      hue = std::fmod(hue + (shiftDegrees / kFullCircleDegrees), 1.0);
+
+      if (hue < 0.0)
+      {
+        hue += 1.0;
+      }
+
+      double const scaledHue = hue * static_cast<double>(kHueSectorCount);
+      std::int32_t const sector = static_cast<std::int32_t>(scaledHue);
+      double const fraction = scaledHue - static_cast<double>(sector);
+      double const lowerValue = maxValue * (1.0 - saturation);
+      double const descendingValue = maxValue * (1.0 - (fraction * saturation));
+      double const ascendingValue = maxValue * (1.0 - ((1.0 - fraction) * saturation));
+
+      auto const toChannel = [](double const value)
+      { return static_cast<std::uint8_t>(std::clamp(std::lround(value * kMaxChannelValue), 0L, kMaxChannelLong)); };
+
+      switch (sector % kHueSectorCount)
+      {
+        case 0:
+          return AobusSoulRgb{
+            .red = toChannel(maxValue), .green = toChannel(ascendingValue), .blue = toChannel(lowerValue)};
+        case 1:
+          return AobusSoulRgb{
+            .red = toChannel(descendingValue), .green = toChannel(maxValue), .blue = toChannel(lowerValue)};
+        case 2:
+          return AobusSoulRgb{
+            .red = toChannel(lowerValue), .green = toChannel(maxValue), .blue = toChannel(ascendingValue)};
+        case 3:
+          return AobusSoulRgb{
+            .red = toChannel(lowerValue), .green = toChannel(descendingValue), .blue = toChannel(maxValue)};
+        case 4:
+          return AobusSoulRgb{
+            .red = toChannel(ascendingValue), .green = toChannel(lowerValue), .blue = toChannel(maxValue)};
+        default:
+          return AobusSoulRgb{
+            .red = toChannel(maxValue), .green = toChannel(lowerValue), .blue = toChannel(descendingValue)};
+      }
+    }
+
+    AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb const aura, double const hueShiftDegrees) noexcept
+    {
+      return AobusSoulGradientColors{
+        .core = aobusSoulShiftRgb(kAobusSoulUiCyan, hueShiftDegrees),
+        .body = aobusSoulShiftRgb(aura, -hueShiftDegrees),
+      };
+    }
   } // namespace
 
   AobusSoulRgb aobusSoulAuraRgb(SoulAura const aura) noexcept
@@ -73,90 +157,6 @@ namespace ao::uimodel
       .red = scaleChannel(color.red), .green = scaleChannel(color.green), .blue = scaleChannel(color.blue)};
   }
 
-  AobusSoulRgb aobusSoulShiftRgb(AobusSoulRgb const color, double const shiftDegrees) noexcept
-  {
-    constexpr double kMinShiftDegrees = 0.01;
-
-    if (std::abs(shiftDegrees) < kMinShiftDegrees)
-    {
-      return color;
-    }
-
-    double const red = static_cast<double>(color.red) / kMaxChannelValue;
-    double const green = static_cast<double>(color.green) / kMaxChannelValue;
-    double const blue = static_cast<double>(color.blue) / kMaxChannelValue;
-    double const maxValue = std::max({red, green, blue});
-    double const minValue = std::min({red, green, blue});
-    double const delta = maxValue - minValue;
-    double const saturation = maxValue == 0.0 ? 0.0 : delta / maxValue;
-    double hue = 0.0;
-
-    if (delta > 0.0)
-    {
-      if (maxValue == red)
-      {
-        hue = ((green - blue) / delta) + (green < blue ? kHueSectorWrap : 0.0);
-      }
-      else if (maxValue == green)
-      {
-        hue = ((blue - red) / delta) + kHueSectorGreenOffset;
-      }
-      else
-      {
-        hue = ((red - green) / delta) + kHueSectorBlueOffset;
-      }
-
-      hue /= kHueSectorWrap;
-    }
-
-    hue = std::fmod(hue + (shiftDegrees / kFullCircleDegrees), 1.0);
-
-    if (hue < 0.0)
-    {
-      hue += 1.0;
-    }
-
-    double const scaledHue = hue * static_cast<double>(kHueSectorCount);
-    std::int32_t const sector = static_cast<std::int32_t>(scaledHue);
-    double const fraction = scaledHue - static_cast<double>(sector);
-    double const lowerValue = maxValue * (1.0 - saturation);
-    double const descendingValue = maxValue * (1.0 - (fraction * saturation));
-    double const ascendingValue = maxValue * (1.0 - ((1.0 - fraction) * saturation));
-
-    auto const toChannel = [](double const value)
-    { return static_cast<std::uint8_t>(std::clamp(std::lround(value * kMaxChannelValue), 0L, kMaxChannelLong)); };
-
-    switch (sector % kHueSectorCount)
-    {
-      case 0:
-        return AobusSoulRgb{
-          .red = toChannel(maxValue), .green = toChannel(ascendingValue), .blue = toChannel(lowerValue)};
-      case 1:
-        return AobusSoulRgb{
-          .red = toChannel(descendingValue), .green = toChannel(maxValue), .blue = toChannel(lowerValue)};
-      case 2:
-        return AobusSoulRgb{
-          .red = toChannel(lowerValue), .green = toChannel(maxValue), .blue = toChannel(ascendingValue)};
-      case 3:
-        return AobusSoulRgb{
-          .red = toChannel(lowerValue), .green = toChannel(descendingValue), .blue = toChannel(maxValue)};
-      case 4:
-        return AobusSoulRgb{
-          .red = toChannel(ascendingValue), .green = toChannel(lowerValue), .blue = toChannel(maxValue)};
-      default:
-        return AobusSoulRgb{
-          .red = toChannel(maxValue), .green = toChannel(lowerValue), .blue = toChannel(descendingValue)};
-    }
-  }
-
-  AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb const aura, double const hueShiftDegrees) noexcept
-  {
-    return AobusSoulGradientColors{
-      .core = aobusSoulShiftRgb(kAobusSoulUiCyan, hueShiftDegrees),
-      .body = aobusSoulShiftRgb(aura, -hueShiftDegrees),
-    };
-  }
-
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> const elapsed) noexcept
   {
     auto const breathingPhase = soulPhase(elapsed, kAobusSoulBreathingPeriod);
@@ -178,11 +178,6 @@ namespace ao::uimodel
       .motion = motion,
       .gradientColors = aobusSoulGradientColors(aura, motion.hueShiftDegrees),
     };
-  }
-
-  AobusSoulVisualFrame aobusSoulVisualAt(AobusSoulRgb const aura, std::chrono::duration<double> const elapsed) noexcept
-  {
-    return aobusSoulVisualFrame(aura, aobusSoulMotionAt(elapsed));
   }
 
   AobusSoulMotionMode aobusSoulMotionMode(audio::Transport const transport) noexcept

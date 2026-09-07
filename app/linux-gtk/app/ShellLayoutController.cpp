@@ -1172,12 +1172,6 @@ namespace ao::gtk
     _actionRegistry.activate(id, ctx);
   }
 
-  layout::ActionAvailability ShellLayoutController::actionAvailability(std::string_view id)
-  {
-    auto ctx = actionContext(id);
-    return _actionRegistry.state(id, ctx);
-  }
-
   layout::ActionActivationContext ShellLayoutController::actionContext(std::string_view componentId)
   {
     return layout::ActionActivationContext{

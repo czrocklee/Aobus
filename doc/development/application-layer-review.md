@@ -16,16 +16,11 @@ Architectural authority remains in the [system](../architecture/system-overview.
 
 Physical target direction is necessary but insufficient: behavior must also be owned by the correct layer.
 
-For every proposed public role, ask these questions:
+Apply the public-role justification questions owned by [Naming convention](naming-convention.md#review).
+For lifecycle-bearing objects, also check the construction and ownership requirements in [C++ coding style](coding-style.md):
 
-1. What does it own?
-2. What does it guarantee beyond the types it contains?
-3. Which correctness contract is lost if it is deleted?
-4. Has the object reached its final address before any callback, observer, provider, restoration, or borrowed reference is published?
-5. If state is shared, which independent participant may retain it, and what borrowed owner or executor is its lifetime ceiling?
-
-If none has an answer, absorb the role into its real owner or use a function.
-These questions are not a score.
+- Has the object reached its final address before any callback, observer, provider, restoration, or borrowed reference is published?
+- If state is shared, which independent participant may retain it, and what borrowed owner or executor is its lifetime ceiling?
 
 Then place the surviving behavior by authority: cross-frontend source-of-truth
 state and service coordination belong to runtime; deterministic
@@ -100,3 +95,4 @@ If a guardrail blocks a legitimate dependency, update the architecture and guard
 - [Presentation architecture](../architecture/presentation.md)
 - [Failure and reporting architecture](../architecture/failure-and-reporting.md)
 - [UIModel organization](uimodel-organization.md)
+- [Design review](design-review.md) guides comparisons of alternatives and refactor evidence.

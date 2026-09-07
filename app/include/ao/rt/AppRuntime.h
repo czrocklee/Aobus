@@ -96,7 +96,6 @@ namespace ao::rt
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
     ConfigStore& workspaceConfigStore() noexcept;
-    ConfigStore& playbackSessionConfigStore() noexcept;
 
     Result<> savePlaybackSession();
     Result<PlaybackSessionRestoreResult> restorePlaybackSession();

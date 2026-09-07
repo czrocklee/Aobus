@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
 #include <memory>
@@ -41,7 +41,9 @@ namespace ao::audio::backend::detail
      * graph. A stored publication takes precedence. The returned subscription
      * may safely outlive the registry.
      */
-    Subscription subscribe(std::string_view routeAnchor, Callback callback, flow::Graph initialGraph = {});
+    utility::ScopedRegistration subscribe(std::string_view routeAnchor,
+                                          Callback callback,
+                                          flow::Graph initialGraph = {});
 
     /// Replaces one route snapshot and publishes it to current subscribers.
     void publish(std::string_view routeAnchor, flow::Graph graph);

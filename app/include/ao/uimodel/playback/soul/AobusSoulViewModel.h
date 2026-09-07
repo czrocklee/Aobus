@@ -103,7 +103,6 @@ namespace ao::uimodel
   inline constexpr double kAobusSoulMaxHueShiftDegrees = 10.0;
   inline constexpr auto kAobusSoulGeometry = AobusSoulGeometry{};
 
-  inline constexpr auto kAobusSoulBrandCyan = AobusSoulRgb{.red = 0x06, .green = 0xB6, .blue = 0xD4};
   inline constexpr auto kAobusSoulUiCyan = AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF};
   inline constexpr auto kAobusSoulAnchorAmber = AobusSoulRgb{.red = 0xF9, .green = 0x73, .blue = 0x16};
   inline constexpr auto kAobusSoulRadiant = AobusSoulRgb{.red = 0xA8, .green = 0x55, .blue = 0xF7};
@@ -111,7 +110,6 @@ namespace ao::uimodel
   inline constexpr auto kAobusSoulTurbulent = AobusSoulRgb{.red = 0xF5, .green = 0x9E, .blue = 0x0B};
   inline constexpr auto kAobusSoulBurning = AobusSoulRgb{.red = 0xEF, .green = 0x44, .blue = 0x44};
   inline constexpr auto kAobusSoulVeiled = AobusSoulRgb{.red = 0x6B, .green = 0x72, .blue = 0x80};
-  inline constexpr auto kAobusSoulNightField = AobusSoulRgb{.red = 0x11, .green = 0x18, .blue = 0x27};
 
   struct AobusSoulViewState final
   {
@@ -123,13 +121,10 @@ namespace ao::uimodel
 
   SoulAura resolveSoulAura(audio::Transport transport, bool ready, rt::QualityState const& signal) noexcept;
   AobusSoulRgb aobusSoulAuraRgb(SoulAura aura) noexcept;
-  AobusSoulRgb aobusSoulShiftRgb(AobusSoulRgb color, double shiftDegrees) noexcept;
-  AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb aura, double hueShiftDegrees) noexcept;
   AobusSoulRgb aobusSoulMixRgb(AobusSoulRgb from, AobusSoulRgb to, double fraction) noexcept;
   AobusSoulRgb aobusSoulScaleRgb(AobusSoulRgb color, double factor) noexcept;
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> elapsed) noexcept;
   AobusSoulVisualFrame aobusSoulVisualFrame(AobusSoulRgb aura, AobusSoulMotionFrame const& motion) noexcept;
-  AobusSoulVisualFrame aobusSoulVisualAt(AobusSoulRgb aura, std::chrono::duration<double> elapsed) noexcept;
   AobusSoulMotionMode aobusSoulMotionMode(audio::Transport transport) noexcept;
   bool shouldAnimateAobusSoul(AobusSoulMotionMode motionMode, bool visible, bool minimized) noexcept;
 

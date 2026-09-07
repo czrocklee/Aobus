@@ -6,6 +6,7 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -102,7 +103,7 @@ namespace ao::audio::backend::detail::test
     bool cancelSecond = false;
     std::int32_t firstCalls = 0;
     std::int32_t secondCalls = 0;
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = registry.subscribe("endpoint-a",
                                        [&](flow::Graph const&)
                                        {
@@ -239,7 +240,7 @@ namespace ao::audio::backend::detail::test
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t secondShutdownCalls = 0;
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = registry.subscribe("endpoint-a",
                                        [&](flow::Graph const& graph)
                                        {
@@ -270,7 +271,7 @@ namespace ao::audio::backend::detail::test
     auto subscriptionAttempted = std::binary_semaphore{0};
     auto emptyCalls = std::atomic<std::int32_t>{0};
     auto nonEmptyCalls = std::atomic<std::int32_t>{0};
-    auto racedSub = Subscription{};
+    auto racedSub = utility::ScopedRegistration{};
     auto subscribeThread =
       std::jthread{[&]
                    {

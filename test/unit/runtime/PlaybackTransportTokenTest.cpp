@@ -26,10 +26,10 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PreparedPlayback.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -216,7 +216,7 @@ namespace ao::rt::test
 
       void shutdown() noexcept override {}
 
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback(devices());
         return {};
@@ -240,7 +240,8 @@ namespace ao::rt::test
         return std::make_unique<ProbeBackend>(_probePtr);
       }
 
-      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
       {
         return {};
       }

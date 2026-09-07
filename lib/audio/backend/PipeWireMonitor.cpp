@@ -23,9 +23,9 @@ extern "C"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/CallbackStackScope.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/ThreadName.h>
 
 #include <algorithm>
@@ -347,8 +347,9 @@ namespace ao::audio::backend
     void deliverDeviceCallbacks(std::vector<PendingDeviceCallback>& pendingCallbacks,
                                 std::vector<Device> const& devices);
 
-    Subscription subscribeDevices(DeviceCallback callback);
-    Subscription subscribeGraph(std::string_view routeAnchor, std::function<void(flow::Graph const&)> callback);
+    utility::ScopedRegistration subscribeDevices(DeviceCallback callback);
+    utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor,
+                                               std::function<void(flow::Graph const&)> callback);
 
     std::vector<Device> enumerateSinks() const;
 
@@ -769,7 +770,7 @@ namespace ao::audio::backend
     _workerPtr->shutdown();
   }
 
-  Subscription PipeWireMonitor::subscribeDevices(DeviceCallback callback)
+  utility::ScopedRegistration PipeWireMonitor::subscribeDevices(DeviceCallback callback)
   {
     auto const statePtr = _statePtr;
     return statePtr->subscribeDevices(std::move(callback));
@@ -788,8 +789,8 @@ namespace ao::audio::backend
     return statePtr->isRunning();
   }
 
-  Subscription PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
-                                               std::function<void(flow::Graph const&)> callback)
+  utility::ScopedRegistration PipeWireMonitor::subscribeGraph(std::string_view routeAnchor,
+                                                              std::function<void(flow::Graph const&)> callback)
   {
     auto const statePtr = _statePtr;
     return statePtr->subscribeGraph(routeAnchor, std::move(callback));
@@ -924,7 +925,7 @@ namespace ao::audio::backend
     return utility::CallbackStackScope::containsIdentity(this);
   }
 
-  Subscription PipeWireMonitor::State::subscribeDevices(DeviceCallback callback)
+  utility::ScopedRegistration PipeWireMonitor::State::subscribeDevices(DeviceCallback callback)
   {
     if (!callback)
     {
@@ -992,28 +993,29 @@ namespace ao::audio::backend
     }
 
     auto const weakStatePtr = std::weak_ptr<State>{retainedStatePtr};
-    return Subscription{[weakStatePtr, id]
-                        {
-                          auto const statePtr = weakStatePtr.lock();
+    return utility::ScopedRegistration{[weakStatePtr, id]
+                                       {
+                                         auto const statePtr = weakStatePtr.lock();
 
-                          if (!statePtr)
-                          {
-                            return;
-                          }
+                                         if (!statePtr)
+                                         {
+                                           return;
+                                         }
 
-                          auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-                          auto const lock = std::scoped_lock{statePtr->mutex};
-                          auto const it = std::ranges::find(statePtr->deviceSubscriptions, id, &DeviceSubscription::id);
+                                         auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+                                         auto const lock = std::scoped_lock{statePtr->mutex};
+                                         auto const it = std::ranges::find(
+                                           statePtr->deviceSubscriptions, id, &DeviceSubscription::id);
 
-                          if (it != statePtr->deviceSubscriptions.end())
-                          {
-                            statePtr->deviceSubscriptions.erase(it);
-                          }
-                        }};
+                                         if (it != statePtr->deviceSubscriptions.end())
+                                         {
+                                           statePtr->deviceSubscriptions.erase(it);
+                                         }
+                                       }};
   }
 
-  Subscription PipeWireMonitor::State::subscribeGraph(std::string_view routeAnchor,
-                                                      std::function<void(flow::Graph const&)> callback)
+  utility::ScopedRegistration PipeWireMonitor::State::subscribeGraph(std::string_view routeAnchor,
+                                                                     std::function<void(flow::Graph const&)> callback)
   {
     if (!callback)
     {
@@ -1061,28 +1063,29 @@ namespace ao::audio::backend
     }
 
     auto const weakStatePtr = std::weak_ptr<State>{retainedStatePtr};
-    return Subscription{[weakStatePtr, id]
-                        {
-                          auto const statePtr = weakStatePtr.lock();
+    return utility::ScopedRegistration{[weakStatePtr, id]
+                                       {
+                                         auto const statePtr = weakStatePtr.lock();
 
-                          if (!statePtr)
-                          {
-                            return;
-                          }
+                                         if (!statePtr)
+                                         {
+                                           return;
+                                         }
 
-                          auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-                          {
-                            auto const lock = std::scoped_lock{statePtr->mutex};
-                            auto const it = std::ranges::find(statePtr->graphSubscriptions, id, &GraphSubscription::id);
+                                         auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+                                         {
+                                           auto const lock = std::scoped_lock{statePtr->mutex};
+                                           auto const it = std::ranges::find(
+                                             statePtr->graphSubscriptions, id, &GraphSubscription::id);
 
-                            if (it != statePtr->graphSubscriptions.end())
-                            {
-                              statePtr->graphSubscriptions.erase(it);
-                            }
-                          }
+                                           if (it != statePtr->graphSubscriptions.end())
+                                           {
+                                             statePtr->graphSubscriptions.erase(it);
+                                           }
+                                         }
 
-                          statePtr->triggerRefresh();
-                        }};
+                                         statePtr->triggerRefresh();
+                                       }};
   }
 
   std::vector<Device> PipeWireMonitor::State::enumerateSinks() const

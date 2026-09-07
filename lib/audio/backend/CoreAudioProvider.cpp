@@ -14,9 +14,9 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/CallbackStackScope.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/ThreadName.h>
 
 #include <CoreAudio/AudioHardware.h>
@@ -382,7 +382,7 @@ namespace ao::audio::backend
         }
       }
 
-      Subscription subscribeDevices(BackendProvider::OnDevicesChangedCallback callback)
+      utility::ScopedRegistration subscribeDevices(BackendProvider::OnDevicesChangedCallback callback)
       {
         if (!callback || !acceptsSubscriptions())
         {
@@ -409,7 +409,8 @@ namespace ao::audio::backend
         return sub;
       }
 
-      Subscription subscribeGraph(std::string_view const routeAnchor, BackendProvider::OnGraphChangedCallback callback)
+      utility::ScopedRegistration subscribeGraph(std::string_view const routeAnchor,
+                                                 BackendProvider::OnGraphChangedCallback callback)
       {
         if (!callback || !acceptsSubscriptions())
         {
@@ -619,7 +620,7 @@ namespace ao::audio::backend
     controlPtr->shutdown();
   }
 
-  Subscription CoreAudioProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  utility::ScopedRegistration CoreAudioProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const controlPtr = _implPtr->controlPtr;
     return controlPtr->subscribeDevices(std::move(callback));
@@ -638,7 +639,8 @@ namespace ao::audio::backend
     return std::make_unique<CoreAudioBackend>(device, kProfileShared, controlPtr->graphRegistry());
   }
 
-  Subscription CoreAudioProvider::subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
+  utility::ScopedRegistration CoreAudioProvider::subscribeGraph(std::string_view const routeAnchor,
+                                                                OnGraphChangedCallback callback)
   {
     auto const controlPtr = _implPtr->controlPtr;
     return controlPtr->subscribeGraph(routeAnchor, std::move(callback));

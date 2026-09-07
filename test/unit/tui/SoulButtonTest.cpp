@@ -36,9 +36,10 @@ namespace ao::tui::test
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing,
-                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
-                                            animationElapsed));
+      return renderScreen(soulButtonElement(
+        audio::Transport::Playing,
+        uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulRadiant, uimodel::aobusSoulMotionAt(animationElapsed)),
+        animationElapsed));
     };
 
     CHECK(soulButtonCells(renderAt(std::chrono::milliseconds{0})) == std::array<std::string, 3>{" ", " ", "⡷"});
@@ -59,9 +60,10 @@ namespace ao::tui::test
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing,
-                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
-                                            animationElapsed));
+      return renderScreen(soulButtonElement(
+        audio::Transport::Playing,
+        uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulRadiant, uimodel::aobusSoulMotionAt(animationElapsed)),
+        animationElapsed));
     };
 
     // These timestamps have the same rotation frame. Only GTK's stroke-width
@@ -72,7 +74,8 @@ namespace ao::tui::test
 
   TEST_CASE("SoulButton - paused state preserves the sampled arc while quality color changes", "[tui][unit][soul]")
   {
-    auto const frozenVisual = uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, std::chrono::milliseconds{2080});
+    auto const frozenVisual = uimodel::aobusSoulVisualFrame(
+      uimodel::kAobusSoulRadiant, uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080}));
     auto const renderAt = [&frozenVisual](std::chrono::milliseconds const transientElapsed)
     { return renderScreen(soulButtonElement(audio::Transport::Paused, frozenVisual, transientElapsed)); };
 
@@ -94,9 +97,10 @@ namespace ao::tui::test
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing,
-                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
-                                            animationElapsed));
+      return renderScreen(soulButtonElement(
+        audio::Transport::Playing,
+        uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulRadiant, uimodel::aobusSoulMotionAt(animationElapsed)),
+        animationElapsed));
     };
 
     // The GTK cyan-core side of the gradient moves over the same three-cell

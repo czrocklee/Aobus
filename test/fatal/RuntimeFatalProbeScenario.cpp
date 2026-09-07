@@ -28,7 +28,6 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
@@ -52,6 +51,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #ifdef _WIN32
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -288,7 +288,7 @@ namespace ao::rt::test
 
       void shutdown() noexcept override {}
 
-      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback(_status.devices);
         return {};
@@ -302,8 +302,8 @@ namespace ao::rt::test
         return std::make_unique<ThrowingVolumeBackend>(*_arm);
       }
 
-      audio::Subscription subscribeGraph([[maybe_unused]] std::string_view routeAnchor,
-                                         [[maybe_unused]] OnGraphChangedCallback callback) override
+      utility::ScopedRegistration subscribeGraph([[maybe_unused]] std::string_view routeAnchor,
+                                                 [[maybe_unused]] OnGraphChangedCallback callback) override
       {
         return {};
       }

@@ -175,8 +175,8 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 - [`TrackFilterViewModel`](../../../app/include/ao/uimodel/library/track/TrackFilterView.h) owns frontend-neutral filter state.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns runtime view replacement and observations.
 - [`TrackSourceCache`](../../../app/include/ao/rt/source/TrackSourceCache.h) owns ad-hoc source acquisition.
-- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h), [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h), and [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) are completion adapters; [`QuickFilterCompletionAdapter`](../../../app/windows-winui/include/ao/winui/track/QuickFilterCompletionAdapter.h) owns the WinUI UTF-8/UTF-16 and semantic-row boundary, while [`TrackComponents.cpp`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) owns the composed create action.
-- TUI `EventController` owns live input timing and `LibraryController` applies TUI filters.
+- [`TrackQuickFilter`](../../../app/linux-gtk/track/TrackQuickFilter.h) and [`TrackQuickFilterControl`](../../../app/windows-winui/track/TrackQuickFilterControl.h) are completion adapters; [`QuickFilterCompletionAdapter`](../../../app/windows-winui/include/ao/winui/track/QuickFilterCompletionAdapter.h) owns the WinUI UTF-8/UTF-16 and semantic-row boundary, while [`TrackComponents.cpp`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) owns the composed create action.
+- TUI [`App.cpp`](../../../app/tui/App.cpp) composes command and filter completion callbacks, `EventController` owns live input timing, and `LibraryController` applies TUI filters.
 
 ## Test map
 

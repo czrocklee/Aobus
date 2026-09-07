@@ -6,8 +6,8 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
 #include <memory>
@@ -89,7 +89,7 @@ namespace ao::audio
      * handle without invoking the callback. The returned handle may outlive the
      * provider and remains safe to reset concurrently with publication.
      */
-    virtual Subscription subscribeDevices(OnDevicesChangedCallback callback) = 0;
+    virtual utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) = 0;
 
     /**
      * @brief Gets the current status of the provider, including supported profiles and devices.
@@ -117,7 +117,8 @@ namespace ao::audio
      * post-shutdown, and provider-independent handle lifetime contract as
      * subscribeDevices().
      */
-    virtual Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) = 0;
+    virtual utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor,
+                                                       OnGraphChangedCallback callback) = 0;
 
   protected:
     BackendProvider() = default;

@@ -216,9 +216,7 @@ namespace ao::gtk::test
     CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
     CHECK_FALSE(soul.isTickActive());
     auto const recolored = soul.visualFrame();
-    CHECK(recolored.motion == frozen.motion);
-    CHECK(recolored.gradientColors ==
-          uimodel::aobusSoulGradientColors(uimodel::kAobusSoulTurbulent, frozen.motion.hueShiftDegrees));
+    CHECK(recolored == uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, frozen.motion));
     auto const optTurbulent = renderedGradientBody(windowFixture.window(), soul);
     REQUIRE(optTurbulent);
     CHECK(*optTurbulent == rgbaFromSoulRgb(recolored.gradientColors.body));

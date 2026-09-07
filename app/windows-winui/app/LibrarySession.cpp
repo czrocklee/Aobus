@@ -426,11 +426,6 @@ namespace ao::winui
     return _storagePtr->scanAfterOpen;
   }
 
-  bool LibrarySession::operationActive() const noexcept
-  {
-    return _storagePtr->operationActive;
-  }
-
   uimodel::PlaybackActions& LibrarySession::playbackActions() const noexcept
   {
     return _storagePtr->optRuntimeGraph->optInteractiveBorrowers->playbackActions;

@@ -6,7 +6,7 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <memory>
 #include <string_view>
@@ -39,10 +39,10 @@ namespace ao::audio::backend
     AlsaProvider& operator=(AlsaProvider&&) = delete;
 
     void shutdown() noexcept override;
-    Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
+    utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override;
     BackendProvider::Status status() const override;
     std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
-    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
+    utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     struct Impl;

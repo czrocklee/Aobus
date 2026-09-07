@@ -84,13 +84,6 @@ SUITE_TARGETS = {
     name: [spec.target] for name, spec in SUITES.items() if spec.kind == "catch2" and spec.target is not None
 }
 
-SUITE_GROUPS = {
-    "default": builddir.LINUX_PROFILE.default_suites,
-    "all": builddir.LINUX_PROFILE.all_suites,
-    "tsan": builddir.LINUX_PROFILE.tsan_suites,
-    "concurrency": tuple(name for name, spec in SUITES.items() if spec.kind == "catch2"),
-}
-
 
 def suite_groups() -> dict[str, tuple[str, ...]]:
     """Return suite groups containing only targets enabled by the native profile."""
@@ -198,7 +191,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
         "--suite",
-        choices=(*profile.all_suites, *SUITE_GROUPS),
+        choices=(*profile.all_suites, *suite_groups()),
         default="default",
         help="test suite or group (default: default)",
     )

@@ -42,7 +42,10 @@ target_include_directories(ao_audio
     PUBLIC ${AO_PUBLIC_INCLUDE_DIR} ${AO_GENERATED_INCLUDE_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
-target_link_libraries(ao_audio PUBLIC ao_media ao_utility PkgFLAC PkgALAC PkgFDKAAC PkgMPG123 PkgOpus)
+target_link_libraries(ao_audio
+    PUBLIC ao_media ao_utility
+    PRIVATE PkgFLAC PkgALAC PkgFDKAAC PkgMPG123 PkgOpus
+)
 
 if(WIN32)
     target_sources(ao_audio PRIVATE

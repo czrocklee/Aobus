@@ -13,7 +13,7 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -130,7 +130,7 @@ namespace ao::audio::test
   {
   }
 
-  Subscription MockProviderProxy::subscribeDevices(OnDevicesChangedCallback callback)
+  utility::ScopedRegistration MockProviderProxy::subscribeDevices(OnDevicesChangedCallback callback)
   {
     return _real.subscribeDevices(callback);
   }
@@ -145,7 +145,8 @@ namespace ao::audio::test
     return _real.status();
   }
 
-  Subscription MockProviderProxy::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  utility::ScopedRegistration MockProviderProxy::subscribeGraph(std::string_view routeAnchor,
+                                                                OnGraphChangedCallback callback)
   {
     return _real.subscribeGraph(routeAnchor, callback);
   }
