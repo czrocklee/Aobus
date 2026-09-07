@@ -121,7 +121,6 @@
         "AOBUS_BUILD_CLI": "OFF",
         "AOBUS_BUILD_GTK": "OFF",
         "AOBUS_BUILD_TESTS": "OFF",
-        "AOBUS_BUILD_TOOLS": "OFF",
         "AOBUS_BUILD_LINT_PLUGIN": "OFF",
         "AOBUS_BUILD_TUI": "OFF",
         "AOBUS_BUILD_WINUI": "ON"

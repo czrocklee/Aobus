@@ -10,7 +10,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <memory>
 #include <string_view>
@@ -66,7 +66,7 @@ namespace ao::audio::backend
     _implPtr->monitor.stop();
   }
 
-  Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  utility::ScopedRegistration PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     if (!callback)
     {
@@ -102,7 +102,8 @@ namespace ao::audio::backend
       .devices = std::move(devices)};
   }
 
-  Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  utility::ScopedRegistration PipeWireProvider::subscribeGraph(std::string_view routeAnchor,
+                                                               OnGraphChangedCallback callback)
   {
     return _implPtr->monitor.subscribeGraph(routeAnchor, std::move(callback));
   }

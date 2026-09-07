@@ -985,7 +985,7 @@ class CliParseTest(unittest.TestCase):
 
         with mock.patch.object(test_command, "run_suite", return_value=0) as run_suite:
             with mock.patch.object(test_command, "run_non_catch2_suite", return_value=0) as run_non_catch2:
-                self.assertEqual(test_command.run_suites(test_command.SUITE_GROUPS["all"], build_dir), 0)
+                self.assertEqual(test_command.run_suites(builddir.LINUX_PROFILE.all_suites, build_dir), 0)
 
         self.assertEqual(
             [call.args[0] for call in run_suite.call_args_list],
@@ -1116,7 +1116,7 @@ class CliParseTest(unittest.TestCase):
         do_build.assert_called_once_with(args, targets=["all", "aobus_guardrails", "ao_perf_baseline"])
         verify.assert_called_once_with(result.build_dir)
         run_suites.assert_called_once_with(
-            test_command.SUITE_GROUPS["all"],
+            builddir.LINUX_PROFILE.all_suites,
             result.build_dir,
             asan=False,
             tsan=False,

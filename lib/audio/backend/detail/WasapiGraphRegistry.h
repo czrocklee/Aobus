@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
 #include <memory>
@@ -58,11 +58,11 @@ namespace ao::audio::backend::detail
      *
      * @param routeAnchor The unique identifier for the route (endpoint ID).
      * @param callback The function to invoke whenever the graph changes.
-     * @return A Subscription that removes the callback on destruction.
+     * @return A scoped registration that removes the callback on destruction.
      *
      * The returned subscription may safely outlive this registry.
      */
-    Subscription subscribe(std::string_view routeAnchor, Callback callback);
+    utility::ScopedRegistration subscribe(std::string_view routeAnchor, Callback callback);
 
     /**
      * @brief Publishes new state for a WASAPI route.

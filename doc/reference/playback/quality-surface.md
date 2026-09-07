@@ -158,7 +158,7 @@ The raw conclusion/category and Soul aura surfaces have explicit `Clipped` mappi
 `AobusSoulAnimationState` owns accumulated active elapsed time and the current motion sample.
 `advance(delta)` changes that sample only in `Animating`; `Frozen` retains the exact breath, rotation, luminance, and hue-shift values; `Dormant` resets elapsed time and the sample.
 `visualFrame(aura)` composes the retained sample with the current aura, so a quality update can recolor a frozen frame without changing its motion values.
-`aobusSoulVisualAt(aura, elapsed)` remains the pure direct-sampling operation, while `aobusSoulVisualFrame(aura, motion)` composes an already sampled or frozen frame.
+`aobusSoulMotionAt(elapsed)` samples motion, and `aobusSoulVisualFrame(aura, motion)` composes the sampled or frozen frame with the current aura. Gradient and hue-shift calculations remain private to that composition.
 The transport mapping is:
 
 | Transport | Aura input | `motionMode` |

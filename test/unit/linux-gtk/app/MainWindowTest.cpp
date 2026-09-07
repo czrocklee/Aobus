@@ -202,7 +202,7 @@ namespace ao::gtk::test
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    REQUIRE(runtime.playbackSessionConfigStore().save(
+    REQUIRE(runtime.workspaceConfigStore().save(
       rt::kPlaybackSessionConfigGroup, rt::PlaybackSessionState{}, rt::PlaybackSessionYamlSchema{}));
 
     auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
@@ -210,7 +210,7 @@ namespace ao::gtk::test
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
     REQUIRE(window.retireForLibrarySwitch());
     CHECK(window.sessionPhase() == MainWindow::SessionPhase::Retired);
-    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains(rt::kPlaybackSessionConfigGroup));
+    CHECK_FALSE(*runtime.workspaceConfigStore().contains(rt::kPlaybackSessionConfigGroup));
 
     auto switchedSession = rt::AppSessionState{};
     switchedSession.lastLibraryPath = "/tmp/new-library";

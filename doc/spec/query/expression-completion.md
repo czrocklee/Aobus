@@ -121,7 +121,7 @@ Frontends cannot invent additional query fields or operators that the core compl
 - [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves semantic completion details into shared interactive copy.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) composes expression completion into the interactive filter surface.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK adapter.
-- [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) is the TUI command adapter.
+- [`App.cpp`](../../../app/tui/App.cpp) composes the TUI command and live-filter completion callbacks from the shared completion owners.
 
 ## Test map
 

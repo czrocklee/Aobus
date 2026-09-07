@@ -8,8 +8,8 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -107,7 +107,7 @@ namespace ao::audio::backend::test
     outerHooksPtr->onMonitorStateDestroyed = [&] { outerStateDestroyed.release(); };
     auto outerProviderPtr = std::make_unique<AlsaProvider>(outerHooksPtr);
     auto innerProvider = AlsaProvider{makeMonitorHooks()};
-    auto innerSub = Subscription{};
+    auto innerSub = utility::ScopedRegistration{};
     std::size_t outerCallbackCount = 0U;
     std::size_t innerCallbackCount = 0U;
 
@@ -202,8 +202,8 @@ namespace ao::audio::backend::test
 
   TEST_CASE("AlsaProvider - device and graph subscriptions may outlive provider", "[audio][regression][alsa][provider]")
   {
-    auto deviceSub = Subscription{};
-    auto graphSub = Subscription{};
+    auto deviceSub = utility::ScopedRegistration{};
+    auto graphSub = utility::ScopedRegistration{};
 
     {
       auto provider = AlsaProvider{makeMonitorHooks()};
@@ -230,8 +230,8 @@ namespace ao::audio::backend::test
     auto provider = AlsaProvider{hooksPtr};
     auto firstCalls = std::atomic{std::size_t{0U}};
     auto secondCalls = std::atomic{std::size_t{0U}};
-    auto firstSub = Subscription{};
-    auto secondSub = Subscription{};
+    auto firstSub = utility::ScopedRegistration{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstThread =
       std::jthread{[&]
                    {
@@ -271,7 +271,7 @@ namespace ao::audio::backend::test
     auto cancelSecond = std::atomic_bool{false};
     auto firstCalls = std::atomic{std::size_t{0U}};
     auto secondCalls = std::atomic{std::size_t{0U}};
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
       {
@@ -366,7 +366,7 @@ namespace ao::audio::backend::test
     auto provider = AlsaProvider{hooksPtr};
     auto callbackCount = std::atomic{std::size_t{0U}};
     auto lateCalls = std::atomic{std::size_t{0U}};
-    auto lateSub = Subscription{};
+    auto lateSub = utility::ScopedRegistration{};
     auto lateSubscriber =
       std::jthread{[&]
                    {

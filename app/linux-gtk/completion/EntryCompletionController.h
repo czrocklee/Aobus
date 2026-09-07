@@ -4,7 +4,6 @@
 #pragma once
 
 #include "common/DismissController.h"
-#include "layout/LayoutConstants.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -34,8 +33,6 @@ namespace ao::gtk
 {
   struct EntryCompletionControllerOptions final
   {
-    std::int32_t popoverWidth = layout::kCompletionPopoverWidth;
-    std::int32_t popoverMaxHeight = layout::kCompletionPopoverMaxHeight;
     bool acceptOnReturn = false;
   };
 

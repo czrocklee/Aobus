@@ -60,7 +60,7 @@ Callers normally create one binding per output batch and reuse it for the tracks
 A later binding can resolve a custom key introduced by a newer committed dictionary generation without recompiling the plan.
 When the batch evaluates transaction-backed track views, the caller opens the read transaction before creating the binding so the binding cannot be older than the evaluated storage snapshot.
 
-Supplying every tier required by the plan is a caller precondition of every `FormatEvaluator::evaluate()` overload.
+Supplying every tier required by the plan is a caller precondition of `FormatEvaluator::evaluate(binding, track, output)`.
 The evaluator enforces that contract before clearing caller-owned output or appending any instruction.
 
 Otherwise, it appends each instruction:
@@ -80,8 +80,9 @@ Invalid subset shapes, unknown fields, and non-scalar fields return `Error::Code
 Malformed UTF-8 or text beyond the Unicode operation limit also returns `FormatRejected` without a partial plan.
 Private compiler recursion may use an internal exception, but no exception escapes for user input.
 
-Plans with no dictionary access may use the context-free evaluation overloads.
-Supplying an explicit `DictionaryReadContext` or `FormatBinding` is a precondition for a plan whose `requiresDictionary` flag is true.
+Plans with no dictionary access may use `FormatBinding(plan)` without a dictionary context.
+A plan whose `requiresDictionary` flag is true requires `FormatBinding(plan, dictionary)` with an explicit `DictionaryReadContext`.
+Evaluation uses the binding and caller-owned output storage in both cases.
 
 Evaluation is synchronous and non-throwing for ordinary missing track values.
 It has no cancellation point.

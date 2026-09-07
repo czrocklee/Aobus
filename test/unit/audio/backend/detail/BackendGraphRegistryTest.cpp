@@ -3,8 +3,8 @@
 
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
 
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -74,7 +74,7 @@ namespace ao::audio::backend::detail::test
     bool cancelSecond = false;
     std::int32_t firstCalls = 0;
     std::int32_t secondCalls = 0;
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = registry.subscribe("route-a",
                                        [&](flow::Graph const&)
                                        {
@@ -185,7 +185,7 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE("BackendGraphRegistry - subscription may outlive registry", "[audio][regression][backend-graph]")
   {
-    auto sub = Subscription{};
+    auto sub = utility::ScopedRegistration{};
 
     {
       auto registryPtr = std::make_unique<BackendGraphRegistry>();

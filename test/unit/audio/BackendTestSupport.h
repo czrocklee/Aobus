@@ -13,7 +13,7 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/Subscription.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <fakeit.hpp>
 
@@ -80,13 +80,13 @@ namespace ao::audio::test
 
     void shutdown() noexcept override;
 
-    Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
+    utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override;
 
     std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
 
     Status status() const override;
 
-    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
+    utility::ScopedRegistration subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     BackendProvider& _real;

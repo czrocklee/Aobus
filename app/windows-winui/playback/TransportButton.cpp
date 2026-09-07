@@ -41,9 +41,6 @@ namespace ao::winui
                                    ao::rt::PlaybackService& playback,
                                    ao::uimodel::PlaybackActions& actions)
     : _button{std::move(config.button)}
-    , _textCatalog{std::move(config.textCatalog)}
-    , _command{config.command}
-    , _showLabel{config.showLabel}
   {
     _clickRevoker = _button.Click(winrt::auto_revoke,
                                   [this](winrt::Windows::Foundation::IInspectable const&,
@@ -51,9 +48,9 @@ namespace ao::winui
     resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
                                                                   actions,
-                                                                  _textCatalog,
-                                                                  _command,
-                                                                  _showLabel,
+                                                                  std::move(config.textCatalog),
+                                                                  config.command,
+                                                                  /*showLabel=*/false,
                                                                   [this](uimodel::TransportViewState const& state)
                                                                   { applyState(state); });
   }

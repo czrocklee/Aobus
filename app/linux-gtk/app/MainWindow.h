@@ -92,7 +92,6 @@ namespace ao::gtk
      */
     Result<rt::ViewId> navigateToList(ListId listId);
 
-    void rebuildLayout();
     void openLayoutEditor();
     void resetRuntimeLayoutState();
     void saveCurrentPanelSizesAsLayoutDefaults();

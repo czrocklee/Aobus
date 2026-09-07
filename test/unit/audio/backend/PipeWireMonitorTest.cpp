@@ -7,8 +7,8 @@
 #include "lib/audio/backend/detail/PipeWireMonitorHooks.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -108,7 +108,7 @@ namespace ao::audio::backend::test
     monitor.start();
     REQUIRE(initialRefreshCompleted.try_acquire_for(kWaitTimeout));
     auto graphCalls = std::atomic{std::size_t{0U}};
-    auto graphSub = Subscription{};
+    auto graphSub = utility::ScopedRegistration{};
 
     auto subscriptionThread =
       std::jthread{[&]
@@ -142,8 +142,8 @@ namespace ao::audio::backend::test
     auto hooksPtr = makeMonitorHooks();
     auto stateDestroyed = std::binary_semaphore{0};
     hooksPtr->onMonitorStateDestroyed = [&] { stateDestroyed.release(); };
-    auto deviceSub = Subscription{};
-    auto graphSub = Subscription{};
+    auto deviceSub = utility::ScopedRegistration{};
+    auto graphSub = utility::ScopedRegistration{};
 
     {
       auto monitor = PipeWireMonitor{hooksPtr};
@@ -229,7 +229,7 @@ namespace ao::audio::backend::test
     auto innerProvider = PipeWireProvider{innerHooksPtr};
     REQUIRE(outerRefreshCompleted.try_acquire_for(kWaitTimeout));
     REQUIRE(innerRefreshCompleted.try_acquire_for(kWaitTimeout));
-    auto innerSub = Subscription{};
+    auto innerSub = utility::ScopedRegistration{};
     std::size_t outerCallbackCount = 0U;
     std::size_t innerCallbackCount = 0U;
 
@@ -299,8 +299,8 @@ namespace ao::audio::backend::test
   TEST_CASE("PipeWireProvider - device and graph subscriptions may outlive provider",
             "[audio][regression][pipewire][provider]")
   {
-    auto deviceSub = Subscription{};
-    auto graphSub = Subscription{};
+    auto deviceSub = utility::ScopedRegistration{};
+    auto graphSub = utility::ScopedRegistration{};
 
     {
       auto provider = PipeWireProvider{makeMonitorHooks()};
@@ -324,8 +324,8 @@ namespace ao::audio::backend::test
     auto secondRefreshed = std::binary_semaphore{0};
     auto firstCalls = std::atomic{std::size_t{0U}};
     auto secondCalls = std::atomic{std::size_t{0U}};
-    auto firstSub = Subscription{};
-    auto secondSub = Subscription{};
+    auto firstSub = utility::ScopedRegistration{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstThread =
       std::jthread{[&]
                    {
@@ -482,7 +482,7 @@ namespace ao::audio::backend::test
     auto monitor = PipeWireMonitor{hooksPtr};
     auto callbackCount = std::atomic{std::size_t{0U}};
     auto lateCalls = std::atomic{std::size_t{0U}};
-    auto lateSub = Subscription{};
+    auto lateSub = utility::ScopedRegistration{};
     auto sub = monitor.subscribeDevices(
       [&](std::vector<Device> const&)
       {

@@ -5,8 +5,8 @@
 
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <cmath>
 #include <memory>
@@ -69,7 +69,7 @@ namespace ao::audio::backend::detail
 
   WasapiGraphRegistry::~WasapiGraphRegistry() = default;
 
-  Subscription WasapiGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
+  utility::ScopedRegistration WasapiGraphRegistry::subscribe(std::string_view routeAnchor, Callback callback)
   {
     auto const anchor = std::string{routeAnchor};
     return _implPtr->registry.subscribe(

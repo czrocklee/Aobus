@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/audio/OpenedPcmMode.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <cstdint>
 #include <functional>
@@ -77,7 +77,7 @@ namespace ao::audio::backend::detail
     AlsaGraphRegistry(AlsaGraphRegistry&&) = delete;
     AlsaGraphRegistry& operator=(AlsaGraphRegistry&&) = delete;
 
-    Subscription subscribe(std::string_view routeAnchor, Callback callback);
+    utility::ScopedRegistration subscribe(std::string_view routeAnchor, Callback callback);
     AlsaGraphPublisher publisher() const;
     void publish(AlsaRouteState state) const;
     void clear(std::string_view routeAnchor) const;

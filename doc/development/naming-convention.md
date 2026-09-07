@@ -260,7 +260,6 @@ Ask three questions about a proposed public role:
 If none has an answer, absorb the declaration into its real owner or use a
 function. These are review questions, not a score and not a lint rule.
 
-Prefer fixing an unclear name and its responsibility over documenting a
-one-off exception. If a recurring decision is genuinely architectural, state
-the general principle here; implementation-specific history does not belong in
-this document.
+Fix unclear names and responsibilities rather than documenting one-off exceptions.
+Naming and public-role justification principles belong here; general comparisons of alternatives belong in [design review](design-review.md).
+Architectural rules belong in their owning architecture document and durable rationale in decisions, following the [documentation policy](../README.md).

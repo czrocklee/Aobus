@@ -38,14 +38,15 @@ namespace ao::query
   {
     void validateFormatText(std::string_view const text, std::string_view const context)
     {
-      auto validationRes = utility::validateUtf8(text);
-      if (!validationRes)
+      if (auto validationRes = utility::validateUtf8(text); !validationRes)
       {
         auto error = std::move(validationRes.error());
+
         if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
         {
           error.code = Error::Code::FormatRejected;
         }
+
         error.message = std::format("{}: {}", context, error.message);
         detail::throwQueryError(std::move(error));
       }
@@ -54,16 +55,20 @@ namespace ao::query
     std::string normalizeFormatText(std::string_view const text, std::string_view const context)
     {
       auto normalizedRes = utility::normalizeUtf8Nfc(text);
+
       if (!normalizedRes)
       {
         auto error = std::move(normalizedRes.error());
+
         if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
         {
           error.code = Error::Code::FormatRejected;
         }
+
         error.message = std::format("{}: {}", context, error.message);
         detail::throwQueryError(std::move(error));
       }
+
       return std::move(*normalizedRes);
     }
 
@@ -371,20 +376,6 @@ namespace ao::query
   FormatBinding::FormatBinding(FormatBinding&&) noexcept = default;
   FormatBinding& FormatBinding::operator=(FormatBinding&&) noexcept = default;
 
-  std::string FormatEvaluator::evaluate(FormatBinding const& binding, library::TrackView const& track) const
-  {
-    auto output = std::string{};
-    evaluate(binding, track, output);
-    return output;
-  }
-
-  std::string FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track) const
-  {
-    AO_EXPECTS(!plan.requiresDictionary);
-    auto const binding = FormatBinding{plan};
-    return evaluate(binding, track);
-  }
-
   void FormatEvaluator::evaluate(FormatBinding const& binding,
                                  library::TrackView const& track,
                                  std::string& output) const
@@ -410,12 +401,5 @@ namespace ao::query
           break;
       }
     }
-  }
-
-  void FormatEvaluator::evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const
-  {
-    AO_EXPECTS(!plan.requiresDictionary);
-    auto const binding = FormatBinding{plan};
-    evaluate(binding, track, output);
   }
 } // namespace ao::query

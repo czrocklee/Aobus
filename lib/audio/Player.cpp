@@ -16,9 +16,9 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <algorithm>
 #include <atomic>
@@ -60,7 +60,7 @@ namespace ao::audio
     struct ProviderRecord
     {
       std::unique_ptr<BackendProvider> providerPtr;
-      Subscription subscription;
+      utility::ScopedRegistration subscription;
       std::vector<Device> devices;
     };
 
@@ -217,7 +217,7 @@ namespace ao::audio
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
     BackendProvider* activeBackendProvider = nullptr;
-    Subscription graphSubscription;
+    utility::ScopedRegistration graphSubscription;
     std::unique_ptr<Engine> enginePtr;
     std::shared_ptr<CallbackGate> gatePtr;
 
@@ -712,10 +712,6 @@ namespace ao::audio
     }
 
     playerStatus.isReady = isReady();
-    playerStatus.volume = playerStatus.engine.volume;
-    playerStatus.muted = playerStatus.engine.muted;
-    playerStatus.volumeAvailable = playerStatus.engine.volumeAvailable;
-    playerStatus.volumeIsHardwareAssisted = playerStatus.engine.volumeIsHardwareAssisted;
     return playerStatus;
   }
 

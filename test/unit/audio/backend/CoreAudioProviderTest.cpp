@@ -7,8 +7,8 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -123,7 +123,7 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioProvider - subscription and backend may outlive provider",
             "[audio][regression][coreaudio][provider]")
   {
-    auto sub = Subscription{};
+    auto sub = utility::ScopedRegistration{};
     auto backendPtr = std::unique_ptr<Backend>{};
     {
       auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
@@ -165,7 +165,7 @@ namespace ao::audio::backend::test
     outerHooksPtr->onMonitorStateDestroyed = [&] { outerStateDestroyed.release(); };
     auto outerProviderPtr = std::make_unique<CoreAudioProvider>(outerHooksPtr);
     auto innerProvider = CoreAudioProvider{makeHooks()};
-    auto innerSub = Subscription{};
+    auto innerSub = utility::ScopedRegistration{};
     std::size_t outerCallbackCount = 0U;
     std::size_t innerCallbackCount = 0U;
 
@@ -296,8 +296,8 @@ namespace ao::audio::backend::test
     auto provider = CoreAudioProvider{hooksPtr};
     auto callbackCount = std::atomic{std::size_t{0U}};
     auto lateCalls = std::atomic{std::size_t{0U}};
-    auto lateDeviceSub = Subscription{};
-    auto lateGraphSub = Subscription{};
+    auto lateDeviceSub = utility::ScopedRegistration{};
+    auto lateGraphSub = utility::ScopedRegistration{};
     auto sub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
       {

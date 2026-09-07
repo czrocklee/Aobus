@@ -43,7 +43,6 @@ namespace ao::rt
     PlaybackService playback;
     WorkspaceService workspaceService;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
-    ConfigStore& playbackSessionStore;
     PlaybackSessionPersistence playbackSessionPersistence;
     bool stopped = false;
 
@@ -74,14 +73,13 @@ namespace ao::rt
       , playback{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(), playbackSuccession)}
       , workspaceService{core.async().callbackExecutor(), viewService, core.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
-      , playbackSessionStore{playbackSessionConfigStoreValue != nullptr ? *playbackSessionConfigStoreValue
-                                                                        : *workspaceConfigStorePtr}
-      , playbackSessionPersistence{playbackSessionStore,
-                                   core.library(),
-                                   playbackSuccession,
-                                   playbackTransport,
-                                   playback,
-                                   core.async()}
+      , playbackSessionPersistence{
+          playbackSessionConfigStoreValue != nullptr ? *playbackSessionConfigStoreValue : *workspaceConfigStorePtr,
+          core.library(),
+          playbackSuccession,
+          playbackTransport,
+          playback,
+          core.async()}
     {
     }
 
@@ -226,11 +224,6 @@ namespace ao::rt
   ConfigStore& AppRuntime::workspaceConfigStore() noexcept
   {
     return *_implPtr->workspaceConfigStorePtr;
-  }
-
-  ConfigStore& AppRuntime::playbackSessionConfigStore() noexcept
-  {
-    return _implPtr->playbackSessionStore;
   }
 
   Result<> AppRuntime::savePlaybackSession()

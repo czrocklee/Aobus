@@ -59,6 +59,7 @@ Reviewers can reject a change whose claimed ownership gain is vague, whose regre
 ## Current authorities
 
 - [Concept metrics](../development/concept-metrics.md)
+- [Design review](../development/design-review.md)
 - [Application-layer review](../development/application-layer-review.md)
 - [Validation and review](../development/test/validation-and-review.md)
 

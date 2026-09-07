@@ -7,8 +7,8 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -129,7 +129,7 @@ namespace ao::audio::backend::test
     outerHooksPtr->onMonitorStateDestroyed = [&] { outerStateDestroyed.release(); };
     auto outerProviderPtr = std::make_unique<WasapiProvider>(outerHooksPtr);
     auto innerProvider = WasapiProvider{makeHooks()};
-    auto innerSub = Subscription{};
+    auto innerSub = utility::ScopedRegistration{};
     std::size_t outerCallbackCount = 0U;
     std::size_t innerCallbackCount = 0U;
 
@@ -235,7 +235,7 @@ namespace ao::audio::backend::test
     auto cancelSecond = std::atomic{false};
     auto firstCalls = std::atomic{std::size_t{0}};
     auto secondCalls = std::atomic{std::size_t{0}};
-    auto secondSub = Subscription{};
+    auto secondSub = utility::ScopedRegistration{};
     auto firstSub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
       {
@@ -425,7 +425,7 @@ namespace ao::audio::backend::test
     { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto provider = WasapiProvider{hooksPtr};
-    auto racedSub = Subscription{};
+    auto racedSub = utility::ScopedRegistration{};
     auto subscribeThread =
       std::jthread{[&]
                    {
@@ -462,7 +462,7 @@ namespace ao::audio::backend::test
 
   TEST_CASE("WasapiProvider - device subscription may outlive provider", "[audio][regression][wasapi][provider]")
   {
-    auto sub = Subscription{};
+    auto sub = utility::ScopedRegistration{};
 
     {
       auto provider = WasapiProvider{};

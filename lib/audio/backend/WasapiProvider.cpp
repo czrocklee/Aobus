@@ -12,9 +12,9 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/CallbackStackScope.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/ThreadName.h>
 
 #ifndef NOMINMAX
@@ -734,7 +734,7 @@ namespace ao::audio::backend
         }
       }
 
-      Subscription subscribeDevices(OnDevicesChangedCallback callback)
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback)
       {
         if (!callback || !acceptsSubscriptions())
         {
@@ -813,21 +813,22 @@ namespace ao::audio::backend
           return {};
         }
 
-        return Subscription{[weakStatePtr = std::weak_ptr{statePtr}, id]
-                            {
-                              auto const retainedStatePtr = weakStatePtr.lock();
+        return utility::ScopedRegistration{[weakStatePtr = std::weak_ptr{statePtr}, id]
+                                           {
+                                             auto const retainedStatePtr = weakStatePtr.lock();
 
-                              if (!retainedStatePtr)
-                              {
-                                return;
-                              }
+                                             if (!retainedStatePtr)
+                                             {
+                                               return;
+                                             }
 
-                              auto const callbackLock = std::scoped_lock{retainedStatePtr->callbackMutex};
-                              retainedStatePtr->removeDeviceSubscription(id);
-                            }};
+                                             auto const callbackLock =
+                                               std::scoped_lock{retainedStatePtr->callbackMutex};
+                                             retainedStatePtr->removeDeviceSubscription(id);
+                                           }};
       }
 
-      Subscription subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
+      utility::ScopedRegistration subscribeGraph(std::string_view const routeAnchor, OnGraphChangedCallback callback)
       {
         if (!callback || !acceptsSubscriptions())
         {
@@ -1040,7 +1041,7 @@ namespace ao::audio::backend
     controlPtr->shutdown();
   }
 
-  Subscription WasapiProvider::subscribeDevices(OnDevicesChangedCallback callback)
+  utility::ScopedRegistration WasapiProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
     auto const controlPtr = _implPtr->controlPtr;
     return controlPtr->subscribeDevices(std::move(callback));
@@ -1059,7 +1060,8 @@ namespace ao::audio::backend
     return std::make_unique<WasapiSharedBackend>(device, kProfileShared, controlPtr->graphRegistry());
   }
 
-  Subscription WasapiProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  utility::ScopedRegistration WasapiProvider::subscribeGraph(std::string_view routeAnchor,
+                                                             OnGraphChangedCallback callback)
   {
     auto const controlPtr = _implPtr->controlPtr;
     return controlPtr->subscribeGraph(routeAnchor, std::move(callback));

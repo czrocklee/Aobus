@@ -126,10 +126,10 @@ namespace ao::rt
         .ready = status.isReady,
         .volume =
           VolumeState{
-            .level = status.volume,
-            .muted = status.muted,
-            .available = status.volumeAvailable,
-            .hardwareAssisted = status.volumeIsHardwareAssisted,
+            .level = status.engine.volume,
+            .muted = status.engine.muted,
+            .available = status.engine.volumeAvailable,
+            .hardwareAssisted = status.engine.volumeIsHardwareAssisted,
           },
         .output =
           OutputState{

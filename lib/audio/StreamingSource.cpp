@@ -50,7 +50,6 @@ namespace ao::audio
                                    std::chrono::milliseconds prerollDuration,
                                    std::chrono::milliseconds decodeHighWatermarkThreshold)
     : _decoderPtr{std::move(decoderPtr)}
-    , _streamInfo{streamInfo}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollDuration{prerollDuration}
     , _decodeHighWatermarkByteCount{

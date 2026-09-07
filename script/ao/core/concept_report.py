@@ -73,7 +73,6 @@ TYPE_KEYWORDS = frozenset(
     }
 )
 CXX_METHOD_KINDS = frozenset({"CXXMethodDecl", "CXXConstructorDecl", "CXXDestructorDecl", "CXXConversionDecl"})
-TYPE_DECL_KINDS = frozenset({"CXXRecordDecl", "ClassTemplateDecl", "EnumDecl", "TypeAliasDecl", "TypedefDecl"})
 FUNCTION_DECL_KINDS = frozenset({"FunctionDecl", "FunctionTemplateDecl"})
 DEPENDENCY_TARGET_KINDS = frozenset({"alias", "class", "enum"})
 KEEP_FLAG_PREFIXES = (

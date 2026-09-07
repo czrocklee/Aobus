@@ -2,7 +2,6 @@ add_library(aobus-tui-lib STATIC
     AnchoredOverlay.cpp
     CommandCompletion.cpp
     CommandPalettePanel.cpp
-    CommandCompletionProvider.cpp
     CommandCompletionState.cpp
     EventController.cpp
     Executor.cpp

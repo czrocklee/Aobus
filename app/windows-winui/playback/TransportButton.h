@@ -23,7 +23,6 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
     i18n::MessageCatalog textCatalog;
     uimodel::PlaybackCommand command = uimodel::PlaybackCommand::PlayPause;
-    bool showLabel = false;
   };
 
   class TransportButton final
@@ -46,9 +45,6 @@ namespace ao::winui
     void applyState(uimodel::TransportViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
-    i18n::MessageCatalog _textCatalog;
-    uimodel::PlaybackCommand _command = uimodel::PlaybackCommand::PlayPause;
-    bool _showLabel = false;
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _clickRevoker{};
     std::unique_ptr<uimodel::TransportViewModel> _viewModelPtr;
   };

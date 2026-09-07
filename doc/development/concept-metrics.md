@@ -98,5 +98,6 @@ concept-debloat phase still requires the full gate in
 
 - [Decision 0017: evaluate concept metrics as a vector](../decision/0017-evaluate-concept-metrics-as-a-vector.md) records why no individual measurement is an independent veto.
 - [Dependency governance](dependency-governance.md) owns `./ao deps verify` and governed package identity.
-- [Naming convention](naming-convention.md) owns role vocabulary; this report only counts it.
-- [Application-layer review](application-layer-review.md) owns the contributor review workflow and public-role questions.
+- [Naming convention](naming-convention.md#review) owns role vocabulary and public-role justification; this report measures the public surface.
+- [Application-layer review](application-layer-review.md) applies ownership review to runtime, UIModel, and frontends.
+- [Design review](design-review.md) combines refactor measurement evidence with behavioral and structural acceptance.

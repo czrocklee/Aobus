@@ -8,6 +8,7 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -314,7 +315,7 @@ TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied fo
   bool cancelSecond = false;
   std::int32_t firstCalls = 0;
   std::int32_t secondCalls = 0;
-  auto secondSub = ao::audio::Subscription{};
+  auto secondSub = ao::utility::ScopedRegistration{};
   auto firstSub = registry.subscribe("hw:0,0",
                                      [&](Graph const&)
                                      {
@@ -362,7 +363,7 @@ TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry",
           "[audio][regression][alsa][concurrency]")
 {
   auto publisher = AlsaGraphPublisher{};
-  auto sub = ao::audio::Subscription{};
+  auto sub = ao::utility::ScopedRegistration{};
   std::int32_t callbackCount = 0;
 
   {

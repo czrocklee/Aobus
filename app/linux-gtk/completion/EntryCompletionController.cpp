@@ -3,6 +3,7 @@
 
 #include "completion/EntryCompletionController.h"
 
+#include "layout/LayoutConstants.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -180,9 +181,9 @@ namespace ao::gtk
       });
 
     _scrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
-    _scrolledWindow.set_min_content_width(_options.popoverWidth);
+    _scrolledWindow.set_min_content_width(layout::kCompletionPopoverWidth);
     _scrolledWindow.set_min_content_height(0);
-    _scrolledWindow.set_max_content_height(_options.popoverMaxHeight);
+    _scrolledWindow.set_max_content_height(layout::kCompletionPopoverMaxHeight);
     _scrolledWindow.set_propagate_natural_height(true);
     _scrolledWindow.set_vexpand(false);
     _scrolledWindow.set_valign(Gtk::Align::START);

@@ -186,8 +186,6 @@ TIDY_PRESETS = {
     "windows": "windows-tidy",
 }
 
-FLAVORS = tuple(PRESETS)
-
 
 @dataclass(frozen=True)
 class PlatformProfile:
@@ -242,7 +240,6 @@ WINDOWS_PROFILE = PlatformProfile(
     compiler="msvc",
 )
 
-DEFAULT_DEBUG_DIR = BUILD_ROOT / "debug"
 COVERAGE_DIR = BUILD_ROOT / "coverage"
 
 

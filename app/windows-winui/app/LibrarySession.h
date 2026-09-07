@@ -72,7 +72,6 @@ namespace ao::winui
     rt::AppRuntime& runtime() const noexcept;
     std::filesystem::path const& musicRoot() const noexcept;
     bool scanAfterOpen() const noexcept;
-    bool operationActive() const noexcept;
     uimodel::PlaybackActions& playbackActions() const noexcept;
     i18n::MessageCatalog const& textCatalog() const noexcept;
 

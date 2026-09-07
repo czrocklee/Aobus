@@ -43,8 +43,6 @@ namespace ao::rt
   {
     std::unique_ptr<async::Executor> executorPtr;
     async::Runtime asyncRuntime;
-    std::filesystem::path musicRoot;
-    std::filesystem::path databasePath;
     library::MusicLibrary musicLibrary;
     LibraryChanges libraryChanges;
     std::optional<Library> optLibrary;
@@ -56,8 +54,6 @@ namespace ao::rt
     bool stopped = false;
 
     Impl(std::unique_ptr<async::Executor> execPtr,
-         std::filesystem::path musicRoot,
-         std::filesystem::path databasePath,
          std::filesystem::path cacheDirectory,
          library::MusicLibrary&& library,
          async::Sleeper* sleeper,
@@ -65,8 +61,6 @@ namespace ao::rt
          CompletionAliasPolicy const* aliasPolicy)
       : executorPtr{std::move(execPtr)}
       , asyncRuntime{*executorPtr, sleeper}
-      , musicRoot{std::move(musicRoot)}
-      , databasePath{std::move(databasePath)}
       , musicLibrary{std::move(library)}
       , libraryChanges{*executorPtr,
                        currentLibraryRevision(musicLibrary),
@@ -131,8 +125,6 @@ namespace ao::rt
     }
 
     auto implPtr = std::make_unique<Impl>(std::move(executorPtr),
-                                          std::move(musicRoot),
-                                          std::move(databasePath),
                                           std::move(cacheDirectory),
                                           std::move(*storageRes),
                                           sleeper,
@@ -184,12 +176,12 @@ namespace ao::rt
 
   std::filesystem::path const& CoreRuntime::musicRoot() const noexcept
   {
-    return _implPtr->musicRoot;
+    return _implPtr->musicLibrary.rootPath();
   }
 
   std::filesystem::path const& CoreRuntime::databasePath() const noexcept
   {
-    return _implPtr->databasePath;
+    return _implPtr->musicLibrary.databasePath();
   }
 
   CompletionService& CoreRuntime::completion() noexcept

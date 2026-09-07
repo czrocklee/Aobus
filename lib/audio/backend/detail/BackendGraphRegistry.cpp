@@ -4,8 +4,8 @@
 #include "backend/detail/BackendGraphRegistry.h"
 
 #include <ao/Contract.h>
-#include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -106,9 +106,9 @@ namespace ao::audio::backend::detail
     shutdown();
   }
 
-  Subscription BackendGraphRegistry::subscribe(std::string_view const routeAnchor,
-                                               Callback callback,
-                                               flow::Graph initialGraph)
+  utility::ScopedRegistration BackendGraphRegistry::subscribe(std::string_view const routeAnchor,
+                                                              Callback callback,
+                                                              flow::Graph initialGraph)
   {
     if (!callback)
     {
@@ -163,25 +163,25 @@ namespace ao::audio::backend::detail
     }
 
     auto const weakStatePtr = std::weak_ptr<State>{statePtr};
-    return Subscription{[weakStatePtr, subscriberId]
-                        {
-                          auto const statePtr = weakStatePtr.lock();
+    return utility::ScopedRegistration{[weakStatePtr, subscriberId]
+                                       {
+                                         auto const statePtr = weakStatePtr.lock();
 
-                          if (!statePtr)
-                          {
-                            return;
-                          }
+                                         if (!statePtr)
+                                         {
+                                           return;
+                                         }
 
-                          auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-                          auto const lock = std::scoped_lock{statePtr->mutex};
-                          auto const it =
-                            std::ranges::find(statePtr->subscribers, subscriberId, &State::Subscriber::id);
+                                         auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+                                         auto const lock = std::scoped_lock{statePtr->mutex};
+                                         auto const it = std::ranges::find(
+                                           statePtr->subscribers, subscriberId, &State::Subscriber::id);
 
-                          if (it != statePtr->subscribers.end())
-                          {
-                            statePtr->subscribers.erase(it);
-                          }
-                        }};
+                                         if (it != statePtr->subscribers.end())
+                                         {
+                                           statePtr->subscribers.erase(it);
+                                         }
+                                       }};
   }
 
   void BackendGraphRegistry::publish(std::string_view const routeAnchor, flow::Graph graph)

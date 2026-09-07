@@ -80,7 +80,9 @@ namespace ao::query::test
       auto context = library::DictionaryReadContext{cache};
       auto const binding = FormatBinding{plan, context};
       auto evaluator = FormatEvaluator{};
-      return evaluator.evaluate(binding, fixture.view());
+      auto output = std::string{};
+      evaluator.evaluate(binding, fixture.view(), output);
+      return output;
     }
   } // namespace
 
@@ -201,7 +203,10 @@ namespace ao::query::test
     auto evaluator = FormatEvaluator{};
     auto emptyTrack = TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
 
-    CHECK(evaluator.evaluate(plan, emptyTrack) == "literal");
+    auto const binding = FormatBinding{plan};
+    auto output = std::string{"stale data"};
+    evaluator.evaluate(binding, emptyTrack, output);
+    CHECK(output == "literal");
   }
 
   TEST_CASE("FormatEvaluator - clears and reuses caller-owned output", "[query][unit][format-expression]")
@@ -218,7 +223,6 @@ namespace ao::query::test
     evaluator.evaluate(binding, fixture.view(), output);
 
     CHECK(output == "Johann Sebastian Bach|Cello Suite|Archiv 123|1720|FLAC");
-    CHECK(output == evaluator.evaluate(binding, fixture.view()));
 
     output += " appended garbage";
     evaluator.evaluate(binding, fixture.view(), output);

@@ -512,11 +512,6 @@ namespace ao::gtk
     return {};
   }
 
-  void MainWindow::rebuildLayout()
-  {
-    _shellLayout.loadLayout();
-  }
-
   void MainWindow::openLayoutEditor()
   {
     _shellLayout.openEditor(*_configStorePtr);
