@@ -43,6 +43,7 @@ namespace ao::rt
 namespace ao::tui
 {
   class LibraryScanController;
+  class TrackEditController;
 
   using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
 
@@ -66,7 +67,10 @@ namespace ao::tui
     uimodel::ActivityStatusViewModel& activityStatusViewModel;
     rt::NotificationService& notifications;
     LibraryScanController& libraryScan;
+    TrackEditController& trackEdit;
     std::function<void()> requestExit;
+    /// Whether the shell is holding input while a submitted write settles.
+    std::function<bool()> isExitWaiting{};
     InputCompletionCallback commandCompletionCallback;
     InputCompletionCallback filterCompletionCallback;
   };
@@ -96,6 +100,7 @@ namespace ao::tui
     void toggleOutputDevices();
     void togglePresentationPanel();
     void toggleNotificationCenter();
+    void editSelectedTrackProperties();
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();
@@ -181,7 +186,9 @@ namespace ao::tui
     uimodel::ActivityStatusViewModel& _activityStatusViewModel;
     rt::NotificationService& _notifications;
     LibraryScanController& _libraryScan;
+    TrackEditController& _trackEdit;
     std::function<void()> _requestExit;
+    std::function<bool()> _isExitWaiting;
     InputCompletionCallback _commandCompletionCallback;
     InputCompletionCallback _filterCompletionCallback;
     bool _qualityHoverVisible = false;

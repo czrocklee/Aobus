@@ -23,8 +23,10 @@
 #include "tui/PresentationPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/TerminalTrackColumnLayout.h"
+#include "tui/TrackEditController.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
+#include "tui/TrackPropertiesEditor.h"
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
@@ -106,7 +108,9 @@ namespace ao::tui::test
                                                                ao::test::englishMessageCatalog(),
                                                                [](uimodel::ActivityStatusViewState const&) {}};
       std::unique_ptr<LibraryScanController> libraryScanPtr{};
+      std::unique_ptr<TrackEditController> trackEditPtr{};
       std::size_t exitRequestCount = 0;
+      bool exitWaiting = false;
 
       explicit EventControllerFixture(bool const useControlledSleeper = false)
         : sleeperPtr{useControlledSleeper ? std::make_unique<rt::test::ControlledSleeper>() : nullptr}
@@ -143,6 +147,17 @@ namespace ao::tui::test
                                                                    ao::test::englishMessageCatalog());
         }
 
+        if (trackEditPtr == nullptr)
+        {
+          trackEditPtr = std::make_unique<TrackEditController>(runtimePtr->async(),
+                                                               runtimePtr->library(),
+                                                               runtimePtr->notifications(),
+                                                               ao::test::englishMessageCatalog(),
+                                                               TrackEditController::Outputs{},
+                                                               runtimePtr->completion(),
+                                                               runtimePtr->textOrderingPolicy());
+        }
+
         return EventController{shell,
                                library,
                                runtimePtr->async(),
@@ -156,7 +171,9 @@ namespace ao::tui::test
                                  .activityStatusViewModel = activityStatusViewModel,
                                  .notifications = runtimePtr->notifications(),
                                  .libraryScan = *libraryScanPtr,
+                                 .trackEdit = *trackEditPtr,
                                  .requestExit = [this] { ++exitRequestCount; },
+                                 .isExitWaiting = [this] { return exitWaiting; },
                                  .commandCompletionCallback = std::move(commandCompletion),
                                  .filterCompletionCallback = std::move(filterCompletion),
                                }};
@@ -438,6 +455,108 @@ namespace ao::tui::test
       CHECK_FALSE(library.isVisualSelectionActive());
       CHECK(library.markedIds().empty());
     }
+  }
+
+  TEST_CASE("EventController - the edit command opens one editor over the whole selection",
+            "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.tracks().size() >= 2);
+
+    enterCommand(controller, "select all");
+    enterCommand(controller, "edit");
+
+    REQUIRE(fixture.trackEditPtr->isActive());
+    CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == library.tracks().size());
+    // Opening retires the command line it was launched from.
+    CHECK_FALSE(fixture.shell.isInputActive());
+    // The marks the editor captured are the workspace's own, and it keeps them.
+    CHECK(library.markedIds().size() == library.tracks().size());
+  }
+
+  TEST_CASE("EventController - opening the editor ends the visual range it captured", "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.tracks().size() >= 2);
+
+    controller.handleEvent(ftxui::Event::Character("V"));
+    controller.handleEvent(ftxui::Event::Character("j"));
+    REQUIRE(library.isVisualSelectionActive());
+    auto const captured = library.selectedTrackIds();
+    REQUIRE(captured.size() == 2);
+
+    REQUIRE(controller.handleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.trackEditPtr->isActive());
+
+    // The rows the range reached are what the editor is writing to, so they
+    // stay marked; only the anchor that would keep reshaping them goes.
+    CHECK(library.selectedTrackIds() == captured);
+    CHECK_FALSE(library.isVisualSelectionActive());
+
+    // A motion key after the modal closes moves the focus, and no longer
+    // rewrites the mark set the user left behind.
+    fixture.trackEditPtr->handleEvent(ftxui::Event::Escape);
+    REQUIRE_FALSE(fixture.trackEditPtr->isActive());
+    controller.handleEvent(ftxui::Event::Character("j"));
+    CHECK(library.selectedTrackIds() == captured);
+  }
+
+  TEST_CASE("EventController - the edit shortcut opens the focused track alone", "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("e")));
+
+    REQUIRE(fixture.trackEditPtr->isActive());
+    CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == 1);
+  }
+
+  TEST_CASE("EventController - an open editor answers for every remaining key", "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const overlayBefore = fixture.shell.overlay();
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.trackEditPtr->isActive());
+
+    // A workspace shortcut behind the editor never reaches the workspace.
+    CHECK(controller.handleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().empty());
+    CHECK(controller.handleEvent(ftxui::Event::Character("d")));
+    CHECK(fixture.shell.overlay() == overlayBefore);
+
+    // Escape asks to discard because typed characters edited the focused field;
+    // Return confirms the discard and closes the editor.
+    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    CHECK(controller.handleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.trackEditPtr->isActive());
+    CHECK(fixture.shell.overlay() == overlayBefore);
+  }
+
+  TEST_CASE("EventController - waiting for a submitted write consumes ordinary input", "[tui][unit][event][exit]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.exitWaiting = true;
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().empty());
+    CHECK(controller.handleEvent(ftxui::Event::Character(":")));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(fixture.exitRequestCount == 0);
+
+    // Ctrl-C is still the way out, which is what the footer advertises.
+    CHECK(controller.handleEvent(ftxui::Event::CtrlC));
+    CHECK(fixture.exitRequestCount == 1);
   }
 
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")

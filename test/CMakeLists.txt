@@ -742,7 +742,12 @@ add_executable(ao_tui_test
     unit/tui/SignalExitWatcherTest.cpp
     unit/tui/TrackDetailLinesTest.cpp
     unit/tui/TrackListEntryTest.cpp
+    unit/tui/TrackEditControllerTest.cpp
     unit/tui/TrackPresentationNavigationTest.cpp
+    unit/tui/TrackPropertiesEditorTest.cpp
+    unit/tui/TrackPropertiesEditorCompletionTest.cpp
+    unit/tui/TrackPropertiesEditorTagsTest.cpp
+    unit/tui/TrackPropertiesEditorTestSupport.cpp
     unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackPanelTest.cpp
@@ -756,6 +761,7 @@ add_executable(ao_tui_test
     unit/tui/TuiKeymapTest.cpp
     unit/tui/TuiLayoutStateStoreTest.cpp
     unit/tui/TuiSignalProbeTest.cpp
+    unit/tui/TuiTextFieldModelTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 

@@ -120,6 +120,8 @@ A List or manifest row that violates the established gate instead aborts through
 ### Metadata and tags
 
 `Library::bindTrackTargets` accepts a non-empty target sequence only while authoring is available, verifies every track in one read snapshot, and returns a `BoundTrackTargets` for that runtime instance and committed revision.
+`BoundTrackTargets::revision()` exposes that committed revision.
+`LibrarySnapshot::revision()` is the committed revision observed when that snapshot's read transaction began.
 Binding from inside the matching `Available` notification is valid, but committing another mutation reentrantly from any publication or availability observer is rejected.
 
 Metadata updates apply one patch to the complete bound target sequence.
@@ -132,13 +134,14 @@ An effective update returns `Applied`, the mutation reply, the committed revisio
 
 Tag edit adds absent requested tags and removes present requested tags.
 Duplicate and already-present/absent tag requests do not create an effective change.
+After NFC normalization, a tag requested for both addition and removal is `InvalidInput`; tag-only and combined Properties commands reject the entire request without advancing revision or publishing changes.
 Target binding and all-or-none outcomes are identical to metadata update, and one command updates all affected tracks atomically.
 
 The combined Properties command applies one metadata patch and one tag edit through the same target binding, root operation, and write transaction.
 Either both parts commit in one revision and one changeset or an error aborts every staged effect; a tag validation or storage failure cannot leave the metadata part committed.
 If both parts are semantic no-ops, the command returns `NoOp` and retains the binding.
 
-Raw-id metadata, tag, and combined Properties previews remain non-committing administrative inspection.
+Raw-id metadata and tag previews remain non-committing administrative inspection.
 They may report the mutation that would affect currently existing ids, but they create no authoring binding and cannot be turned into a commit without a fresh binding.
 
 ### Create from file
@@ -272,7 +275,7 @@ Exact records and identifier allocation belong to the [library database referenc
 
 ## Test map
 
-- [`LibrarySnapshotTest.cpp`](../../../../test/unit/runtime/library/LibrarySnapshotTest.cpp) proves coherent runtime values.
+- [`LibrarySnapshotTest.cpp`](../../../../test/unit/runtime/library/LibrarySnapshotTest.cpp) proves coherent runtime values and that a snapshot caches the committed revision observed at construction.
 - [`WriteTransactionTest.cpp`](../../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
 - `LibraryCommands*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.

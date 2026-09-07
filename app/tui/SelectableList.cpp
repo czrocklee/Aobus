@@ -29,7 +29,7 @@ namespace ao::tui
 
       if (options.framed)
       {
-        listPtr = std::move(listPtr) | frame;
+        listPtr = options.horizontalScroll ? std::move(listPtr) | frame : std::move(listPtr) | yframe;
       }
 
       if (options.height > 0)

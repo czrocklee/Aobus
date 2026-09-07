@@ -34,6 +34,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - A **hit region** is a rendered FTXUI box retained for the next mouse-dispatch pass.
 - The **seek rail** is only the reflected timeline/thumb segment, excluding elapsed/duration text.
 - A **visual row** includes group headers as well as selectable track rows.
+- The **Track Properties editor** is a full-surface modal that edits one frozen vector of captured track ids; it is not one of the overlays above.
 
 ## Invariants
 
@@ -47,6 +48,9 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 - One prepared `TuiKeymapPlan` drives root dispatch and every hint for a configurable action, so rebinding or unbinding cannot leave a hard-coded execution or display path behind.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Explicit marks are a transient TUI set distinct from the focused row. The effective edit/publication selection is the marked ids in current view order when any marks exist, otherwise the focused track.
+- The Track Properties editor captures its target ids once at open; nothing during its lifetime adds, removes, or reorders them, and changing the target set requires closing and opening a new editor.
+- An open editor consumes every event that reaches it, so no root action, overlay toggle, or mouse gesture behind it can run against geometry the user cannot see.
+- A submitted metadata write outlives the editor that started it; exit waits for exactly that write rather than for the editor.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
 - The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
 - Startup attaches the exact active runtime view restored by `WorkspaceService`; a valid empty projection does not cause replacement navigation.
@@ -99,7 +103,7 @@ Quick Filter is a live value editor, so Return accepts its highlighted value whi
 The palette completes command names and aliases, including multi-word exact aliases such as `scan cancel`, presentation ids, and filter candidates only within an explicit `filter` argument.
 A `scan` prefix may list `scan` and `scan cancel`; a trailing space after `scan` converges to `scan cancel`.
 Enter on bare `select` remains an unknown command.
-The Command Palette is a centered bounded fraction of terminal width and height and renders its title, prompt, footer, and completion detail.
+The Command Palette is a centered bounded fraction of terminal width and height and renders its title, prompt, footer, and completion detail; being both centered and not live, it dims the workspace it covers.
 Quick Filter replaces the bottom status-bar content with its draft and inline completion suffix; its completion list, footer, and current expression error occupy a bounded popup anchored directly above that row.
 Runtime/query completions without TUI category metadata retain their core detail.
 
@@ -132,6 +136,11 @@ Help remains a modal surface closed by fixed Escape rather than by its root open
 Return activates the selected list, presentation, or output row.
 Escape closes the active overlay.
 Notification `x` locally suppresses the compact activity entry according to the shared activity model.
+
+Overlays are composed over the root in one place, ordered by keyboard ownership: whichever surface answers for every key is drawn last, so no candidate below it can cover a surface that still owns input.
+Each candidate is built only once those above it decline, so an overlay that is not drawn publishes no hit regions for rows nobody can click.
+Only a centred modal surface dims what it covers, because it stands on its own rather than beside the control that opened it and the workspace under it is not what the user is acting on.
+An anchored panel leaves the workspace lit, and Quick Filter must, because the track table behind it is the very thing the typing changes.
 
 ### Playback dock and seek
 
@@ -206,8 +215,71 @@ A successful no-op filter keeps marks.
 Mouse input still only moves focus.
 `publishSelection()` publishes `selectedTrackIds()`. Playback Enter and Detail/cover remain focus-based: marks change the published selection and the status count, not which track Enter starts.
 
+The effective edit shortcut (shipped as `e`), `:edit`, and `:properties` open one `TrackEditController` editor over `selectedTrackIds()`.
+Preparation is one attempt on the callback executor: it begins a `TrackAuthoringSession` over the captured ids, then reads every field and tag count of every target from one `LibrarySnapshot` and refuses when that snapshot's revision differs from the session's bound revision.
+An empty selection, a bind failure, and a revision mismatch all refuse without opening, each posting its own Warning; a bind-time missing target reports the incomplete selection rather than a generic availability refusal.
+A refusal changes nothing, and a second open while an editor is already active is refused too.
+Opening retires command and filter input, cancels the filter debounce and pointer gestures, rolls back a column preview, and commits a running visual range into the mark set; the Detail inspector's visibility preference is preserved rather than closed.
+The range's rows stay marked because they are what the editor captured, but the anchor goes: leaving it armed would let the first motion key after the modal closes reshape those marks, and a library change under the modal would re-derive the range against rows the edit itself reordered.
+
+The editor is composed as a centered modal overlay over the live workspace using a dimmed backdrop.
+The workspace remains visible but inert behind the modal: all keyboard events and mouse gestures reach only the editor.
+Cover art is neither requested nor painted while the editor is active.
+The Kitty image in particular is written to the terminal outside FTXUI's cell buffer after the frame is flushed, so it would paint over the modal rather than under it; the Kitty owner therefore removes its image while an editor is active or an exit is in progress.
+
+The editor organizes authoring into pages: `Metadata`, `Tags`, read-only `Properties`, and (for multi-track selections) `Tracks`.
+`Tab` and `Shift-Tab` cycle forward and backward through available pages from any control, search input, or completion popup.
+Inside the Metadata page, editing uses direct keyboard input without checkboxes.
+A passive changed indicator (`*`) marks edited rows, while an active indicator (`>`) highlights the focused row.
+Typing text into a field marks it for replacement; typing back the baseline value removes the pending change.
+Deleting an edited field to empty marks it for explicit clear.
+For mixed-value fields across multiple tracks, `Ctrl-U` triggers an explicit clear across all targets, while `Ctrl-G` restores the field to baseline or mixed preservation.
+Inline numeric validation flags parsing errors and disables save while preserving the draft input.
+
+Metadata fields supporting vocabulary completion (Artist, Album, Album Artist, Genre, Composer, Conductor, Ensemble, Work, Movement, Soloist) query the runtime `CompletionService` synchronously on the event thread.
+Non-empty typing or `Ctrl-N` triggers completion candidates in an anchored popup.
+`Up`/`Down` and `PageUp`/`PageDown` navigate candidates, `Enter` replaces the targeted field text via checked range replacement (`replaceRange`), and `Esc` closes the completion popup without dismissing the editor.
+The six-row candidate window moves only when arrow navigation leaves it; page navigation advances both selection and window by six rows, clamped at either end.
+The metadata viewport follows the selected candidate while completion is open, including in a terminal too short to show the entire popup.
+Every chord the popup declines -- `Ctrl-S`, `Ctrl-R`, `Ctrl-U`, `Ctrl-G`, and page switching -- closes it before the editor acts on it, so no confirmation prompt is drawn under candidates it cannot take input for.
+Single-line values refuse control characters, U+2028, and U+2029 rather than sanitizing them, one `insert` call at a time; FTXUI implements no bracketed paste, so a pasted string arrives as ordinary key events with its newlines as `Return` and cannot be refused as a unit.
+Caret navigation (`Left`, `Right`, `Home`, `End`) closes completion.
+
+The `Tags` page leads every row with a three-state box showing what all captured targets would carry after a submission: `[x]` for every target, `[ ]` for none, and `[~]` for a tag only some of them carry.
+A pending intent moves the box now and colours it, and names the change beside the tag as `Add` or `Remove`.
+The box says nothing about where a partly carried tag started, so those rows and only those rows also carry the `carried/captured` fraction.
+Library tags no captured track carries follow the selection's own, needing no heading because an empty box already says no captured target carries the tag, and are capped at the 50 highest-frequency suggestions; a truncated list reports how many it left out.
+Tags already marked by the draft and exact query matches are exempt from that cap, so the existing tag remains reachable even when many higher-frequency suggestions contain its name.
+The page has no second mode: a query field above the list is always live, so any printable key, `Backspace`, `Delete`, and caret navigation edit the query while `Up`/`Down` and `PageUp`/`PageDown` move the selection.
+The query filters the whole library vocabulary by Unicode case-insensitive substring using `makeUtf8CaselessKey`; it is never part of the draft, and `Esc` drops a non-empty query before it means anything about the editor.
+Matching keys normalize to NFC and apply Unicode default case folding; accepted existing tags retain their stored spelling, and new names are normalized to NFC without changing case.
+A decomposed or case-variant spelling therefore finds the existing tag instead of offering another row.
+A query wider than the modal scrolls horizontally to keep the caret visible rather than shrinking, matching the metadata inputs, and stays one line tall.
+`Enter` advances the selected tag through the intents that would write something: `AddToAll` then back to baseline when no target carries it, `RemoveFromAll` then back to baseline when every target does, and `AddToAll`, `RemoveFromAll`, baseline when only some do.
+A query naming no existing tag offers creation on a trailing row, so `Enter` prefers an existing match whenever the query found one; a created tag joins the captured tags rather than the suggestions.
+Empty or ASCII-whitespace-only queries never offer creation; surrounding spaces in a nonblank name remain part of its spelling.
+Committing an intent drops the query and keeps the selection on that tag, and `Ctrl-G` restores the selected tag to baseline.
+
+The retained session's invalidation signal is observed on the callback executor and marks a Ready editor Stale, which disables Save while preserving the raw draft.
+Any effective library commit can invalidate the session, including one unrelated to the edited tracks.
+An invalidation arriving while a write is in flight is ignored, because that write reconciles its own binding and reports its own terminal result.
+`Ctrl-R` re-runs the same one-attempt preparation against the entire captured id vector and replaces the baseline, raw inputs, and session only on success; on failure the previous draft and its diagnostic remain, and no draft is ever reattached to a fresh session automatically.
+
+`Ctrl-S` compiles and submits one unified `TrackPropertiesPatch` containing metadata edits and tag changes (`tagsToAdd`, `tagsToRemove`) through the retained session via `submitProperties()`.
+Both entry into the lazy session submission and terminal-result handling run on the callback executor, alongside session invalidation.
+Changed targets across metadata and tags are deduplicated into a single mutation count.
+Applied and NoOp close the editor and post the applied or no-change result; a reply with fewer change records than targets is not partial failure.
+Busy preserves the draft and binding and re-enables Save only while the session is still current, otherwise it becomes Stale.
+The retryable Busy diagnostic clears on the next keyboard event so normal shortcuts become visible again.
+Confirmation and diagnostic text wraps to the modal width; recovery shortcuts occupy their own row so a long translation cannot truncate the key names.
+Stale and Unavailable preserve the draft and offer Reload or Close, and an operational `Result` error does the same with its own message.
+If a submission is cancelled while the editor remains active, it becomes Stale and preserves the draft for Reload or Close.
+Pending-submission bookkeeping clears before any presentation work, so a failing presentation cannot leave exit waiting for a write that already landed.
+Closing the editor during a submission keeps the session alive until that write settles; controller retirement suppresses late presentation but never cancels the write, and the destructor only drops the editor, the invalidation observer, and its output callbacks without dispatching or presenting anything.
+
 The effective quit shortcut (shipped as `q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
-The first request retires scan presentation and transient input, then posts loop exit.
+The first request asks once whether a submitted metadata write is still settling, retires scan and editor presentation and transient input, then posts loop exit.
+A pending write instead moves the gate to a waiting phase: the status row is replaced by a waiting message, ordinary input is consumed before it reaches the editor or the workspace, and either the write settling or a second exit request posts loop exit.
 Input dispatch does not stop playback early.
 Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, cover work, and scan presentation before persistence captures state.
 Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
@@ -252,6 +324,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation, and forwards graceful exit without owning `ScreenInteractive`.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single restartable scan task.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate; [`SignalExitWatcherPosix.cpp`](../../../app/tui/SignalExitWatcherPosix.cpp) and [`SignalExitWatcherWindows.cpp`](../../../app/tui/SignalExitWatcherWindows.cpp) post those requests from platform signals.
+- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns coherent preparation, the retained authoring session and its invalidation observer, submission, and retirement; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns the editor's own focus, keys, draft state, and rendering.
 - [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
@@ -265,6 +338,10 @@ The notification center can be opened explicitly even when compact status is not
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, selection commands, and exit without early playback stop.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.
+- [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, single-editor exclusivity, one patch across every captured target, invalidation staleness, reload rebinding, and a submission settling after its editor and controller retired.
+- [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects focus order, Apply intent, mixed-value placeholders, patch construction, confirmations, and submission-state rendering.
+- [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorCompletionTest.cpp) protects candidate acceptance, stable paging, popup dismissal, and selected-candidate visibility in short terminals.
+- [`TrackPropertiesEditorTagsTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTagsTest.cpp) protects tag intent, Unicode matching, suggestion caps, and query editing.
 - [`TuiSignalProbeTest.cpp`](../../../test/unit/tui/TuiSignalProbeTest.cpp) drives [`ao_tui_signal_probe`](../../../test/fatal/TuiSignalProbeScenario.cpp) to protect watcher signal routing and previous-handler restoration outside the ordinary unit-test process.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, list-deletion recovery, and mark/range/select-all reconciliation.
 - [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal-cell projection, sections, viewport, persisted widths, and selection.

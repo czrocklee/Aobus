@@ -451,6 +451,7 @@ root:table {
     tui_shell_detail_quit { "quit" }
     tui_shell_detail_scan { "scan library" }
     tui_shell_detail_scan_cancel { "cancel library scan" }
+    tui_shell_detail_edit_properties { "edit track properties" }
     tui_shell_detail_select_toggle { "mark or unmark the focused track" }
     tui_shell_detail_select_visual { "start or confirm a visual selection from the focused track" }
     tui_shell_detail_select_all { "mark every track in this view" }
@@ -508,6 +509,48 @@ root:table {
     tui_presentation_custom_from { "custom from {id}" }
     tui_presentation_default { "default" }
     tui_presentation_badge { "view:{id}" }
+    tui_editor_title { "Track Properties" }
+    tui_editor_title_multiple { "Edit {count, plural, one {# track} other {# tracks}}" }
+    tui_editor_applies_to_all { "Changes apply to all {count, plural, one {# track} other {# tracks}}" }
+    tui_editor_tab_metadata { "Metadata" }
+    tui_editor_tab_tags { "Tags" }
+    tui_editor_tab_properties { "Properties" }
+    tui_editor_tab_tracks { "Tracks" }
+    tui_editor_clear_for_all { "Clear for {count, plural, one {# track} other {all # tracks}}" }
+    tui_editor_apply_action { "Apply to {count, plural, one {# track} other {# tracks}}" }
+    tui_editor_invalid_number { "Whole number required" }
+    tui_editor_discard_prompt { "Discard changes? Enter to discard, Escape to keep editing" }
+    tui_editor_hint_page { "page" }
+    tui_editor_hint_select { "select" }
+    tui_editor_hint_clear { "clear" }
+    tui_editor_hint_restore { "restore" }
+    tui_editor_hint_complete { "complete" }
+    tui_editor_hint_toggle { "toggle" }
+    tui_editor_hint_add { "add" }
+    tui_editor_hint_accept { "accept" }
+    tui_editor_hint_close { "close" }
+    tui_editor_hint_dismiss { "dismiss" }
+    tui_editor_status_submitting { "Applying…" }
+    tui_editor_status_stale { "The library changed; reload to edit again" }
+    tui_editor_summary_fields { "{count, plural, one {# field} other {# fields}}" }
+    tui_editor_summary_clears { "{count, plural, one {# clear} other {# clears}}" }
+    tui_editor_summary_tags_add { "{count, plural, one {Add # tag} other {Add # tags}}" }
+    tui_editor_summary_tags_remove { "{count, plural, one {Remove # tag} other {Remove # tags}}" }
+    tui_editor_summary_targets { "{count, plural, one {Applies to # track} other {Applies to # tracks}}" }
+    tui_editor_tags_state_add { "Add" }
+    tui_editor_tags_state_remove { "Remove" }
+    tui_editor_tags_action_add_new { "Add new tag \"{name}\"" }
+    tui_editor_tags_filter_hint { "type to filter or add a tag" }
+    tui_editor_tags_more_hidden { "{count, plural, one {# more tag not shown} other {# more tags not shown}}" }
+    tui_editor_hint_reload { "reload" }
+    tui_editor_reload_prompt { "Reload and lose changes? Enter to reload, Escape to keep editing" }
+    tui_editor_open_no_targets { "No track is selected" }
+    tui_editor_open_unavailable { "Library is changing or unavailable; try again" }
+    tui_editor_open_incomplete { "The complete selection could not be opened" }
+    tui_editor_applied { "Updated {count, plural, one {# track} other {# tracks}}" }
+    tui_editor_no_change { "No changes were needed" }
+    tui_editor_busy { "The library is busy; try again" }
+    tui_editor_exit_waiting { "Finishing save… Ctrl-C to stop waiting" }
     winui_shell_menu_file { "File" }
     winui_shell_open_library { "Open Library..." }
     winui_shell_rescan { "Rescan" }

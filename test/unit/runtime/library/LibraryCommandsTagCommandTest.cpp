@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -92,6 +94,45 @@ namespace ao::rt::test
     REQUIRE(removeRes->changes.size() == 1);
     REQUIRE(removeRes->changes[0].removedTags.size() == 1);
     CHECK(removeRes->changes[0].removedTags[0] == "résumé");
+  }
+
+  TEST_CASE("LibraryCommands - conflicting tag edits preserve membership and revision",
+            "[runtime][regression][library][tag]")
+  {
+    auto storage = MusicLibraryFixture{};
+    auto const trackId = storage.addTrack("Track");
+    auto changes = makeStateOnlyLibraryChanges(storage.library());
+    auto commandsFixture = LibraryCommandsFixture{storage.library(), changes};
+    auto const tag = std::array{std::string{"Favorite"}};
+    bool initiallyPresent = false;
+
+    SECTION("The tag starts absent")
+    {
+    }
+
+    SECTION("The tag starts present")
+    {
+      REQUIRE(commandsFixture.editTags(std::array{trackId}, tag, {}));
+      initiallyPresent = true;
+    }
+
+    auto const revision = commandsFixture.bind(std::array{trackId}).revision();
+    std::size_t publicationCount = 0;
+    [[maybe_unused]] auto subscription =
+      changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
+
+    auto const result = commandsFixture.editTags(std::array{trackId}, tag, tag);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(publicationCount == 0);
+    CHECK(commandsFixture.bind(std::array{trackId}).revision() == revision);
+    auto transaction = storage.library().readTransaction();
+    auto const optTrack =
+      storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optTrack);
+    auto const track = library::TrackBuilder::fromHotView(*optTrack, storage.library().dictionary());
+    CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}) == initiallyPresent);
   }
 
   TEST_CASE("LibraryCommands - editTags rejects missing tag-add targets", "[runtime][unit][library][tag]")

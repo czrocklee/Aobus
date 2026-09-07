@@ -22,7 +22,19 @@ namespace ao::utility
 
   Result<std::string> makeUtf8CaselessKey(std::string_view text);
 
-  // Returns the UTF-8 byte offset immediately before the final extended
-  // grapheme cluster, or zero for an empty string.
-  Result<std::size_t> previousUtf8GraphemeBoundary(std::string_view text);
+  // Validates the complete text and byte offset before checking a grapheme
+  // boundary. Both ends are boundaries; offsets inside a scalar or cluster are not.
+  Result<bool> isUtf8GraphemeBoundary(std::string_view text, std::size_t offset);
+
+  // Returns the UTF-8 byte offset of the extended grapheme boundary immediately
+  // before @p offset, or zero when no earlier boundary exists. An offset past
+  // the end of @p text is rejected; an offset inside a cluster resolves to that
+  // cluster's start.
+  Result<std::size_t> previousUtf8GraphemeBoundary(std::string_view text, std::size_t offset);
+
+  // Returns the UTF-8 byte offset of the extended grapheme boundary immediately
+  // after @p offset, or the size of @p text when no later boundary exists. The
+  // offset rules of the previous-boundary operation apply, except that an
+  // offset inside a cluster resolves to that cluster's end.
+  Result<std::size_t> nextUtf8GraphemeBoundary(std::string_view text, std::size_t offset);
 } // namespace ao::utility

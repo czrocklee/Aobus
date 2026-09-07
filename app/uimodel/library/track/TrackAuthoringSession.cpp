@@ -15,6 +15,7 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
+#include <cstdint>
 #include <exception>
 #include <expected>
 #include <functional>
@@ -193,6 +194,11 @@ namespace ao::uimodel
   std::span<TrackId const> TrackAuthoringSession::targetIds() const noexcept
   {
     return _statePtr->targets.trackIds();
+  }
+
+  std::uint64_t TrackAuthoringSession::boundRevision() const noexcept
+  {
+    return _statePtr->targets.revision();
   }
 
   async::Subscription TrackAuthoringSession::onInvalidated(compat::MoveOnlyFunction<void()> handler) const

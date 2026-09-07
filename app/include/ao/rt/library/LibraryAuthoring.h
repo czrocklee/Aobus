@@ -64,6 +64,7 @@ namespace ao::rt
     }
 
     std::span<TrackId const> trackIds() const noexcept { return _trackIds; }
+    std::uint64_t revision() const noexcept { return _stamp.revision; }
 
     bool operator==(BoundTrackTargets const&) const = default;
 

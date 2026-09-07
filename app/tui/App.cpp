@@ -28,6 +28,7 @@
 #include "StatusBar.h"
 #include "Style.h"
 #include "TerminalTrackColumnLayout.h"
+#include "TrackEditController.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
@@ -204,6 +205,43 @@ namespace ao::tui
                              AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
+    /// How an overlay treats the workspace it covers.
+    enum class OverlayBackdrop : std::uint8_t
+    {
+      /// Left lit, because the workspace is still what the surface is about.
+      Live,
+      /// Dimmed, because the surface stands on its own and the workspace is not.
+      Dimmed,
+    };
+
+    /**
+     * @brief Composes @p overlayPtr over @p rootPtr, or reports nothing composed.
+     *
+     * Dimming belongs to a centred modal surface and nothing else. Such a
+     * surface stands on its own rather than beside the control that opened it,
+     * and what it covers is not what the user is acting on, so the terminal's
+     * one depth cue is worth spending. An anchored menu is a menu over live
+     * content, and the quick filter must leave the workspace lit because the
+     * track table behind it is the very thing the typing changes.
+     *
+     * @p rootPtr is left untouched when @p overlayPtr is null, so a caller can
+     * offer candidates in turn and still fall through to the bare root.
+     */
+    ftxui::Element composeOverlay(ftxui::Element& rootPtr,
+                                  ftxui::Element overlayPtr,
+                                  OverlayBackdrop const backdrop = OverlayBackdrop::Live)
+    {
+      if (overlayPtr == nullptr)
+      {
+        return {};
+      }
+
+      return ftxui::dbox({
+        backdrop == OverlayBackdrop::Dimmed ? std::move(rootPtr) | ftxui::dim : std::move(rootPtr),
+        std::move(overlayPtr),
+      });
+    }
+
     std::int32_t sidePanelColumnsLimit(std::int32_t const terminalColumns)
     {
       return terminalColumns <= 0 ? terminalColumns : std::max(1, terminalColumns / 2);
@@ -340,6 +378,8 @@ namespace ao::tui
       OutputDeviceController& outputDevices;
       uimodel::ActivityStatusViewModel& activityStatusViewModel;
       EventController& events;
+      TrackEditController& trackEdit;
+      ExitController& exitController;
       TuiHitRegions& hitRegions;
       uimodel::TrackColumnLayouts& trackColumnLayouts;
       TrackColumnResizePreview& trackColumnResizePreview;
@@ -356,6 +396,7 @@ namespace ao::tui
         using namespace ftxui;
 
         auto const frameBuildScope = frameTimer.measureBuild();
+
         auto const selectedTrackView = library.selectedTrackView();
         auto const terminalSize = ftxui::Terminal::Size();
         auto const terminalColumns = terminalSize.dimx;
@@ -368,7 +409,7 @@ namespace ao::tui
 
         // Artwork nobody can see is still a resource read and a transform, so
         // the request follows what the frame will actually show.
-        if (coverArtVisible)
+        if (coverArtVisible && !trackEdit.isActive())
         {
           coverArt.request(selectedTrackView.coverArtId);
         }
@@ -548,11 +589,10 @@ namespace ao::tui
                                                qualityPanel(textCatalog, state, keymapPlan, panelColumns));
         }
 
-        auto mainLayerPtr = popoverElementPtr == nullptr ? std::move(mainContentPtr)
-                                                         : dbox({
-                                                             std::move(mainContentPtr),
-                                                             std::move(popoverElementPtr),
-                                                           });
+        // Anchored menus over live content, so they take the same composition
+        // as the root layer and the backdrop rule's Live default.
+        auto composedMainPtr = composeOverlay(mainContentPtr, std::move(popoverElementPtr));
+        auto mainLayerPtr = composedMainPtr != nullptr ? std::move(composedMainPtr) : std::move(mainContentPtr);
         auto rootPtr = vbox({
           playbackBar(textCatalog,
                       PlaybackBarViewState{.playbackState = &state,
@@ -566,15 +606,37 @@ namespace ao::tui
                                            .outputDeviceHovered = hoveredButton == HoveredButton::OutputDevice,
                                            .terminalColumns = terminalColumns}),
           std::move(mainLayerPtr) | flex,
-          statusBar(textCatalog,
-                    StatusBarViewState{.activityStatus = &activityStatusViewModel.viewState(),
-                                       .terminalColumns = terminalColumns,
-                                       .filterDraft = library.filterDraft(),
-                                       .shell = &shell,
-                                       .activityStatusBox = &hitRegions.activityStatusBox,
-                                       .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus},
-                    keymapPlan),
+          exitController.isWaitingForSubmittedWrite()
+            ? text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiEditorExitWaiting)}) | bold |
+                style::warning()
+            : statusBar(textCatalog,
+                        StatusBarViewState{.activityStatus = &activityStatusViewModel.viewState(),
+                                           .terminalColumns = terminalColumns,
+                                           .filterDraft = library.filterDraft(),
+                                           .shell = &shell,
+                                           .activityStatusBox = &hitRegions.activityStatusBox,
+                                           .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus},
+                        keymapPlan),
         });
+
+        // Root-layer overlays, ordered by keyboard ownership, strongest first:
+        // whichever surface answers for every key must be drawn last, so no
+        // candidate below may cover one that still owns input. Each is built
+        // only once those above it decline, which also keeps a surface nobody
+        // sees from publishing hit regions for rows nobody can click.
+        if (auto const* const editor = trackEdit.activeEditor(); editor != nullptr)
+        {
+          return composeOverlay(rootPtr, editor->renderModal(terminalColumns, terminalRows), OverlayBackdrop::Dimmed);
+        }
+
+        if (auto composedPtr =
+              composeOverlay(rootPtr,
+                             commandPalettePopover(textCatalog, shell, keymapPlan, terminalColumns, terminalRows),
+                             OverlayBackdrop::Dimmed);
+            composedPtr != nullptr)
+        {
+          return composedPtr;
+        }
 
         auto visibleFilterError = std::string_view{};
 
@@ -584,55 +646,39 @@ namespace ao::tui
           visibleFilterError = library.filterError();
         }
 
-        if (auto commandPopoverPtr =
-              commandPalettePopover(textCatalog, shell, keymapPlan, terminalColumns, terminalRows);
-            commandPopoverPtr != nullptr)
+        if (auto composedPtr = composeOverlay(
+              rootPtr,
+              quickFilterPopover(textCatalog, shell, keymapPlan, visibleFilterError, terminalColumns, terminalRows));
+            composedPtr != nullptr)
         {
-          return dbox({
-            std::move(rootPtr),
-            std::move(commandPopoverPtr),
-          });
+          return composedPtr;
         }
 
-        if (auto quickFilterPopoverPtr =
-              quickFilterPopover(textCatalog, shell, keymapPlan, visibleFilterError, terminalColumns, terminalRows);
-            quickFilterPopoverPtr != nullptr)
+        if (auto composedPtr = composeOverlay(rootPtr,
+                                              presentationPopover(textCatalog,
+                                                                  shell,
+                                                                  keymapPlan,
+                                                                  library,
+                                                                  hitRegions.presentationButtonBox,
+                                                                  terminalColumns,
+                                                                  &hitRegions.presentationRows));
+            composedPtr != nullptr)
         {
-          return dbox({
-            std::move(rootPtr),
-            std::move(quickFilterPopoverPtr),
-          });
+          return composedPtr;
         }
 
-        if (auto presentationPopoverPtr = presentationPopover(textCatalog,
-                                                              shell,
-                                                              keymapPlan,
-                                                              library,
-                                                              hitRegions.presentationButtonBox,
-                                                              terminalColumns,
-                                                              &hitRegions.presentationRows);
-            presentationPopoverPtr != nullptr)
+        if (auto composedPtr = composeOverlay(rootPtr,
+                                              notificationPopover(textCatalog,
+                                                                  shell,
+                                                                  keymapPlan,
+                                                                  activityStatusViewModel.viewState(),
+                                                                  hitRegions.activityStatusBox,
+                                                                  terminalColumns,
+                                                                  terminalRows,
+                                                                  &hitRegions.notificationDetailRows));
+            composedPtr != nullptr)
         {
-          return dbox({
-            std::move(rootPtr),
-            std::move(presentationPopoverPtr),
-          });
-        }
-
-        if (auto notificationPopoverPtr = notificationPopover(textCatalog,
-                                                              shell,
-                                                              keymapPlan,
-                                                              activityStatusViewModel.viewState(),
-                                                              hitRegions.activityStatusBox,
-                                                              terminalColumns,
-                                                              terminalRows,
-                                                              &hitRegions.notificationDetailRows);
-            notificationPopoverPtr != nullptr)
-        {
-          return dbox({
-            std::move(rootPtr),
-            std::move(notificationPopoverPtr),
-          });
+          return composedPtr;
         }
 
         return rootPtr;
@@ -738,6 +784,28 @@ namespace ao::tui
       {
         playback.commands().setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
       }
+    }
+
+    /**
+     * @brief Brings the out-of-band Kitty image in line with the frame just drawn.
+     *
+     * The image lives outside FTXUI's own output, so a frame that no longer
+     * shows artwork has to say so here. @p surfaceTaken is that case: a
+     * full-surface editor or an exit in progress owns those cells, and the
+     * image is removed rather than left painted under them.
+     */
+    void syncKittyCoverArt(KittyPaintState& paintState,
+                           CoverArtLoader const& coverArt,
+                           ftxui::Box const& coverBox,
+                           bool const surfaceTaken)
+    {
+      if (surfaceTaken)
+      {
+        updateKittyCoverArt(paintState, kInvalidResourceId, ftxui::Box{}, std::nullopt);
+        return;
+      }
+
+      updateKittyCoverArt(paintState, coverArt.resourceId(), coverBox, coverArt.kittyPng());
     }
   } // namespace
 
@@ -945,36 +1013,60 @@ namespace ao::tui
     auto libraryScan =
       LibraryScanController{runtime.async(), runtime.library().jobs(), runtime.notifications(), textCatalog};
     EventController* activeEvents = nullptr;
+    ExitController* activeExit = nullptr;
+    auto trackEdit = TrackEditController{runtime.async(),
+                                         runtime.library(),
+                                         runtime.notifications(),
+                                         textCatalog,
+                                         TrackEditController::Outputs{
+                                           .requestRefresh = requestRefresh,
+                                           .notifySubmittedWriteSettled =
+                                             [&activeExit]
+                                           {
+                                             if (activeExit != nullptr)
+                                             {
+                                               activeExit->notifySubmittedWriteSettled();
+                                             }
+                                           },
+                                         },
+                                         runtime.completion(),
+                                         runtime.textOrderingPolicy()};
     auto exitController = ExitController{{
       .retire =
         [&]
       {
         libraryScan.retire();
+        trackEdit.retire();
         activeEvents->cancelTransientInteractions();
         shell.closeInput();
       },
       .postExit = [&screen] { screen.Post(screen.ExitLoopClosure()); },
+      .hasPendingSubmittedWrite = [&trackEdit] { return trackEdit.hasPendingSubmission(); },
     }};
+    activeExit = &exitController;
     auto requestGracefulExit = [&exitController] { exitController.requestExit(); };
-    auto events = EventController{shell,
-                                  library,
-                                  runtime.async(),
-                                  runtime.playback(),
-                                  keymapPlan,
-                                  EventControllerBindings{
-                                    .outputDevices = outputDevices,
-                                    .hitRegions = hitRegions,
-                                    .trackColumnLayouts = trackColumnLayouts,
-                                    .trackColumnResizePreview = trackColumnResizePreview,
-                                    .activityStatusViewModel = activityStatusViewModel,
-                                    .notifications = runtime.notifications(),
-                                    .libraryScan = libraryScan,
-                                    .requestExit = requestGracefulExit,
-                                    .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
-                                    { return commandCompletions.completeCommand(draft); },
-                                    .filterCompletionCallback = [&commandCompletions](std::string_view const draft)
-                                    { return commandCompletions.completeFilter(draft); },
-                                  }};
+    auto events =
+      EventController{shell,
+                      library,
+                      runtime.async(),
+                      runtime.playback(),
+                      keymapPlan,
+                      EventControllerBindings{
+                        .outputDevices = outputDevices,
+                        .hitRegions = hitRegions,
+                        .trackColumnLayouts = trackColumnLayouts,
+                        .trackColumnResizePreview = trackColumnResizePreview,
+                        .activityStatusViewModel = activityStatusViewModel,
+                        .notifications = runtime.notifications(),
+                        .libraryScan = libraryScan,
+                        .trackEdit = trackEdit,
+                        .requestExit = requestGracefulExit,
+                        .isExitWaiting = [&exitController] { return exitController.isWaitingForSubmittedWrite(); },
+                        .commandCompletionCallback = [&commandCompletions](std::string_view const draft)
+                        { return commandCompletions.completeCommand(draft); },
+                        .filterCompletionCallback = [&commandCompletions](std::string_view const draft)
+                        { return commandCompletions.completeFilter(draft); },
+                      }};
     activeEvents = &events;
 
     auto frameTimer = FrameTimer{};
@@ -988,6 +1080,8 @@ namespace ao::tui
       .outputDevices = outputDevices,
       .activityStatusViewModel = activityStatusViewModel,
       .events = events,
+      .trackEdit = trackEdit,
+      .exitController = exitController,
       .hitRegions = hitRegions,
       .trackColumnLayouts = trackColumnLayouts,
       .trackColumnResizePreview = trackColumnResizePreview,
@@ -1034,7 +1128,10 @@ namespace ao::tui
 
       if (kittyCoverArt)
       {
-        updateKittyCoverArt(kittyPaintState, coverArt.resourceId(), hitRegions.coverBox, coverArt.kittyPng());
+        syncKittyCoverArt(kittyPaintState,
+                          coverArt,
+                          hitRegions.coverBox,
+                          trackEdit.isActive() || exitController.phase() != ExitController::Phase::Running);
       }
     }
 
@@ -1046,6 +1143,7 @@ namespace ao::tui
 
     coverArt.cancel();
     libraryScan.retire();
+    trackEdit.retire();
     events.cancelTransientInteractions();
     shell.closeInput();
 

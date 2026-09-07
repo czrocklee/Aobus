@@ -60,6 +60,7 @@ namespace ao::uimodel
 
     bool isCurrent() const noexcept;
     std::span<TrackId const> targetIds() const noexcept;
+    std::uint64_t boundRevision() const noexcept;
     async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
     async::Task<Result<TrackMetadataSubmitResult>> submitMetadata(rt::MetadataPatch patch);

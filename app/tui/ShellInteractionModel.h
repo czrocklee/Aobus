@@ -56,6 +56,7 @@ namespace ao::tui
     SelectVisual,
     SelectAll,
     SelectClear,
+    EditProperties,
     Play,
     TogglePlayback,
     Stop,

@@ -116,6 +116,7 @@ The resulting additional defaults are:
 | `tui.library.selectVisual` | `V`, `Shift+V` |
 | `tui.library.selectAll` | `Shift+A` |
 | `tui.library.selectClear` | `U` |
+| `tui.library.editProperties` | `E` |
 | `tui.library.playSelection` | `Enter` |
 | `tui.library.previousTrack` | `K` |
 | `tui.library.nextTrack` | `J` |

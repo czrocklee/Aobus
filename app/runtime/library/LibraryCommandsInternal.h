@@ -42,6 +42,11 @@ namespace ao::rt
   {
     Result<std::string> normalizeRuntimeText(std::string_view value, std::string_view context);
 
+    Result<std::vector<std::string>> normalizeTags(std::span<std::string const> tags);
+
+    Result<> validateDisjointTags(std::span<std::string const> normalizedAdd,
+                                  std::span<std::string const> normalizedRemove);
+
     std::unexpected<Error> storageError(char const* action, Error const& error);
 
     std::vector<TrackId> orderTrackIdsFrom(library::ListView const& view);

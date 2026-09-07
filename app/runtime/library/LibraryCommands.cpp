@@ -41,7 +41,7 @@
 
 namespace ao::rt
 {
-  namespace
+  namespace detail
   {
     Result<std::vector<std::string>> normalizeTags(std::span<std::string const> const tags)
     {
@@ -52,7 +52,7 @@ namespace ao::rt
 
       for (auto const& tag : tags)
       {
-        auto tagRes = detail::normalizeRuntimeText(tag, "Track tag");
+        auto tagRes = normalizeRuntimeText(tag, "Track tag");
 
         if (!tagRes)
         {
@@ -67,10 +67,20 @@ namespace ao::rt
 
       return normalized;
     }
-  } // namespace
 
-  namespace detail
-  {
+    Result<> validateDisjointTags(std::span<std::string const> const normalizedAdd,
+                                  std::span<std::string const> const normalizedRemove)
+    {
+      if (std::ranges::any_of(normalizedAdd,
+                              [normalizedRemove](auto const& tag)
+                              { return std::ranges::contains(normalizedRemove, tag); }))
+      {
+        return makeError(Error::Code::InvalidInput, "A tag cannot be both added and removed");
+      }
+
+      return {};
+    }
+
     Result<std::string> normalizeRuntimeText(std::string_view const value, std::string_view const context)
     {
       auto normalizedRes = utility::normalizeUtf8Nfc(value);
@@ -168,6 +178,11 @@ namespace ao::rt
                                                           std::span<std::string const> tagsToAdd,
                                                           std::span<std::string const> tagsToRemove)
     {
+      if (tagsToAdd.empty() && tagsToRemove.empty())
+      {
+        return EditTrackTagsReply{};
+      }
+
       auto normalizedAddRes = normalizeTags(tagsToAdd);
 
       if (!normalizedAddRes)
@@ -180,6 +195,11 @@ namespace ao::rt
       if (!normalizedRemoveRes)
       {
         return std::unexpected{normalizedRemoveRes.error()};
+      }
+
+      if (auto const disjointRes = validateDisjointTags(*normalizedAddRes, *normalizedRemoveRes); !disjointRes)
+      {
+        return std::unexpected{disjointRes.error()};
       }
 
       auto writer = transaction.tracks();

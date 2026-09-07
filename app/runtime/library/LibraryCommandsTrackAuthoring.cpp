@@ -347,6 +347,47 @@ namespace ao::rt
       return result;
     }
 
+    /**
+     * @brief Writes exactly the halves @p patchResult says changed.
+     *
+     * Reports whether anything was written: a track whose patch changed nothing
+     * is not written at all, and a patch touching one half does not rewrite the
+     * other. @p action names the operation in a storage error.
+     */
+    Result<bool> writeChangedTrackHalves(library::TrackWriter& writer,
+                                         TrackId const trackId,
+                                         library::TrackBuilder& builder,
+                                         PatchResult const& patchResult,
+                                         char const* const action)
+    {
+      if (!patchResult.changedHot && !patchResult.changedCold)
+      {
+        return false;
+      }
+
+      auto updateRes = Result<>{};
+
+      if (patchResult.changedHot && patchResult.changedCold)
+      {
+        updateRes = writer.update(trackId, builder);
+      }
+      else if (patchResult.changedHot)
+      {
+        updateRes = writer.updateHot(trackId, builder);
+      }
+      else
+      {
+        updateRes = writer.updateCold(trackId, builder);
+      }
+
+      if (!updateRes)
+      {
+        return detail::storageError(action, updateRes.error());
+      }
+
+      return true;
+    }
+
     Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
                                                                      library::LibraryWrite& transaction,
                                                                      std::span<TrackId const> trackIds,
@@ -375,30 +416,17 @@ namespace ao::rt
         auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto const patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
+        auto const wroteRes =
+          writeChangedTrackHalves(writer, trackId, builder, patchRes, "Failed to update track data");
 
-        if (!patchRes.changedHot && !patchRes.changedCold)
+        if (!wroteRes)
+        {
+          return std::unexpected{wroteRes.error()};
+        }
+
+        if (!*wroteRes)
         {
           continue;
-        }
-
-        auto updateRes = Result<>{};
-
-        if (patchRes.changedHot && patchRes.changedCold)
-        {
-          updateRes = writer.update(trackId, builder);
-        }
-        else if (patchRes.changedHot)
-        {
-          updateRes = writer.updateHot(trackId, builder);
-        }
-        else
-        {
-          updateRes = writer.updateCold(trackId, builder);
-        }
-
-        if (!updateRes)
-        {
-          return detail::storageError("Failed to update track data", updateRes.error());
         }
 
         changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
@@ -407,27 +435,130 @@ namespace ao::rt
       return UpdateTrackMetadataReply{.changes = std::move(changes)};
     }
 
+    bool applyTrackTagChanges(library::TrackBuilder& builder,
+                              std::span<std::string const> const normalizedAdd,
+                              std::span<std::string const> const normalizedRemove,
+                              std::vector<std::string>& addedTags,
+                              std::vector<std::string>& removedTags)
+    {
+      bool tagsChanged = false;
+
+      for (auto const& tag : normalizedAdd)
+      {
+        if (!std::ranges::contains(builder.tags().names(), tag))
+        {
+          builder.tags().add(tag);
+          addedTags.push_back(tag);
+          tagsChanged = true;
+        }
+      }
+
+      for (auto const& tag : normalizedRemove)
+      {
+        if (std::ranges::contains(builder.tags().names(), tag))
+        {
+          builder.tags().remove(tag);
+          removedTags.push_back(tag);
+          tagsChanged = true;
+        }
+      }
+
+      return tagsChanged;
+    }
+
     Result<UpdateTrackPropertiesReply> applyPropertiesPatchInTransaction(library::MusicLibrary& library,
                                                                          library::LibraryWrite& transaction,
                                                                          std::span<TrackId const> trackIds,
                                                                          TrackPropertiesPatch const& patch)
     {
-      auto metadataRes = applyMetadataPatchInTransaction(library, transaction, trackIds, patch.metadata);
+      auto normalizedPatchRes = normalizeMetadataPatch(patch.metadata);
 
-      if (!metadataRes)
+      if (!normalizedPatchRes)
       {
-        return std::unexpected{metadataRes.error()};
+        return std::unexpected{normalizedPatchRes.error()};
       }
 
-      auto tagsRes =
-        detail::applyTagPatchInTransaction(library, transaction, trackIds, patch.tagsToAdd, patch.tagsToRemove);
+      auto normalizedAddRes = detail::normalizeTags(patch.tagsToAdd);
 
-      if (!tagsRes)
+      if (!normalizedAddRes)
       {
-        return std::unexpected{tagsRes.error()};
+        return std::unexpected{normalizedAddRes.error()};
       }
 
-      return UpdateTrackPropertiesReply{.metadata = std::move(*metadataRes), .tags = std::move(*tagsRes)};
+      auto normalizedRemoveRes = detail::normalizeTags(patch.tagsToRemove);
+
+      if (!normalizedRemoveRes)
+      {
+        return std::unexpected{normalizedRemoveRes.error()};
+      }
+
+      if (auto const disjointRes = detail::validateDisjointTags(*normalizedAddRes, *normalizedRemoveRes); !disjointRes)
+      {
+        return std::unexpected{disjointRes.error()};
+      }
+
+      auto const& normalizedPatch = *normalizedPatchRes;
+      auto const& normalizedAdd = *normalizedAddRes;
+      auto const& normalizedRemove = *normalizedRemoveRes;
+
+      auto writer = transaction.tracks();
+      auto metadataChanges = std::vector<TrackChangeRecord>{};
+      auto tagChanges = std::vector<TrackTagsChange>{};
+
+      for (auto const trackId : trackIds)
+      {
+        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+
+        if (!optView)
+        {
+          continue;
+        }
+
+        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
+        auto fieldChanges = std::vector<TrackFieldChange>{};
+        auto patchRes = applyMetadataPatch(builder, normalizedPatch, fieldChanges);
+
+        auto addedTags = std::vector<std::string>{};
+        auto removedTags = std::vector<std::string>{};
+        bool const tagsChanged = applyTrackTagChanges(builder, normalizedAdd, normalizedRemove, addedTags, removedTags);
+
+        if (tagsChanged)
+        {
+          patchRes.changedHot = true;
+        }
+
+        auto const wroteRes =
+          writeChangedTrackHalves(writer, trackId, builder, patchRes, "Failed to update track properties");
+
+        if (!wroteRes)
+        {
+          return std::unexpected{wroteRes.error()};
+        }
+
+        if (!*wroteRes)
+        {
+          continue;
+        }
+
+        if (!fieldChanges.empty())
+        {
+          metadataChanges.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
+        }
+
+        if (tagsChanged)
+        {
+          tagChanges.push_back(TrackTagsChange{
+            .trackId = trackId,
+            .addedTags = std::move(addedTags),
+            .removedTags = std::move(removedTags),
+          });
+        }
+      }
+
+      return UpdateTrackPropertiesReply{
+        .metadata = UpdateTrackMetadataReply{.changes = std::move(metadataChanges)},
+        .tags = EditTrackTagsReply{.changes = std::move(tagChanges)},
+      };
     }
   } // namespace
 

@@ -92,6 +92,8 @@ namespace ao::tui
     void toggleFocusedMark();
     void toggleVisualSelection();
     void cancelVisualSelection();
+    /// Stops extending a visual range, keeping every row it already marked.
+    void commitVisualSelection();
     void markAllTracks();
     void clearMarks();
 

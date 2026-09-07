@@ -92,6 +92,7 @@ The production shared-id families are:
 | `gtk_track_*`, `gtk_tag_*`, `gtk_custom_metadata_*`, `gtk_activity_*`, `gtk_manual_order_*` | GTK metadata/property editing, activity, and authoring accessibility copy |
 | `gtk_layout_*`, `gtk_edit_value`, `gtk_*_panel`, `gtk_*_details`, `gtk_startup_*` | GTK Layout Editor vocabulary, structural accessibility, and recoverable startup copy |
 | `tui_shell_*`, `tui_playback_*`, `tui_library_*` | TUI navigation, help, playback, and library copy through canonical `MessageId` values |
+| `tui_editor_*` | TUI track Properties pages, edit intents, confirmation prompts, submission status, and contextual shortcuts |
 | `tui_presentation_*`, `tui_*_opened`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
 
