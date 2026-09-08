@@ -64,6 +64,7 @@ namespace ao::rt
     {
       DictionaryId id;
       std::uint32_t frequency = 0;
+      std::uint32_t aliasIndex = 0;
     };
 
     struct AliasRecord final
@@ -97,7 +98,7 @@ namespace ao::rt
     void materializeCustomKeys();
     void materializeValues(TrackField field);
     void materializeAggregateValues();
-    std::span<std::string const> aliasesForDictionary(DictionaryId id, std::string_view text);
+    std::span<std::string const> aliasesForDictionary(std::size_t aliasIndex, std::string_view text);
     std::span<std::string const> aliasesForTitle(std::size_t titleIndex, std::string_view text);
     std::span<std::string const> aliasesFor(AliasHandle handle, std::string_view text);
     std::span<std::string const> resolveAliases(AliasRecord& record, std::string_view text);

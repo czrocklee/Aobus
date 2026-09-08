@@ -64,7 +64,13 @@ That traversal counts:
 - tags and custom metadata keys by dictionary id; and
 - every dictionary-backed runtime track field by its typed query-field extractor.
 
-The service compresses dictionary-id counts by source and discards the traversal working storage.
+The service counts only dictionary ids with live contributions, compresses those
+counts by source, and discards the traversal working storage. Title reservations
+follow the current track count; per-source count reservations may reuse the prior
+snapshot's live cardinality as a hint. Unused append-only dictionary history does
+not size completion counters or alias records. Aggregate reservations follow the
+selected live source cardinalities, and equal text is merged directly without an
+additional dictionary-wide frequency array.
 No tag, custom-key, field, or aggregate access scans track storage again until another qualifying library change invalidates the snapshot.
 Individual result vectors remain lazy: tags, custom keys, and requested fields resolve their retained ids and sort in memory only when consumed.
 Locale keys are materialized once per value before that sort; comparators never
@@ -79,9 +85,15 @@ When equal text merges an inline title with a dictionary-backed source, the aggr
 Materialization does not sort the complete aggregate because Quick-filter completion scans it once and retains only the requested top matches.
 An empty aggregate specification returns an empty result without forcing a snapshot rebuild.
 
-When a completion-alias policy is present, the snapshot owns one lazy alias record per dictionary id and one per compacted title slot.
+When a completion-alias policy is present, the snapshot owns one lazy alias record per live dictionary id and one per compacted title slot.
 Dictionary-backed field, tag, custom-key, and aggregate materializations borrow the same dictionary record, so repeated consumers and aggregate-specification changes do not repeat transliteration.
-The record vectors are sized once for the snapshot and are not resized while entries borrow their alias ranges.
+Snapshot rebuilds deduplicate live dictionary ids with a temporary index and
+store the shared alias-record slot in each source frequency. Materialization
+addresses those slots directly without retaining or consulting a dictionary-id
+map. Both dictionary and title record vectors are allocated to the new snapshot's
+record counts before any materialization borrows aliases, releasing their previous
+buffers even when the vocabulary shrinks. Materialization never resizes these
+vectors while entries borrow their alias ranges.
 A snapshot rebuild clears every borrowing materialization before replacing the records, then derives aliases lazily for the new generation.
 
 ## Alias derivation

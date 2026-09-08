@@ -14,7 +14,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
@@ -27,6 +29,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -328,6 +331,71 @@ namespace ao::rt::test
     REQUIRE(aggregateShared != aggregate.end());
     CHECK(aggregateShared->frequency == 3);
     CHECK(policy.callCount("周杰倫") == 1);
+  }
+
+  TEST_CASE("CompletionService - sparse live dictionary ids preserve frequencies and alias borrows",
+            "[runtime][regression][completion][completion-alias]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto transaction = library::test::writeTransaction(libraryFixture.library());
+
+    for (std::size_t index = 0; index < 4096; ++index)
+    {
+      REQUIRE(library::test::physicalDictionary(transaction).intern(std::format("Retired {}", index)));
+    }
+
+    REQUIRE(transaction.commit());
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                  library::test::TrackSpec{.title = "周杰倫",
+                                                                           .artist = "周杰倫",
+                                                                           .album = "周杰倫",
+                                                                           .tags = {"周杰倫"},
+                                                                           .customMetadata = {{"音乐", "Value"}}});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto policy = RecordingCompletionAliasPolicy{};
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, &policy};
+    auto const artists = service.valuesFor(TrackField::Artist);
+    REQUIRE(artists.size() == 1);
+    auto const* const borrowedAliases = artists.front().aliases.data();
+    REQUIRE(service.tags().size() == 1);
+    CHECK(service.tags().front().aliases.data() == borrowedAliases);
+    constexpr auto kFields = std::to_array({TrackField::Title, TrackField::Artist, TrackField::Album});
+    auto aggregate = service.aggregateValues({.fields = kFields, .includeTags = true});
+    REQUIRE(aggregate.size() == 1);
+    CHECK(aggregate.front().value == "周杰倫");
+    CHECK(aggregate.front().frequency == 4);
+    CHECK(aggregate.front().aliases.data() == borrowedAliases);
+    REQUIRE(service.customKeys().size() == 1);
+    CHECK(aliasValues(service.customKeys().front().aliases) == std::vector<std::string>{"yinle"});
+    CHECK(aliasValues(artists.front().aliases) == std::vector<std::string>{"zhoujielun"});
+    CHECK(policy.callCount("周杰倫") == 1);
+    CHECK(policy.callCount("Retired 4095") == 0);
+
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optArtist = "王菲"}));
+    aggregate = service.aggregateValues({.fields = kFields, .includeTags = true});
+    CHECK(sortedPairs(aggregate) == std::vector<std::pair<std::string, std::uint32_t>>{{"周杰倫", 3}, {"王菲", 1}});
+    auto const updatedArtists = service.valuesFor(TrackField::Artist);
+    REQUIRE(updatedArtists.size() == 1);
+    CHECK(aliasValues(updatedArtists.front().aliases) == std::vector<std::string>{"wangfei"});
+
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrack(trackId)));
+    CHECK(service.aggregateValues({.fields = kFields, .includeTags = true}).empty());
+    CHECK(service.tags().empty());
+    CHECK(service.customKeys().empty());
+    CHECK(service.valuesFor(TrackField::Artist).empty());
+
+    commandsFixture.addTrack(library::test::TrackSpec{
+      .title = "Later", .artist = "王菲", .album = "音乐", .tags = {"王菲"}, .customMetadata = {{"王菲", "Value"}}});
+    CHECK(sortedPairs(service.aggregateValues({.fields = kFields, .includeTags = true})) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Later", 1}, {"王菲", 2}, {"音乐", 1}});
+    auto const newArtists = service.valuesFor(TrackField::Artist);
+    REQUIRE(newArtists.size() == 1);
+    CHECK(aliasValues(newArtists.front().aliases) == std::vector<std::string>{"wangfei"});
+    REQUIRE(service.customKeys().size() == 1);
+    CHECK(service.customKeys().front().aliases.data() == newArtists.front().aliases.data());
+    CHECK(policy.callCount("王菲") == 2);
   }
 
   TEST_CASE("CompletionService - snapshot invalidation retires stale aliases",
