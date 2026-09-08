@@ -12,6 +12,7 @@
 #include <ao/utility/ScopedRegistration.h>
 // The loaded theme override is held here, so its type is part of the frame.
 #include <ao/winui/Theme.h>
+#include <ao/winui/layout/ShellState.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -108,7 +109,7 @@ namespace winrt::Aobus::implementation
     void clearGroupCoverPresenters() noexcept;
     void unbindPlayback() noexcept;
     void bindPlayback();
-    void applyShellState(double width);
+    bool applyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);
     void restoreWindowPlacement();
     void saveWindowState() noexcept;
     void applyTheme(ao::winui::Theme const& theme);

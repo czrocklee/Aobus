@@ -19,11 +19,16 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/FileAllocation.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
+
+#ifndef _WIN32
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- POSIX setenv/unsetenv require this header.
+#endif
 
 #include <array>
 #include <chrono>
@@ -123,7 +128,8 @@ namespace ao::cli::test
 #ifdef _WIN32
       std::ignore = ::_putenv_s(name.c_str(), value.c_str());
 #else
-      std::ignore = ::setenv(name.c_str(), value.c_str(), 1);
+      // Darwin's public stdlib.h forwards this declaration through private _stdlib.h.
+      std::ignore = ::setenv(name.c_str(), value.c_str(), 1); // NOLINT(misc-include-cleaner)
 #endif
     }
 
@@ -132,7 +138,8 @@ namespace ao::cli::test
 #ifdef _WIN32
       std::ignore = ::_putenv_s(name.c_str(), "");
 #else
-      std::ignore = ::unsetenv(name.c_str());
+      // Darwin's public stdlib.h forwards this declaration through private _stdlib.h.
+      std::ignore = ::unsetenv(name.c_str()); // NOLINT(misc-include-cleaner)
 #endif
     }
 
@@ -478,6 +485,32 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "resources: 1"));
     CHECK(contains(result.out, "resourceBytes: 0"));
+  }
+
+  TEST_CASE("CLI - database allocation excludes workspace and unrelated descendants", "[cli][regression][lib][stats]")
+  {
+    auto fixture = CliFixture{};
+    REQUIRE(fixture.run({"init"}).status == 0);
+    auto const before = fixture.run({"-O", "json", "lib", "stats"});
+    REQUIRE(before.status == 0);
+    auto const beforeTree = parseYaml(before.out);
+    auto const expected = std::string{yaml::scalarView(beforeTree.rootref()["diskBytes"])};
+    REQUIRE(std::stoull(expected) > 0);
+    auto const databasePath = rt::LibraryPaths{fixture.root()}.databasePath();
+    CHECK(std::stoull(expected) == utility::allocatedFileBytes(databasePath / "data.mdb") +
+                                     utility::allocatedFileBytes(databasePath / "lock.mdb") +
+                                     utility::allocatedFileBytes(databasePath / ".aobus-writer.lock"));
+    std::filesystem::create_directories(databasePath / "unrelated");
+    {
+      auto workspace = std::ofstream{databasePath / "workspace.yaml"};
+      workspace << std::string(65536, 'x');
+      auto descendant = std::ofstream{databasePath / "unrelated" / "data.mdb"};
+      descendant << std::string(65536, 'y');
+    }
+    auto const after = fixture.run({"-O", "json", "lib", "stats"});
+    REQUIRE(after.status == 0);
+    auto const afterTree = parseYaml(after.out);
+    CHECK(yaml::scalarView(afterTree.rootref()["diskBytes"]) == expected);
   }
 
   TEST_CASE("CLI - lib verify reports missing files with failing exit", "[cli][workflow][lib][verify]")
@@ -1493,6 +1526,33 @@ namespace ao::cli::test
     CHECK(contains(result.out, "--dry-run"));
     CHECK(contains(result.out, "not $genre?"));
     CHECK(contains(result.out, "$artist + \" - \" + $title"));
+  }
+
+  TEST_CASE("CLI - help-all follows parser option and literal boundaries", "[cli][regression][contract]")
+  {
+    SECTION("A subcommand can request the recursive help tree")
+    {
+      auto const nested = runArgs({"aobus", "track", "--help-all"});
+      REQUIRE(nested.status == 0);
+      CHECK(nested.err.empty());
+      CHECK(contains(nested.out, "list create"));
+    }
+
+    SECTION("An argument after the literal boundary remains an import path")
+    {
+      auto const literal = runArgs({"aobus", "lib", "import", "--", "--help-all"});
+      CHECK(literal.status != 0);
+      CHECK(contains(literal.err, "Failed to read '--help-all'"));
+      CHECK_FALSE(contains(literal.out, "list create"));
+    }
+
+    SECTION("An option value does not bypass parser requirements")
+    {
+      auto const malformed = runArgs({"aobus", "--output", "--help-all"});
+      CHECK(malformed.status != 0);
+      CHECK(contains(malformed.err, "subcommand is required"));
+      CHECK_FALSE(contains(malformed.out, "list create"));
+    }
   }
 
   TEST_CASE("CLI - track update sets and unsets custom metadata", "[cli][workflow][track][update]")

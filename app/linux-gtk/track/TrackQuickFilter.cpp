@@ -132,7 +132,11 @@ namespace ao::gtk
     _entry.add_controller(dropTargetPtr);
   }
 
-  TrackQuickFilter::~TrackQuickFilter() = default;
+  TrackQuickFilter::~TrackQuickFilter()
+  {
+    _debounceTimer.disconnect();
+    _textChangedConn.disconnect();
+  }
 
   void TrackQuickFilter::setText(Glib::ustring const& text)
   {
@@ -162,6 +166,7 @@ namespace ao::gtk
   void TrackQuickFilter::handleFilterTextChanged()
   {
     updateClearButton();
+    _filterViewModel.editFilter(_entry.get_text().raw());
     _debounceTimer.disconnect();
     auto callback = sigc::slot<bool()>{[this]
                                        {
@@ -181,7 +186,7 @@ namespace ao::gtk
 
   void TrackQuickFilter::handleCreateSmartListClicked()
   {
-    if (!_resolvedExpression.empty())
+    if (_createSmartListButton.get_sensitive() && !_resolvedExpression.empty())
     {
       _signalCreateSmartListRequested.emit(_resolvedExpression);
     }

@@ -266,8 +266,7 @@ namespace ao::gtk::layout
         auto const& transport = snapshot.transport;
         auto const trackId =
           transport.transport == audio::Transport::Idle ? kInvalidTrackId : transport.nowPlaying.trackId;
-        auto const coverArtId =
-          transport.transport == audio::Transport::Idle ? kInvalidResourceId : transport.nowPlaying.coverArtId;
+        bool const trackChanged = !_synced || trackId != _currentTrackId;
         auto const candidates = std::array<std::string_view, 3>{
           transport.nowPlaying.album,
           transport.nowPlaying.artist,
@@ -277,14 +276,21 @@ namespace ao::gtk::layout
                           ? uimodel::CoverArtPlaceholderIdentity{}
                           : uimodel::makeCoverArtPlaceholderIdentity(candidates);
 
-        if (_synced && trackId == _currentTrackId && coverArtId == _currentCoverArtId && identity == _currentIdentity)
+        if (!trackChanged && identity == _currentIdentity)
         {
           return;
         }
 
+        // Playback metadata is captured at launch. Library changes own live
+        // cover updates, so a same-track snapshot must preserve that identity.
+        if (trackChanged)
+        {
+          _currentCoverArtId =
+            trackId == kInvalidTrackId ? kInvalidResourceId : _library.snapshot().trackCoverArtId(trackId);
+        }
+
         _synced = true;
         _currentTrackId = trackId;
-        _currentCoverArtId = coverArtId;
         _currentIdentity = std::move(identity);
         _imageControllerPtr->setPlaceholderPresentation(
           uimodel::makeCoverArtPlaceholderPresentation(_placeholderStyle, _currentIdentity));

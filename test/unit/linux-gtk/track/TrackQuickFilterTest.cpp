@@ -25,8 +25,12 @@
 #include <gtkmm/label.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/window.h>
+#include <sigc++/connection.h>
+#include <sigc++/functors/slot.h>
 
+#include <chrono>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -50,6 +54,63 @@ namespace ao::gtk::test
       return handled == TRUE;
     }
   } // namespace
+
+  TEST_CASE("TrackQuickFilter - duplicate surfaces preserve drafts and create from the current commit",
+            "[gtk][regression][track][quick-filter]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
+    drainGtkEvents();
+    auto submitFirst = sigc::slot<bool()>{};
+    auto submitSecond = sigc::slot<bool()>{};
+    auto first = TrackQuickFilter{runtime.completion(),
+                                  runtime.views(),
+                                  runtime.workspace(),
+                                  ao::test::englishMessageCatalog(),
+                                  [&submitFirst](auto, auto callback)
+                                  {
+                                    submitFirst = std::move(callback);
+                                    return sigc::connection{};
+                                  }};
+    auto second = TrackQuickFilter{runtime.completion(),
+                                   runtime.views(),
+                                   runtime.workspace(),
+                                   ao::test::englishMessageCatalog(),
+                                   [&submitSecond](auto, auto callback)
+                                   {
+                                     submitSecond = std::move(callback);
+                                     return sigc::connection{};
+                                   }};
+    auto* const create = findWidgetByClass<Gtk::Button>(second, "ao-quick-filter-create");
+    REQUIRE(create != nullptr);
+    first.setText("$artist = 'first'");
+    REQUIRE(!submitFirst.empty());
+    submitFirst();
+    drainGtkEvents();
+    CHECK(second.text() == first.text());
+    CHECK(create->get_sensitive());
+
+    second.setText("$artist = 'draft'");
+    CHECK_FALSE(create->get_sensitive());
+    first.setText("$artist = 'external'");
+    submitFirst();
+    drainGtkEvents();
+    CHECK(second.text() == "$artist = 'draft'");
+    CHECK_FALSE(create->get_sensitive());
+    REQUIRE(!submitSecond.empty());
+    submitSecond();
+    drainGtkEvents();
+    CHECK(first.text() == second.text());
+    CHECK(create->get_sensitive());
+    auto created = std::string{};
+    auto connection = second.signalCreateSmartListRequested().connect([&created](std::string const& expression)
+                                                                      { created = expression; });
+    emitClicked(*create);
+    CHECK(created == "$artist = 'draft'");
+    connection.disconnect();
+  }
 
   TEST_CASE("TrackQuickFilter - renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
   {
@@ -82,6 +143,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
+    REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
+    drainGtkEvents();
 
     auto filter =
       TrackQuickFilter{runtime.completion(), runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
@@ -123,6 +186,8 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
+    REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
+    drainGtkEvents();
 
     auto filter =
       TrackQuickFilter{runtime.completion(), runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
@@ -134,16 +199,27 @@ namespace ao::gtk::test
     CHECK(filter.position() == 3);
   }
 
-  TEST_CASE("TrackQuickFilter - renders shared Quick-filter value completion", "[gtk][unit][track][completion]")
+  TEST_CASE("TrackQuickFilter - retains shared value completion after filter debounce",
+            "[gtk][regression][track][completion]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
+    REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
+    drainGtkEvents();
 
+    auto debounceCallback = sigc::slot<bool()>{};
     auto window = Gtk::Window{};
-    auto filter =
-      TrackQuickFilter{runtime.completion(), runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto filter = TrackQuickFilter{runtime.completion(),
+                                   runtime.views(),
+                                   runtime.workspace(),
+                                   ao::test::englishMessageCatalog(),
+                                   [&](std::chrono::milliseconds, sigc::slot<bool()> callback)
+                                   {
+                                     debounceCallback = std::move(callback);
+                                     return sigc::connection{};
+                                   }};
     window.set_child(filter);
     auto* const popover = findWidget<Gtk::Popover>(filter.entry());
     REQUIRE(popover != nullptr);
@@ -152,6 +228,12 @@ namespace ao::gtk::test
     filter.setPosition(3);
     ::g_signal_emit_by_name(filter.entry().gobj(), "changed");
     drainGtkEvents();
+
+    REQUIRE_FALSE(debounceCallback.empty());
+    CHECK_FALSE(debounceCallback());
+    drainGtkEvents();
+    CHECK(filter.text() == "Aim");
+    CHECK(filter.get_sensitive());
 
     auto* const title = findWidgetByClass<Gtk::Label>(*popover, "ao-query-completion-row-title");
     REQUIRE(title != nullptr);

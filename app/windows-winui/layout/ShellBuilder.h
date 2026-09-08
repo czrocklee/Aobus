@@ -14,6 +14,7 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/Theme.h>
+#include <ao/winui/input/KeymapAcceleratorPlan.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -183,6 +184,7 @@ namespace ao::winui::layout
     ShellBuilderConfig _config;
     uimodel::LayoutSchema _schema;
     ActionRegistry _actions;
+    std::vector<KeymapAcceleratorPlan> _acceleratorPlans;
     ComponentRegistry _registry;
     // These sources outlive the host so every component subscription disconnects
     // before the signal it observes is destroyed.

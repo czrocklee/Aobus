@@ -24,19 +24,6 @@ namespace ao::cli
 {
   namespace
   {
-    bool hasHelpAllArgument(std::int32_t argc, char const* const* argv)
-    {
-      for (std::int32_t i = 1; i < argc; ++i)
-      {
-        if (std::string_view{argv[i]} == "--help-all")
-        {
-          return true;
-        }
-      }
-
-      return false;
-    }
-
     void writeHelpTree(CLI::App const& app, std::string const& commandPath, std::ostream& out)
     {
       out << app.help(commandPath, CLI::AppFormatMode::Normal);
@@ -77,17 +64,12 @@ namespace ao::cli
       configureTagCommand(app, cli);
       configureLibCommand(app, cli);
 
-      if (hasHelpAllArgument(argc, argv))
-      {
-        // CLI11's built-in help-all still runs after subcommand requirements,
-        // and its All mode expands only one level. Print the full tree before
-        // parse() so `aobus --help-all` works as a complete agent-facing
-        // command reference.
-        writeHelpTree(app, "aobus", out);
-        return 0;
-      }
-
       app.parse(argc, argv);
+      return 0;
+    }
+    catch (CLI::CallForAllHelp const&)
+    {
+      writeHelpTree(app, "aobus", out);
       return 0;
     }
     catch (CLI::ParseError const& e)

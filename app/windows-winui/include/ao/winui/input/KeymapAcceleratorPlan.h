@@ -23,6 +23,7 @@ namespace ao::winui
   {
     std::string actionId;
     WindowsAccelerator key;
+    std::string displayText;
 
     bool operator==(KeymapAcceleratorPlan const&) const = default;
   };

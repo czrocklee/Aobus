@@ -64,7 +64,7 @@ It does not denote nested mappings.
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
 | Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | No TUI writer; `ao::uimodel::loadKeymap` reads it over TUI defaults. |
-| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `LibrarySession`. |
+| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
@@ -144,7 +144,8 @@ Each present action id replaces the complete shipped chord list for that action.
 An empty sequence explicitly unbinds it; an absent action id retains its current shipped defaults.
 Saving writes only bindings whose effective chord sequence differs from the defaults supplied to `KeymapModel`.
 
-GTK and WinUI expose mutation surfaces and persist those deltas in their own global documents.
+GTK exposes a mutation surface and persists those deltas in its global document.
+WinUI loads hand-authored overrides over the desktop defaults; it has no shortcut editor or shortcut writer.
 GTK persists a shortcut candidate before publishing live accelerators, and the Keyboard page reports a failed `saveKeymap` result once.
 TUI loads the same group from `<config>/tui.yaml` over its shared-plus-terminal defaults, but exposes no editor and does not save the keymap during ordinary shutdown.
 Its normal output-preference checkpoint writes the `runtime` sibling through the same live `ConfigStore`, preserving the shortcut group already present in the store snapshot.

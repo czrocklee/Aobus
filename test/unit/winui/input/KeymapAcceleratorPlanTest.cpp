@@ -61,6 +61,27 @@ namespace ao::winui::test
     }
   } // namespace
 
+  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings", "[winui][regression][input]")
+  {
+    auto const keymap = KeymapModel{KeymapBindings{
+      {"first", {chord("Ctrl+P")}},
+      {"track.orderMoveUp", {KeyChord{.key = "Hyper"}, chord("Ctrl+P"), chord("Ctrl+U"), chord("Alt+Up")}},
+      {"track.orderMoveDown", {}},
+      {"track.orderMoveToTop", {KeyChord{.key = "Hyper"}}},
+      {"track.orderMoveToBottom", {chord("Ctrl+P")}},
+    }};
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
+    auto const up = std::ranges::find(plans, std::string{"track.orderMoveUp"}, &KeymapAcceleratorPlan::actionId);
+    REQUIRE(up != plans.end());
+    CHECK(up->displayText == "Ctrl+U");
+    CHECK(up->key.virtualKey == 0x55);
+
+    for (auto const* id : {"track.orderMoveDown", "track.orderMoveToTop", "track.orderMoveToBottom"})
+    {
+      CHECK(std::ranges::find(plans, std::string{id}, &KeymapAcceleratorPlan::actionId) == plans.end());
+    }
+  }
+
   TEST_CASE("KeymapAcceleratorPlan - a binding this shell serves becomes an accelerator", "[winui][unit][input]")
   {
     auto const keymap = KeymapModel{KeymapBindings{{"playback.playPause", {chord("Ctrl+P")}}}};

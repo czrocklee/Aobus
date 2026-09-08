@@ -122,6 +122,12 @@ Standalone modifier presses do not complete capture.
 GTK app-scoped `Ctrl+,` remains outside its current layout-action keymap.
 TUI bare Space is a frontend-local default for shared `playback.playPause`; protocol-owned text-input, list, overlay, notification, mouse, and escape behavior remains outside configurable root dispatch.
 
+WinUI saved-order menu hints use the first surviving accelerator for each action
+from the same plan installed by the shell. An explicit unbinding, an unsupported
+chord, or a collision that leaves no executable binding produces no hint.
+Rebinding therefore changes both the executable shortcut and its order-menu
+label without a separate default-chord fallback.
+
 ## Implementation map
 
 - [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and the explicit override schema.
@@ -130,6 +136,7 @@ TUI bare Space is a frontend-local default for shared `playback.playPause`; prot
 - [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing, conflict confirmation, failed-candidate Retry/Discard, and deferred list rebuild.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.
 - [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) owns TUI descriptors, local defaults, terminal projection, collision resolution, and the immutable dispatch/hint plan; [`app/tui/App.cpp`](../../../app/tui/App.cpp) loads that plan from the global TUI store.
+- [`KeymapAcceleratorPlan.cpp`](../../../app/windows-winui/input/KeymapAcceleratorPlan.cpp) owns WinUI executable projection and retained hint text; `ShellBuilder` installs that plan and supplies order-menu hint lookup.
 
 ## Test map
 
@@ -137,6 +144,7 @@ TUI bare Space is a frontend-local default for shared `playback.playPause`; prot
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
 - [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
 - [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects executable WinUI projection and hints after rebinding, unbinding, unsupported keys, and collisions.
 
 ## Related documents
 

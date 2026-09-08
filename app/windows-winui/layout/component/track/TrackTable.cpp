@@ -133,6 +133,7 @@ namespace ao::winui::layout
                           std::function<uimodel::ListOrderCapabilityState()> orderCapabilities,
                           std::function<void(ListOrderCommand)> applyOrder,
                           ActionRegistry const& actions,
+                          std::function<std::string(std::string_view)> shortcutHint,
                           i18n::MessageCatalog textCatalog,
                           std::function<void(std::string)> reportStatus,
                           DataTemplate const& headerTemplate,
@@ -142,6 +143,7 @@ namespace ao::winui::layout
         : _trackList{trackList}
         , _playTrack{std::move(playTrack)}
         , _actions{actions}
+        , _shortcutHint{std::move(shortcutHint)}
         , _membershipTargets{std::move(membershipTargets)}
         , _editMembership{std::move(editMembership)}
         , _orderCapabilities{std::move(orderCapabilities)}
@@ -497,22 +499,22 @@ namespace ao::winui::layout
                        i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveUp),
                        action("track.orderMoveUp"),
                        capabilities.canRelativeMove,
-                       "Alt+Up");
+                       _shortcutHint("track.orderMoveUp"));
             appendItem(ordering.Items(),
                        i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveDown),
                        action("track.orderMoveDown"),
                        capabilities.canRelativeMove,
-                       "Alt+Down");
+                       _shortcutHint("track.orderMoveDown"));
             appendItem(ordering.Items(),
                        i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveToTop),
                        action("track.orderMoveToTop"),
                        capabilities.canAbsoluteMove,
-                       "Alt+Home");
+                       _shortcutHint("track.orderMoveToTop"));
             appendItem(ordering.Items(),
                        i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveToBottom),
                        action("track.orderMoveToBottom"),
                        capabilities.canAbsoluteMove,
-                       "Alt+End");
+                       _shortcutHint("track.orderMoveToBottom"));
             appendItem(
               ordering.Items(),
               i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListResetOrder),
@@ -535,6 +537,7 @@ namespace ao::winui::layout
       TrackListController& _trackList;
       std::function<Result<>(rt::ViewId, TrackId)> _playTrack;
       ActionRegistry const& _actions;
+      std::function<std::string(std::string_view)> _shortcutHint;
       std::function<std::vector<uimodel::WritableTagListTarget>()> _membershipTargets;
       std::function<void(ListId, bool)> _editMembership;
       std::function<uimodel::ListOrderCapabilityState()> _orderCapabilities;
@@ -563,6 +566,7 @@ namespace ao::winui::layout
                                    std::function<uimodel::ListOrderCapabilityState()> orderCapabilities,
                                    std::function<void(ListOrderCommand)> applyOrder,
                                    ActionRegistry const& actions,
+                                   std::function<std::string(std::string_view)> shortcutHint,
                                    i18n::MessageCatalog textCatalog,
                                    std::function<void(std::string)> reportStatus)
   {
@@ -575,6 +579,7 @@ namespace ao::winui::layout
        orderCapabilities = std::move(orderCapabilities),
        applyOrder = std::move(applyOrder),
        &actions,
+       shortcutHint = std::move(shortcutHint),
        textCatalog = std::move(textCatalog),
        reportStatus = std::move(reportStatus)](
         LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
@@ -603,6 +608,7 @@ namespace ao::winui::layout
           orderCapabilities,
           applyOrder,
           actions,
+          shortcutHint,
           textCatalog,
           reportStatus,
           headerTemplate,

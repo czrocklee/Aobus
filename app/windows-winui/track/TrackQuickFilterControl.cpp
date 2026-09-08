@@ -180,6 +180,7 @@ namespace ao::winui
       return;
     }
 
+    _viewModelPtr->editFilter(winrt::to_string(_input.Text()));
     refreshSuggestions();
     schedulePendingText();
   }
@@ -414,6 +415,11 @@ namespace ao::winui
       {
         _editor.Select(static_cast<std::int32_t>(caret), 0);
       }
+    }
+
+    if (_viewModelPtr)
+    {
+      _viewModelPtr->editFilter(winrt::to_string(_input.Text()));
     }
 
     return true;

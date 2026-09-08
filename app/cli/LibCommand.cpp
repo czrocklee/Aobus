@@ -32,7 +32,6 @@
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
-#include <ao/utility/FileAllocation.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
@@ -320,43 +319,6 @@ namespace ao::cli
       }
     }
 
-    // Allocation rather than length, because a sparse Windows LMDB data file
-    // reports the environment's whole map size as its length while only its
-    // committed pages occupy disk. The two agree on POSIX.
-    std::uint64_t directoryAllocatedBytes(std::filesystem::path const& path)
-    {
-      auto ec = std::error_code{};
-      std::uint64_t total = 0;
-      auto it = std::filesystem::recursive_directory_iterator{
-        path, std::filesystem::directory_options::skip_permission_denied, ec};
-
-      if (ec)
-      {
-        throwCommandError(Error::Code::IoError, "failed to inspect library size: {}", ec.message());
-      }
-
-      for (; it != std::filesystem::recursive_directory_iterator{}; it.increment(ec))
-      {
-        if (ec)
-        {
-          ec.clear();
-          continue;
-        }
-
-        if (!it->is_regular_file(ec) || ec)
-        {
-          ec.clear();
-          continue;
-        }
-
-        // The query reports zero for an entry it cannot inspect, which is the
-        // same tolerance the surrounding walk already applies.
-        total += utility::allocatedFileBytes(it->path());
-      }
-
-      return total;
-    }
-
     /**
      * @brief What the covers tracks currently reference would occupy.
      *
@@ -393,7 +355,7 @@ namespace ao::cli
       return total;
     }
 
-    LibraryStats collectStats(library::MusicLibrary const& ml, std::filesystem::path const& databasePath)
+    LibraryStats collectStats(library::MusicLibrary const& ml)
     {
       auto stats = LibraryStats{};
       {
@@ -440,20 +402,16 @@ namespace ao::cli
         stats.tags = tagIds.size();
       }
 
-      stats.diskBytes = directoryAllocatedBytes(databasePath);
-
       auto const capacity = ml.storageCapacity();
+      stats.diskBytes = capacity.diskBytes;
       stats.highWaterBytes = capacity.highWaterBytes;
       stats.mapBytes = capacity.mapBytes;
       return stats;
     }
 
-    void printStats(library::MusicLibrary const& ml,
-                    std::filesystem::path const& databasePath,
-                    OutputFormat format,
-                    std::ostream& os)
+    void printStats(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
-      auto const stats = collectStats(ml, databasePath);
+      auto const stats = collectStats(ml);
 
       if (format != OutputFormat::Plain)
       {
@@ -1425,8 +1383,7 @@ namespace ao::cli
       ->callback([&cli] { printMetadata(cli.musicLibrary(), cli.options().format, cli.io().out); });
 
     lib->add_subcommand("stats", "Show library statistics")
-      ->callback([&cli]
-                 { printStats(cli.musicLibrary(), cli.core().databasePath(), cli.options().format, cli.io().out); });
+      ->callback([&cli] { printStats(cli.musicLibrary(), cli.options().format, cli.io().out); });
 
     lib->add_subcommand("verify", "Verify library files against the manifest")
       ->callback([&cli] { verifyLibrary(cli.musicLibrary(), cli.options().format, cli.io().out); });

@@ -141,7 +141,7 @@ The two figures disagreeing is the normal state of a rescanned library: descript
 Neither figure counts stored bytes, because the library stores no cover content.
 
 `lib stats` reports three separate byte figures for the database and they answer different questions.
-`diskBytes` is what the database directory allocates, counting allocation rather than file length so a sparse data file is not reported as the whole map.
+`diskBytes` is what database-owned files allocate, excluding frontend state and unrelated descendants. It counts allocation rather than file length so a sparse data file is not reported as the whole map; the [database reference](../library/storage/database.md) owns the file inventory.
 `mapBytes` is the capacity the environment may grow into before a mutation runs out of room.
 `highWaterBytes` is how much of that capacity the environment has ever needed; deleting rows returns their pages for reuse without lowering it, so it is a peak rather than a measure of live data.
 

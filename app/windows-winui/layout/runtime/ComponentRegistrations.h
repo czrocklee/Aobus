@@ -18,6 +18,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::async
@@ -120,6 +121,7 @@ namespace ao::winui::layout
                                    std::function<uimodel::ListOrderCapabilityState()> orderCapabilities,
                                    std::function<void(ListOrderCommand)> applyOrder,
                                    ActionRegistry const& actions,
+                                   std::function<std::string(std::string_view)> shortcutHint,
                                    i18n::MessageCatalog textCatalog,
                                    std::function<void(std::string)> reportStatus);
 } // namespace ao::winui::layout

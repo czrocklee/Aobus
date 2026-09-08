@@ -10,6 +10,7 @@
 #include "MetadataStore.h"
 #include "OpenValidationMetrics.h"
 #include "TrackRecordValidation.h"
+#include "WriterSessionLease.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include "lmdb/detail/UnvalidatedDatabase.h"
@@ -31,6 +32,8 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/FileAllocation.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 
 #include <algorithm>
@@ -1226,6 +1229,12 @@ namespace ao::library
   MusicLibrary::StorageCapacity MusicLibrary::storageCapacity() const
   {
     auto const capacity = _implPtr->env.capacity();
-    return StorageCapacity{.mapBytes = capacity.mapBytes, .highWaterBytes = capacity.highWaterBytes};
+    auto const& path = _implPtr->databasePath;
+    return StorageCapacity{
+      .mapBytes = capacity.mapBytes,
+      .highWaterBytes = capacity.highWaterBytes,
+      .diskBytes = utility::allocatedFileBytes(path / "data.mdb") + utility::allocatedFileBytes(path / "lock.mdb") +
+                   utility::allocatedFileBytes(path / utility::pathFromUtf8(detail::WriterSessionLease::kFileName)),
+    };
   }
 } // namespace ao::library

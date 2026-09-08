@@ -143,6 +143,10 @@ GTK packages them as GResources and WinUI packages them as application content; 
 
 ### GTK full-size image
 
+The GTK Now Playing component takes the current track identity from playback and reads that track's primary cover from the live library when the track changes.
+Committed library changes refresh the displayed cover, including clearing it when the cover or track is removed.
+Later playback snapshots for the same track preserve that live cover identity rather than restoring the cover captured at playback launch.
+
 Loading an invalid id cancels the active interest and displays the configured no-cover placeholder.
 A full-size cache hit is applied directly.
 On a miss, the controller clears stale imagery and requests the shared loader.
@@ -296,7 +300,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`ResourceByteMemoryCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects entry-count and aggregate-byte retention limits, least-recently-used eviction, shared storage beyond cache destruction, application-runtime and controlled-reader paths, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, and destruction fencing against a replacement cache.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
-- [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
+- [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, live cover updates across playback snapshots, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
 - [`CoverArtPlaceholderTest.cpp`](../../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects style ids, slot defaults, candidate priority, semantic group monograms, and deterministic foreground colors.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, the selection-settle window and navigation-burst cost, supported decode, limits, block preview, PNG, and Kitty escapes.

@@ -108,6 +108,9 @@ No focused view disables the control and clears its state.
 Updating raw text resolves it immediately and calls synchronous `ViewService::setFilter()` with either an empty expression or the resolved expression.
 On success the model reads the installed expression error from `TrackListViewState`; a command failure becomes the displayed error without replacing the preceding runtime resources.
 The model renders once for the completed call.
+Multiple surfaces may target the same view. They reconcile committed expressions and errors through projection replacement observations, reading the current view state rather than replaying stale notices.
+A debounced frontend first records its unsubmitted draft in the model. External commits preserve that draft, and Create List stays disabled until submission succeeds. A focus change discards the preceding view's draft.
+A surface without a draft adopts an external committed expression as entry text; its own successful submission retains the raw Quick-mode spelling.
 
 The frontend-neutral view exposes:
 

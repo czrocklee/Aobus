@@ -3,6 +3,7 @@
 
 #include "WriterSessionLease.h"
 #include <ao/Error.h>
+#include <ao/utility/Path.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -24,7 +25,6 @@ namespace ao::library::detail
 {
   namespace
   {
-    constexpr auto kWriterLeaseFileName = L".aobus-writer.lock";
     constexpr std::size_t kSystemMessageBufferSize = 512;
 
     std::string systemMessage(DWORD errorCode)
@@ -79,7 +79,7 @@ namespace ao::library::detail
 
   Result<WriterSessionLease> WriterSessionLease::acquire(std::filesystem::path const& databasePath)
   {
-    auto const leasePath = databasePath / kWriterLeaseFileName;
+    auto const leasePath = databasePath / utility::pathFromUtf8(kFileName);
     auto* const handle = ::CreateFileW(leasePath.c_str(),
                                        GENERIC_READ | GENERIC_WRITE,
                                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,

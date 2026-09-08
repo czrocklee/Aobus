@@ -7,12 +7,15 @@
 
 #include <filesystem>
 #include <memory>
+#include <string_view>
 
 namespace ao::library::detail
 {
   class WriterSessionLease final
   {
   public:
+    static constexpr std::string_view kFileName = ".aobus-writer.lock";
+
     static Result<WriterSessionLease> acquire(std::filesystem::path const& databasePath);
 
     ~WriterSessionLease();

@@ -55,6 +55,109 @@ namespace ao::uimodel::test
     };
   } // namespace
 
+  TEST_CASE("TrackFilterViewModel - shared views reconcile commits while preserving an unsubmitted draft",
+            "[uimodel][regression][track-filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto const viewId = fixture.focusAllTracksView();
+    auto otherLog = ao::test::RenderLog<TrackFilterViewState>{};
+    auto other = TrackFilterViewModel{fixture.viewService,
+                                      fixture.workspaceService,
+                                      ao::test::messageCatalog("en"),
+                                      [&otherLog](auto const& state) { otherLog.render(state); }};
+    fixture.viewModel.updateFilter("first");
+    CHECK(otherLog.last().resolvedExpression == fixture.renderLog.last().resolvedExpression);
+    CHECK(otherLog.last().canCreateSmartList);
+
+    other.editFilter("draft");
+    fixture.viewModel.updateFilter("$artist =");
+    CHECK(otherLog.last().entryText == "draft");
+    CHECK_FALSE(otherLog.last().canCreateSmartList);
+    CHECK(fixture.renderLog.last().hasError);
+
+    other.updateFilter("draft");
+    CHECK(fixture.renderLog.last().resolvedExpression == otherLog.last().resolvedExpression);
+    CHECK_FALSE(fixture.renderLog.last().hasError);
+    CHECK(fixture.renderLog.last().canCreateSmartList);
+    CHECK(fixture.viewService.trackListState(viewId).filterExpression == otherLog.last().resolvedExpression);
+
+    other.updateFilter("$artist =");
+    CHECK(fixture.renderLog.last().hasError);
+    CHECK_FALSE(fixture.renderLog.last().canCreateSmartList);
+    other.updateFilter("");
+    CHECK(fixture.renderLog.last().entryText.empty());
+    CHECK_FALSE(fixture.renderLog.last().hasError);
+    CHECK_FALSE(fixture.renderLog.last().canCreateSmartList);
+  }
+
+  TEST_CASE("TrackFilterViewModel - queued commit notices render only changed filter state",
+            "[uimodel][regression][track-filter]")
+  {
+    auto library = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto sources = TrackSourceCache{library.library(), changes};
+    auto views = ViewService{executor, library.library(), sources, changes};
+    auto workspace = WorkspaceService{executor, views, changes};
+    auto log = ao::test::RenderLog<TrackFilterViewState>{};
+    auto model = TrackFilterViewModel{
+      views, workspace, ao::test::englishMessageCatalog(), [&log](auto const& state) { log.render(state); }};
+    auto const viewId = ao::test::requireValue(workspace.navigate({.target = GlobalViewKind::AllTracks}));
+    executor.drain();
+    log.clear();
+
+    model.updateFilter("first");
+    REQUIRE(log.states.size() == 1);
+    executor.drain();
+    CHECK(log.states.size() == 1);
+    CHECK(log.last().entryText == "first");
+
+    REQUIRE(views.setFilter(viewId, "$year >"));
+    REQUIRE(views.setFilter(viewId, "true"));
+    executor.drain();
+    REQUIRE(log.states.size() == 2);
+    CHECK(log.last().entryText == "true");
+    CHECK_FALSE(log.last().hasError);
+
+    model.updateFilter("$year >");
+    REQUIRE(log.states.size() == 3);
+    CHECK(log.last().hasError);
+    executor.drain();
+    CHECK(log.states.size() == 3);
+
+    model.updateFilter("second");
+    model.editFilter("second draft");
+    REQUIRE(log.states.size() == 5);
+    executor.drain();
+    CHECK(log.states.size() == 5);
+    CHECK(log.last().entryText == "second draft");
+    CHECK_FALSE(log.last().canCreateSmartList);
+  }
+
+  TEST_CASE("TrackFilterViewModel - focus changes discard drafts and restore each view's committed filter",
+            "[uimodel][regression][track-filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto const first = fixture.focusAllTracksView();
+    fixture.viewModel.updateFilter("$year = 2020");
+    fixture.viewModel.editFilter("first draft");
+    auto const second = ao::test::requireValue(fixture.workspaceService.navigate(
+      {.target = FilteredListTarget{.listId = kAllTracksListId, .filterExpression = {}}}));
+    REQUIRE(first != second);
+    CHECK(fixture.renderLog.last().entryText.empty());
+    CHECK_FALSE(fixture.renderLog.last().canCreateSmartList);
+    REQUIRE(fixture.viewService.setFilter(second, "true"));
+    fixture.viewModel.editFilter("second draft");
+
+    REQUIRE(fixture.workspaceService.focusView(first));
+    CHECK(fixture.renderLog.last().entryText == "$year = 2020");
+    CHECK(fixture.renderLog.last().canCreateSmartList);
+    REQUIRE(fixture.workspaceService.focusView(second));
+    CHECK(fixture.renderLog.last().entryText == "true");
+    CHECK(fixture.renderLog.last().resolvedExpression == "true");
+    CHECK(fixture.renderLog.last().canCreateSmartList);
+  }
+
   TEST_CASE("TrackFilterViewModel - initial render produces disabled state", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};

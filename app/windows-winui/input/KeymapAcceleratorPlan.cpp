@@ -73,7 +73,7 @@ namespace ao::winui
           continue;
         }
 
-        auto candidate = KeymapAcceleratorPlan{.actionId = actionId, .key = *optKey};
+        auto candidate = KeymapAcceleratorPlan{.actionId = actionId, .key = *optKey, .displayText = chord.toString()};
         auto const claimed = std::ranges::find(plans, candidate.key, &KeymapAcceleratorPlan::key);
 
         if (claimed != plans.end())

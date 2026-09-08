@@ -291,6 +291,7 @@ namespace ao::library::test
     // nowhere near the map it may grow into.
     CHECK(capacity.highWaterBytes > 0);
     CHECK(capacity.highWaterBytes < capacity.mapBytes);
+    CHECK(capacity.diskBytes > 0);
   }
 
   TEST_CASE("MusicLibrary - managed capacity opens a fresh library well past the LMDB default",

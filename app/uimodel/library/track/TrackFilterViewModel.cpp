@@ -24,13 +24,20 @@ namespace ao::uimodel
     , _textCatalog{std::move(textCatalog)}
     , _onRender{std::move(onRender)}
   {
+    _projectionSub = _viewService.onProjectionChanged(
+      [this](rt::TrackListProjectionChanged const& changed)
+      {
+        if (changed.viewId == _viewId)
+        {
+          syncCommittedFilter();
+        }
+      });
     _filterErrorSub = _viewService.onFilterErrorChanged(
       [this](rt::ViewService::FilterErrorChanged const& changed)
       {
         if (changed.viewId == _viewId)
         {
-          _optFilterError = changed.optFilterError;
-          refresh();
+          syncCommittedFilter();
         }
       });
     _focusSub = _workspaceService.onChanged(
@@ -45,16 +52,27 @@ namespace ao::uimodel
     handleFocusedViewChanged(_workspaceService.snapshot().activeViewId);
   }
 
+  void TrackFilterViewModel::editFilter(std::string const& rawText)
+  {
+    _entryText = rawText;
+    _resolvedExpression = resolveTrackFilter(rawText).expression;
+    _optFilterError.reset();
+    _draftPending = true;
+    refresh();
+  }
+
   void TrackFilterViewModel::updateFilter(std::string const& rawText)
   {
     _entryText = rawText;
 
     if (_viewId == rt::kInvalidViewId)
     {
+      _draftPending = false;
       refresh();
       return;
     }
 
+    _draftPending = true;
     auto const resolved = resolveTrackFilter(rawText);
     _resolvedExpression = resolved.expression;
 
@@ -66,6 +84,7 @@ namespace ao::uimodel
     }
     else
     {
+      _draftPending = false;
       _optFilterError = _viewService.trackListState(_viewId).optFilterError;
     }
 
@@ -75,6 +94,7 @@ namespace ao::uimodel
   void TrackFilterViewModel::handleFocusedViewChanged(rt::ViewId viewId)
   {
     _viewId = viewId;
+    _draftPending = false;
 
     if (_viewId == rt::kInvalidViewId)
     {
@@ -101,10 +121,44 @@ namespace ao::uimodel
 
     _entryText = foundRes->filterExpression;
 
-    auto const resolved = resolveTrackFilter(_entryText);
-    _resolvedExpression = resolved.expression;
+    _resolvedExpression = foundRes->filterExpression;
     _optFilterError = foundRes->optFilterError;
 
+    refresh();
+  }
+
+  void TrackFilterViewModel::syncCommittedFilter()
+  {
+    if (_draftPending)
+    {
+      return;
+    }
+
+    // Queued notices can be superseded or repeat a synchronous local render.
+    auto const stateRes = _viewService.findTrackListState(_viewId);
+
+    if (!stateRes)
+    {
+      return;
+    }
+
+    auto const errorChanged = _optFilterError.has_value() != stateRes->optFilterError.has_value() ||
+                              (_optFilterError && stateRes->optFilterError &&
+                               (_optFilterError->code != stateRes->optFilterError->code ||
+                                _optFilterError->message != stateRes->optFilterError->message));
+
+    if (_resolvedExpression == stateRes->filterExpression && !errorChanged)
+    {
+      return;
+    }
+
+    if (_resolvedExpression != stateRes->filterExpression)
+    {
+      _entryText = stateRes->filterExpression;
+      _resolvedExpression = stateRes->filterExpression;
+    }
+
+    _optFilterError = stateRes->optFilterError;
     refresh();
   }
 
@@ -129,7 +183,7 @@ namespace ao::uimodel
           _textCatalog, i18n::MessageId::TrackFilterError, {{"diagnostic", _optFilterError->message}});
       }
 
-      view.canCreateSmartList = !view.resolvedExpression.empty() && !view.hasError;
+      view.canCreateSmartList = !_draftPending && !view.resolvedExpression.empty() && !view.hasError;
     }
 
     if (_onRender)
