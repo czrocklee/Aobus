@@ -16,10 +16,6 @@
 #include <ao/audio/Transport.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -110,14 +106,12 @@ namespace ao::gtk::layout
       };
 
       PlaybackImageComponent(rt::PlaybackService& playback,
-                             rt::Library& library,
                              std::function<Result<>(TrackId)> jumpToAlbum,
                              ResourceImageLoader* imageLoader,
                              i18n::MessageCatalog const& textCatalog,
                              LayoutBuildContext const& ctx,
                              LayoutNode const& node)
         : _playback{playback}
-        , _library{library}
         , _jumpToAlbum{std::move(jumpToAlbum)}
         , _tooltipSurface{ctx.surface == uimodel::LayoutSurface::Tooltip}
         , _authoredVisible{node.layoutOr<bool>("visible", true)}
@@ -208,16 +202,6 @@ namespace ao::gtk::layout
 
         _snapshotSub =
           _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { syncSnapshot(snapshot); });
-        _tracksMutatedSub = _library.changes().onChanged(
-          [this](rt::LibraryChangeSet const& changeSet)
-          {
-            if (changeSet.libraryReset || std::ranges::contains(changeSet.tracksInserted, _currentTrackId) ||
-                std::ranges::contains(changeSet.tracksDeleted, _currentTrackId) ||
-                std::ranges::contains(changeSet.tracksMutated, _currentTrackId))
-            {
-              syncCoverArtFromLibrary();
-            }
-          });
 
         syncSnapshot(_playback.snapshot());
       }
@@ -266,7 +250,8 @@ namespace ao::gtk::layout
         auto const& transport = snapshot.transport;
         auto const trackId =
           transport.transport == audio::Transport::Idle ? kInvalidTrackId : transport.nowPlaying.trackId;
-        bool const trackChanged = !_synced || trackId != _currentTrackId;
+        auto const coverArtId =
+          transport.transport == audio::Transport::Idle ? kInvalidResourceId : transport.nowPlaying.coverArtId;
         auto const candidates = std::array<std::string_view, 3>{
           transport.nowPlaying.album,
           transport.nowPlaying.artist,
@@ -276,44 +261,17 @@ namespace ao::gtk::layout
                           ? uimodel::CoverArtPlaceholderIdentity{}
                           : uimodel::makeCoverArtPlaceholderIdentity(candidates);
 
-        if (!trackChanged && identity == _currentIdentity)
-        {
-          return;
-        }
-
-        // Playback metadata is captured at launch. Library changes own live
-        // cover updates, so a same-track snapshot must preserve that identity.
-        if (trackChanged)
-        {
-          _currentCoverArtId =
-            trackId == kInvalidTrackId ? kInvalidResourceId : _library.snapshot().trackCoverArtId(trackId);
-        }
-
-        _synced = true;
-        _currentTrackId = trackId;
-        _currentIdentity = std::move(identity);
-        _imageControllerPtr->setPlaceholderPresentation(
-          uimodel::makeCoverArtPlaceholderPresentation(_placeholderStyle, _currentIdentity));
-        updateImage();
-      }
-
-      void syncCoverArtFromLibrary()
-      {
-        if (_currentTrackId == kInvalidTrackId)
-        {
-          return;
-        }
-
-        auto coverArtId = kInvalidResourceId;
-        auto scope = _library.snapshot();
-        coverArtId = scope.trackCoverArtId(_currentTrackId);
-
-        if (coverArtId == _currentCoverArtId)
+        if (_synced && trackId == _currentTrackId && coverArtId == _currentCoverArtId && identity == _currentIdentity)
         {
           return;
         }
 
         _currentCoverArtId = coverArtId;
+        _synced = true;
+        _currentTrackId = trackId;
+        _currentIdentity = std::move(identity);
+        _imageControllerPtr->setPlaceholderPresentation(
+          uimodel::makeCoverArtPlaceholderPresentation(_placeholderStyle, _currentIdentity));
         updateImage();
       }
 
@@ -337,7 +295,6 @@ namespace ao::gtk::layout
       }
 
       rt::PlaybackService& _playback;
-      rt::Library& _library;
       std::function<Result<>(TrackId)> _jumpToAlbum;
       Action _action = Action::None;
       std::unique_ptr<CoverArtView> _imageWidgetPtr;
@@ -356,13 +313,11 @@ namespace ao::gtk::layout
         uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)};
       uimodel::CoverArtPlaceholderIdentity _currentIdentity{};
       async::Subscription _snapshotSub;
-      async::Subscription _tracksMutatedSub;
     };
   } // namespace
 
   void registerPlaybackImageComponent(ComponentRegistry& registry,
                                       rt::PlaybackService& playback,
-                                      rt::Library& library,
                                       std::function<Result<>(TrackId)> jumpToAlbum,
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog)
@@ -394,11 +349,8 @@ namespace ao::gtk::layout
        .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
                    static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip),
        .actionSlots = actionSlotBit(ActionSlot::SecondaryClick) | actionSlotBit(ActionSlot::SecondaryLongPress)},
-      [&playback, &library, jumpToAlbum = std::move(jumpToAlbum), imageLoader, textCatalog](
+      [&playback, jumpToAlbum = std::move(jumpToAlbum), imageLoader, textCatalog](
         LayoutBuildContext const& ctx, LayoutNode const& node)
-      {
-        return std::make_unique<PlaybackImageComponent>(
-          playback, library, jumpToAlbum, imageLoader, textCatalog, ctx, node);
-      });
+      { return std::make_unique<PlaybackImageComponent>(playback, jumpToAlbum, imageLoader, textCatalog, ctx, node); });
   }
 } // namespace ao::gtk::layout

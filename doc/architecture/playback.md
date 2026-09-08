@@ -85,7 +85,10 @@ It groups the cursor, projection anchor, shuffle history, and prepared-next regi
 ### Application transport authority
 
 `PlaybackTransport` is the runtime-internal current-subject and transport owner.
-It resolves a library `TrackId` into a runtime playback request, owns the now-playing snapshot, translates pause/resume/stop/seek and output commands, exposes volume and quality state, and publishes executor-affine application observations.
+It resolves a library `TrackId` into a runtime playback request, owns the launch-time now-playing request, translates pause/resume/stop/seek and output commands, exposes volume and quality state, and publishes executor-affine application observations.
+
+`PlaybackService` derives live display metadata for its public snapshot from the current library record.
+This cached presentation does not replace the transport's source identity or launch request, and metadata edits do not emit position-anchor events.
 
 It does not decide list membership, ordering, shuffle, repeat, or source recovery.
 Sequence-only operations use a private collaboration surface so ordinary consumers cannot update transport without the matching succession policy.

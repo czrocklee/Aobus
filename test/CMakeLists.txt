@@ -504,6 +504,7 @@ add_executable(ao_core_test
     unit/runtime/playback/ProjectionAnchorTest.cpp
     unit/runtime/playback/ShuffleHistoryTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
+    unit/runtime/PlaybackMetadataTest.cpp
     unit/runtime/PlaybackTransportControlTest.cpp
     unit/runtime/PlaybackTransportOutputTest.cpp
     unit/runtime/PlaybackTransportSelectionTest.cpp

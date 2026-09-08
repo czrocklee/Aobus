@@ -15,8 +15,14 @@ namespace ao::audio
   class BackendProvider;
 }
 
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
+  class LibraryChanges;
   class PlaybackService;
   class PlaybackSuccession;
   class PlaybackTransport;
@@ -27,7 +33,10 @@ namespace ao::rt
   public:
     explicit PlaybackBootstrap(PlaybackTransport& transport) noexcept;
 
-    PlaybackService createPlaybackService(async::Executor& executor, PlaybackSuccession& succession);
+    PlaybackService createPlaybackService(async::Executor& executor,
+                                          PlaybackSuccession& succession,
+                                          library::MusicLibrary const& library,
+                                          LibraryChanges const& changes);
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void shutdown() noexcept;
 

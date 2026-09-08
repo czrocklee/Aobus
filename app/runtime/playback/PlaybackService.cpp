@@ -16,15 +16,21 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/CoverArt.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +39,7 @@
 #include <expected>
 #include <memory>
 #include <source_location>
+#include <string>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -71,15 +78,21 @@ namespace ao::rt
       compat::MoveOnlyFunction<Result<bool>()> operation;
     };
 
-    Impl(async::Executor& executorRef, PlaybackTransport& transportRef, PlaybackSuccession& successionRef)
+    Impl(async::Executor& executorRef,
+         PlaybackTransport& transportRef,
+         PlaybackSuccession& successionRef,
+         library::MusicLibrary const& libraryRef,
+         LibraryChanges const& changesRef)
       : executor{executorRef}
       , transport{transportRef}
       , succession{successionRef}
+      , library{libraryRef}
       , deferredControlPtr{std::make_shared<DeferredControl>(this)}
       , lastSnapshot{composeContent()}
       , observedAnchorTrackId{lastSnapshot.transport.nowPlaying.trackId}
       , observedAnchorSourceListId{lastSnapshot.transport.nowPlaying.sourceListId}
     {
+      connectSources(changesRef);
     }
 
     Impl(Impl const&) = delete;
@@ -90,6 +103,8 @@ namespace ao::rt
     ~Impl() override
     {
       ensureOnExecutor();
+      AO_EXPECTS(
+        !insideBoundary(), "PlaybackService cannot be destroyed synchronously from an active publication or command");
       subscriptions.clear();
       deferredControlPtr->owner = nullptr;
       deferredControlPtr.reset();
@@ -424,8 +439,24 @@ namespace ao::rt
 
     // Adapter wiring ----------------------------------------------------------
 
-    void connectSources()
+    void connectSources(LibraryChanges const& changes)
     {
+      subscriptions.push_back(changes.onChanged(
+        [this](LibraryChangeSet const& changeSet)
+        {
+          ensureOnExecutor();
+
+          if (auto const trackId = transport.state().nowPlaying.trackId;
+              trackId != kInvalidTrackId &&
+              (changeSet.libraryReset || std::ranges::contains(changeSet.tracksInserted, trackId) ||
+               std::ranges::contains(changeSet.tracksMutated, trackId) ||
+               std::ranges::contains(changeSet.tracksDeleted, trackId)))
+          {
+            nowPlayingDirty = true;
+            onSourceChanged();
+          }
+        }));
+
       auto const markChanged = [this] { onSourceChanged(); };
 
       subscriptions.push_back(transport.onPreparing(markChanged));
@@ -612,7 +643,17 @@ namespace ao::rt
       publishPendingEvents();
     }
 
-    void closeCommit() noexcept { --commitDepth; }
+    void closeCommit() noexcept
+    {
+      --commitDepth;
+
+      // An observer can deliver a library mutation while settlement publishes
+      // the preceding snapshot. Preserve that invalidation beyond this commit.
+      if (commitDepth == 0 && nowPlayingDirty && !closed)
+      {
+        scheduleDeferredPublish();
+      }
+    }
 
     // Shared closure mechanism for normal shutdown and a terminal unexpected
     // command or settlement failure.
@@ -694,10 +735,48 @@ namespace ao::rt
     void shutdown() noexcept
     {
       ensureOnExecutor();
+      AO_EXPECTS(
+        !insideBoundary(), "PlaybackService cannot shut down synchronously from an active publication or command");
       closeService();
     }
 
-    PlaybackSnapshot composeContent() const
+    NowPlayingInfo const& resolveNowPlaying(NowPlayingInfo const& request)
+    {
+      if (!nowPlayingDirty && request == observedNowPlayingRequest)
+      {
+        return resolvedNowPlaying;
+      }
+
+      // A missing library track retains launch text while its open source plays.
+      auto resolved = request;
+
+      if (request.trackId != kInvalidTrackId)
+      {
+        resolved.coverArtId = kInvalidResourceId;
+        auto const transaction = library.readTransaction();
+        auto reader = library.tracks().reader(transaction);
+
+        if (auto const optView = reader.get(request.trackId, library::TrackStore::Reader::LoadMode::Both); optView)
+        {
+          auto const metadata = optView->metadata();
+          auto const& dictionary = library.dictionary();
+          resolved.title = std::string{metadata.title()};
+          resolved.artist = std::string{dictionary.getOrDefault(metadata.artistId())};
+          resolved.album = std::string{dictionary.getOrDefault(metadata.albumId())};
+          resolved.coverArtId = optView->coverArt()
+                                  .primary()
+                                  .transform([](library::CoverArt const cover) { return cover.resourceId; })
+                                  .value_or(kInvalidResourceId);
+        }
+      }
+
+      observedNowPlayingRequest = request;
+      resolvedNowPlaying = std::move(resolved);
+      nowPlayingDirty = false;
+      return resolvedNowPlaying;
+    }
+
+    PlaybackSnapshot composeContent()
     {
       auto const& transportState = transport.state();
       auto const& successionState = succession.state();
@@ -711,7 +790,7 @@ namespace ao::rt
             .finalSeekRevision = PlaybackFinalSeekRevision{.value = finalSeekRevisionCounter},
             .elapsed = transportState.elapsed,
             .duration = transportState.duration,
-            .nowPlaying = transportState.nowPlaying,
+            .nowPlaying = resolveNowPlaying(transportState.nowPlaying),
             .volume = transportState.volume,
             .output = transportState.output,
             .quality = transportState.quality,
@@ -732,6 +811,7 @@ namespace ao::rt
     async::Executor& executor;
     PlaybackTransport& transport;
     PlaybackSuccession& succession;
+    library::MusicLibrary const& library;
 
     async::Signal<PlaybackSnapshot const&> snapshotSignal;
     async::Signal<std::chrono::milliseconds> seekPreviewSignal;
@@ -754,6 +834,9 @@ namespace ao::rt
     std::uint64_t latestInvalidatingGeneration = 0;
     TrackId commitStartTrackId = kInvalidTrackId;
     ListId commitStartSourceListId = kInvalidListId;
+    NowPlayingInfo observedNowPlayingRequest{};
+    NowPlayingInfo resolvedNowPlaying{};
+    bool nowPlayingDirty = true;
     PlaybackSnapshot lastSnapshot{};
     TrackId observedAnchorTrackId = kInvalidTrackId;
     ListId observedAnchorSourceListId = kInvalidListId;
@@ -771,9 +854,12 @@ namespace ao::rt
   {
   }
 
-  PlaybackService PlaybackBootstrap::createPlaybackService(async::Executor& executor, PlaybackSuccession& succession)
+  PlaybackService PlaybackBootstrap::createPlaybackService(async::Executor& executor,
+                                                           PlaybackSuccession& succession,
+                                                           library::MusicLibrary const& library,
+                                                           LibraryChanges const& changes)
   {
-    return PlaybackService{std::make_unique<PlaybackService::Impl>(executor, _transport, succession)};
+    return PlaybackService{std::make_unique<PlaybackService::Impl>(executor, _transport, succession, library, changes)};
   }
 
   void PlaybackBootstrap::addProvider(std::unique_ptr<audio::BackendProvider> providerPtr)
@@ -789,7 +875,6 @@ namespace ao::rt
   PlaybackService::PlaybackService(std::unique_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}
   {
-    _implPtr->connectSources();
   }
 
   PlaybackService::~PlaybackService() = default;

@@ -62,7 +62,7 @@ namespace ao::uimodel::test
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Title) == "Not Playing");
     }
 
-    SECTION("Metadata formatting")
+    SECTION("Metadata formatting for a track absent from the library")
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
       desc.item.coverArtId = ResourceId{42};
@@ -70,7 +70,8 @@ namespace ao::uimodel::test
 
       REQUIRE(playbackTransport.play(desc, ListId{1}));
       REQUIRE(!log.empty());
-      CHECK(log.last().coverArtId == ResourceId{42});
+      // A missing library track cannot retain its captured cover.
+      CHECK(log.last().coverArtId == kInvalidResourceId);
       CHECK(log.last().title == "Song");
       CHECK(log.last().artist == "Artist");
       CHECK(log.last().coverArtPlaceholderIdentity.primaryText == "Album");
@@ -78,6 +79,16 @@ namespace ao::uimodel::test
 
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Title) == "Song");
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Artist) == "Artist");
+    }
+
+    SECTION("A request without library identity retains its supplied cover")
+    {
+      auto desc = playbackRequest(kInvalidTrackId, "External source");
+      desc.item.coverArtId = ResourceId{42};
+      REQUIRE(playbackTransport.play(desc, kInvalidListId));
+      CHECK(log.last().coverArtId == ResourceId{42});
+      CHECK(log.last().title == "External source");
+      CHECK(log.last().isActive);
     }
 
     SECTION("Metadata with empty artist shows Unknown Artist")

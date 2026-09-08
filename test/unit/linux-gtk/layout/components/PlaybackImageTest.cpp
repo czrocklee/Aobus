@@ -214,7 +214,6 @@ namespace ao::gtk::layout::test
     registerPlaybackImageComponent(
       fixture.components(),
       runtime.playback(),
-      runtime.library(),
       [&runtime](TrackId const trackId) { return runtime.jumpToAlbum(trackId); },
       imageLoaderPtr.get(),
       textCatalog);

@@ -268,7 +268,8 @@ namespace ao::rt::test
                                          fixture.notificationService,
                                          fixture.asyncRuntime};
     auto bootstrap = PlaybackBootstrap{fixture.playbackTransport};
-    auto playback = bootstrap.createPlaybackService(fixture.executor, succession);
+    auto playback =
+      bootstrap.createPlaybackService(fixture.executor, succession, fixture.libraryFixture.library(), changes);
     auto playbackActions = uimodel::PlaybackActions{playback, [] {}};
     std::size_t availabilityChanged = 0;
     auto const availabilitySubscription =

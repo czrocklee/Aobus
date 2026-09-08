@@ -985,6 +985,32 @@ namespace ao::rt::test
       return 3;
     }
 
+    std::int32_t runPlaybackServiceTeardownFromSnapshot(std::string_view const scratchName, bool const destroy)
+    {
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::make_unique<ProbeQueuedExecutor>());
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto const subscription = runtimePtr->playback().events().onSnapshot(
+        [&](PlaybackSnapshot const&)
+        {
+          if (destroy)
+          {
+            runtimePtr.reset();
+          }
+          else
+          {
+            runtimePtr->shutdown();
+          }
+        });
+      runtimePtr->playback().commands().setMuted(true);
+      return 3;
+    }
+
     std::int32_t runPlaybackServiceSnapshotOffExecutor(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<ProbeQueuedExecutor>();
@@ -1331,6 +1357,11 @@ namespace ao::rt::test
     if (name == "playback-reveal-off-executor")
     {
       return runPlaybackRevealOffExecutor(scratchName);
+    }
+
+    if (name == "playback-service-destroy-from-snapshot" || name == "playback-service-shutdown-from-snapshot")
+    {
+      return runPlaybackServiceTeardownFromSnapshot(scratchName, name == "playback-service-destroy-from-snapshot");
     }
 
     if (name == "playback-service-snapshot-off-executor")

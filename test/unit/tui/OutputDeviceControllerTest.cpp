@@ -47,7 +47,10 @@ namespace ao::tui::test
                      fixture.notificationService,
                      fixture.asyncRuntime}
         , playbackBootstrap{fixture.playbackTransport}
-        , playback{playbackBootstrap.createPlaybackService(fixture.executor, succession)}
+        , playback{playbackBootstrap.createPlaybackService(fixture.executor,
+                                                           succession,
+                                                           fixture.libraryFixture.library(),
+                                                           changes)}
       {
       }
 
