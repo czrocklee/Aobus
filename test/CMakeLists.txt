@@ -515,6 +515,7 @@ add_executable(ao_core_test
     unit/runtime/PlaybackSuccessionFailureTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
+    unit/runtime/source/TrackSourcePublicationTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
     unit/runtime/source/VirtualListIdsTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp

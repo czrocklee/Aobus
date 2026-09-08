@@ -148,7 +148,7 @@ namespace ao::library::test
       return writeObservation("writer-conflict");
     }
 
-    std::int32_t runCommitRevision(std::string_view const scratchName)
+    std::int32_t runCommitRevision(std::string_view const scratchName, bool const withDictionary = false)
     {
       if (scratchName.empty())
       {
@@ -176,13 +176,27 @@ namespace ao::library::test
 
       auto transaction = writableRes->writeTransaction();
 
-      if (library.libraryRevision(transaction) != 1 || !transaction.commit())
+      if (withDictionary)
+      {
+        auto track = TrackBuilder::makeEmpty();
+        track.property().uri("child.flac");
+        track.metadata().title("Child title").artist("Child artist");
+        auto const createdRes = transaction.apply(
+          [&track](LibraryWrite& write) { return write.tracks().create(track, FileManifestBuilder::makeEmpty()); });
+
+        if (!createdRes)
+        {
+          return 3;
+        }
+      }
+
+      if ((!withDictionary && library.libraryRevision(transaction) != 1) || !transaction.commit())
       {
         std::fputs("Library probe could not commit revision one\n", stderr);
         return 3;
       }
 
-      return writeObservation("committed-revision=1");
+      return writeObservation(withDictionary ? "committed-dictionary" : "committed-revision=1");
     }
 
     std::int32_t runDefaultReaderCapacity(std::string_view const scratchName)
@@ -1113,6 +1127,11 @@ namespace ao::library::test
     if (name == "writer-conflict")
     {
       return runWriterConflict(scratchName);
+    }
+
+    if (name == "commit-dictionary")
+    {
+      return runCommitRevision(scratchName, true);
     }
 
     if (name == "commit-revision")

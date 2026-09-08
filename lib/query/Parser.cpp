@@ -21,6 +21,7 @@
 
 #include <ao/query/Parser.h>
 
+#include "detail/CompletionTokenizer.h"
 #include "detail/Lexical.h"
 #include "detail/Normalize.h"
 #include <ao/Error.h>
@@ -51,6 +52,7 @@
 #include <lexy/encoding.hpp>
 #include <lexy/input/string_input.hpp>
 
+#include <cstddef>
 #include <format>
 #include <memory>
 #include <ranges>
@@ -60,6 +62,82 @@
 
 namespace
 {
+  // Bound work before constructing recursively owned nodes. List elements are
+  // flat scalar storage; quoted text and lists remain bounded by the byte cap.
+  // Keep tokenizer and grammar changes aligned with admission boundary tests;
+  // this structural guard does not replace lexy syntax validation.
+  bool admitsExpression(std::string_view text)
+  {
+    constexpr std::size_t kMaximumBytes = 65536;
+    constexpr std::size_t kMaximumStructuralTokens = 512;
+    constexpr std::size_t kMaximumGroupDepth = 64;
+
+    if (text.size() > kMaximumBytes)
+    {
+      return false;
+    }
+
+    std::size_t structuralTokens = 0;
+    std::size_t groupDepth = 0;
+    std::size_t listDepth = 0;
+
+    for (auto const& token : ao::query::detail::tokenizeCompletionQuery(text))
+    {
+      using Kind = ao::query::detail::CompletionTokenKind;
+
+      if (token.kind == Kind::Whitespace)
+      {
+        continue;
+      }
+
+      if (token.kind == Kind::CloseList && listDepth != 0)
+      {
+        --listDepth;
+        continue;
+      }
+
+      if (token.kind == Kind::OpenList)
+      {
+        if (++listDepth > 1)
+        {
+          return false;
+        }
+      }
+      else if (listDepth != 0)
+      {
+        // Only flat scalar storage is exempt from structural counting. An
+        // unclosed list must not hide later operators or recursive groups.
+        switch (token.kind)
+        {
+          case Kind::StringLiteral:
+          case Kind::Bareword:
+          case Kind::BooleanLiteral:
+          case Kind::IntegerLiteral:
+          case Kind::UnitLiteral:
+          case Kind::Comma: continue;
+          default: return false;
+        }
+      }
+
+      if (++structuralTokens > kMaximumStructuralTokens)
+      {
+        return false;
+      }
+
+      if (token.kind == Kind::OpenGroup && ++groupDepth > kMaximumGroupDepth)
+      {
+        return false;
+      }
+
+      if (token.kind == Kind::CloseGroup && groupDepth != 0)
+      {
+        --groupDepth;
+      }
+    }
+
+    return listDepth == 0;
+  }
+
   // LEXY grammar: rule/value/op/operand/operation names follow framework conventions.
   namespace dsl = lexy::dsl;
   using namespace ao::query;
@@ -204,12 +282,24 @@ namespace ao::query
 {
   bool matchesExpressionSyntax(std::string_view expr)
   {
+    if (!admitsExpression(expr))
+    {
+      return false;
+    }
+
     auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
     return lexy::match<Stmt>(input);
   }
 
   Result<Expression> parse(std::string_view expr)
   {
+    if (!admitsExpression(expr))
+    {
+      return makeError(
+        Error::Code::FormatRejected,
+        "Query expression exceeds complexity limits (65536 bytes, 512 structural tokens, 64 nested groups)");
+    }
+
     auto const input = lexy::string_input<lexy::utf8_char_encoding>{expr};
 
     if (auto optResult = lexy::parse<Stmt>(input, lexy::noop); optResult)

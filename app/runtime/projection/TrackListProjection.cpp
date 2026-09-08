@@ -120,6 +120,7 @@ namespace ao::rt
     struct OrderEntry final
     {
       TrackId trackId{};
+      std::size_t sourceRank = 0;
       SortKeys keys{};
       GroupIdentityKey groupIdentity{};
       GroupSection::HeadingValue primary{};
@@ -460,7 +461,7 @@ namespace ao::rt
           }
         }
 
-        return lhs.trackId < rhs.trackId;
+        return lhs.sourceRank < rhs.sourceRank;
       };
     }
 
@@ -883,7 +884,9 @@ namespace ao::rt
                          {
                            if (!entriesDependOnTrackData || hasRequiredTrackData(view, loadMode))
                            {
-                             orderIndex.push_back(buildOrderEntry(trackId, view, dictionary));
+                             auto entry = buildOrderEntry(trackId, view, dictionary);
+                             entry.sourceRank = orderIndex.size();
+                             orderIndex.push_back(std::move(entry));
                            }
                          });
 
@@ -1127,6 +1130,33 @@ namespace ao::rt
 
       if (comparator)
       {
+        auto sourceRanks = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+        sourceRanks.reserve(finalSourceOrder.size());
+
+        for (std::size_t index = 0; index < finalSourceOrder.size(); ++index)
+        {
+          sourceRanks.emplace(finalSourceOrder[index], index);
+        }
+
+        // Both ranges must belong to the final source membership. A missing
+        // rank is an invariant violation, not a fallback ordering case.
+        for (auto& entry : retainedEntries)
+        {
+          auto const rank = sourceRanks.find(entry.trackId);
+          AO_INVARIANT(rank != sourceRanks.end(), "Retained projection entry is absent from the final source");
+          entry.sourceRank = rank->second;
+        }
+
+        for (auto& entry : replacementEntries)
+        {
+          auto const rank = sourceRanks.find(entry.trackId);
+          AO_INVARIANT(rank != sourceRanks.end(), "Replacement projection entry is absent from the final source");
+          entry.sourceRank = rank->second;
+        }
+
+        // Moves are remove/insert pairs, so moved and updated entries are
+        // replacements. Retained entries keep their keys and relative source
+        // order, and remain sorted after their ranks are refreshed.
         std::ranges::sort(replacementEntries, std::ref(comparator));
         std::ranges::merge(retainedEntries, replacementEntries, std::back_inserter(updatedOrder), std::ref(comparator));
         return updatedOrder;

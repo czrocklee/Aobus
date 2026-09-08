@@ -4,15 +4,20 @@
 #include <ao/query/Parser.h>
 
 #include <ao/query/Expression.h>
+#include <ao/query/FormatExpression.h>
+#include <ao/query/QueryCompilation.h>
+#include <ao/query/Serializer.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -491,5 +496,90 @@ namespace ao::query::test
     REQUIRE_FALSE(badRes.has_value());
     CHECK(badRes.error().code == Error::Code::FormatRejected);
     CHECK_FALSE(badRes.error().message.empty());
+  }
+
+  TEST_CASE("Parser - admits bounded recursive work and rejects excessive flat and nested expressions",
+            "[query][regression][parser]")
+  {
+    auto adjacent = std::string{};
+
+    for (std::size_t index = 0; index < 512; ++index)
+    {
+      adjacent += "1 ";
+    }
+
+    {
+      auto admittedRes = ::ao::query::parse(adjacent);
+      REQUIRE(admittedRes);
+      CHECK_FALSE(serialize(*admittedRes).empty());
+      std::ignore = compileQuery(*admittedRes);
+      CHECK(compileFormat(*admittedRes));
+    }
+
+    adjacent += "1";
+
+    for (auto const& excessive :
+         {adjacent, std::string(65, '(') + "true" + std::string(65, ')'), std::string(65537, ' ')})
+    {
+      auto rejectedRes = ::ao::query::parse(excessive);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::FormatRejected);
+      CHECK(rejectedRes.error().message.contains("complexity"));
+      CHECK_FALSE(matchesExpressionSyntax(excessive));
+    }
+
+    auto nestedRes = ::ao::query::parse(std::string(64, '(') + "true" + std::string(64, ')'));
+    REQUIRE(nestedRes);
+    CHECK(compileQuery(*nestedRes));
+    CHECK(serialize(*nestedRes) == "true");
+  }
+
+  TEST_CASE("Parser - admission rejects nested scalar lists before syntax parsing", "[query][regression][parser]")
+  {
+    auto const expression = std::string_view{"$year in [[1]]"};
+    auto const result = ::ao::query::parse(expression);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().message.contains("complexity"));
+    CHECK_FALSE(matchesExpressionSyntax(expression));
+  }
+
+  TEST_CASE("Parser - list exemption cannot hide recursive groups or an unclosed tail", "[query][regression][parser]")
+  {
+    for (auto const& expression : {std::string{"$year in ["} + std::string(65000, '('),
+                                   std::string{"$year in ["} + std::string(1000, '(') + "]",
+                                   std::string{"$year in [1, 2"}})
+    {
+      auto const result = ::ao::query::parse(expression);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message.contains("complexity"));
+      CHECK_FALSE(matchesExpressionSyntax(expression));
+    }
+  }
+
+  TEST_CASE("Parser - admission counts quoted values and scalar lists without artificial AST depth",
+            "[query][regression][parser]")
+  {
+    auto quoted = std::string(1, '"') + std::string(1000, '(') + '"';
+    CHECK(::ao::query::parse(quoted));
+    auto list = std::string{"$year in ["};
+
+    for (std::size_t index = 0; index < 1024; ++index)
+    {
+      if (index != 0)
+      {
+        list += ',';
+      }
+
+      list += std::to_string(index);
+    }
+
+    list += ']';
+    auto expressionRes = ::ao::query::parse(list);
+    REQUIRE(expressionRes);
+    CHECK(compileQuery(*expressionRes));
+    CHECK_FALSE(serialize(*expressionRes).empty());
+    CHECK(::ao::query::parse(std::string(1, '"') + std::string(65534, 'x') + '"'));
   }
 } // namespace ao::query::test

@@ -67,13 +67,16 @@ Committing writes require a separately acquired `WritableMusicLibrary`; `MusicLi
 Acquisition takes a non-blocking OS file lease for the database path, so a second writable process receives `Conflict` while the first capability or any transaction anchored to it remains active.
 The capability borrows its `MusicLibrary`; storage composition keeps that library alive until the capability and all transactions anchored to its lease are destroyed.
 Read-only processes do not take that lease.
+After acquiring the lease, the capability refreshes the dictionary from a fresh read snapshot before admitting writes, closing the gap between open and acquisition.
 The core [LMDB operation specification](../spec/storage/lmdb-operation.md) owns environment, transaction, cursor, and raw read/write behavior below these library-specific stores.
 
 Every `MusicLibrary` read uses one move-only `ReadTransaction` that directly owns a native LMDB read transaction.
 The wrapper is the library-level snapshot capability: store readers accept it, while its native handle remains private to `MusicLibrary` and the stores.
 Borrowed `string_view` values returned by `CustomMetadataProxy::get()` alias the selected cold-record bytes and cannot cross transaction completion, backing mutation, reentrant work, or coroutine suspension without an explicit owning copy and a separately proved storage lifetime.
 The wrapper and every store carry the same stable implementation-owned library identity, so a snapshot from one `MusicLibrary` is rejected before it can be mixed with another library's DBI.
-This adds no allocation, locking, or another transaction layer to each operation.
+Before exposing a new read snapshot, `MusicLibrary` extends its dictionary cache through the snapshot's committed dense tail. The common path checks the entry count under a shared lock; only a newly observed tail takes exclusive publication ownership and allocates strings.
+Already returned dictionary borrows remain valid: entries are append-only and their storage never relocates. Older snapshots can coexist with a newer cache because their ids retain the same meanings.
+This is low-level snapshot freshness, not live-runtime source or workspace synchronization; an interactive runtime retains its exclusive writer lease, and opening a new runtime remains the reconstruction boundary.
 
 Every writable-capability write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, a shared writer-lease anchor, and the transaction-local dictionary overlay.
 After native begin acquires LMDB's single-writer snapshot, creating the wrapper reads that snapshot's durable header and revision and computes its one candidate successor without persisting it.

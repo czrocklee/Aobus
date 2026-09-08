@@ -90,6 +90,14 @@ The first metadata block must be one exact 34-byte `StreamInfo`; all block bound
 
 Every traversed atom must have a complete compact or 64-bit extended header. Recognized semantic boxes read their fields relative to the actual payload and therefore accept either header form. A top-level size `0` atom consumes the remainder of the file; size `0` inside a container, truncated headers, undersized declarations, and boundary overruns are rejected. Path lookup and audio-track selection validate only through the first complete match, while required payload indexing traverses every top-level atom and requires exactly one non-empty `mdat`. Metadata atoms, `mdta` key tables, freeform fields, cover children, and optional timing/property evidence are accepted only within their validated bounds. A malformed optional entry does not overwrite an earlier accepted value, and a malformed multi-image `covr` contributes no image.
 
+The audio packet demuxer supports a single sample description in the selected track's `stsd`; every `stsc` mapping must reference that entry with `sampleDescriptionIndex == 1`.
+Multiple sample entries and mappings to other descriptions are unsupported and return `FormatRejected`, even when the container is otherwise valid.
+The demuxer admits the selected track's compact sample count against its chunk mappings and any supplied timing entries before allocating per-sample records.
+Variable sample sizes require a complete bounded entry table; fixed sample sizes additionally require both their aggregate payload bytes and their expanded sample-index bytes to fit within the mapped file size, and their chunk extents not to overflow.
+The fixed-size index budget can reject otherwise valid containers with unusually small packets. It bounds the sample-index allocation, not total demuxer memory or allocation success; variable-size tables still incur per-entry expansion.
+Admission does not traverse other tracks or trailing atoms: admitted packets whose individual bytes are missing still return an empty payload.
+An infeasible declared count returns `FormatRejected`; genuine allocation failures remain outside the corruption channel.
+
 ### MPEG audio and ID3
 
 A confirmed MPEG audio frame is required. A table-rate candidate is confirmed by a compatible adjacent frame when enough trailing bytes remain; an exact terminal frame is also accepted. A free-format candidate derives its frame length and bitrate from compatible adjacent frame boundaries. A valid leading ID3v2 envelope and valid trailing ID3v1/APEv2 regions are excluded from the payload. A malformed or oversized leading ID3 envelope may be ignored when a confirmed MPEG frame can still be located. A bounded but malformed ID3 frame sequence contributes no ID3 metadata; MPEG technical properties remain available. Unknown frames and unsupported `TXXX` keys are ignored.
@@ -142,6 +150,8 @@ There is no direct frontend observation. Runtime library workflows translate rea
 - [`readMediaTrack` and `MediaTrack`](../../../app/runtime/library/MediaTrack.h) own runtime adaptation to `TrackBuilder` and its backing lifetime.
 
 ## Test map
+
+- [`DemuxerTest.cpp`](../../../test/unit/media/mp4/DemuxerTest.cpp) protects selected-track MP4 sample admission, fixed-size allocation feasibility, timing, and missing packet payloads.
 
 - [`FileTest.cpp`](../../../test/unit/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
 - [`DemuxerTest.cpp`](../../../test/unit/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.

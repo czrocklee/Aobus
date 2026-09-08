@@ -57,7 +57,7 @@ namespace ao::library::test
                                    "WriteTransaction::requireOperationActive",
                                    true},
       LibraryFatalProbeExpectation{
-        "post-open-native-read-failure", "fatal", {}, "mdb_get", "ThrowError.cpp:", "failRead", true},
+        "post-open-native-read-failure", "fatal", {}, "mdb_stat", "ThrowError.cpp:", "failRead", true},
       LibraryFatalProbeExpectation{"post-open-track-reader-half-row",
                                    "invariant",
                                    "optHotBytes.has_value() == optColdBytes.has_value()",

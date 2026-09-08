@@ -11,6 +11,7 @@
 
 #include <expected>
 #include <memory>
+#include <tuple>
 #include <utility>
 
 namespace ao::library
@@ -29,6 +30,12 @@ namespace ao::library
     {
       return std::unexpected{leaseRes.error()};
     }
+
+    // The lease closes the open-to-writer gap. Refresh append-only lookup state
+    // from a snapshot acquired after the preceding writer released its lease.
+    // readTransaction returns a transaction, not a Result; read failures are
+    // fatal and refresh exceptions propagate before writer admission completes.
+    std::ignore = library.readTransaction();
 
     auto implPtr = std::make_unique<Impl>(&library, std::make_shared<detail::WriterSessionLease>(std::move(*leaseRes)));
     return WritableMusicLibrary{std::move(implPtr)};

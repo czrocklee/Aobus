@@ -31,8 +31,9 @@ namespace ao::rt
     explicit AllTracksSource(library::TrackStore const& store);
 
     void reloadFromStore(library::ReadTransaction const& transaction);
-    void applyCollectionChange(std::span<TrackId const> inserted, std::span<TrackId const> removed);
-    void applyMetadataChange(std::span<TrackId const> trackIds);
+    void applyChanges(std::span<TrackId const> inserted,
+                      std::span<TrackId const> removed,
+                      std::span<TrackId const> updated);
 
     std::size_t size() const override { return _trackIds.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }

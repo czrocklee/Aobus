@@ -41,7 +41,7 @@ namespace ao::media::mp4
      * @return A ready-to-use demuxer, or a parse error.
      *
      * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
-     * lower-level byte-view parser exceptions are translated to Error::Code::CorruptData here.
+     * malformed required MP4 structures return Error::Code::FormatRejected here.
      * See doc/spec/media/file-reading.md.
      */
     static Result<Demuxer> parse(std::span<std::byte const> fileData, std::string_view targetFormat);
@@ -99,21 +99,30 @@ namespace ao::media::mp4
       std::uint32_t sampleDelta = 0;
     };
 
-    void parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
-    void parseStsz(std::span<std::byte const> bytes);
-    void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
-    void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
-    void parseSampleTable(AtomView const& table,
-                          std::vector<std::uint64_t>& chunkOffsets,
-                          std::vector<SampleToChunkEntry>& sampleToChunk,
-                          std::vector<TimeToSampleEntry>& timeToSample);
-    Result<> parseTrack(std::string_view targetFormat);
+    struct SampleSizes;
 
+    static void validateSampleChunks(SampleSizes const& sizes,
+                                     std::span<std::uint64_t const> chunkOffsets,
+                                     std::span<SampleToChunkEntry const> sampleToChunk);
+    void buildSamples(SampleSizes const& sizes,
+                      std::span<std::uint64_t const> chunkOffsets,
+                      std::span<SampleToChunkEntry const> sampleToChunk,
+                      std::span<TimeToSampleEntry const> timeToSample);
     static void applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample);
     static void buildSampleOffsets(std::vector<SampleEntry>& samples,
                                    std::span<std::uint64_t const> chunkOffsets,
                                    std::span<SampleToChunkEntry const> sampleToChunk);
+
+    void parseStts(std::span<std::byte const> bytes, std::vector<TimeToSampleEntry>& out);
+    static SampleSizes parseStsz(std::span<std::byte const> bytes);
+    void parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out);
+    void parseStco(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    void parseCo64(std::span<std::byte const> bytes, std::vector<std::uint64_t>& out);
+    SampleSizes parseSampleTable(AtomView const& table,
+                                 std::vector<std::uint64_t>& chunkOffsets,
+                                 std::vector<SampleToChunkEntry>& sampleToChunk,
+                                 std::vector<TimeToSampleEntry>& timeToSample);
+    Result<> parseTrack(std::string_view targetFormat);
 
     std::span<std::byte const> _fileData;
     std::vector<std::byte> _magicCookie;

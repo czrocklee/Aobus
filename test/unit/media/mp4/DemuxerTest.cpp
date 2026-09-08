@@ -6,7 +6,9 @@
 #include "TestAtoms.h"
 #include <ao/utility/MappedFile.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <cstddef>
@@ -14,6 +16,7 @@
 #include <filesystem>
 #include <limits>
 #include <span>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -43,10 +46,10 @@ namespace ao::media::mp4::test
     std::vector<std::uint8_t> makeSampleTable(std::vector<std::uint8_t> const& stsd,
                                               std::vector<std::uint8_t> const& stsz,
                                               std::vector<std::uint8_t> const& stsc,
-                                              std::vector<std::uint8_t> const& chunkOffsets)
+                                              std::vector<std::uint8_t> const& chunkOffsets,
+                                              std::vector<std::uint8_t> const& stts = ao::test::mp4::makeSttsAtom())
     {
       auto body = std::vector<std::uint8_t>{};
-      auto const stts = ao::test::mp4::makeSttsAtom();
       body.insert(body.end(), stsd.begin(), stsd.end());
       body.insert(body.end(), stsz.begin(), stsz.end());
       body.insert(body.end(), stts.begin(), stts.end());
@@ -71,6 +74,288 @@ namespace ao::media::mp4::test
   static_assert(!std::is_constructible_v<Demuxer, std::span<std::byte const>>);
   static_assert(std::is_nothrow_move_constructible_v<Demuxer>);
   static_assert(!std::is_move_assignable_v<Demuxer>);
+
+  TEST_CASE("MP4 Demuxer - rejects infeasible fixed-size sample counts before expansion", "[media][regression][mp4]")
+  {
+    constexpr auto kHugeCount = std::numeric_limits<std::uint32_t>::max();
+    auto sampleCount = kHugeCount;
+    std::uint32_t sampleSize = 1;
+    auto stsc = ao::test::mp4::makeStscAtom(kHugeCount);
+    auto stts = ao::test::mp4::makeSttsAtom(kHugeCount);
+    auto chunkOffsets = ao::test::mp4::makeStcoAtom();
+
+    SECTION("Matching compact tables cannot justify more fixed-size bytes than the file")
+    {
+    }
+
+    SECTION("Missing chunk entries cannot admit the declared count")
+    {
+      stsc.clear();
+    }
+
+    SECTION("A small chunk mapping cannot admit the declared count")
+    {
+      stsc = ao::test::mp4::makeStscAtom();
+    }
+
+    SECTION("Missing timing keeps the byte-feasibility requirement")
+    {
+      stts.clear();
+    }
+
+    SECTION("Zero samples are rejected")
+    {
+      sampleCount = 0;
+      stsc = ao::test::mp4::makeStscAtom();
+      stts = ao::test::mp4::makeSttsAtom();
+    }
+
+    SECTION("Fixed-size byte multiplication cannot wrap at 32 bits")
+    {
+      sampleCount = 2;
+      sampleSize = 0x80000000U;
+      stsc = ao::test::mp4::makeStscAtom(2);
+      stts = ao::test::mp4::makeSttsAtom(2);
+    }
+
+    SECTION("Chunk expansion cannot exceed the sample count")
+    {
+      sampleCount = 2;
+      sampleSize = 4;
+      stts = ao::test::mp4::makeSttsAtom(2);
+    }
+
+    SECTION("Timing expansion cannot exceed the sample count")
+    {
+      sampleCount = 2;
+      sampleSize = 4;
+      stsc = ao::test::mp4::makeStscAtom(2);
+    }
+
+    SECTION("Chunk-run multiplication cannot wrap at 32 bits")
+    {
+      auto body = std::vector<std::uint8_t>{};
+
+      for (auto const value : {0U, 2U, 0U, 1U})
+      {
+        ao::test::mp4::appendBe32(body, value);
+      }
+
+      chunkOffsets = ao::test::mp4::makeAtom("stco", body);
+    }
+
+    SECTION("Timing entries must cover every sample")
+    {
+      sampleCount = 2;
+      stsc = ao::test::mp4::makeStscAtom(2);
+      stts = ao::test::mp4::makeSttsAtom();
+    }
+
+    SECTION("Timing deltas must be nonzero")
+    {
+      sampleCount = 1;
+      stsc = ao::test::mp4::makeStscAtom();
+      stts = ao::test::mp4::makeSttsAtom(1, 0);
+    }
+
+    auto const stsz = ao::test::mp4::makeStszAtom(sampleSize, sampleCount);
+    auto const stbl = makeSampleTable(makeAlacStsd(), stsz, stsc, chunkOffsets, stts);
+    auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
+    REQUIRE(fileData.size() < 512);
+    auto const result = Demuxer::parse(fileData, "alac");
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+  }
+
+  TEST_CASE("MP4 Demuxer - fixed-size sample index must fit the mapped file budget", "[media][regression][mp4]")
+  {
+    constexpr std::uint32_t kSampleCount = 1024;
+    auto const fileSize = GENERATE(std::size_t{kSampleCount},
+                                   (kSampleCount * sizeof(Demuxer::SampleEntry)) - 1,
+                                   kSampleCount * sizeof(Demuxer::SampleEntry));
+    CAPTURE(fileSize);
+    auto const stbl = makeSampleTable(makeAlacStsd(),
+                                      ao::test::mp4::makeStszAtom(1, kSampleCount),
+                                      ao::test::mp4::makeStscAtom(kSampleCount),
+                                      ao::test::mp4::makeStcoAtom(),
+                                      ao::test::mp4::makeSttsAtom(kSampleCount));
+    auto fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
+    REQUIRE(fileData.size() < fileSize);
+    fileData.resize(fileSize);
+
+    if (auto const result = Demuxer::parse(fileData, "alac"); fileSize < kSampleCount * sizeof(Demuxer::SampleEntry))
+    {
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(result.error().message == "MP4 fixed-size samples or index exceed file size");
+    }
+    else
+    {
+      REQUIRE(result);
+      CHECK(result->sampleCount() == kSampleCount);
+      CHECK(result->sampleInfo(kSampleCount - 1).offset == kSampleCount - 1);
+      CHECK(result->samplePayload(kSampleCount - 1).size() == 1);
+    }
+  }
+
+  TEST_CASE("MP4 Demuxer - rejects malformed compact sample table entries", "[media][regression][mp4]")
+  {
+    auto stsz = ao::test::mp4::makeStszAtom();
+    auto stsc = ao::test::mp4::makeStscAtom();
+    auto stts = ao::test::mp4::makeSttsAtom();
+    auto expectedMessage = std::string_view{};
+
+    SECTION("Chunk mappings must have strictly increasing first chunks")
+    {
+      auto body = std::vector<std::uint8_t>{};
+
+      // Two mappings both begin at chunk one.
+      for (auto const value : {0U, 2U, 1U, 1U, 1U, 1U, 1U, 1U})
+      {
+        ao::test::mp4::appendBe32(body, value);
+      }
+
+      stsc = ao::test::mp4::makeAtom("stsc", body);
+      expectedMessage = "MP4 sample-to-chunk entries are not ordered";
+    }
+
+    SECTION("A chunk mapping cannot contain zero samples")
+    {
+      stsc = ao::test::mp4::makeStscAtom(0);
+      expectedMessage = "Invalid MP4 sample-to-chunk entry";
+    }
+
+    SECTION("Fixed-size sample tables cannot contain trailing entry bytes")
+    {
+      auto body = std::vector<std::uint8_t>{};
+
+      // Version/flags, fixed size, count, and an extraneous entry.
+      for (auto const value : {0U, 4U, 1U, 4U})
+      {
+        ao::test::mp4::appendBe32(body, value);
+      }
+
+      stsz = ao::test::mp4::makeAtom("stsz", body);
+      expectedMessage = "Malformed fixed-size stsz atom";
+    }
+
+    SECTION("A timing entry cannot contain zero samples")
+    {
+      stts = ao::test::mp4::makeSttsAtom(0);
+      expectedMessage = "Invalid MP4 time-to-sample entry";
+    }
+
+    auto const stbl = makeSampleTable(makeAlacStsd(), stsz, stsc, ao::test::mp4::makeStcoAtom(), stts);
+    auto const fileData = makeFile(ao::test::mp4::makeTrackAtom("soun", stbl));
+    auto const result = Demuxer::parse(fileData, "alac");
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().message == expectedMessage);
+  }
+
+  TEST_CASE("MP4 Demuxer - preserves packets across chunk runs and missing payload", "[media][regression][mp4]")
+  {
+    auto stscBody = std::vector<std::uint8_t>{};
+
+    for (auto const value : {0U, 2U, 1U, 2U, 1U, 2U, 1U, 1U})
+    {
+      ao::test::mp4::appendBe32(stscBody, value);
+    }
+
+    auto chunkBody = std::vector<std::uint8_t>{};
+
+    for (auto const value : {0U, 2U, 8U, 14U})
+    {
+      ao::test::mp4::appendBe32(chunkBody, value);
+    }
+
+    auto sttsBody = std::vector<std::uint8_t>{};
+
+    for (auto const value : {0U, 2U, 2U, 1024U, 1U, 512U})
+    {
+      ao::test::mp4::appendBe32(sttsBody, value);
+    }
+
+    auto stsz = ao::test::mp4::makeStszAtom(2, 3);
+    auto stts = ao::test::mp4::makeAtom("stts", sttsBody);
+    auto stsc = ao::test::mp4::makeAtom("stsc", stscBody);
+    auto chunkOffsets = ao::test::mp4::makeAtom("stco", chunkBody);
+    bool missingPayload = false;
+    bool hasTiming = true;
+
+    SECTION("Compact sample tables")
+    {
+    }
+
+    SECTION("Extended sample tables")
+    {
+      stsz = ao::test::mp4::makeExtendedFromCompactAtom(stsz);
+      stts = ao::test::mp4::makeExtendedFromCompactAtom(stts);
+      stsc = ao::test::mp4::makeExtendedFromCompactAtom(stsc);
+      chunkOffsets = ao::test::mp4::makeExtendedFromCompactAtom(chunkOffsets);
+    }
+
+    SECTION("Explicit sample sizes retain their byte-backed count")
+    {
+      auto body = std::vector<std::uint8_t>{};
+
+      for (auto const value : {0U, 0U, 3U, 2U, 2U, 2U})
+      {
+        ao::test::mp4::appendBe32(body, value);
+      }
+
+      stsz = ao::test::mp4::makeAtom("stsz", body);
+    }
+
+    SECTION("Timing remains optional")
+    {
+      hasTiming = false;
+      stts.clear();
+    }
+
+    SECTION("Missing packet bytes remain an empty payload")
+    {
+      missingPayload = true;
+      auto co64Body = std::vector<std::uint8_t>{};
+      ao::test::mp4::appendBe32(co64Body, 0);
+      ao::test::mp4::appendBe32(co64Body, 2);
+      ao::test::mp4::appendBe64(co64Body, 8);
+      ao::test::mp4::appendBe64(co64Body, 4096);
+      chunkOffsets = ao::test::mp4::makeAtom("co64", co64Body);
+    }
+
+    auto const stbl = makeSampleTable(makeAlacStsd(), stsz, stsc, chunkOffsets, stts);
+    auto data = ao::test::mp4::makeAtom("mdat", {1, 2, 3, 4, 0, 0, 5, 6});
+    auto const moov = ao::test::mp4::makeAtom("moov", ao::test::mp4::makeTrackAtom("soun", stbl, 48000, 2560));
+    data.insert(data.end(), moov.begin(), moov.end());
+    auto const fileData = toBytes(data);
+    auto const result = Demuxer::parse(fileData, "alac");
+    REQUIRE(result);
+    REQUIRE(result->sampleCount() == 3);
+    CHECK(result->sampleInfo(0).offset == 8);
+    CHECK(result->sampleInfo(1).offset == 10);
+    CHECK(result->sampleInfo(2).offset == (missingPayload ? 4096U : 14U));
+    CHECK(result->sampleInfo(2).size == 2);
+    CHECK(result->sampleInfo(2).startTime == (hasTiming ? 2048U : 0U));
+    CHECK(result->sampleInfo(2).duration == (hasTiming ? 512U : 0U));
+    CHECK(result->sampleIndexAtTime(2560) == 3);
+    REQUIRE(result->samplePayload(0).size() == 2);
+    CHECK(result->samplePayload(0)[0] == std::byte{1});
+    REQUIRE(result->samplePayload(1).size() == 2);
+    CHECK(result->samplePayload(1)[1] == std::byte{4});
+
+    if (missingPayload)
+    {
+      CHECK(result->samplePayload(2).empty());
+    }
+    else
+    {
+      REQUIRE(result->samplePayload(2).size() == 2);
+      CHECK(result->samplePayload(2)[0] == std::byte{5});
+      CHECK(result->samplePayload(2)[1] == std::byte{6});
+    }
+  }
 
   TEST_CASE("MP4 Demuxer - rejects malformed sample-table inputs", "[media][unit][mp4][error]")
   {
@@ -220,6 +505,20 @@ namespace ao::media::mp4::test
       auto const fileData = toBytes(ao::test::mp4::makeAtom("moov", moovBody));
       REQUIRE(Demuxer::parse(fileData, "alac"));
     }
+
+    SECTION("Unrelated video track has a huge fixed-size sample count")
+    {
+      auto const videoStbl = makeSampleTable(ao::test::mp4::makeStsdAtom("avc1"),
+                                             ao::test::mp4::makeStszAtom(1, std::numeric_limits<std::uint32_t>::max()),
+                                             ao::test::mp4::makeStcoAtom());
+      auto moovBody = ao::test::mp4::makeTrackAtom("vide", videoStbl);
+      moovBody.insert(moovBody.end(), track.begin(), track.end());
+      auto const fileData = toBytes(ao::test::mp4::makeAtom("moov", moovBody));
+      auto const result = Demuxer::parse(fileData, "alac");
+      REQUIRE(result);
+      CHECK(result->sampleCount() == 1);
+      CHECK(result->sampleInfo(0).size == 7);
+    }
   }
 
   TEST_CASE("MP4 Demuxer - parses version 1 media timing", "[media][unit][mp4]")
@@ -320,7 +619,10 @@ namespace ao::media::mp4::test
     body.insert(body.end(), stco.begin(), stco.end());
     auto const stbl = ao::test::mp4::makeAtom("stbl", body);
     auto const track = ao::test::mp4::makeTrackAtom("soun", stbl, 48000, kTotalDuration);
-    auto const fileData = makeFile(track);
+    auto fileData = makeFile(track);
+    // Supply the fixed-size index budget so this fixture isolates seek timing.
+    fileData.append_range(
+      toBytes(ao::test::mp4::makeAtom("mdat", std::vector<std::uint8_t>(kSampleCount * sizeof(Demuxer::SampleEntry)))));
     auto const result = Demuxer::parse(fileData, "alac");
 
     REQUIRE(result);

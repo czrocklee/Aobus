@@ -35,7 +35,8 @@ custom-variable     ::= "%" user-variable-name ;
 constant            ::= boolean | unit-number | integer | string ;
 ```
 
-The shared parser first accepts its expression superset.
+The shared parser applies [complexity admission](predicate-language.md#complexity-admission)
+before accepting its expression superset.
 `compileFormat()` then accepts only variables, constants, grouping, `+`, and adjacency concatenation.
 
 Constants use predicate-language tokenization.

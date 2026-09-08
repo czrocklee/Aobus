@@ -9,6 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -68,6 +69,53 @@ namespace ao::rt::test
       };
     }
   } // namespace
+
+  TEST_CASE("TrackListProjection - equal keys follow source order across every update path",
+            "[runtime][regression][projection][incremental]")
+  {
+    auto fixture = MusicLibraryFixture{};
+    auto const first = fixture.addTrack(library::test::makeTrackSpec("First", 2020));
+    auto const second = fixture.addTrack(library::test::makeTrackSpec("Second", 2020));
+    auto const third = fixture.addTrack(library::test::makeTrackSpec("Third", 2020));
+    auto sourcePtr = makeMutableTrackSource({third, first});
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, fixture.library()};
+    auto presentation = TrackPresentationSpec{.sortBy = {{.field = TrackSortField::Year}}};
+    projection.setPresentation(presentation);
+    auto checkSourceOrder = [&]
+    {
+      REQUIRE(projection.size() == sourcePtr->size());
+
+      for (std::size_t index = 0; index < sourcePtr->size(); ++index)
+      {
+        CHECK(projection.trackIdAt(index) == sourcePtr->trackIdAt(index));
+      }
+
+      auto rebuilt = TrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, fixture.library()};
+      rebuilt.setPresentation(presentation);
+      checkProjectionMatches(projection, rebuilt);
+    };
+    checkSourceOrder();
+    sourcePtr->insert(second, 1);
+    checkSourceOrder();
+    sourcePtr->replaceWithBatch(
+      std::array{second, first, third},
+      delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = 0, .trackIds = {third}},
+                                              delta::InsertRange{.start = 2, .trackIds = {third}}}});
+    checkSourceOrder();
+    fixture.updateTrack(first, [](auto& track) { track.year = 2019; });
+    sourcePtr->update(first);
+    CHECK(projection.trackIdAt(0) == first);
+    fixture.updateTrack(first, [](auto& track) { track.year = 2020; });
+    sourcePtr->update(first);
+    checkSourceOrder();
+    presentation.sortBy.front().ascending = false;
+    projection.setPresentation(presentation);
+    checkSourceOrder();
+    sourcePtr->remove(first);
+    checkSourceOrder();
+    sourcePtr->emitReset();
+    checkSourceOrder();
+  }
 
   TEST_CASE("TrackListProjection - incremental batches match a fresh full rebuild",
             "[runtime][regression][projection][incremental]")

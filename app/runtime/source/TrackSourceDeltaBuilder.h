@@ -18,7 +18,8 @@ namespace ao::rt
    * Removal indices address the source before the operation. Insertion indices
    * use the sequential coordinate space after every removal and any earlier
    * ascending insertion. Register consecutive inserted IDs at consecutive
-   * indices so their resulting order is explicit.
+   * indices so their resulting order is explicit. Update indices address the
+   * final sequence after every removal and insertion.
    *
    * The builder never compares old and new source snapshots. Callers must
    * register every affected TrackId, and an operation with no registered edits
@@ -31,6 +32,7 @@ namespace ao::rt
 
     void remove(std::size_t originalIndex, TrackId trackId);
     void insert(std::size_t postRemovalIndex, TrackId trackId);
+    void update(std::size_t finalIndex, TrackId trackId);
 
     std::optional<delta::RegularTrackEditScript> build() const;
 
@@ -44,5 +46,6 @@ namespace ao::rt
     std::size_t _initialSize = 0;
     std::vector<IndexedTrack> _removals;
     std::vector<IndexedTrack> _insertions;
+    std::vector<IndexedTrack> _updates;
   };
 } // namespace ao::rt

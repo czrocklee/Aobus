@@ -47,11 +47,18 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  void AllTracksSource::applyCollectionChange(std::span<TrackId const> const inserted,
-                                              std::span<TrackId const> const removed)
+  void AllTracksSource::applyChanges(std::span<TrackId const> const inserted,
+                                     std::span<TrackId const> const removed,
+                                     std::span<TrackId const> const updated)
   {
     if (state() == TrackSourceState::Invalidated)
     {
+      return;
+    }
+
+    if (inserted.empty() && removed.empty())
+    {
+      notifyUpdated(updated);
       return;
     }
 
@@ -113,6 +120,23 @@ namespace ao::rt
       }
     }
 
+    auto updatedIds = std::vector<TrackId>{updated.begin(), updated.end()};
+    std::ranges::sort(updatedIds);
+    updatedIds.erase(std::ranges::unique(updatedIds).begin(), updatedIds.end());
+
+    for (auto const id : updatedIds)
+    {
+      if (std::ranges::binary_search(insertedIds, id) || std::ranges::binary_search(removedIds, id))
+      {
+        continue;
+      }
+
+      if (auto const it = std::ranges::lower_bound(finalIds, id); it != finalIds.end() && *it == id)
+      {
+        builder.update(static_cast<std::size_t>(std::distance(finalIds.begin(), it)), id);
+      }
+    }
+
     _trackIds = std::move(finalIds);
 
     auto optBatch = builder.build();
@@ -123,11 +147,6 @@ namespace ao::rt
     }
 
     std::ignore = publishDelta(std::move(*optBatch), previousSize);
-  }
-
-  void AllTracksSource::applyMetadataChange(std::span<TrackId const> const trackIds)
-  {
-    notifyUpdated(trackIds);
   }
 
   std::optional<std::size_t> AllTracksSource::indexOf(TrackId const id) const

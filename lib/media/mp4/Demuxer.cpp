@@ -322,6 +322,13 @@ namespace ao::media::mp4
     }
   } // namespace
 
+  struct Demuxer::SampleSizes final
+  {
+    std::uint32_t count = 0;
+    std::uint32_t fixedSize = 0;
+    std::span<StszAtomLayout::Entry const> entries = {};
+  };
+
   Demuxer::Demuxer(std::span<std::byte const> fileData)
     : _fileData{fileData}
   {
@@ -339,54 +346,17 @@ namespace ao::media::mp4
     return Result<Demuxer>{std::in_place, std::move(demuxer)};
   }
 
-  void Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
+  void Demuxer::validateSampleChunks(SampleSizes const& sizes,
+                                     std::span<std::uint64_t const> chunkOffsets,
+                                     std::span<SampleToChunkEntry const> sampleToChunk)
   {
-    if (samples.empty() || timeToSample.empty())
-    {
-      detail::throwMediaError(Error::Code::FormatRejected, "Missing MP4 samples or timing entries");
-    }
-
-    std::size_t sampleIndex = 0;
-    std::uint64_t sampleTime = 0;
-
-    for (auto const& entry : timeToSample)
-    {
-      if (entry.sampleCount == 0 || entry.sampleDelta == 0)
-      {
-        detail::throwMediaError(Error::Code::FormatRejected, "Invalid MP4 time-to-sample entry");
-      }
-
-      for (std::uint32_t sample = 0; sample < entry.sampleCount; ++sample)
-      {
-        if (sampleIndex >= samples.size())
-        {
-          detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table has too many samples");
-        }
-
-        samples[sampleIndex].startTime = sampleTime;
-        samples[sampleIndex].duration = entry.sampleDelta;
-        sampleTime += entry.sampleDelta;
-        ++sampleIndex;
-      }
-    }
-
-    if (sampleIndex != samples.size())
-    {
-      detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table does not cover every sample");
-    }
-  }
-
-  void Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
-                                   std::span<std::uint64_t const> chunkOffsets,
-                                   std::span<SampleToChunkEntry const> sampleToChunk)
-  {
-    if (samples.empty() || chunkOffsets.empty() || sampleToChunk.empty())
+    if (sizes.count == 0 || chunkOffsets.empty() || sampleToChunk.empty())
     {
       detail::throwMediaError(
         Error::Code::FormatRejected, "Missing MP4 samples, chunk offsets, or sample-to-chunk table");
     }
 
-    std::size_t sampleIndex = 0;
+    std::uint64_t mappedSampleCount = 0;
 
     for (std::size_t entryIndex = 0; entryIndex < sampleToChunk.size(); ++entryIndex)
     {
@@ -404,7 +374,7 @@ namespace ao::media::mp4
         detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk entry references an invalid chunk");
       }
 
-      std::size_t chunkEndIndex = chunkOffsets.size();
+      auto chunkEndIndex = chunkOffsets.size();
 
       if (entryIndex + 1 < sampleToChunk.size())
       {
@@ -418,17 +388,136 @@ namespace ao::media::mp4
         chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
       }
 
+      // Admit the chunk run against the remaining sample count before
+      // multiplying, so expansion does not depend on the factors' widths.
+      auto const runChunkCount = chunkEndIndex - chunkStartIndex;
+
+      if (runChunkCount > (sizes.count - mappedSampleCount) / entry.samplesPerChunk)
+      {
+        detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table has too many samples");
+      }
+
+      mappedSampleCount += static_cast<std::uint64_t>(runChunkCount) * entry.samplesPerChunk;
+
+      if (sizes.fixedSize != 0)
+      {
+        auto const chunkByteCount = static_cast<std::uint64_t>(entry.samplesPerChunk) * sizes.fixedSize;
+
+        for (auto chunkIndex = chunkStartIndex; chunkIndex < chunkEndIndex; ++chunkIndex)
+        {
+          if (chunkByteCount > std::numeric_limits<std::uint64_t>::max() - chunkOffsets[chunkIndex])
+          {
+            detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample offset overflow");
+          }
+        }
+      }
+    }
+
+    if (mappedSampleCount != sizes.count)
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table does not cover every sample");
+    }
+  }
+
+  void Demuxer::buildSamples(SampleSizes const& sizes,
+                             std::span<std::uint64_t const> chunkOffsets,
+                             std::span<SampleToChunkEntry const> sampleToChunk,
+                             std::span<TimeToSampleEntry const> timeToSample)
+  {
+    validateSampleChunks(sizes, chunkOffsets, sampleToChunk);
+
+    std::uint64_t timedSampleCount = 0;
+
+    for (auto const& entry : timeToSample)
+    {
+      if (entry.sampleCount == 0 || entry.sampleDelta == 0)
+      {
+        detail::throwMediaError(Error::Code::FormatRejected, "Invalid MP4 time-to-sample entry");
+      }
+
+      if (entry.sampleCount > sizes.count - timedSampleCount)
+      {
+        detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table has too many samples");
+      }
+
+      timedSampleCount += entry.sampleCount;
+    }
+
+    if (!timeToSample.empty() && timedSampleCount != sizes.count)
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, "MP4 timing table does not cover every sample");
+    }
+
+    // Fixed-size stsz has no per-sample bytes to bound its declared count.
+    // Bound both its payload bytes and expanded index bytes by the file size.
+    // Individual missing packets still return an empty span in samplePayload;
+    // this admission does not traverse unrelated tracks or trailing atoms.
+    if (sizes.fixedSize != 0 &&
+        sizes.count > _fileData.size() / std::max<std::size_t>(sizes.fixedSize, sizeof(SampleEntry)))
+    {
+      detail::throwMediaError(Error::Code::FormatRejected, "MP4 fixed-size samples or index exceed file size");
+    }
+
+    _samples.resize(sizes.count);
+
+    for (auto const& [index, sample] : compat::views::enumerate(_samples))
+    {
+      sample.size =
+        sizes.fixedSize != 0 ? sizes.fixedSize : sizes.entries[static_cast<std::size_t>(index)].size.value();
+    }
+
+    buildSampleOffsets(_samples, chunkOffsets, sampleToChunk);
+
+    if (!timeToSample.empty())
+    {
+      applySampleTiming(_samples, timeToSample);
+    }
+  }
+
+  void Demuxer::applySampleTiming(std::vector<SampleEntry>& samples, std::span<TimeToSampleEntry const> timeToSample)
+  {
+    std::size_t sampleIndex = 0;
+    std::uint64_t sampleTime = 0;
+
+    for (auto const& entry : timeToSample)
+    {
+      for (std::uint32_t sample = 0; sample < entry.sampleCount; ++sample)
+      {
+        samples[sampleIndex].startTime = sampleTime;
+        samples[sampleIndex].duration = entry.sampleDelta;
+        sampleTime += entry.sampleDelta;
+        ++sampleIndex;
+      }
+    }
+  }
+
+  void Demuxer::buildSampleOffsets(std::vector<SampleEntry>& samples,
+                                   std::span<std::uint64_t const> chunkOffsets,
+                                   std::span<SampleToChunkEntry const> sampleToChunk)
+  {
+    std::size_t sampleIndex = 0;
+
+    for (std::size_t entryIndex = 0; entryIndex < sampleToChunk.size(); ++entryIndex)
+    {
+      auto const& entry = sampleToChunk[entryIndex];
+
+      auto const chunkStartIndex = static_cast<std::size_t>(entry.firstChunk - 1);
+
+      std::size_t chunkEndIndex = chunkOffsets.size();
+
+      if (entryIndex + 1 < sampleToChunk.size())
+      {
+        auto const nextFirstChunk = sampleToChunk[entryIndex + 1].firstChunk;
+
+        chunkEndIndex = std::min(chunkEndIndex, static_cast<std::size_t>(nextFirstChunk - 1));
+      }
+
       for (auto chunkIndex = chunkStartIndex; chunkIndex < chunkEndIndex; ++chunkIndex)
       {
         auto sampleOffset = chunkOffsets[chunkIndex];
 
         for (std::uint32_t sampleInChunk = 0; sampleInChunk < entry.samplesPerChunk; ++sampleInChunk)
         {
-          if (sampleIndex >= samples.size())
-          {
-            detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table has too many samples");
-          }
-
           samples[sampleIndex].offset = sampleOffset;
 
           if (samples[sampleIndex].size > std::numeric_limits<std::uint64_t>::max() - sampleOffset)
@@ -440,11 +529,6 @@ namespace ao::media::mp4
           ++sampleIndex;
         }
       }
-    }
-
-    if (sampleIndex != samples.size())
-    {
-      detail::throwMediaError(Error::Code::FormatRejected, "MP4 sample-to-chunk table does not cover every sample");
     }
   }
 
@@ -474,7 +558,7 @@ namespace ao::media::mp4
     }
   }
 
-  void Demuxer::parseStsz(std::span<std::byte const> bytes)
+  Demuxer::SampleSizes Demuxer::parseStsz(std::span<std::byte const> bytes)
   {
     if (bytes.size() < sizeof(SampleSizeBodyLayout))
     {
@@ -483,8 +567,9 @@ namespace ao::media::mp4
 
     auto const* header = utility::layout::view<SampleSizeBodyLayout>(bytes);
     auto const sampleSize = header->sampleSize.value();
+    auto const count = header->sampleCount.value();
 
-    if (auto const count = header->sampleCount.value(); sampleSize == 0)
+    if (sampleSize == 0)
     {
       auto const optEntries = validatedEntries<SampleSizeBodyLayout, StszAtomLayout::Entry>(bytes, count);
 
@@ -493,27 +578,15 @@ namespace ao::media::mp4
         detail::throwMediaError(Error::Code::FormatRejected, "Malformed stsz entry table");
       }
 
-      _samples.resize(count);
-
-      for (auto const& [index, entry] : compat::views::enumerate(*optEntries))
-      {
-        _samples[static_cast<std::size_t>(index)].size = entry.size.value();
-      }
+      return {.count = count, .entries = *optEntries};
     }
-    else
+
+    if (bytes.size() != sizeof(SampleSizeBodyLayout))
     {
-      if (bytes.size() != sizeof(SampleSizeBodyLayout))
-      {
-        detail::throwMediaError(Error::Code::FormatRejected, "Malformed fixed-size stsz atom");
-      }
-
-      _samples.resize(count);
-
-      for (auto& sample : _samples)
-      {
-        sample.size = sampleSize;
-      }
+      detail::throwMediaError(Error::Code::FormatRejected, "Malformed fixed-size stsz atom");
     }
+
+    return {.count = count, .fixedSize = sampleSize};
   }
 
   void Demuxer::parseStsc(std::span<std::byte const> bytes, std::vector<SampleToChunkEntry>& out)
@@ -591,44 +664,48 @@ namespace ao::media::mp4
     }
   }
 
-  void Demuxer::parseSampleTable(AtomView const& table,
-                                 std::vector<std::uint64_t>& chunkOffsets,
-                                 std::vector<SampleToChunkEntry>& sampleToChunk,
-                                 std::vector<TimeToSampleEntry>& timeToSample)
+  Demuxer::SampleSizes Demuxer::parseSampleTable(AtomView const& table,
+                                                 std::vector<std::uint64_t>& chunkOffsets,
+                                                 std::vector<SampleToChunkEntry>& sampleToChunk,
+                                                 std::vector<TimeToSampleEntry>& timeToSample)
   {
-    auto const visitRes = visitChildren(table,
-                                        [this, &chunkOffsets, &sampleToChunk, &timeToSample](AtomView const& atom)
-                                        {
-                                          auto type = atom.type();
+    auto sizes = SampleSizes{};
+    auto const visitRes =
+      visitChildren(table,
+                    [this, &sizes, &chunkOffsets, &sampleToChunk, &timeToSample](AtomView const& atom)
+                    {
+                      auto type = atom.type();
 
-                                          if (auto const atomPayload = atom.payload(); type == "stsz")
-                                          {
-                                            parseStsz(atomPayload);
-                                          }
-                                          else if (type == "stts")
-                                          {
-                                            parseStts(atomPayload, timeToSample);
-                                          }
-                                          else if (type == "stsc")
-                                          {
-                                            parseStsc(atomPayload, sampleToChunk);
-                                          }
-                                          else if (type == "stco")
-                                          {
-                                            parseStco(atomPayload, chunkOffsets);
-                                          }
-                                          else if (type == "co64")
-                                          {
-                                            parseCo64(atomPayload, chunkOffsets);
-                                          }
+                      if (auto const atomPayload = atom.payload(); type == "stsz")
+                      {
+                        sizes = parseStsz(atomPayload);
+                      }
+                      else if (type == "stts")
+                      {
+                        parseStts(atomPayload, timeToSample);
+                      }
+                      else if (type == "stsc")
+                      {
+                        parseStsc(atomPayload, sampleToChunk);
+                      }
+                      else if (type == "stco")
+                      {
+                        parseStco(atomPayload, chunkOffsets);
+                      }
+                      else if (type == "co64")
+                      {
+                        parseCo64(atomPayload, chunkOffsets);
+                      }
 
-                                          return true;
-                                        });
+                      return true;
+                    });
 
     if (!visitRes)
     {
       detail::throwMediaError(Error::Code::FormatRejected, visitRes.error().message);
     }
+
+    return sizes;
   }
 
   Result<> Demuxer::parseTrack(std::string_view targetFormat)
@@ -701,19 +778,14 @@ namespace ao::media::mp4
         return makeError(Error::Code::FormatRejected, "Missing stbl atom");
       }
 
-      parseSampleTable(*optStbl, chunkOffsets, sampleToChunk, timeToSample);
+      auto const sizes = parseSampleTable(*optStbl, chunkOffsets, sampleToChunk, timeToSample);
 
-      if (_magicCookie.empty() || _samples.empty())
+      if (_magicCookie.empty() || sizes.count == 0)
       {
         return makeError(Error::Code::FormatRejected, "Failed to extract track extradata or sample table");
       }
 
-      buildSampleOffsets(_samples, chunkOffsets, sampleToChunk);
-
-      if (!timeToSample.empty())
-      {
-        applySampleTiming(_samples, timeToSample);
-      }
+      buildSamples(sizes, chunkOffsets, sampleToChunk, timeToSample);
 
       return {};
     };

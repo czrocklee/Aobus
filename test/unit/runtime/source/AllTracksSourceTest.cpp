@@ -54,14 +54,14 @@ namespace ao::rt::test
 
     SECTION("collection insertions add items and notify")
     {
-      source.applyCollectionChange(std::array{TrackId{10}}, {});
+      source.applyChanges(std::array{TrackId{10}}, {}, {});
       REQUIRE(listener.batches.size() == 1);
       auto const& firstInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[0]).edits.front());
       CHECK(firstInsert.start == 0);
       CHECK(firstInsert.trackIds == std::vector{TrackId{10}});
       CHECK(source.size() == 1);
 
-      source.applyCollectionChange(std::array{TrackId{20}}, {});
+      source.applyChanges(std::array{TrackId{20}}, {}, {});
       REQUIRE(listener.batches.size() == 2);
       auto const& secondInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[1]).edits.front());
       CHECK(secondInsert.start == 1);
@@ -69,25 +69,25 @@ namespace ao::rt::test
       CHECK(source.size() == 2);
 
       // Insert smaller id, should be at index 0
-      source.applyCollectionChange(std::array{TrackId{5}}, {});
+      source.applyChanges(std::array{TrackId{5}}, {}, {});
       REQUIRE(listener.batches.size() == 3);
       auto const& frontInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[2]).edits.front());
       CHECK(frontInsert.start == 0);
       CHECK(frontInsert.trackIds == std::vector{TrackId{5}});
 
       // Duplicate insert shouldn't trigger
-      source.applyCollectionChange(std::array{TrackId{10}}, {});
+      source.applyChanges(std::array{TrackId{10}}, {}, {});
       CHECK(listener.batches.size() == 3);
     }
 
     SECTION("collection removals remove items and notify")
     {
-      source.applyCollectionChange(std::array{TrackId{10}}, {});
-      source.applyCollectionChange(std::array{TrackId{20}}, {});
+      source.applyChanges(std::array{TrackId{10}}, {}, {});
+      source.applyChanges(std::array{TrackId{20}}, {}, {});
 
       listener.clear();
 
-      source.applyCollectionChange({}, std::array{TrackId{10}});
+      source.applyChanges({}, std::array{TrackId{10}}, {});
       REQUIRE(listener.batches.size() == 1);
       auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(listener.batches.front()).edits.front());
       CHECK(removal.start == 0);
@@ -95,7 +95,7 @@ namespace ao::rt::test
       CHECK(source.size() == 1);
 
       // Non-existent remove shouldn't trigger
-      source.applyCollectionChange({}, std::array{TrackId{99}});
+      source.applyChanges({}, std::array{TrackId{99}}, {});
       CHECK(listener.batches.size() == 1);
 
       CHECK(source.indexOf(TrackId{10}) == std::nullopt);
@@ -103,10 +103,10 @@ namespace ao::rt::test
 
     SECTION("metadata changes notify updates for existing tracks")
     {
-      source.applyCollectionChange(std::array{TrackId{10}, TrackId{20}}, {});
+      source.applyChanges(std::array{TrackId{10}, TrackId{20}}, {}, {});
       listener.clear();
 
-      source.applyMetadataChange(std::array{TrackId{20}, TrackId{99}});
+      source.applyChanges({}, {}, std::array{TrackId{20}, TrackId{99}});
 
       REQUIRE(listener.batches.size() == 1);
       REQUIRE(sourceEditScript(listener.batches.front()).edits.size() == 1);
@@ -126,7 +126,7 @@ namespace ao::rt::test
     auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
     auto const initialInsertions = std::array{TrackId{30}, TrackId{10}, TrackId{20}};
 
-    source.applyCollectionChange(initialInsertions, {});
+    source.applyChanges(initialInsertions, {}, {});
 
     REQUIRE(batches.size() == 1);
     REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
@@ -136,7 +136,7 @@ namespace ao::rt::test
 
     auto const inserted = std::array{TrackId{25}, TrackId{15}};
     auto const removed = std::array{TrackId{20}};
-    source.applyCollectionChange(inserted, removed);
+    source.applyChanges(inserted, removed, {});
 
     REQUIRE(batches.size() == 2);
     REQUIRE(sourceEditScript(batches[1]).edits.size() == 2);
@@ -151,6 +151,40 @@ namespace ao::rt::test
     CHECK(source.trackIdAt(1) == TrackId{15});
     CHECK(source.trackIdAt(2) == TrackId{25});
     CHECK(source.trackIdAt(3) == TrackId{30});
+  }
+
+  TEST_CASE("AllTracksSource - mixed changes update surviving identities at final coordinates",
+            "[runtime][regression][source][all-tracks]")
+  {
+    auto fixture = MusicLibraryFixture{};
+    auto source = AllTracksSource{fixture.library().tracks()};
+    auto const initial = std::vector{TrackId{10}, TrackId{20}, TrackId{30}, TrackId{40}, TrackId{50}};
+    source.applyChanges(initial, {}, {});
+    auto listener = TrackSourceBatchSpy{source};
+
+    source.applyChanges(
+      std::array{TrackId{25}, TrackId{5}, TrackId{5}},
+      std::array{TrackId{30}, TrackId{10}, TrackId{30}},
+      std::array{TrackId{50}, TrackId{20}, TrackId{40}, TrackId{20}, TrackId{5}, TrackId{10}, TrackId{99}});
+
+    REQUIRE(listener.batches.size() == 1);
+    auto const& script = sourceEditScript(listener.batches.front());
+    CHECK(script == delta::RegularTrackEditScript{{delta::RemoveRange{2, {TrackId{30}}},
+                                                   delta::RemoveRange{0, {TrackId{10}}},
+                                                   delta::InsertRange{0, {TrackId{5}}},
+                                                   delta::InsertRange{2, {TrackId{25}}},
+                                                   delta::UpdateRange{1, {TrackId{20}}},
+                                                   delta::UpdateRange{3, {TrackId{40}, TrackId{50}}}}});
+    auto const expected = std::vector{TrackId{5}, TrackId{20}, TrackId{25}, TrackId{40}, TrackId{50}};
+    CHECK(sourceTrackIds(source) == expected);
+    auto const replayRes = delta::apply(initial, script);
+    REQUIRE(replayRes);
+    CHECK(*replayRes == expected);
+
+    listener.clear();
+    source.applyChanges({}, {}, {});
+    source.applyChanges({}, std::array{TrackId{99}}, std::array{TrackId{99}});
+    CHECK(listener.batches.empty());
   }
 
   TEST_CASE("AllTracksSource - invalidation clears and permanently fences its snapshot",
@@ -173,7 +207,7 @@ namespace ao::rt::test
       auto const transaction = libraryFixture.library().readTransaction();
       source.reloadFromStore(transaction);
     }
-    source.applyCollectionChange(std::array{TrackId{99}}, {});
+    source.applyChanges(std::array{TrackId{99}}, {}, {});
 
     CHECK(source.state() == TrackSourceState::Invalidated);
     CHECK(source.size() == 0);

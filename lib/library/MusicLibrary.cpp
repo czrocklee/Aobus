@@ -1117,6 +1117,9 @@ namespace ao::library
       AO_FATAL("Failed to begin library read transaction: {}", transactionRes.error().message);
     }
 
+    // A supported writer in another process may have appended dictionary ids
+    // since open. Admit that snapshot's tail before exposing any Track views.
+    _implPtr->dictionary.refresh(_implPtr->dictionary._database.reader(*transactionRes));
     auto headerRes = _implPtr->metadataStore.load(*transactionRes);
     AO_INVARIANT(headerRes, "Library metadata header failed after open validation: {}", headerRes.error().message);
     auto const revision = _implPtr->metadataStore.revision(*transactionRes);
