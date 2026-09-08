@@ -26,6 +26,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -109,14 +110,14 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path blockedFileName,
     bool const failBlockedPreparation,
     bool const blockEveryLookahead,
-    std::filesystem::path finalOpenFailureFileName)
+    std::vector<std::filesystem::path> finalOpenFailureFileNames)
   {
     return [probePtr = std::move(probePtr),
             blockingGatePtr = std::move(blockingGatePtr),
             blockedFileName = std::move(blockedFileName),
             failBlockedPreparation,
             blockEveryLookahead,
-            finalOpenFailureFileName = std::move(finalOpenFailureFileName)](
+            finalOpenFailureFileNames = std::move(finalOpenFailureFileNames)](
              std::filesystem::path const& path,
              std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
     {
@@ -158,7 +159,7 @@ namespace ao::rt::test::playback_succession
         return makeError(Error::Code::IoError, "Scripted lookahead preparation failure");
       }
 
-      if (!finalOpenFailureFileName.empty() && path.filename() == finalOpenFailureFileName && optOutputEncoding)
+      if (optOutputEncoding && std::ranges::contains(finalOpenFailureFileNames, path.filename()))
       {
         return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
       }
@@ -184,7 +185,7 @@ namespace ao::rt::test::playback_succession
                                                    std::move(config.blockedFileName),
                                                    config.failBlockedPreparation,
                                                    config.blockEveryLookahead,
-                                                   std::move(config.finalOpenFailureFileName))}
+                                                   std::move(config.finalOpenFailureFileNames))}
     , asyncRuntime{transport.executor, 1, &sleeper}
     , changes{transport.executor, 0, "test-library"}
     , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}

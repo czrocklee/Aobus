@@ -152,8 +152,7 @@ namespace ao::rt
     async::Subscription onRevealTrackRequested(compat::MoveOnlyFunction<void(RevealTrackRequested const&)> handler);
     async::Subscription onSeekUpdate(compat::MoveOnlyFunction<void(SeekUpdate const&)> handler);
 
-    // Starts a track by id. Succession passes announce=false because it
-    // publishes its own now-playing story for automatic transitions.
+    // Starts a track by id, optionally suppressing playback announcements.
     Result<PreparedCancellationBarrier> playTrack(TrackId trackId, ListId sourceListId, bool announce = true);
 
     // Lower-level playback entry point: start a fully-resolved request.
@@ -191,11 +190,19 @@ namespace ao::rt
     friend class PlaybackSessionPersistence;
     friend class PlaybackSuccession;
 
+    // Acceptance and cancellation proof do not imply that playback started.
+    struct PlaybackStartReceipt final
+    {
+      PreparedCancellationBarrier cancellationBarrier{};
+      bool playbackStarted = false;
+    };
+
     void shutdown() noexcept;
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
-    Result<PreparedCancellationBarrier> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
+    Result<PlaybackStartReceipt> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
+    Result<PlaybackStartReceipt> startTrack(TrackId trackId, ListId sourceListId, bool announce);
     Result<> stageSuccessionPlaybackAsync(PlaybackRequest request,
                                           ListId sourceListId,
                                           compat::MoveOnlyFunction<bool()> acceptance,

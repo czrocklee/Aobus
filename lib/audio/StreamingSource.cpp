@@ -144,6 +144,7 @@ namespace ao::audio
     _decoderReachedEof = false;
     _ringBuffer.clear();
     _previousBlockByteCount = 0;
+    _optPendingBlock.reset();
 
     try
     {
@@ -227,10 +228,12 @@ namespace ao::audio
       while (!threadStopToken.stop_requested() && !_failed.load(std::memory_order_relaxed) &&
              !_decoderReachedEof.load(std::memory_order_relaxed) && !seekToken.stop_requested())
       {
-        if (!detail::permitsDecode(_decodeHighWatermarkByteCount,
-                                   _ringBuffer.size(),
-                                   _ringBuffer.availableToWrite(),
-                                   _previousBlockByteCount))
+        // An already decoded block must finish before admission of another
+        // read, even when its original size exceeds the remaining capacity.
+        if (!_optPendingBlock && !detail::permitsDecode(_decodeHighWatermarkByteCount,
+                                                        _ringBuffer.size(),
+                                                        _ringBuffer.availableToWrite(),
+                                                        _previousBlockByteCount))
         {
           std::this_thread::sleep_for(kDecodeBackoffInterval);
           continue;
@@ -295,8 +298,7 @@ namespace ao::audio
       return DecodeBlockStatus::Stopped;
     }
 
-    auto block = PcmBlock{};
-
+    if (!_optPendingBlock)
     {
       auto lock = std::scoped_lock{_decoderMutex};
 
@@ -312,31 +314,30 @@ namespace ao::audio
         detail::throwDecoderError(blockRes.error());
       }
 
-      block = *blockRes;
+      if (blockRes->bytes.size() > _ringBuffer.capacity())
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block exceeds streaming buffer capacity");
+      }
+
+      if (!blockRes->bytes.empty())
+      {
+        _previousBlockByteCount = blockRes->bytes.size();
+      }
+
+      _optPendingBlock = *blockRes;
     }
 
-    if (block.endOfStream && block.bytes.empty())
-    {
-      _decoderReachedEof = true;
-      return DecodeBlockStatus::Stopped;
-    }
+    auto& pendingBlock = *_optPendingBlock;
 
-    if (block.bytes.size() > _ringBuffer.capacity())
-    {
-      detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block exceeds streaming buffer capacity");
-    }
-
-    if (!block.bytes.empty())
-    {
-      _previousBlockByteCount = block.bytes.size();
-    }
-
-    if (!writeBlock(std::span<std::byte const>{block.bytes.data(), block.bytes.size()}, seekToken, threadStopToken))
+    if (!writeBlock(pendingBlock.bytes, seekToken, threadStopToken))
     {
       return DecodeBlockStatus::Stopped;
     }
 
-    if (block.endOfStream)
+    bool const endOfStream = pendingBlock.endOfStream;
+    _optPendingBlock.reset();
+
+    if (endOfStream)
     {
       _decoderReachedEof = true;
       return DecodeBlockStatus::Stopped;
@@ -345,28 +346,31 @@ namespace ao::audio
     return DecodeBlockStatus::Decoded;
   }
 
-  bool StreamingSource::writeBlock(std::span<std::byte const> bytes,
+  bool StreamingSource::writeBlock(std::span<std::byte const>& bytes,
                                    std::stop_token const& seekToken,
                                    std::stop_token const* threadStopToken)
   {
     auto const stopRequested = [&]
     { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };
 
-    auto const* current = bytes.data();
-    std::size_t remaining = bytes.size();
-
-    while (remaining > 0 && !stopRequested())
+    while (!bytes.empty() && !stopRequested())
     {
-      auto const written = _ringBuffer.write(std::span<std::byte const>{current, remaining});
-      remaining -= written;
-      current += written;
+      auto const written = _ringBuffer.write(bytes);
+      bytes = bytes.subspan(written);
 
-      if (remaining > 0)
+      if (!bytes.empty())
       {
+        // Synchronous preroll has no consumer. Retain the borrowed remainder
+        // for activation instead of waiting for space that cannot appear yet.
+        if (threadStopToken == nullptr)
+        {
+          return false;
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds{2});
       }
     }
 
-    return remaining == 0;
+    return bytes.empty();
   }
 } // namespace ao::audio

@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
+#include <ao/audio/PcmBlock.h>
 
 #include <atomic>
 #include <chrono>
@@ -67,7 +68,8 @@ namespace ao::audio
     void decodeLoop(std::stop_token const& threadStopToken);
     void fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
     DecodeBlockStatus decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
-    bool writeBlock(std::span<std::byte const> bytes,
+    // Advances bytes in place to the unwritten remainder so retries resume without duplicating PCM.
+    bool writeBlock(std::span<std::byte const>& bytes,
                     std::stop_token const& seekToken,
                     std::stop_token const* threadStopToken);
 
@@ -88,7 +90,10 @@ namespace ao::audio
     bool _activated = false;
 
     // Producer-confined. prepare()/seek() run before the decode worker, and
-    // seek stops and joins that worker before resetting this value.
+    // seek stops and joins that worker before resetting these values.
     std::size_t _previousBlockByteCount = 0;
+    // Borrows decoder storage until fully written. No subsequent decoder read
+    // may invalidate it; seek retires it before mutating the decoder.
+    std::optional<PcmBlock> _optPendingBlock;
   };
 } // namespace ao::audio

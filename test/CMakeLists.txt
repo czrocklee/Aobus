@@ -356,6 +356,7 @@ add_executable(ao_core_test
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
+    unit/audio/StreamingPrerollTest.cpp
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
@@ -365,6 +366,7 @@ add_executable(ao_core_test
     unit/audio/backend/detail/CallbackFenceTest.cpp
     unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
+    unit/audio/PlayerGraphObservationTest.cpp
     unit/audio/EngineDrainTest.cpp
     unit/audio/EngineErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp

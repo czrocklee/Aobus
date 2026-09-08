@@ -250,16 +250,16 @@ namespace ao::rt
 
       auto pending = std::move(*optPendingViewStart);
       optPendingViewStart.reset();
-      auto barrierRes = transport.commitStagedPlayback(std::move(*preparedStartRes), false);
+      auto startRes = transport.commitStagedPlayback(std::move(*preparedStartRes), false);
 
-      if (!barrierRes || isClosing())
+      if (!startRes || isClosing())
       {
         return;
       }
 
       if (sessionPtr)
       {
-        sessionPtr->clearPreparedCoveredBy(*barrierRes);
+        sessionPtr->clearPreparedCoveredBy(startRes->cancellationBarrier);
         captureRestorableSnapshot();
       }
 
@@ -270,8 +270,11 @@ namespace ao::rt
       std::ignore = pending.sessionPtr->setShuffleMode(shuffleMode);
       sessionPtr = std::move(pending.sessionPtr);
       startObservingCurrentSession();
+      // An explicit user start begins a fresh failure streak once per action.
+      // A correlated final-setup failure counts afterward; automatic recovery
+      // preserves the streak until playback actually starts.
       resetFailureState();
-      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
       reprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -576,11 +579,11 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No active playback sequence");
       }
 
-      auto barrierRes = transport.playTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId, false);
+      auto startRes = transport.startTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId, false);
 
-      if (!barrierRes)
+      if (!startRes)
       {
-        return std::unexpected{barrierRes.error()};
+        return std::unexpected{startRes.error()};
       }
 
       if (isClosing())
@@ -588,7 +591,7 @@ namespace ao::rt
         return {};
       }
 
-      sessionPtr->clearPreparedCoveredBy(*barrierRes);
+      sessionPtr->clearPreparedCoveredBy(startRes->cancellationBarrier);
       auto adoptedRes = sessionPtr->adoptCurrent(trackId, std::nullopt, origin);
 
       if (!adoptedRes)
@@ -596,8 +599,15 @@ namespace ao::rt
         return std::unexpected{adoptedRes.error()};
       }
 
-      resetFailureState();
-      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
+      // Acceptance owns the candidate and cancellation proof. Only a real
+      // start breaks the failure streak; a queued failure or natural end
+      // still settles through its existing callback path.
+      if (startRes->playbackStarted)
+      {
+        resetFailureState();
+      }
+
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
       reprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();

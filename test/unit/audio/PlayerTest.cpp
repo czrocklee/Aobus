@@ -590,7 +590,6 @@ namespace ao::audio::test
 
       // Fire graph change, which captures the old gen
       onGraphChanged(flow::Graph{});
-      executor.checkQueued();
       executor.drain();
 
       auto const snap = player.status();
@@ -1021,6 +1020,48 @@ namespace ao::audio::test
           status.flow.nodes.end());
     CHECK(std::ranges::find(status.flow.nodes, std::string_view{"route-a-stale"}, &flow::Node::id) ==
           status.flow.nodes.end());
+  }
+
+  TEST_CASE("Player - graph bursts do not consume the ordered playback failure notification",
+            "[audio][regression][player][concurrency]")
+  {
+    auto const fixturePath = requireAudioFixture("basic_metadata.flac");
+    auto probePtr = std::make_shared<SynchronousGraphProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor};
+    bool routeSettled = false;
+    player.setOnQualityChanged([&](auto const&, bool) { routeSettled = probePtr->subscriptionCount() != 0; });
+    player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
+    REQUIRE(executor.drainUntil([&] { return routeSettled; }));
+    auto callback = BackendProvider::OnGraphChangedCallback{};
+    {
+      auto const lock = std::scoped_lock{probePtr->mutex};
+      callback = probePtr->graphCallback;
+    }
+    REQUIRE(callback);
+    std::size_t failures = 0;
+    player.setOnPlaybackFailure([&](auto const&) { ++failures; });
+
+    for (std::size_t index = 0; index < 1000; ++index)
+    {
+      callback(flow::Graph{});
+    }
+
+    auto* const target = probePtr->target();
+    REQUIRE(target != nullptr);
+    target->handleBackendError("Failure amid replaceable observations");
+
+    for (std::size_t index = 0; index < 1000; ++index)
+    {
+      callback(flow::Graph{});
+    }
+
+    REQUIRE(executor.drainUntil([&] { return failures == 1; }));
+    executor.drain();
+    CHECK(failures == 1);
   }
 
   TEST_CASE("Player - graph callbacks are marshalled onto the executor", "[audio][unit][player][concurrency]")

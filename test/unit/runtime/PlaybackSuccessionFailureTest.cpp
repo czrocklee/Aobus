@@ -1,23 +1,37 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "lib/audio/NullBackend.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
+#include "test/unit/audio/BackendTestSupport.h"
 #include "test/unit/audio/EngineTestSupport.h"
 #include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include "test/unit/runtime/PlaybackSuccessionSeekTestSupport.h"
 #include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <fakeit.hpp>
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <tuple>
 #include <variant>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -26,11 +40,133 @@ namespace ao::rt::test
   using playback_succession::PlaybackSuccessionTransportFixture;
   using playback_succession::PlaybackSuccessionTransportFixtureConfig;
 
+  namespace
+  {
+    void countCommittedStarts(PlaybackSuccessionTransportFixture& fixture, std::size_t& count)
+    {
+      audio::test::SpyBackend<audio::NullBackend>& backend = *fixture.transport.spyBackendPtr;
+      fakeit::When(Method(backend.mock(), open))
+        .AlwaysDo(
+          [&](audio::SignalFormat const& format, audio::RenderTarget& target) -> Result<audio::OpenedPcmMode>
+          {
+            ++count;
+            fixture.transport.renderTarget = &target;
+            return audio::OpenedPcmMode{.clientFormat = audio::pcmFormat(format, audio::SampleEncoding::Signed16Le)};
+          });
+    }
+  } // namespace
+
+  TEST_CASE("PlaybackSuccession - accepted final decoder failures stop after three committed attempts",
+            "[runtime][regression][playback-succession][concurrency]")
+  {
+    auto const repeatMode = GENERATE(RepeatMode::One, RepeatMode::Off);
+    CAPTURE(repeatMode);
+    std::size_t committedStarts = 0;
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .finalOpenFailureFileNames = {"transport-playable-0.flac",
+                                    "transport-playable-1.flac",
+                                    "transport-playable-2.flac"},
+    }};
+    fixture.buildFourTrackManualView();
+    countCommittedStarts(fixture, committedStarts);
+    fixture.successionPtr->setRepeatMode(repeatMode);
+
+    bool settled = false;
+    std::size_t startedEvents = 0;
+    auto nowPlayingTracks = std::vector<TrackId>{};
+    auto const settledSubscription = fixture.successionPtr->onExplicitStartSettled([&] { settled = true; });
+    auto const startedSubscription = fixture.transport.playbackTransport.onStarted([&] { ++startedEvents; });
+    auto const nowPlayingSubscription = fixture.transport.playbackTransport.onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const& event) { nowPlayingTracks.push_back(event.trackId); });
+    REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId));
+    auto const completed = fixture.transport.executor.drainUntil(
+      [&]
+      {
+        return (settled && fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive) ||
+               committedStarts >= 4;
+      });
+    CHECK(completed);
+    CHECK(committedStarts == 3);
+    CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Idle);
+    CHECK(startedEvents == 0);
+    CHECK(nowPlayingTracks == std::vector{kInvalidTrackId});
+
+    // The attempt limit keeps this regression finite if Repeat One retries
+    // indefinitely again. Retire recovery before inspecting the report or destroying captures.
+    auto const feed = fixture.transport.notificationService.feed();
+    std::ignore = fixture.transport.playbackTransport.stop();
+    fixture.transport.executor.drain();
+    NotificationEntry const* failureLimit = nullptr;
+
+    for (auto const& entry : feed.entries)
+    {
+      if (auto const* report = std::get_if<NotificationReport>(&entry.message);
+          report != nullptr && report->templateId == NotificationReportTemplate::PlaybackStoppedAfterFailures)
+      {
+        failureLimit = &entry;
+        CHECK(report->count == 3);
+      }
+    }
+
+    REQUIRE(failureLimit != nullptr);
+    CHECK(failureLimit->severity == NotificationSeverity::Error);
+    CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
+  }
+
+  TEST_CASE("PlaybackSuccession - unannounced successful recovery resets the failure streak",
+            "[runtime][regression][playback-succession][concurrency]")
+  {
+    std::size_t committedStarts = 0;
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .finalOpenFailureFileNames = {"transport-playable-0.flac",
+                                    "transport-playable-1.flac",
+                                    "transport-playable-3.flac",
+                                    "transport-playable-4.flac"},
+    }};
+    auto const tracks = std::array{fixture.addPlayableTrack("First failure"),
+                                   fixture.addPlayableTrack("Second failure"),
+                                   fixture.addPlayableTrack("First recovery"),
+                                   fixture.addPlayableTrack("Third failure"),
+                                   fixture.addPlayableTrack("Fourth failure"),
+                                   fixture.addPlayableTrack("Second recovery")};
+    fixture.openManualView(tracks);
+    countCommittedStarts(fixture, committedStarts);
+    REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, tracks[0]));
+    REQUIRE(fixture.transport.executor.drainUntil(
+      [&]
+      {
+        return fixture.successionPtr->state().currentTrackId == tracks[2] &&
+               fixture.transport.playbackTransport.state().transport == audio::Transport::Playing;
+      }));
+    CHECK(committedStarts == 3);
+
+    fixture.successionPtr->next();
+    REQUIRE(fixture.transport.executor.drainUntil(
+      [&]
+      {
+        return fixture.successionPtr->state().currentTrackId == tracks[5] ||
+               fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive;
+      }));
+    CHECK(committedStarts == 6);
+    CHECK(fixture.successionPtr->state().currentTrackId == tracks[5]);
+    CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
+    auto const feed = fixture.transport.notificationService.feed();
+
+    for (auto const& entry : feed.entries)
+    {
+      if (auto const* report = std::get_if<NotificationReport>(&entry.message); report != nullptr)
+      {
+        CHECK(report->templateId != NotificationReportTemplate::PlaybackStoppedAfterFailures);
+      }
+    }
+  }
+
   TEST_CASE("PlaybackSuccession - accepted final decoder failure skips the failed candidate",
             "[runtime][regression][playback-succession][failure]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
-      .finalOpenFailureFileName = "transport-playable-2.flac",
+      .finalOpenFailureFileNames = {"transport-playable-2.flac"},
     }};
     fixture.buildFourTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));

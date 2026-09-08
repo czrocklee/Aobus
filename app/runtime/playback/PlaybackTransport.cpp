@@ -1643,11 +1643,13 @@ namespace ao::rt
 
   Result<PreparedCancellationBarrier> PlaybackTransport::commitPlayback(PreparedPlaybackStart&& preparedStart)
   {
-    return commitStagedPlayback(std::move(preparedStart), true);
+    return commitStagedPlayback(std::move(preparedStart), true)
+      .transform([](PlaybackStartReceipt const& receipt) { return receipt.cancellationBarrier; });
   }
 
-  Result<PreparedCancellationBarrier> PlaybackTransport::commitStagedPlayback(PreparedPlaybackStart&& preparedStart,
-                                                                              bool const announce)
+  Result<PlaybackTransport::PlaybackStartReceipt> PlaybackTransport::commitStagedPlayback(
+    PreparedPlaybackStart&& preparedStart,
+    bool const announce)
   {
     auto* const impl = checkedImpl();
 
@@ -1695,7 +1697,7 @@ namespace ao::rt
       impl->announceNowPlaying(preparedImplPtr->request, preparedImplPtr->sourceListId);
     }
 
-    return barrier;
+    return PlaybackStartReceipt{.cancellationBarrier = barrier, .playbackStarted = commitRes->playbackStarted};
   }
 
   Result<PreparedCancellationBarrier> PlaybackTransport::play(PlaybackRequest const& request,
@@ -1717,6 +1719,14 @@ namespace ao::rt
   Result<PreparedCancellationBarrier> PlaybackTransport::playTrack(TrackId const trackId,
                                                                    ListId const sourceListId,
                                                                    bool const announce)
+  {
+    return startTrack(trackId, sourceListId, announce)
+      .transform([](PlaybackStartReceipt const& receipt) { return receipt.cancellationBarrier; });
+  }
+
+  Result<PlaybackTransport::PlaybackStartReceipt> PlaybackTransport::startTrack(TrackId const trackId,
+                                                                                ListId const sourceListId,
+                                                                                bool const announce)
   {
     auto* const impl = checkedImpl();
     auto const requestRes = playbackRequestForTrack(impl->library, trackId);
