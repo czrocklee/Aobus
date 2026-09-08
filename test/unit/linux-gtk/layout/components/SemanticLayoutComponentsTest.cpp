@@ -1135,6 +1135,7 @@ namespace ao::gtk::layout::test
                                               ShellLayoutCollaborators{
                                                 .textCatalog = ao::test::englishMessageCatalog(),
                                                 .trackPageHost = &pageHost,
+                                                .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded(),
                                                 .createSmartListFromExpression = createSmartListFromExpression,
                                               });
 

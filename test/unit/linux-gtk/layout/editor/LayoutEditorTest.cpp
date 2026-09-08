@@ -15,6 +15,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -51,7 +52,10 @@ namespace ao::gtk::layout::editor::test
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
-      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{
+        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
     auto actionRegistry = ActionRegistry{registry.schema()};
 
     auto window = Gtk::Window{};

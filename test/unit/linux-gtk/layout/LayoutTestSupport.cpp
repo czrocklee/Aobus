@@ -20,6 +20,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
@@ -110,12 +111,12 @@ namespace ao::gtk::layout::test
                 .buildSnapshot = activateBuildSnapshot(session)}
       , layoutRuntime{components}
     {
-      LayoutRuntime::registerStandardComponents(components,
-                                                *runtimePtr,
-                                                ShellLayoutCollaborators{
-                                                  .textCatalog = messageCatalog,
-                                                  .playbackActions = &playbackActions,
-                                                });
+      LayoutRuntime::registerStandardComponents(
+        components,
+        *runtimePtr,
+        ShellLayoutCollaborators{.textCatalog = messageCatalog,
+                                 .playbackActions = &playbackActions,
+                                 .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
     }
 
     ~State() noexcept

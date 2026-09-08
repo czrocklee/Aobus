@@ -14,6 +14,7 @@
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -45,7 +46,10 @@ namespace ao::gtk::layout::editor::test
       DialogSessionFixture()
       {
         LayoutRuntime::registerStandardComponents(
-          registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = textCatalog});
+          registry,
+          *runtimePtr,
+          ShellLayoutCollaborators{
+            .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
         actionRegistry.registerAction(
           {.id = "playback.showOutputDeviceSelector", .label = "Output Device", .category = "Playback"}, {});
         actionRegistry.registerAction({.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell"}, {});

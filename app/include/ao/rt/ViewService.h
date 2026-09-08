@@ -48,6 +48,8 @@ namespace ao::rt
     std::shared_ptr<TrackListProjection const> projectionPtr{};
   };
 
+  /// Runtime operations and subscription creation require the supplied executor.
+  /// Composition constructs the service before publishing it to that owner.
   class ViewService final
   {
   public:

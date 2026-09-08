@@ -186,13 +186,50 @@ class CoverageMeasurementTest(unittest.TestCase):
             source = coverage.PROJECT_ROOT / "lib" / "audio" / "Foo.cpp"
 
             def extract(argv, *, cwd, **kwargs):
-                text = GCOV_A if "first.gcda" in argv[1] else GCOV_B
+                text = GCOV_A if "first.gcda" in argv[-1] else GCOV_B
                 (cwd / "Foo.cpp.gcov").write_text(text.replace("lib/audio/Foo.cpp", str(source)), encoding="utf-8")
                 return subprocess.CompletedProcess(argv, 0, "", "")
 
             with mock.patch.object(coverage.subprocess, "run", side_effect=extract):
                 merged = coverage.collect_coverage(build)
             self.assertEqual(coverage.file_stats(merged["lib/audio/Foo.cpp"]), (2, 2, 0, 100.0))
+
+    def test_same_basename_headers_from_one_object_both_survive_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build = Path(temporary)
+            (build / "test").mkdir()
+            (build / "test" / "headers.gcda").touch()
+            sources = ("app/tui/Executor.h", "include/ao/async/Executor.h")
+
+            def extract(argv, *, cwd, **kwargs):
+                for source in sources:
+                    filename = source.replace("/", "#") if "--preserve-paths" in argv else Path(source).name
+                    text = GCOV_B.replace("lib/audio/Foo.cpp", str(coverage.PROJECT_ROOT / source))
+                    (cwd / (filename + ".gcov")).write_text(text, encoding="utf-8")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with mock.patch.object(coverage.subprocess, "run", side_effect=extract):
+                merged = coverage.collect_coverage(build)
+            self.assertEqual(sorted(merged), sorted(sources))
+            for source in sources:
+                self.assertEqual(coverage.file_stats(merged[source]), (2, 2, 0, 100.0))
+
+    def test_test_objects_contribute_production_headers_without_test_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build = Path(temporary)
+            (build / "test").mkdir()
+            (build / "test" / "header.gcda").touch()
+
+            def extract(argv, *, cwd, **kwargs):
+                for source in ("include/ao/Example.h", "test/unit/ExampleTest.cpp"):
+                    text = GCOV_B.replace("lib/audio/Foo.cpp", str(coverage.PROJECT_ROOT / source))
+                    (cwd / (Path(source).name + ".gcov")).write_text(text, encoding="utf-8")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with mock.patch.object(coverage.subprocess, "run", side_effect=extract):
+                merged = coverage.collect_coverage(build)
+            self.assertEqual(list(merged), ["include/ao/Example.h"])
+            self.assertEqual(coverage.file_stats(merged["include/ao/Example.h"]), (2, 2, 0, 100.0))
 
 
 if __name__ == "__main__":

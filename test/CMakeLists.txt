@@ -978,6 +978,7 @@ endif()
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
     perf/CompletionVocabularyBaselineTest.cpp
+    perf/PerformanceReport.cpp
     perf/PerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp
 )

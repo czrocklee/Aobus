@@ -8,6 +8,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/uimodel/layout/component/LayoutSchema.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_message.hpp>
@@ -33,7 +34,10 @@ namespace ao::gtk::layout::editor::test
     std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
-      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
     auto const& schemas = registry.schema().components();
 

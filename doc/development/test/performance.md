@@ -73,6 +73,9 @@ The measured materialization includes the track-store scan, snapshot alias memoi
 Cached lookup rows separately cover enough whole-value hits to fill the limit, enough interior-word hits to fill it, no direct hits followed by alias hits, and a complete direct-plus-alias miss.
 
 `--no-build` uses the selected existing flavor tree and fails when its benchmark executable is absent.
+The configured compiler, sanitizer flags, and CMake build type must match the selected options; a mismatched tree is rejected before running or removing an existing report.
+Its report and terminal summary mark the source revision as `unverified`: the current checkout does not establish which source produced an existing executable.
+Rerun without `--no-build` when the review needs source-attributed evidence.
 `-p` selects one exact build tree in the same way as other portal commands.
 The portal removes the selected report before launching the workload and rejects a successful test selection that does not recreate it, so a filtered run cannot present stale evidence.
 Debug, sanitizer, and profile runs may help diagnosis, but acceptance evidence uses `release` unless the reviewed question explicitly concerns another build mode.
@@ -81,7 +84,7 @@ Debug, sanitizer, and profile runs may help diagnosis, but acceptance evidence u
 
 The JSON report records:
 
-- source revision and whether the worktree is dirty;
+- source revision and whether the worktree is dirty after a portal build, or `unverified` for `--no-build`;
 - compiler, build mode, platform, and governed ICU version;
 - warm-up and measured-sample counts; and
 - capability, scenario, dataset, input cardinality, median, and p95 for every measurement;
@@ -92,6 +95,10 @@ The current schema identifier is `aobus-performance-review/v2`.
 Ordering rows use the optional byte metric for distinct generated keys rather than every attempted generation.
 Completion-alias rows omit locale because alias derivation is independent of the presentation locale, and they report snapshot alias bytes only for scenarios that materialize them.
 
+The sampler sorts measured durations, uses the upper middle observation for the
+median when the sample count is even, and uses the nearest-rank 95th percentile.
+These are sample summaries, not confidence bounds or worst-case latency.
+
 Keep before/after reports outside the repository, normally under `/tmp` on Linux or the local temporary directory on Windows.
 Review both absolute latency and the relative delta.
 Binary or dependency size may be reported alongside the timings, but it does not override correctness or an observed latency regression.
@@ -101,6 +108,78 @@ Do not check machine-specific raw reports into the repository.
 
 Proposal-specific thresholds remain owned by their in-review RFC.
 Before that RFC is deleted, an accepted long-term upgrade gate moves into one scoped section of this guide; its decision record links here and retains rationale rather than duplicating the threshold table.
+
+## Design-audit workloads
+
+The opt-in audit filters use the same report format and honor `--samples` and
+`--warmups`. Run each filter separately with its own output path: each test case
+writes one complete report. A second reporting case fails without overwriting the
+first report; the partial file from that failed run is not acceptance evidence.
+The portal creates missing output parent directories. Direct executable runs must
+provide an existing parent directory and a fresh output path.
+For example, on Linux:
+
+```bash
+AOBUS_AUDIT_OBSERVATIONS=1000 ./ao perf --filter '[audit-observation]' --samples 40 --warmups 2 --output /tmp/observations.json
+AOBUS_AUDIT_COMPLETION_HISTORY=200000 ./ao perf --filter '[completion-vocabulary]' --samples 40 --warmups 2 --output /tmp/completion-history.json
+AOBUS_AUDIT_QUERY_ATOMS=512 ./ao perf --filter '[audit-query]' --samples 40 --warmups 2 --output /tmp/query-boundary.json
+```
+
+On Windows, set the corresponding environment variable before `ao.bat perf`
+and write reports to the guest's local temporary directory.
+
+- The observation fixture withholds Player's owner executor while a producer
+  emits graphs with 32 nodes and 128-byte ordinary node names. It measures
+  producer enqueue time and total owner drain time separately, asserts one
+  pending delivery and one coalesced quality notification, and checks the final
+  graph. Older pre-coalescing reports retained one task and notification per
+  observation; their batch drain and memory costs remain the comparison baseline. Repeat at 100,
+  1,000, and 10,000 observations. The byte metric is a payload lower bound;
+  allocator overhead, task wrappers, connections, and additional graph copies
+  require a separate heap profile. The pending-payload byte metric now counts
+  one retained graph regardless of burst length. Drain p95 describes complete batches, not
+  individual callback latency. This fixture does not directly withhold Engine's
+  non-realtime event worker or exercise ordered terminal events. Deterministic
+  Player regressions separately withhold that worker, delay outward publication,
+  race subscription retirement with delivery, and interleave a playback failure.
+- The completion fixture fixes 50,000 live tracks and 93,674 aggregate values,
+  while the history variable adds unused append-only dictionary entries.
+  Compare zero, 200,000, and 1,000,000 retired values. Cold timing starts after
+  invalidation and includes the production snapshot rebuild and aggregate
+  materialization; fixture creation and invalidation delivery are outside it.
+  Warm-up rebuilds also warm process-wide ICU state, so this is an invalidated
+  snapshot measurement, not first-process startup. Other vocabulary rows
+  measure subsequent materialization. Cached lookup samples each time one
+  request, rather than averaging a batch of requests before computing p95.
+  These rows are separate from the ordering-key completion vocabulary gate below.
+- The query fixture covers adjacent atoms, binary expressions, parentheses,
+  quoted text, and scalar lists. The input parameter counts atoms, nesting
+  levels, quoted payload bytes, or list elements according to the shape; the
+  report also records actual input bytes. Preparation is outside timing.
+  Parsing includes the initial normalization. Admitted inputs additionally time
+  renormalization, query and format compilation including temporary-plan
+  destruction, serialization, and AST retirement. Rejected inputs omit phases
+  that did not execute. Total duration includes timing bookkeeping. Probe both
+  sides of structural and byte limits, as well as much larger rejected inputs;
+  parser correctness tests remain the authority for expected admission.
+
+A fast workstation establishes an observed result on that workstation only.
+Record CPU, compiler, build settings, source identity, competing load, and sample
+counts, and run timing workloads serially without concurrent builds or profilers.
+For a dirty tree, preserve its diff and hashes of untracked source files outside
+the repository alongside the report. Profile allocation separately: whole-process
+peak heap can include fixture construction, while allocation-call-path attribution
+can include long-lived caches and does not by itself identify temporary bytes.
+
+Before accepting a change, state an interaction budget and retain headroom for
+slower hardware. Explicit 3x and 5x latency sensitivity calculations can expose
+risk but are hypothetical projections, not measured low-end CPU results.
+A VM sharing the workstation CPU adds native-platform evidence, not independent
+weak-hardware evidence. For the September 2026 audit, use 100 ms as a cold owner
+request investigation threshold and 20 ms on the reference workstation as a
+warning under the 5x assumption. These are review thresholds, not timer assertions
+or a promised supported-library-size limit. Unbounded memory growth requires a
+retention decision regardless of how quickly a finite batch drains.
 
 ## Locale-aware ordering gate
 

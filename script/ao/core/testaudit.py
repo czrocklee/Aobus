@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import PROJECT_ROOT, absolute_path
+from .proc import die
 
 LINT_FIXTURE_PARTS = ("integration", "lint", "fixture")
 
@@ -82,6 +83,8 @@ def resolve_files(paths: Iterable[str], root: Path = PROJECT_ROOT) -> list[Path]
         path = Path(name)
         if not path.is_absolute():
             path = root / path
+        if not path.exists():
+            raise die(f"explicitly selected audit path does not exist: {name}")
         if path.is_dir():
             candidates = sorted(path.rglob("*Test.cpp"))
         elif path.is_file() and path.name.endswith("Test.cpp"):

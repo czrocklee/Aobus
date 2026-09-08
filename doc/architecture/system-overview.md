@@ -64,15 +64,14 @@ Interactive-runtime-owned components may provide reusable application delivery b
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
 It owns storage, asynchronous execution, the library facade and change bus, source caching, verified resource-byte reading, completion, and notifications.
-`CoreRuntime::create()` is a typed-result factory: it opens and validates storage, allocates and finalizes its `Impl` and direct `MusicLibrary` first, uses the short-lived `Library::Prepared` token to acquire write authority against that final object, then emplaces the nonmovable `Library` directly in phase-local optional storage.
-It completes the initial All Tracks source reload before exposing the runtime.
-The `CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; moving either public wrapper transfers only its unique PImpl and moved-from destruction is inert.
+`CoreRuntime::create()` returns a typed result after storage validation and initial All Tracks materialization.
+The [interactive session lifecycle architecture](interactive-session-lifecycle.md#interactive-runtime-composition) owns construction order and stable runtime identity; the [library architecture](library.md#runtime-library-facade) owns acquisition of write authority.
 
 `AppRuntime` owns one `CoreRuntime` as the first direct member of its pinned implementation and adds the interactive application graph; it does not inherit from or expose the core owner.
 It directly contains mandatory view, workspace, playback transport and succession, `PlaybackService`, and playback-session-persistence values; among those interactive additions, only the transferred nonmovable workspace store retains unique ownership.
 The resolved playback-session store is a required reference, and one shared read-through `ResourceByteMemoryCache` is exposed through `resourceBytes()`.
 Its public application face explicitly forwards the core library, async runtime, sources, notifications, completion, ordering policy, and music root, but not raw `MusicLibrary` or database-path access.
-`AppRuntime::create()` is likewise the sole public construction boundary and returns a move-only value only after Core has moved into its final pinned implementation address and every Core-borrowing interactive member has been constructed there.
+`AppRuntime::create()` is likewise the sole public construction boundary.
 It exposes no partial graph when core initialization or required workspace-store composition fails.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.

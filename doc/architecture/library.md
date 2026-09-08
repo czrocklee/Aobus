@@ -172,9 +172,9 @@ It exposes four cooperating roles and owns one private mutation coordinator:
 Only a narrow shared delivery/admission block survives queued callback dispatch or a late replica-subscription reset, and that block exists only to weakly enter the owner, retain already-admitted delivery stacks, and preserve delivery diagnostics until those stacks retire.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
-`CoreRuntime` allocates and finalizes its `Impl` and direct `MusicLibrary` first, then `Library::prepare()` acquires `WritableMusicLibrary` against that final object and returns a short-lived move-only `Library::Prepared` construction token.
-The token carries only that successfully acquired authority across the typed-error boundary and is consumed when `CoreRuntime` emplaces the nonmovable `Library` directly in phase-local optional storage; it is never published as a runtime role.
-`CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; moving either wrapper transfers only its PImpl and moved-from destruction is inert.
+`Library::prepare()` acquires `WritableMusicLibrary` and returns a short-lived move-only `Library::Prepared` construction token.
+The token carries only that successfully acquired authority across the typed-error boundary and is consumed when constructing `Library`; it is never published as a runtime role.
+The [interactive session lifecycle architecture](interactive-session-lifecycle.md#interactive-runtime-composition) owns final placement, construction order, and wrapper movement.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
 
 Lane admission uses move-only value permits rather than heap-allocated lease wrappers.

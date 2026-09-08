@@ -23,6 +23,9 @@ This script will automatically:
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).
 5. Output the exact missing lines with 6 lines of surrounding context.
 
+Select `--cli`, `--tui`, or `--gtk` for a frontend suite; `--all` runs core, CLI, TUI, and GTK.
+Coverage extraction includes test objects so production headers instantiated only in tests contribute; reports retain only `app/`, `lib/`, and `include/` sources.
+
 The command may still print a partial report after a test failure, but it
 returns the first failing suite's non-zero status. A partial report is never a
 green coverage result.

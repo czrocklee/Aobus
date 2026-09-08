@@ -19,11 +19,16 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
 {
+  static_assert(!std::is_copy_constructible_v<LayoutSession>);
+  static_assert(!std::is_copy_assignable_v<LayoutSession>);
+  static_assert(!std::is_move_constructible_v<LayoutSession>);
+  static_assert(!std::is_move_assignable_v<LayoutSession>);
   namespace
   {
     class RecordingStateStore final : public LayoutComponentStateStore

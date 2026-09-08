@@ -1540,7 +1540,8 @@ namespace ao::cli::test
 
     SECTION("An argument after the literal boundary remains an import path")
     {
-      auto const literal = runArgs({"aobus", "lib", "import", "--", "--help-all"});
+      auto const fixture = CliFixture{};
+      auto const literal = fixture.run({"lib", "import", "--", "--help-all"});
       CHECK(literal.status != 0);
       CHECK(contains(literal.err, "Failed to read '--help-all'"));
       CHECK_FALSE(contains(literal.out, "list create"));

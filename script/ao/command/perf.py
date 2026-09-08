@@ -36,7 +36,9 @@ def _non_negative_integer(value: str) -> int:
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     build.add_build_arguments(parser, default_flavor="release")
-    parser.add_argument("--no-build", action="store_true", help="run the existing benchmark executable")
+    parser.add_argument(
+        "--no-build", action="store_true", help="run the existing benchmark executable with unverified source revision"
+    )
     parser.add_argument(
         "--samples",
         type=_positive_integer,
@@ -103,6 +105,7 @@ def _print_report(path: Path) -> None:
         f"Performance review: {metadata['platform']} {metadata['build_mode']} "
         f"{metadata['compiler']}, ICU {metadata['icu_version']}"
     )
+    print(f"  Source revision: {metadata.get('revision', 'unverified')}")
     for index, measurement in enumerate(measurements):
         context = f"measurement {index}"
         if not isinstance(measurement, dict):
@@ -137,7 +140,7 @@ def _print_report(path: Path) -> None:
         dimensions.append(measurement["scenario"])
         if locale := measurement.get("locale"):
             dimensions.append(locale)
-        dimensions.append(f"{measurement['dataset']}-{measurement['input_count']}")
+        dimensions.append(f"{measurement['dataset']} (input_count={measurement['input_count']})")
         summary = f"  {'/'.join(dimensions)}: median {median_ms:.3f} ms, p95 {p95_ms:.3f} ms"
         if byte_metric is not None:
             summary += f", {byte_metric['count']} {byte_metric['kind']}"
@@ -165,15 +168,23 @@ def run_command(args: argparse.Namespace) -> int:
     if not executable.exists():
         raise die(f"Performance executable not found at {executable}. Run './ao perf' without --no-build first.")
 
+    compiler = (
+        result.compiler
+        if result is not None
+        else build.validate_build_tree(
+            args,
+            build_dir,
+            expected_build_type={"debug": "Debug", "release": "Release", "profile": "RelWithDebInfo"}[args.flavor],
+        )
+    )
     output = args.output if args.output is not None else build_dir / "performance-review.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
-    compiler = result.compiler if result is not None else "clang" if args.clang else profile.compiler
     environment = {
         "AOBUS_PERF_REPORT_JSON": str(output),
         "AOBUS_PERF_SAMPLES": str(args.samples),
         "AOBUS_PERF_WARMUPS": str(args.warmups),
-        "AOBUS_PERF_REVISION": _revision(),
+        "AOBUS_PERF_REVISION": "unverified" if args.no_build else _revision(),
         "AOBUS_PERF_COMPILER": compiler,
         "AOBUS_PERF_BUILD_MODE": args.flavor,
         "AOBUS_PERF_PLATFORM": profile.name,

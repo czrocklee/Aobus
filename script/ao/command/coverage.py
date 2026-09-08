@@ -27,6 +27,7 @@ EPILOG = """\
 examples:
   ./ao coverage                          # core suite, full report
   ./ao coverage "SmartListEvaluator*"   # coverage for a test subset
+  ./ao coverage --cli --scope app/cli
   ./ao coverage --tui --scope app/tui
   ./ao coverage --gtk "[layout]"         # GTK suite with a Catch2 filter
   ./ao coverage --gtk --scope app/linux-gtk
@@ -43,10 +44,11 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
-        "--suite", choices=("core", "tui", "gtk", "all"), default="core", help="test suite (default: core)"
+        "--suite", choices=("core", "tui", "cli", "gtk", "all"), default="core", help="test suite (default: core)"
     )
     suite.add_argument("--core", dest="suite", action="store_const", const="core", help="shortcut for --suite core")
     suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
+    suite.add_argument("--cli", dest="suite", action="store_const", const="cli", help="shortcut for --suite cli")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
     suite.add_argument("--all", dest="suite", action="store_const", const="all", help="shortcut for --suite all")
     parser.add_argument("-p", "--path", metavar="<dir>", help=f"build directory (default: {builddir.COVERAGE_DIR})")
@@ -185,8 +187,10 @@ def scoped_stats(
 
 
 def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, str]]]:
-    """Run gcov for every .gcda under app/ and lib/ and merge the reports per source."""
-    gcda_files = sorted(path for top in ("app", "lib") for path in (build_dir / top).rglob("*.gcda") if path.is_file())
+    """Merge production coverage from all instrumented project and test objects."""
+    gcda_files = sorted(
+        path for top in ("app", "lib", "test") for path in (build_dir / top).rglob("*.gcda") if path.is_file()
+    )
     if not gcda_files:
         raise die("no coverage data generated. Did the tests run successfully?")
 
@@ -194,7 +198,9 @@ def collect_coverage(build_dir: Path) -> dict[str, dict[int, tuple[int | None, s
     with tempfile.TemporaryDirectory(prefix="ao-gcov-") as temporary:
         report_dir = Path(temporary)
         for gcda in gcda_files:
-            result = subprocess.run(["gcov", str(absolute_path(gcda))], cwd=report_dir, capture_output=True, text=True)
+            result = subprocess.run(
+                ["gcov", "--preserve-paths", str(absolute_path(gcda))], cwd=report_dir, capture_output=True, text=True
+            )
             if result.returncode != 0:
                 detail = (result.stdout + result.stderr).strip()
                 raise die(f"gcov failed for {gcda} (exit {result.returncode}); coverage is incomplete.\n{detail}")
@@ -307,7 +313,7 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
             raise die("coverage configure failed.")
 
     print("Building tests...")
-    suites = ("core", "tui", "gtk") if args.suite == "all" else (args.suite,)
+    suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)
     targets = [target for suite in suites for target in SUITE_TARGETS[suite]]
     if run(["cmake", "--build", str(build_dir), f"-j{args.jobs}", "--target", *targets]) != 0:
         raise die("coverage build failed.")

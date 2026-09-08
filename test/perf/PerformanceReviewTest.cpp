@@ -3,15 +3,27 @@
 //
 // Review evidence only: no machine-dependent pass/fail thresholds.
 
+#include "PerformanceReport.h"
+#include "lib/audio/NullBackend.h"
+#include "lib/query/detail/Normalize.h"
 #include "runtime/library/LibraryWriteLane.h"
 #include "runtime/projection/StringArena.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/Player.h>
+#include <ao/audio/RouteAnchor.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/library/DictionaryStore.h>
@@ -20,6 +32,10 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/FormatExpression.h>
+#include <ao/query/Parser.h>
+#include <ao/query/QueryCompilation.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
@@ -30,28 +46,24 @@
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/String.h>
 #include <ao/utility/UnicodeText.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <unicode/uvernum.h>
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <functional>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -59,7 +71,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -69,6 +81,44 @@ namespace ao::rt::test
 {
   namespace
   {
+    // One producer is joined before subscriptions or the fixture are retired.
+    class ObservationProvider final : public audio::BackendProvider
+    {
+    public:
+      void shutdown() noexcept override
+      {
+        _onDevices = {};
+        _onGraph = {};
+      }
+      Status status() const override { return {.descriptor = {.id = audio::kBackendNone}}; }
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        _onDevices = std::move(callback);
+        _onDevices({device()});
+        return {};
+      }
+      utility::ScopedRegistration subscribeGraph(std::string_view /*anchorId*/,
+                                                 OnGraphChangedCallback callback) override
+      {
+        _onGraph = std::move(callback);
+        return {};
+      }
+      std::unique_ptr<audio::Backend> createBackend(audio::Device const& /*device*/,
+                                                    audio::ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<audio::NullBackend>();
+      }
+      static audio::Device device()
+      {
+        return {.id = audio::DeviceId{"audit"}, .displayName = "Audit", .backendId = audio::kBackendNone};
+      }
+      void emitGraph(audio::flow::Graph const& graph) const { _onGraph(graph); }
+
+    private:
+      OnDevicesChangedCallback _onDevices;
+      OnGraphChangedCallback _onGraph;
+    };
+
     constexpr std::size_t kDefaultSamples = 20;
     constexpr std::size_t kDefaultWarmups = 1;
     constexpr std::size_t kRealLibraryTrackCount = 50000;
@@ -120,25 +170,6 @@ namespace ao::rt::test
     {
       std::uint64_t checksum = 0;
       std::size_t generatedKeyBytes = 0;
-    };
-
-    struct Measurement final
-    {
-      struct ByteMetric final
-      {
-        std::string kind;
-        std::size_t count = 0;
-      };
-
-      std::string capability;
-      std::optional<std::string> optPolicy;
-      std::string scenario;
-      std::optional<std::string> optLocale;
-      std::string dataset;
-      std::size_t inputCount = 0;
-      std::int64_t medianNs = 0;
-      std::int64_t percentile95Ns = 0;
-      std::optional<ByteMetric> optByteMetric;
     };
 
     struct CompletionReviewHarness final
@@ -583,26 +614,6 @@ namespace ao::rt::test
       return result;
     }
 
-    std::size_t configuredCount(char const* const name, std::size_t const fallback, std::size_t const minimum)
-    {
-      auto const* const raw = std::getenv(name);
-
-      if (raw == nullptr || raw[0] == '\0')
-      {
-        return fallback;
-      }
-
-      std::size_t parsed = 0;
-      auto const [end, error] = std::from_chars(raw, raw + std::strlen(raw), parsed);
-
-      if (error != std::errc{} || end != raw + std::strlen(raw) || parsed < minimum)
-      {
-        throw std::runtime_error{std::format("{} is outside the supported range", name)};
-      }
-
-      return parsed;
-    }
-
     template<typename Operation>
     Measurement sampleMeasurement(Measurement measurement,
                                   std::size_t const warmups,
@@ -630,10 +641,7 @@ namespace ao::rt::test
       }
 
       CHECK(checksum != 0);
-      std::ranges::sort(elapsed);
-      std::size_t const percentile95Index = (((samples * 95U) + 99U) / 100U) - 1U;
-      measurement.medianNs = elapsed[samples / 2];
-      measurement.percentile95Ns = elapsed[percentile95Index];
+      setPercentiles(measurement, elapsed);
 
       if (measurement.optByteMetric)
       {
@@ -836,33 +844,6 @@ namespace ao::rt::test
         std::move(operation));
     }
 
-    std::string jsonEscape(std::string_view const value)
-    {
-      auto result = std::string{};
-      result.reserve(value.size() + 8);
-
-      for (auto const ch : value)
-      {
-        switch (ch)
-        {
-          case '"': result += "\\\""; break;
-          case '\\': result += "\\\\"; break;
-          case '\n': result += "\\n"; break;
-          case '\r': result += "\\r"; break;
-          case '\t': result += "\\t"; break;
-          default: result += ch; break;
-        }
-      }
-
-      return result;
-    }
-
-    std::string environmentText(char const* const name, std::string_view const fallback = "unknown")
-    {
-      auto const* const value = std::getenv(name);
-      return value == nullptr || value[0] == '\0' ? std::string{fallback} : value;
-    }
-
     std::unique_ptr<TextOrderingPolicy> requireIcuPolicy(std::string_view const locale)
     {
       auto policyRes = i18n::createIcuTextOrderingPolicy(locale);
@@ -873,76 +854,6 @@ namespace ao::rt::test
       }
 
       return std::move(*policyRes);
-    }
-
-    void writeReport(std::span<Measurement const> const measurements,
-                     std::size_t const warmups,
-                     std::size_t const samples)
-    {
-      auto const* const outputPath = std::getenv("AOBUS_PERF_REPORT_JSON");
-
-      if (outputPath == nullptr || outputPath[0] == '\0')
-      {
-        return;
-      }
-
-      auto output = std::ofstream{utility::pathFromUtf8(outputPath), std::ios::trunc};
-
-      if (!output)
-      {
-        throw std::runtime_error{std::format("could not open performance report '{}'", outputPath)};
-      }
-
-      output << '{' << '\n';
-      output << R"(  "schema": "aobus-performance-review/v2",)" << '\n';
-      output << R"(  "metadata": {)" << '\n';
-      output << R"(    "revision": ")" << jsonEscape(environmentText("AOBUS_PERF_REVISION")) << R"(",)" << '\n';
-      output << R"(    "compiler": ")" << jsonEscape(environmentText("AOBUS_PERF_COMPILER")) << R"(",)" << '\n';
-      output << R"(    "build_mode": ")" << jsonEscape(environmentText("AOBUS_PERF_BUILD_MODE")) << R"(",)" << '\n';
-      output << R"(    "platform": ")" << jsonEscape(environmentText("AOBUS_PERF_PLATFORM")) << R"(",)" << '\n';
-      output << R"(    "icu_version": ")" << U_ICU_VERSION << R"(",)" << '\n';
-      output << R"(    "warmups": )" << warmups << ',' << '\n';
-      output << R"(    "samples": )" << samples << '\n';
-      output << "  }," << '\n';
-      output << R"(  "measurements": [)" << '\n';
-
-      for (std::size_t index = 0; index < measurements.size(); ++index)
-      {
-        auto const& item = measurements[index];
-        output << R"(    {"capability": ")" << jsonEscape(item.capability) << R"(", )"
-               << R"("scenario": ")" << jsonEscape(item.scenario) << R"(", )"
-               << R"("dataset": ")" << jsonEscape(item.dataset) << R"(", )"
-               << R"("input_count": )" << item.inputCount << ", "
-               << R"("median_ns": )" << item.medianNs << ", "
-               << R"("p95_ns": )" << item.percentile95Ns;
-
-        if (item.optPolicy)
-        {
-          output << R"(, "policy": ")" << jsonEscape(*item.optPolicy) << '"';
-        }
-
-        if (item.optLocale)
-        {
-          output << R"(, "locale": ")" << jsonEscape(*item.optLocale) << '"';
-        }
-
-        if (item.optByteMetric)
-        {
-          output << R"(, "byte_metric": {"kind": ")" << jsonEscape(item.optByteMetric->kind) << R"(", "count": )"
-                 << item.optByteMetric->count << '}';
-        }
-
-        output << '}';
-        output << (index + 1 == measurements.size() ? "\n" : ",\n");
-      }
-
-      output << "  ]" << '\n';
-      output << '}' << '\n';
-
-      if (!output)
-      {
-        throw std::runtime_error{std::format("could not write performance report '{}'", outputPath)};
-      }
     }
   } // namespace
 
@@ -1231,5 +1142,245 @@ namespace ao::rt::test
 
     writeReport(measurements, warmups, samples);
     REQUIRE(measurements.size() == expectedMeasurementCount);
+  }
+
+  TEST_CASE("PerformanceReview - query expression admission and recursive phases", "[perf][unit][audit-query]")
+  {
+    auto const count = configuredCount("AOBUS_AUDIT_QUERY_ATOMS", 128, 1);
+    auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);
+    auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", kDefaultWarmups, 0);
+    auto measurements = std::vector<Measurement>{};
+
+    for (auto const* const shape : {"adjacent", "binary", "nested", "quoted", "list"})
+    {
+      auto input = std::string{};
+
+      if (std::string_view{shape} == "nested")
+      {
+        input = std::string(count, '(') + "true" + std::string(count, ')');
+      }
+      else if (std::string_view{shape} == "quoted")
+      {
+        input = "\"" + std::string(count, 'x') + "\"";
+      }
+      else
+      {
+        if (std::string_view{shape} == "list")
+        {
+          input += '[';
+        }
+
+        for (std::size_t index = 0; index < count; ++index)
+        {
+          if (index != 0)
+          {
+            if (std::string_view{shape} == "binary")
+            {
+              input += " and ";
+            }
+            else if (std::string_view{shape} == "list")
+            {
+              input += ", ";
+            }
+            else
+            {
+              input += ' ';
+            }
+          }
+
+          input += "true";
+        }
+
+        if (std::string_view{shape} == "list")
+        {
+          input += ']';
+        }
+      }
+
+      constexpr auto kPhases = std::to_array<std::string_view>({
+        "parse-and-normalize",
+        "renormalize",
+        "compile-query-and-retire-plan",
+        "compile-format-and-retire-plan",
+        "serialize",
+        "ast-teardown",
+        "total",
+      });
+      auto elapsed = std::array<std::vector<std::int64_t>, kPhases.size()>{};
+
+      for (auto& phaseSamples : elapsed)
+      {
+        phaseSamples.reserve(samples);
+      }
+
+      bool accepted = false;
+      bool queryAccepted = false;
+      bool formatAccepted = false;
+      std::size_t outputBytes = 0;
+
+      bool structureAdmitted = true;
+
+      if (std::string_view{shape} == "adjacent")
+      {
+        structureAdmitted = count <= 512;
+      }
+      else if (std::string_view{shape} == "binary")
+      {
+        structureAdmitted = count <= 256;
+      }
+      else if (std::string_view{shape} == "nested")
+      {
+        structureAdmitted = count <= 64;
+      }
+
+      for (std::size_t run = 0; run < warmups + samples; ++run)
+      {
+        using Clock = std::chrono::steady_clock;
+        auto const start = Clock::now();
+        auto previousTime = start;
+        auto record = [&](std::size_t const phase)
+        {
+          if (auto const now = Clock::now(); run >= warmups)
+          {
+            elapsed[phase].push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(now - previousTime).count());
+          }
+
+          previousTime = Clock::now();
+        };
+        auto expressionRes = query::parse(input);
+        record(0);
+        accepted = expressionRes.has_value();
+
+        if (accepted)
+        {
+          query::normalize(*expressionRes);
+          record(1);
+          queryAccepted = query::compileQuery(*expressionRes).has_value();
+          record(2);
+          formatAccepted = query::compileFormat(*expressionRes).has_value();
+          record(3);
+          outputBytes = query::serialize(*expressionRes).size();
+          record(4);
+          expressionRes = query::Expression{};
+          record(5);
+        }
+
+        if (run >= warmups)
+        {
+          elapsed.back().push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count());
+        }
+
+        REQUIRE(accepted == (structureAdmitted && input.size() <= 65536));
+      }
+
+      for (std::size_t phase = 0; phase < kPhases.size(); ++phase)
+      {
+        if (elapsed[phase].empty())
+        {
+          continue;
+        }
+
+        auto measurement = Measurement{
+          .capability = "query-admission",
+          .scenario = std::format("{}/{}/{}", shape, accepted ? "admitted" : "rejected", kPhases[phase]),
+          .dataset = std::format("{} units; {} input bytes; query {}; format {}",
+                                 count,
+                                 input.size(),
+                                 queryAccepted ? "accepted" : "rejected",
+                                 formatAccepted ? "accepted" : "rejected"),
+          .inputCount = count,
+          .optByteMetric = Measurement::ByteMetric{.kind = "serialized-bytes", .count = outputBytes},
+        };
+        setPercentiles(measurement, elapsed[phase]);
+        measurements.push_back(std::move(measurement));
+      }
+    }
+
+    writeReport(measurements, warmups, samples);
+  }
+
+  TEST_CASE("PerformanceReview - graph bursts retain one latest payload until owner delivery",
+            "[perf][unit][audit-observation]")
+  {
+    auto const count = configuredCount("AOBUS_AUDIT_OBSERVATIONS", 1000, 1);
+    auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);
+    auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", kDefaultWarmups, 0);
+    auto executor = QueuedExecutor{};
+    auto player = audio::Player{executor};
+    auto providerPtr = std::make_unique<ObservationProvider>();
+    auto* source = providerPtr.get();
+    player.addProvider(std::move(providerPtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(audio::kBackendNone, ObservationProvider::device().id, audio::kProfileShared));
+    player.handleRouteChanged(
+      audio::Engine::RouteStatus{.optAnchor = audio::RouteAnchor{.backend = audio::kBackendNone, .id = "audit-route"}},
+      player.playbackGeneration());
+    executor.drain();
+    std::size_t delivered = 0;
+    player.setOnQualityChanged([&delivered](auto const&, bool) { ++delivered; });
+    auto graph = audio::flow::Graph{};
+
+    for (std::size_t index = 0; index < 32; ++index)
+    {
+      graph.nodes.push_back(audio::flow::Node{.id = std::format("node-{}", index), .name = std::string(128, 'x')});
+    }
+
+    auto enqueueSamples = std::vector<std::int64_t>{};
+    auto drainSamples = std::vector<std::int64_t>{};
+
+    for (std::size_t run = 0; run < warmups + samples; ++run)
+    {
+      delivered = 0;
+      std::int64_t enqueueNs = 0;
+      auto producer = std::jthread{
+        [&]
+        {
+          auto const start = std::chrono::steady_clock::now();
+
+          for (std::size_t index = 0; index < count; ++index)
+          {
+            graph.nodes.back().name = std::format("last-{}", index);
+            source->emitGraph(graph);
+          }
+
+          enqueueNs =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+        }};
+      producer.join();
+      CHECK(executor.queuedCount() == 1);
+      CHECK(delivered == 0);
+      auto const startTime = std::chrono::steady_clock::now();
+      REQUIRE(executor.drainUntil([&] { return delivered == 1; }, std::chrono::seconds{30}));
+      auto const elapsed =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTime).count();
+      auto const final = player.status();
+      REQUIRE(!final.flow.nodes.empty());
+      CHECK(final.flow.nodes.back().name == std::format("last-{}", count - 1));
+
+      if (run >= warmups)
+      {
+        enqueueSamples.push_back(enqueueNs);
+        drainSamples.push_back(elapsed);
+      }
+    }
+
+    auto const payloadBytes = (32U * sizeof(audio::flow::Node)) + (std::size_t{31} * 129U);
+    auto measurements = std::vector<Measurement>{};
+
+    for (auto const* const phase : {"producer-enqueue", "graph-to-quality-drain"})
+    {
+      auto measurement = Measurement{
+        .capability = "audio-observation-retention",
+        .scenario = std::format("withheld-owner/{}", phase),
+        .dataset =
+          std::format("{} emitted graphs; 1 pending delivery; {} delivered callbacks; 32 nodes", count, delivered),
+        .inputCount = count,
+        .optByteMetric = Measurement::ByteMetric{.kind = "queued-payload-bytes-lower-bound", .count = payloadBytes},
+      };
+      setPercentiles(measurement, std::string_view{phase} == "producer-enqueue" ? enqueueSamples : drainSamples);
+      measurements.push_back(std::move(measurement));
+    }
+
+    writeReport(measurements, warmups, samples);
   }
 } // namespace ao::rt::test
