@@ -22,7 +22,7 @@ namespace ao::tui
   enum class KeyAction : std::uint8_t
   {
     Quit,
-    ToggleListChooser,
+    ToggleLists,
     ToggleDetails,
     ToggleAudioPipeline,
     ToggleOutputDevices,
@@ -43,8 +43,8 @@ namespace ao::tui
     EditProperties,
     OpenSettings,
     PlaySelection,
-    PreviousTrack,
-    NextTrack,
+    PreviousRow,
+    NextRow,
     PreviousSection,
     NextSection,
     SeekBackward,
@@ -53,8 +53,15 @@ namespace ao::tui
     VolumeUp,
     PlaybackPlayPause,
     PlaybackStop,
+    PlaybackPrevious,
+    PlaybackNext,
+    PlaybackShuffle,
+    PlaybackRepeat,
+    SwitchWorkspaceFocus,
     Count,
   };
+
+  bool isPlaybackControl(KeyAction action);
 
   struct ActionDescriptor final
   {
@@ -63,10 +70,10 @@ namespace ao::tui
     std::span<std::string_view const> defaultChords{};
   };
 
-  /// Stable action identities and TUI-local default additions, in conflict-winner order.
+  /// Stable action identities and terminal defaults, in conflict-winner order.
   std::span<ActionDescriptor const> actionDescriptors();
 
-  /// Shared application defaults plus TUI-only defaults and preferred terminal aliases.
+  /// Deliberate terminal defaults using shared action identities where applicable.
   uimodel::KeymapBindings defaultKeymap();
 
   /// Validates only the edited action against executable terminal ownership.
@@ -74,6 +81,9 @@ namespace ao::tui
 
   /// Projects one neutral chord when the pinned terminal protocol can represent it safely.
   std::optional<ftxui::Event> eventForChord(uimodel::KeyChord const& chord);
+
+  /// Human-readable terminal spelling; bare letters show their actual case.
+  std::string keyChordLabel(uimodel::KeyChord const& chord);
 
   /**
    * @brief Immutable executable projection of one effective keymap.

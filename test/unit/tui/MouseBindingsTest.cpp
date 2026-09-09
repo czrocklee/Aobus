@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -64,5 +65,25 @@ namespace ao::tui::test
         CHECK(box.y_max < 3);
       }
     }
+  }
+
+  TEST_CASE("MouseBindings - panel close stays in the visible viewport while content scrolls",
+            "[tui][unit][mouse][render]")
+  {
+    using namespace ftxui;
+    auto regions = PanelMouseRegions{};
+    auto rows = Elements{};
+
+    for (std::int32_t index = 0; index < 30; ++index)
+    {
+      rows.push_back(text(std::to_string(index)));
+    }
+
+    auto const rendered = renderElement(mousePanel(vbox(std::move(rows)) | border, regions, 29), 20, 5);
+    CHECK(rendered.text.contains("29"));
+    CHECK(regions.closeBox.y_min == 0);
+    CHECK(regions.closeBox.x_min >= 0);
+    CHECK(regions.closeBox.x_max < 20);
+    CHECK(regions.contentBox.y_max - regions.contentBox.y_min > 5);
   }
 } // namespace ao::tui::test

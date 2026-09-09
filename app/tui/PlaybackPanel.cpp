@@ -8,11 +8,16 @@
 #include "ShellText.h"
 #include "SoulButton.h"
 #include "Style.h"
+#include "TextCell.h"
+#include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/node.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -29,6 +34,21 @@ namespace ao::tui
     constexpr std::int32_t kMinimumSeekRailColumns = 24;
     constexpr std::int32_t kMaximumSeekRailColumns = 48;
     constexpr std::int32_t kPlaybackRows = 1;
+
+    std::string playbackTitle(i18n::MessageCatalog const& textCatalog, rt::NowPlayingInfo const& track)
+    {
+      if (!track.title.empty())
+      {
+        return track.title;
+      }
+
+      if (track.trackId != kInvalidTrackId)
+      {
+        return i18n::requiredFormat(textCatalog, i18n::MessageId::TrackFallback, {{"id", track.trackId.raw()}});
+      }
+
+      return std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoActiveTrack)};
+    }
 
     std::string repeatGlyph(std::string_view const glyph, std::int32_t const count)
     {
@@ -112,9 +132,27 @@ namespace ao::tui
 
     auto fallbackState = rt::PlaybackTransportSnapshot{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
-    auto const title = state.nowPlaying.title.empty()
-                         ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoActiveTrack)}
-                         : state.nowPlaying.title;
+    auto const succession = view.succession == nullptr ? rt::PlaybackSuccessionSnapshot{} : *view.succession;
+    auto shufflePtr = text("⇄");
+    shufflePtr = succession.shuffle == rt::ShuffleMode::On ? std::move(shufflePtr) | style::accent() | bold
+                                                           : std::move(shufflePtr) | dim;
+    auto repeatPtr = text(succession.repeat == rt::RepeatMode::One ? "↻1" : "↻ ");
+    repeatPtr = succession.repeat == rt::RepeatMode::Off ? std::move(repeatPtr) | dim
+                                                         : std::move(repeatPtr) | style::accent() | bold;
+
+    if (view.shuffleBox != nullptr)
+    {
+      shufflePtr = std::move(shufflePtr) | reflect(*view.shuffleBox);
+    }
+
+    if (view.repeatBox != nullptr)
+    {
+      repeatPtr = std::move(repeatPtr) | reflect(*view.repeatBox);
+    }
+
+    auto modesPtr = hbox({std::move(shufflePtr), text(" "), std::move(repeatPtr), text(" ")});
+    modesPtr->ComputeRequirement();
+    auto const title = playbackTitle(textCatalog, state.nowPlaying);
     auto const artist = state.nowPlaying.artist;
     auto titleLine = title;
 
@@ -127,12 +165,30 @@ namespace ao::tui
     auto const effectiveElapsed = clampedElapsed(view.displayElapsed, state.duration);
     auto const elapsed = formatDuration(effectiveElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
-    auto const volume = playbackVolume(textCatalog, static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
+    auto const volume =
+      state.volume.muted
+        ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::AudioFindingMuted)}
+        : playbackVolume(textCatalog, static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
     auto const soulAura = uimodel::resolveSoulAura(state.transport, state.ready, state.quality);
     auto const soulVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(soulAura), view.soulMotion);
     auto outputElementPtr = outputDeviceBadge(view.outputView, view.outputDeviceHovered);
     auto soulButtonElementPtr = soulButtonElement(state.transport, soulVisual, view.animationElapsed);
-    auto seekRailElementPtr = seekRail(effectiveElapsed, state.duration, seekRailColumns(view.terminalColumns));
+    outputElementPtr->ComputeRequirement();
+    soulButtonElementPtr->ComputeRequirement();
+    auto const fixedColumns = outputElementPtr->requirement().min_x + soulButtonElementPtr->requirement().min_x +
+                              cellWidth(elapsed) + cellWidth(duration) + cellWidth(volume) + 5 +
+                              modesPtr->requirement().min_x;
+    auto const freeColumns = std::max(0, view.terminalColumns - fixedColumns);
+    auto const railColumns =
+      view.terminalColumns <= 0
+        ? seekRailColumns(0)
+        : std::min(seekRailColumns(view.terminalColumns), freeColumns - std::min(12, std::max(0, freeColumns - 1)));
+    auto seekRailElementPtr = railColumns > 0 ? seekRail(effectiveElapsed, state.duration, railColumns) : text("");
+
+    if (view.terminalColumns > 0)
+    {
+      titleLine = ellipsizeToCellWidth(titleLine, freeColumns - railColumns);
+    }
 
     if (view.outputDeviceBox != nullptr)
     {
@@ -149,11 +205,19 @@ namespace ao::tui
       seekRailElementPtr = std::move(seekRailElementPtr) | reflect(*view.seekRailBox);
     }
 
+    auto volumePtr = text(volume);
+
+    if (view.volumeBox != nullptr)
+    {
+      volumePtr = std::move(volumePtr) | ftxui::reflect(*view.volumeBox);
+    }
+
     return hbox({
       std::move(soulButtonElementPtr),
       text(" "),
       text(std::move(titleLine)) | bold | flex,
       text(" "),
+      std::move(modesPtr),
       std::move(outputElementPtr),
       text(elapsed),
       text(" "),
@@ -161,7 +225,7 @@ namespace ao::tui
       text(" "),
       text(duration),
       text(" "),
-      text(volume),
+      std::move(volumePtr),
     });
   }
 } // namespace ao::tui

@@ -34,9 +34,9 @@ namespace ao::tui::test
     CHECK(requiredCommand(":output").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":devices").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":views").action == CommandAction::OpenPresentationPanel);
-    CHECK(requiredCommand(":p").action == CommandAction::OpenPresentationPanel);
+
     CHECK(requiredCommand(":notifications").action == CommandAction::OpenNotifications);
-    CHECK(requiredCommand(":n").action == CommandAction::OpenNotifications);
+
     CHECK(requiredCommand("help").action == CommandAction::ShowHelp);
     CHECK(requiredCommand(":current").action == CommandAction::RevealCurrentTrack);
     auto presentationCommand = requiredCommand(":view albums");
@@ -70,6 +70,15 @@ namespace ao::tui::test
     CHECK(requiredCommand("stop").action == CommandAction::Stop);
     CHECK(requiredCommand("quit").action == CommandAction::Quit);
     CHECK(requiredCommand("close").action == CommandAction::CloseOverlay);
+    CHECK(requiredCommand(":previous").action == CommandAction::Previous);
+    CHECK(requiredCommand(":next").action == CommandAction::Next);
+    CHECK(requiredCommand(":shuffle").action == CommandAction::Shuffle);
+    CHECK(requiredCommand(":repeat").action == CommandAction::Repeat);
+    CHECK(requiredCommand(":back").action == CommandAction::Back);
+    CHECK(requiredCommand(":forward").action == CommandAction::Forward);
+    CHECK_FALSE(parseCommand(":c"));
+    CHECK_FALSE(parseCommand(":C"));
+    CHECK_FALSE(parseCommand(":r"));
     CHECK(requiredCommand("hide").action == CommandAction::CloseOverlay);
     CHECK(requiredCommand("esc").action == CommandAction::CloseOverlay);
   }
@@ -77,7 +86,7 @@ namespace ao::tui::test
   TEST_CASE("Command - command and root key actions share one relation", "[tui][unit][keymap]")
   {
     constexpr auto kRelations = std::to_array<std::pair<CommandAction, KeyAction>>({
-      {CommandAction::OpenLists, KeyAction::ToggleListChooser},
+      {CommandAction::OpenLists, KeyAction::ToggleLists},
       {CommandAction::OpenDetail, KeyAction::ToggleDetails},
       {CommandAction::OpenQuality, KeyAction::ToggleAudioPipeline},
       {CommandAction::OpenOutputDevices, KeyAction::ToggleOutputDevices},
@@ -97,6 +106,10 @@ namespace ao::tui::test
       {CommandAction::EditProperties, KeyAction::EditProperties},
       {CommandAction::Play, KeyAction::PlaySelection},
       {CommandAction::TogglePlayback, KeyAction::PlaybackPlayPause},
+      {CommandAction::Previous, KeyAction::PlaybackPrevious},
+      {CommandAction::Next, KeyAction::PlaybackNext},
+      {CommandAction::Shuffle, KeyAction::PlaybackShuffle},
+      {CommandAction::Repeat, KeyAction::PlaybackRepeat},
       {CommandAction::Stop, KeyAction::PlaybackStop},
       {CommandAction::Quit, KeyAction::Quit},
     });

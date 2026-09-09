@@ -20,7 +20,7 @@ Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translati
 The replaceable plan value built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
-`TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns modal keys and confirmations; `TrackMetadataEditor.cpp` and `TrackTagEditor.cpp` own their page input and draft state.
+`TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns modal keys and submission prompts, while `TrackMetadataEditor.cpp` and `TrackTagEditor.cpp` own page input and rendering.
 
 ## Surface
 
@@ -35,19 +35,19 @@ The replaceable plan value built there is read by `EventController.cpp` for root
 | `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
 | `--version` | prints `Aobus TUI <version>` and exits |
 
-Per-library column layouts and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
+Per-library List navigation visibility, column layouts, and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
 Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
 
 ### Shortcut overrides
 
-At startup the TUI loads the `shortcuts` group from the application-global `<config>/tui.yaml`, using the shared application defaults plus the TUI-local defaults in the [keyboard map reference](../shell/keymap.md).
+At startup the TUI loads the `shortcuts` group from the application-global `<config>/tui.yaml`, using the deliberate terminal defaults in the [keyboard map reference](../shell/keymap.md).
 This source is independent of the selected library and `--config`.
 The Settings Keyboard page saves accepted candidates before replacing the effective dispatch/hint plan. Ordinary shutdown does not rewrite untouched shortcuts. All global preferences share one store that preserves sibling groups.
 
 ### Settings
 
 Press `,`, click Settings in the workspace status bar, or use `:settings` / `:config` to open Settings. The shortcut is configurable through `tui.shell.openSettings`; the mouse entry remains available when it is unbound. Help lists the effective shortcut and command aliases.
-Tab/Shift+Tab selects a page; Escape closes, asking for confirmation if a failed save is pending. In the language chooser or shortcut capture, Escape cancels only the unconfirmed choice. Preference rows use Left/Right or Enter. Language uses a chooser and Enter confirmation. Keyboard uses Left/Right to select a chord, Insert to add, Enter to replace, Delete to remove, and `r` to restore defaults. Failed preference and shortcut saves offer Ctrl+R retry and Ctrl+G discard.
+Tab/Shift+Tab selects a page; Escape closes, asking for confirmation if a failed save is pending. In the language chooser or shortcut capture, Escape cancels only the unconfirmed choice. Preference rows use Left/Right or Enter. Language uses a chooser and Enter confirmation. Keyboard uses Left/Right to select a chord, `a` or Insert to add, Enter to replace, Delete to remove, and `r` to restore defaults. Failed preference and shortcut saves offer Ctrl+R retry and Ctrl+G discard.
 
 ### Command prefixes
 
@@ -61,23 +61,23 @@ The parser accepts the Command Palette draft with or without its leading `:`; `/
 | `preset <id>` | set track presentation |
 | `view <id>` | set track presentation |
 
-Text that is not a known prefix or exact alias is an unknown command and does not change the filter.
+The parser accepts only known prefixes and exact aliases. The palette also searches localized action names and aliases, showing one row per action; Return activates a highlighted search result. An unmatched draft reports an unknown command without changing the filter.
 
 ### Command aliases
 
 | Aliases | Action |
 | --- | --- |
-| `lists`, `l` | open/toggle list chooser |
-| `detail`, `details`, `d` | open/toggle detail |
-| `quality`, `audio`, `pipeline`, `a` | open/toggle quality pipeline |
-| `output`, `outputs`, `device`, `devices`, `o` | open/toggle output devices |
-| `views`, `p` | open/toggle presentation panel |
-| `notifications`, `notification`, `n` | open/toggle notification center |
+| `lists` | enable/focus Lists or disable its visible pane |
+| `detail`, `details` | open/toggle detail |
+| `quality`, `audio`, `pipeline` | open/toggle quality pipeline |
+| `output`, `outputs`, `device`, `devices` | open/toggle output devices |
+| `views` | open/toggle presentation panel |
+| `notifications`, `notification` | open/toggle notification center |
 | `close`, `hide`, `esc` | close overlay |
-| `help`, `h`, `?` | help |
+| `help` | help |
 | `current`, `now`, `reveal` | reveal current track |
-| `clear`, `c` | clear filter |
-| `reload`, `refresh`, `r` | reload active list |
+| `clear` | clear filter |
+| `reload`, `refresh` | reload active list |
 | `scan`, `rescan` | start an eager library scan |
 | `scan cancel` | request cooperative cancellation of the running scan |
 | `select toggle` | mark or unmark the focused track |
@@ -87,9 +87,13 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `edit`, `properties` | open the Track Properties editor over the current selection |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
-| `stop`, `s` | stop playback |
+| `stop` | stop playback |
+| `previous`, `next` | play the previous/next track in the playback sequence |
+| `shuffle` | toggle shuffle |
+| `repeat` | cycle repeat Off → All → One → Off |
+| `back`, `forward` | navigate workspace history, including the view left by reveal |
 | `settings`, `config` | open global TUI Settings |
-| `quit`, `q` | request normal checkpoint-and-stop exit |
+| `quit` | request normal checkpoint-and-stop exit |
 
 ### Workspace keys
 
@@ -102,35 +106,48 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `PageUp`, `PageDown` | page selection | fixed protocol |
 | `Home`, `End` | first/last selection | fixed protocol |
 | `Return` | play the focused track | configurable at root; Return is fixed activation inside supported overlays |
-| `j` / `k` | next/previous track | configurable |
+| `j` / `k` | move focus to next/previous row | configurable |
 | `Space` | toggle play/pause | configurable |
 | `s` | stop | configurable |
-| `[` / `]` | seek -/+ 5 seconds | configurable |
+| `<` / `>`, `Ctrl+Left` / `Ctrl+Right` | previous/next playback track | configurable |
+| `S` | toggle shuffle | configurable |
+| `r` | cycle repeat Off → All → One → Off | configurable |
+| `Left` / `Right`, `[` / `]` | seek -/+ 5 seconds | configurable |
 | `{` / `}` | previous/next presentation group | configurable |
 | `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
-| `l`, `d`, `a`, `o`, `p`, `n` | toggle corresponding overlay | configurable |
+| `l` | enable/focus Lists or disable its visible pane | configurable |
+| `d`, `a`, `o`, `p`, `n` | toggle corresponding panel | configurable |
 | `,` | open Settings | configurable at root |
-| `?` | open help | configurable |
-| `Ctrl+L` | reveal current track | configurable |
-| `c` | clear filter | configurable |
-| `r` | reload active list | configurable |
+| `?`, `F1` | open/close help | configurable |
+| `c` | reveal current track | configurable |
+| `C` | clear filter | configurable |
+| `R` | reload active list | configurable |
+| `Tab`, `Shift+Tab` | switch Lists/Tracks focus when docked; return to Tracks from Lists | configurable |
 | `m` | mark or unmark the focused track | configurable |
-| `v`, `Shift+V` | start a visual selection at the focus, or confirm the running one | configurable |
+| `v` | start a visual selection at the focus, or confirm the running one | configurable |
 | `Shift+A` | mark every track in the current view | configurable |
 | `u` | clear marked tracks | configurable |
 | `e` | open the Track Properties editor over the current selection | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
 | `:` | open an empty Command Palette input | configurable |
-| `q` | request normal exit | configurable |
+| `Q` (Shift+Q) | request normal exit | configurable |
 | `Ctrl-C` | graceful exit request through the App exit gate | fixed protocol |
 | `Esc` | close overlay, cancel active text input, or cancel a running visual selection according to its mode | fixed protocol |
+
+Playback shortcuts also work in browse panels after local navigation, activation, and toggle handling. Active search, shell text input, Settings, and track editors consume their own input exclusively. Rebinding a root key does not change fixed picker or editor keys. Uppercase letters in this table require Shift; canonical configuration uses `Shift+C`, `Shift+R`, and `Shift+S`.
 
 ### Quick Filter keys
 
 | Key | Action |
 | --- | --- |
-| printable UTF-8 | append to draft |
-| `Backspace` | remove one extended grapheme cluster |
+| printable UTF-8 | insert at the caret |
+| `Backspace`, `Delete` | remove one grapheme before/at the caret |
+| `Left`, `Right` | move by grapheme; clicking input also positions the caret |
+| `Home`, `End`, `Ctrl+A`, `Ctrl+E` | move to the beginning/end |
+| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words |
+| `Ctrl+W` | delete the preceding word |
+| `Ctrl+U`, `Ctrl+K` | delete text before/after the caret |
+| `Ctrl+P`, `Ctrl+N` | recall older/newer session history, restoring the unfinished draft past the newest entry |
 | `Up`, `Down` | cycle completion selection |
 | `PageUp`, `PageDown` | move selection by one bounded completion page |
 | `Tab` | apply selected completion and keep editing |
@@ -143,18 +160,24 @@ After an edit, the draft also applies live following a 200-millisecond quiet int
 The active draft replaces the bottom status bar, and its completion popup opens directly above it; the separate Command Palette remains centered.
 
 Return and Escape intentionally differ between the two input modes.
-Quick Filter edits are live, so Return accepts the highlighted value and Escape keeps the literal draft; Command Palette input has no live effect, so Return executes only the typed command and Escape cancels it.
+Quick Filter edits are live, so Return accepts the highlighted value and Escape keeps the literal draft; Command Palette input has no live effect; Return executes an exact typed command, or activates the selected search result, and Escape cancels it.
 
 ### Command Palette keys
 
 | Key | Action |
 | --- | --- |
-| printable UTF-8 | append to draft |
-| `Backspace` | remove one extended grapheme cluster |
+| printable UTF-8 | insert at the caret |
+| `Backspace`, `Delete` | remove one grapheme before/at the caret |
+| `Left`, `Right` | move by grapheme; clicking input also positions the caret |
+| `Home`, `End`, `Ctrl+A`, `Ctrl+E` | move to the beginning/end |
+| `Alt+B`, `Alt+F`, `Ctrl+Left`, `Ctrl+Right` | move across space-delimited words |
+| `Ctrl+W` | delete the preceding word |
+| `Ctrl+U`, `Ctrl+K` | delete text before/after the caret |
+| `Ctrl+P`, `Ctrl+N` | recall older/newer session history, restoring the unfinished draft past the newest entry |
 | `Up`, `Down` | cycle completion selection |
 | `PageUp`, `PageDown` | move selection by one bounded completion page |
 | `Tab` | apply selected completion and keep editing |
-| `Return` | run a known command without implicitly applying the selected completion |
+| `Return` | run a complete typed command; otherwise activate the highlighted candidate. Explicit candidate navigation takes priority; argument prefixes remain open |
 | `Esc` | discard the command draft and close |
 
 ### Track Properties editor keys
@@ -191,21 +214,28 @@ Footer controls and `×` follow the same validation, submission, and confirmatio
 `Ctrl-R` is accepted in every state but advertised only in Stale, Unavailable, and error states, where it is the way forward.
 While a write is in flight the surface stays visible and inert: `Ctrl-S`, `Esc`, and every other key are consumed without effect, and there is no Cancel Save control.
 
+### Local list navigation and search
+
+Pickers and read-only modal pages accept Up/Down or j/k, viewport-sized PageUp/PageDown, and Home/End. Root j/k remains configurable. Text editors keep printable keys for text; Home/End belongs to the caret while a search field is active. Detail continues to follow workspace selection.
+
+Press `/` inside Lists, Views, or Settings Keyboard to search within that panel. Up/Down and page keys navigate matches; Return activates one. Escape clears the query before closing the panel. Empty results cannot activate the previously selected row. Settings searches localized labels and stable action ids. Queries do not alter the workspace filter. Views and Settings clear their query on panel/page changes; Lists retains search while a stronger surface suspends it. Lists searches names and ancestor paths, displays context-only ancestors without activation, and uses Left/Right for tree navigation outside search. Tab/Shift-Tab is a fixed search-local exit to Tracks; a printable custom focus binding remains text during search.
+
+Lists is a workspace pane, docked when its 26 columns leave at least 72 track-content columns after Detail. Otherwise it appears as a drawer only while Lists has focus. `l` / `:lists` enables and focuses it, opens a hidden drawer, or disables a visible pane. Escape and the focus action return to Tracks without disabling it; the close button disables it. `tui.workspace.switchFocus` defaults to Tab/Shift-Tab and cannot open a hidden drawer from Tracks. Enter returns to Tracks after navigation; a docked row click keeps Lists focused. Clicking the active List preserves its current filtered view and marks. Outside drawer clicks dismiss and consume; docked Tracks clicks operate immediately.
+
 ### Overlay-specific keys
 
 | Overlay | Keys |
 | --- | --- |
-| Lists | effective toggle (default `l`), `Return` open, `Esc` close |
 | Detail | effective toggle (default `d`), `Esc` close; every workspace key and mouse gesture below stays available while it is open |
 | Pipeline | effective toggle (default `a`), `Esc` close |
 | Output | effective toggle (default `o`), `Return` select, `Esc` close |
 | Views | effective toggle (default `p`), `Return` select, `Esc` close |
 | Notifications | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close |
-| Help | `Esc` close; its root open shortcut is not a toggle inside the modal panel |
+| Help | effective toggle (defaults `?` and F1), `Esc` close; navigation keys scroll the body within its fixed frame |
 
 ### Mouse targets
 
-All track-table gestures below remain available while the detail inspector is open and are blocked by every other overlay.
+All track-table gestures below remain available while the detail inspector is open and are blocked by every other overlay. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail side panel and editor dialogs use their close controls.
 
 | Target/gesture | Action |
 | --- | --- |
@@ -214,6 +244,8 @@ All track-table gestures below remain available while the detail inspector is op
 | header column edge drag/release | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
 | group header click | select first track in section |
 | seek rail press/drag/release | preview/final seek |
+| shuffle indicator click | toggle shuffle off/on |
+| repeat indicator click | cycle repeat off → all → one → off |
 | Soul button click | toggle playback |
 | Soul button hover | show quality hover panel |
 | library/view/status/quality/output indicators | open corresponding panel |

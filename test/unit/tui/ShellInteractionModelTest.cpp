@@ -10,6 +10,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string_view>
+
 namespace ao::tui::test
 {
   TEST_CASE("ShellInteractionModel - input mode and touched state are explicit", "[tui][unit][shell]")
@@ -23,7 +25,7 @@ namespace ao::tui::test
     CHECK_FALSE(model.isInputTouched());
     CHECK(model.inputDraft().empty());
 
-    model.appendInputText("detail");
+    model.insertInputText("detail");
 
     CHECK(model.isInputTouched());
     CHECK(model.inputDraft() == "detail");
@@ -52,7 +54,7 @@ namespace ao::tui::test
     auto model = ShellInteractionModel{};
 
     model.beginInput(ShellInputMode::Command);
-    model.appendInputText("a翼e\u0301👨‍👩‍👧‍👦");
+    model.insertInputText("a翼e\u0301👨‍👩‍👧‍👦");
     model.backspaceInput();
 
     CHECK(model.inputDraft() == "a翼e\u0301");
@@ -69,8 +71,8 @@ namespace ao::tui::test
     auto model = ShellInteractionModel{};
 
     CHECK(model.overlay() == Overlay::None);
-    model.openOverlay(Overlay::ListChooser);
-    CHECK(model.overlay() == Overlay::ListChooser);
+    model.openOverlay(Overlay::Help);
+    CHECK(model.overlay() == Overlay::Help);
     model.closeOverlay();
     CHECK(model.overlay() == Overlay::None);
   }
@@ -79,7 +81,6 @@ namespace ao::tui::test
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(overlayLabel(textCatalog, Overlay::None) == "Tracks");
-    CHECK(overlayLabel(textCatalog, Overlay::ListChooser) == "Lists");
     CHECK(overlayLabel(textCatalog, Overlay::DetailPanel) == "Detail");
     CHECK(overlayLabel(textCatalog, Overlay::QualityPanel) == "Pipeline");
     CHECK(overlayLabel(textCatalog, Overlay::OutputDevices) == "Output");
@@ -93,7 +94,6 @@ namespace ao::tui::test
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const& keymapPlan = defaultKeymapPlan();
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::None).empty());
-    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser) == "l toggle  Enter open  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::DetailPanel) == "d toggle  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel) == "a toggle  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices) == "o toggle  Enter select  Esc close");
@@ -113,9 +113,7 @@ namespace ao::tui::test
     auto const plan = KeymapPlan{model};
     auto const& textCatalog = ao::test::englishMessageCatalog();
 
-    CHECK(plan.shortcutFor(KeyAction::ToggleListChooser) == "Enter");
-    CHECK(overlayToggleShortcut(plan, Overlay::ListChooser) == "F2");
-    CHECK(overlayHint(textCatalog, plan, Overlay::ListChooser) == "F2 toggle  Enter open  Esc close");
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "Enter");
 
     CHECK(plan.shortcutFor(KeyAction::ToggleNotifications) == "x");
     CHECK(overlayToggleShortcut(plan, Overlay::Notifications) == "F3");

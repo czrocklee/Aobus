@@ -10,6 +10,7 @@
 #include "tui/CoverArt.h"
 #include "tui/HitRegions.h"
 #include "tui/Keymap.h"
+#include "tui/MouseBindings.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PresentationPanel.h"
@@ -50,6 +51,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <format>
 #include <optional>
 #include <string>
@@ -250,7 +252,6 @@ namespace ao::tui::test
     CHECK(chromeText(german, i18n::MessageId::TuiShellQuickFilterTitle) == "Schnellfilter");
     CHECK(chromeText(german, i18n::MessageId::TuiShellQuickFilterFooter).contains("Enter übernehmen"));
     CHECK(chromeText(german, i18n::MessageId::TuiShellOverlayViews) == "Ansichten");
-    CHECK(overlayHintText(german, i18n::MessageId::TuiShellHintLists, "l").contains("Enter öffnen"));
     CHECK(chromeText(german, i18n::MessageId::TuiLibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
     CHECK(libraryReloadedTracks(german, 2) == "2 Titel neu geladen");
     CHECK(libraryQuickFilterMatched(german, 1) == "Schnellfilter fand 1 Titel");
@@ -260,8 +261,7 @@ namespace ao::tui::test
     CHECK(chromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
     CHECK(overlayHintText(pseudo, i18n::MessageId::TuiShellHintViews, "v").contains("Enter"));
     CHECK(chromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
-          "No tracks found. Run `aobus init` in this library first.");
-    CHECK(libraryOpenedList(pseudo, "Road Trip").contains("Road Trip"));
+          "This List has no tracks. Choose another List to browse.");
 
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "view albums");
@@ -270,26 +270,26 @@ namespace ao::tui::test
     CHECK_FALSE(narrow.text.empty());
   }
 
-  TEST_CASE("Render - help pane advertises workspace commands", "[tui][unit][render]")
+  TEST_CASE("Render - help pane pairs effective shortcuts with actions and retains command-only entries",
+            "[tui][unit][render]")
   {
     auto const text = renderText(helpPane());
 
-    CHECK(text.contains(":current"));
+    CHECK(text.contains("reveal current track"));
     CHECK(text.contains(":view <id>"));
-    CHECK(text.contains(":output"));
-    CHECK(text.contains(":views"));
-    CHECK(text.contains(":notifications"));
+    CHECK(text.contains("choose output"));
+    CHECK(text.contains("choose presentation"));
+    CHECK(text.contains("show notification center"));
     CHECK(text.contains(":scan / :scan cancel"));
-    CHECK(text.contains(":select toggle / :select visual / :select all / :select clear"));
+    CHECK(text.contains("m / v / A / u"));
     CHECK(text.contains("{ / }"));
   }
 
-  TEST_CASE("Render - help pane aligns localized descriptions after dynamic shortcut and command columns",
-            "[tui][unit][render][keymap]")
+  TEST_CASE("Render - help pane aligns localized descriptions after effective shortcuts", "[tui][unit][render][keymap]")
   {
     auto checkAligned = [](i18n::MessageCatalog const& textCatalog, std::array<std::string_view, 5> const descriptions)
     {
-      auto const rendered = renderText(helpPane(textCatalog, defaultKeymapPlan(), 120), 120);
+      auto const rendered = renderElement(helpPane(textCatalog, defaultKeymapPlan(), 120), 120, 40).text;
       auto const optExpectedColumn = textColumn(rendered, descriptions.front());
       REQUIRE(optExpectedColumn);
 
@@ -311,21 +311,61 @@ namespace ao::tui::test
       CHECK(rendered.contains("quick filter"));
       CHECK(rendered.contains("choose list"));
       CHECK(rendered.contains("playback"));
-      CHECK(rendered.contains(kCellEllipsis));
+      CHECK(rendered.contains(kCellEllipsis) == (panelColumns == 40));
       CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "choose list"));
       CHECK(textColumn(rendered, "quick filter") == textColumn(rendered, "playback"));
     }
   }
 
-  TEST_CASE("Render - side panes size to content and terminal bounds", "[tui][unit][render]")
+  TEST_CASE("Render - centered Help keeps its frame visible while the body scrolls", "[tui][regression][render][help]")
   {
-    auto wideHelpBox = ftxui::Box{};
-    auto narrowHelpBox = ftxui::Box{};
-    std::ignore = renderBesideWorkspace(helpPane(120), wideHelpBox, 120);
-    std::ignore = renderBesideWorkspace(helpPane(30), narrowHelpBox, 30);
+    using namespace ftxui;
 
-    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultKeymapPlan(), 120));
-    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultKeymapPlan(), 30));
+    for (auto const* locale : {"en", "de", "zh-Hans"})
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+
+      for (auto const columns : {32, 48, 100})
+      {
+        INFO(locale << " at " << columns << " columns");
+        auto regions = PanelMouseRegions{};
+        auto workspaceBox = kEmptyMouseBox;
+        auto renderHelp = [&](std::int32_t const scrollRow)
+        {
+          return renderElement(
+            dbox({filler() | reflect(workspaceBox),
+                  centerPopover(helpPane(catalog, defaultKeymapPlan(), columns - 4, &regions, scrollRow) |
+                                size(HEIGHT, LESS_THAN, 16))}),
+            columns,
+            20);
+        };
+        auto const top = renderHelp(0);
+        auto const originalBox = regions.box;
+        auto const originalCloseBox = regions.closeBox;
+        REQUIRE(!originalBox.IsEmpty());
+        CHECK(workspaceBox.x_min == 0);
+        CHECK(workspaceBox.x_max == columns - 1);
+        CHECK(std::abs(originalBox.x_min - (columns - 1 - originalBox.x_max)) <= 1);
+        CHECK(originalBox.y_min == 19 - originalBox.y_max);
+        CHECK(originalBox.y_min >= 1);
+        CHECK(top.text.contains(chromeText(catalog, i18n::MessageId::TuiShellHelpFooter)));
+        CHECK(top.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellOverlayHelp)));
+        CHECK(regions.navigationBox.y_min > originalBox.y_min);
+        CHECK(regions.navigationBox.y_max < originalBox.y_max - 1);
+        auto const bottom = renderHelp(1000);
+        CHECK(bottom.text.contains(chromeText(catalog, i18n::MessageId::TuiShellHelpFooter)));
+        CHECK(bottom.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellHelpQuit)));
+        CHECK(bottom.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellOverlayHelp)));
+        CHECK(regions.box == originalBox);
+        CHECK(regions.closeBox == originalCloseBox);
+        CHECK(regions.contentBox.y_max - regions.contentBox.y_min >
+              regions.navigationBox.y_max - regions.navigationBox.y_min);
+      }
+    }
+  }
+
+  TEST_CASE("Render - detail pane size follows terminal bounds", "[tui][unit][render]")
+  {
     CHECK(englishDetailPaneColumns(120) > 0);
     CHECK(englishDetailPaneColumns(40) == 40);
   }
@@ -795,8 +835,8 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("o output"));
     CHECK_FALSE(rendered.text.contains("groups"));
     CHECK_FALSE(rendered.text.contains("Ctrl+L current"));
-    CHECK_FALSE(rendered.text.contains("q quit"));
-    CHECK_FALSE(rendered.text.contains("c clear filter"));
+    CHECK_FALSE(rendered.text.contains("Q quit"));
+    CHECK_FALSE(rendered.text.contains("C clear filter"));
     CHECK_FALSE(rendered.text.contains("Mode:"));
     CHECK_FALSE(rendered.text.contains("Filter:"));
     CHECK_FALSE(rendered.text.contains("view:"));
@@ -824,7 +864,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("l lists"));
     CHECK_FALSE(rendered.text.contains("v view"));
     CHECK_FALSE(rendered.text.contains("d detail"));
-    CHECK_FALSE(rendered.text.contains("q quit"));
+    CHECK_FALSE(rendered.text.contains("Q quit"));
   }
 
   TEST_CASE("Render - Settings and help survive long workspace text in narrow terminals", "[tui][unit][render]")
@@ -870,7 +910,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("F12 Settings"));
     auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
     CHECK(help.contains("F12"));
-    CHECK(help.contains(":settings / :config"));
+    CHECK_FALSE(help.contains(":settings"));
     CHECK(help.contains("Settings"));
     model.applyOverrides({{"tui.shell.openSettings", {}}});
     plan = KeymapPlan{model};
@@ -893,7 +933,7 @@ namespace ao::tui::test
     auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}), 140);
 
     CHECK(rendered.contains("/ Aimer"));
-    CHECK(rendered.contains("c clear filter"));
+    CHECK(rendered.contains("C clear filter"));
     CHECK_FALSE(rendered.contains("/ Filter"));
     CHECK_FALSE(rendered.contains("Filter:"));
   }
@@ -920,7 +960,6 @@ namespace ao::tui::test
     };
 
     auto const cases = std::vector<Case>{
-      {.overlay = Overlay::ListChooser, .label = "Lists", .hint = "l toggle  Enter open  Esc close"},
       {.overlay = Overlay::DetailPanel, .label = "Detail", .hint = "d toggle  Esc close"},
       {.overlay = Overlay::QualityPanel, .label = "Pipeline", .hint = "a toggle  Esc close"},
       {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "o toggle  Enter select  Esc close"},
@@ -967,9 +1006,11 @@ namespace ao::tui::test
     CHECK_FALSE(status.contains(": command"));
     CHECK_FALSE(status.contains("d detail"));
 
-    shell.openOverlay(Overlay::ListChooser);
+    shell.focusNavigation();
     auto const listStatus = renderText(statusBar(StatusBarViewState{.shell = &shell}, keymapPlan), 140);
-    CHECK(listStatus.contains("F2 toggle  Enter open  Esc close"));
+    CHECK(listStatus.contains("Enter open"));
+    CHECK(listStatus.contains("Esc tracks"));
+    shell.focusTracks();
 
     shell.openOverlay(Overlay::DetailPanel);
     auto const detailStatus = renderText(statusBar(StatusBarViewState{.shell = &shell}, keymapPlan), 140);
@@ -980,10 +1021,10 @@ namespace ao::tui::test
     shell.setCommandCompletion(rt::CompletionResult{
       .items =
         {
-          rt::CompletionItem{.displayText = ":lists",
+          rt::CompletionItem{.displayText = "choose list",
                              .insertText = "lists",
                              .detail = rt::CompletionDetail::makeResolvedText("choose list")},
-          rt::CompletionItem{.displayText = ":detail",
+          rt::CompletionItem{.displayText = "track detail",
                              .insertText = "detail",
                              .detail = rt::CompletionDetail::makeResolvedText("track detail")},
         },
@@ -995,17 +1036,16 @@ namespace ao::tui::test
 
     auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), keymapPlan, 120), 120);
     CHECK(help.contains("F2"));
-    CHECK(help.contains(":lists / :l"));
+    CHECK(help.contains("choose list"));
     CHECK(help.contains("F3"));
-    CHECK(help.contains(":filter <text>"));
-    CHECK(lineIndexContaining(help, "F2") == lineIndexContaining(help, ":lists / :l"));
-    CHECK(lineIndexContaining(help, "F3") == lineIndexContaining(help, ":filter <text>"));
+    CHECK(help.contains("quick filter"));
+    CHECK(lineIndexContaining(help, "F2") == lineIndexContaining(help, "choose list"));
+    CHECK(lineIndexContaining(help, "F3") == lineIndexContaining(help, "quick filter"));
     CHECK_FALSE(help.contains("l  :lists"));
     CHECK_FALSE(help.contains("d  :detail"));
     CHECK_FALSE(help.contains("Enter run"));
 
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto const lists = renderText(libraryChooserPane(textCatalog, {"All Tracks"}, 0, keymapPlan, 100), 100);
     auto const quality = renderText(qualityPanel(textCatalog, rt::PlaybackTransportSnapshot{}, keymapPlan, 100), 100);
     auto const output =
       renderText(outputDevicePanel(textCatalog, uimodel::OutputDeviceViewState{}, -1, keymapPlan, nullptr, 100), 100);
@@ -1013,7 +1053,6 @@ namespace ao::tui::test
     auto const notification = renderText(
       notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, keymapPlan, nullptr, 100), 100);
 
-    CHECK(lists.contains("F2 toggle"));
     CHECK(quality.contains("F5 toggle"));
     CHECK(output.contains("F6 toggle"));
     CHECK(presentation.contains("F7 toggle"));
@@ -1284,7 +1323,7 @@ namespace ao::tui::test
     auto const status = renderText(statusBar(StatusBarViewState{.shell = &shell}));
     auto const popup = renderText(quickFilterCompletionPanel(shell));
 
-    CHECK(status.contains("/ Aimer_"));
+    CHECK(status.contains("/ A "));
     CHECK_FALSE(status.contains("/ Filter"));
     CHECK_FALSE(status.contains(": command"));
     CHECK(popup.contains("Quick Filter"));
@@ -1302,7 +1341,7 @@ namespace ao::tui::test
 
     CHECK(rendered.contains("Quick Filter"));
     CHECK(rendered.contains("Filter error: expected value"));
-    CHECK(rendered.contains("Esc keep typed"));
+    CHECK(rendered.contains("Esc keep text"));
   }
 
   TEST_CASE("Render - Quick Filter popup height follows results and leaves the status row visible",
@@ -1320,8 +1359,8 @@ namespace ao::tui::test
         },
     });
 
-    CHECK(quickFilterPanelRows(shell, false, 24) == 6);
-    CHECK(quickFilterPanelRows(shell, true, 24) == 8);
+    CHECK(quickFilterPanelRows(shell, false, 24) == 7);
+    CHECK(quickFilterPanelRows(shell, true, 24) == 9);
     CHECK(quickFilterPanelRows(shell, true, 5) == 4);
   }
 
@@ -1351,7 +1390,7 @@ namespace ao::tui::test
 
     auto const rendered = renderText(commandPalettePanel(shell));
 
-    CHECK(rendered.contains(":_"));
+    CHECK(rendered.contains("> : "));
     CHECK(rendered.contains(":output"));
     CHECK(rendered.contains("Tab complete"));
   }
@@ -1363,25 +1402,25 @@ namespace ao::tui::test
     shell.setCommandCompletion(rt::CompletionResult{
       .items =
         {
-          rt::CompletionItem{.displayText = ":view",
+          rt::CompletionItem{.displayText = "track view",
                              .insertText = "view ",
-                             .detail = rt::CompletionDetail::makeResolvedText("track view")},
+                             .detail = rt::CompletionDetail::makeResolvedText(":view")},
           rt::CompletionItem{
             .displayText = "Aimer", .insertText = "Aimer", .detail = rt::CompletionDetail::makeResolvedText("artist")},
         },
     });
     REQUIRE(shell.tryMoveCommandCompletion(1));
 
-    auto const rendered = renderElement(commandPalettePanel(shell, 48), 48, 8);
+    auto const rendered = renderElement(commandPalettePanel(shell, 48), 48, 9);
 
     CHECK(rendered.text.contains("Command Palette"));
-    CHECK(rendered.text.contains(":view"));
 
     // A command reachable by key shows that key where its detail would go, so
     // the assertion has to be that the detail is gone. Checking for a 'v'
     // instead passes on the word ":view" itself and would survive the hint
     // being dropped entirely.
-    CHECK_FALSE(rendered.text.contains("track view"));
+    CHECK(rendered.text.contains("track view"));
+    CHECK_FALSE(rendered.text.contains(":view"));
 
     // An item that is not a command keeps its detail.
     CHECK(rendered.text.contains("Aimer"));

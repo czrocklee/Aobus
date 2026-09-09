@@ -3,19 +3,25 @@
 
 #pragma once
 
+#include "ListSearch.h"
+#include "MouseBindings.h"
 #include "Preferences.h"
 #include "TextFieldModel.h"
 #include <ao/Error.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/box.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ao::i18n
 {
@@ -57,14 +63,15 @@ namespace ao::tui
     ftxui::Element renderModal(std::int32_t columns, std::int32_t rows) const;
 
   private:
+    void handleMouse(ftxui::Mouse const& mouse);
     std::size_t rowCount() const;
+    std::vector<std::string> keyboardLabels() const;
     void moveRow(std::int32_t delta);
     void changePreference(std::int32_t delta);
     void applyPreferences(Preferences candidate);
     void applyKeymap(uimodel::KeymapModel candidate);
     void retry();
     bool tryHandlePrompt(ftxui::Event const& event);
-    void editChordText(ftxui::Event const& event);
     void handleChordEditing(ftxui::Event const& event);
     void submitKeymap(uimodel::KeymapModel candidate);
     void handleKeyboard(ftxui::Event const& event);
@@ -81,6 +88,7 @@ namespace ao::tui
     Outputs _outputs;
     bool _active = false;
     SettingsPage _page = SettingsPage::General;
+    ListSearch _search{};
     std::size_t _row = 0;
     std::size_t _chord = 0;
     std::optional<Preferences> _optPreferenceCandidate;
@@ -92,5 +100,25 @@ namespace ao::tui
     bool _choosingLanguage = false;
     std::size_t _language = 0;
     bool _confirmClose = false;
+    struct ChordHit final
+    {
+      std::size_t row = 0;
+      std::size_t chord = 0;
+      ftxui::Box box = kEmptyMouseBox;
+    };
+    mutable bool _mouseReady = false;
+    mutable MouseBindings _mouseBindings;
+    mutable std::vector<ftxui::Box> _tabBoxes;
+    mutable std::vector<ftxui::Box> _rowBoxes;
+    mutable std::vector<ftxui::Box> _decreaseBoxes;
+    mutable std::vector<ftxui::Box> _valueBoxes;
+    mutable std::deque<ChordHit> _chordBoxes;
+    mutable ftxui::Box _chordInputBox = kEmptyMouseBox;
+    mutable ftxui::Box _chordTextBox = kEmptyMouseBox;
+    mutable ftxui::Box _keyboardViewport = kEmptyMouseBox;
+    mutable ftxui::Box _bodyBox = kEmptyMouseBox;
+    mutable SettingsPage _renderedPage = SettingsPage::General;
+    mutable bool _renderedLanguage = false;
+    mutable bool _renderedChord = false;
   };
 } // namespace ao::tui

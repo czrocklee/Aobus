@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -22,6 +23,7 @@ namespace ftxui
 namespace ao::tui
 {
   class KeymapPlan;
+  class ListSearch;
 
   inline constexpr std::int32_t kPresentationPanelColumns = 48;
   inline constexpr std::int32_t kPresentationPanelListRows = 10;
@@ -32,6 +34,7 @@ namespace ao::tui
   {
     std::int32_t rowIndex = -1;
     ftxui::Box box{};
+    std::string presentationId{};
   };
 
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
@@ -45,5 +48,7 @@ namespace ao::tui
                                    std::int32_t selectedIndex,
                                    KeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* rowHitRegions = nullptr,
-                                   std::int32_t columns = 0);
+                                   std::int32_t columns = 0,
+                                   ListSearch const* search = nullptr,
+                                   ftxui::Box* viewportBox = nullptr);
 } // namespace ao::tui

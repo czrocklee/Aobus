@@ -3,18 +3,25 @@
 
 #pragma once
 
+#include "CommandPalettePanel.h"
+#include "MouseBindings.h"
+#include "NavigationPanel.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDevicePanel.h"
 #include "PresentationPanel.h"
+#include "StatusBar.h"
 #include "TrackTable.h"
 
 #include <ftxui/screen/box.hpp>
 
 #include <cstdint>
+#include <list>
 #include <vector>
 
 namespace ao::tui
 {
+  bool hasCoverIntersection(ftxui::Box const& cover, ftxui::Box const& foreground);
+
   enum class HoveredButton : std::uint8_t
   {
     None,
@@ -50,9 +57,22 @@ namespace ao::tui
     ftxui::Box presentationButtonBox{};
     ftxui::Box activityStatusBox{};
     ftxui::Box settingsButtonBox{};
+    ftxui::Box cancelSelectionBox = kEmptyMouseBox;
     ftxui::Box seekRailBox{};
-    ftxui::Box trackTableBox{};
+    ftxui::Box volumeBox{};
+    ftxui::Box shuffleBox = kEmptyMouseBox;
+    ftxui::Box repeatBox = kEmptyMouseBox;
+    NavigationGeometry navigationLayout{};
+    NavigationHitRegions navigation{};
+    PanelMouseRegions overlayPanel{};
+    PanelMouseRegions inputPanel{};
+    CompletionHitRegions completion{};
+    ftxui::Box trackTableBox = kEmptyMouseBox;
+    /// Materialized rows that supplied the painted section and resize targets.
+    std::uint64_t trackTableRevision = 0;
 
+    std::list<StatusActionHitRegion> statusActions{};
+    std::vector<TrackRowHitRegion> trackRows{};
     std::vector<OutputDeviceRowHitRegion> outputDeviceRows{};
     std::vector<PresentationRowHitRegion> presentationRows{};
     std::vector<NotificationDetailRowHitRegion> notificationDetailRows{};

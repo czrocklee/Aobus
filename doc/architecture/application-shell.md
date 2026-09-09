@@ -155,9 +155,11 @@ It refuses to write on a tooltip surface, in edit mode, for an anonymous node, w
 The keymap model binds neutral chords to action ids.
 GTK translates those chords to native accelerator syntax and applies eligible window actions; the shortcut editor remains a GTK view over UIModel policy.
 WinUI translates the same neutral values into the keyboard accelerators its live action registry can execute.
-TUI begins with the shared application defaults, adds terminal-only defaults in its adapter, loads the global override group, and builds one immutable `KeymapPlan`.
+TUI defines independent terminal defaults over shared action identities, loads the global override group, and builds one immutable `KeymapPlan`.
 That plan considers only actions with a TUI handler, resolves collisions after FTXUI projection, and supplies both root dispatch and every configurable shortcut hint.
 Terminal input protocol remains a narrower scope above the plan: Ctrl-C, text editing and completion, list and modal-overlay navigation/activation, notification `x`, mouse sequences, and escape routes cannot be disabled by a root binding.
+
+The TUI keeps List-pane enablement and workspace focus separate from its single transient overlay. Its composition root derives docking/drawer geometry and cover occlusion; `LibraryController` remains the authority for runtime view attachment and active List identity. `ListNavigationModel` owns only browsing state. The existing per-library layout writer checkpoints explicit visibility with columns and presentations.
 
 The TUI track-properties modal composes value-owned metadata and tag editors.
 `TrackMetadataEditor` owns field drafts, validation, completion, and read-only form properties; `TrackTagEditor` owns tag intents and transient search.
@@ -165,7 +167,8 @@ The TUI track-properties modal composes value-owned metadata and tag editors.
 The shared TUI `TextFieldModel` interprets standard editing keys and reports value changes separately from cursor movement.
 `textFieldValue` renders the shared grapheme caret and keeps its unclipped origin for pointer placement.
 `MouseBindings` binds painted footer controls to existing editor key protocols; it owns neither mutations nor validation.
-FTXUI reflection clips hit regions to painted cells, while `reflectLayout` retains the raw origin needed for scrolled text.
+FTXUI reflection clips hit regions to painted cells, while `reflectLayout` retains the raw origin needed for scrolled text and panel content.
+Runtime-backed row hits carry stable identity for admission after refresh.
 Editor commands and completion remain with the owning page.
 
 Command parsing and discovery live in `Command`, independently of the shell input and overlay state.

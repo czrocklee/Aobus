@@ -9,7 +9,7 @@ summary: Enumerates neutral chord syntax, modifier aliases, shipped action bindi
 
 ## Scope and version
 
-This reference owns the exact neutral `KeyChord` string surface, shipped application defaults, TUI-local default additions, persisted override shape, and the rules deciding which bindings a shell installs.
+This reference owns the exact neutral `KeyChord` string surface, shipped application defaults, terminal defaults, persisted override shape, and the rules deciding which bindings a shell installs.
 Merge, conflict, editor, and shell-projection behavior belongs to the [keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md).
 
 The surface has no explicit schema version.
@@ -91,53 +91,60 @@ The literal plus key is `+` without modifiers or a trailing doubled plus after m
 Other actions have no shipped global shortcut.
 `Ctrl+,` is an app-scoped fixed preference accelerator and is not part of this keymap.
 
-### TUI-local additions
+### TUI defaults
 
-The TUI starts with the shipped application defaults above, prepends its preferred terminal chords to shared actions, and adds terminal-only actions without changing `defaultKeymap()` for another shell.
-The resulting additional defaults are:
+The TUI defines its own defaults and reuses shared action identities for playback and reveal. Desktop chords are not inherited. Global TUI overrides apply to this terminal default map.
+The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shift+C` is uppercase `C`.
 
-| Action id | Chords prepended or added by the TUI |
+| Action id | Terminal default chords |
 |---|---|
 | `tui.shell.openSettings` | `,` |
-| `tui.shell.quit` | `Q` |
+| `tui.shell.quit` | `Shift+Q` |
 | `tui.shell.toggleListChooser` | `L` |
 | `tui.shell.toggleTrackDetail` | `D` |
 | `tui.shell.toggleAudioQuality` | `A` |
 | `tui.shell.toggleOutputDevices` | `O` |
 | `tui.shell.togglePresentationChooser` | `P` |
 | `tui.shell.toggleNotifications` | `N` |
-| `tui.shell.showHelp` | `?` |
+| `tui.shell.showHelp` | `?`, `F1` |
 | `tui.shell.openCommandPalette` | `:` |
+| `tui.workspace.switchFocus` | `Tab`, `Shift+Tab` |
 | `tui.library.openQuickFilter` | `/` |
-| `tui.library.clearFilter` | `C` |
-| `tui.library.reloadActiveList` | `R` |
+| `tui.library.clearFilter` | `Shift+C` |
+| `tui.library.reloadActiveList` | `Shift+R` |
 | `tui.library.scan` | none |
 | `tui.library.scanCancel` | none |
 | `tui.library.selectToggle` | `M` |
-| `tui.library.selectVisual` | `V`, `Shift+V` |
+| `tui.library.selectVisual` | `V` |
 | `tui.library.selectAll` | `Shift+A` |
 | `tui.library.selectClear` | `U` |
 | `tui.library.editProperties` | `E` |
 | `tui.library.playSelection` | `Enter` |
-| `tui.library.previousTrack` | `K` |
-| `tui.library.nextTrack` | `J` |
+| `tui.library.previousRow` | `K` |
+| `tui.library.nextRow` | `J` |
 | `tui.library.previousSection` | `{` |
 | `tui.library.nextSection` | `}` |
-| `tui.playback.seekBackward` | `[` |
-| `tui.playback.seekForward` | `]` |
+| `tui.playback.seekBackward` | `Left`, `[` |
+| `tui.playback.seekForward` | `Right`, `]` |
 | `tui.playback.volumeDown` | `-` |
 | `tui.playback.volumeUp` | `+`, `=` |
-| `playback.playPause` | `Space` before the shared chords |
-| `playback.stop` | `S` before the shared media chord |
+| `playback.playPause` | `Space` |
+| `playback.stop` | `S` |
+| `playback.previous` | `<`, `Ctrl+Left` |
+| `playback.next` | `>`, `Ctrl+Right` |
+| `playback.toggleShuffle` | `Shift+S` |
+| `playback.cycleRepeat` | `R` |
+| `workspace.revealCurrentTrack` | `C` |
 
-`workspace.revealCurrentTrack` uses the shared `Ctrl+L` default unchanged.
-The stored `tui.*` ids are compatibility surfaces; `tui.library.playSelection` deliberately differs from shared `playback.play`, because it starts a sequence from the selected row rather than resuming the current playback subject.
+The stored `tui.*` ids identify terminal actions; `tui.library.playSelection` deliberately differs from shared `playback.play`, because it starts a sequence from the selected row rather than resuming the current playback subject.
+
+The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and Shift+Tab and is appended after existing actions for collision resolution. It operates only in workspace scope; completion/editor Tab remains local, and active List search always uses Tab/Shift+Tab to clear search and return to Tracks.
 
 ### Coverage per shell
 
 | Action family | GTK | TUI | Windows |
 |---|---|---|---|
-| `playback.*` transport, keyboard chords | installed | Play/Pause and Stop descriptors only | installed |
+| `playback.*` transport, keyboard chords | installed | Play/Pause, Stop, Previous, Next, Shuffle, Repeat descriptors | installed |
 | `playback.*` transport, media chords | installed | omitted | system media controls |
 | `workspace.revealCurrentTrack` | installed | installed | installed |
 | `track.orderMove*` | installed | no descriptor | installed |
@@ -239,7 +246,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the transport action ids every shell registers.
 - [`GtkAccelTranslator.h`](../../../app/linux-gtk/app/GtkAccelTranslator.h) owns the GDK edge, and [`KeyChordAccelerator.h`](../../../app/windows-winui/include/ao/winui/input/KeyChordAccelerator.h) the Windows one.
 - [`KeymapAcceleratorPlan.h`](../../../app/windows-winui/include/ao/winui/input/KeymapAcceleratorPlan.h) owns which bindings the Windows shell installs.
-- [`Keymap.h`](../../../app/tui/Keymap.h) and [`Keymap.cpp`](../../../app/tui/Keymap.cpp) own TUI-only descriptors, default additions, the terminal whitelist, collision policy, and the immutable dispatch/hint plan.
+- [`Keymap.h`](../../../app/tui/Keymap.h) and [`Keymap.cpp`](../../../app/tui/Keymap.cpp) own TUI-only descriptors, terminal defaults, the terminal whitelist, collision policy, and the immutable dispatch/hint plan.
 - WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout schema.
 
 ## Test authority
@@ -249,7 +256,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
 - [`GtkAccelTranslatorTest.cpp`](../../../test/unit/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the GDK edge.
 - [`KeyChordAcceleratorTest.cpp`](../../../test/unit/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules plus the shipped native-only reveal and saved-order actions. Both run on every host.
-- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects descriptor identities, shared/local default composition, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
+- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects descriptor identities, independent terminal defaults and shared action identities, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
 
 ## Related documents
 

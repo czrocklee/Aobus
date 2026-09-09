@@ -45,7 +45,7 @@ No FTXUI event or escape-sequence value enters UIModel.
 `KeymapModel` retains immutable-by-policy defaults and one mutable effective map.
 The preference editor holds a working model, displays pre-existing conflicts, and invokes a change callback after confirmed mutations.
 GTK application accelerator state is a platform projection of the last successfully persisted effective map rather than another keymap authority.
-The TUI starts from the shared defaults, adds frontend-local defaults without mutating them, applies the global override group, and prepares an immutable `KeymapPlan` before constructing dispatch and rendering owners.
+The TUI defines terminal defaults with shared action identities, applies the global override group, and prepares an immutable `KeymapPlan` before constructing dispatch and rendering owners.
 
 ## Commands and transitions
 
@@ -65,7 +65,7 @@ A persistence failure keeps the candidate, leaves live bindings unchanged, and s
 GTK application first clears `win.*` accelerator descriptions absent from the new mapping, then translates and applies the effective chords for each action.
 This reconciliation prevents removed or reset shortcuts from remaining active until restart.
 
-The TUI has no editing transition in the current surface.
+The TUI Settings keyboard page validates and persists each accepted candidate before replacing the live keymap and its dispatch/hint plan. Picker and editor keys remain scoped protocol.
 At startup it loads the effective map from the global application store, projects each recognized action's chords through an explicit FTXUI-event whitelist, and locally omits unsupported or later-colliding entries.
 Unknown action ids are retained by neutral keymap policy but have no TUI descriptor, so they cannot consume a terminal event.
 An explicit empty binding removes both the root dispatch path and every configurable hint for that action; command aliases are a separate command-language surface and remain available.

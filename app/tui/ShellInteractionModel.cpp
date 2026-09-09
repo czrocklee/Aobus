@@ -7,11 +7,12 @@
 #include "ShellText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/utility/UnicodeText.h>
 
 #include <ftxui/component/event.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -20,13 +21,52 @@
 
 namespace ao::tui
 {
+  void ShellInteractionModel::setNavigationEnabled(bool const enabled) noexcept
+  {
+    _navigationEnabled = enabled;
+
+    if (!enabled)
+    {
+      focusTracks();
+    }
+  }
+
+  void ShellInteractionModel::focusNavigation() noexcept
+  {
+    _navigationEnabled = true;
+    _workspaceFocus = WorkspaceFocus::Lists;
+  }
+
+  void ShellInteractionModel::toggleNavigation(bool const canDock) noexcept
+  {
+    if (_navigationEnabled && (canDock || isNavigationFocused()))
+    {
+      setNavigationEnabled(false);
+    }
+    else
+    {
+      focusNavigation();
+    }
+  }
+
+  void ShellInteractionModel::switchWorkspaceFocus(bool const canDock) noexcept
+  {
+    if (isNavigationFocused())
+    {
+      focusTracks();
+    }
+    else if (_navigationEnabled && canDock)
+    {
+      focusNavigation();
+    }
+  }
+
   bool isModalOverlay(Overlay const overlay) noexcept
   {
     switch (overlay)
     {
       case Overlay::None:
       case Overlay::DetailPanel: return false;
-      case Overlay::ListChooser:
       case Overlay::QualityPanel:
       case Overlay::OutputDevices:
       case Overlay::PresentationPanel:
@@ -42,7 +82,6 @@ namespace ao::tui
     switch (overlay)
     {
       case Overlay::None: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
-      case Overlay::ListChooser: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayLists);
       case Overlay::DetailPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayDetail);
       case Overlay::QualityPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayPipeline);
       case Overlay::OutputDevices: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayOutput);
@@ -57,16 +96,20 @@ namespace ao::tui
 
   std::string_view overlayToggleShortcut(KeymapPlan const& keymapPlan, Overlay const overlay)
   {
-    static auto const kSelectionEvents = std::to_array({ftxui::Event::Return});
-    static auto const kNotificationEvents = std::to_array({ftxui::Event::Character("x")});
+    static auto const kSelectionEvents =
+      std::to_array({ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k")});
+    static auto const kSearchEvents = std::to_array(
+      {ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k"), ftxui::Event::Character("/")});
+    static auto const kScrollEvents = std::to_array({ftxui::Event::Character("j"), ftxui::Event::Character("k")});
+    static auto const kNotificationEvents =
+      std::to_array({ftxui::Event::Character("x"), ftxui::Event::Character("j"), ftxui::Event::Character("k")});
 
     switch (overlay)
     {
-      case Overlay::ListChooser: return keymapPlan.shortcutFor(KeyAction::ToggleListChooser, kSelectionEvents);
       case Overlay::DetailPanel: return keymapPlan.shortcutFor(KeyAction::ToggleDetails);
-      case Overlay::QualityPanel: return keymapPlan.shortcutFor(KeyAction::ToggleAudioPipeline);
+      case Overlay::QualityPanel: return keymapPlan.shortcutFor(KeyAction::ToggleAudioPipeline, kScrollEvents);
       case Overlay::OutputDevices: return keymapPlan.shortcutFor(KeyAction::ToggleOutputDevices, kSelectionEvents);
-      case Overlay::PresentationPanel: return keymapPlan.shortcutFor(KeyAction::TogglePresentations, kSelectionEvents);
+      case Overlay::PresentationPanel: return keymapPlan.shortcutFor(KeyAction::TogglePresentations, kSearchEvents);
       case Overlay::Notifications: return keymapPlan.shortcutFor(KeyAction::ToggleNotifications, kNotificationEvents);
       case Overlay::None:
       case Overlay::Help: return {};
@@ -80,9 +123,6 @@ namespace ao::tui
     switch (overlay)
     {
       case Overlay::None: return {};
-      case Overlay::ListChooser:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintLists, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::DetailPanel:
         return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintDetail, overlayToggleShortcut(keymapPlan, overlay));
@@ -116,7 +156,72 @@ namespace ao::tui
 
   std::string const& ShellInteractionModel::inputDraft() const noexcept
   {
-    return _inputDraft;
+    return _input.value();
+  }
+
+  bool ShellInteractionModel::tryEditInput(ftxui::Event const& event)
+  {
+    if (!_input.tryApplyEvent(event))
+    {
+      return false;
+    }
+
+    _inputTouched = true;
+    _optHistoryIndex.reset();
+    return true;
+  }
+
+  bool ShellInteractionModel::tryMoveInputCursor(std::int32_t const column)
+  {
+    return _input.tryMoveToCell(column);
+  }
+
+  void ShellInteractionModel::rememberInput()
+  {
+    if (_input.empty())
+    {
+      return;
+    }
+
+    constexpr std::size_t kHistoryLimit = 50;
+    auto& entries = _inputMode == ShellInputMode::Command ? _commandHistory : _filterHistory;
+    std::erase(entries, _input.value());
+    entries.push_back(_input.value());
+
+    if (entries.size() > kHistoryLimit)
+    {
+      entries.erase(entries.begin());
+    }
+  }
+
+  bool ShellInteractionModel::tryMoveInputHistory(std::int32_t const delta)
+  {
+    auto const& entries = _inputMode == ShellInputMode::Command ? _commandHistory : _filterHistory;
+
+    if (entries.empty() || (delta >= 0 && !_optHistoryIndex))
+    {
+      return false;
+    }
+
+    if (!_optHistoryIndex)
+    {
+      _historyDraft = _input.value();
+      _optHistoryIndex = entries.size();
+    }
+
+    auto const next = std::clamp(
+      static_cast<std::int64_t>(*_optHistoryIndex) + delta, std::int64_t{0}, static_cast<std::int64_t>(entries.size()));
+
+    if (std::cmp_equal(next, *_optHistoryIndex))
+    {
+      return false;
+    }
+
+    _optHistoryIndex = static_cast<std::size_t>(next);
+    _input.reset(*_optHistoryIndex == entries.size() ? _historyDraft : entries[*_optHistoryIndex]);
+    _inputTouched = true;
+    clearCommandCompletion();
+    return true;
   }
 
   bool ShellInteractionModel::isInputTouched() const noexcept
@@ -139,105 +244,95 @@ namespace ao::tui
     return _overlay;
   }
 
+  void ShellInteractionModel::scrollOverlay(std::int32_t const delta, std::int32_t const lastRow)
+  {
+    _overlayScroll = static_cast<std::int32_t>(
+      std::clamp<std::int64_t>(static_cast<std::int64_t>(_overlayScroll) + delta, 0, std::max(0, lastRow)));
+  }
+
   void ShellInteractionModel::beginInput(ShellInputMode const mode, std::string draft)
   {
     _inputMode = mode;
-    _inputDraft = std::move(draft);
-    _inputTouched = !_inputDraft.empty();
+    _input.reset(std::move(draft));
+    _optHistoryIndex.reset();
+    _historyDraft.clear();
+    _inputTouched = !_input.empty();
     clearCommandCompletion();
   }
 
-  void ShellInteractionModel::appendInputText(std::string_view const text)
+  void ShellInteractionModel::insertInputText(std::string_view const text)
   {
-    if (text.empty())
+    if (_input.tryInsert(text))
     {
-      return;
+      _inputTouched = true;
+      _optHistoryIndex.reset();
     }
-
-    _inputDraft.append(text);
-    _inputTouched = true;
   }
 
   void ShellInteractionModel::backspaceInput()
   {
-    if (_inputDraft.empty())
+    if (_input.tryBackspace())
     {
-      return;
-    }
-
-    _inputTouched = true;
-    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_inputDraft, _inputDraft.size());
-
-    if (boundaryRes)
-    {
-      _inputDraft.resize(*boundaryRes);
-      return;
-    }
-
-    // Terminal input is expected to be valid UTF-8. Preserve the former
-    // code-point fallback if an invalid byte sequence or ICU failure reaches
-    // this UI-only boundary so Backspace still makes progress.
-    constexpr unsigned int kUtf8ContinuationMask = 0xC0U;
-    constexpr unsigned int kUtf8ContinuationTag = 0x80U;
-
-    while (!_inputDraft.empty() &&
-           (static_cast<unsigned char>(_inputDraft.back()) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
-    {
-      _inputDraft.pop_back();
-    }
-
-    if (!_inputDraft.empty())
-    {
-      _inputDraft.pop_back();
+      _inputTouched = true;
+      _optHistoryIndex.reset();
     }
   }
 
   void ShellInteractionModel::closeInput()
   {
     _inputMode = ShellInputMode::None;
-    _inputDraft.clear();
+    _input.reset("");
     _inputTouched = false;
     clearCommandCompletion();
   }
 
   void ShellInteractionModel::setCommandCompletion(std::optional<rt::CompletionResult> optCompletion)
   {
+    _completionNavigated = false;
     _completion.set(std::move(optCompletion));
   }
 
   bool ShellInteractionModel::tryMoveCommandCompletion(std::int32_t const delta)
   {
+    _completionNavigated = true;
     return _completion.tryMoveSelection(delta);
   }
 
   bool ShellInteractionModel::tryMoveCommandCompletionByPage(std::int32_t const delta)
   {
+    _completionNavigated = true;
     return _completion.tryMoveSelectionByPage(delta);
   }
 
   bool ShellInteractionModel::tryApplyCommandCompletion()
   {
-    if (!_completion.tryApplyTo(_inputDraft))
+    if (!_completion.tryApplyTo(_input))
     {
       return false;
     }
 
     _inputTouched = true;
+    _optHistoryIndex.reset();
+    clearCommandCompletion();
     return true;
   }
 
   void ShellInteractionModel::clearCommandCompletion()
   {
+    _completionNavigated = false;
     _completion.clear();
   }
 
   void ShellInteractionModel::openOverlay(Overlay overlay) noexcept
   {
+    _listSearch.clear();
     _overlay = overlay;
+    _overlayScroll = 0;
   }
 
   void ShellInteractionModel::closeOverlay() noexcept
   {
+    _listSearch.clear();
     _overlay = Overlay::None;
   }
 } // namespace ao::tui

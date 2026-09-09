@@ -736,12 +736,15 @@ add_executable(ao_tui_test
     unit/tui/CoverArtLoaderTest.cpp
     unit/tui/CoverArtTest.cpp
     unit/tui/EventControllerTest.cpp
+    unit/tui/EditorMouseTest.cpp
+    unit/tui/MouseBindingsTest.cpp
     unit/tui/ExecutorTest.cpp
     unit/tui/ExitControllerTest.cpp
     unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
     unit/tui/LibraryScanControllerTest.cpp
-    unit/tui/LibraryNavigationTest.cpp
+    unit/tui/ListNavigationModelTest.cpp
+    unit/tui/NavigationPanelTest.cpp
     unit/tui/PlaybackStatusFormatterTest.cpp
     unit/tui/SelectionNavigationTest.cpp
     unit/tui/SignalExitWatcherTest.cpp
@@ -750,8 +753,6 @@ add_executable(ao_tui_test
     unit/tui/TrackEditControllerTest.cpp
     unit/tui/TrackPresentationNavigationTest.cpp
     unit/tui/TrackPropertiesEditorTest.cpp
-    unit/tui/EditorMouseTest.cpp
-    unit/tui/MouseBindingsTest.cpp
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
     unit/tui/TrackPropertiesEditorTagsTest.cpp
     unit/tui/TrackPropertiesEditorTestSupport.cpp
@@ -759,6 +760,9 @@ add_executable(ao_tui_test
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
+    unit/tui/WorkspaceUsabilityTest.cpp
+    unit/tui/ShellInputTest.cpp
+    unit/tui/ListSearchTest.cpp
     unit/tui/ShellInteractionModelTest.cpp
     unit/tui/SoulButtonTest.cpp
     unit/tui/TerminalTrackColumnLayoutTest.cpp

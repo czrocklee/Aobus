@@ -4,7 +4,6 @@
 #include "TrackTable.h"
 
 #include "SelectableList.h"
-#include "ShellInteractionModel.h"
 #include "ShellText.h"
 #include "Style.h"
 #include "TerminalTrackColumnLayout.h"
@@ -39,7 +38,10 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::int32_t kListChooserScrollIndicatorColumns = 1;
+    ftxui::Decorator trackSelectionStyle(bool const focused)
+    {
+      return focused ? style::selected() : style::accent() | ftxui::bold;
+    }
 
     struct TrackColumn final
     {
@@ -199,7 +201,7 @@ namespace ao::tui
             .columns = column.width,
             .availableColumns = availableColumns,
           });
-          cellPtr = std::move(cellPtr) | reflect(resizeHandles->back().box);
+          cellPtr = std::move(cellPtr) | ftxui::reflect(resizeHandles->back().box);
         }
 
         cells.push_back(std::move(cellPtr));
@@ -258,22 +260,39 @@ namespace ao::tui
       return hbox(std::move(cells));
     }
 
-    ftxui::Element trackRowWithMarkStyle(i18n::MessageCatalog const& textCatalog,
-                                         TrackListEntry const& track,
-                                         TrackId const playingTrackId,
-                                         std::vector<TrackColumn> const& columns,
-                                         std::unordered_set<TrackId> const* const markedTrackIds,
-                                         bool const focused)
+    template<typename Region>
+    void resetRowRegions(std::vector<Region>* regions, std::size_t count = 0)
+    {
+      if (regions != nullptr)
+      {
+        regions->clear();
+        regions->reserve(count);
+      }
+    }
+
+    ftxui::Element interactiveTrackRow(i18n::MessageCatalog const& textCatalog,
+                                       TrackListEntry const& track,
+                                       TrackId const playingTrackId,
+                                       std::vector<TrackColumn> const& columns,
+                                       TrackTableViewOptions const& options,
+                                       std::int32_t const rowIndex,
+                                       bool const focused)
     {
       auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns, focused);
 
-      if (markedTrackIds != nullptr && markedTrackIds->contains(track.id))
+      if (options.markedTrackIds != nullptr && options.markedTrackIds->contains(track.id))
       {
         // The interactive surface is applied to the focused row afterwards, so the
         // same reversal flips the terminal's own pair on an unfocused row and the
         // interactive pair on the focused one. Both stay distinguishable without
         // spending a gutter cell.
         rowPtr = std::move(rowPtr) | style::markedSurface();
+      }
+
+      if (options.trackRowHitRegions != nullptr)
+      {
+        options.trackRowHitRegions->push_back(TrackRowHitRegion{.id = track.id, .rowIndex = rowIndex});
+        rowPtr = std::move(rowPtr) | ftxui::reflect(options.trackRowHitRegions->back().box);
       }
 
       return rowPtr;
@@ -325,27 +344,11 @@ namespace ao::tui
       });
     }
 
-    ftxui::Element selectableRows(ftxui::Elements rows,
-                                  std::int32_t const selected,
-                                  bool const active,
-                                  std::string const& emptyText)
+    ftxui::Element emptyTrackTable(i18n::MessageCatalog const& textCatalog, std::string_view const message)
     {
-      using namespace ftxui;
-
-      if (rows.empty())
-      {
-        return vbox({text(emptyText) | dim}) | center;
-      }
-
-      for (std::size_t index = 0; index < rows.size(); ++index)
-      {
-        if (std::cmp_equal(index, selected))
-        {
-          rows[index] = active ? rows[index] | style::selected() : rows[index] | inverted;
-        }
-      }
-
-      return vbox(std::move(rows)) | focusPosition(0, std::max(0, selected)) | vscroll_indicator | frame | flex;
+      auto const emptyText =
+        message.empty() ? chromeText(textCatalog, i18n::MessageId::TuiLibraryNoTracksFound) : std::string{message};
+      return ftxui::paragraph(emptyText) | ftxui::dim | ftxui::flex;
     }
 
     // A fixed-height, flexible-width empty box standing in for the off-window rows
@@ -538,18 +541,14 @@ namespace ao::tui
     auto const& columnLayout = options.columnLayout != nullptr ? *options.columnLayout : fallbackLayout;
     auto const columns = columnsForLayout(textCatalog, columnLayout);
 
-    if (options.sectionRowHitRegions != nullptr)
-    {
-      options.sectionRowHitRegions->clear();
-      options.sectionRowHitRegions->reserve(sections.size());
-    }
+    resetRowRegions(options.sectionRowHitRegions, sections.size());
+    resetRowRegions(options.trackRowHitRegions);
 
     auto listElementPtr = ftxui::Element{};
 
     if (tracks.empty())
     {
-      listElementPtr =
-        selectableRows(Elements{}, -1, true, chromeText(textCatalog, i18n::MessageId::TuiLibraryNoTracksFound));
+      listElementPtr = emptyTrackTable(textCatalog, options.emptyText);
     }
     else
     {
@@ -565,6 +564,8 @@ namespace ao::tui
 
       auto rows = Elements{};
       rows.reserve(rowRefs.size() + 2);
+
+      resetRowRegions(options.trackRowHitRegions, rowRefs.size());
 
       if (window.topSpacerRows > 0)
       {
@@ -585,19 +586,22 @@ namespace ao::tui
             // windowed headers keeps the true sectionIndex for every clickable one.
             options.sectionRowHitRegions->push_back(
               TrackSectionRowHitRegion{.sectionIndex = static_cast<std::int32_t>(ref.sectionIndex)});
-            rowPtr = std::move(rowPtr) | reflect(options.sectionRowHitRegions->back().box);
+            rowPtr = std::move(rowPtr) | ftxui::reflect(options.sectionRowHitRegions->back().box);
           }
 
           rows.push_back(std::move(rowPtr));
         }
         else
         {
-          rows.push_back(trackRowWithMarkStyle(textCatalog,
-                                               tracks[ref.trackIndex],
-                                               playingTrackId,
-                                               columns,
-                                               options.markedTrackIds,
-                                               std::cmp_equal(ref.trackIndex, selected)));
+          auto rowPtr = interactiveTrackRow(textCatalog,
+                                            tracks[ref.trackIndex],
+                                            playingTrackId,
+                                            columns,
+                                            options,
+                                            static_cast<std::int32_t>(ref.trackIndex),
+                                            std::cmp_equal(ref.trackIndex, selected));
+
+          rows.push_back(std::move(rowPtr));
         }
       }
 
@@ -617,7 +621,7 @@ namespace ao::tui
         if (rowIndex >= 0 && std::cmp_less(rowIndex, rows.size()))
         {
           auto const index = static_cast<std::size_t>(rowIndex);
-          rows[index] = std::move(rows[index]) | style::selected();
+          rows[index] = std::move(rows[index]) | trackSelectionStyle(options.focused);
         }
       }
 
@@ -637,63 +641,5 @@ namespace ao::tui
     }
 
     return tablePtr;
-  }
-
-  std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
-                                         std::vector<std::string> const& labels,
-                                         KeymapPlan const& keymapPlan,
-                                         std::int32_t const terminalColumns)
-  {
-    auto contentColumns =
-      std::max({cellWidth(overlayLabel(textCatalog, Overlay::ListChooser)),
-                cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryNoListsFound)) +
-                  kListChooserScrollIndicatorColumns,
-                cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser))});
-
-    for (auto const& label : labels)
-    {
-      contentColumns = std::max(contentColumns, cellWidth(label) + kListChooserScrollIndicatorColumns);
-    }
-
-    return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
-  }
-
-  ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
-                                    std::vector<std::string> const& labels,
-                                    std::int32_t const selected,
-                                    KeymapPlan const& keymapPlan,
-                                    std::int32_t columns)
-  {
-    using namespace ftxui;
-
-    if (columns <= 0)
-    {
-      columns = libraryChooserPaneColumns(textCatalog, labels, keymapPlan, 0);
-    }
-
-    auto rows = std::vector<SelectableListRow>{};
-    rows.reserve(labels.size());
-
-    for (std::size_t index = 0; index < labels.size(); ++index)
-    {
-      rows.push_back(
-        SelectableListRow{.elementPtr = text(labels[index]) | flex, .selected = std::cmp_equal(index, selected)});
-    }
-
-    return style::popupPanel(
-             overlayLabel(textCatalog, Overlay::ListChooser),
-             vbox({
-               selectableList(std::move(rows),
-                              SelectableListOptions{.focusRow = std::max(0, selected),
-                                                    .emptyText = std::string{i18n::requiredText(
-                                                      textCatalog, i18n::MessageId::TuiLibraryNoListsFound)},
-                                                    .framed = !labels.empty(),
-                                                    .scrollIndicator = !labels.empty(),
-                                                    .flex = !labels.empty(),
-                                                    .centerEmpty = labels.empty()}),
-               separator(),
-               style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser)),
-             })) |
-           size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

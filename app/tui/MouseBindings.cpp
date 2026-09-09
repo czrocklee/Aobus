@@ -90,6 +90,21 @@ namespace ao::tui
     return [&box](ftxui::Element elementPtr) { return std::make_shared<LayoutRegionNode>(std::move(elementPtr), box); };
   }
 
+  ftxui::Element mousePanel(ftxui::Element panelPtr, PanelMouseRegions& regions, std::int32_t const scrollRow)
+  {
+    using namespace ftxui;
+
+    if (scrollRow >= 0)
+    {
+      panelPtr = std::move(panelPtr) | reflectLayout(regions.contentBox) | focusPosition(0, scrollRow) | yframe;
+    }
+
+    return dbox(
+             {std::move(panelPtr),
+              vbox({hbox({filler(), text(" × ") | bold | ftxui::reflect(regions.closeBox), text(" ")}), filler()})}) |
+           ftxui::reflect(regions.box);
+  }
+
   void MouseBindings::clear()
   {
     _bindings.clear();

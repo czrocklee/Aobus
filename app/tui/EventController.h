@@ -7,11 +7,14 @@
 #include "HitRegions.h"
 #include "Keymap.h"
 #include "LibraryController.h"
+#include "MouseBindings.h"
+#include "NavigationPanel.h"
 #include "OutputDeviceController.h"
 #include "Preferences.h"
 #include "ShellInteractionModel.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
@@ -26,14 +29,17 @@
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
+#include <ftxui/screen/box.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -48,7 +54,8 @@ namespace ao::tui
   class SettingsEditor;
   class TrackEditController;
 
-  using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
+  using InputCompletionCallback =
+    std::function<std::optional<rt::CompletionResult>(std::string_view draft, std::size_t cursor)>;
 
   struct TrackColumnResizePreview final
   {
@@ -78,6 +85,7 @@ namespace ao::tui
     std::function<bool()> isExitWaiting{};
     InputCompletionCallback commandCompletionCallback;
     InputCompletionCallback filterCompletionCallback;
+    std::function<void()> requestLayoutCheckpoint{};
   };
 
   class EventController final
@@ -94,12 +102,20 @@ namespace ao::tui
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     bool tryHandleEvent(ftxui::Event const& event);
     void cancelTransientInteractions();
+    void syncWorkspaceGeometry();
 
   private:
-    void openSelectedList();
+    bool tryHandleNavigationEvent(ftxui::Event const& event);
+    std::optional<bool> tryHandleNavigationMouse(ftxui::Mouse const& mouse);
+    void activateNavigation(bool keyboard);
+    void handleNavigationPress(ftxui::Mouse const& mouse);
+    void leaveNavigation();
+    void switchWorkspaceFocus();
+    void reportNavigationVisibilityChange(bool previous);
+    void selectNavigationFromScrollbar(std::int32_t row);
     void reloadActiveList();
     void applyFilter(bool reportError = true);
-    void toggleListChooser();
+    void toggleLists();
     void toggleDetailPanel();
     void toggleQualityPanel();
     void toggleOutputDevices();
@@ -124,6 +140,8 @@ namespace ao::tui
                                                         std::uint64_t generation,
                                                         std::stop_token stopToken);
     bool tryHandleMouse(ftxui::Mouse const& mouse);
+    bool tryHandleInputMouse(ftxui::Mouse const& mouse);
+    bool tryHandleTrackPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleActiveMouseDrag(ftxui::Mouse const& mouse);
     bool tryHandleTrackColumnResizeDrag(ftxui::Mouse const& mouse);
     std::optional<bool> handleMouseWheel(ftxui::Mouse const& mouse);
@@ -133,15 +151,20 @@ namespace ao::tui
     std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleButtonPress(ftxui::Mouse const& mouse);
+    bool tryHandlePresentationPress(ftxui::Mouse const& mouse);
     bool tryHandleOverlayPress(ftxui::Mouse const& mouse);
+    void submitCommandInput();
     bool tryHandleCommandEvent(ftxui::Event const& event);
+    bool tryHandleListSearchEvent(ftxui::Event const& event);
+    bool tryMoveOverlaySelection(std::int32_t delta);
+    bool tryHandleOverlayNavigation(ftxui::Event const& event);
+    bool tryHandleOverlayActivation(ftxui::Event const& event);
     bool tryHandleOverlayEvent(ftxui::Event const& event);
     bool tryHandleRootEvent(ftxui::Event const& event);
     bool trySelectTrackFromScrollbar(std::int32_t row);
     void syncSeekSlider();
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
-    void cancelSeekInteraction();
     void cancelColumnResize();
     bool hasWorkspaceGesture() const noexcept;
     /**
@@ -164,6 +187,7 @@ namespace ao::tui
       std::int32_t startX = 0;
       std::int32_t startColumns = 0;
       ListId listId = kInvalidListId;
+      std::uint64_t rowsRevision = 0;
     };
 
     struct TrackScrollbarDrag final
@@ -184,9 +208,7 @@ namespace ao::tui
     HitRegions& _hitRegions;
     uimodel::TrackColumnLayouts& _trackColumnLayouts;
     TrackColumnResizePreview& _trackColumnResizePreview;
-    std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
-    std::optional<TrackScrollbarDrag> _optTrackScrollbarDrag{};
-    std::optional<SeekRailDrag> _optSeekRailDrag{};
+    std::variant<std::monostate, TrackColumnResizeDrag, TrackScrollbarDrag, SeekRailDrag> _workspaceGesture{};
     uimodel::SeekInteraction _seekSlider{};
     uimodel::ActivityStatusViewModel& _activityStatusViewModel;
     rt::NotificationService& _notifications;
@@ -198,9 +220,17 @@ namespace ao::tui
     std::function<bool()> _isExitWaiting;
     InputCompletionCallback _commandCompletionCallback;
     InputCompletionCallback _filterCompletionCallback;
+    std::function<void()> _requestLayoutCheckpoint;
+    NavigationGeometry _lastNavigationGeometry{};
+    ftxui::Box _lastTrackTableBox = kEmptyMouseBox;
+    bool _navigationScrollbarDrag = false;
+    TrackId _lastClickedTrack = kInvalidTrackId;
+    ListId _lastClickedList = kInvalidListId;
+    std::chrono::steady_clock::time_point _lastTrackClickTime{};
     bool _qualityHoverVisible = false;
     HoveredButton _hoveredButton = HoveredButton::None;
     std::uint64_t _filterDebounceGeneration = 0;
+    async::Subscription _revealSub;
     // Declared last so teardown requests stop before any callback target is destroyed.
     async::TaskHandle _filterDebounceTask{};
   };

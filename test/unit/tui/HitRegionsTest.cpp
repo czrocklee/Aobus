@@ -56,6 +56,8 @@ namespace ao::tui::test
   {
     auto regions = HitRegions{};
     regions.libraryButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};
+    regions.shuffleBox = {.x_min = 20, .x_max = 20, .y_min = 0, .y_max = 0};
+    regions.repeatBox = {.x_min = 22, .x_max = 23, .y_min = 0, .y_max = 0};
     regions.outputDeviceRows.push_back(OutputDeviceRowHitRegion{.rowIndex = 1});
     regions.presentationRows.push_back(PresentationRowHitRegion{.rowIndex = 2});
     regions.notificationDetailRows.push_back(NotificationDetailRowHitRegion{.dismissible = true});
@@ -64,6 +66,8 @@ namespace ao::tui::test
 
     regions.clearFrameLocalRows();
 
+    CHECK(regions.shuffleBox.IsEmpty());
+    CHECK(regions.repeatBox.IsEmpty());
     CHECK(regions.outputDeviceRows.empty());
     CHECK(regions.presentationRows.empty());
     CHECK(regions.notificationDetailRows.empty());

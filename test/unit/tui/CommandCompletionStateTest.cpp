@@ -3,6 +3,7 @@
 
 #include "tui/CommandCompletionState.h"
 
+#include "tui/TextFieldModel.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -79,13 +80,13 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletionState - applies selected replacement inside a draft", "[tui][unit][completion]")
   {
     auto state = CommandCompletionState{};
-    auto draft = std::string{"view so"};
+    auto draft = TextFieldModel{"view so"};
 
     state.set(completionResult());
     state.tryMoveSelection(1);
 
     CHECK(state.tryApplyTo(draft));
-    CHECK(draft == "view albums");
+    CHECK(draft.value() == "view albums");
     CHECK_FALSE(state.result());
     CHECK(state.selection() == 0);
   }
@@ -93,7 +94,7 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletionState - rejects invalid replacement ranges", "[tui][regression][completion]")
   {
     auto state = CommandCompletionState{};
-    auto draft = std::string{"view so"};
+    auto draft = TextFieldModel{"view so"};
     auto result = completionResult();
 
     SECTION("reversed range")
@@ -104,13 +105,13 @@ namespace ao::tui::test
 
     SECTION("range past the draft")
     {
-      result.replaceEnd = draft.size() + 1;
+      result.replaceEnd = draft.value().size() + 1;
     }
 
     state.set(std::move(result));
 
     CHECK_FALSE(state.tryApplyTo(draft));
-    CHECK(draft == "view so");
+    CHECK(draft.value() == "view so");
     CHECK_FALSE(state.result());
     CHECK(state.selection() == 0);
   }

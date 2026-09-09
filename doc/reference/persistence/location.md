@@ -83,7 +83,7 @@ Settings writes accepted shortcut and UI-preference candidates through that same
 | `<root>/.aobus/library/` | GTK, TUI, and CLI | Default LMDB music-library database | TUI `--database` may select another database path; CLI derives this path from `-C`/`--root` or `AOBUS_ROOT` |
 | `<root>/.aobus/library/workspace.yaml` | GTK | Runtime workspace and view session | None in the current GTK command surface |
 | `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library desktop track-column and list-presentation preferences | None |
-| `<root>/.aobus/tui_layout.yaml` | TUI | Per-library terminal-cell track-column and list-presentation preferences | None |
+| `<root>/.aobus/tui_layout.yaml` | TUI | Per-library List navigation visibility, terminal-cell track-column and list-presentation preferences | None |
 | `<root>/.aobus/winui_layout.yaml` | WinUI | Per-library desktop track-column and list-presentation preferences | None |
 | `<root>/.aobus/tui-workspace.yaml` | TUI | Default workspace and playback-session `ConfigStore` | `--config` selects another file |
 | `<root>/.aobus/logs/` | TUI | TUI operational logs | The library root changes the base location |
@@ -93,7 +93,7 @@ The current GTK database path is `<root>/.aobus/library/`.
 
 TUI passes one store as the owned workspace store and does not inject a separate playback-session store.
 `AppRuntime` therefore uses the selected TUI configuration file for both managed-state groups.
-The TUI layout file is always derived from the selected root and is independent of `--config`; one `LayoutStateStore` writer owns both of its presentation groups.
+The TUI layout file is always derived from the selected root and is independent of `--config`; one `LayoutStateStore` writer owns its navigation group and both presentation groups.
 
 WinUI derives its layout file from the root it opens, so the store only exists once a library is open; the global `windows-settings.yaml` described by the [Windows desktop state reference](../windows/desktop-state.md) holds no list-keyed state.
 

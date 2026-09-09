@@ -11,11 +11,16 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/yaml/Serialization.h>
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <system_error>
+#include <utility>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -38,6 +43,38 @@ namespace ao::tui
 {
   namespace
   {
+    struct NavigationSchema final
+    {
+      Result<> serialize(ryml::NodeRef node, bool const enabled) const
+      {
+        auto writer = yaml::MapWriter{node};
+        writer.scalar("version", 1).scalar("enabled", enabled);
+        return std::move(writer).finish();
+      }
+
+      Result<bool> deserialize(ryml::ConstNodeRef node, bool const /*seed*/) const
+      {
+        constexpr auto kKeys = std::to_array<std::string_view>({"version", "enabled"});
+        std::int32_t version = 0;
+        bool enabled = true;
+        auto reader = yaml::MapReader{node, kKeys, "TUI navigation"};
+        reader.requiredScalar("version", version).requiredScalar("enabled", enabled);
+        auto res = std::move(reader).finish(enabled);
+
+        if (!res)
+        {
+          return res;
+        }
+
+        if (version != 1)
+        {
+          return makeError(Error::Code::NotSupported, "Unsupported TUI navigation version");
+        }
+
+        return res;
+      }
+    };
+
     std::filesystem::path normalizedPhysicalPath(std::filesystem::path const& path)
     {
       auto ec = std::error_code{};
@@ -152,8 +189,17 @@ namespace ao::tui
   LayoutStateStore& LayoutStateStore::operator=(LayoutStateStore&&) noexcept = default;
 
   void LayoutStateStore::load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
-                              uimodel::ListPresentations::Snapshot& listPresentations) const
+                              uimodel::ListPresentations::Snapshot& listPresentations,
+                              bool& navigationEnabled) const
   {
+    navigationEnabled = true;
+
+    if (auto const res = _storePtr->load("navigation", navigationEnabled, NavigationSchema{});
+        !res && res.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_WARN("TUI: failed to load List navigation preference: {}", res.error().message);
+    }
+
     auto const columnsRes =
       _storePtr->load(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
 
@@ -172,9 +218,11 @@ namespace ao::tui
   }
 
   Result<> LayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
-                                  uimodel::ListPresentations::Snapshot const& listPresentations)
+                                  uimodel::ListPresentations::Snapshot const& listPresentations,
+                                  bool const navigationEnabled)
   {
     return _storePtr->saveTogether(
+      rt::configWrite("navigation", navigationEnabled, NavigationSchema{}),
       rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
       rt::configWrite(
         uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));

@@ -34,6 +34,9 @@ namespace ao::tui
                               {MessageArgument{"acceptKey", "Enter"},
                                MessageArgument{"completeKey", "Tab"},
                                MessageArgument{"keepKey", "Esc"}});
+      case MessageId::TuiQuickFilterEmptyFooter:
+      case MessageId::TuiQuickFilterLiteralFooter:
+        return requiredFormat(catalog, id, {{"acceptKey", "Enter"}, {"keepKey", "Esc"}});
       case MessageId::TuiShellHelpFooter: return requiredFormat(catalog, id, {MessageArgument{"closeKey", "Esc"}});
       default: return std::string{requiredText(catalog, id)};
     }
@@ -56,13 +59,6 @@ namespace ao::tui
 
     switch (id)
     {
-      case MessageId::TuiShellHintLists:
-        return requiredFormat(catalog,
-                              id,
-                              {MessageArgument{"toggleState", toggleState},
-                               MessageArgument{"toggleKey", toggleKey},
-                               MessageArgument{"openKey", "Enter"},
-                               MessageArgument{"closeKey", "Esc"}});
       case MessageId::TuiShellHintDetail:
       case MessageId::TuiShellHintPipeline:
         return requiredFormat(catalog,
@@ -113,11 +109,6 @@ namespace ao::tui
   std::string libraryView(MessageCatalog const& catalog, std::string_view const id)
   {
     return requiredFormat(catalog, MessageId::TuiLibraryView, {MessageArgument{"id", id}});
-  }
-
-  std::string libraryOpenedList(MessageCatalog const& catalog, std::string_view const list)
-  {
-    return requiredFormat(catalog, MessageId::TuiLibraryOpenedList, {MessageArgument{"list", list}});
   }
 
   std::string libraryReloadedTracks(MessageCatalog const& catalog, std::size_t const count)

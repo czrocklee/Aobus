@@ -23,6 +23,7 @@ namespace ftxui
 namespace ao::tui
 {
   class KeymapPlan;
+  class ListSearch;
 
   struct OutputDeviceRowHitRegion final
   {
@@ -44,5 +45,6 @@ namespace ao::tui
                                    std::int32_t selectedRow,
                                    KeymapPlan const& keymapPlan,
                                    std::vector<OutputDeviceRowHitRegion>* rowHitRegions = nullptr,
-                                   std::int32_t columns = 0);
+                                   std::int32_t columns = 0,
+                                   ftxui::Box* viewportBox = nullptr);
 } // namespace ao::tui

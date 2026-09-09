@@ -14,11 +14,13 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/tui/KeymapTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
+#include "tui/CommandPalettePanel.h"
 #include "tui/HitRegions.h"
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
-#include "tui/LibraryNavigation.h"
 #include "tui/LibraryScanController.h"
+#include "tui/MouseBindings.h"
+#include "tui/NavigationPanel.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/OutputDevicePanel.h"
@@ -44,6 +46,7 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -104,6 +107,7 @@ namespace ao::tui::test
       uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
       ShellInteractionModel shell{};
       HitRegions hitRegions{};
+      std::int32_t layoutCheckpointCount = 0;
       uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
       TrackColumnResizePreview trackColumnResizePreview{};
       OutputDeviceController outputDevices{runtimePtr->playback(),
@@ -181,6 +185,7 @@ namespace ao::tui::test
                                     return {};
                                   },
                                   .coverMode = [] { return std::string{"off"}; }});
+        hitRegions.trackTableRevision = library.trackRowsRevision();
         return EventController{shell,
                                library,
                                runtimePtr->async(),
@@ -201,6 +206,7 @@ namespace ao::tui::test
                                  .isExitWaiting = [this] { return exitWaiting; },
                                  .commandCompletionCallback = std::move(commandCompletion),
                                  .filterCompletionCallback = std::move(filterCompletion),
+                                 .requestLayoutCheckpoint = [this] { ++layoutCheckpointCount; },
                                }};
       }
 
@@ -254,11 +260,7 @@ namespace ao::tui::test
 
     void openList(LibraryController& library, ListId const listId)
     {
-      auto const it = std::ranges::find(library.libraryEntries(), listId, &LibraryNavEntry::id);
-      REQUIRE(it != library.libraryEntries().end());
-      auto const targetIndex = static_cast<std::int32_t>(it - library.libraryEntries().begin());
-      library.moveFocusedSelection(true, targetIndex - library.selectedList());
-      REQUIRE(library.openSelectedList().opened);
+      REQUIRE(library.openList(listId));
       REQUIRE(library.currentListId() == listId);
     }
 
@@ -297,7 +299,7 @@ namespace ao::tui::test
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     }
 
-    std::optional<rt::CompletionResult> completeYuduo(std::string_view const draft)
+    std::optional<rt::CompletionResult> completeYuduo(std::string_view const draft, std::size_t /*unused*/)
     {
       if (draft != "yuduo")
       {
@@ -366,7 +368,9 @@ namespace ao::tui::test
     auto const trackId = currentPlayback(fixture).transport.nowPlaying.trackId;
     REQUIRE(trackId != kInvalidTrackId);
 
-    CHECK(controller.tryHandleEvent(ftxui::Event::Character("q")));
+    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character("q")));
+    CHECK(fixture.exitRequestCount == 0);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("Q")));
 
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == trackId);
     CHECK(fixture.exitRequestCount == 1);
@@ -378,11 +382,15 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
-    CHECK(controller.tryHandleEvent(ftxui::Event::Character("q")));
+    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character("q")));
+    CHECK(fixture.exitRequestCount == 0);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("Q")));
     CHECK(fixture.exitRequestCount == 1);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlC));
     CHECK(fixture.exitRequestCount == 2);
+    enterCommand(controller, "quit");
+    CHECK(fixture.exitRequestCount == 3);
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Custom));
   }
 
@@ -469,7 +477,7 @@ namespace ao::tui::test
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("j")));
       REQUIRE(library.isVisualSelectionActive());
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("l")));
-      REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
+      REQUIRE(fixture.shell.isNavigationFocused());
 
       CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
       CHECK(fixture.shell.overlay() == Overlay::None);
@@ -508,7 +516,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
     REQUIRE(library.tracks().size() >= 2);
 
-    controller.tryHandleEvent(ftxui::Event::Character("V"));
+    controller.tryHandleEvent(ftxui::Event::Character("v"));
     controller.tryHandleEvent(ftxui::Event::Character("j"));
     REQUIRE(library.isVisualSelectionActive());
     auto const captured = library.selectedTrackIds();
@@ -837,7 +845,7 @@ namespace ao::tui::test
     auto controller =
       fixture.makeEvents(library,
                          defaultKeymapPlan(),
-                         [](std::string_view const draft) -> std::optional<rt::CompletionResult>
+                         [](std::string_view const draft, std::size_t) -> std::optional<rt::CompletionResult>
                          {
                            if (draft != "de")
                            {
@@ -876,17 +884,12 @@ namespace ao::tui::test
       CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
     }
 
-    SECTION("Return rejects an unknown command without accepting the selection")
+    SECTION("Return activates the selected action for an incomplete command")
     {
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
-      CHECK(fixture.shell.isInputActive());
-      CHECK(fixture.shell.inputDraft() == "de");
+      CHECK_FALSE(fixture.shell.isInputActive());
       CHECK(library.filterDraft().empty());
-      CHECK(fixture.shell.overlay() == Overlay::None);
-      auto const feed = fixture.runtimePtr->notifications().feed();
-      REQUIRE(feed.entries.size() == 1);
-      CHECK(feed.entries.front().severity == rt::NotificationSeverity::Warning);
-      CHECK(std::get<std::string>(feed.entries.front().message) == "Unknown command: de");
+      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
     }
 
     SECTION("Page keys move by the bounded list page")
@@ -964,7 +967,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     enterCommand(controller, "lists");
-    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
+    CHECK(fixture.shell.isNavigationFocused());
   }
 
   TEST_CASE("EventController - scoped protocol wins over conflicting root bindings", "[tui][unit][keymap]")
@@ -986,12 +989,12 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
-    REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
+    REQUIRE(fixture.shell.isNavigationFocused());
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
-    REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
+    REQUIRE(fixture.shell.isNavigationFocused());
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
@@ -1196,7 +1199,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("l")));
-    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
+    CHECK(fixture.shell.isNavigationFocused());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.shell.overlay() == Overlay::None);
@@ -1382,11 +1385,11 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Home));
     CHECK(library.selectedTrack() == 0);
 
-    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.shell.focusNavigation();
     CHECK(controller.tryHandleEvent(ftxui::Event::PageDown));
-    CHECK(library.selectedList() == 0);
+    CHECK(library.navigation().selectedIndex() == 0);
     CHECK(controller.tryHandleEvent(ftxui::Event::PageUp));
-    CHECK(library.selectedList() == 0);
+    CHECK(library.navigation().selectedIndex() == 0);
   }
 
   TEST_CASE("EventController - commands apply filters and clear them", "[tui][unit][event]")
@@ -1437,7 +1440,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     enterCommand(controller, "lists");
-    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
+    CHECK(fixture.shell.isNavigationFocused());
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
 
     enterCommand(controller, "detail");
@@ -1839,11 +1842,11 @@ namespace ao::tui::test
     auto& activityStatusViewModel = fixture.activityStatusViewModel;
     auto controller = fixture.makeEvents(library);
 
-    CHECK(controller.tryHandleEvent(ftxui::Event::Character("l")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
 
-    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
     CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Info);
-    CHECK(activityStatusViewModel.viewState().compact.text == "Lists");
+    CHECK(activityStatusViewModel.viewState().compact.text == "Detail panel");
     CHECK_FALSE(activityStatusViewModel.viewState().compact.optAutoDismissTimeout);
     auto const feed = fixture.runtimePtr->notifications().feed();
     REQUIRE(feed.entries.size() == 1);
@@ -2050,6 +2053,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
     auto resizeCurrentList = [&](std::int32_t const releaseX)
     {
+      hitRegions.trackTableRevision = library.trackRowsRevision();
       auto const press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2};
       auto const release =
         ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = releaseX, .y = 2};
@@ -2244,7 +2248,7 @@ namespace ao::tui::test
     REQUIRE(library.sections().size() >= 2);
     auto controller = fixture.makeEvents(library);
 
-    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.shell.focusNavigation();
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("}")));
     CHECK(library.selectedTrack() == 0);
   }
@@ -2284,21 +2288,93 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
   }
 
+  TEST_CASE("EventController - same-sized regrouping rejects a previously painted section header",
+            "[tui][regression][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "One", .artist = "Zulu", .album = "Alpha", .albumArtist = "Zulu"});
+    fixture.addTrack(
+      library::test::TrackSpec{.title = "Two", .artist = "Alpha", .album = "Zulu", .albumArtist = "Alpha"});
+    auto library = fixture.makeLibrary();
+    REQUIRE(library.setPresentation("albums") == "View: albums");
+    auto controller = fixture.makeEvents(library);
+    auto const count = library.sections().size();
+    REQUIRE(count >= 2);
+    auto const previousSection = library.sections()[1];
+    auto const rendered = renderElement(trackTableView(ao::test::englishMessageCatalog(),
+                                                       library.tracks(),
+                                                       library.sections(),
+                                                       0,
+                                                       kInvalidTrackId,
+                                                       library.activePresentation(),
+                                                       {.sectionRowHitRegions = &fixture.hitRegions.trackSectionRows}),
+                                        80,
+                                        24);
+    auto const& box = fixture.hitRegions.trackSectionRows[1].box;
+    REQUIRE_FALSE(box.IsEmpty());
+    REQUIRE(library.setPresentation("artists") == "View: artists");
+    REQUIRE(library.sections().size() == count);
+    auto const& currentSection = library.sections()[1];
+    REQUIRE((currentSection.primaryText != previousSection.primaryText ||
+             currentSection.secondaryText != previousSection.secondaryText));
+    library.setSelectedTrackIndex(0);
+
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = box.x_min + 1, .y = box.y_min})));
+    CHECK(library.selectedTrack() == 0);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(std::get<std::string>(feed.entries.back().message) == "Section is no longer available");
+  }
+
+  TEST_CASE("EventController - refreshed presentation rejects stale column resize gestures",
+            "[tui][regression][mouse][event]")
+  {
+    for (bool const refreshBeforePress : {true, false})
+    {
+      auto fixture = EventControllerFixture{};
+      auto library = fixture.makeLibrary();
+      auto controller = fixture.makeEvents(library);
+      fixture.hitRegions.trackColumnResizeHandles = {{.field = rt::TrackField::Title,
+                                                      .box = {.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                                                      .columns = 20,
+                                                      .availableColumns = 100}};
+
+      if (refreshBeforePress)
+      {
+        REQUIRE(library.setPresentation("albums") == "View: albums");
+      }
+
+      controller.tryHandleEvent(
+        ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 2}));
+
+      if (!refreshBeforePress)
+      {
+        REQUIRE(library.setPresentation("albums") == "View: albums");
+      }
+
+      controller.tryHandleEvent(
+        ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 30, .y = 2}));
+      CHECK(fixture.trackColumnLayouts.snapshot().empty());
+      CHECK(fixture.trackColumnResizePreview.listId == kInvalidListId);
+    }
+  }
+
   TEST_CASE("EventController - list chooser return opens the selected list", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
-    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.shell.focusNavigation();
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.currentListTitle() == "All Tracks");
     auto const feed = fixture.runtimePtr->notifications().feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().severity == rt::NotificationSeverity::Info);
-    CHECK(std::get<std::string>(feed.entries.front().message) == "Opened All Tracks");
+    CHECK(feed.entries.empty());
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
   }
 
   TEST_CASE("EventController - playback shortcuts update controls", "[tui][unit][event]")
@@ -2414,6 +2490,41 @@ namespace ao::tui::test
     CHECK(snapshots[0].transport.elapsed == duration);
   }
 
+  TEST_CASE("EventController - seek drag releases over the docked Lists pane", "[tui][regression][mouse][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto& playback = fixture.runtimePtr->playback();
+    playback.commands().pause();
+    auto const before = playback.snapshot().transport;
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    fixture.hitRegions.navigation.panel.box = {.x_min = 0, .x_max = 25, .y_min = 2, .y_max = 15};
+    fixture.hitRegions.seekRailBox = {.x_min = 30, .x_max = 50, .y_min = 18, .y_max = 18};
+    auto previews = std::vector<std::chrono::milliseconds>{};
+    auto previewSub = playback.events().onSeekPreview([&previews](std::chrono::milliseconds const elapsed) noexcept
+                                                      { previews.push_back(elapsed); });
+    auto controller = fixture.makeEvents(library);
+
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 50, .y = 18})));
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 5, .y = 5})));
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 5, .y = 5})));
+
+    CHECK(previews.size() == 2);
+    CHECK(previews.back() == std::chrono::milliseconds{0});
+    auto const released = playback.snapshot().transport;
+    CHECK(released.finalSeekRevision.value == before.finalSeekRevision.value + 1);
+    CHECK(released.elapsed == std::chrono::milliseconds{0});
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 50, .y = 18}));
+    CHECK(previews.size() == 2);
+    CHECK(playback.snapshot().transport.finalSeekRevision == released.finalSeekRevision);
+  }
+
   TEST_CASE("EventController - teardown cancellation stabilizes an active seek drag",
             "[tui][regression][event][lifecycle]")
   {
@@ -2475,7 +2586,7 @@ namespace ao::tui::test
       [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = fixture.makeEvents(library);
 
-    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.shell.openOverlay(Overlay::Help);
     auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
 
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Mouse("", press)));
@@ -2574,7 +2685,7 @@ namespace ao::tui::test
     REQUIRE(seekPreviews.size() == 1);
     CHECK(seekPreviews[0] == std::chrono::milliseconds{0});
 
-    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.shell.openOverlay(Overlay::Help);
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Mouse("", drag)));
     CHECK(seekPreviews.size() == 1);
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
@@ -2601,7 +2712,896 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Home));
     REQUIRE(library.selectedTrack() == 0);
 
-    CHECK(controller.tryHandleEvent(ftxui::Event::CtrlL));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("c")));
+    fixture.executor->drain();
     CHECK(library.selectedTrack() == 1);
+  }
+
+  TEST_CASE("EventController - track mouse selection supports modifiers and rejects stale identities",
+            "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const first = library.tracks()[0].id;
+    auto const second = library.tracks()[1].id;
+    fixture.hitRegions.trackRows = {
+      TrackRowHitRegion{.id = first, .rowIndex = 0, .box = {.x_min = 3, .x_max = 40, .y_min = 4, .y_max = 4}},
+      TrackRowHitRegion{.id = second, .rowIndex = 1, .box = {.x_min = 3, .x_max = 40, .y_min = 5, .y_max = 5}}};
+    auto mouse =
+      ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .control = true, .x = 10, .y = 5};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(library.selectedTrack() == 1);
+    CHECK(library.markedIds().contains(second));
+    mouse.control = false;
+    mouse.shift = true;
+    mouse.y = 4;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(library.markedIds().size() == 2);
+    mouse.shift = false;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(library.markedIds().empty());
+    CHECK(library.selectedTrack() == 0);
+    fixture.hitRegions.trackRows[1].id = kInvalidTrackId;
+    mouse.y = 5;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(library.selectedTrack() == 0);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("EventController - a double click plays the clicked track while an intervening key breaks the pair",
+            "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const target = library.tracks()[1].id;
+    fixture.hitRegions.trackRows = {
+      TrackRowHitRegion{.id = target, .rowIndex = 1, .box = {.x_min = 3, .x_max = 40, .y_min = 5, .y_max = 5}}};
+    auto const click = ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 5});
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowUp));
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    REQUIRE(controller.tryHandleEvent(click));
+    REQUIRE(fixture.tryWaitForPlayback(target));
+  }
+
+  TEST_CASE("EventController - rendered Library rows open the matching saved list", "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const listId = fixture.addList("Mouse List");
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.focusNavigation();
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, true, false);
+    auto const rendered =
+      renderElement(navigationPanel(ao::test::englishMessageCatalog(),
+                                    library.navigation(),
+                                    library.currentListId(),
+                                    defaultKeymapPlan(),
+                                    {.columns = 26, .focused = true, .regions = &fixture.hitRegions.navigation}),
+                    26,
+                    15);
+    auto const optBox = findTextCells(rendered.screen, "Mouse List");
+    REQUIRE(optBox);
+    auto const click = ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min});
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(library.currentListId() == listId);
+    CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - visible status shortcuts open their matching surface", "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const rendered =
+      renderElement(statusBar(ao::test::englishMessageCatalog(),
+                              StatusBarViewState{.terminalColumns = 120,
+                                                 .shell = &fixture.shell,
+                                                 .actionHitRegions = &fixture.hitRegions.statusActions},
+                              defaultKeymapPlan()),
+                    120,
+                    1);
+    auto const optBox = findTextCells(rendered.screen, "lists");
+    REQUIRE(optBox);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
+    CHECK(fixture.shell.isNavigationFocused());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    auto const optHelp = findTextCells(rendered.screen, "help");
+    REQUIRE(optHelp);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optHelp->x_min, .y = optHelp->y_min})));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+  }
+
+  TEST_CASE("EventController - command candidate clicks execute through the command protocol",
+            "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.beginInput(ShellInputMode::Command, "set");
+    fixture.shell.setCommandCompletion(
+      rt::CompletionResult{.replaceBegin = 0,
+                           .replaceEnd = 3,
+                           .items = {rt::CompletionItem{.displayText = "settings", .insertText = "settings"}}});
+    auto const rendered = renderElement(
+      mousePanel(
+        commandPalettePanel(
+          ao::test::englishMessageCatalog(), fixture.shell, defaultKeymapPlan(), 60, &fixture.hitRegions.completion),
+        fixture.hitRegions.inputPanel),
+      60,
+      15);
+    REQUIRE(fixture.hitRegions.completion.rows.size() == 1);
+    auto const box = fixture.hitRegions.completion.rows.front();
+    CHECK_FALSE(box.IsEmpty());
+    CHECK(rendered.text.contains("settings"));
+    auto const click = ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = box.x_min, .y = box.y_min});
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(fixture.settingsPtr->isActive());
+  }
+
+  TEST_CASE("EventController - completion mouse coordinates cannot accept an older draft",
+            "[tui][regression][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.beginInput(ShellInputMode::QuickFilter, "old");
+    fixture.shell.setCommandCompletion(
+      rt::CompletionResult{.replaceBegin = 0,
+                           .replaceEnd = 3,
+                           .items = {rt::CompletionItem{.displayText = "older", .insertText = "older"}}});
+    auto const rendered = renderElement(mousePanel(quickFilterCompletionPanel(ao::test::englishMessageCatalog(),
+                                                                              fixture.shell,
+                                                                              defaultKeymapPlan(),
+                                                                              60,
+                                                                              {},
+                                                                              &fixture.hitRegions.completion),
+                                                   fixture.hitRegions.inputPanel),
+                                        60,
+                                        15);
+    auto const optBox = findTextCells(rendered.screen, "older");
+    REQUIRE(optBox);
+    fixture.shell.insertInputText("x");
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
+    CHECK(fixture.shell.inputDraft() == "oldx");
+  }
+
+  TEST_CASE("EventController - painted mode controls toggle shuffle and cycle every repeat mode",
+            "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto controller = fixture.makeEvents(library);
+    auto const rendered = renderElement(playbackBar(library.textCatalog(),
+                                                    {.shuffleBox = &fixture.hitRegions.shuffleBox,
+                                                     .repeatBox = &fixture.hitRegions.repeatBox,
+                                                     .terminalColumns = 80}),
+                                        80,
+                                        1);
+    REQUIRE(findTextCells(rendered.screen, "⇄"));
+    REQUIRE(findTextCells(rendered.screen, "↻"));
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
+                              .motion = ftxui::Mouse::Pressed,
+                              .x = fixture.hitRegions.shuffleBox.x_min,
+                              .y = fixture.hitRegions.shuffleBox.y_min};
+
+    for (auto const shuffle : {rt::ShuffleMode::On, rt::ShuffleMode::Off, rt::ShuffleMode::On})
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).succession.shuffle == shuffle);
+      CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
+    }
+
+    mouse.x = fixture.hitRegions.repeatBox.x_min;
+    mouse.y = fixture.hitRegions.repeatBox.y_min;
+
+    for (auto const repeat : {rt::RepeatMode::All, rt::RepeatMode::One, rt::RepeatMode::Off})
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).succession.repeat == repeat);
+      CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::On);
+      CHECK(library.selectedTrack() == 0);
+    }
+  }
+
+  TEST_CASE("EventController - mode clicks respect mouse preferences and foreground ownership",
+            "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.shuffleBox = {.x_min = 40, .x_max = 40, .y_min = 0, .y_max = 0};
+    fixture.hitRegions.repeatBox = {.x_min = 42, .x_max = 43, .y_min = 0, .y_max = 0};
+
+    auto const checkModesUnchanged = [&fixture]
+    {
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::Off);
+      CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
+    };
+
+    for (auto const column : {40, 42})
+    {
+      auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = column, .y = 0};
+      fixture.preferences.mouseEnabled = false;
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+      checkModesUnchanged();
+      fixture.preferences.mouseEnabled = true;
+      mouse.button = ftxui::Mouse::Right;
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+      checkModesUnchanged();
+      mouse.button = ftxui::Mouse::Left;
+      mouse.motion = ftxui::Mouse::Released;
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+      checkModesUnchanged();
+      mouse.motion = ftxui::Mouse::Moved;
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+      checkModesUnchanged();
+      mouse.motion = ftxui::Mouse::Pressed;
+
+      fixture.shell.openOverlay(Overlay::DetailPanel);
+      fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+      checkModesUnchanged();
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+      fixture.shell.openOverlay(Overlay::Help);
+      fixture.hitRegions.overlayPanel.box = {.x_min = 10, .x_max = 60, .y_min = 2, .y_max = 10};
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+      checkModesUnchanged();
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(":")));
+      fixture.hitRegions.inputPanel.box = {.x_min = 10, .x_max = 60, .y_min = 2, .y_max = 10};
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+      CHECK_FALSE(fixture.shell.isInputActive());
+      checkModesUnchanged();
+    }
+  }
+
+  TEST_CASE("EventController - volume mouse wheel and mute share the volume model", "[tui][unit][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.volumeBox = {.x_min = 70, .x_max = 79, .y_min = 0, .y_max = 0};
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 75, .y = 0};
+    auto const before = currentPlayback(fixture).transport.volume.level;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).transport.volume.level < before);
+    mouse.button = ftxui::Mouse::Left;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).transport.volume.muted);
+  }
+
+  TEST_CASE("EventController - foreground detail content scrolls and blocks controls under its painted cells",
+            "[tui][regression][mouse][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
+    fixture.hitRegions.overlayPanel.contentBox = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 40};
+    fixture.hitRegions.overlayPanel.closeBox = {.x_min = 78, .x_max = 78, .y_min = 0, .y_max = 0};
+    fixture.hitRegions.volumeBox = {.x_min = 70, .x_max = 75, .y_min = 0, .y_max = 0};
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 72, .y = 0};
+    auto const volume = currentPlayback(fixture).transport.volume.level;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.shell.overlayScroll() == fixture.preferences.wheelStep);
+    CHECK(library.selectedTrack() == 0);
+    CHECK(currentPlayback(fixture).transport.volume.level == volume);
+    mouse.button = ftxui::Mouse::Left;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    fixture.executor->drain();
+    CHECK_FALSE(currentPlayback(fixture).transport.volume.muted);
+    mouse.x = 78;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - disabled mouse input also protects an open Settings editor",
+            "[tui][regression][mouse][settings]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.settingsPtr->open();
+    auto const rendered = renderElement(fixture.settingsPtr->renderModal(80, 24), 80, 24);
+    auto const optBox = findTextCells(rendered.screen, "Appearance");
+    REQUIRE(optBox);
+    auto const click = ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min});
+    fixture.preferences.mouseEnabled = false;
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(fixture.settingsPtr->page() == SettingsPage::General);
+    fixture.preferences.mouseEnabled = true;
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(fixture.settingsPtr->page() == SettingsPage::Appearance);
+  }
+
+  TEST_CASE("EventController - exact commands win until the user navigates candidates", "[tui][regression][input]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(
+      library,
+      defaultKeymapPlan(),
+      [](std::string_view draft, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        return rt::CompletionResult{.replaceBegin = 0,
+                                    .replaceEnd = draft.size(),
+                                    .items = {rt::CompletionItem{.displayText = "output", .insertText = "output"},
+                                              rt::CompletionItem{.displayText = "detail", .insertText = "detail"}}};
+      });
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(":")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("detail")));
+
+    SECTION("A literal alias is authoritative")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    }
+
+    SECTION("Deliberate candidate navigation activates the candidate")
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowUp));
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+      CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+    }
+  }
+
+  TEST_CASE("EventController - local list search cannot activate a hidden row", "[tui][regression][search]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const jazz = fixture.addList("Jazz");
+    fixture.addList("Rock");
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("missing")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(library.currentListId() == rt::kAllTracksListId);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.isNavigationFocused());
+    CHECK_FALSE(fixture.shell.listSearch().isActive());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("jazz")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(library.currentListId() == jazz);
+    CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - read-only panels use viewport paging and boundary navigation",
+            "[tui][regression][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.openOverlay(Overlay::Help);
+    fixture.hitRegions.overlayPanel.box = {.x_max = 30, .y_min = 1, .y_max = 9};
+    fixture.hitRegions.overlayPanel.navigationBox = {.x_max = 30, .y_min = 2, .y_max = 6};
+    fixture.hitRegions.overlayPanel.contentBox = {.x_max = 30, .y_max = 99};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::PageDown));
+    CHECK(fixture.shell.overlayScroll() == 5);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("j")));
+    CHECK(fixture.shell.overlayScroll() == 6);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::End));
+    CHECK(fixture.shell.overlayScroll() == 99);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::End));
+    CHECK(fixture.shell.overlayScroll() == 99);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Home));
+    CHECK(fixture.shell.overlayScroll() == 0);
+  }
+
+  TEST_CASE("EventController - moving the filter caret refreshes completion without rescheduling work",
+            "[tui][regression][filter][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    std::size_t seenCursor = 0;
+    auto controller =
+      fixture.makeEvents(library,
+                         defaultKeymapPlan(),
+                         {},
+                         [&](std::string_view, std::size_t cursor) -> std::optional<rt::CompletionResult>
+                         {
+                           seenCursor = cursor;
+                           return std::nullopt;
+                         });
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("First")));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowLeft));
+    CHECK(seenCursor == 4);
+    CHECK(fixture.sleeperPtr->callCount() == 1);
+    REQUIRE(fixture.sleeperPtr->tryFire(0));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return library.filterDraft() == "First"; }));
+    CHECK(fixture.shell.inputDraft() == "First");
+  }
+
+  TEST_CASE("EventController - clicking outside a popover dismisses it without activating the workspace",
+            "[tui][regression][mouse][popover]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.overlayPanel.box = {.x_min = 20, .x_max = 50, .y_min = 5, .y_max = 15};
+    fixture.hitRegions.trackTableBox = {.x_min = 0, .x_max = 79, .y_min = 2, .y_max = 20};
+    fixture.hitRegions.trackRows = {TrackRowHitRegion{
+      .id = library.tracks()[1].id, .rowIndex = 1, .box = {.x_min = 0, .x_max = 19, .y_min = 4, .y_max = 4}}};
+    fixture.hitRegions.soulButtonBox = {.x_min = 0, .x_max = 19, .y_min = 4, .y_max = 4};
+    auto const click = ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 4});
+
+    for (auto const overlay : {Overlay::QualityPanel,
+                               Overlay::OutputDevices,
+                               Overlay::PresentationPanel,
+                               Overlay::Notifications,
+                               Overlay::Help})
+    {
+      REQUIRE(controller.tryHandleEvent(
+        ftxui::Event::Mouse("", ftxui::Mouse{.motion = ftxui::Mouse::Moved, .x = 10, .y = 4})));
+      REQUIRE(controller.isQualityHoverVisible());
+      fixture.shell.openOverlay(overlay);
+      REQUIRE(controller.tryHandleEvent(click));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+      CHECK_FALSE(controller.isQualityHoverVisible());
+      CHECK(library.selectedTrack() == 0);
+      CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    }
+
+    fixture.hitRegions.settingsButtonBox = {.x_min = 0, .x_max = 19, .y_min = 4, .y_max = 4};
+    fixture.shell.openOverlay(Overlay::OutputDevices);
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+  }
+
+  TEST_CASE("EventController - popovers retain inside clicks and ignore outside wheel or release events",
+            "[tui][regression][mouse][popover]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.openOverlay(Overlay::Help);
+    fixture.hitRegions.overlayPanel.box = {.x_min = 20, .x_max = 50, .y_min = 5, .y_max = 15};
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 30, .y = 10};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+    mouse.x = 0;
+    mouse.button = ftxui::Mouse::WheelDown;
+    controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+    mouse.button = ftxui::Mouse::Left;
+    mouse.motion = ftxui::Mouse::Released;
+    controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+  }
+
+  TEST_CASE("EventController - outside clicks cancel command input and preserve the underlying inspector",
+            "[tui][regression][mouse][popover]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.shell.beginInput(ShellInputMode::Command, "settings");
+    fixture.hitRegions.inputPanel.box = {.x_min = 20, .x_max = 60, .y_min = 5, .y_max = 15};
+    fixture.hitRegions.settingsButtonBox = {.x_min = 0, .x_max = 10, .y_min = 0, .y_max = 0};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 5, .y = 0})));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+  }
+
+  TEST_CASE("EventController - Quick Filter outside clicks keep literal text and cancel pending completion",
+            "[tui][regression][popover][concurrency]")
+  {
+    auto fixture = EventControllerFixture{true};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library, defaultKeymapPlan(), {}, completeYuduo);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("yuduo")));
+    REQUIRE(fixture.shell.commandCompletion());
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
+    fixture.hitRegions.inputPanel.box = {.x_min = 20, .x_max = 60, .y_min = 5, .y_max = 15};
+    fixture.hitRegions.completion.inputBox = {.x_min = 0, .x_max = 79, .y_min = 23, .y_max = 23};
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 0, .y = 23};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.shell.isInputActive());
+    mouse.y = 0;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft() == "yuduo");
+    CHECK(fixture.sleeperPtr->tryWaitForCancellation(0));
+    CHECK_FALSE(fixture.sleeperPtr->tryFire(0));
+  }
+
+  TEST_CASE("EventController - outside clicks on untouched filter input preserve the applied filter",
+            "[tui][regression][popover][filter]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    library.setFilterDraft("First");
+    REQUIRE(library.applyFilter());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    fixture.hitRegions.inputPanel.box = {.x_min = 20, .x_max = 60, .y_min = 5, .y_max = 15};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 0, .y = 0})));
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK(library.filterDraft() == "First");
+    REQUIRE(library.tracks().size() == 1);
+    CHECK(library.selectedTrackView().track->row.title == "First");
+  }
+
+  TEST_CASE("EventController - outside clicks retain side panels and disabled mouse popovers",
+            "[tui][regression][mouse][popover]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.overlayPanel.box = {.x_min = 20, .x_max = 50, .y_min = 5, .y_max = 15};
+    auto const click = ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 0, .y = 0});
+
+    fixture.shell.openOverlay(Overlay::DetailPanel);
+    controller.tryHandleEvent(click);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+
+    fixture.shell.openOverlay(Overlay::OutputDevices);
+    fixture.preferences.mouseEnabled = false;
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
+  }
+
+  TEST_CASE("EventController - selection footer cancels a range while retaining the detail pane",
+            "[tui][regression][usability]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    library.toggleFocusedMark();
+    auto const originalMarks = library.markedIds();
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("v")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.hitRegions.cancelSelectionBox = {.x_min = 20, .x_max = 40, .y_min = 23, .y_max = 23};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
+      "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 25, .y = 23})));
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK(library.markedIds() == originalMarks);
+    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+  }
+
+  TEST_CASE("EventController - browse overlays admit transport while retaining navigation and activation",
+            "[tui][regression][keyboard][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    prepareSeekablePlayback(fixture, library);
+    auto const track = currentPlayback(fixture).transport.nowPlaying.trackId;
+
+    for (auto const overlay : {Overlay::QualityPanel,
+                               Overlay::Help,
+                               Overlay::OutputDevices,
+                               Overlay::PresentationPanel,
+                               Overlay::Notifications})
+    {
+      fixture.shell.openOverlay(overlay);
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
+      CHECK(fixture.shell.overlay() == overlay);
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
+      CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == track);
+    }
+
+    fixture.shell.openOverlay(Overlay::Help);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::F1));
+    CHECK(fixture.shell.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("EventController - text entry and editors own playback letters and space",
+            "[tui][regression][keyboard][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    prepareSeekablePlayback(fixture, library);
+    fixture.shell.focusNavigation();
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+
+    for (auto const* value : {" ", "S", "r", ">"})
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(value)));
+    }
+
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
+    CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::Off);
+    CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
+    CHECK(library.navigation().search().matches(" Sr>"));
+    CHECK_FALSE(library.navigation().search().matches("Other"));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("e")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("r")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
+    CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
+  }
+
+  TEST_CASE("EventController - transport keys change the playback sequence without moving library focus",
+            "[tui][unit][keyboard][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const first = library.tracks()[0].id;
+    auto const second = library.tracks()[1].id;
+    prepareSeekablePlayback(fixture, library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(">")));
+    REQUIRE(fixture.tryWaitForPlayback(second));
+    CHECK(library.selectedTrack() == 0);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowLeftCtrl));
+    REQUIRE(fixture.tryWaitForPlayback(first));
+    CHECK(library.selectedTrack() == 0);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("S")));
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::On);
+
+    for (auto const repeat : {rt::RepeatMode::All, rt::RepeatMode::One, rt::RepeatMode::Off})
+    {
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("r")));
+      fixture.executor->drain();
+      CHECK(currentPlayback(fixture).succession.repeat == repeat);
+    }
+  }
+
+  TEST_CASE("EventController - Lists focus suspends track selection and keeps search-local bindings",
+            "[tui][regression][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const target = fixture.addList("Target");
+    auto library = fixture.makeLibrary();
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
+    keymap.applyOverrides({{"tui.workspace.switchFocus", {"Z"}}});
+    auto const plan = KeymapPlan{keymap};
+    auto controller = fixture.makeEvents(library, plan);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    library.toggleVisualSelection();
+    library.moveTrackSelection(1);
+    auto const marked = library.selectedTrackIds();
+    auto const view = library.activeViewId();
+    auto const selection = fixture.runtimePtr->views().trackListState(view).selection;
+    fixture.shell.focusNavigation();
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("v")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("C")));
+    CHECK(library.selectedTrackIds() == marked);
+    CHECK(library.isVisualSelectionActive());
+    CHECK(library.activeViewId() == view);
+    CHECK(fixture.runtimePtr->views().trackListState(view).selection == selection);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("z")));
+    CHECK(library.navigation().search().query() == "z");
+    CHECK(fixture.shell.isNavigationFocused());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Tab));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK_FALSE(library.navigation().search().isActive());
+    CHECK(library.selectedTrackIds() == marked);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("z")));
+    CHECK(fixture.shell.isNavigationFocused());
+    library.navigation().reveal(target);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(library.currentListId() == target);
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.isNavigationEnabled());
+  }
+
+  TEST_CASE("EventController - stronger surfaces suspend and restore Lists search", "[tui][unit][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.focusNavigation();
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("?")));
+    CHECK(fixture.shell.overlay() == Overlay::Help);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.isNavigationFocused());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("All")));
+    fixture.shell.beginInput(ShellInputMode::Command);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(library.navigation().search().query() == "All");
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.isNavigationFocused());
+    CHECK_FALSE(library.navigation().search().isActive());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.isNavigationEnabled());
+  }
+
+  TEST_CASE("EventController - drawer outside press consumes Tracks while docked press operates Tracks",
+            "[tui][regression][mouse][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.focusNavigation();
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, true, false);
+    fixture.hitRegions.navigation.panel.box = {.x_min = 0, .x_max = 25, .y_min = 2, .y_max = 20};
+    fixture.hitRegions.trackTableBox = {.x_min = 0, .x_max = 79, .y_min = 2, .y_max = 20};
+    fixture.hitRegions.trackRows = {
+      {.id = library.tracks()[1].id, .rowIndex = 1, .box = {.x_min = 26, .x_max = 70, .y_min = 5, .y_max = 5}}};
+    auto const click =
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 40, .y = 5});
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.isNavigationEnabled());
+    CHECK(library.selectedTrack() == 0);
+    fixture.shell.focusNavigation();
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(library.selectedTrack() == 1);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("EventController - docked List wheel and disclosure never navigate or steal focus",
+            "[tui][regression][mouse][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto const target = fixture.addList("Wheel target");
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    auto const rendered = renderElement(navigationPanel(ao::test::englishMessageCatalog(),
+                                                        library.navigation(),
+                                                        library.currentListId(),
+                                                        defaultKeymapPlan(),
+                                                        {.columns = 26, .regions = &fixture.hitRegions.navigation}),
+                                        26,
+                                        15);
+    auto const view = library.activeViewId();
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 5, .y = 4})));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(library.activeViewId() == view);
+    CHECK(library.navigation().cursor() == target);
+    fixture.preferences.mouseEnabled = false;
+    auto const cursor = library.navigation().cursor();
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::WheelUp, .motion = ftxui::Mouse::Pressed, .x = 5, .y = 4})));
+    CHECK(library.navigation().cursor() == cursor);
+  }
+
+  TEST_CASE("EventController - track scrollbar and resize take focus before starting a gesture",
+            "[tui][regression][mouse][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    fixture.hitRegions.trackTableBox = {.x_min = 26, .x_max = 119, .y_min = 2, .y_max = 20};
+    fixture.shell.focusNavigation();
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 119, .y = 20})));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    CHECK(library.selectedTrack() == 1);
+    controller.cancelTransientInteractions();
+    fixture.shell.focusNavigation();
+    fixture.hitRegions.trackColumnResizeHandles = {
+      {.field = rt::TrackField::Title, .box = {.x_min = 26, .x_max = 56, .y_min = 2, .y_max = 2}, .columns = 30}};
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 56, .y = 2})));
+    CHECK_FALSE(fixture.shell.isNavigationFocused());
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 61, .y = 2})));
+    CHECK(fixture.trackColumnResizePreview.listId == library.currentListId());
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, false, false);
+    controller.syncWorkspaceGeometry();
+    CHECK(fixture.trackColumnResizePreview.listId == kInvalidListId);
+  }
+
+  TEST_CASE("EventController - only explicit List visibility changes request a layout save", "[tui][unit][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, false, false);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
+    CHECK(fixture.layoutCheckpointCount == 0);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.layoutCheckpointCount == 0);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Tab));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::TabReverse));
+    CHECK(fixture.layoutCheckpointCount == 0);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
+    CHECK_FALSE(fixture.shell.isNavigationEnabled());
+    CHECK(fixture.layoutCheckpointCount == 1);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
+    CHECK(fixture.shell.isNavigationEnabled());
+    CHECK(fixture.layoutCheckpointCount == 2);
+  }
+
+  TEST_CASE("EventController - search paging and scrollbar use visible rows with ancestor context",
+            "[tui][regression][navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+
+    for (std::int32_t index = 0; index < 4; ++index)
+    {
+      auto const parentId = fixture.addList(std::format("Parent {}", index));
+      REQUIRE(rt::test::runRuntimeTask(*fixture.runtimePtr,
+                                       fixture.runtimePtr->library().commands().createListAsync(
+                                         rt::ListDraft{.parentId = parentId, .name = "Needle"})));
+    }
+
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.shell.focusNavigation();
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("Needle")));
+    auto& model = library.navigation();
+    REQUIRE(model.rows().size() == 8);
+    model.selectVisibleRow(3);
+    fixture.hitRegions.navigation.panel.navigationBox = {.x_min = 0, .x_max = 24, .y_min = 0, .y_max = 1};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::PageDown));
+    CHECK(model.selectedIndex() == 5);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::PageUp));
+    CHECK(model.selectedIndex() == 3);
+    fixture.hitRegions.navigation.revision = model.revision();
+    fixture.hitRegions.navigation.panel.box = {.x_min = 0, .x_max = 25, .y_min = 0, .y_max = 8};
+    fixture.hitRegions.navigation.panel.navigationBox = {.x_min = 0, .x_max = 24, .y_min = 0, .y_max = 7};
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 24, .y = 5})));
+    CHECK(model.selectedIndex() == 5);
+    CHECK(library.currentListId() == rt::kAllTracksListId);
   }
 } // namespace ao::tui::test

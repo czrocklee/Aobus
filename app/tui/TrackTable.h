@@ -29,8 +29,6 @@ namespace ftxui
 
 namespace ao::tui
 {
-  class KeymapPlan;
-
   struct TrackColumnResizeHandle final
   {
     rt::TrackField field = rt::TrackField::Title;
@@ -45,17 +43,27 @@ namespace ao::tui
     ftxui::Box box{};
   };
 
+  struct TrackRowHitRegion final
+  {
+    TrackId id = kInvalidTrackId;
+    std::int32_t rowIndex = -1;
+    ftxui::Box box{};
+  };
+
   struct TrackTableViewOptions final
   {
     TerminalTrackColumnLayout const* columnLayout = nullptr;
     std::vector<TrackColumnResizeHandle>* resizeHandles = nullptr;
     std::vector<TrackSectionRowHitRegion>* sectionRowHitRegions = nullptr;
     ftxui::Box* tableBox = nullptr;
+    std::vector<TrackRowHitRegion>* trackRowHitRegions = nullptr;
     std::int32_t availableColumns = 0;
     // Upper bound on the visible viewport height. 0 disables windowing and builds
     // every row for full-build comparisons.
     std::int32_t viewportRows = 0;
     std::unordered_set<TrackId> const* markedTrackIds = nullptr;
+    std::string emptyText{};
+    bool focused = true;
   };
 
   // Overscan rows padded onto each side of the virtualized track-table window so
@@ -110,13 +118,4 @@ namespace ao::tui
                                 TrackId playingTrackId,
                                 rt::TrackPresentationSpec const& presentation,
                                 TrackTableViewOptions options = {});
-  std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
-                                         std::vector<std::string> const& labels,
-                                         KeymapPlan const& keymapPlan,
-                                         std::int32_t terminalColumns);
-  ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
-                                    std::vector<std::string> const& labels,
-                                    std::int32_t selected,
-                                    KeymapPlan const& keymapPlan,
-                                    std::int32_t columns = 0);
 } // namespace ao::tui

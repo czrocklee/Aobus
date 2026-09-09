@@ -3,6 +3,12 @@
 
 zh_Hans:table {
   messages:table {
+    tui_workspace_back { "返回上一个视图" }
+    tui_workspace_forward { "前进到下一个视图" }
+    tui_workspace_history_unavailable { "没有可切换的历史视图。" }
+    tui_settings_keyboard_scope { "工作区快捷键。编辑器和选择面板使用各自的按键。" }
+    tui_playback_modes { "随机播放：{shuffle, select, on {开} other {关}} · 循环：{repeat, select, one {单曲} all {全部} other {关}}" }
+
     tui_settings_save_failed { "无法保存设置。{detail}" }
     tui_settings_load_failed { "无法读取已保存的偏好设置，已使用默认值。{detail}" }
     tui_settings_title { "设置" }
@@ -19,7 +25,7 @@ zh_Hans:table {
     tui_settings_mouse { "鼠标操作" }
     tui_settings_wheel { "滚轮移动步长" }
     tui_settings_seek { "键盘快进步长" }
-    tui_settings_volume { "键盘音量步长" }
+    tui_settings_volume { "音量步长" }
     tui_settings_hover { "悬停显示音频详情" }
     tui_settings_on { "开启" }
     tui_settings_off { "关闭" }
@@ -443,6 +449,15 @@ zh_Hans:table {
     gtk_presentation_copy_label { "{label} 副本" }
     tui_shell_command_palette_title { "命令面板" }
     tui_shell_command_palette_no_matches { "无匹配项" }
+    tui_input_history_hint { "Ctrl+P/N 历史" }
+    tui_navigation_focus { "切换列表与曲目焦点" }
+    tui_navigation_return { "{key} 返回曲目" }
+    tui_navigation_keys { "↑↓ 移动 · ←→ 展开/折叠 · Enter 打开 · Esc 返回曲目" }
+    tui_layout_save_failed { "无法保存工作区布局：{detail}" }
+    tui_navigation_open_failed { "无法打开列表：{detail}" }
+    tui_navigation_sync_failed { "无法显示当前列表：{detail}" }
+    tui_list_search_hint { "/ 搜索 · Esc 清除" }
+    tui_list_search_empty { "无匹配项" }
     tui_shell_command_palette_footer { "{completeKey} 补全  {runKey} 运行  {cancelKey} 取消" }
     tui_shell_quick_filter_title { "快速筛选" }
     tui_shell_quick_filter_footer { "{acceptKey} 接受  {completeKey} 补全  {keepKey} 保留输入" }
@@ -456,7 +471,6 @@ zh_Hans:table {
     tui_shell_overlay_views { "视图" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "帮助" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{openKey} 打开  {closeKey} 关闭" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{closeKey} 关闭" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{closeKey} 关闭" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{selectKey} 选择  {closeKey} 关闭" }
@@ -531,16 +545,24 @@ zh_Hans:table {
     tui_library_no_sections { "此视图中无分节" }
     tui_library_no_section_selected { "未选择分节" }
     tui_library_no_current_track { "无当前曲目" }
-    tui_library_current_track_not_in_view { "当前曲目不在本视图中" }
+    tui_library_current_track_not_in_view { "无法在曲库中定位当前曲目" }
     tui_library_no_active_track_view { "无活动曲目视图" }
     tui_library_no_views_available { "无可用视图" }
-    tui_library_no_lists_available { "无可用列表" }
     tui_library_filter_cleared { "筛选条件已清除" }
     tui_library_filter_applied { "筛选条件已应用" }
-    tui_library_no_tracks_found { "未找到曲目。请先在此音乐库中运行 `aobus init`。" }
+    tui_library_empty_scan { "暂无已索引的曲目。运行 {command} 扫描此音乐库。" }
+    tui_library_filter_empty { "没有曲目符合此筛选条件。请修改或清除筛选。" }
+    tui_library_filter_invalid { "无法应用筛选条件。请修改或清除筛选。" }
+    tui_quick_filter_no_suggestions { "无补全建议，仍可使用输入的文字。" }
+    tui_quick_filter_literal_footer { "{acceptKey} 应用文字  {keepKey} 保留文字" }
+    tui_quick_filter_empty_footer { "{acceptKey} 清除筛选  {keepKey} 保留筛选" }
+    tui_status_keep_marks { "保留标记" }
+    tui_status_cancel_range { "取消范围" }
+    tui_status_play { "播放" }
+    tui_status_clear { "清除" }
+    tui_library_no_tracks_found { "此列表中没有曲目。可选择其他列表浏览。" }
     tui_library_marked_count { "{count, plural, other {已标记 # 首}}" }
     tui_library_visual_mode { "可视选择" }
-    tui_library_no_lists_found { "未找到列表" }
     tui_library_ready { "就绪" }
     tui_library_scan_already_running { "音乐库扫描已在进行中" }
     tui_library_scan_cancelling { "正在取消扫描" }
@@ -969,8 +991,6 @@ zh_Hans:table {
     gtk_layout_value_center { "居中" }
     tui_untitled_section { "无标题分节" }
     tui_notification_none { "无通知" }
-    tui_lists_closed { "列表已关闭" }
-    tui_lists_opened { "列表" }
     tui_detail_closed { "详情已关闭" }
     tui_detail_opened { "详情面板" }
     tui_pipeline_closed { "音频链路已关闭" }

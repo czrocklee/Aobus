@@ -30,20 +30,22 @@ namespace ao::tui
 
     constexpr auto kNoDefaults = std::array<std::string_view, 0>{};
     constexpr auto kOpenSettingsDefaults = std::to_array<std::string_view>({","});
-    constexpr auto kQuitDefaults = std::to_array<std::string_view>({"Q"});
-    constexpr auto kToggleListChooserDefaults = std::to_array<std::string_view>({"L"});
+    constexpr auto kQuitDefaults = std::to_array<std::string_view>({"Shift+Q"});
+    constexpr auto kSwitchWorkspaceFocusDefaults = std::to_array<std::string_view>({"Tab", "Shift+Tab"});
+    constexpr auto kToggleListsDefaults = std::to_array<std::string_view>({"L"});
     constexpr auto kToggleDetailsDefaults = std::to_array<std::string_view>({"D"});
     constexpr auto kToggleAudioPipelineDefaults = std::to_array<std::string_view>({"A"});
     constexpr auto kToggleOutputDevicesDefaults = std::to_array<std::string_view>({"O"});
     constexpr auto kTogglePresentationsDefaults = std::to_array<std::string_view>({"P"});
     constexpr auto kToggleNotificationsDefaults = std::to_array<std::string_view>({"N"});
-    constexpr auto kShowHelpDefaults = std::to_array<std::string_view>({"?"});
+    constexpr auto kShowHelpDefaults = std::to_array<std::string_view>({"?", "F1"});
     constexpr auto kOpenCommandPaletteDefaults = std::to_array<std::string_view>({":"});
     constexpr auto kOpenQuickFilterDefaults = std::to_array<std::string_view>({"/"});
-    constexpr auto kClearFilterDefaults = std::to_array<std::string_view>({"C"});
-    constexpr auto kReloadDefaults = std::to_array<std::string_view>({"R"});
+    constexpr auto kRevealDefaults = std::to_array<std::string_view>({"C"});
+    constexpr auto kClearFilterDefaults = std::to_array<std::string_view>({"Shift+C"});
+    constexpr auto kReloadDefaults = std::to_array<std::string_view>({"Shift+R"});
     constexpr auto kSelectToggleDefaults = std::to_array<std::string_view>({"M"});
-    constexpr auto kSelectVisualDefaults = std::to_array<std::string_view>({"V", "Shift+V"});
+    constexpr auto kSelectVisualDefaults = std::to_array<std::string_view>({"V"});
     constexpr auto kSelectAllDefaults = std::to_array<std::string_view>({"Shift+A"});
     constexpr auto kSelectClearDefaults = std::to_array<std::string_view>({"U"});
     constexpr auto kEditPropertiesDefaults = std::to_array<std::string_view>({"E"});
@@ -52,12 +54,17 @@ namespace ao::tui
     constexpr auto kNextTrackDefaults = std::to_array<std::string_view>({"J"});
     constexpr auto kPreviousSectionDefaults = std::to_array<std::string_view>({"{"});
     constexpr auto kNextSectionDefaults = std::to_array<std::string_view>({"}"});
-    constexpr auto kSeekBackwardDefaults = std::to_array<std::string_view>({"["});
-    constexpr auto kSeekForwardDefaults = std::to_array<std::string_view>({"]"});
+    constexpr auto kSeekBackwardDefaults = std::to_array<std::string_view>({"Left", "["});
+    constexpr auto kSeekForwardDefaults = std::to_array<std::string_view>({"Right", "]"});
     constexpr auto kVolumeDownDefaults = std::to_array<std::string_view>({"-"});
     constexpr auto kVolumeUpDefaults = std::to_array<std::string_view>({"+", "="});
     constexpr auto kPlayPauseDefaults = std::to_array<std::string_view>({"Space"});
     constexpr auto kStopDefaults = std::to_array<std::string_view>({"S"});
+
+    constexpr auto kPlaybackPreviousDefaults = std::to_array<std::string_view>({"<", "Ctrl+Left"});
+    constexpr auto kPlaybackNextDefaults = std::to_array<std::string_view>({">", "Ctrl+Right"});
+    constexpr auto kShuffleDefaults = std::to_array<std::string_view>({"Shift+S"});
+    constexpr auto kRepeatDefaults = std::to_array<std::string_view>({"R"});
 
     std::vector<ActionDescriptor> makeDescriptors()
     {
@@ -69,8 +76,8 @@ namespace ao::tui
          .defaultChords = kOpenSettingsDefaults},
         {.actionId = "tui.shell.quit", .action = KeyAction::Quit, .defaultChords = kQuitDefaults},
         {.actionId = "tui.shell.toggleListChooser",
-         .action = KeyAction::ToggleListChooser,
-         .defaultChords = kToggleListChooserDefaults},
+         .action = KeyAction::ToggleLists,
+         .defaultChords = kToggleListsDefaults},
         {.actionId = "tui.shell.toggleTrackDetail",
          .action = KeyAction::ToggleDetails,
          .defaultChords = kToggleDetailsDefaults},
@@ -95,7 +102,7 @@ namespace ao::tui
          .defaultChords = kOpenQuickFilterDefaults},
         {.actionId = std::string{uimodel::kRevealCurrentTrackActionId},
          .action = KeyAction::RevealCurrentTrack,
-         .defaultChords = kNoDefaults},
+         .defaultChords = kRevealDefaults},
         {.actionId = "tui.library.clearFilter",
          .action = KeyAction::ClearFilter,
          .defaultChords = kClearFilterDefaults},
@@ -118,10 +125,10 @@ namespace ao::tui
         {.actionId = "tui.library.playSelection",
          .action = KeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},
-        {.actionId = "tui.library.previousTrack",
-         .action = KeyAction::PreviousTrack,
+        {.actionId = "tui.library.previousRow",
+         .action = KeyAction::PreviousRow,
          .defaultChords = kPreviousTrackDefaults},
-        {.actionId = "tui.library.nextTrack", .action = KeyAction::NextTrack, .defaultChords = kNextTrackDefaults},
+        {.actionId = "tui.library.nextRow", .action = KeyAction::NextRow, .defaultChords = kNextTrackDefaults},
         {.actionId = "tui.library.previousSection",
          .action = KeyAction::PreviousSection,
          .defaultChords = kPreviousSectionDefaults},
@@ -142,6 +149,21 @@ namespace ao::tui
         {.actionId = uimodel::playbackCommandActionId(Stop),
          .action = KeyAction::PlaybackStop,
          .defaultChords = kStopDefaults},
+        {.actionId = uimodel::playbackCommandActionId(Previous),
+         .action = KeyAction::PlaybackPrevious,
+         .defaultChords = kPlaybackPreviousDefaults},
+        {.actionId = uimodel::playbackCommandActionId(Next),
+         .action = KeyAction::PlaybackNext,
+         .defaultChords = kPlaybackNextDefaults},
+        {.actionId = uimodel::playbackCommandActionId(ToggleShuffle),
+         .action = KeyAction::PlaybackShuffle,
+         .defaultChords = kShuffleDefaults},
+        {.actionId = uimodel::playbackCommandActionId(CycleRepeat),
+         .action = KeyAction::PlaybackRepeat,
+         .defaultChords = kRepeatDefaults},
+        {.actionId = "tui.workspace.switchFocus",
+         .action = KeyAction::SwitchWorkspaceFocus,
+         .defaultChords = kSwitchWorkspaceFocusDefaults},
       };
     }
 
@@ -212,16 +234,6 @@ namespace ao::tui
       return ftxui::Event::Special(std::string{control});
     }
 
-    std::string displayChord(uimodel::KeyChord const& chord)
-    {
-      if (chord.modifiers.isEmpty() && chord.key.size() == 1 && utility::isAsciiAlpha(chord.key.front()))
-      {
-        return std::string{utility::toAsciiLower(chord.key.front())};
-      }
-
-      return chord.toString();
-    }
-
     bool isReservedRootEvent(ftxui::Event const& event)
     {
       return event == ftxui::Event::CtrlC || event == ftxui::Event::Escape || event == ftxui::Event::ArrowUp ||
@@ -238,26 +250,23 @@ namespace ao::tui
 
   uimodel::KeymapBindings defaultKeymap()
   {
-    auto bindings = uimodel::defaultKeymap();
+    auto bindings = uimodel::KeymapBindings{};
 
     for (auto const& descriptor : actionDescriptors())
     {
       auto& chords = bindings[descriptor.actionId];
-      auto local = std::vector<uimodel::KeyChord>{};
-      local.reserve(descriptor.defaultChords.size());
+      chords.reserve(descriptor.defaultChords.size());
 
       for (auto const text : descriptor.defaultChords)
       {
         auto optChord = uimodel::KeyChord::parse(text);
         AO_INVARIANT(optChord, "Invalid built-in TUI key chord: {}", text);
 
-        if (!std::ranges::contains(local, *optChord) && !std::ranges::contains(chords, *optChord))
+        if (!std::ranges::contains(chords, *optChord))
         {
-          local.push_back(std::move(*optChord));
+          chords.push_back(std::move(*optChord));
         }
       }
-
-      chords.insert(chords.begin(), local.begin(), local.end());
     }
 
     return bindings;
@@ -347,6 +356,21 @@ namespace ao::tui
     return std::nullopt;
   }
 
+  std::string keyChordLabel(uimodel::KeyChord const& chord)
+  {
+    if (chord.modifiers.isEmpty() && chord.key.size() == 1 && utility::isAsciiAlpha(chord.key.front()))
+    {
+      return std::string{utility::toAsciiLower(chord.key.front())};
+    }
+
+    if (hasOnly(chord, KeyModifier::Shift) && chord.key.size() == 1 && utility::isAsciiAlpha(chord.key.front()))
+    {
+      return std::string{utility::toAsciiUpper(chord.key.front())};
+    }
+
+    return chord.toString();
+  }
+
   KeymapPlan::KeymapPlan(uimodel::KeymapModel const& keymap)
   {
     for (auto const& descriptor : actionDescriptors())
@@ -397,7 +421,7 @@ namespace ao::tui
         _entries.push_back(Entry{.event = std::move(*optEvent),
                                  .action = descriptor.action,
                                  .actionId = descriptor.actionId,
-                                 .shortcut = displayChord(chord)});
+                                 .shortcut = keyChordLabel(chord)});
       }
     }
   }
@@ -452,5 +476,23 @@ namespace ao::tui
     }
 
     return {};
+  }
+
+  bool isPlaybackControl(KeyAction const action)
+  {
+    switch (action)
+    {
+      case KeyAction::PlaybackPlayPause:
+      case KeyAction::PlaybackStop:
+      case KeyAction::PlaybackPrevious:
+      case KeyAction::PlaybackNext:
+      case KeyAction::PlaybackShuffle:
+      case KeyAction::PlaybackRepeat:
+      case KeyAction::SeekBackward:
+      case KeyAction::SeekForward:
+      case KeyAction::VolumeDown:
+      case KeyAction::VolumeUp: return true;
+      default: return false;
+    }
   }
 } // namespace ao::tui

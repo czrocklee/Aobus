@@ -16,6 +16,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -170,6 +171,18 @@ namespace ao::tui::test
     state.nowPlaying.title.clear();
     text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
     CHECK(text.contains("Kein aktiver Titel"));
+  }
+
+  TEST_CASE("PlaybackPanel - muted volume remains visible as a mouse target", "[tui][unit][mouse][playback]")
+  {
+    auto state = rt::PlaybackTransportSnapshot{.volume = rt::VolumeState{.level = 0.42F, .muted = true}};
+    auto box = ftxui::Box{};
+    auto screen = ftxui::Screen{100, 8};
+    ftxui::Render(screen, englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .volumeBox = &box}));
+    CHECK(screen.ToString().contains("Muted"));
+    CHECK_FALSE(screen.ToString().contains("42%"));
+    CHECK_FALSE(box.IsEmpty());
+    CHECK(state.volume.level == 0.42F);
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
@@ -661,5 +674,57 @@ namespace ao::tui::test
     CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Informational) == uimodel::kAobusSoulVeiled);
     CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Unknown) == uimodel::kAobusSoulVeiled);
     CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Clipped) == uimodel::kAobusSoulBurning);
+  }
+
+  TEST_CASE("PlaybackPanel - mode indicators retain state in narrow terminals", "[tui][regression][keyboard][playback]")
+  {
+    auto state = rt::PlaybackTransportSnapshot{};
+    state.nowPlaying.title = "Sample";
+    auto succession = rt::PlaybackSuccessionSnapshot{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::One};
+    auto const active = renderElement(
+      englishPlaybackBar({.playbackState = &state, .succession = &succession, .terminalColumns = 48}), 48, 1);
+    auto const optShuffle = findTextCells(active.screen, "⇄");
+    auto const optRepeat = findTextCells(active.screen, "↻1");
+    REQUIRE(optShuffle);
+    REQUIRE(optRepeat);
+    CHECK(active.screen.PixelAt(optShuffle->x_min, optShuffle->y_min).bold);
+    CHECK(active.screen.PixelAt(optRepeat->x_min, optRepeat->y_min).bold);
+    CHECK(active.text.contains("Sample"));
+    succession.shuffle = rt::ShuffleMode::Off;
+    succession.repeat = rt::RepeatMode::Off;
+    auto const inactive = renderElement(
+      englishPlaybackBar({.playbackState = &state, .succession = &succession, .terminalColumns = 48}), 48, 1);
+    CHECK_FALSE(inactive.text.contains("↻1"));
+    CHECK_FALSE(inactive.screen.PixelAt(optShuffle->x_min, optShuffle->y_min).bold);
+    CHECK_FALSE(inactive.screen.PixelAt(optRepeat->x_min, optRepeat->y_min).bold);
+  }
+
+  TEST_CASE("PlaybackPanel - mode hit regions follow painted glyphs at normal and constrained widths",
+            "[tui][unit][mouse][playback]")
+  {
+    for (auto const width : {48, 96})
+    {
+      for (auto const repeat : {rt::RepeatMode::Off, rt::RepeatMode::All, rt::RepeatMode::One})
+      {
+        auto succession = rt::PlaybackSuccessionSnapshot{.repeat = repeat};
+        auto shuffleBox = ftxui::Box{};
+        auto repeatBox = ftxui::Box{};
+        auto const rendered = renderElement(
+          englishPlaybackBar(
+            {.succession = &succession, .shuffleBox = &shuffleBox, .repeatBox = &repeatBox, .terminalColumns = width}),
+          width,
+          1);
+        REQUIRE_FALSE(shuffleBox.IsEmpty());
+        REQUIRE_FALSE(repeatBox.IsEmpty());
+        REQUIRE(shuffleBox.x_min >= 0);
+        REQUIRE(repeatBox.x_max < width);
+        CHECK(shuffleBox.x_max < repeatBox.x_min);
+        CHECK(rendered.screen.PixelAt(shuffleBox.x_min, shuffleBox.y_min).character == "⇄");
+        CHECK(rendered.screen.PixelAt(repeatBox.x_min, repeatBox.y_min).character == "↻");
+        CHECK(rendered.screen.PixelAt(repeatBox.x_min, repeatBox.y_min).bold == (repeat != rt::RepeatMode::Off));
+        CHECK(rendered.screen.PixelAt(repeatBox.x_min + 1, repeatBox.y_min).character ==
+              (repeat == rt::RepeatMode::One ? "1" : " "));
+      }
+    }
   }
 } // namespace ao::tui::test

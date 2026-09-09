@@ -35,9 +35,11 @@ namespace ao::tui
     LayoutStateStore& operator=(LayoutStateStore&&) noexcept;
 
     void load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
-              uimodel::ListPresentations::Snapshot& listPresentations) const;
+              uimodel::ListPresentations::Snapshot& listPresentations,
+              bool& navigationEnabled) const;
     Result<> save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
-                  uimodel::ListPresentations::Snapshot const& listPresentations);
+                  uimodel::ListPresentations::Snapshot const& listPresentations,
+                  bool navigationEnabled);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

@@ -26,6 +26,18 @@ namespace ao::tui
   /// Storage must outlive the rendered node and remain at a stable address.
   ftxui::Decorator reflectLayout(ftxui::Box& box);
 
+  struct PanelMouseRegions final
+  {
+    ftxui::Box box = kEmptyMouseBox;
+    ftxui::Box closeBox = kEmptyMouseBox;
+    ftxui::Box contentBox = kEmptyMouseBox;
+    ftxui::Box navigationBox = kEmptyMouseBox;
+  };
+
+  /// Adds a fixed close target. Nonnegative scrollRow also scrolls the whole panel;
+  /// otherwise the caller may own a separately measured, scrolling body.
+  ftxui::Element mousePanel(ftxui::Element panelPtr, PanelMouseRegions& regions, std::int32_t scrollRow = -1);
+
   /// Visible shortcuts route clicks through their owner's existing key protocol.
   class MouseBindings final
   {

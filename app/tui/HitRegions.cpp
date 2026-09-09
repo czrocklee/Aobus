@@ -3,12 +3,22 @@
 
 #include "HitRegions.h"
 
+#include "MouseBindings.h"
+
 #include <ftxui/screen/box.hpp>
 
 #include <cstdint>
 
 namespace ao::tui
 {
+  bool hasCoverIntersection(ftxui::Box const& cover, ftxui::Box const& foreground)
+  {
+    // Kitty clears a one-cell halo around its image when placement changes.
+    return !cover.IsEmpty() && !foreground.IsEmpty() && cover.x_min - 1 <= foreground.x_max &&
+           cover.x_max + 1 >= foreground.x_min && cover.y_min - 1 <= foreground.y_max &&
+           cover.y_max + 1 >= foreground.y_min;
+  }
+
   bool hasHitArea(ftxui::Box const& box)
   {
     return box.x_min <= box.x_max && box.y_min <= box.y_max &&
@@ -22,6 +32,16 @@ namespace ao::tui
 
   void HitRegions::clearFrameLocalRows()
   {
+    navigation = {};
+    overlayPanel = {};
+    inputPanel = {};
+    completion = {};
+    statusActions.clear();
+    cancelSelectionBox = kEmptyMouseBox;
+    shuffleBox = kEmptyMouseBox;
+    repeatBox = kEmptyMouseBox;
+    trackTableRevision = 0;
+    trackRows.clear();
     outputDeviceRows.clear();
     presentationRows.clear();
     notificationDetailRows.clear();

@@ -159,7 +159,7 @@ Changing a stable token's meaning or spelling requires an explicit compatibility
 Adding a token does not change the meaning of existing documents, but older
 readers reject a document that uses the new unknown value.
 
-The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `winui_layout.yaml` files have no shared envelope version.
+The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `winui_layout.yaml` files have no shared envelope version. The TUI file also has a frontend-only `navigation` visibility group (version 1), documented in [application configuration](../persistence/application-config.md); it is not a shared presentation preference.
 Each literal group carries and gates its own payload version.
 
 ## Implementation authority

@@ -3,6 +3,12 @@
 
 de:table {
   messages:table {
+    tui_workspace_back { "Vorherige Arbeitsansicht" }
+    tui_workspace_forward { "Nächste Arbeitsansicht" }
+    tui_workspace_history_unavailable { "Keine Ansicht in dieser Richtung." }
+    tui_settings_keyboard_scope { "Tasten für die Arbeitsansicht. Editoren und Auswahllisten haben eigene Tasten." }
+    tui_playback_modes { "Zufallswiedergabe: {shuffle, select, on {an} other {aus}} · Wiederholen: {repeat, select, one {ein Titel} all {alle} other {aus}}" }
+
     tui_settings_save_failed { "Einstellungen konnten nicht gespeichert werden. {detail}" }
     tui_settings_load_failed { "Gespeicherte Einstellungen konnten nicht geladen werden; Standardwerte werden verwendet. {detail}" }
     tui_settings_title { "Einstellungen" }
@@ -19,7 +25,7 @@ de:table {
     tui_settings_mouse { "Maussteuerung" }
     tui_settings_wheel { "Schrittweite des Mausrads" }
     tui_settings_seek { "Sprungweite per Tastatur" }
-    tui_settings_volume { "Lautstärkeschritt per Tastatur" }
+    tui_settings_volume { "Lautstärkeschritt" }
     tui_settings_hover { "Audiodetails beim Zeigen" }
     tui_settings_on { "Ein" }
     tui_settings_off { "Aus" }
@@ -442,6 +448,15 @@ de:table {
     gtk_presentation_copy_label { "Kopie von {label}" }
     tui_shell_command_palette_title { "Befehlspalette" }
     tui_shell_command_palette_no_matches { "Keine Treffer" }
+    tui_input_history_hint { "Ctrl+P/N Verlauf" }
+    tui_navigation_focus { "Fokus zwischen Listen und Titeln wechseln" }
+    tui_navigation_return { "{key} Titel" }
+    tui_navigation_keys { "↑↓ bewegen · ←→ Baum · Enter öffnen · Esc Titel" }
+    tui_layout_save_failed { "Arbeitsbereich konnte nicht gespeichert werden: {detail}" }
+    tui_navigation_open_failed { "Liste konnte nicht geöffnet werden: {detail}" }
+    tui_navigation_sync_failed { "Aktive Liste konnte nicht angezeigt werden: {detail}" }
+    tui_list_search_hint { "/ suchen · Esc löschen" }
+    tui_list_search_empty { "Keine Treffer" }
     tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }
     tui_shell_quick_filter_title { "Schnellfilter" }
     tui_shell_quick_filter_footer { "{acceptKey} übernehmen  {completeKey} ergänzen  {keepKey} Eingabe behalten" }
@@ -455,7 +470,6 @@ de:table {
     tui_shell_overlay_views { "Ansichten" }
     tui_shell_overlay_notifications { "Benachrichtigungen" }
     tui_shell_overlay_help { "Hilfe" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{openKey} öffnen  {closeKey} schließen" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
@@ -530,16 +544,24 @@ de:table {
     tui_library_no_sections { "Keine Abschnitte in dieser Ansicht" }
     tui_library_no_section_selected { "Kein Abschnitt ausgewählt" }
     tui_library_no_current_track { "Kein aktueller Titel" }
-    tui_library_current_track_not_in_view { "Der aktuelle Titel ist nicht in dieser Ansicht" }
+    tui_library_current_track_not_in_view { "Der aktuelle Titel konnte in der Bibliothek nicht gefunden werden" }
     tui_library_no_active_track_view { "Keine aktive Titelansicht" }
     tui_library_no_views_available { "Keine Ansichten verfügbar" }
-    tui_library_no_lists_available { "Keine Listen verfügbar" }
     tui_library_filter_cleared { "Filter gelöscht" }
     tui_library_filter_applied { "Filter angewendet" }
-    tui_library_no_tracks_found { "Keine Titel gefunden. Führen Sie zuerst `aobus init` in dieser Bibliothek aus." }
+    tui_library_empty_scan { "Keine indizierten Titel. Mit {command} diese Bibliothek scannen." }
+    tui_library_filter_empty { "Keine Titel passen zu diesem Filter. Filter ändern oder löschen." }
+    tui_library_filter_invalid { "Der Filter konnte nicht angewendet werden. Bitte bearbeiten oder löschen." }
+    tui_quick_filter_no_suggestions { "Keine Vorschläge. Der eingegebene Text ist weiterhin nutzbar." }
+    tui_quick_filter_literal_footer { "{acceptKey} Text anwenden  {keepKey} Text behalten" }
+    tui_quick_filter_empty_footer { "{acceptKey} Filter löschen  {keepKey} Filter behalten" }
+    tui_status_keep_marks { "merken" }
+    tui_status_cancel_range { "Bereich verwerfen" }
+    tui_status_play { "abspielen" }
+    tui_status_clear { "löschen" }
+    tui_library_no_tracks_found { "Diese Liste enthält keine Titel. Wählen Sie eine andere Liste." }
     tui_library_marked_count { "{count, plural, one {# markiert} other {# markiert}}" }
     tui_library_visual_mode { "VISUELL" }
-    tui_library_no_lists_found { "Keine Listen gefunden" }
     tui_library_ready { "Bereit" }
     tui_library_scan_already_running { "Ein Bibliotheksscan läuft bereits" }
     tui_library_scan_cancelling { "Scanabbruch läuft bereits" }
@@ -968,8 +990,6 @@ de:table {
     gtk_layout_value_center { "Zentriert" }
     tui_untitled_section { "Unbenannter Abschnitt" }
     tui_notification_none { "Keine Benachrichtigungen" }
-    tui_lists_closed { "Listen geschlossen" }
-    tui_lists_opened { "Listen" }
     tui_detail_closed { "Details geschlossen" }
     tui_detail_opened { "Detailbereich" }
     tui_pipeline_closed { "Audiokette geschlossen" }

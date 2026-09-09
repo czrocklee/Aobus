@@ -7,10 +7,10 @@
 
 #include <cstdint>
 #include <optional>
-#include <string>
 
 namespace ao::tui
 {
+  class TextFieldModel;
   class CommandCompletionState final
   {
   public:
@@ -20,7 +20,7 @@ namespace ao::tui
     void set(std::optional<rt::CompletionResult> optResult);
     bool tryMoveSelection(std::int32_t delta);
     bool tryMoveSelectionByPage(std::int32_t delta);
-    bool tryApplyTo(std::string& draft);
+    bool tryApplyTo(TextFieldModel& draft);
     void clear();
 
   private:

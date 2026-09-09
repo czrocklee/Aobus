@@ -5,26 +5,37 @@
 
 #include "CommandCompletionState.h"
 #include "Keymap.h"
+#include "ListSearch.h"
+#include "TextFieldModel.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
+#include <ftxui/component/event.hpp>
+
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::tui
 {
   enum class Overlay : std::uint8_t
   {
     None,
-    ListChooser,
     DetailPanel,
     QualityPanel,
     OutputDevices,
     PresentationPanel,
     Notifications,
     Help,
+  };
+
+  enum class WorkspaceFocus : std::uint8_t
+  {
+    Tracks,
+    Lists,
   };
 
   enum class ShellInputMode : std::uint8_t
@@ -52,16 +63,33 @@ namespace ao::tui
   class ShellInteractionModel final
   {
   public:
+    bool isNavigationEnabled() const noexcept { return _navigationEnabled; }
+    bool isNavigationFocused() const noexcept { return _workspaceFocus == WorkspaceFocus::Lists; }
+    void setNavigationEnabled(bool enabled) noexcept;
+    void focusNavigation() noexcept;
+    void focusTracks() noexcept { _workspaceFocus = WorkspaceFocus::Tracks; }
+    void toggleNavigation(bool canDock) noexcept;
+    void switchWorkspaceFocus(bool canDock) noexcept;
     bool isInputActive() const noexcept;
     ShellInputMode inputMode() const noexcept;
     std::string const& inputDraft() const noexcept;
+    TextFieldModel const& inputField() const noexcept { return _input; }
+    bool tryEditInput(ftxui::Event const& event);
+    bool tryMoveInputCursor(std::int32_t column);
+    void rememberInput();
+    bool tryMoveInputHistory(std::int32_t delta);
     bool isInputTouched() const noexcept;
     std::optional<rt::CompletionResult> const& commandCompletion() const noexcept;
+    bool isCompletionNavigated() const noexcept { return _completionNavigated; }
     std::int32_t commandCompletionSelection() const noexcept;
+    ListSearch& listSearch() noexcept { return _listSearch; }
+    ListSearch const& listSearch() const noexcept { return _listSearch; }
     Overlay overlay() const noexcept;
+    std::int32_t overlayScroll() const noexcept { return _overlayScroll; }
+    void scrollOverlay(std::int32_t delta, std::int32_t lastRow);
 
     void beginInput(ShellInputMode mode, std::string draft = {});
-    void appendInputText(std::string_view text);
+    void insertInputText(std::string_view text);
     void backspaceInput();
     void closeInput();
     void setCommandCompletion(std::optional<rt::CompletionResult> optCompletion);
@@ -74,10 +102,19 @@ namespace ao::tui
     void closeOverlay() noexcept;
 
   private:
+    bool _navigationEnabled = true;
+    WorkspaceFocus _workspaceFocus = WorkspaceFocus::Tracks;
     ShellInputMode _inputMode = ShellInputMode::None;
-    std::string _inputDraft{};
+    TextFieldModel _input{};
+    std::vector<std::string> _commandHistory{};
+    std::vector<std::string> _filterHistory{};
+    std::optional<std::size_t> _optHistoryIndex{};
+    std::string _historyDraft{};
     bool _inputTouched = false;
     CommandCompletionState _completion{};
+    bool _completionNavigated = false;
+    ListSearch _listSearch{};
     Overlay _overlay = Overlay::None;
+    std::int32_t _overlayScroll = 0;
   };
 } // namespace ao::tui

@@ -21,7 +21,6 @@ namespace ao::tui
   std::string libraryRevealedTrack(i18n::MessageCatalog const& catalog, std::string_view track);
   std::string libraryUnknownView(i18n::MessageCatalog const& catalog, std::string_view id);
   std::string libraryView(i18n::MessageCatalog const& catalog, std::string_view id);
-  std::string libraryOpenedList(i18n::MessageCatalog const& catalog, std::string_view list);
   std::string libraryReloadedTracks(i18n::MessageCatalog const& catalog, std::size_t count);
   std::string libraryQuickFilterMatched(i18n::MessageCatalog const& catalog, std::size_t count);
   std::string libraryExpressionFilterMatched(i18n::MessageCatalog const& catalog, std::size_t count);

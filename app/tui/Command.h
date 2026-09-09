@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2026 Aobus Contributors
+// Copyright (c) 2026 Aobus Contributors
 
 #pragma once
 
@@ -40,6 +40,12 @@ namespace ao::tui
     Play,
     TogglePlayback,
     Stop,
+    Previous,
+    Next,
+    Shuffle,
+    Repeat,
+    Back,
+    Forward,
     Quit,
   };
 

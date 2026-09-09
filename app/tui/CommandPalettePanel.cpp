@@ -4,13 +4,14 @@
 #include "CommandPalettePanel.h"
 
 #include "Command.h"
-#include "CommandCompletion.h"
 #include "Keymap.h"
+#include "MouseBindings.h"
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
 #include "ShellText.h"
 #include "Style.h"
 #include "TextCell.h"
+#include "TextField.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -40,7 +41,7 @@ namespace ao::tui
     constexpr double kCommandPaletteWidthRatio = 0.40;
     constexpr double kCommandPaletteHeightRatio = 0.35;
     constexpr std::size_t kCommandCompletionRowCellReserve = 6;
-    constexpr std::int32_t kQuickFilterPanelChromeRows = 4;
+    constexpr std::int32_t kQuickFilterPanelChromeRows = 5;
     constexpr std::int32_t kQuickFilterErrorRows = 2;
 
     struct CommandPaletteEntryDescriptor final
@@ -56,23 +57,13 @@ namespace ao::tui
       return ftxui::text(fitCellText(value, columns, alignment)) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, columns);
     }
 
-    std::string commandPrefixDisplayText(std::string_view prefix)
-    {
-      if (!prefix.empty() && prefix.back() == ' ')
-      {
-        prefix.remove_suffix(1);
-      }
-
-      return ":" + std::string{prefix};
-    }
-
     std::optional<CommandPaletteEntryDescriptor> commandPaletteEntryDescriptor(i18n::MessageCatalog const& textCatalog,
                                                                                rt::CompletionItem const& item,
                                                                                KeymapPlan const& keymapPlan)
     {
       for (auto const& spec : commandPrefixSpecs())
       {
-        if (item.insertText == spec.prefix && item.displayText == commandPrefixDisplayText(spec.prefix))
+        if (item.insertText == spec.prefix && item.displayText == chromeText(textCatalog, spec.detail))
         {
           return CommandPaletteEntryDescriptor{
             .category = i18n::requiredText(textCatalog, spec.category),
@@ -83,7 +74,7 @@ namespace ao::tui
 
       for (auto const& spec : commandAliasSpecs())
       {
-        if (item.insertText == spec.alias && item.displayText == ":" + std::string{spec.alias})
+        if (item.insertText == spec.alias && item.displayText == chromeText(textCatalog, spec.detail))
         {
           auto const optAction = shortcutActionForCommand(spec.action);
           return CommandPaletteEntryDescriptor{
@@ -112,7 +103,8 @@ namespace ao::tui
                                                          i18n::MessageCatalog const& textCatalog,
                                                          KeymapPlan const& keymapPlan,
                                                          std::int32_t const selectedIndex,
-                                                         std::int32_t const contentColumns)
+                                                         std::int32_t const contentColumns,
+                                                         CompletionHitRegions* hitRegions)
     {
       using namespace ftxui;
 
@@ -135,6 +127,19 @@ namespace ao::tui
 
       auto rows = std::vector<SelectableListRow>{};
       rows.reserve(completion.items.size());
+
+      if (hitRegions != nullptr)
+      {
+        hitRegions->rows.assign(completion.items.size(), kEmptyMouseBox);
+        hitRegions->insertions.clear();
+        hitRegions->replaceBegin = completion.replaceBegin;
+        hitRegions->replaceEnd = completion.replaceEnd;
+
+        for (auto const& item : completion.items)
+        {
+          hitRegions->insertions.push_back(item.insertText);
+        }
+      }
 
       for (std::size_t index = 0; index < completion.items.size(); ++index)
       {
@@ -166,7 +171,9 @@ namespace ao::tui
 
         auto rowPtr = hbox(std::move(cells));
 
-        rows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr), .selected = selected});
+        rows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr),
+                                         .selected = selected,
+                                         .box = hitRegions != nullptr ? &hitRegions->rows[index] : nullptr});
       }
 
       return rows;
@@ -175,21 +182,36 @@ namespace ao::tui
     ftxui::Element commandCompletionList(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
                                          KeymapPlan const& keymapPlan,
-                                         std::int32_t const contentColumns)
+                                         std::int32_t const contentColumns,
+                                         CompletionHitRegions* hitRegions)
     {
+      if (hitRegions != nullptr)
+      {
+        *hitRegions = CompletionHitRegions{.draft = shell.inputDraft(), .cursor = shell.inputField().cursor()};
+      }
+
       if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
       {
         return selectableList(
           commandCompletionRows(
-            *optCompletion, textCatalog, keymapPlan, shell.commandCompletionSelection(), contentColumns),
-          SelectableListOptions{.focusRow = shell.commandCompletionSelection(), .flex = true});
+            *optCompletion, textCatalog, keymapPlan, shell.commandCompletionSelection(), contentColumns, hitRegions),
+          SelectableListOptions{.focusRow = shell.commandCompletionSelection(),
+                                .flex = true,
+                                .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr});
+      }
+
+      if (shell.inputMode() == ShellInputMode::QuickFilter)
+      {
+        return ftxui::paragraph(chromeText(textCatalog, i18n::MessageId::TuiQuickFilterNoSuggestions)) | ftxui::dim |
+               ftxui::flex;
       }
 
       return selectableList(
         {},
         SelectableListOptions{.emptyText = chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteNoMatches),
                               .flex = true,
-                              .centerEmpty = true});
+                              .centerEmpty = true,
+                              .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr});
     }
   } // namespace
 
@@ -225,7 +247,7 @@ namespace ao::tui
   {
     auto const completionRows = shell.commandCompletion() && !shell.commandCompletion()->items.empty()
                                   ? static_cast<std::int32_t>(shell.commandCompletion()->items.size())
-                                  : 1;
+                                  : 2;
     auto const desiredRows =
       completionRows + kQuickFilterPanelChromeRows + (hasFilterError ? kQuickFilterErrorRows : 0);
 
@@ -240,7 +262,8 @@ namespace ao::tui
   ftxui::Element commandPalettePanel(i18n::MessageCatalog const& textCatalog,
                                      ShellInteractionModel const& shell,
                                      KeymapPlan const& keymapPlan,
-                                     std::int32_t columns)
+                                     std::int32_t columns,
+                                     CompletionHitRegions* hitRegions)
   {
     using namespace ftxui;
 
@@ -249,22 +272,21 @@ namespace ao::tui
       columns = commandPalettePanelColumns(0);
     }
 
-    auto const suffix = commandCompletionSuffix(shell);
     auto rows = Elements{};
     rows.push_back(hbox({
       text("> ") | style::accent() | bold,
       text(":") | style::accent() | bold,
-      text(shell.inputDraft()) | bold,
-      text(suffix) | dim,
-      text("_") | style::accent() | bold,
+      textFieldValue(shell.inputField(), hitRegions == nullptr ? nullptr : &hitRegions->inputOrigin) | bold | flex |
+        (hitRegions == nullptr ? nothing : reflect(hitRegions->inputBox)),
     }));
     rows.push_back(separator());
 
     auto const contentColumns = style::popupPanelBodyColumns(columns);
-    rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns));
+    rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns, hitRegions));
 
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteFooter)));
+    rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint)));
 
     return style::popupPanel(
              chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteTitle), vbox(std::move(rows))) |
@@ -275,7 +297,8 @@ namespace ao::tui
                                             ShellInteractionModel const& shell,
                                             KeymapPlan const& keymapPlan,
                                             std::int32_t columns,
-                                            std::string_view const filterError)
+                                            std::string_view const filterError,
+                                            CompletionHitRegions* hitRegions)
   {
     using namespace ftxui;
 
@@ -293,9 +316,27 @@ namespace ao::tui
       rows.push_back(separator());
     }
 
-    rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns));
+    rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns, hitRegions));
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiShellQuickFilterFooter)));
+    auto footer = i18n::MessageId::TuiQuickFilterLiteralFooter;
+
+    if (shell.inputDraft().empty())
+    {
+      footer = i18n::MessageId::TuiQuickFilterEmptyFooter;
+    }
+    else if (shell.commandCompletion() && !shell.commandCompletion()->items.empty())
+    {
+      footer = i18n::MessageId::TuiShellQuickFilterFooter;
+    }
+
+    rows.push_back(paragraph(chromeText(textCatalog, footer)) | dim);
+
+    constexpr std::int32_t kHistoryHintColumns = 80;
+
+    if (columns >= kHistoryHintColumns)
+    {
+      rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint)));
+    }
 
     return style::popupPanel(
              chromeText(textCatalog, i18n::MessageId::TuiShellQuickFilterTitle), vbox(std::move(rows))) |

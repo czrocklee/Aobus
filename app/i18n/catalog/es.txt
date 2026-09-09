@@ -3,6 +3,12 @@
 
 es:table {
   messages:table {
+    tui_workspace_back { "Vista anterior" }
+    tui_workspace_forward { "Vista siguiente" }
+    tui_workspace_history_unavailable { "No hay ninguna vista en esa dirección." }
+    tui_settings_keyboard_scope { "Atajos del área de trabajo. Los editores y selectores tienen sus propias teclas." }
+    tui_playback_modes { "Aleatorio: {shuffle, select, on {activado} other {desactivado}} · Repetir: {repeat, select, one {una pista} all {todo} other {desactivado}}" }
+
     tui_settings_save_failed { "No se pudo guardar la configuración. {detail}" }
     tui_settings_load_failed { "No se pudieron cargar las preferencias guardadas; se usan los valores predeterminados. {detail}" }
     tui_settings_title { "Ajustes" }
@@ -19,7 +25,7 @@ es:table {
     tui_settings_mouse { "Control con ratón" }
     tui_settings_wheel { "Paso de la rueda" }
     tui_settings_seek { "Paso de búsqueda con teclado" }
-    tui_settings_volume { "Paso de volumen con teclado" }
+    tui_settings_volume { "Paso de volumen" }
     tui_settings_hover { "Detalles de audio al pasar el ratón" }
     tui_settings_on { "Activado" }
     tui_settings_off { "Desactivado" }
@@ -442,6 +448,15 @@ es:table {
     gtk_presentation_copy_label { "Copia de {label}" }
     tui_shell_command_palette_title { "Paleta de comandos" }
     tui_shell_command_palette_no_matches { "Sin coincidencias" }
+    tui_input_history_hint { "Ctrl+P/N historial" }
+    tui_navigation_focus { "Cambiar foco entre listas y pistas" }
+    tui_navigation_return { "{key} pistas" }
+    tui_navigation_keys { "↑↓ mover · ←→ árbol · Enter abrir · Esc pistas" }
+    tui_layout_save_failed { "No se pudo guardar la disposición: {detail}" }
+    tui_navigation_open_failed { "No se pudo abrir la lista: {detail}" }
+    tui_navigation_sync_failed { "No se pudo mostrar la lista activa: {detail}" }
+    tui_list_search_hint { "/ buscar · Esc borrar" }
+    tui_list_search_empty { "Sin coincidencias" }
     tui_shell_command_palette_footer { "{completeKey} autocompletar  {runKey} ejecutar  {cancelKey} cancelar" }
     tui_shell_quick_filter_title { "Filtro rápido" }
     tui_shell_quick_filter_footer { "{acceptKey} aceptar  {completeKey} autocompletar  {keepKey} conservar texto" }
@@ -455,7 +470,6 @@ es:table {
     tui_shell_overlay_views { "Vistas" }
     tui_shell_overlay_notifications { "Notificaciones" }
     tui_shell_overlay_help { "Ayuda" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{openKey} abrir  {closeKey} cerrar" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{closeKey} cerrar" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{closeKey} cerrar" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{selectKey} seleccionar  {closeKey} cerrar" }
@@ -530,16 +544,24 @@ es:table {
     tui_library_no_sections { "Sin secciones en esta vista" }
     tui_library_no_section_selected { "Ninguna sección seleccionada" }
     tui_library_no_current_track { "Sin pista actual" }
-    tui_library_current_track_not_in_view { "La pista actual no está en esta vista" }
+    tui_library_current_track_not_in_view { "No se pudo localizar la pista actual en la biblioteca" }
     tui_library_no_active_track_view { "Sin vista de pista activa" }
     tui_library_no_views_available { "No hay vistas disponibles" }
-    tui_library_no_lists_available { "No hay listas disponibles" }
     tui_library_filter_cleared { "Filtro borrado" }
     tui_library_filter_applied { "Filtro aplicado" }
-    tui_library_no_tracks_found { "No se encontraron pistas. Ejecuta primero `aobus init` en esta biblioteca." }
+    tui_library_empty_scan { "No hay pistas indexadas. Ejecuta {command} para escanear esta biblioteca." }
+    tui_library_filter_empty { "Ninguna pista coincide con este filtro. Cámbialo o bórralo." }
+    tui_library_filter_invalid { "No se pudo aplicar el filtro. Edítalo o bórralo." }
+    tui_quick_filter_no_suggestions { "Sin sugerencias. Puedes usar el texto escrito." }
+    tui_quick_filter_literal_footer { "{acceptKey} aplicar texto  {keepKey} conservar texto" }
+    tui_quick_filter_empty_footer { "{acceptKey} borrar filtro  {keepKey} conservar filtro" }
+    tui_status_keep_marks { "conservar" }
+    tui_status_cancel_range { "cancelar rango" }
+    tui_status_play { "reproducir" }
+    tui_status_clear { "borrar" }
+    tui_library_no_tracks_found { "Esta lista no tiene pistas. Elige otra lista para explorar." }
     tui_library_marked_count { "{count, plural, one {# marcada} other {# marcadas}}" }
     tui_library_visual_mode { "VISUAL" }
-    tui_library_no_lists_found { "No se encontraron listas" }
     tui_library_ready { "Listo" }
     tui_library_scan_already_running { "Ya hay un escaneo de la biblioteca en curso" }
     tui_library_scan_cancelling { "La cancelación del escaneo ya está en curso" }
@@ -968,8 +990,6 @@ es:table {
     gtk_layout_value_center { "Centro" }
     tui_untitled_section { "Sección sin título" }
     tui_notification_none { "Sin notificaciones" }
-    tui_lists_closed { "Listas cerradas" }
-    tui_lists_opened { "Listas" }
     tui_detail_closed { "Detalle cerrado" }
     tui_detail_opened { "Panel de detalle" }
     tui_pipeline_closed { "Cadena de audio cerrada" }

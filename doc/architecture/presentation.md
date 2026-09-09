@@ -182,7 +182,7 @@ It constructs the same `AppRuntime`, uses shared runtime services and selected U
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
 The TUI composition root instantiates the shared `TrackPresentationCatalog`, `ListPresentations`, and `TrackColumnLayouts` models for the selected library. Its frontend-local store adapter chooses a TUI-only document and terminal-cell geometry, while the shared UIModel models and schemas remain the semantic authorities. A column drag is a terminal preview until release commits one canonical per-list layout; cancellation discards the preview.
 Its output overlay consumes the same UIModel output-device view model as GTK and WinUI.
-Its list chooser consumes the shared UIModel list-tree projection, and its live Quick Filter consumes the same UIModel track-filter completer as GTK's Quick-filter entry.
+Its persistent List navigation pane consumes the shared UIModel list-tree projection and owns a separate ID cursor, expansion, and local search, and its live Quick Filter consumes the same UIModel track-filter completer as GTK's Quick-filter entry.
 Its separate Command Palette retains terminal-only command and presentation routing and delegates only explicit filter arguments to that completer.
 The process root retains one `MessageCatalog`; terminal renderers and completion adapters borrow it, while command, key, and presentation ids remain owned by the shell interaction model or runtime.
 

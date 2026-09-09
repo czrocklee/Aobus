@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Keymap.h"
+#include "MouseBindings.h"
 #include "ShellInteractionModel.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -13,6 +14,7 @@
 #include <ftxui/screen/box.hpp>
 
 #include <cstdint>
+#include <list>
 #include <string>
 #include <string_view>
 
@@ -22,16 +24,30 @@ namespace ao::tui
   /// The rows the bottom status bar claims from the root layout.
   inline constexpr std::int32_t kStatusBarRows = 1;
 
+  struct StatusActionHitRegion final
+  {
+    KeyAction action = KeyAction::ShowHelp;
+    ftxui::Box box = kEmptyMouseBox;
+  };
+
+  struct CompletionHitRegions;
+
   struct StatusBarViewState final
   {
     uimodel::ActivityStatusViewState const* activityStatus = nullptr;
     std::int32_t terminalColumns = kDefaultStatusBarColumns;
     std::string filterDraft{};
+    bool filterInvalid = false;
+    bool visualSelectionActive = false;
+    bool navigationSearching = false;
     ShellInteractionModel const* shell = nullptr;
     ftxui::Box* activityStatusBox = nullptr;
+    ftxui::Box* cancelSelectionBox = nullptr;
     bool activityStatusHovered = false;
     ftxui::Box* settingsButtonBox = nullptr;
     bool settingsHovered = false;
+    std::list<StatusActionHitRegion>* actionHitRegions = nullptr;
+    CompletionHitRegions* inputHitRegions = nullptr;
   };
 
   std::string_view activityKindLabel(uimodel::ActivityStatusKind kind);

@@ -3,9 +3,7 @@
 
 #include "tui/Keymap.h"
 
-#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "tui/ShellInteractionModel.h"
 #include <ao/Error.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
@@ -76,7 +74,7 @@ namespace ao::tui::test
     constexpr auto kExpected = std::to_array<std::pair<KeyAction, std::string_view>>({
       {KeyAction::OpenSettings, "tui.shell.openSettings"},
       {KeyAction::Quit, "tui.shell.quit"},
-      {KeyAction::ToggleListChooser, "tui.shell.toggleListChooser"},
+      {KeyAction::ToggleLists, "tui.shell.toggleListChooser"},
       {KeyAction::ToggleDetails, "tui.shell.toggleTrackDetail"},
       {KeyAction::ToggleAudioPipeline, "tui.shell.toggleAudioQuality"},
       {KeyAction::ToggleOutputDevices, "tui.shell.toggleOutputDevices"},
@@ -96,8 +94,8 @@ namespace ao::tui::test
       {KeyAction::SelectClear, "tui.library.selectClear"},
       {KeyAction::EditProperties, "tui.library.editProperties"},
       {KeyAction::PlaySelection, "tui.library.playSelection"},
-      {KeyAction::PreviousTrack, "tui.library.previousTrack"},
-      {KeyAction::NextTrack, "tui.library.nextTrack"},
+      {KeyAction::PreviousRow, "tui.library.previousRow"},
+      {KeyAction::NextRow, "tui.library.nextRow"},
       {KeyAction::PreviousSection, "tui.library.previousSection"},
       {KeyAction::NextSection, "tui.library.nextSection"},
       {KeyAction::SeekBackward, "tui.playback.seekBackward"},
@@ -106,6 +104,11 @@ namespace ao::tui::test
       {KeyAction::VolumeUp, "tui.playback.volumeUp"},
       {KeyAction::PlaybackPlayPause, "playback.playPause"},
       {KeyAction::PlaybackStop, "playback.stop"},
+      {KeyAction::PlaybackPrevious, "playback.previous"},
+      {KeyAction::PlaybackNext, "playback.next"},
+      {KeyAction::PlaybackShuffle, "playback.toggleShuffle"},
+      {KeyAction::PlaybackRepeat, "playback.cycleRepeat"},
+      {KeyAction::SwitchWorkspaceFocus, "tui.workspace.switchFocus"},
     });
     auto ids = std::set<std::string_view>{};
     auto actions = std::set<KeyAction>{};
@@ -130,28 +133,32 @@ namespace ao::tui::test
     CHECK(kExpected.size() == static_cast<std::size_t>(KeyAction::Count));
   }
 
-  TEST_CASE("Keymap - terminal defaults extend but do not mutate shared defaults", "[tui][unit][keymap]")
+  TEST_CASE("Keymap - terminal defaults are independent of desktop defaults", "[tui][unit][keymap]")
   {
     auto const sharedBefore = uimodel::defaultKeymap();
     auto const tuiDefaults = defaultKeymap();
     auto const sharedAfter = uimodel::defaultKeymap();
 
     CHECK(sharedAfter == sharedBefore);
-    CHECK_FALSE(sharedBefore.contains(actionId(KeyAction::ToggleListChooser)));
-    REQUIRE(tuiDefaults.contains(actionId(KeyAction::ToggleListChooser)));
-    CHECK(tuiDefaults.at(actionId(KeyAction::ToggleListChooser)) == std::vector{chord("L")});
+    CHECK_FALSE(sharedBefore.contains(actionId(KeyAction::ToggleLists)));
+    REQUIRE(tuiDefaults.contains(actionId(KeyAction::ToggleLists)));
+    CHECK(tuiDefaults.at(actionId(KeyAction::ToggleLists)) == std::vector{chord("L")});
 
     auto const& playPause = tuiDefaults.at(actionId(KeyAction::PlaybackPlayPause));
-    REQUIRE(playPause.size() == 4);
-    CHECK(playPause[0] == chord("Space"));
-    CHECK(playPause[1] == chord("Ctrl+P"));
-    CHECK(playPause[2] == chord("Media:Play"));
-    CHECK(playPause[3] == chord("Media:Pause"));
+    CHECK(playPause == std::vector{chord("Space")});
+    CHECK(tuiDefaults.at(actionId(KeyAction::PlaybackStop)) == std::vector{chord("S")});
+    CHECK_FALSE(tuiDefaults.contains("track.orderMoveUp"));
+  }
 
-    auto const& stop = tuiDefaults.at(actionId(KeyAction::PlaybackStop));
-    REQUIRE(stop.size() == 2);
-    CHECK(stop[0] == chord("S"));
-    CHECK(stop[1] == chord("Media:Stop"));
+  TEST_CASE("Keymap - an explicit quit override preserves the lowercase chord", "[tui][unit][keymap]")
+  {
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
+    keymap.applyOverrides({{"tui.shell.quit", {"Q"}}});
+    auto const plan = KeymapPlan{keymap};
+
+    CHECK(plan.actionFor(ftxui::Event::Character("q")) == KeyAction::Quit);
+    CHECK_FALSE(plan.actionFor(ftxui::Event::Character("Q")));
+    CHECK(plan.shortcutFor(KeyAction::Quit) == "q");
   }
 
   TEST_CASE("Keymap - no-location global store retains defaults without persistence", "[tui][unit][keymap]")
@@ -160,7 +167,7 @@ namespace ao::tui::test
     auto const model = uimodel::loadKeymap(store, defaultKeymap());
     auto const plan = KeymapPlan{model};
 
-    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleListChooser);
+    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleLists);
     CHECK(plan.shortcutFor(KeyAction::OpenQuickFilter) == "/");
   }
 
@@ -169,22 +176,40 @@ namespace ao::tui::test
     auto const model = uimodel::KeymapModel{defaultKeymap()};
     auto const plan = KeymapPlan{model};
 
-    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleListChooser);
+    CHECK_FALSE(plan.actionFor(ftxui::Event::Character("q")));
+    CHECK(plan.actionFor(ftxui::Event::Character("Q")) == KeyAction::Quit);
+    CHECK(plan.shortcutFor(KeyAction::Quit) == "Q");
+    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleLists);
     CHECK(plan.actionFor(ftxui::Event::Character("m")) == KeyAction::SelectToggle);
     CHECK(plan.actionFor(ftxui::Event::Character("A")) == KeyAction::SelectAll);
     CHECK(plan.actionFor(ftxui::Event::Character("a")) == KeyAction::ToggleAudioPipeline);
-    CHECK(plan.actionFor(ftxui::Event::Character("V")) == KeyAction::SelectVisual);
+    CHECK_FALSE(plan.actionFor(ftxui::Event::Character("V")));
     CHECK(plan.actionFor(ftxui::Event::Character("v")) == KeyAction::SelectVisual);
     CHECK(plan.actionFor(ftxui::Event::Character("p")) == KeyAction::TogglePresentations);
-    CHECK(plan.actionFor(ftxui::Event::Character("j")) == KeyAction::NextTrack);
-    CHECK(plan.actionFor(ftxui::Event::Character("k")) == KeyAction::PreviousTrack);
+    CHECK(plan.actionFor(ftxui::Event::Character("j")) == KeyAction::NextRow);
+    CHECK(plan.actionFor(ftxui::Event::Character("k")) == KeyAction::PreviousRow);
     CHECK(plan.actionFor(ftxui::Event::Return) == KeyAction::PlaySelection);
     CHECK(plan.actionFor(ftxui::Event::Character(" ")) == KeyAction::PlaybackPlayPause);
-    CHECK(plan.actionFor(ftxui::Event::CtrlP) == KeyAction::PlaybackPlayPause);
-    CHECK(plan.actionFor(ftxui::Event::CtrlL) == KeyAction::RevealCurrentTrack);
-    CHECK(plan.shortcutFor(KeyAction::ToggleListChooser) == "l");
+    CHECK_FALSE(plan.actionFor(ftxui::Event::CtrlP));
+    CHECK_FALSE(plan.actionFor(ftxui::Event::CtrlL));
+    CHECK(plan.actionFor(ftxui::Event::Character("c")) == KeyAction::RevealCurrentTrack);
+    CHECK(plan.actionFor(ftxui::Event::Character("C")) == KeyAction::ClearFilter);
+    CHECK(plan.actionFor(ftxui::Event::Character("r")) == KeyAction::PlaybackRepeat);
+    CHECK(plan.actionFor(ftxui::Event::Character("R")) == KeyAction::Reload);
+    CHECK(plan.actionFor(ftxui::Event::Character("S")) == KeyAction::PlaybackShuffle);
+    CHECK(plan.actionFor(ftxui::Event::Character("<")) == KeyAction::PlaybackPrevious);
+    CHECK(plan.actionFor(ftxui::Event::Character(">")) == KeyAction::PlaybackNext);
+    CHECK(plan.actionFor(ftxui::Event::ArrowLeft) == KeyAction::SeekBackward);
+    CHECK(plan.actionFor(ftxui::Event::ArrowRight) == KeyAction::SeekForward);
+    CHECK(plan.actionFor(ftxui::Event::ArrowLeftCtrl) == KeyAction::PlaybackPrevious);
+    CHECK(plan.actionFor(ftxui::Event::ArrowRightCtrl) == KeyAction::PlaybackNext);
+    CHECK(plan.actionFor(ftxui::Event::F1) == KeyAction::ShowHelp);
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "l");
     CHECK(plan.shortcutFor(KeyAction::SelectToggle) == "m");
     CHECK(plan.shortcutFor(KeyAction::SelectClear) == "u");
+    CHECK(keyChordLabel(chord("C")) == "c");
+    CHECK(keyChordLabel(chord("Shift+C")) == "C");
+    CHECK(keyChordLabel(chord("Ctrl+C")) == "Ctrl+C");
     CHECK(plan.shortcutFor(KeyAction::SelectVisual) == "v");
     CHECK(plan.shortcutFor(KeyAction::TogglePresentations) == "p");
     CHECK(plan.shortcutFor(KeyAction::PlaybackPlayPause) == "Space");
@@ -283,9 +308,7 @@ namespace ao::tui::test
     auto const plan = KeymapPlan{model};
 
     CHECK_FALSE(plan.actionFor(ftxui::Event::Character("l")));
-    CHECK(plan.actionFor(ftxui::Event::F2) == KeyAction::ToggleListChooser);
-    CHECK(overlayHint(ao::test::englishMessageCatalog(), plan, Overlay::ListChooser) ==
-          "F2 toggle  Enter open  Esc close");
+    CHECK(plan.actionFor(ftxui::Event::F2) == KeyAction::ToggleLists);
   }
 
   TEST_CASE("Keymap - ordinary global preference writes preserve untouched shortcuts", "[tui][unit][keymap]")
@@ -302,7 +325,7 @@ namespace ao::tui::test
 
     auto store = rt::ConfigStore{configPath};
     auto const model = uimodel::loadKeymap(store, defaultKeymap());
-    REQUIRE(model.chordsFor(actionId(KeyAction::ToggleListChooser)) == std::vector{chord("F2")});
+    REQUIRE(model.chordsFor(actionId(KeyAction::ToggleLists)) == std::vector{chord("F2")});
 
     auto prefs = rt::AppPrefsState{};
     prefs.lastThemePreset = "night";
@@ -318,11 +341,11 @@ namespace ao::tui::test
   TEST_CASE("Keymap - explicit unbinding removes dispatch and hint", "[tui][unit][keymap]")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
-    model.applyOverrides({{actionId(KeyAction::ToggleListChooser), {}}});
+    model.applyOverrides({{actionId(KeyAction::ToggleLists), {}}});
     auto const plan = KeymapPlan{model};
 
     CHECK_FALSE(plan.actionFor(ftxui::Event::Character("l")));
-    CHECK(plan.shortcutFor(KeyAction::ToggleListChooser).empty());
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists).empty());
   }
 
   TEST_CASE("Keymap - root protocol events are representable but never installed or advertised", "[tui][unit][keymap]")
@@ -330,7 +353,7 @@ namespace ao::tui::test
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
       {actionId(KeyAction::Quit), {"Ctrl+C", "Up", "Home", "PageUp"}},
-      {actionId(KeyAction::ToggleListChooser), {"Escape", "Down", "End", "PageDown"}},
+      {actionId(KeyAction::ToggleLists), {"Escape", "Down", "End", "PageDown"}},
     });
     auto const plan = KeymapPlan{model};
 
@@ -343,7 +366,7 @@ namespace ao::tui::test
     CHECK_FALSE(plan.actionFor(ftxui::Event::PageUp));
     CHECK_FALSE(plan.actionFor(ftxui::Event::PageDown));
     CHECK(plan.shortcutFor(KeyAction::Quit).empty());
-    CHECK(plan.shortcutFor(KeyAction::ToggleListChooser).empty());
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists).empty());
   }
 
   TEST_CASE("Keymap - unsupported and unknown bindings are local omissions", "[tui][unit][keymap]")
@@ -357,20 +380,20 @@ namespace ao::tui::test
 
     CHECK(plan.actionFor(ftxui::Event::F3) == KeyAction::ToggleDetails);
     CHECK(plan.shortcutFor(KeyAction::ToggleDetails) == "F3");
-    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleListChooser);
+    CHECK(plan.actionFor(ftxui::Event::Character("l")) == KeyAction::ToggleLists);
   }
 
   TEST_CASE("Keymap - projected collision keeps the earlier descriptor deterministically", "[tui][unit][keymap]")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
-      {actionId(KeyAction::ToggleListChooser), {"Tab"}},
+      {actionId(KeyAction::ToggleLists), {"Tab"}},
       {actionId(KeyAction::ToggleDetails), {"Ctrl+I"}},
     });
     auto const plan = KeymapPlan{model};
 
-    CHECK(plan.actionFor(ftxui::Event::Tab) == KeyAction::ToggleListChooser);
-    CHECK(plan.shortcutFor(KeyAction::ToggleListChooser) == "Tab");
+    CHECK(plan.actionFor(ftxui::Event::Tab) == KeyAction::ToggleLists);
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "Tab");
     CHECK(plan.shortcutFor(KeyAction::ToggleDetails).empty());
   }
 } // namespace ao::tui::test

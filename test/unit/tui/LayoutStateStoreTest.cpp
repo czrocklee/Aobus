@@ -12,16 +12,16 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <filesystem>
-#include <fstream>
-#include <ios>
-#include <string>
-
 #ifdef __APPLE__
 #include <unistd.h>
 
 #include <sys/unistd.h>
 #endif
+
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <string>
 
 namespace ao::tui::test
 {
@@ -35,7 +35,8 @@ namespace ao::tui::test
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
     auto const store = LayoutStateStore{libraryPath};
 
-    store.load(columns, presentations);
+    bool navigationEnabled = true;
+    store.load(columns, presentations, navigationEnabled);
 
     REQUIRE(columns.size() == 1);
     CHECK(columns.contains(ListId{7}));
@@ -110,11 +111,14 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
-    REQUIRE(store.save(columnLayouts, presentations));
+    REQUIRE(store.save(columnLayouts, presentations, true));
     CHECK(ao::test::readFile(runtimeSessionPath) == "workspace-sentinel\n");
 
     auto const serialized = ao::test::readFile(layoutStatePath(libraryPath));
-    CHECK(serialized == "trackView.columnLayouts:\n"
+    CHECK(serialized == "navigation:\n"
+                        "  version: 1\n"
+                        "  enabled: true\n"
+                        "trackView.columnLayouts:\n"
                         "  version: 2\n"
                         "  layouts:\n"
                         "    - listId: 10\n"
@@ -136,7 +140,8 @@ namespace ao::tui::test
     auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPresentations = uimodel::ListPresentations::Snapshot{};
     auto const reopenedStore = LayoutStateStore{libraryPath};
-    reopenedStore.load(loadedColumns, loadedPresentations);
+    bool navigationEnabled = true;
+    reopenedStore.load(loadedColumns, loadedPresentations, navigationEnabled);
 
     CHECK(loadedColumns == columnLayouts);
     CHECK(loadedPresentations == presentations);
@@ -166,7 +171,8 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
-    store.load(columns, presentations);
+    bool navigationEnabled = true;
+    store.load(columns, presentations, navigationEnabled);
 
     REQUIRE(columns.size() == 1);
     CHECK(columns.contains(ListId{7}));
@@ -199,7 +205,8 @@ namespace ao::tui::test
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
-    store.load(columns, presentations);
+    bool navigationEnabled = true;
+    store.load(columns, presentations, navigationEnabled);
 
     REQUIRE(columns.size() == 1);
     REQUIRE(columns.contains(ListId{42}));
@@ -224,7 +231,7 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
-    REQUIRE(store.save(columns, presentations));
+    REQUIRE(store.save(columns, presentations, true));
     auto const before = ao::test::readFile(configPath);
     CHECK(before.contains("future.owner:\n  value: keep-me\n"));
     CHECK(before.contains("width: 17"));
@@ -232,18 +239,68 @@ namespace ao::tui::test
 
     columns.at(ListId{10})[0] = uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 29, .weight = -1.0};
     presentations.at(ListId{10}) = "artists";
-    auto const failedSaveRes = store.save(columns, presentations);
+    auto const failedSaveRes = store.save(columns, presentations, true);
 
     REQUIRE_FALSE(failedSaveRes);
     CHECK(ao::test::readFile(configPath) == before);
 
     columns.at(ListId{10})[0] = uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 2.0};
-    REQUIRE(store.save(columns, presentations));
+    REQUIRE(store.save(columns, presentations, true));
 
     auto const after = ao::test::readFile(configPath);
     CHECK(after.contains("future.owner:\n  value: keep-me\n"));
     CHECK(after.contains("field: \"artist\""));
     CHECK(after.contains("weight: 2"));
     CHECK(after.contains("presentationId: \"artists\""));
+  }
+
+  TEST_CASE("LayoutStateStore - navigation visibility round trips independently of focus and geometry",
+            "[tui][unit][config]")
+  {
+    auto const directory = ao::test::TempDir{};
+    auto store = LayoutStateStore{directory.path()};
+    auto columns = uimodel::TrackColumnLayouts::Snapshot{};
+    auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+    REQUIRE(store.save(columns, presentations, false));
+    auto reopened = LayoutStateStore{directory.path()};
+    bool enabled = true;
+    presentations.clear();
+    reopened.load(columns, presentations, enabled);
+    CHECK_FALSE(enabled);
+    CHECK(presentations.at(ListId{7}) == "songs");
+    REQUIRE(reopened.save(columns, presentations, true));
+    auto again = LayoutStateStore{directory.path()};
+    enabled = false;
+    again.load(columns, presentations, enabled);
+    CHECK(enabled);
+  }
+
+  TEST_CASE("LayoutStateStore - malformed navigation defaults without discarding other groups",
+            "[tui][regression][config]")
+  {
+    for (auto const* group : {"navigation: {version: 2, enabled: false}",
+                              "navigation: {version: 1, enabled: nope}",
+                              "navigation: []",
+                              "navigation: {enabled: false}"})
+    {
+      auto const directory = ao::test::TempDir{};
+      auto const path = layoutStatePath(directory.path());
+      std::filesystem::create_directories(path.parent_path());
+      {
+        auto output = std::ofstream{path};
+        output << group << "\n";
+      }
+      auto store = LayoutStateStore{directory.path()};
+      auto columns = uimodel::TrackColumnLayouts::Snapshot{};
+      auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+      bool enabled = false;
+      store.load(columns, presentations, enabled);
+      CHECK(enabled);
+      CHECK(presentations.at(ListId{7}) == "songs");
+      REQUIRE(store.save(columns, presentations, false));
+      auto reopened = LayoutStateStore{directory.path()};
+      reopened.load(columns, presentations, enabled);
+      CHECK_FALSE(enabled);
+    }
   }
 } // namespace ao::tui::test
