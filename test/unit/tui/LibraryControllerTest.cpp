@@ -8,7 +8,6 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "tui/LibraryNavigation.h"
 #include "tui/TrackPresentationNavigation.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -166,11 +165,8 @@ namespace ao::tui::test
                                         presentations};
 
     CHECK(controller.activePresentationId() == "artists");
-    auto const listIt = std::ranges::find(controller.libraryEntries(), listId, &LibraryNavEntry::id);
-    REQUIRE(listIt != controller.libraryEntries().end());
-    auto const listIndex = static_cast<std::int32_t>(listIt - controller.libraryEntries().begin());
-    controller.moveFocusedSelection(true, listIndex - controller.selectedList());
-    REQUIRE(controller.openSelectedList().opened);
+    controller.navigation().reveal(listId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
     CHECK(controller.currentListId() == listId);
     CHECK(controller.activePresentationId() == "albums");
   }
@@ -308,9 +304,7 @@ namespace ao::tui::test
     CHECK(controller.activeViewId() == expectedActiveViewId);
     CHECK(runtimePtr->workspace().snapshot() == before);
     CHECK(controller.currentListId() == rt::kAllTracksListId);
-    auto const allTracksIt = std::ranges::find(controller.libraryEntries(), rt::kAllTracksListId, &LibraryNavEntry::id);
-    REQUIRE(allTracksIt != controller.libraryEntries().end());
-    CHECK(controller.selectedList() == static_cast<std::int32_t>(allTracksIt - controller.libraryEntries().begin()));
+    CHECK(controller.navigation().cursor() == rt::kAllTracksListId);
     CHECK(controller.filterDraft() == expectedState.filterExpression);
     CHECK(controller.activePresentationId() == "albums");
     REQUIRE(controller.tracks().size() == 1);
@@ -393,10 +387,7 @@ namespace ao::tui::test
     fixture.addTrack("Initial");
     auto const otherListId = fixture.addList("Other");
     auto controller = fixture.makeController();
-    auto const listIt = std::ranges::find(controller.libraryEntries(), otherListId, &LibraryNavEntry::id);
-    REQUIRE(listIt != controller.libraryEntries().end());
-    auto const selectedList = static_cast<std::int32_t>(listIt - controller.libraryEntries().begin());
-    controller.moveFocusedSelection(true, selectedList - controller.selectedList());
+    controller.navigation().reveal(otherListId);
     REQUIRE(controller.presentationEntries().size() > 1);
     auto const activePresentationId = controller.activePresentationId();
     auto const selectedPresentation = controller.selectedPresentation() == 0 ? 1 : 0;
@@ -405,7 +396,7 @@ namespace ao::tui::test
     fixture.addTrack("Added");
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
 
-    CHECK(controller.selectedList() == selectedList);
+    CHECK(controller.navigation().cursor() == otherListId);
     CHECK(controller.selectedPresentation() == selectedPresentation);
     CHECK(controller.currentListId() == rt::kAllTracksListId);
     CHECK(controller.activePresentationId() == activePresentationId);
@@ -452,10 +443,8 @@ namespace ao::tui::test
                                         ao::test::englishMessageCatalog(),
                                         presentations};
     auto const allTracksViewId = controller.activeViewId();
-    auto const listIt = std::ranges::find(controller.libraryEntries(), temporaryListId, &LibraryNavEntry::id);
-    REQUIRE(listIt != controller.libraryEntries().end());
-    controller.moveFocusedSelection(true, static_cast<std::int32_t>(listIt - controller.libraryEntries().begin()));
-    REQUIRE(controller.openSelectedList().opened);
+    controller.navigation().reveal(temporaryListId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
     REQUIRE(controller.currentListId() == temporaryListId);
 
     REQUIRE(rt::test::runRuntimeTask(
@@ -513,13 +502,11 @@ namespace ao::tui::test
     REQUIRE(controller.applyFilter());
     REQUIRE(controller.filterError().contains("Filter error:"));
 
-    auto const listIt = std::ranges::find(controller.libraryEntries(), cleanListId, &LibraryNavEntry::id);
-    REQUIRE(listIt != controller.libraryEntries().end());
-    controller.moveFocusedSelection(true, static_cast<std::int32_t>(listIt - controller.libraryEntries().begin()));
+    controller.navigation().reveal(cleanListId);
 
-    auto const opened = controller.openSelectedList();
+    auto const openedRes = controller.openList(controller.navigation().cursor());
 
-    REQUIRE(opened.opened);
+    REQUIRE(openedRes);
     CHECK(controller.currentListId() == cleanListId);
     CHECK(controller.filterDraft().empty());
     CHECK(controller.filterError().empty());
@@ -536,7 +523,7 @@ namespace ao::tui::test
     auto const activeViewId = controller.activeViewId();
     auto const sectionCount = controller.sections().size();
     controller.toggleFocusedMark();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     auto const selectedTrack = controller.selectedTrack();
     REQUIRE(selectedTrack == 1);
     REQUIRE(controller.markedIds().contains(firstTrackId));
@@ -594,7 +581,8 @@ namespace ao::tui::test
     CHECK(controller.selectedTrackView().track->id == secondId);
   }
 
-  TEST_CASE("LibraryController - revealTrack reports unavailable targets", "[tui][unit][library]")
+  TEST_CASE("LibraryController - revealTrack opens an unfiltered view and preserves the previous filter",
+            "[tui][unit][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
@@ -606,8 +594,18 @@ namespace ao::tui::test
 
     controller.setFilterDraft("First");
     CHECK(requireAppliedFilter(controller) == "Quick filter matched 1 track");
-    CHECK(controller.revealTrack(hiddenId) == "Current track is not in this view");
-    CHECK(controller.selectedTrack() == 0);
+    auto const filteredView = controller.activeViewId();
+    auto const expression = fixture.runtimePtr->views().trackListState(filteredView).filterExpression;
+    CHECK(controller.revealTrack(hiddenId) == "Revealed Hidden");
+    CHECK(controller.activeViewId() != filteredView);
+    CHECK(controller.tracks()[controller.selectedTrack()].id == hiddenId);
+    CHECK(fixture.runtimePtr->views().trackListState(filteredView).filterExpression == expression);
+    REQUIRE(controller.navigateHistory(false));
+    CHECK(controller.activeViewId() == filteredView);
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().row.title == "First");
+    REQUIRE(controller.navigateHistory(true));
+    CHECK(controller.tracks().size() == 2);
   }
 
   TEST_CASE("LibraryController - revealTrack selects a track after presentation reorder", "[tui][unit][library]")
@@ -740,7 +738,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks().size() == 2);
     REQUIRE(controller.tracks()[1].id == olderId);
 
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackView().track != nullptr);
     REQUIRE(controller.selectedTrackView().track->id == olderId);
 
@@ -824,14 +822,14 @@ namespace ao::tui::test
     CHECK(controller.markedIds().contains(firstId));
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
 
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     CHECK(controller.selectedTrack() == 1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
 
     controller.toggleFocusedMark();
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     CHECK(controller.selectedTrackView().track->id == thirdId);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
@@ -852,18 +850,18 @@ namespace ao::tui::test
     CHECK(controller.isVisualSelectionActive());
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId});
 
-    controller.moveFocusedSelection(false, 2);
+    controller.moveTrackSelection(2);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId, thirdId});
 
     // Retreating re-derives the range instead of accumulating what it passed over.
-    controller.moveFocusedSelection(false, -1);
+    controller.moveTrackSelection(-1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
     controller.toggleVisualSelection();
     CHECK_FALSE(controller.isVisualSelectionActive());
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
   }
 
@@ -879,7 +877,7 @@ namespace ao::tui::test
     controller.toggleFocusedMark();
     controller.setSelectedTrackIndex(1);
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId, thirdId});
 
     controller.cancelVisualSelection();
@@ -900,7 +898,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 2);
+    controller.moveTrackSelection(2);
     controller.toggleFocusedMark();
 
     CHECK_FALSE(controller.isVisualSelectionActive());
@@ -908,7 +906,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.markedIds().contains(thirdId));
 
     // With the range committed, a later move no longer re-derives it.
-    controller.moveFocusedSelection(false, -2);
+    controller.moveTrackSelection(-2);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
   }
 
@@ -921,14 +919,14 @@ namespace ao::tui::test
     auto const thirdId = fixture.addTrack("Third");
     auto controller = fixture.makeController();
 
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{secondId, thirdId});
 
     // Crossing back over the anchor drops the rows on the far side instead of
     // keeping everything the focus ever passed.
-    controller.moveFocusedSelection(false, -2);
+    controller.moveTrackSelection(-2);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
     CHECK_FALSE(controller.markedIds().contains(thirdId));
   }
@@ -950,7 +948,7 @@ namespace ao::tui::test
       CHECK_FALSE(controller.isVisualSelectionActive());
       CHECK(controller.markedIds().size() == controller.tracks().size());
 
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       CHECK(controller.markedIds().size() == controller.tracks().size());
     }
 
@@ -958,14 +956,14 @@ namespace ao::tui::test
     {
       auto controller = fixture.makeController();
       controller.toggleVisualSelection();
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
       controller.clearMarks();
       CHECK_FALSE(controller.isVisualSelectionActive());
       CHECK(controller.markedIds().empty());
 
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       CHECK(controller.markedIds().empty());
     }
   }
@@ -987,7 +985,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks()[2].id == charlieId);
 
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
     CHECK(controller.setPresentation("artists") == "View: artists");
@@ -1000,7 +998,7 @@ namespace ao::tui::test
     CHECK(controller.isVisualSelectionActive());
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId, bravoId});
 
-    controller.moveFocusedSelection(false, -1);
+    controller.moveTrackSelection(-1);
     CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId});
   }
 
@@ -1018,7 +1016,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks()[1].id == bravoId);
 
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
     // Another shell can reorder the rows under the same filter expression, so
@@ -1049,7 +1047,7 @@ namespace ao::tui::test
       auto controller = fixture.makeController();
       auto const activeViewId = controller.activeViewId();
       controller.toggleVisualSelection();
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
       controller.setFilterDraft("Alpha");
@@ -1064,7 +1062,7 @@ namespace ao::tui::test
     {
       auto controller = fixture.makeController();
       controller.toggleVisualSelection();
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
       controller.setFilterDraft("Alpha");
@@ -1078,24 +1076,24 @@ namespace ao::tui::test
     {
       auto controller = fixture.makeController();
       controller.toggleVisualSelection();
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
-      REQUIRE(controller.openSelectedList().opened);
+      REQUIRE(controller.openList(controller.navigation().cursor()));
 
       CHECK(controller.isVisualSelectionActive());
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
     }
 
     SECTION("a reorder keeps the marks the selection started from")
     {
       auto controller = fixture.makeController();
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       controller.toggleFocusedMark();
-      controller.moveFocusedSelection(false, -1);
+      controller.moveTrackSelection(-1);
       controller.toggleVisualSelection();
       REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
@@ -1107,7 +1105,7 @@ namespace ao::tui::test
       CHECK(controller.isVisualSelectionActive());
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId});
 
-      controller.moveFocusedSelection(false, 1);
+      controller.moveTrackSelection(1);
       CHECK(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, charlieId, bravoId});
     }
   }
@@ -1124,7 +1122,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks().size() == 4);
 
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 2);
+    controller.moveTrackSelection(2);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
 
     REQUIRE(rt::test::runRuntimeTask(
@@ -1154,7 +1152,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     controller.toggleVisualSelection();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
     REQUIRE(rt::test::runRuntimeTask(
@@ -1220,7 +1218,7 @@ namespace ao::tui::test
     REQUIRE(controller.tracks()[1].id == olderId);
 
     controller.toggleFocusedMark();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     controller.toggleFocusedMark();
     REQUIRE(controller.selectedTrack() == 1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{newerId, olderId});
@@ -1241,7 +1239,7 @@ namespace ao::tui::test
     auto controller = fixture.makeController();
 
     controller.toggleFocusedMark();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     controller.toggleFocusedMark();
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
@@ -1283,11 +1281,8 @@ namespace ao::tui::test
     CHECK(controller.reloadActiveList().contains("2"));
     CHECK(controller.markedIds().contains(firstId));
 
-    auto const listIt = std::ranges::find(controller.libraryEntries(), listId, &LibraryNavEntry::id);
-    REQUIRE(listIt != controller.libraryEntries().end());
-    controller.moveFocusedSelection(
-      true, static_cast<std::int32_t>(listIt - controller.libraryEntries().begin()) - controller.selectedList());
-    REQUIRE(controller.openSelectedList().opened);
+    controller.navigation().reveal(listId);
+    REQUIRE(controller.openList(controller.navigation().cursor()));
     CHECK(controller.markedIds().empty());
   }
 
@@ -1299,15 +1294,22 @@ namespace ao::tui::test
     auto const secondId = fixture.addTrack("Second");
     auto controller = fixture.makeController();
 
+    controller.setFilterDraft("$title?");
+    REQUIRE(controller.applyFilter());
     controller.toggleFocusedMark();
-    controller.moveFocusedSelection(false, 1);
+    controller.moveTrackSelection(1);
     controller.toggleFocusedMark();
     auto const viewId = controller.activeViewId();
     auto const marked = controller.selectedTrackIds();
     REQUIRE(viewId != rt::kInvalidViewId);
     REQUIRE(marked == std::vector<TrackId>{firstId, secondId});
 
-    REQUIRE(controller.openSelectedList().opened);
+    auto const workspaceBefore = fixture.runtimePtr->workspace().snapshot();
+    auto const openedRes = controller.openList(controller.currentListId());
+    REQUIRE(openedRes);
+    CHECK_FALSE(*openedRes);
+    CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
+    CHECK(controller.filterDraft() == "$title?");
 
     CHECK(controller.activeViewId() == viewId);
     CHECK(controller.markedIds().contains(firstId));
@@ -1317,5 +1319,120 @@ namespace ao::tui::test
     CHECK(controller.selectedTrack() == 1);
     REQUIRE(controller.selectedTrackView().track != nullptr);
     CHECK(controller.selectedTrackView().track->id == secondId);
+  }
+
+  TEST_CASE("LibraryController - empty library guidance uses the available scan command", "[tui][unit][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tracks().empty());
+    CHECK(controller.emptyStateText() == "No indexed tracks. Run :scan to scan this library.");
+    controller.setFilterDraft("not applied yet");
+    CHECK(controller.emptyStateText().contains(":scan"));
+  }
+
+  TEST_CASE("LibraryController - empty-state guidance distinguishes filter errors and empty Lists",
+            "[tui][regression][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Alpha");
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("missing");
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.tracks().empty());
+    CHECK(controller.emptyStateText() == "No tracks match this filter. Change or clear the filter.");
+    controller.setFilterDraft("$artist =");
+    REQUIRE(controller.applyFilter());
+    REQUIRE_FALSE(controller.filterError().empty());
+    CHECK(controller.emptyStateText() == "The filter could not be applied. Edit or clear it.");
+    controller.clearFilterDraft();
+    REQUIRE(controller.applyFilter());
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().row.title == "Alpha");
+    auto const emptyList = ao::test::requireValue(
+      rt::test::runRuntimeTask(*fixture.runtimePtr,
+                               fixture.runtimePtr->library().commands().createListAsync(
+                                 rt::ListDraft{.name = "Empty", .expression = "$title ~ \"Missing\""})));
+    auto listController = fixture.makeController();
+
+    REQUIRE(listController.openList(emptyList));
+    REQUIRE(listController.currentListId() == emptyList);
+    REQUIRE(listController.tracks().empty());
+    CHECK(listController.emptyStateText() == "This List has no tracks. Choose another List to browse.");
+  }
+
+  TEST_CASE("LibraryController - reveal finishes a visual range without extending its marks",
+            "[tui][regression][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const first = fixture.addTrack("First");
+    auto const second = fixture.addTrack("Second");
+    auto controller = fixture.makeController();
+    controller.toggleVisualSelection();
+    REQUIRE(controller.markedIds() == std::unordered_set<TrackId>{first});
+    CHECK(controller.revealTrack(second) == "Revealed Second");
+    CHECK_FALSE(controller.isVisualSelectionActive());
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{first});
+    CHECK(controller.tracks()[controller.selectedTrack()].id == second);
+  }
+
+  TEST_CASE("LibraryController - reveal prefers a source view and tolerates a removed source",
+            "[tui][regression][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const target = fixture.addTrack("Target");
+    fixture.addTrack("Other");
+    auto const sourceList = fixture.addList("Source");
+    auto const sourceView = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
+    auto controller = fixture.makeController();
+    controller.setFilterDraft("Other");
+    REQUIRE(controller.applyFilter());
+    auto const filteredView = controller.activeViewId();
+    auto const plainSource = ao::test::requireValue(fixture.runtimePtr->workspace().navigate({.target = sourceList}));
+    REQUIRE(fixture.runtimePtr->workspace().focusView(filteredView));
+
+    SECTION("An existing source view is reused")
+    {
+      CHECK(controller.revealTrack(target, plainSource, sourceList) == "Revealed Target");
+      CHECK(controller.activeViewId() == plainSource);
+      REQUIRE(controller.navigateHistory(false));
+      CHECK(controller.activeViewId() == filteredView);
+    }
+
+    SECTION("A closed source view falls back without changing the filtered view")
+    {
+      REQUIRE(fixture.runtimePtr->workspace().closeView(plainSource));
+      CHECK(controller.revealTrack(target, plainSource, kInvalidListId) == "Revealed Target");
+      CHECK(controller.currentListId() == rt::kAllTracksListId);
+      CHECK_FALSE(fixture.runtimePtr->views().trackListState(sourceView).filterExpression.empty());
+    }
+  }
+
+  TEST_CASE("LibraryController - reveal of a missing subject leaves the workspace intact", "[tui][regression][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("First");
+    auto controller = fixture.makeController();
+    auto const view = controller.activeViewId();
+    CHECK(controller.revealTrack(TrackId{999999}) == "Could not locate the current track in the library");
+    CHECK(controller.activeViewId() == view);
+    CHECK(controller.tracks().size() == 1);
+  }
+
+  TEST_CASE("LibraryController - missing List fails before changing active view or selection",
+            "[tui][regression][library]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Retained");
+    auto controller = fixture.makeController();
+    controller.toggleVisualSelection();
+    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const selected = controller.selectedTrackIds();
+    auto const res = controller.openList(ListId{987654});
+    REQUIRE_FALSE(res);
+    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.activeViewId() == before.activeViewId);
+    CHECK(controller.selectedTrackIds() == selected);
+    CHECK(controller.isVisualSelectionActive());
   }
 } // namespace ao::tui::test

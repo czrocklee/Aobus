@@ -3,7 +3,7 @@
 
 #include "TrackPropertiesEditorTestSupport.h"
 
-#include "TuiRenderTestSupport.h"
+#include "RenderTestSupport.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "tui/TrackPropertiesEditor.h"
 #include <ao/CoreIds.h>
@@ -137,7 +137,7 @@ namespace ao::tui::test
 
   ftxui::Event clearEvent()
   {
-    return ftxui::Event::Character(static_cast<char>(0x15));
+    return ftxui::Event::CtrlD;
   }
 
   ftxui::Event restoreEvent()

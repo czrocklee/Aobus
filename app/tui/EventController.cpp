@@ -3,8 +3,12 @@
 
 #include "EventController.h"
 
+#include "Command.h"
+#include "HitRegions.h"
+#include "Keymap.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
+#include "MouseBindings.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
@@ -18,17 +22,18 @@
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
-#include "TuiHitRegions.h"
-#include "TuiKeymap.h"
 #include <ao/Contract.h>
+#include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -52,6 +57,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::tui
@@ -59,56 +65,21 @@ namespace ao::tui
   namespace
   {
     constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
-    constexpr std::int32_t kPageSelectionDelta = 10;
-    constexpr std::int32_t kBoundarySelectionDelta = 1'000'000;
 
-    std::optional<std::int32_t> listNavigationDelta(ftxui::Event const& event)
+    bool isPopoverOverlay(Overlay const overlay)
     {
-      if (event == ftxui::Event::ArrowUp)
+      switch (overlay)
       {
-        return -1;
+        case Overlay::QualityPanel:
+        case Overlay::OutputDevices:
+        case Overlay::PresentationPanel:
+        case Overlay::Notifications:
+        case Overlay::Help: return true;
+        case Overlay::None:
+        case Overlay::DetailPanel: return false;
       }
 
-      if (event == ftxui::Event::ArrowDown)
-      {
-        return 1;
-      }
-
-      if (event == ftxui::Event::PageUp)
-      {
-        return -kPageSelectionDelta;
-      }
-
-      if (event == ftxui::Event::PageDown)
-      {
-        return kPageSelectionDelta;
-      }
-
-      if (event == ftxui::Event::Home)
-      {
-        return -kBoundarySelectionDelta;
-      }
-
-      if (event == ftxui::Event::End)
-      {
-        return kBoundarySelectionDelta;
-      }
-
-      return std::nullopt;
-    }
-
-    template<typename MoveSelection>
-    bool tryHandleListNavigation(ftxui::Event const& event, MoveSelection moveSelection)
-    {
-      auto const optDelta = listNavigationDelta(event);
-
-      if (!optDelta)
-      {
-        return false;
-      }
-
-      moveSelection(*optDelta);
-      return true;
+      return false;
     }
 
     bool tryPlaySelected(rt::PlaybackCommands& commands,
@@ -191,7 +162,7 @@ namespace ao::tui
                                    LibraryController& library,
                                    async::Runtime& asyncRuntime,
                                    rt::PlaybackService& playback,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    EventControllerBindings bindings)
     : _shell{shell}
     , _library{library}
@@ -215,37 +186,124 @@ namespace ao::tui
     , _isExitWaiting{std::move(bindings.isExitWaiting)}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
     , _filterCompletionCallback{std::move(bindings.filterCompletionCallback)}
+    , _requestLayoutCheckpoint{std::move(bindings.requestLayoutCheckpoint)}
   {
-  }
-
-  void EventController::postActivityNotification(rt::NotificationSeverity const severity, std::string message)
-  {
-    auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
-                                                                     : rt::NotificationLifetime::history();
-    _notifications.post(
-      rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
-  }
-
-  void EventController::openSelectedList()
-  {
-    auto result = _library.openSelectedList();
-
-    if (result.opened)
-    {
-      closeOverlay();
-
-      if (!result.status.empty())
+    _revealSub = _playback.events().onRevealTrackRequested(
+      [this](rt::PlaybackRevealTrackRequest const& request)
       {
-        postActivityNotification(rt::NotificationSeverity::Info, std::move(result.status));
+        postActivityNotification(
+          rt::NotificationSeverity::Info,
+          _library.revealTrack(request.trackId, request.preferredViewId, request.preferredListId));
+
+        if (request.trackId != kInvalidTrackId && _library.selectedTrackView().track != nullptr &&
+            _library.selectedTrackView().track->id == request.trackId)
+        {
+          leaveNavigation();
+        }
+      });
+  }
+
+  bool EventController::tryHandleEvent(ftxui::Event const& event)
+  {
+    syncWorkspaceGeometry();
+
+    if (event == ftxui::Event::CtrlC)
+    {
+      _requestExit();
+      return true;
+    }
+
+    if (event == ftxui::Event::Custom)
+    {
+      return false;
+    }
+
+    if (!event.is_mouse())
+    {
+      _lastClickedTrack = kInvalidTrackId;
+    }
+
+    // Waiting for a submitted write swallows ordinary input; only the Ctrl-C
+    // above can stop the wait.
+    if (_isExitWaiting && _isExitWaiting())
+    {
+      return true;
+    }
+
+    if (event.is_mouse() && !_preferences.mouseEnabled)
+    {
+      return true;
+    }
+
+    // An open editor owns the whole surface, including keys and mouse events
+    // it has no use for, so nothing behind it can act on stale geometry.
+    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
+    {
+      return true;
+    }
+
+    if (event.is_mouse())
+    {
+      auto mouseEvent = event;
+
+      if (tryHandleListSearchEvent(event))
+      {
+        return true;
       }
 
-      return;
+      return tryHandleMouse(mouseEvent.mouse());
     }
 
-    if (!result.status.empty())
+    if (_shell.isInputActive())
     {
-      postActivityNotification(rt::NotificationSeverity::Warning, std::move(result.status));
+      return tryHandleCommandEvent(event);
     }
+
+    if (tryHandleListSearchEvent(event))
+    {
+      return true;
+    }
+
+    if (tryHandleNavigationEvent(event))
+    {
+      return true;
+    }
+
+    // Escape is protocol-owned before any overlay sees it, so rebinding cannot
+    // strand the user inside a modal surface. A running visual selection is the
+    // innermost transient state of the workspace, so it wins whenever the
+    // workspace is still drivable; a modal overlay took the keys that grow the
+    // selection, so it is closed first and the selection survives.
+    if (event == ftxui::Event::Escape)
+    {
+      if (!isModalOverlay(_shell.overlay()) && _library.isVisualSelectionActive())
+      {
+        _library.cancelVisualSelection();
+        return true;
+      }
+
+      runCommand({.action = CommandAction::CloseOverlay});
+      return true;
+    }
+
+    // A modal overlay answers everything, so reaching the workspace below means
+    // the open overlay left this key alone.
+    if (isOverlayActive(_shell.overlay()) && tryHandleOverlayEvent(event))
+    {
+      return true;
+    }
+
+    return tryHandleRootEvent(event);
+  }
+
+  void EventController::cancelTransientInteractions()
+  {
+    _lastClickedTrack = kInvalidTrackId;
+    _navigationScrollbarDrag = false;
+    cancelFilterDebounce();
+    cancelWorkspaceGestures();
+    _qualityHoverVisible = false;
+    _hoveredButton = HoveredButton::None;
   }
 
   void EventController::reloadActiveList()
@@ -274,22 +332,6 @@ namespace ao::tui
     {
       postActivityNotification(rt::NotificationSeverity::Warning, _library.filterError());
     }
-  }
-
-  void EventController::toggleListChooser()
-  {
-    if (_shell.overlay() == Overlay::ListChooser)
-    {
-      closeOverlay();
-      postActivityNotification(
-        rt::NotificationSeverity::Info,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiListsClosed)});
-      return;
-    }
-
-    openOverlay(Overlay::ListChooser);
-    postActivityNotification(rt::NotificationSeverity::Info,
-                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiListsOpened)});
   }
 
   void EventController::toggleDetailPanel()
@@ -381,6 +423,24 @@ namespace ao::tui
       std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiNotificationsOpened)});
   }
 
+  void EventController::editSelectedTrackProperties()
+  {
+    if (!_trackEdit.tryOpen(_library.selectedTrackIds()))
+    {
+      return;
+    }
+
+    // The editor takes the whole surface, so whatever the workspace was in the
+    // middle of ends here instead of finishing against a layout nobody can see.
+    cancelTransientInteractions();
+    // The editor captured the range the moment it opened. Leaving the range
+    // armed would let the next motion key after the modal closes reshape the
+    // marks the user comes back to, and a library change under the modal would
+    // re-derive it against rows the edit itself reordered.
+    _library.commitVisualSelection();
+    _shell.closeInput();
+  }
+
   void EventController::selectOutputDevice()
   {
     _outputDevices.trySelectSelected();
@@ -395,7 +455,7 @@ namespace ao::tui
 
   void EventController::revealCurrentTrack()
   {
-    _library.revealTrack(_playback.snapshot().transport.nowPlaying.trackId);
+    _playback.commands().revealPlayingTrack();
   }
 
   void EventController::playSelectedTrack()
@@ -410,15 +470,39 @@ namespace ao::tui
 
   void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
   {
-    if (!_playbackActions.tryExecute(command) && command != uimodel::PlaybackCommand::Stop)
+    if (!_playbackActions.tryExecute(command))
     {
+      if (command != uimodel::PlaybackCommand::Stop)
+      {
+        postActivityNotification(
+          rt::NotificationSeverity::Warning,
+          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable)});
+      }
+
+      return;
+    }
+
+    if (command == uimodel::PlaybackCommand::ToggleShuffle || command == uimodel::PlaybackCommand::CycleRepeat)
+    {
+      auto const& state = _playback.snapshot().succession;
+      auto repeat = std::string_view{"off"};
+
+      switch (state.repeat)
+      {
+        case rt::RepeatMode::Off: break;
+        case rt::RepeatMode::All: repeat = "all"; break;
+        case rt::RepeatMode::One: repeat = "one"; break;
+      }
+
       postActivityNotification(
-        rt::NotificationSeverity::Warning,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable)});
+        rt::NotificationSeverity::Info,
+        i18n::requiredFormat(_library.textCatalog(),
+                             i18n::MessageId::TuiPlaybackModes,
+                             {{"shuffle", state.shuffle == rt::ShuffleMode::On ? "on" : "off"}, {"repeat", repeat}}));
     }
   }
 
-  void EventController::executeKeyAction(TuiKeyAction const action)
+  void EventController::executeKeyAction(KeyAction const action)
   {
     if (auto const optCommandAction = commandActionForKeyAction(action); optCommandAction)
     {
@@ -426,18 +510,24 @@ namespace ao::tui
       return;
     }
 
-    using enum TuiKeyAction;
+    using enum KeyAction;
 
     switch (action)
     {
+      case SwitchWorkspaceFocus: switchWorkspaceFocus(); break;
       case OpenCommandPalette:
       case OpenQuickFilter:
+        if (action == OpenQuickFilter)
+        {
+          leaveNavigation();
+        }
+
         cancelWorkspaceGestures();
         _shell.beginInput(action == OpenQuickFilter ? ShellInputMode::QuickFilter : ShellInputMode::Command);
         refreshCommandCompletion();
         break;
-      case PreviousTrack: _library.moveFocusedSelection(false, -1); break;
-      case NextTrack: _library.moveFocusedSelection(false, 1); break;
+      case PreviousRow: _library.moveTrackSelection(-1); break;
+      case NextRow: _library.moveTrackSelection(1); break;
       case PreviousSection: _library.jumpToAdjacentSection(-1); break;
       case NextSection: _library.jumpToAdjacentSection(1); break;
       case SeekBackward: _seekViewModel.seekBy(-std::chrono::seconds{_preferences.seekSeconds}); break;
@@ -445,7 +535,7 @@ namespace ao::tui
       case VolumeDown: _volumeViewModel.adjustVolume(-static_cast<float>(_preferences.volumePercent) / 100.0F); break;
       case VolumeUp: _volumeViewModel.adjustVolume(static_cast<float>(_preferences.volumePercent) / 100.0F); break;
       case Quit:
-      case ToggleListChooser:
+      case ToggleLists:
       case ToggleDetails:
       case ToggleAudioPipeline:
       case ToggleOutputDevices:
@@ -465,27 +555,13 @@ namespace ao::tui
       case OpenSettings:
       case PlaySelection:
       case PlaybackPlayPause:
+      case PlaybackPrevious:
+      case PlaybackNext:
+      case PlaybackShuffle:
+      case PlaybackRepeat:
       case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
       case Count: break;
     }
-  }
-
-  void EventController::editSelectedTrackProperties()
-  {
-    if (!_trackEdit.tryOpen(_library.selectedTrackIds()))
-    {
-      return;
-    }
-
-    // The editor takes the whole surface, so whatever the workspace was in the
-    // middle of ends here instead of finishing against a layout nobody can see.
-    cancelTransientInteractions();
-    // The editor captured the range the moment it opened. Leaving the range
-    // armed would let the next motion key after the modal closes reshape the
-    // marks the user comes back to, and a library change under the modal would
-    // re-derive it against rows the edit itself reordered.
-    _library.commitVisualSelection();
-    _shell.closeInput();
   }
 
   void EventController::runCommand(Command const& command)
@@ -493,10 +569,11 @@ namespace ao::tui
     switch (command.action)
     {
       case CommandAction::QuickFilter:
+        leaveNavigation();
         _library.setFilterDraft(command.argument);
         applyFilter();
         break;
-      case CommandAction::OpenLists: toggleListChooser(); break;
+      case CommandAction::OpenLists: toggleLists(); break;
       case CommandAction::OpenDetail: toggleDetailPanel(); break;
       case CommandAction::OpenQuality: toggleQualityPanel(); break;
       case CommandAction::OpenOutputDevices: toggleOutputDevices(); break;
@@ -541,8 +618,34 @@ namespace ao::tui
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
+      case CommandAction::Previous: executePlaybackCommand(uimodel::PlaybackCommand::Previous); break;
+      case CommandAction::Next: executePlaybackCommand(uimodel::PlaybackCommand::Next); break;
+      case CommandAction::Shuffle: executePlaybackCommand(uimodel::PlaybackCommand::ToggleShuffle); break;
+      case CommandAction::Repeat: executePlaybackCommand(uimodel::PlaybackCommand::CycleRepeat); break;
+      case CommandAction::Back:
+      case CommandAction::Forward:
+        if (!_library.navigateHistory(command.action == CommandAction::Forward))
+        {
+          postActivityNotification(
+            rt::NotificationSeverity::Info,
+            std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiWorkspaceHistoryUnavailable)});
+        }
+        else
+        {
+          leaveNavigation();
+        }
+
+        break;
       case CommandAction::Quit: _requestExit(); break;
     }
+  }
+
+  void EventController::postActivityNotification(rt::NotificationSeverity const severity, std::string message)
+  {
+    auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
+                                                                     : rt::NotificationLifetime::history();
+    _notifications.post(
+      rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
   }
 
   void EventController::refreshCommandCompletion()
@@ -562,7 +665,7 @@ namespace ao::tui
       return;
     }
 
-    _shell.setCommandCompletion((*callback)(_shell.inputDraft()));
+    _shell.setCommandCompletion((*callback)(_shell.inputDraft(), _shell.inputField().cursor()));
   }
 
   void EventController::scheduleFilterDebounce()
@@ -584,16 +687,6 @@ namespace ao::tui
   {
     _filterDebounceTask.reset();
     ++_filterDebounceGeneration;
-  }
-
-  async::Task<void> EventController::waitForFilterDebounceAsync(async::Runtime* const runtime,
-                                                                EventController* const owner,
-                                                                std::uint64_t const generation,
-                                                                std::stop_token const stopToken)
-  {
-    co_await runtime->sleepForAsync(kFilterDebounceInterval, stopToken);
-    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
-    owner->applyPendingFilter(generation);
   }
 
   void EventController::applyPendingFilter(std::uint64_t const generation)
@@ -625,101 +718,299 @@ namespace ao::tui
 
     _library.setFilterDraft(_shell.inputDraft());
     applyFilter();
+    _shell.rememberInput();
     _shell.closeInput();
   }
 
-  bool EventController::trySelectTrackFromScrollbar(std::int32_t const row)
+  async::Task<void> EventController::waitForFilterDebounceAsync(async::Runtime* const runtime,
+                                                                EventController* const owner,
+                                                                std::uint64_t const generation,
+                                                                std::stop_token const stopToken)
   {
-    if (_library.tracks().empty())
+    co_await runtime->sleepForAsync(kFilterDebounceInterval, stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+    owner->applyPendingFilter(generation);
+  }
+
+  bool EventController::tryHandleMouse(ftxui::Mouse const& mouse)
+  {
+    auto const modalInputActive = _shell.isInputActive() || isModalOverlay(_shell.overlay());
+
+    // A gesture aimed at the workspace cannot be finished across a surface that
+    // took the workspace away, whichever of the two arrived first.
+    if (modalInputActive && hasWorkspaceGesture())
+    {
+      cancelWorkspaceGestures();
+      return false;
+    }
+
+    if (_shell.isInputActive())
+    {
+      return tryHandleInputMouse(mouse);
+    }
+
+    if (isLeftPress(mouse) && containsMouse(_hitRegions.overlayPanel.closeBox, mouse))
+    {
+      closeOverlay();
+      return true;
+    }
+
+    // An admitted gesture owns pointer motion and release across workspace panes.
+    if (auto const optHandled = handleActiveMouseDrag(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = tryHandleNavigationMouse(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleMouseWheel(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (mouse.motion == ftxui::Mouse::Moved)
+    {
+      return tryHandleMouseMove(mouse);
+    }
+
+    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
     {
       return false;
     }
 
-    auto const target =
-      scrollbarTrackIndex(_hitRegions.trackTableBox, row, _library.tracks().size(), _library.sections());
-    _library.setSelectedTrackIndex(target);
+    if (isOverlayActive(_shell.overlay()) && containsMouse(_hitRegions.overlayPanel.box, mouse))
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      tryHandleOverlayPress(mouse);
+      return true;
+    }
+
+    if (isPopoverOverlay(_shell.overlay()) && !_hitRegions.overlayPanel.box.IsEmpty())
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      closeOverlay();
+      return true;
+    }
+
+    if (auto const optHandled = handleSeekRailPress(mouse, modalInputActive); optHandled)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return *optHandled;
+    }
+
+    if (isLeftPress(mouse) && containsMouse(_hitRegions.trackTableBox, mouse))
+    {
+      leaveNavigation();
+    }
+
+    if (auto const optHandled = handleColumnResizePress(mouse); optHandled)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleScrollbarPress(mouse); optHandled)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleSectionPress(mouse); optHandled)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return *optHandled;
+    }
+
+    if (auto const optHandled = handleButtonPress(mouse); optHandled)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+      return *optHandled;
+    }
+
+    if (tryHandleOverlayPress(mouse))
+    {
+      return true;
+    }
+
+    return !isModalOverlay(_shell.overlay()) && tryHandleTrackPress(mouse);
+  }
+
+  bool EventController::tryHandleInputMouse(ftxui::Mouse const& mouse)
+  {
+    if (mouse.motion == ftxui::Mouse::Moved)
+    {
+      return tryHandleMouseMove(mouse);
+    }
+
+    if (isLeftPress(mouse) && containsMouse(_hitRegions.inputPanel.closeBox, mouse))
+    {
+      return tryHandleCommandEvent(ftxui::Event::Escape);
+    }
+
+    if (auto const& inputHit = _hitRegions.completion; isLeftPress(mouse) && containsMouse(inputHit.inputBox, mouse))
+    {
+      if (inputHit.draft == _shell.inputDraft() && inputHit.cursor == _shell.inputField().cursor() &&
+          _shell.tryMoveInputCursor(mouse.x - inputHit.inputOrigin.x_min))
+      {
+        refreshCommandCompletion();
+      }
+
+      return true;
+    }
+
+    if (!containsMouse(_hitRegions.inputPanel.box, mouse))
+    {
+      if (isLeftPress(mouse) && !_hitRegions.inputPanel.box.IsEmpty())
+      {
+        _qualityHoverVisible = false;
+        return tryHandleCommandEvent(ftxui::Event::Escape);
+      }
+
+      return false;
+    }
+
+    if (auto const wheel = mouseWheelDirection(mouse); wheel != 0)
+    {
+      _shell.tryMoveCommandCompletionByPage(wheel);
+      return true;
+    }
+
+    if (!isLeftPress(mouse))
+    {
+      return false;
+    }
+
+    auto const& hit = _hitRegions.completion;
+    auto const& optCompletion = _shell.commandCompletion();
+    auto const optRow = mouseRowAt(hit.rows, mouse);
+
+    if (!optRow || !optCompletion || hit.draft != _shell.inputDraft() || hit.cursor != _shell.inputField().cursor() ||
+        hit.replaceBegin != optCompletion->replaceBegin || hit.replaceEnd != optCompletion->replaceEnd ||
+        *optRow >= optCompletion->items.size() || *optRow >= hit.insertions.size() ||
+        hit.insertions[*optRow] != optCompletion->items[*optRow].insertText)
+    {
+      return true;
+    }
+
+    _shell.tryMoveCommandCompletion(static_cast<std::int32_t>(*optRow) - _shell.commandCompletionSelection());
+    tryHandleCommandEvent(ftxui::Event::Tab);
+
+    if (_shell.inputMode() == ShellInputMode::Command && parseCommand(_shell.inputDraft()))
+    {
+      tryHandleCommandEvent(ftxui::Event::Return);
+    }
+
     return true;
   }
 
-  void EventController::syncSeekSlider()
+  bool EventController::tryHandleTrackPress(ftxui::Mouse const& mouse)
   {
-    auto const duration = _playback.snapshot().transport.duration;
-    _seekSlider.applyViewState(duration, duration > std::chrono::milliseconds{0});
-  }
-
-  std::chrono::milliseconds EventController::seekRailElapsed(std::int32_t const column) const
-  {
-    auto const duration = _playback.snapshot().transport.duration;
-
-    if (duration <= std::chrono::milliseconds{0})
+    for (auto const& hit : _hitRegions.trackRows)
     {
-      return std::chrono::milliseconds{0};
+      if (!containsMouse(hit.box, mouse))
+      {
+        continue;
+      }
+
+      if (auto const& tracks = _library.tracks(); hit.rowIndex < 0 ||
+                                                  static_cast<std::size_t>(hit.rowIndex) >= tracks.size() ||
+                                                  tracks[hit.rowIndex].id != hit.id)
+      {
+        _lastClickedTrack = kInvalidTrackId;
+        return true;
+      }
+
+      if (mouse.shift && !_library.isVisualSelectionActive())
+      {
+        _library.toggleVisualSelection();
+      }
+      else if (!mouse.shift)
+      {
+        _library.commitVisualSelection();
+
+        if (!mouse.control)
+        {
+          _library.clearMarks();
+        }
+      }
+
+      _library.setSelectedTrackIndex(hit.rowIndex);
+
+      if (mouse.control)
+      {
+        _library.toggleFocusedMark();
+      }
+
+      auto const now = std::chrono::steady_clock::now();
+      auto const isDoubleClick = !mouse.control && !mouse.shift && _lastClickedTrack == hit.id &&
+                                 _lastClickedList == _library.currentListId() &&
+                                 now - _lastTrackClickTime <= std::chrono::milliseconds{400};
+      _lastClickedTrack = mouse.control || mouse.shift || isDoubleClick ? kInvalidTrackId : hit.id;
+      _lastClickedList = _library.currentListId();
+      _lastTrackClickTime = now;
+
+      if (isDoubleClick)
+      {
+        playSelectedTrack();
+      }
+
+      return true;
     }
 
-    auto const& seekRailBox = _hitRegions.seekRailBox;
-    auto const railColumns = std::max(1, seekRailBox.x_max - seekRailBox.x_min + 1);
-    auto const denominator = std::max(1, railColumns - 1);
-    auto const relativeColumn = std::clamp(column - seekRailBox.x_min, 0, denominator);
-    auto const fraction = static_cast<double>(relativeColumn) / static_cast<double>(denominator);
-    auto const elapsed =
-      static_cast<std::chrono::milliseconds::rep>(std::llround(static_cast<double>(duration.count()) * fraction));
-    return std::chrono::milliseconds{elapsed};
+    _lastClickedTrack = kInvalidTrackId;
+    return false;
   }
 
-  void EventController::applySeekUpdate(uimodel::SeekSliderUpdate const& update)
+  std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
   {
-    switch (update.action)
+    if (std::holds_alternative<SeekRailDrag>(_workspaceGesture))
     {
-      case uimodel::SeekSliderAction::None: return;
-      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(update.elapsed); return;
-      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(update.elapsed); return;
-    }
-  }
+      if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
+      {
+        syncSeekSlider();
+        auto const elapsed = seekRailElapsed(mouse.x);
+        auto const update = mouse.motion == ftxui::Mouse::Released ? _seekSlider.endPointerInteraction(elapsed)
+                                                                   : _seekSlider.valueChanged(elapsed);
+        applySeekUpdate(update);
 
-  void EventController::cancelSeekInteraction()
-  {
-    if (!_optSeekRailDrag)
-    {
-      return;
-    }
+        if (mouse.motion == ftxui::Mouse::Released)
+        {
+          _workspaceGesture = std::monostate{};
+        }
 
-    if (_seekSlider.hasPendingFinalSeek())
-    {
-      _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
+        return true;
+      }
+
+      _workspaceGesture = std::monostate{};
+      _seekSlider.reset();
     }
 
-    _optSeekRailDrag.reset();
-    _seekSlider.reset();
-  }
+    if (std::holds_alternative<TrackScrollbarDrag>(_workspaceGesture))
+    {
+      if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
+      {
+        auto const handled = trySelectTrackFromScrollbar(mouse.y);
 
-  void EventController::cancelColumnResize()
-  {
-    _optTrackColumnResizeDrag.reset();
-    _trackColumnResizePreview = {};
-  }
+        if (mouse.motion == ftxui::Mouse::Released)
+        {
+          _workspaceGesture = std::monostate{};
+        }
 
-  bool EventController::hasWorkspaceGesture() const noexcept
-  {
-    return _optSeekRailDrag || _optTrackScrollbarDrag || _optTrackColumnResizeDrag;
-  }
+        return handled;
+      }
 
-  void EventController::cancelWorkspaceGestures()
-  {
-    cancelSeekInteraction();
-    _optTrackScrollbarDrag.reset();
-    cancelColumnResize();
-  }
+      _workspaceGesture = std::monostate{};
+    }
 
-  void EventController::openOverlay(Overlay const overlay)
-  {
-    cancelWorkspaceGestures();
-    _shell.openOverlay(overlay);
-  }
+    if (std::holds_alternative<TrackColumnResizeDrag>(_workspaceGesture))
+    {
+      return tryHandleTrackColumnResizeDrag(mouse);
+    }
 
-  void EventController::closeOverlay()
-  {
-    cancelWorkspaceGestures();
-    _shell.closeOverlay();
+    return std::nullopt;
   }
 
   bool EventController::tryHandleTrackColumnResizeDrag(ftxui::Mouse const& mouse)
@@ -730,10 +1021,10 @@ namespace ao::tui
       return false;
     }
 
-    AO_EXPECTS(_optTrackColumnResizeDrag);
-    auto const drag = *_optTrackColumnResizeDrag;
+    AO_EXPECTS(std::holds_alternative<TrackColumnResizeDrag>(_workspaceGesture));
+    auto const drag = std::get<TrackColumnResizeDrag>(_workspaceGesture);
 
-    if (_library.currentListId() != drag.listId)
+    if (_library.currentListId() != drag.listId || _library.trackRowsRevision() != drag.rowsRevision)
     {
       cancelColumnResize();
       return false;
@@ -765,64 +1056,47 @@ namespace ao::tui
     return true;
   }
 
-  std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
-  {
-    if (_optSeekRailDrag)
-    {
-      if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
-      {
-        syncSeekSlider();
-        auto const elapsed = seekRailElapsed(mouse.x);
-        auto const update = mouse.motion == ftxui::Mouse::Released ? _seekSlider.endPointerInteraction(elapsed)
-                                                                   : _seekSlider.valueChanged(elapsed);
-        applySeekUpdate(update);
-
-        if (mouse.motion == ftxui::Mouse::Released)
-        {
-          _optSeekRailDrag.reset();
-        }
-
-        return true;
-      }
-
-      _optSeekRailDrag.reset();
-      _seekSlider.reset();
-    }
-
-    if (_optTrackScrollbarDrag)
-    {
-      if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
-      {
-        auto const handled = trySelectTrackFromScrollbar(mouse.y);
-
-        if (mouse.motion == ftxui::Mouse::Released)
-        {
-          _optTrackScrollbarDrag.reset();
-        }
-
-        return handled;
-      }
-
-      _optTrackScrollbarDrag.reset();
-    }
-
-    if (_optTrackColumnResizeDrag)
-    {
-      return tryHandleTrackColumnResizeDrag(mouse);
-    }
-
-    return std::nullopt;
-  }
-
   std::optional<bool> EventController::handleMouseWheel(ftxui::Mouse const& mouse)
   {
+    auto const wheel = mouseWheelDirection(mouse);
+
+    if (wheel != 0)
+    {
+      _lastClickedTrack = kInvalidTrackId;
+    }
+
+    if (wheel != 0 && containsMouse(_hitRegions.overlayPanel.box, mouse))
+    {
+      switch (_shell.overlay())
+      {
+        case Overlay::PresentationPanel: tryMoveOverlaySelection(wheel); break;
+        case Overlay::OutputDevices: _outputDevices.tryMoveSelection(wheel); break;
+        case Overlay::DetailPanel:
+        case Overlay::QualityPanel:
+        case Overlay::Help:
+        case Overlay::Notifications:
+          _shell.scrollOverlay(wheel * _preferences.wheelStep,
+                               _hitRegions.overlayPanel.contentBox.y_max - _hitRegions.overlayPanel.contentBox.y_min);
+          break;
+        case Overlay::None: return false;
+      }
+
+      return true;
+    }
+
+    if (wheel != 0 && !isModalOverlay(_shell.overlay()) && contains(_hitRegions.volumeBox, mouse.x, mouse.y))
+    {
+      _volumeViewModel.adjustVolume(-static_cast<float>(wheel * _preferences.volumePercent) / 100.0F);
+      return true;
+    }
+
     if ((mouse.button == ftxui::Mouse::WheelUp || mouse.button == ftxui::Mouse::WheelDown) &&
         mouse.motion == ftxui::Mouse::Pressed)
     {
       if (!isModalOverlay(_shell.overlay()) && contains(_hitRegions.trackTableBox, mouse.x, mouse.y))
       {
         auto const delta = mouse.button == ftxui::Mouse::WheelUp ? -_preferences.wheelStep : _preferences.wheelStep;
-        _library.moveFocusedSelection(false, delta);
+        _library.moveTrackSelection(delta);
         return true;
       }
 
@@ -870,7 +1144,7 @@ namespace ao::tui
       return false;
     }
 
-    _optSeekRailDrag = SeekRailDrag{};
+    _workspaceGesture = SeekRailDrag{};
     applySeekUpdate(_seekSlider.valueChanged(seekRailElapsed(mouse.x)));
     return true;
   }
@@ -891,12 +1165,18 @@ namespace ao::tui
       return std::nullopt;
     }
 
+    if (_hitRegions.trackTableRevision != _library.trackRowsRevision())
+    {
+      return true;
+    }
+
     _trackColumnResizePreview = {};
-    _optTrackColumnResizeDrag = TrackColumnResizeDrag{
+    _workspaceGesture = TrackColumnResizeDrag{
       .field = handleIt->field,
       .startX = mouse.x,
       .startColumns = handleIt->columns,
       .listId = _library.currentListId(),
+      .rowsRevision = _hitRegions.trackTableRevision,
     };
     return true;
   }
@@ -908,11 +1188,11 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    _optTrackScrollbarDrag = TrackScrollbarDrag{};
+    _workspaceGesture = TrackScrollbarDrag{};
 
     if (!trySelectTrackFromScrollbar(mouse.y))
     {
-      _optTrackScrollbarDrag.reset();
+      _workspaceGesture = std::monostate{};
       return false;
     }
 
@@ -935,7 +1215,7 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    if (hitRegionIt->sectionIndex < 0 ||
+    if (_hitRegions.trackTableRevision != _library.trackRowsRevision() || hitRegionIt->sectionIndex < 0 ||
         static_cast<std::size_t>(hitRegionIt->sectionIndex) >= _library.sections().size())
     {
       postActivityNotification(
@@ -950,6 +1230,42 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
   {
+    if (!isModalOverlay(_shell.overlay()))
+    {
+      if (_library.isVisualSelectionActive() && containsMouse(_hitRegions.cancelSelectionBox, mouse))
+      {
+        _library.cancelVisualSelection();
+        return true;
+      }
+
+      if (containsMouse(_hitRegions.shuffleBox, mouse))
+      {
+        executeKeyAction(KeyAction::PlaybackShuffle);
+        return true;
+      }
+
+      if (containsMouse(_hitRegions.repeatBox, mouse))
+      {
+        executeKeyAction(KeyAction::PlaybackRepeat);
+        return true;
+      }
+
+      for (auto const& hit : _hitRegions.statusActions)
+      {
+        if (containsMouse(hit.box, mouse))
+        {
+          executeKeyAction(hit.action);
+          return true;
+        }
+      }
+    }
+
+    if (!isModalOverlay(_shell.overlay()) && contains(_hitRegions.volumeBox, mouse.x, mouse.y))
+    {
+      _volumeViewModel.toggleMuted();
+      return true;
+    }
+
     if (contains(_hitRegions.settingsButtonBox, mouse.x, mouse.y))
     {
       runCommand(Command{.action = CommandAction::OpenSettings});
@@ -970,7 +1286,7 @@ namespace ao::tui
 
     if (contains(_hitRegions.libraryButtonBox, mouse.x, mouse.y))
     {
-      toggleListChooser();
+      toggleLists();
       return true;
     }
 
@@ -1002,24 +1318,43 @@ namespace ao::tui
     return std::nullopt;
   }
 
+  bool EventController::tryHandlePresentationPress(ftxui::Mouse const& mouse)
+  {
+    auto const hit =
+      std::ranges::find_if(_hitRegions.presentationRows,
+                           [&](PresentationRowHitRegion const& row) { return contains(row.box, mouse.x, mouse.y); });
+
+    if (hit == _hitRegions.presentationRows.end())
+    {
+      return false;
+    }
+
+    auto const& entries = _library.presentationEntries();
+
+    if (hit->rowIndex < 0 || static_cast<std::size_t>(hit->rowIndex) >= entries.size())
+    {
+      return true;
+    }
+
+    if (auto const& entry = entries[hit->rowIndex];
+        (!hit->presentationId.empty() && entry.id != hit->presentationId) || !_shell.listSearch().matches(entry.label))
+    {
+      return true;
+    }
+
+    if (_library.trySetSelectedPresentation(hit->rowIndex))
+    {
+      selectPresentation();
+    }
+
+    return true;
+  }
+
   bool EventController::tryHandleOverlayPress(ftxui::Mouse const& mouse)
   {
     if (_shell.overlay() == Overlay::PresentationPanel)
     {
-      auto const hitRegionIt = std::ranges::find_if(_hitRegions.presentationRows,
-                                                    [&](PresentationRowHitRegion const& hitRegion)
-                                                    { return contains(hitRegion.box, mouse.x, mouse.y); });
-
-      if (hitRegionIt != _hitRegions.presentationRows.end())
-      {
-        if (_library.trySetSelectedPresentation(hitRegionIt->rowIndex))
-        {
-          selectPresentation();
-          return true;
-        }
-      }
-
-      return false;
+      return tryHandlePresentationPress(mouse);
     }
 
     if (_shell.overlay() == Overlay::Notifications)
@@ -1078,69 +1413,47 @@ namespace ao::tui
     return false;
   }
 
-  bool EventController::tryHandleMouse(ftxui::Mouse const& mouse)
+  void EventController::submitCommandInput()
   {
-    auto const modalInputActive = _shell.isInputActive() || isModalOverlay(_shell.overlay());
-
-    // A gesture aimed at the workspace cannot be finished across a surface that
-    // took the workspace away, whichever of the two arrived first.
-    if (modalInputActive && hasWorkspaceGesture())
+    if (_shell.inputMode() == ShellInputMode::QuickFilter)
     {
-      cancelWorkspaceGestures();
-      return false;
+      closeQuickFilter(true);
+      return;
     }
 
-    if (_shell.isInputActive() && mouse.motion != ftxui::Mouse::Moved)
+    auto optCommand = parseCommand(_shell.inputDraft());
+
+    if ((!optCommand || _shell.isCompletionNavigated()) && _shell.tryApplyCommandCompletion())
     {
-      return false;
+      optCommand = parseCommand(_shell.inputDraft());
+
+      if (!optCommand)
+      {
+        refreshCommandCompletion();
+        return;
+      }
     }
 
-    if (auto const optHandled = handleActiveMouseDrag(mouse); optHandled)
+    if (!optCommand)
     {
-      return *optHandled;
+      if (_shell.inputDraft().empty())
+      {
+        _shell.closeInput();
+      }
+      else
+      {
+        postActivityNotification(
+          rt::NotificationSeverity::Warning,
+          i18n::requiredFormat(
+            _library.textCatalog(), i18n::MessageId::TuiUnknownCommand, {{"command", _shell.inputDraft()}}));
+      }
+
+      return;
     }
 
-    if (auto const optHandled = handleMouseWheel(mouse); optHandled)
-    {
-      return *optHandled;
-    }
-
-    if (mouse.motion == ftxui::Mouse::Moved)
-    {
-      return tryHandleMouseMove(mouse);
-    }
-
-    if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
-    {
-      return false;
-    }
-
-    if (auto const optHandled = handleSeekRailPress(mouse, modalInputActive); optHandled)
-    {
-      return *optHandled;
-    }
-
-    if (auto const optHandled = handleColumnResizePress(mouse); optHandled)
-    {
-      return *optHandled;
-    }
-
-    if (auto const optHandled = handleScrollbarPress(mouse); optHandled)
-    {
-      return *optHandled;
-    }
-
-    if (auto const optHandled = handleSectionPress(mouse); optHandled)
-    {
-      return *optHandled;
-    }
-
-    if (auto const optHandled = handleButtonPress(mouse); optHandled)
-    {
-      return *optHandled;
-    }
-
-    return tryHandleOverlayPress(mouse);
+    _shell.rememberInput();
+    _shell.closeInput();
+    runCommand(*optCommand);
   }
 
   bool EventController::tryHandleCommandEvent(ftxui::Event const& event)
@@ -1162,33 +1475,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Return)
     {
-      if (_shell.inputMode() == ShellInputMode::QuickFilter)
-      {
-        closeQuickFilter(true);
-        return true;
-      }
-
-      auto const optCommand = parseCommand(_shell.inputDraft());
-
-      if (!optCommand)
-      {
-        if (_shell.inputDraft().empty())
-        {
-          _shell.closeInput();
-        }
-        else
-        {
-          postActivityNotification(
-            rt::NotificationSeverity::Warning,
-            i18n::requiredFormat(
-              _library.textCatalog(), i18n::MessageId::TuiUnknownCommand, {{"command", _shell.inputDraft()}}));
-        }
-
-        return true;
-      }
-
-      _shell.closeInput();
-      runCommand(*optCommand);
+      submitCommandInput();
       return true;
     }
 
@@ -1217,129 +1504,242 @@ namespace ao::tui
 
     if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
     {
-      _shell.tryMoveCommandCompletionByPage(listNavigationDelta(event).value_or(0));
+      _shell.tryMoveCommandCompletionByPage(
+        listNavigationDelta(event, navigationPageRows(_hitRegions.completion.listBox)).value_or(0));
       return true;
     }
 
-    if (event == ftxui::Event::Backspace)
+    if (event == ftxui::Event::CtrlP || event == ftxui::Event::CtrlN)
     {
-      _shell.backspaceInput();
-      refreshCommandCompletion();
-      scheduleFilterDebounce();
+      if (_shell.tryMoveInputHistory(event == ftxui::Event::CtrlP ? -1 : 1))
+      {
+        refreshCommandCompletion();
+        scheduleFilterDebounce();
+      }
+
       return true;
     }
 
-    if (event.is_character())
+    auto const previousCursor = _shell.inputField().cursor();
+    auto const edited = _shell.tryEditInput(event);
+
+    if (edited || previousCursor != _shell.inputField().cursor())
     {
-      _shell.appendInputText(event.character());
       refreshCommandCompletion();
+    }
+
+    if (edited)
+    {
       scheduleFilterDebounce();
     }
 
     return true;
   }
 
-  bool EventController::tryHandleOverlayEvent(ftxui::Event const& event)
+  bool EventController::tryHandleListSearchEvent(ftxui::Event const& event)
   {
-    switch (_shell.overlay())
+    if (_shell.isInputActive() || _shell.overlay() != Overlay::PresentationPanel)
     {
-      case Overlay::ListChooser:
-        if (tryHandleListNavigation(
-              event, [this](std::int32_t const delta) { _library.moveFocusedSelection(true, delta); }))
-        {
-          return true;
-        }
+      return false;
+    }
 
-        if (event == ftxui::Event::Return)
-        {
-          openSelectedList();
-          return true;
-        }
+    if (!_shell.listSearch().tryHandleEvent(event))
+    {
+      return false;
+    }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleListChooser)
-        {
-          toggleListChooser();
-        }
+    tryMoveOverlaySelection(0);
+    return true;
+  }
 
-        return true;
-      case Overlay::DetailPanel:
-        // Detail inspects whatever the table has selected, so every other key
-        // belongs to the workspace it is watching.
-        return false;
+  bool EventController::tryMoveOverlaySelection(std::int32_t const delta)
+  {
+    auto labels = std::vector<std::string>{};
+
+    for (auto const& entry : _library.presentationEntries())
+    {
+      labels.push_back(entry.label);
+    }
+
+    auto const selected = _library.selectedPresentation();
+    auto const optTarget = _shell.listSearch().selection(labels, selected, delta);
+
+    if (!optTarget)
+    {
+      return false;
+    }
+
+    _library.movePresentationSelection(*optTarget - selected);
+
+    return true;
+  }
+
+  bool EventController::tryHandleOverlayNavigation(ftxui::Event const& event)
+  {
+    auto const overlay = _shell.overlay();
+
+    if (!isModalOverlay(overlay))
+    {
+      return false;
+    }
+
+    auto const picker = overlay == Overlay::PresentationPanel || overlay == Overlay::OutputDevices;
+    auto pageRows = navigationPageRows(picker || overlay == Overlay::Help ? _hitRegions.overlayPanel.navigationBox
+                                                                          : _hitRegions.overlayPanel.box);
+
+    if (overlay == Overlay::OutputDevices)
+    {
+      auto const visibleRows = std::ranges::count_if(
+        _hitRegions.outputDeviceRows, [](OutputDeviceRowHitRegion const& row) { return !row.box.IsEmpty(); });
+
+      if (visibleRows > 0)
+      {
+        pageRows = static_cast<std::int32_t>(visibleRows);
+      }
+    }
+
+    auto const optDelta = listNavigationDelta(event, pageRows, true);
+
+    if (!optDelta)
+    {
+      return false;
+    }
+
+    switch (overlay)
+    {
+      case Overlay::PresentationPanel: tryMoveOverlaySelection(*optDelta); break;
+      case Overlay::OutputDevices: _outputDevices.tryMoveSelection(*optDelta); break;
+      case Overlay::Help:
       case Overlay::QualityPanel:
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleAudioPipeline)
-        {
-          toggleQualityPanel();
-        }
-
-        return true;
-      case Overlay::OutputDevices:
-        if (tryHandleListNavigation(
-              event, [this](std::int32_t const delta) { _outputDevices.tryMoveSelection(delta); }))
-        {
-          return true;
-        }
-
-        if (event == ftxui::Event::Return)
-        {
-          selectOutputDevice();
-          return true;
-        }
-
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleOutputDevices)
-        {
-          toggleOutputDevices();
-        }
-
-        return true;
-      case Overlay::PresentationPanel:
-        if (tryHandleListNavigation(
-              event, [this](std::int32_t const delta) { _library.movePresentationSelection(delta); }))
-        {
-          return true;
-        }
-
-        if (event == ftxui::Event::Return)
-        {
-          selectPresentation();
-          return true;
-        }
-
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::TogglePresentations)
-        {
-          togglePresentationPanel();
-        }
-
-        return true;
       case Overlay::Notifications:
-        if (event == ftxui::Event::Character("x"))
-        {
-          if (_activityStatusViewModel.viewState().compact.dismissible)
+        _shell.scrollOverlay(
+          *optDelta, _hitRegions.overlayPanel.contentBox.y_max - _hitRegions.overlayPanel.contentBox.y_min);
+        break;
+      case Overlay::None:
+      case Overlay::DetailPanel: return false;
+    }
+
+    return true;
+  }
+
+  bool EventController::tryHandleOverlayActivation(ftxui::Event const& event)
+  {
+    if (event == ftxui::Event::Return)
+    {
+      switch (_shell.overlay())
+      {
+        case Overlay::PresentationPanel:
+          if (tryMoveOverlaySelection(0))
           {
-            _activityStatusViewModel.dismissCompact();
+            selectPresentation();
           }
 
           return true;
-        }
+        case Overlay::OutputDevices: selectOutputDevice(); return true;
+        default: break;
+      }
+    }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleNotifications)
-        {
-          toggleNotificationCenter();
-        }
+    if (_shell.overlay() == Overlay::Notifications && event == ftxui::Event::Character("x"))
+    {
+      if (_activityStatusViewModel.viewState().compact.dismissible)
+      {
+        _activityStatusViewModel.dismissCompact();
+      }
 
-        return true;
-      case Overlay::Help: return true;
-      case Overlay::None: return false;
+      return true;
     }
 
     return false;
   }
 
+  bool EventController::tryHandleOverlayEvent(ftxui::Event const& event)
+  {
+    // Detail follows the table focus and leaves the workspace drivable.
+    if (!isModalOverlay(_shell.overlay()))
+    {
+      return false;
+    }
+
+    if (tryHandleOverlayNavigation(event) || tryHandleOverlayActivation(event))
+    {
+      return true;
+    }
+
+    auto const optAction = _keymapPlan.actionFor(event);
+
+    switch (_shell.overlay())
+    {
+      case Overlay::QualityPanel:
+        if (optAction == KeyAction::ToggleAudioPipeline)
+        {
+          toggleQualityPanel();
+        }
+
+        break;
+      case Overlay::OutputDevices:
+        if (optAction == KeyAction::ToggleOutputDevices)
+        {
+          toggleOutputDevices();
+        }
+
+        break;
+      case Overlay::PresentationPanel:
+        if (optAction == KeyAction::TogglePresentations)
+        {
+          togglePresentationPanel();
+        }
+
+        break;
+      case Overlay::Notifications:
+        if (optAction == KeyAction::ToggleNotifications)
+        {
+          toggleNotificationCenter();
+        }
+
+        break;
+      case Overlay::Help:
+        if (optAction == KeyAction::ShowHelp)
+        {
+          closeOverlay();
+        }
+
+        break;
+      case Overlay::None:
+      case Overlay::DetailPanel: break;
+    }
+
+    if (optAction && isPlaybackControl(*optAction))
+    {
+      executeKeyAction(*optAction);
+    }
+
+    return true;
+  }
+
   bool EventController::tryHandleRootEvent(ftxui::Event const& event)
   {
-    if (tryHandleListNavigation(
-          event, [this](std::int32_t const delta) { _library.moveFocusedSelection(false, delta); }))
+    auto viewport = _hitRegions.trackTableBox;
+
+    if (!viewport.IsEmpty())
     {
+      ++viewport.y_min;
+    }
+
+    if (auto optDelta = listNavigationDelta(event, navigationPageRows(viewport)); optDelta)
+    {
+      if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
+      {
+        auto const selected = _library.selectedTrack();
+        auto const visual = trackVisualRow(selected, _library.sections());
+        auto const target = trackIndexForVisualRow(visual + *optDelta, _library.tracks().size(), _library.sections());
+        _library.moveTrackSelection(target - selected);
+      }
+      else
+      {
+        _library.moveTrackSelection(*optDelta);
+      }
+
       return true;
     }
 
@@ -1352,81 +1752,88 @@ namespace ao::tui
     return false;
   }
 
-  bool EventController::tryHandleEvent(ftxui::Event const& event)
+  bool EventController::trySelectTrackFromScrollbar(std::int32_t const row)
   {
-    if (event == ftxui::Event::CtrlC)
-    {
-      _requestExit();
-      return true;
-    }
-
-    if (event == ftxui::Event::Custom)
+    if (_library.tracks().empty())
     {
       return false;
     }
 
-    // Waiting for a submitted write swallows ordinary input; only the Ctrl-C
-    // above can stop the wait.
-    if (_isExitWaiting && _isExitWaiting())
-    {
-      return true;
-    }
-
-    // An open editor owns the whole surface, including keys and mouse events
-    // it has no use for, so nothing behind it can act on stale geometry.
-    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
-    {
-      return true;
-    }
-
-    if (event.is_mouse())
-    {
-      if (!_preferences.mouseEnabled)
-      {
-        return true;
-      }
-
-      auto mouseEvent = event;
-      return tryHandleMouse(mouseEvent.mouse());
-    }
-
-    if (_shell.isInputActive())
-    {
-      return tryHandleCommandEvent(event);
-    }
-
-    // Escape is protocol-owned before any overlay sees it, so rebinding cannot
-    // strand the user inside a modal surface. A running visual selection is the
-    // innermost transient state of the workspace, so it wins whenever the
-    // workspace is still drivable; a modal overlay took the keys that grow the
-    // selection, so it is closed first and the selection survives.
-    if (event == ftxui::Event::Escape)
-    {
-      if (!isModalOverlay(_shell.overlay()) && _library.isVisualSelectionActive())
-      {
-        _library.cancelVisualSelection();
-        return true;
-      }
-
-      runCommand({.action = CommandAction::CloseOverlay});
-      return true;
-    }
-
-    // A modal overlay answers everything, so reaching the workspace below means
-    // the open overlay left this key alone.
-    if (isOverlayActive(_shell.overlay()) && tryHandleOverlayEvent(event))
-    {
-      return true;
-    }
-
-    return tryHandleRootEvent(event);
+    auto const target =
+      scrollbarTrackIndex(_hitRegions.trackTableBox, row, _library.tracks().size(), _library.sections());
+    _library.setSelectedTrackIndex(target);
+    return true;
   }
 
-  void EventController::cancelTransientInteractions()
+  void EventController::syncSeekSlider()
   {
-    cancelFilterDebounce();
+    auto const duration = _playback.snapshot().transport.duration;
+    _seekSlider.applyViewState(duration, duration > std::chrono::milliseconds{0});
+  }
+
+  std::chrono::milliseconds EventController::seekRailElapsed(std::int32_t const column) const
+  {
+    auto const duration = _playback.snapshot().transport.duration;
+
+    if (duration <= std::chrono::milliseconds{0})
+    {
+      return std::chrono::milliseconds{0};
+    }
+
+    auto const& seekRailBox = _hitRegions.seekRailBox;
+    auto const railColumns = std::max(1, seekRailBox.x_max - seekRailBox.x_min + 1);
+    auto const denominator = std::max(1, railColumns - 1);
+    auto const relativeColumn = std::clamp(column - seekRailBox.x_min, 0, denominator);
+    auto const fraction = static_cast<double>(relativeColumn) / static_cast<double>(denominator);
+    auto const elapsed =
+      static_cast<std::chrono::milliseconds::rep>(std::llround(static_cast<double>(duration.count()) * fraction));
+    return std::chrono::milliseconds{elapsed};
+  }
+
+  void EventController::applySeekUpdate(uimodel::SeekSliderUpdate const& update)
+  {
+    switch (update.action)
+    {
+      case uimodel::SeekSliderAction::None: return;
+      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(update.elapsed); return;
+      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(update.elapsed); return;
+    }
+  }
+
+  void EventController::cancelColumnResize()
+  {
+    _workspaceGesture = std::monostate{};
+    _trackColumnResizePreview = {};
+  }
+
+  bool EventController::hasWorkspaceGesture() const noexcept
+  {
+    return !std::holds_alternative<std::monostate>(_workspaceGesture);
+  }
+
+  void EventController::cancelWorkspaceGestures()
+  {
+    if (std::holds_alternative<SeekRailDrag>(_workspaceGesture) && _seekSlider.hasPendingFinalSeek())
+    {
+      _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
+    }
+
+    _seekSlider.reset();
+    _workspaceGesture = std::monostate{};
+    _trackColumnResizePreview = {};
+  }
+
+  void EventController::openOverlay(Overlay const overlay)
+  {
+    cancelWorkspaceGestures();
+    _lastClickedTrack = kInvalidTrackId;
+    _shell.openOverlay(overlay);
+  }
+
+  void EventController::closeOverlay()
+  {
     cancelWorkspaceGestures();
     _qualityHoverVisible = false;
-    _hoveredButton = HoveredButton::None;
+    _shell.closeOverlay();
   }
 } // namespace ao::tui

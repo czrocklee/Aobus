@@ -3,14 +3,16 @@
 
 #include "Render.h"
 
+#include "Command.h"
 #include "CoverArt.h"
+#include "Keymap.h"
+#include "MouseBindings.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TrackDetailLines.h"
 #include "TrackListEntry.h"
-#include "TuiKeymap.h"
-#include "TuiText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
@@ -61,14 +63,15 @@ namespace ao::tui
     };
 
     constexpr auto kHelpPaneRowSpecs = std::to_array<HelpPaneRowSpec>({
-      {.descriptionId = i18n::MessageId::TuiSettingsTitle, .command = ":settings / :config"},
+      {.descriptionId = i18n::MessageId::TuiSettingsTitle, .command = ":settings"},
+      {.descriptionId = i18n::MessageId::TuiNavigationFocus},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuickFilter, .command = ":filter <text>"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpChooseList, .command = ":lists / :l"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail / :d"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpAudioPipeline, .command = ":pipeline / :a"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpOutputDevice, .command = ":output / :o"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpChooseView, .command = ":views / :v"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpNotifications, .command = ":notifications / :n"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpChooseList, .command = ":lists"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpAudioPipeline, .command = ":pipeline"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpOutputDevice, .command = ":output"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpChooseView, .command = ":views"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpNotifications, .command = ":notifications"},
       {.descriptionId = i18n::MessageId::TuiShellHelpCurrentTrack, .command = ":current"},
       {.descriptionId = i18n::MessageId::TuiShellHelpSwitchPresentation, .command = ":view <id>"},
       {.descriptionId = i18n::MessageId::TuiShellHelpPreviousNextGroup},
@@ -78,17 +81,23 @@ namespace ao::tui
       {.descriptionId = i18n::MessageId::TuiShellHelpSelect,
        .command = ":select toggle / :select visual / :select all / :select clear"},
       {.descriptionId = i18n::MessageId::TuiShellHelpPlayback, .command = ":play :pause :stop"},
+      {.descriptionId = i18n::MessageId::PlaybackControlPreviousTrack, .command = ":previous"},
+      {.descriptionId = i18n::MessageId::PlaybackControlNextTrack, .command = ":next"},
+      {.descriptionId = i18n::MessageId::PlaybackActionToggleShuffle, .command = ":shuffle"},
+      {.descriptionId = i18n::MessageId::PlaybackActionCycleRepeat, .command = ":repeat"},
+      {.descriptionId = i18n::MessageId::TuiSettingsSeekBack},
+      {.descriptionId = i18n::MessageId::TuiSettingsSeekForward},
+      {.descriptionId = i18n::MessageId::TuiSettingsVolumeDown},
+      {.descriptionId = i18n::MessageId::TuiSettingsVolumeUp},
+      {.descriptionId = i18n::MessageId::TuiWorkspaceBack, .command = ":back"},
+      {.descriptionId = i18n::MessageId::TuiWorkspaceForward, .command = ":forward"},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuit, .command = ":quit"},
     });
     constexpr std::int32_t kHelpPaneColumnGap = 2;
-    constexpr std::int32_t kHelpPaneGapsColumns = (2 * kHelpPaneColumnGap);
-    constexpr std::int32_t kMinimumHelpDescriptionColumns = 12;
-    constexpr std::size_t kHelpPaneSeparatorCount = 2;
 
     struct ResolvedHelpPaneRow final
     {
       std::string shortcut{};
-      std::string command{};
       std::string description{};
     };
 
@@ -97,21 +106,19 @@ namespace ao::tui
       std::array<ResolvedHelpPaneRow, kHelpPaneRowSpecs.size()> rows{};
       std::string footer{};
       std::int32_t shortcutColumns = 0;
-      std::int32_t commandColumns = 0;
       std::int32_t descriptionColumns = 0;
     };
 
     struct HelpPaneColumnWidths final
     {
       std::int32_t shortcut = 0;
-      std::int32_t command = 0;
       std::int32_t description = 0;
       std::int32_t gap = 0;
     };
 
-    std::string helpShortcut(TuiKeymapPlan const& keymapPlan, i18n::MessageId const id)
+    std::string helpShortcut(KeymapPlan const& keymapPlan, HelpPaneRowSpec const& spec)
     {
-      auto joinComplete = [&](std::span<TuiKeyAction const> const actions)
+      auto joinComplete = [&](std::span<KeyAction const> const actions)
       {
         auto result = std::string{};
 
@@ -135,45 +142,48 @@ namespace ao::tui
         return result;
       };
 
-      switch (id)
+      if (auto const optCommand = parseCommand(spec.command); optCommand)
       {
-        case i18n::MessageId::TuiSettingsTitle: return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenSettings)};
+        if (auto const optAction = shortcutActionForCommand(optCommand->action); optAction)
+        {
+          return std::string{keymapPlan.shortcutFor(*optAction)};
+        }
+      }
+
+      switch (spec.descriptionId)
+      {
+        case i18n::MessageId::TuiNavigationFocus:
+          return std::string{keymapPlan.shortcutFor(KeyAction::SwitchWorkspaceFocus)};
         case i18n::MessageId::TuiShellHelpQuickFilter:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenQuickFilter)};
-        case i18n::MessageId::TuiShellHelpChooseList:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser)};
-        case i18n::MessageId::TuiShellHelpTrackDetail:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleDetails)};
-        case i18n::MessageId::TuiShellHelpAudioPipeline:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleAudioPipeline)};
-        case i18n::MessageId::TuiShellHelpOutputDevice:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices)};
-        case i18n::MessageId::TuiShellHelpChooseView:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations)};
-        case i18n::MessageId::TuiShellHelpNotifications:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications)};
-        case i18n::MessageId::TuiShellHelpCurrentTrack:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::RevealCurrentTrack)};
-        case i18n::MessageId::TuiShellHelpClearFilter:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ClearFilter)};
-        case i18n::MessageId::TuiShellHelpReloadList: return std::string{keymapPlan.shortcutFor(TuiKeyAction::Reload)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::OpenQuickFilter)};
         case i18n::MessageId::TuiShellHelpPlayback:
         {
           constexpr auto kActions =
-            std::to_array({TuiKeyAction::PlaySelection, TuiKeyAction::PlaybackPlayPause, TuiKeyAction::PlaybackStop});
+            std::to_array({KeyAction::PlaySelection, KeyAction::PlaybackPlayPause, KeyAction::PlaybackStop});
           return joinComplete(kActions);
         }
         case i18n::MessageId::TuiShellHelpPreviousNextGroup:
         {
-          constexpr auto kActions = std::to_array({TuiKeyAction::PreviousSection, TuiKeyAction::NextSection});
+          constexpr auto kActions = std::to_array({KeyAction::PreviousSection, KeyAction::NextSection});
           return joinComplete(kActions);
         }
-        case i18n::MessageId::TuiShellHelpQuit: return std::string{keymapPlan.shortcutFor(TuiKeyAction::Quit)};
+        case i18n::MessageId::TuiSettingsSeekBack: return std::string{keymapPlan.shortcutFor(KeyAction::SeekBackward)};
+        case i18n::MessageId::TuiSettingsSeekForward:
+          return std::string{keymapPlan.shortcutFor(KeyAction::SeekForward)};
+        case i18n::MessageId::TuiSettingsVolumeDown: return std::string{keymapPlan.shortcutFor(KeyAction::VolumeDown)};
+        case i18n::MessageId::TuiSettingsVolumeUp: return std::string{keymapPlan.shortcutFor(KeyAction::VolumeUp)};
+        case i18n::MessageId::TuiShellHelpSelect:
+        {
+          constexpr auto kActions = std::to_array(
+            {KeyAction::SelectToggle, KeyAction::SelectVisual, KeyAction::SelectAll, KeyAction::SelectClear});
+          return joinComplete(kActions);
+        }
+        case i18n::MessageId::TuiShellHelpQuit: return std::string{keymapPlan.shortcutFor(KeyAction::Quit)};
         default: return {};
       }
     }
 
-    ResolvedHelpPane resolveHelpPane(i18n::MessageCatalog const& textCatalog, TuiKeymapPlan const& keymapPlan)
+    ResolvedHelpPane resolveHelpPane(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan)
     {
       auto result = ResolvedHelpPane{};
 
@@ -181,15 +191,19 @@ namespace ao::tui
       {
         auto const& spec = kHelpPaneRowSpecs[index];
         auto& row = result.rows[index];
-        row.shortcut = helpShortcut(keymapPlan, spec.descriptionId);
-        row.command = spec.command;
+        row.shortcut = helpShortcut(keymapPlan, spec);
+
+        if (row.shortcut.empty())
+        {
+          row.shortcut = spec.command;
+        }
+
         row.description = i18n::requiredText(textCatalog, spec.descriptionId);
         result.shortcutColumns = std::max(result.shortcutColumns, cellWidth(row.shortcut));
-        result.commandColumns = std::max(result.commandColumns, cellWidth(row.command));
         result.descriptionColumns = std::max(result.descriptionColumns, cellWidth(row.description));
       }
 
-      result.footer = tuiChromeText(textCatalog, i18n::MessageId::TuiShellHelpFooter);
+      result.footer = chromeText(textCatalog, i18n::MessageId::TuiShellHelpFooter);
       return result;
     }
 
@@ -197,8 +211,7 @@ namespace ao::tui
                                          std::string_view const title,
                                          std::int32_t const terminalColumns)
     {
-      auto const rowColumns =
-        help.shortcutColumns + help.commandColumns + help.descriptionColumns + kHelpPaneGapsColumns;
+      auto const rowColumns = help.shortcutColumns + help.descriptionColumns + kHelpPaneColumnGap;
       auto const contentColumns = std::max({cellWidth(title), cellWidth(help.footer), rowColumns});
 
       return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
@@ -207,33 +220,11 @@ namespace ao::tui
     HelpPaneColumnWidths helpPaneColumnWidths(ResolvedHelpPane const& help, std::int32_t const panelColumns)
     {
       auto const bodyColumns = style::popupPanelBodyColumns(panelColumns);
-      auto const minimumStructuredColumns = kMinimumHelpDescriptionColumns + kHelpPaneGapsColumns + 2;
-
-      if (bodyColumns <= minimumStructuredColumns)
-      {
-        return HelpPaneColumnWidths{.description = std::min(help.descriptionColumns, bodyColumns)};
-      }
-
-      auto const availableColumns = bodyColumns - kHelpPaneGapsColumns;
-      auto descriptionColumns = std::min(help.descriptionColumns, kMinimumHelpDescriptionColumns);
-      auto const prefixBudget = std::max(0, availableColumns - descriptionColumns);
-      auto shortcutColumns = std::min(help.shortcutColumns, prefixBudget / 2);
-      auto commandColumns = std::min(help.commandColumns, prefixBudget - shortcutColumns);
-      auto remainingColumns = prefixBudget - shortcutColumns - commandColumns;
-
-      auto const addShortcutColumns = std::min(help.shortcutColumns - shortcutColumns, remainingColumns);
-      shortcutColumns += addShortcutColumns;
-      remainingColumns -= addShortcutColumns;
-
-      auto const addCommandColumns = std::min(help.commandColumns - commandColumns, remainingColumns);
-      commandColumns += addCommandColumns;
-      remainingColumns -= addCommandColumns;
-      descriptionColumns = std::min(help.descriptionColumns, descriptionColumns + remainingColumns);
-
-      return HelpPaneColumnWidths{.shortcut = shortcutColumns,
-                                  .command = commandColumns,
-                                  .description = descriptionColumns,
-                                  .gap = kHelpPaneColumnGap};
+      auto const gap = bodyColumns > kHelpPaneColumnGap ? kHelpPaneColumnGap : 0;
+      auto const availableColumns = bodyColumns - gap;
+      auto const shortcutColumns = std::min(help.shortcutColumns, availableColumns / 2);
+      return HelpPaneColumnWidths{
+        .shortcut = shortcutColumns, .description = availableColumns - shortcutColumns, .gap = gap};
     }
 
     ftxui::Element fixedHelpText(std::string_view const value, std::int32_t const columns)
@@ -249,12 +240,6 @@ namespace ao::tui
       if (widths.shortcut > 0)
       {
         cells.push_back(fixedHelpText(row.shortcut, widths.shortcut));
-        cells.push_back(ftxui::text(std::string(static_cast<std::size_t>(widths.gap), ' ')));
-      }
-
-      if (widths.command > 0)
-      {
-        cells.push_back(fixedHelpText(row.command, widths.command));
         cells.push_back(ftxui::text(std::string(static_cast<std::size_t>(widths.gap), ' ')));
       }
 
@@ -548,37 +533,41 @@ namespace ao::tui
            size(WIDTH, EQUAL, columns);
   }
 
-  std::int32_t helpPaneColumns(i18n::MessageCatalog const& textCatalog,
-                               TuiKeymapPlan const& keymapPlan,
-                               std::int32_t const terminalColumns)
-  {
-    auto const help = resolveHelpPane(textCatalog, keymapPlan);
-    auto const title = std::string{overlayLabel(textCatalog, Overlay::Help)};
-    return resolvedHelpPaneColumns(help, title, terminalColumns);
-  }
-
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog,
-                          TuiKeymapPlan const& keymapPlan,
-                          std::int32_t const terminalColumns)
+                          KeymapPlan const& keymapPlan,
+                          std::int32_t const terminalColumns,
+                          PanelMouseRegions* const mouseRegions,
+                          std::int32_t const scrollRow)
   {
     using namespace ftxui;
 
     auto help = resolveHelpPane(textCatalog, keymapPlan);
     auto const title = std::string{overlayLabel(textCatalog, Overlay::Help)};
     auto const columns = resolvedHelpPaneColumns(help, title, terminalColumns);
-    auto const widths = helpPaneColumnWidths(help, columns);
+    auto const widths = helpPaneColumnWidths(help, columns - (mouseRegions != nullptr ? 1 : 0));
 
     auto rows = Elements{};
-    rows.reserve(kHelpPaneRowSpecs.size() + kHelpPaneSeparatorCount);
+    rows.reserve(kHelpPaneRowSpecs.size());
 
     for (auto const& row : help.rows)
     {
       rows.push_back(helpPaneRow(row, widths));
     }
 
-    rows.push_back(separator());
-    rows.push_back(text(std::move(help.footer)) | dim);
+    auto bodyPtr = vbox(std::move(rows));
 
-    return style::popupPanel(title, vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
+    if (mouseRegions != nullptr)
+    {
+      bodyPtr = std::move(bodyPtr) | reflectLayout(mouseRegions->contentBox) | focusPosition(0, scrollRow) |
+                vscroll_indicator | yframe | ftxui::reflect(mouseRegions->navigationBox) | flex;
+    }
+
+    auto panelPtr =
+      style::popupPanel(title,
+                        vbox({std::move(bodyPtr),
+                              separator(),
+                              text(ellipsizeToCellWidth(help.footer, style::popupPanelBodyColumns(columns))) | dim})) |
+      size(WIDTH, EQUAL, columns);
+    return mouseRegions != nullptr ? mousePanel(std::move(panelPtr), *mouseRegions) : std::move(panelPtr);
   }
 } // namespace ao::tui

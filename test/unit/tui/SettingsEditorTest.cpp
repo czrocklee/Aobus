@@ -3,10 +3,11 @@
 
 #include "tui/SettingsEditor.h"
 
-#include "TuiPreferences.h"
+#include "Preferences.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "tui/TuiKeymap.h"
+#include "test/unit/tui/RenderTestSupport.h"
+#include "tui/Keymap.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
@@ -15,6 +16,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
 
@@ -32,14 +34,14 @@ namespace ao::tui::test
     struct SettingsFixture final
     {
       i18n::MessageCatalog catalog{ao::test::englishMessageCatalog()};
-      TuiPreferences preferences;
-      uimodel::KeymapModel keymap{tuiDefaultKeymap()};
+      Preferences preferences;
+      uimodel::KeymapModel keymap{defaultKeymap()};
       bool fail = false;
       SettingsEditor editor{
         catalog,
         preferences,
         keymap,
-        SettingsEditor::Outputs{.applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+        SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
                                 {
                                   if (fail)
                                   {
@@ -80,6 +82,17 @@ namespace ao::tui::test
           REQUIRE(editor.tryHandleEvent(ftxui::Event::Tab));
         }
       }
+      void click(std::string_view const label)
+      {
+        auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
+        auto const optBox = findTextCells(rendered.screen, label);
+        REQUIRE(optBox);
+        REQUIRE(editor.tryHandleEvent(ftxui::Event::Mouse(
+          "",
+          ftxui::Mouse{
+            .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
+      }
+
       std::string render(std::int32_t const columns = 80, std::int32_t const rows = 24) const
       {
         auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(columns), ftxui::Dimension::Fixed(rows));
@@ -210,7 +223,7 @@ namespace ao::tui::test
     auto fixture = SettingsFixture{};
     fixture.editor.open();
     fixture.page(SettingsPage::Keyboard);
-    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Insert));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("a")));
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("F12")));
     fixture.fail = true;
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
@@ -282,7 +295,7 @@ namespace ao::tui::test
     fixture.editor.open();
     fixture.page(SettingsPage::Keyboard);
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Insert));
-    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("Q")));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("Shift+Q")));
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.keymap.chordsFor("tui.shell.openSettings").empty());
     CHECK(fixture.render().contains("Already assigned to quit"));
@@ -350,5 +363,100 @@ namespace ao::tui::test
       REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::TabReverse));
       CHECK(fixture.editor.page() == SettingsPage::Keyboard);
     }
+  }
+
+  TEST_CASE("SettingsEditor - mouse pages language and values use the live save path", "[tui][unit][mouse][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.click("Language");
+    fixture.click("English");
+    CHECK(fixture.preferences.language == "en");
+    fixture.click("Appearance");
+    CHECK(fixture.editor.page() == SettingsPage::Appearance);
+    auto const previous = fixture.preferences.dimBackdrop;
+    fixture.click("<");
+    CHECK(fixture.preferences.dimBackdrop != previous);
+    fixture.click("Interaction");
+    CHECK(fixture.editor.page() == SettingsPage::Interaction);
+    fixture.click("[Esc]");
+    CHECK_FALSE(fixture.editor.isActive());
+  }
+
+  TEST_CASE("SettingsEditor - mouse save failure keeps retry and discard available",
+            "[tui][regression][mouse][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.click("Appearance");
+    auto const previous = fixture.preferences.dimBackdrop;
+    fixture.fail = true;
+    fixture.click("<");
+    CHECK(fixture.preferences.dimBackdrop == previous);
+    fixture.fail = false;
+    fixture.click("[Ctrl-R]");
+    CHECK(fixture.preferences.dimBackdrop != previous);
+    fixture.click("[Esc]");
+    CHECK_FALSE(fixture.editor.isActive());
+  }
+
+  TEST_CASE("SettingsEditor - mouse wheel moves the keyboard list without changing bindings",
+            "[tui][unit][mouse][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.click("Keyboard");
+    auto const rendered = renderElement(fixture.editor.renderModal(80, 24), 80, 24);
+    auto const optBox = findTextCells(rendered.screen, "Unbound");
+    REQUIRE(optBox);
+    auto const before = fixture.keymap.toOverrides();
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
+    CHECK(fixture.keymap.toOverrides() == before);
+    fixture.click("[a]");
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("F12")));
+    fixture.click("[Enter]");
+    CHECK(fixture.keymap.toOverrides() != before);
+  }
+
+  TEST_CASE("SettingsEditor - searching a keyboard action preserves its binding identity",
+            "[tui][regression][settings][search]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Keyboard);
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("tui.shell.openSettings")));
+    auto const filtered = fixture.render(36, 24);
+    CHECK(filtered.contains("Esc"));
+    CHECK(filtered.contains("Tab"));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("F12")));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    auto const chords = fixture.keymap.chordsFor("tui.shell.openSettings");
+    REQUIRE(chords.size() == 1);
+    CHECK(chords.front().toString() == "F12");
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.editor.isActive());
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.editor.isActive());
+  }
+
+  TEST_CASE("SettingsEditor - an empty keyboard search cannot edit or save the hidden selection",
+            "[tui][regression][settings][search]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Keyboard);
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("/")));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("no such action")));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    CHECK(fixture.render().contains("No matches"));
+    CHECK(fixture.keymap.chordsFor("tui.shell.openSettings").empty());
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Tab));
+    CHECK(fixture.editor.page() == SettingsPage::General);
+    CHECK_FALSE(fixture.render().contains("no such action"));
   }
 } // namespace ao::tui::test

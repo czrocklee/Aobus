@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "HitRegions.h"
+
+#include "MouseBindings.h"
+
+#include <ftxui/screen/box.hpp>
+
+#include <cstdint>
+
+namespace ao::tui
+{
+  bool hasCoverIntersection(ftxui::Box const& cover, ftxui::Box const& foreground)
+  {
+    // Kitty clears a one-cell halo around its image when placement changes.
+    return !cover.IsEmpty() && !foreground.IsEmpty() && cover.x_min - 1 <= foreground.x_max &&
+           cover.x_max + 1 >= foreground.x_min && cover.y_min - 1 <= foreground.y_max &&
+           cover.y_max + 1 >= foreground.y_min;
+  }
+
+  bool hasHitArea(ftxui::Box const& box)
+  {
+    return box.x_min <= box.x_max && box.y_min <= box.y_max &&
+           (box.x_min != 0 || box.x_max != 0 || box.y_min != 0 || box.y_max != 0);
+  }
+
+  bool contains(ftxui::Box const& box, std::int32_t const column, std::int32_t const row)
+  {
+    return hasHitArea(box) && column >= box.x_min && column <= box.x_max && row >= box.y_min && row <= box.y_max;
+  }
+
+  void HitRegions::clearFrameLocalRows()
+  {
+    navigation = {};
+    overlayPanel = {};
+    inputPanel = {};
+    completion = {};
+    statusActions.clear();
+    cancelSelectionBox = kEmptyMouseBox;
+    shuffleBox = kEmptyMouseBox;
+    repeatBox = kEmptyMouseBox;
+    trackTableRevision = 0;
+    trackRows.clear();
+    outputDeviceRows.clear();
+    presentationRows.clear();
+    notificationDetailRows.clear();
+    trackColumnResizeHandles.clear();
+    trackSectionRows.clear();
+  }
+
+  ButtonHitTestResult HitRegions::hitTestButton(std::int32_t const column,
+                                                std::int32_t const row,
+                                                HitTestContext const context) const
+  {
+    if (context.isTextInputActive)
+    {
+      return {};
+    }
+
+    auto result = ButtonHitTestResult{};
+
+    if (contains(outputDeviceButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::OutputDevice;
+      return result;
+    }
+
+    if (contains(soulButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::Soul;
+      result.isQualityHoverVisible = !context.isOverlayActive;
+      return result;
+    }
+
+    if (contains(libraryButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::Library;
+      return result;
+    }
+
+    if (contains(presentationButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::Presentation;
+      return result;
+    }
+
+    if (contains(settingsButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::Settings;
+      return result;
+    }
+
+    if (contains(activityStatusBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::ActivityStatus;
+      return result;
+    }
+
+    return result;
+  }
+} // namespace ao::tui

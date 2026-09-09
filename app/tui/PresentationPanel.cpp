@@ -3,12 +3,13 @@
 
 #include "PresentationPanel.h"
 
+#include "ListSearch.h"
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TrackPresentationNavigation.h"
-#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -46,10 +47,10 @@ namespace ao::tui
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view const activePresentationId,
-                                        TuiKeymapPlan const& keymapPlan,
+                                        KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(cellWidth(tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
+    auto contentColumns = std::max(cellWidth(chromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
                                      kPresentationPanelScrollIndicatorColumns,
                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
@@ -70,9 +71,11 @@ namespace ao::tui
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view const activePresentationId,
                                    std::int32_t const selectedIndex,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* const rowHitRegions,
-                                   std::int32_t const columns)
+                                   std::int32_t const columns,
+                                   ListSearch const* search,
+                                   ftxui::Box* viewportBox)
   {
     using namespace ftxui;
 
@@ -94,6 +97,12 @@ namespace ao::tui
     for (std::size_t index = 0; index < items.size(); ++index)
     {
       auto const& item = items[index];
+
+      if ((search != nullptr) && !search->matches(item.label))
+      {
+        continue;
+      }
+
       auto label = presentationPanelRowText(item);
 
       auto rowPtr = hbox({
@@ -111,20 +120,33 @@ namespace ao::tui
 
       if (rowHitRegions != nullptr)
       {
-        rowHitRegions->push_back(PresentationRowHitRegion{.rowIndex = static_cast<std::int32_t>(index)});
+        rowHitRegions->push_back(
+          PresentationRowHitRegion{.rowIndex = static_cast<std::int32_t>(index), .presentationId = item.id});
         rowBox = &rowHitRegions->back().box;
       }
 
       listRows.push_back(SelectableListRow{.elementPtr = std::move(rowPtr), .selected = selected, .box = rowBox});
     }
 
-    rows.push_back(selectableList(
-      std::move(listRows),
-      SelectableListOptions{.focusRow = focusRow,
-                            .height = kPresentationPanelListRows,
-                            .emptyText = tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)}));
+    if (search != nullptr)
+    {
+      rows.push_back(search->render(textCatalog));
+    }
+
+    rows.push_back(
+      selectableList(std::move(listRows),
+                     SelectableListOptions{.focusRow = focusRow,
+                                           .height = kPresentationPanelListRows,
+                                           .emptyText = chromeText(textCatalog,
+                                                                   (search != nullptr) && search->isActive()
+                                                                     ? i18n::MessageId::TuiListSearchEmpty
+                                                                     : i18n::MessageId::TuiLibraryNoViewsAvailable),
+                                           .viewportBox = viewportBox}));
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
+    rows.push_back(
+      style::panelFooterHint((search != nullptr) && search->isActive()
+                               ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiListSearchHint)}
+                               : overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
 
     auto activePresentationLabel = trackPresentationDisplayId(textCatalog, activePresentationId);
     return style::popupPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),

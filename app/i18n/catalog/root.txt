@@ -3,6 +3,12 @@
 
 root:table {
   messages:table {
+    tui_workspace_back { "Previous workspace view" }
+    tui_workspace_forward { "Next workspace view" }
+    tui_workspace_history_unavailable { "No view in that direction." }
+    tui_settings_keyboard_scope { "Workspace shortcuts. Editors and pickers keep their own keys." }
+    tui_playback_modes { "Shuffle: {shuffle, select, on {on} other {off}} · Repeat: {repeat, select, one {one} all {all} other {off}}" }
+
     tui_settings_save_failed { "Could not save settings. {detail}" }
     tui_settings_load_failed { "Could not load saved preferences; using defaults. {detail}" }
     tui_settings_title { "Settings" }
@@ -19,7 +25,7 @@ root:table {
     tui_settings_mouse { "Mouse control" }
     tui_settings_wheel { "Wheel selection step" }
     tui_settings_seek { "Keyboard seek step" }
-    tui_settings_volume { "Keyboard volume step" }
+    tui_settings_volume { "Volume step" }
     tui_settings_hover { "Audio details on hover" }
     tui_settings_on { "On" }
     tui_settings_off { "Off" }
@@ -444,6 +450,15 @@ root:table {
     gtk_presentation_copy_label { "{label} Copy" }
     tui_shell_command_palette_title { "Command Palette" }
     tui_shell_command_palette_no_matches { "No matches" }
+    tui_input_history_hint { "Ctrl+P/N history" }
+    tui_navigation_focus { "Switch Lists / tracks focus" }
+    tui_navigation_return { "{key} tracks" }
+    tui_navigation_keys { "↑↓ move · ←→ tree · Enter open · Esc tracks" }
+    tui_layout_save_failed { "Could not save workspace layout: {detail}" }
+    tui_navigation_open_failed { "Could not open list: {detail}" }
+    tui_navigation_sync_failed { "Could not display the active list: {detail}" }
+    tui_list_search_hint { "/ search · Esc clear" }
+    tui_list_search_empty { "No matches" }
     tui_shell_command_palette_footer { "{completeKey} complete  {runKey} run  {cancelKey} cancel" }
     tui_shell_quick_filter_title { "Quick Filter" }
     tui_shell_quick_filter_footer { "{acceptKey} accept  {completeKey} complete  {keepKey} keep typed" }
@@ -457,7 +472,6 @@ root:table {
     tui_shell_overlay_views { "Views" }
     tui_shell_overlay_notifications { "Notifications" }
     tui_shell_overlay_help { "Help" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{openKey} open  {closeKey} close" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{selectKey} select  {closeKey} close" }
@@ -532,16 +546,24 @@ root:table {
     tui_library_no_sections { "No sections in this view" }
     tui_library_no_section_selected { "No section selected" }
     tui_library_no_current_track { "No current track" }
-    tui_library_current_track_not_in_view { "Current track is not in this view" }
+    tui_library_current_track_not_in_view { "Could not locate the current track in the library" }
     tui_library_no_active_track_view { "No active track view" }
     tui_library_no_views_available { "No views available" }
-    tui_library_no_lists_available { "No lists available" }
     tui_library_filter_cleared { "Filter cleared" }
     tui_library_filter_applied { "Filter applied" }
-    tui_library_no_tracks_found { "No tracks found. Run `aobus init` in this library first." }
+    tui_library_empty_scan { "No indexed tracks. Run {command} to scan this library." }
+    tui_library_filter_empty { "No tracks match this filter. Change or clear the filter." }
+    tui_library_filter_invalid { "The filter could not be applied. Edit or clear it." }
+    tui_quick_filter_no_suggestions { "No suggestions. You can still use your text." }
+    tui_quick_filter_literal_footer { "{acceptKey} apply text  {keepKey} keep text" }
+    tui_quick_filter_empty_footer { "{acceptKey} clear filter  {keepKey} keep filter" }
+    tui_status_keep_marks { "keep marks" }
+    tui_status_cancel_range { "cancel range" }
+    tui_status_play { "play" }
+    tui_status_clear { "clear" }
+    tui_library_no_tracks_found { "This List has no tracks. Choose another List to browse." }
     tui_library_marked_count { "{count, plural, one {# marked} other {# marked}}" }
     tui_library_visual_mode { "VISUAL" }
-    tui_library_no_lists_found { "No lists found" }
     tui_library_ready { "Ready" }
     tui_library_scan_already_running { "A library scan is already running" }
     tui_library_scan_cancelling { "Scan cancellation is already in progress" }
@@ -970,8 +992,6 @@ root:table {
     gtk_layout_value_center { "Center" }
     tui_untitled_section { "Untitled Section" }
     tui_notification_none { "No notifications" }
-    tui_lists_closed { "Lists closed" }
-    tui_lists_opened { "Lists" }
     tui_detail_closed { "Detail closed" }
     tui_detail_opened { "Detail panel" }
     tui_pipeline_closed { "Pipeline closed" }

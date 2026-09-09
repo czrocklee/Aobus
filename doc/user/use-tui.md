@@ -14,7 +14,7 @@ You can browse an existing Aobus library, play tracks, filter the current view, 
 ## Before you start
 
 The TUI opens an Aobus database; it does not create one.
-Initialize the root with the GTK application or CLI first, then scan from any shell.
+Initialize the root with the GTK application or `aobus -C /music init` first. After opening the TUI, run `:scan` to index its audio files; see [Use the CLI](use-cli.md) for the shell workflow.
 
 ## Steps
 
@@ -25,12 +25,13 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
    ```
 
 2. Move the cursor with Up/Down, PageUp/PageDown, Home, and End.
+   Lists and presentation pickers also accept j/k. Press `/` inside either to search, then Enter to open a match. Escape clears search first. Help, Quality, and Notifications scroll with the same navigation keys; pages follow the visible terminal height.
 3. Press Enter to play the focused track.
    Use Space for play/pause, `s` to stop, `[` and `]` to seek by five seconds, and `-`/`+` to change volume by five percentage points.
 4. Press `/` to open Quick Filter in the bottom status bar, then type to filter the current view live; suggestions open directly above the input.
    Up/Down selects a suggestion, Tab accepts it while you keep editing, and Enter accepts it and closes Quick Filter.
    Escape keeps the text you typed instead of the selected suggestion.
-   To clear the current filter, press `c` in the workspace or press `/` followed immediately by Enter; `/` followed immediately by Escape preserves it.
+   To clear the current filter, press `C` in the workspace or press `/` followed immediately by Enter; `/` followed immediately by Escape preserves it.
 5. Press `:` to open the Command Palette, then enter a command such as:
 
    ```text
@@ -38,7 +39,8 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
    :view classical-works
    ```
 
-   Tab accepts a highlighted command completion; Enter runs only a complete known command.
+   You can also search action names in the current UI language: type `set` (or `设置` in Chinese) and press Enter to open Settings. Each action appears once, even when it has several command aliases. Tab fills the selected candidate; Enter runs it. A complete typed command keeps priority until you move the candidate selection.
+   In command and filter input, Left/Right moves the caret, Home/End moves to the boundaries, and Backspace/Delete edits around it. Alt+B/F moves by word; Ctrl+W removes the preceding word. Ctrl+U/K removes text before/after the caret. Ctrl+P/N recalls earlier entries from separate session histories and can return to your unfinished draft.
    `:scan` and `:rescan` start an eager library scan; `:scan cancel` requests cooperative cancellation.
    A scan already in progress, or a cancellation still settling, posts a short notice instead of starting a second flight.
    Progress uses the existing status line; the finished scan uses the same outcome sentence as the other shells.
@@ -49,11 +51,12 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
 6. Press `e`, `:edit`, or `:properties` to open the Track Properties editor over the current selection: every marked track, or the focused track when nothing is marked.
    The editor appears as a centered modal dialog floating over the dimmed workspace. Its target list is frozen when it opens, so editing a different set of tracks means closing it and opening a new one.
    Press Tab or Shift+Tab to switch between the editor's pages: `Metadata`, `Tags`, `Properties` (read-only audio/technical details), and (for multi-track selections) `Tracks` (to review captured titles and paths).
+   On Properties and Tracks, j/k or Up/Down scrolls rows; PageUp/PageDown moves by a viewport and Home/End goes to the beginning/end.
    On the `Metadata` page, editing is direct without checkboxes: Up and Down move between rows, and typing immediately edits the focused field.
    An edited field displays a passive changed marker (`*`), while an active indicator (`>`) marks the focused row.
    Only changed fields are written to every target; untouched fields preserve each track's existing value.
    A field shared across all targets shows its value, while differing fields display a multiple-values placeholder; typing there replaces that field for all targets.
-   To clear a field across all targets, press Ctrl+U; pressing Ctrl+G restores the field to its baseline value or mixed preservation state.
+   To clear a field across all targets, press Ctrl+D; pressing Ctrl+G restores the field to its baseline value or mixed preservation state.
    For supported fields (such as Artist, Album, Genre, Composer), typing suggests matching library values in a popup; press Ctrl+N to open completion explicitly. Use Up/Down to navigate suggestions, Enter to accept, and Escape to dismiss the popup.
    On the `Tags` page, the box in front of each tag shows what the selected tracks would carry after you apply: `[x]` all of them, `[ ]` none of them, and `[~]` only some of them.
    A `[~]` row also shows the fraction, such as `1/2`, because the box alone cannot say how many. Below your own tags come library tags none of the selection carries yet, which is what their empty boxes say.
@@ -64,19 +67,20 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
    Press Escape to close or Ctrl+R to re-read the tracks and start fresh; if changes were made, both prompt for confirmation (Enter confirms, Escape cancels).
    Any library change while the editor is open marks the draft stale and disables Ctrl+S; your draft is preserved so you can press Ctrl+R to reload or Escape to leave.
    Applying closes the editor and reports the number of deduplicated changed tracks. Tracks that already matched the submitted values are not counted, and a save requiring no change reports "No changes were needed".
-7. Toggle panels with `l` for lists, `d` for detail, `a` for the quality pipeline, `o` for output devices, `p` for presentations, and `n` for notifications.
+7. Use `l` for Lists and toggle panels with `d` for detail, `a` for the quality pipeline, `o` for output devices, `p` for presentations, and `n` for notifications.
 8. Press `d` and keep browsing: the detail pane stays open beside the track table and follows the cursor, so arrows, pages, wheel, scrollbar, group jumps, playback, and filtering all keep working while you read it.
    Press `d` again or Escape to close it.
 9. With mouse tracking enabled, drag a track-header column edge to preview a new width and release to keep it for that list.
    Opening a panel, entering text input, changing lists, or quitting before release cancels the preview.
-10. Press `?` for help, Escape to close the current overlay or cancel active text input, and `q` or Ctrl+C to quit normally.
-   Quit, `:quit`, terminal Ctrl+C, and handleable platform signals share one graceful exit path: they retire scan and editor presentation and unfinished input, then leave the loop.
+10. Press `?` or F1 for centered Help. Its body scrolls while the title and close controls stay visible. Press the Help shortcut again or click outside to close it without changing the underlying workspace. Press Escape to close the current overlay or cancel active text input, and Shift+Q (uppercase `Q`) or Ctrl+C to quit normally.
+   Plain `q` has no default action, reducing accidental exits; explicit custom quit bindings remain effective.
+   Shift+Q, `:quit`, terminal Ctrl+C, and handleable platform signals share one graceful exit path: they retire scan and editor presentation and unfinished input, then leave the loop.
    Quitting while a save is still in flight waits for that write instead of leaving immediately: the status row says the save is finishing, other keys do nothing, and Ctrl+C stops waiting.
 
 These are the shipped shortcuts.
 The TUI loads global overrides from the `shortcuts` group in `<config>/tui.yaml`; supported changes update both behavior and the key shown in status chips, panels, Help, and the Command Palette.
 An empty chord list unbinds a configurable action.
-Press `,` or click Settings at the bottom right, then choose Keyboard to edit shortcuts live. Left/Right selects one chord; Insert adds, Enter replaces, Delete removes it, and `r` restores that action's defaults. Conflicts and unsupported terminal chords are rejected. Ordinary exit does not rewrite untouched shortcuts; see the [keyboard map reference](../reference/shell/keymap.md).
+Press `,` or click Settings at the bottom right, then choose Keyboard to edit shortcuts live. Left/Right selects one chord; `a` or Insert adds, Enter replaces, Delete removes it, and `r` restores that action's defaults. Conflicts and unsupported terminal chords are rejected. Ordinary exit does not rewrite untouched shortcuts; see the [keyboard map reference](../reference/shell/keymap.md).
 Ctrl+C, text-entry editing/submission/cancellation keys, overlay navigation/activation/Escape, notification `x`, and mouse input remain fixed protocol and cannot be disabled by a root shortcut override.
 
 The default session file is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
@@ -85,9 +89,9 @@ A restored playback subject remains idle until you press Space or otherwise star
 When several filtered views use the same list, the previously active one is restored exactly.
 
 Ctrl+S in the Track Properties editor is not a preference save: it writes track metadata and tags into the library for every captured target, and nothing about it is deferred to quit.
-Column widths and preferred presentations are the other kind of save, kept per list in the layout file below and written when you release a drag or when the shell checkpoints its state.
+List panel visibility, plus per-List column widths and preferred presentations, are kept in the layout file below and written when you release a drag or when the shell checkpoints its state.
 
-Per-list column layouts and preferred presentations are stored separately in `<root>/.aobus/tui_layout.yaml`.
+List panel visibility, plus per-List column layouts and preferred presentations, are stored separately in `<root>/.aobus/tui_layout.yaml`.
 Column widths in that file are terminal cells; fixed widths are projected within the supported 8-through-160-cell range, while flexible columns reflow when the terminal size changes. The TUI does not reuse GTK desktop widths.
 Opening a list uses its remembered presentation, while startup still keeps the exact presentation of the restored active view.
 
@@ -95,17 +99,59 @@ Normal quit retires an in-flight scan and an open editor without presenting a la
 Track selection, an unfinished Quick Filter draft, open panels, pointer state, and an unfinished column-width preview are not restored.
 The output device you select is remembered separately as a global TUI preference in `<config>/tui.yaml` rather than in the per-library session file; saving it preserves the `shortcuts` and `preferences` siblings.
 
+## Understand the current workspace
+
+An empty track table explains whether the current List is empty, a filter has no matches, or a filter is invalid. An empty All Tracks view offers `:scan`; an unsuccessful search does not ask you to initialize the library again. These messages wrap in narrow terminals.
+
+The bottom bar advertises play and filter actions when space permits. While a filter is present, its text and clear control take priority over secondary shortcuts. Long filters end in an ellipsis; click the filter or use its shortcut to enter Quick Filter, and use Ctrl+P to recall a previous entry. A `!` before the filter text marks an invalid draft: edit it or clear it to recover.
+
+Quick Filter explains the current Enter/Escape transitions: an empty draft offers clearing or preserving the filter; literal text without suggestions can still be applied. At narrow widths, these instructions take priority over the history reminder. During a visual range, the bottom bar instead offers keeping the marks or cancelling the range, including while Detail is open. Both controls are clickable.
+
+In a narrow filtered workspace, informational notices yield their space to the filter. Warnings and errors retain a clickable `!`; running work retains `…`. Click that indicator or open Notifications to read the message. The playback bar shortens its seek rail before sacrificing the track title, elapsed time, or complete volume value.
+
+Lists have a persistent left pane when the terminal is wide enough. Press Tab or Shift+Tab to move between Lists and Tracks. On a narrow terminal, press `l` to open Lists as a drawer. Up/Down or j/k moves its cursor; Left/Right expands or collapses the tree. Enter opens a List and returns to Tracks. `/` searches List names and their ancestor paths, keeping enough parent context to distinguish duplicate names.
+
+Escape clears List search first, then returns to Tracks. Tab also ends search and returns to Tracks. These focus changes keep the pane enabled; `l` while it is visible, or its `×` button, disables it. Your visibility choice survives restarting, while focus, expansion, and search do not. Resizing automatically chooses a docked pane or drawer. Clicking a docked List opens it and keeps Lists focused for browsing; clicking outside a drawer dismisses it without acting on the track underneath. Clicking the active List preserves its current filter and selection.
+
+Use `c` to return to the currently playing track, even after filtering it out or browsing another List. The previous view remains available through `:back`; `:forward` returns to the reveal destination. Use uppercase `C` to clear the current filter.
+
+`<` and `>` change the playing track; Up/Down and `j/k` move the table focus. Left/Right seek, Space pauses/resumes, `S` toggles shuffle, `r` cycles repeat, and `R` reloads the List. The playback bar shows `⇄` for shuffle and `↻` / `↻1` for repeat-all / repeat-one; dim indicators mean off. Playback controls remain available while browsing panels, except while typing or editing.
+
+## Mouse controls
+
+Enable Mouse control under Settings → Interaction. With it enabled:
+
+| Surface | Interaction |
+|---|---|
+| Status bar | Click a visible shortcut chip to open or run its action. |
+| Tracks | Click to focus and clear marks; double-click to play. Ctrl+click toggles a mark. Shift+click starts or extends a visual range; Escape cancels it and `v` confirms it. |
+| Track table | Wheel moves focus; drag the scrollbar to jump. Click a section heading to focus its first track; drag a column edge to resize. |
+| Shuffle / Repeat | Click `⇄` to toggle shuffle. Click `↻` to cycle repeat: off → all → one → off. Active modes are highlighted; `↻1` means repeat one. |
+| Volume | Wheel changes the level using the configured volume step. Click to mute or restore sound; muted output displays a localized mute label. |
+| Lists, Presentation, Output | Click a row to activate it; wheel moves the highlighted row. |
+| Command and filter suggestions | Click a candidate to accept it. A complete command runs immediately; a command prefix or Quick Filter stays open for more input. Wheel moves the highlight. |
+| Settings | Click tabs and rows. Click `<` or the value/`>` to adjust; choose a language to save it. Wheel navigates without changing values. Click a shortcut chord to replace it; the footer offers add, remove, restore, and confirmation controls. |
+| Track Properties | Click tabs, fields, suggestions, and tags. Click within an editable value to place the cursor. Wheel navigates rows; footer controls apply, reload, clear, restore, or close using the same confirmation rules as the keyboard. |
+| Detail, Quality, Help, Notifications | Wheel scrolls the panel. Click a dismissible notification to hide it locally. |
+| Panels and editors | Click `×` to use their Escape/close behavior, including unsaved-change confirmation. |
+
+Click outside a floating Lists drawer or a Presentation, Output, Quality, Notifications, or Help panel to close it. That click is consumed, so it cannot also play a track or activate a background control. Clicking outside the Command Palette cancels its draft; clicking outside Quick Filter keeps your typed text, just like Escape. The Detail side panel and editor dialogs use their close controls.
+
+Mouse modifiers must be forwarded by your terminal; some terminals reserve Shift for selecting terminal text. Disabling Mouse control also disables clicks inside Settings, so use the keyboard to re-enable it.
+
 ## Settings
 
 If saved preferences are invalid or unreadable, TUI starts with defaults and shows a warning. The original preference group is retained until an explicit successful Settings save.
 
 Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser or shortcut capture only cancels that unconfirmed choice.
 
+In Settings Keyboard, press `/` to find an action by its translated name or action id, then Enter to edit its shortcut. Escape clears the search first; Tab switches pages and clears it.
+
 General includes system language, English, Deutsch, Español, Français, 日本語, 简体中文, and 繁體中文. Confirming a language updates the open Settings dialog and workspace immediately, including localized headings and browsing/completion ordering. Focus and marks remain on the same tracks; playback and its captured sequence continue. Existing literal notification messages retain their original wording; structured notifications and new scan results use the selected language. Close Track Properties before opening Settings.
 
 Appearance controls the dimmed modal backdrop, reduced motion, and cover renderer. Dimming uses your terminal's dim attribute, so its strength depends on the terminal theme. Reduced motion uses a static frame for time-driven decoration and pauses the soul animation; the playhead keeps moving. A command-line cover-mode override stays effective for this session and is shown beside the preference. Editing that preference still saves the renderer for future launches without the override.
 
-Interaction controls mouse input, wheel movement (1–10 tracks), keyboard seek (1–60 seconds), keyboard volume (1–10 percentage points), and the quality hover popup. Preference and shortcut changes save immediately. On failure the applied setting stays unchanged; the dialog keeps the attempted value visible and offers Ctrl+R to retry or Ctrl+G to discard.
+Interaction controls mouse input, wheel movement (1–10 tracks), keyboard seek (1–60 seconds), volume steps for keyboard and wheel (1–10 percentage points), and the quality hover popup. Preference and shortcut changes save immediately. On failure the applied setting stays unchanged; the dialog keeps the attempted value visible and offers Ctrl+R to retry or Ctrl+G to discard.
 
 ## Verify the result
 
@@ -114,7 +160,7 @@ Interaction controls mouse input, wheel movement (1–10 tracks), keyboard seek 
 - `e` over a marked set opens one editor titled with that count, and Ctrl+S reports the same number of updated tracks once every target actually changed.
 - Reopening the editor, or the detail pane, shows the values you applied.
 - Playing a selection updates the one-row playback dock and seek rail.
-- A filter changes the visible projection, and `c` clears it.
+- A filter changes the visible projection, and `C` clears it.
 - Opening the detail pane leaves the track table usable, and the pane's contents change as the selection moves.
 - Opening any other overlay prevents workspace-only gestures from mutating the track table beneath it.
 - Restarting the TUI returns to the active filtered/presentation view, restores committed per-list columns and presentation preferences, and exposes the saved playback subject without starting audio automatically.

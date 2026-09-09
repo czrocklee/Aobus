@@ -21,6 +21,7 @@ namespace ftxui
 namespace ao::rt
 {
   struct PlaybackTransportSnapshot;
+  struct PlaybackSuccessionSnapshot;
 } // namespace ao::rt
 
 namespace ao::uimodel
@@ -33,6 +34,7 @@ namespace ao::tui
   struct PlaybackBarViewState final
   {
     rt::PlaybackTransportSnapshot const* playbackState = nullptr;
+    rt::PlaybackSuccessionSnapshot const* succession = nullptr;
     std::chrono::milliseconds displayElapsed{};
     std::chrono::milliseconds animationElapsed{};
     uimodel::AobusSoulMotionFrame soulMotion{};
@@ -40,6 +42,9 @@ namespace ao::tui
     ftxui::Box* outputDeviceBox = nullptr;
     ftxui::Box* soulButtonBox = nullptr;
     ftxui::Box* seekRailBox = nullptr;
+    ftxui::Box* volumeBox = nullptr;
+    ftxui::Box* shuffleBox = nullptr;
+    ftxui::Box* repeatBox = nullptr;
     bool outputDeviceHovered = false;
     std::int32_t terminalColumns = 0;
   };

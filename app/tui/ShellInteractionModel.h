@@ -4,28 +4,38 @@
 #pragma once
 
 #include "CommandCompletionState.h"
-#include "TuiKeymap.h"
+#include "Keymap.h"
+#include "ListSearch.h"
+#include "TextFieldModel.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
+#include <ftxui/component/event.hpp>
+
+#include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::tui
 {
   enum class Overlay : std::uint8_t
   {
     None,
-    ListChooser,
     DetailPanel,
     QualityPanel,
     OutputDevices,
     PresentationPanel,
     Notifications,
     Help,
+  };
+
+  enum class WorkspaceFocus : std::uint8_t
+  {
+    Tracks,
+    Lists,
   };
 
   enum class ShellInputMode : std::uint8_t
@@ -35,72 +45,6 @@ namespace ao::tui
     Command,
   };
 
-  enum class CommandAction : std::uint8_t
-  {
-    QuickFilter,
-    OpenLists,
-    OpenDetail,
-    OpenQuality,
-    OpenOutputDevices,
-    OpenPresentationPanel,
-    OpenNotifications,
-    CloseOverlay,
-    ShowHelp,
-    RevealCurrentTrack,
-    SetPresentation,
-    ClearFilter,
-    Reload,
-    Scan,
-    ScanCancel,
-    SelectToggle,
-    SelectVisual,
-    SelectAll,
-    SelectClear,
-    EditProperties,
-    OpenSettings,
-    Play,
-    TogglePlayback,
-    Stop,
-    Quit,
-  };
-
-  struct Command final
-  {
-    CommandAction action = CommandAction::QuickFilter;
-    std::string argument{};
-  };
-
-  struct CommandPrefixSpec final
-  {
-    std::string_view prefix;
-    CommandAction action;
-    i18n::MessageId detail;
-    i18n::MessageId category;
-    /**
-     * @brief The action whose key this entry advertises, when not its own.
-     *
-     * A prefix can lead to a related interactive path: `/` opens Quick Filter
-     * editing for `:filter`, while `p` opens the chooser for `:view <name>`.
-     * Naming that action rather than its key keeps the hint from drifting: a
-     * rebound key moves the hint with it, and an unbound one shows nothing.
-     */
-    std::optional<TuiKeyAction> optShortcutAction{};
-  };
-
-  struct CommandAliasSpec final
-  {
-    std::string_view alias;
-    CommandAction action;
-    i18n::MessageId detail;
-    i18n::MessageId category;
-  };
-
-  std::span<CommandPrefixSpec const> commandPrefixSpecs();
-  std::span<CommandAliasSpec const> commandAliasSpecs();
-  /// The root shortcut worth showing beside a command alias, when one has the same semantics.
-  std::optional<TuiKeyAction> shortcutActionForCommand(CommandAction action) noexcept;
-  /// The command action with the same semantics as a root key action.
-  std::optional<CommandAction> commandActionForKeyAction(TuiKeyAction action) noexcept;
   /**
    * @brief Whether @p overlay blocks interaction with the workspace beneath it.
    *
@@ -111,25 +55,41 @@ namespace ao::tui
    * the question is "is another surface open".
    */
   bool isModalOverlay(Overlay overlay) noexcept;
-  std::optional<Command> parseCommand(std::string_view input);
   std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay overlay);
   /// The first binding that reaches an overlay's toggle after its fixed local protocol handles input.
-  std::string_view overlayToggleShortcut(TuiKeymapPlan const& keymapPlan, Overlay overlay);
-  std::string overlayHint(i18n::MessageCatalog const& textCatalog, TuiKeymapPlan const& keymapPlan, Overlay overlay);
+  std::string_view overlayToggleShortcut(KeymapPlan const& keymapPlan, Overlay overlay);
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan, Overlay overlay);
 
   class ShellInteractionModel final
   {
   public:
+    bool isNavigationEnabled() const noexcept { return _navigationEnabled; }
+    bool isNavigationFocused() const noexcept { return _workspaceFocus == WorkspaceFocus::Lists; }
+    void setNavigationEnabled(bool enabled) noexcept;
+    void focusNavigation() noexcept;
+    void focusTracks() noexcept { _workspaceFocus = WorkspaceFocus::Tracks; }
+    void toggleNavigation(bool canDock) noexcept;
+    void switchWorkspaceFocus(bool canDock) noexcept;
     bool isInputActive() const noexcept;
     ShellInputMode inputMode() const noexcept;
     std::string const& inputDraft() const noexcept;
+    TextFieldModel const& inputField() const noexcept { return _input; }
+    bool tryEditInput(ftxui::Event const& event);
+    bool tryMoveInputCursor(std::int32_t column);
+    void rememberInput();
+    bool tryMoveInputHistory(std::int32_t delta);
     bool isInputTouched() const noexcept;
     std::optional<rt::CompletionResult> const& commandCompletion() const noexcept;
+    bool isCompletionNavigated() const noexcept { return _completionNavigated; }
     std::int32_t commandCompletionSelection() const noexcept;
+    ListSearch& listSearch() noexcept { return _listSearch; }
+    ListSearch const& listSearch() const noexcept { return _listSearch; }
     Overlay overlay() const noexcept;
+    std::int32_t overlayScroll() const noexcept { return _overlayScroll; }
+    void scrollOverlay(std::int32_t delta, std::int32_t lastRow);
 
     void beginInput(ShellInputMode mode, std::string draft = {});
-    void appendInputText(std::string_view text);
+    void insertInputText(std::string_view text);
     void backspaceInput();
     void closeInput();
     void setCommandCompletion(std::optional<rt::CompletionResult> optCompletion);
@@ -142,10 +102,19 @@ namespace ao::tui
     void closeOverlay() noexcept;
 
   private:
+    bool _navigationEnabled = true;
+    WorkspaceFocus _workspaceFocus = WorkspaceFocus::Tracks;
     ShellInputMode _inputMode = ShellInputMode::None;
-    std::string _inputDraft{};
+    TextFieldModel _input{};
+    std::vector<std::string> _commandHistory{};
+    std::vector<std::string> _filterHistory{};
+    std::optional<std::size_t> _optHistoryIndex{};
+    std::string _historyDraft{};
     bool _inputTouched = false;
     CommandCompletionState _completion{};
+    bool _completionNavigated = false;
+    ListSearch _listSearch{};
     Overlay _overlay = Overlay::None;
+    std::int32_t _overlayScroll = 0;
   };
 } // namespace ao::tui

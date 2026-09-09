@@ -4,13 +4,13 @@
 #include "CommandCompletionState.h"
 
 #include "SelectionNavigation.h"
+#include "TextFieldModel.h"
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <utility>
 
 namespace ao::tui
@@ -61,11 +61,11 @@ namespace ao::tui
       return false;
     }
 
-    _selection = ao::tui::moveSelection(_selection, delta, _optResult->items.size());
+    _selection = moveSelection(_selection, delta, _optResult->items.size());
     return true;
   }
 
-  bool CommandCompletionState::tryApplyTo(std::string& draft)
+  bool CommandCompletionState::tryApplyTo(TextFieldModel& draft)
   {
     if (!_optResult || _optResult->items.empty())
     {
@@ -74,15 +74,14 @@ namespace ao::tui
 
     auto const index = static_cast<std::size_t>(std::max<std::int32_t>(0, _selection)) % _optResult->items.size();
     auto const& result = *_optResult;
-    auto const& item = result.items[index];
 
-    if (result.replaceBegin > result.replaceEnd || result.replaceEnd > draft.size())
+    if (auto const& item = result.items[index];
+        !draft.tryReplaceRange(result.replaceBegin, result.replaceEnd, item.insertText))
     {
       clear();
       return false;
     }
 
-    draft.replace(result.replaceBegin, result.replaceEnd - result.replaceBegin, item.insertText);
     clear();
     return true;
   }

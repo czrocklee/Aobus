@@ -3,6 +3,12 @@
 
 ja:table {
   messages:table {
+    tui_workspace_back { "前のビュー" }
+    tui_workspace_forward { "次のビュー" }
+    tui_workspace_history_unavailable { "この方向に移動できるビューはありません。" }
+    tui_settings_keyboard_scope { "ワークスペースのショートカットです。エディターや選択画面のキー操作は別です。" }
+    tui_playback_modes { "シャッフル：{shuffle, select, on {オン} other {オフ}} · リピート：{repeat, select, one {1曲} all {すべて} other {オフ}}" }
+
     tui_settings_save_failed { "設定を保存できませんでした。{detail}" }
     tui_settings_load_failed { "保存済みの設定を読み込めないため、既定値を使用します。{detail}" }
     tui_settings_title { "設定" }
@@ -19,7 +25,7 @@ ja:table {
     tui_settings_mouse { "マウス操作" }
     tui_settings_wheel { "ホイールの移動量" }
     tui_settings_seek { "キー操作のシーク幅" }
-    tui_settings_volume { "キー操作の音量幅" }
+    tui_settings_volume { "音量の調整幅" }
     tui_settings_hover { "ホバーで音声情報を表示" }
     tui_settings_on { "オン" }
     tui_settings_off { "オフ" }
@@ -442,6 +448,15 @@ ja:table {
     gtk_presentation_copy_label { "{label} のコピー" }
     tui_shell_command_palette_title { "コマンドパレット" }
     tui_shell_command_palette_no_matches { "一致なし" }
+    tui_input_history_hint { "Ctrl+P/N 履歴" }
+    tui_navigation_focus { "リストと曲のフォーカスを切り替え" }
+    tui_navigation_return { "{key} 曲へ" }
+    tui_navigation_keys { "↑↓ 移動 · ←→ ツリー · Enter 開く · Esc 曲へ" }
+    tui_layout_save_failed { "ワークスペースのレイアウトを保存できませんでした: {detail}" }
+    tui_navigation_open_failed { "リストを開けませんでした: {detail}" }
+    tui_navigation_sync_failed { "アクティブなリストを表示できませんでした: {detail}" }
+    tui_list_search_hint { "/ 検索 · Esc クリア" }
+    tui_list_search_empty { "一致する項目なし" }
     tui_shell_command_palette_footer { "{completeKey} 補完  {runKey} 実行  {cancelKey} キャンセル" }
     tui_shell_quick_filter_title { "クイックフィルター" }
     tui_shell_quick_filter_footer { "{acceptKey} 確定  {completeKey} 補完  {keepKey} 入力を保持" }
@@ -455,7 +470,6 @@ ja:table {
     tui_shell_overlay_views { "表示" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "ヘルプ" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{openKey} 開く  {closeKey} 閉じる" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{selectKey} 選択  {closeKey} 閉じる" }
@@ -530,16 +544,24 @@ ja:table {
     tui_library_no_sections { "この表示にはセクションがありません" }
     tui_library_no_section_selected { "セクションが選択されていません" }
     tui_library_no_current_track { "現在の曲はありません" }
-    tui_library_current_track_not_in_view { "現在の曲はこの表示にありません" }
+    tui_library_current_track_not_in_view { "ライブラリで現在の曲を見つけられませんでした" }
     tui_library_no_active_track_view { "アクティブな曲表示はありません" }
     tui_library_no_views_available { "利用可能な表示はありません" }
-    tui_library_no_lists_available { "利用可能なリストはありません" }
     tui_library_filter_cleared { "フィルターがクリアされました" }
     tui_library_filter_applied { "フィルターが適用されました" }
-    tui_library_no_tracks_found { "曲が見つかりません。まずこのライブラリで `aobus init` を実行してください。" }
+    tui_library_empty_scan { "登録済みの曲がありません。{command} でライブラリをスキャンしてください。" }
+    tui_library_filter_empty { "フィルターに一致する曲がありません。条件を変更するか解除してください。" }
+    tui_library_filter_invalid { "フィルターを適用できません。条件を編集するか解除してください。" }
+    tui_quick_filter_no_suggestions { "候補はありません。入力した文字はそのまま使えます。" }
+    tui_quick_filter_literal_footer { "{acceptKey} 文字を適用  {keepKey} 文字を保持" }
+    tui_quick_filter_empty_footer { "{acceptKey} 絞り込み解除  {keepKey} 絞り込み保持" }
+    tui_status_keep_marks { "マーク保持" }
+    tui_status_cancel_range { "範囲取消" }
+    tui_status_play { "再生" }
+    tui_status_clear { "解除" }
+    tui_library_no_tracks_found { "このリストには曲がありません。別のリストを選択してください。" }
     tui_library_marked_count { "{count, plural, other {# 件マーク}}" }
     tui_library_visual_mode { "ビジュアル" }
-    tui_library_no_lists_found { "リストが見つかりません" }
     tui_library_ready { "準備完了" }
     tui_library_scan_already_running { "ライブラリーのスキャンは既に実行中です" }
     tui_library_scan_cancelling { "スキャンのキャンセルは既に進行中です" }
@@ -968,8 +990,6 @@ ja:table {
     gtk_layout_value_center { "中央" }
     tui_untitled_section { "無題のセクション" }
     tui_notification_none { "通知なし" }
-    tui_lists_closed { "リストが閉じられました" }
-    tui_lists_opened { "リスト" }
     tui_detail_closed { "詳細が閉じられました" }
     tui_detail_opened { "詳細パネル" }
     tui_pipeline_closed { "パイプラインが閉じられました" }

@@ -6,7 +6,6 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "tui/ShellInteractionModel.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -27,6 +26,14 @@ namespace ao::tui::test
 {
   namespace
   {
+    std::optional<rt::CompletionResult> completeDraft(i18n::MessageCatalog const& catalog,
+                                                      std::string_view draft,
+                                                      CommandCompletionContext const& context,
+                                                      std::size_t limit = kInputCompletionResultLimit)
+    {
+      return completeCommandDraft(catalog, draft, draft.size(), context, limit);
+    }
+
     std::vector<std::string> insertTexts(rt::CompletionResult const& result)
     {
       auto values = std::vector<std::string>{};
@@ -43,22 +50,22 @@ namespace ao::tui::test
 
   TEST_CASE("CommandCompletion - completes command names from shell command specs", "[tui][unit][completion]")
   {
-    auto const optResult = completeCommandDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{});
+    auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{});
 
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 0);
     CHECK(optResult->replaceEnd == 2);
-    CHECK(insertTexts(*optResult) == std::vector<std::string>{"output", "outputs"});
-    CHECK(optResult->items[0].displayText == ":output");
-    CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items[0].detail) == "output device");
+    CHECK(insertTexts(*optResult) == std::vector<std::string>{"output", "previous", "back"});
+    CHECK(optResult->items[0].displayText == "output device");
+    CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items[0].detail) == ":output");
   }
 
   TEST_CASE("CommandCompletion - completes presentation ids after view commands", "[tui][unit][completion]")
   {
     auto const optResult =
-      completeCommandDraft(ao::test::englishMessageCatalog(),
-                           "view al",
-                           CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()});
+      completeDraft(ao::test::englishMessageCatalog(),
+                    "view al",
+                    CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()});
 
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 5);
@@ -70,46 +77,41 @@ namespace ao::tui::test
   TEST_CASE("CommandCompletion - returns no filter result without a filter completion provider",
             "[tui][unit][completion]")
   {
-    CHECK_FALSE(completeCommandDraft(ao::test::englishMessageCatalog(), "Aimer", CommandCompletionContext{}));
-    CHECK_FALSE(
-      completeCommandDraft(ao::test::englishMessageCatalog(), "filter Road Trips", CommandCompletionContext{}));
+    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzzzzz", CommandCompletionContext{}));
+    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "filter Road Trips", CommandCompletionContext{}));
   }
 
   TEST_CASE("CommandCompletion - returns no result for unmatched command and presentation prefixes",
             "[tui][unit][completion]")
   {
-    CHECK_FALSE(completeCommandDraft(ao::test::englishMessageCatalog(), "zzz", CommandCompletionContext{}));
-    CHECK_FALSE(
-      completeCommandDraft(ao::test::englishMessageCatalog(),
-                           "view zzz",
-                           CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()}));
+    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzz", CommandCompletionContext{}));
+    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(),
+                              "view zzz",
+                              CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()}));
   }
 
   TEST_CASE("CommandCompletion - offers multi-word exact aliases from a prefix", "[tui][unit][completion]")
   {
-    auto const optScan = completeCommandDraft(ao::test::englishMessageCatalog(), "scan", CommandCompletionContext{});
+    auto const optScan = completeDraft(ao::test::englishMessageCatalog(), "scan", CommandCompletionContext{});
 
     REQUIRE(optScan);
     CHECK(optScan->replaceBegin == 0);
     CHECK(optScan->replaceEnd == 4);
     CHECK(insertTexts(*optScan) == std::vector<std::string>{"scan", "scan cancel"});
 
-    auto const optTrailingSpace =
-      completeCommandDraft(ao::test::englishMessageCatalog(), "scan ", CommandCompletionContext{});
+    auto const optTrailingSpace = completeDraft(ao::test::englishMessageCatalog(), "scan ", CommandCompletionContext{});
 
     REQUIRE(optTrailingSpace);
     CHECK(optTrailingSpace->replaceBegin == 0);
     CHECK(optTrailingSpace->replaceEnd == 5);
-    CHECK(insertTexts(*optTrailingSpace) == std::vector<std::string>{"scan cancel"});
+    CHECK(insertTexts(*optTrailingSpace) == std::vector<std::string>{"scan", "scan cancel"});
 
-    auto const optPartial =
-      completeCommandDraft(ao::test::englishMessageCatalog(), "scan c", CommandCompletionContext{});
+    auto const optPartial = completeDraft(ao::test::englishMessageCatalog(), "scan c", CommandCompletionContext{});
 
     REQUIRE(optPartial);
     CHECK(insertTexts(*optPartial) == std::vector<std::string>{"scan cancel"});
 
-    auto const optSelect =
-      completeCommandDraft(ao::test::englishMessageCatalog(), "select", CommandCompletionContext{});
+    auto const optSelect = completeDraft(ao::test::englishMessageCatalog(), "select", CommandCompletionContext{});
     REQUIRE(optSelect);
     CHECK(insertTexts(*optSelect) ==
           std::vector<std::string>{"select toggle", "select visual", "select all", "select clear"});
@@ -117,7 +119,7 @@ namespace ao::tui::test
 
   TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")
   {
-    auto const optResult = completeCommandDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{}, 1);
+    auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{}, 1);
 
     REQUIRE(optResult);
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output"});
@@ -140,7 +142,7 @@ namespace ao::tui::test
         -> std::optional<rt::CompletionResult> { return completer.complete(text, cursor, limit); },
     };
 
-    auto optResult = completeCommandDraft(ao::test::englishMessageCatalog(), "filter $ar", context);
+    auto optResult = completeDraft(ao::test::englishMessageCatalog(), "filter $ar", context);
 
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 7);
@@ -148,61 +150,12 @@ namespace ao::tui::test
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"$artist"});
     CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items[0].detail) == "field");
 
-    optResult = completeCommandDraft(ao::test::englishMessageCatalog(), "filter $artist = Ai", context);
+    optResult = completeDraft(ao::test::englishMessageCatalog(), "filter $artist = Ai", context);
 
     REQUIRE(optResult);
     CHECK(optResult->replaceBegin == 17);
     CHECK(optResult->replaceEnd == 19);
     CHECK(optResult->items[0].displayText == "Aimer");
     CHECK(optResult->items[0].insertText == "\"Aimer\"");
-  }
-
-  TEST_CASE("commandCompletionSuffix returns only a trailing prefix suffix", "[tui][unit][completion]")
-  {
-    auto shell = ShellInteractionModel{};
-    shell.beginInput(ShellInputMode::QuickFilter);
-
-    SECTION("Missing and empty completion results have no suffix")
-    {
-      CHECK(commandCompletionSuffix(shell).empty());
-      shell.setCommandCompletion(rt::CompletionResult{});
-      CHECK(commandCompletionSuffix(shell).empty());
-    }
-
-    SECTION("ASCII case differences preserve the candidate suffix")
-    {
-      shell.appendInputText("aim");
-      shell.setCommandCompletion(rt::CompletionResult{
-        .replaceBegin = 0,
-        .replaceEnd = 3,
-        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer"}},
-      });
-
-      CHECK(commandCompletionSuffix(shell) == "er");
-    }
-
-    SECTION("Quoted candidates do not invent a suffix")
-    {
-      shell.appendInputText("aim");
-      shell.setCommandCompletion(rt::CompletionResult{
-        .replaceBegin = 0,
-        .replaceEnd = 3,
-        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "\"Aimer\""}},
-      });
-
-      CHECK(commandCompletionSuffix(shell).empty());
-    }
-
-    SECTION("Replacement ranges before the draft end do not emit ghost text")
-    {
-      shell.appendInputText("aim suffix");
-      shell.setCommandCompletion(rt::CompletionResult{
-        .replaceBegin = 0,
-        .replaceEnd = 3,
-        .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer"}},
-      });
-
-      CHECK(commandCompletionSuffix(shell).empty());
-    }
   }
 } // namespace ao::tui::test

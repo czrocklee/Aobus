@@ -45,7 +45,7 @@ No FTXUI event or escape-sequence value enters UIModel.
 `KeymapModel` retains immutable-by-policy defaults and one mutable effective map.
 The preference editor holds a working model, displays pre-existing conflicts, and invokes a change callback after confirmed mutations.
 GTK application accelerator state is a platform projection of the last successfully persisted effective map rather than another keymap authority.
-The TUI starts from the shared defaults, adds frontend-local defaults without mutating them, applies the global override group, and prepares an immutable `TuiKeymapPlan` before constructing dispatch and rendering owners.
+The TUI defines terminal defaults with shared action identities, applies the global override group, and prepares an immutable `KeymapPlan` before constructing dispatch and rendering owners.
 
 ## Commands and transitions
 
@@ -65,7 +65,7 @@ A persistence failure keeps the candidate, leaves live bindings unchanged, and s
 GTK application first clears `win.*` accelerator descriptions absent from the new mapping, then translates and applies the effective chords for each action.
 This reconciliation prevents removed or reset shortcuts from remaining active until restart.
 
-The TUI has no editing transition in the current surface.
+The TUI Settings keyboard page validates and persists each accepted candidate before replacing the live keymap and its dispatch/hint plan. Picker and editor keys remain scoped protocol.
 At startup it loads the effective map from the global application store, projects each recognized action's chords through an explicit FTXUI-event whitelist, and locally omits unsupported or later-colliding entries.
 Unknown action ids are retained by neutral keymap policy but have no TUI descriptor, so they cannot consume a terminal event.
 An explicit empty binding removes both the root dispatch path and every configurable hint for that action; command aliases are a separate command-language surface and remain available.
@@ -135,7 +135,7 @@ label without a separate default-chord fallback.
 - [`KeymapApplicator.cpp`](../../../app/linux-gtk/app/KeymapApplicator.cpp) and [`GtkAccelTranslator.cpp`](../../../app/linux-gtk/app/GtkAccelTranslator.cpp) own GTK projection.
 - [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing, conflict confirmation, failed-candidate Retry/Discard, and deferred list rebuild.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.
-- [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) owns TUI descriptors, local defaults, terminal projection, collision resolution, and the immutable dispatch/hint plan; [`app/tui/App.cpp`](../../../app/tui/App.cpp) loads that plan from the global TUI store.
+- [`Keymap.cpp`](../../../app/tui/Keymap.cpp) owns TUI descriptors, local defaults, terminal projection, collision resolution, and the immutable dispatch/hint plan; [`app/tui/App.cpp`](../../../app/tui/App.cpp) loads that plan from the global TUI store.
 - [`KeymapAcceleratorPlan.cpp`](../../../app/windows-winui/input/KeymapAcceleratorPlan.cpp) owns WinUI executable projection and retained hint text; `ShellBuilder` installs that plan and supplies order-menu hint lookup.
 
 ## Test map
@@ -143,7 +143,7 @@ label without a separate default-chord fallback.
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
 - [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
-- [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
+- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects executable WinUI projection and hints after rebinding, unbinding, unsupported keys, and collisions.
 
 ## Related documents

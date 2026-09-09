@@ -3,18 +3,22 @@
 
 #include "SettingsEditor.h"
 
+#include "Command.h"
 #include "CoverArt.h"
-#include "ShellInteractionModel.h"
+#include "Keymap.h"
+#include "MouseBindings.h"
+#include "Preferences.h"
+#include "SelectionNavigation.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiKeymap.h"
-#include "TuiPreferences.h"
+#include "TextField.h"
 #include <ao/compat/Enumerate.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 #include <ftxui/dom/elements.hpp>
 
 #include <algorithm>
@@ -33,6 +37,9 @@ namespace ao::tui
 {
   namespace
   {
+    constexpr std::int32_t kTitleControlColumns = 6;
+    constexpr std::int32_t kPreferenceControlColumns = 6;
+
     using i18n::MessageId;
     constexpr auto kPages = std::to_array<MessageId>({MessageId::TuiSettingsGeneral,
                                                       MessageId::TuiSettingsAppearance,
@@ -74,9 +81,7 @@ namespace ao::tui
           return i18n::requiredFormat(catalog, id, {{"retry", "Ctrl+R"}, {"discard", "Ctrl+G"}, {"close", "Esc"}});
         case MessageId::TuiSettingsKeyboardKeys:
           return i18n::requiredFormat(
-            catalog,
-            id,
-            {{"choose", "←/→"}, {"edit", "Enter"}, {"add", "Insert"}, {"remove", "Delete"}, {"reset", "r"}});
+            catalog, id, {{"choose", "←/→"}, {"edit", "Enter"}, {"add", "a"}, {"remove", "Delete"}, {"reset", "r"}});
         default: return std::string{i18n::requiredText(catalog, id)};
       }
     }
@@ -100,7 +105,7 @@ namespace ao::tui
   } // namespace
 
   SettingsEditor::SettingsEditor(i18n::MessageCatalog const& textCatalog,
-                                 TuiPreferences const& preferences,
+                                 Preferences const& preferences,
                                  uimodel::KeymapModel const& keymap,
                                  Outputs outputs)
     : _textCatalog{textCatalog}, _preferences{preferences}, _keymap{keymap}, _outputs{std::move(outputs)}
@@ -119,6 +124,7 @@ namespace ao::tui
 
   void SettingsEditor::retire()
   {
+    _search.clear();
     _active = false;
     _editingChord = false;
     _choosingLanguage = false;
@@ -135,6 +141,25 @@ namespace ao::tui
       return false;
     }
 
+    if (event.is_mouse())
+    {
+      if (!std::exchange(_mouseReady, false))
+      {
+        return true;
+      }
+
+      if (_page == SettingsPage::Keyboard && !_editingChord && _search.tryHandleEvent(event))
+      {
+        return true;
+      }
+
+      auto mouseEvent = event;
+      handleMouse(mouseEvent.mouse());
+      return true;
+    }
+
+    _mouseReady = false;
+
     if (tryHandlePrompt(event))
     {
       return true;
@@ -146,13 +171,9 @@ namespace ao::tui
       {
         _choosingLanguage = false;
       }
-      else if (event == ftxui::Event::ArrowUp)
+      else if (auto optDelta = listNavigationDelta(event, navigationPageRows(_bodyBox), true); optDelta)
       {
-        _language = movedIndex(_language, -1, languageChoices().size());
-      }
-      else if (event == ftxui::Event::ArrowDown)
-      {
-        _language = movedIndex(_language, 1, languageChoices().size());
+        _language = movedIndex(_language, *optDelta, languageChoices().size());
       }
       else if (event == ftxui::Event::Return)
       {
@@ -171,6 +192,12 @@ namespace ao::tui
       return true;
     }
 
+    if (_page == SettingsPage::Keyboard && _search.tryHandleEvent(event))
+    {
+      moveRow(0);
+      return true;
+    }
+
     if (event == ftxui::Event::Escape)
     {
       retire();
@@ -184,39 +211,25 @@ namespace ao::tui
       _page = static_cast<SettingsPage>(
         (static_cast<std::int32_t>(_page) + delta + static_cast<std::int32_t>(kPages.size())) %
         static_cast<std::int32_t>(kPages.size()));
+      _search.clear();
       _row = 0;
       _chord = 0;
       _diagnostic.clear();
     }
-    else if (event == ftxui::Event::ArrowUp)
+    else if (auto optDelta =
+               listNavigationDelta(event,
+                                   navigationPageRows(_page == SettingsPage::Keyboard ? _keyboardViewport : _bodyBox),
+                                   !_search.isActive());
+             optDelta)
     {
-      moveRow(-1);
-    }
-    else if (event == ftxui::Event::ArrowDown)
-    {
-      moveRow(1);
-    }
-    else if (event == ftxui::Event::PageUp)
-    {
-      moveRow(-8);
-    }
-    else if (event == ftxui::Event::PageDown)
-    {
-      moveRow(8);
-    }
-    else if (event == ftxui::Event::Home)
-    {
-      _row = 0;
-      _chord = 0;
-    }
-    else if (event == ftxui::Event::End)
-    {
-      _row = rowCount() == 0 ? 0 : rowCount() - 1;
-      _chord = 0;
+      moveRow(*optDelta);
     }
     else if (_page == SettingsPage::Keyboard)
     {
-      handleKeyboard(event);
+      if (_search.matches(actionLabel(_row) + " " + std::string{actionDescriptors()[_row].actionId}))
+      {
+        handleKeyboard(event);
+      }
     }
     else if (event == ftxui::Event::Return || event == ftxui::Event::ArrowRight ||
              event == ftxui::Event::Character(" "))
@@ -236,26 +249,140 @@ namespace ao::tui
     using namespace ftxui;
     auto const width = std::min(columns, std::clamp(columns - 4, 76, 100));
     auto const height = std::min(rows, 28);
+    _mouseBindings.clear();
+    _tabBoxes.assign(kPages.size(), kEmptyMouseBox);
+    _rowBoxes.clear();
+    _decreaseBoxes.clear();
+    _valueBoxes.clear();
+    _chordBoxes.clear();
+    _renderedPage = _page;
+    _renderedLanguage = _choosingLanguage;
+    _renderedChord = _editingChord;
     auto tabs = Elements{};
+    _mouseReady = true;
 
     for (std::size_t index = 0; index < kPages.size(); ++index)
     {
       auto itemPtr = text(" " + std::string{i18n::requiredText(_textCatalog, kPages[index])} + " ");
-      tabs.push_back(index == static_cast<std::size_t>(_page) ? std::move(itemPtr) | style::selected() : itemPtr);
+      tabs.push_back((index == static_cast<std::size_t>(_page) ? std::move(itemPtr) | style::selected() : itemPtr) |
+                     ftxui::reflect(_tabBoxes[index]));
     }
 
     auto title = std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsTitle)};
     auto context = std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsGlobal)};
 
     title += " · " + context;
-    auto modalPtr = vbox({text(ellipsizeToCellWidth(title, width - 2)) | bold,
+    auto modalPtr = vbox({hbox({text(ellipsizeToCellWidth(title, width - kTitleControlColumns)) | bold | flex,
+                                _mouseBindings.bind(text(" × "), Event::Escape)}),
                           hflow(std::move(tabs)),
                           separator(),
-                          renderBody(width - 2),
+                          renderBody(width - 2) | ftxui::reflect(_bodyBox),
                           separator(),
                           renderFooter()}) |
                     border | size(WIDTH, EQUAL, width) | size(HEIGHT, EQUAL, height) | clear_under;
     return vbox({filler(), hbox({filler(), std::move(modalPtr), filler()}), filler()});
+  }
+
+  void SettingsEditor::handleMouse(ftxui::Mouse const& mouse)
+  {
+    if (_renderedPage != _page || _renderedLanguage != _choosingLanguage || _renderedChord != _editingChord)
+    {
+      return;
+    }
+
+    if (auto const optEvent = _mouseBindings.eventAt(mouse); optEvent)
+    {
+      _mouseBindings.clear();
+      tryHandleEvent(*optEvent);
+      return;
+    }
+
+    if (_editingChord && isLeftPress(mouse) && containsMouse(_chordInputBox, mouse))
+    {
+      _chordInput.tryMoveToCell(mouse.x - _chordTextBox.x_min);
+      return;
+    }
+
+    if (_confirmClose || _optPreferenceCandidate || _optKeymapCandidate || _editingChord)
+    {
+      return;
+    }
+
+    if (auto const wheel = mouseWheelDirection(mouse); wheel != 0 && containsMouse(_bodyBox, mouse))
+    {
+      if (_choosingLanguage)
+      {
+        _language = movedIndex(_language, wheel, languageChoices().size());
+      }
+      else
+      {
+        moveRow(wheel);
+      }
+
+      return;
+    }
+
+    if (!isLeftPress(mouse))
+    {
+      return;
+    }
+
+    if (!_choosingLanguage)
+    {
+      if (auto const optTab = mouseRowAt(_tabBoxes, mouse); optTab)
+      {
+        _page = static_cast<SettingsPage>(*optTab);
+        _search.clear();
+        _row = 0;
+        _chord = 0;
+        _diagnostic.clear();
+        _mouseBindings.clear();
+        return;
+      }
+    }
+
+    auto const optRow = mouseRowAt(_rowBoxes, mouse);
+
+    if (!optRow)
+    {
+      return;
+    }
+
+    if (_choosingLanguage)
+    {
+      _language = *optRow;
+      tryHandleEvent(ftxui::Event::Return);
+      return;
+    }
+
+    if (*optRow >= rowCount())
+    {
+      return;
+    }
+
+    _row = *optRow;
+    _chord = 0;
+    _diagnostic.clear();
+
+    if (_page == SettingsPage::Keyboard)
+    {
+      auto const hit = std::ranges::find_if(
+        _chordBoxes, [&](ChordHit const& chord) { return chord.row == _row && containsMouse(chord.box, mouse); });
+
+      if (hit != _chordBoxes.end())
+      {
+        _chord = hit->chord;
+        handleKeyboard(ftxui::Event::Return);
+      }
+    }
+    else if (mouseRowAt(_decreaseBoxes, mouse))
+    {
+      changePreference(-1);
+    }
+    else if (mouseRowAt(_valueBoxes, mouse) || _page == SettingsPage::General)
+    {
+      changePreference(1);
+    }
   }
 
   std::size_t SettingsEditor::rowCount() const
@@ -265,15 +392,38 @@ namespace ao::tui
       case SettingsPage::General: return 1;
       case SettingsPage::Appearance: return kAppearanceLabels.size();
       case SettingsPage::Interaction: return kInteractionLabels.size();
-      case SettingsPage::Keyboard: return tuiActionDescriptors().size();
+      case SettingsPage::Keyboard: return actionDescriptors().size();
     }
 
     return 0;
   }
 
+  std::vector<std::string> SettingsEditor::keyboardLabels() const
+  {
+    auto labels = std::vector<std::string>{};
+
+    for (std::size_t index = 0; index < actionDescriptors().size(); ++index)
+    {
+      labels.push_back(actionLabel(index) + " " + std::string{actionDescriptors()[index].actionId});
+    }
+
+    return labels;
+  }
+
   void SettingsEditor::moveRow(std::int32_t const delta)
   {
-    _row = movedIndex(_row, delta, rowCount());
+    if (_page == SettingsPage::Keyboard)
+    {
+      if (auto optTarget = _search.selection(keyboardLabels(), static_cast<std::int32_t>(_row), delta); optTarget)
+      {
+        _row = static_cast<std::size_t>(*optTarget);
+      }
+    }
+    else
+    {
+      _row = movedIndex(_row, delta, rowCount());
+    }
+
     _chord = 0;
     _diagnostic.clear();
   }
@@ -329,7 +479,7 @@ namespace ao::tui
     }
   }
 
-  void SettingsEditor::applyPreferences(TuiPreferences candidate)
+  void SettingsEditor::applyPreferences(Preferences candidate)
   {
     if (auto const res = _outputs.applyPreferences(candidate); !res)
     {
@@ -346,7 +496,7 @@ namespace ao::tui
 
   void SettingsEditor::applyKeymap(uimodel::KeymapModel candidate)
   {
-    auto const chords = candidate.chordsFor(tuiActionDescriptors()[_row].actionId);
+    auto const chords = candidate.chordsFor(actionDescriptors()[_row].actionId);
     _chord = std::min(_chord, chords.empty() ? std::size_t{0} : chords.size() - 1);
 
     if (auto const res = _outputs.applyKeymap(candidate); !res)
@@ -417,38 +567,6 @@ namespace ao::tui
     return false;
   }
 
-  void SettingsEditor::editChordText(ftxui::Event const& event)
-  {
-    if (event == ftxui::Event::Backspace)
-    {
-      std::ignore = _chordInput.tryBackspace();
-    }
-    else if (event == ftxui::Event::Delete)
-    {
-      std::ignore = _chordInput.tryDeleteForward();
-    }
-    else if (event == ftxui::Event::ArrowLeft)
-    {
-      std::ignore = _chordInput.tryMoveLeft();
-    }
-    else if (event == ftxui::Event::ArrowRight)
-    {
-      std::ignore = _chordInput.tryMoveRight();
-    }
-    else if (event == ftxui::Event::Home)
-    {
-      std::ignore = _chordInput.tryMoveToBegin();
-    }
-    else if (event == ftxui::Event::End)
-    {
-      std::ignore = _chordInput.tryMoveToEnd();
-    }
-    else if (event.is_character())
-    {
-      std::ignore = _chordInput.tryInsert(event.character());
-    }
-  }
-
   void SettingsEditor::handleChordEditing(ftxui::Event const& event)
   {
     if (event == ftxui::Event::Escape)
@@ -460,7 +578,7 @@ namespace ao::tui
 
     if (event != ftxui::Event::Return)
     {
-      editChordText(event);
+      std::ignore = _chordInput.tryApplyEvent(event);
       return;
     }
 
@@ -472,7 +590,7 @@ namespace ao::tui
       return;
     }
 
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
     auto const chords = _keymap.chordsFor(action.actionId);
     auto candidate = _keymap;
 
@@ -482,11 +600,11 @@ namespace ao::tui
     }
 
     // Terminal aliases for one action represent a single physical binding.
-    auto const optEvent = tuiEventForChord(*optChord);
+    auto const optEvent = eventForChord(*optChord);
 
     for (auto const& existing : candidate.chordsFor(action.actionId))
     {
-      if (optEvent && tuiEventForChord(existing) == optEvent)
+      if (optEvent && eventForChord(existing) == optEvent)
       {
         std::ignore = candidate.tryUnbind(action.actionId, existing);
       }
@@ -498,9 +616,9 @@ namespace ao::tui
 
   void SettingsEditor::submitKeymap(uimodel::KeymapModel candidate)
   {
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
 
-    if (auto const res = validateTuiActionBindings(candidate, action.actionId); !res)
+    if (auto const res = validateActionBindings(candidate, action.actionId); !res)
     {
       auto const message =
         res.error().code == Error::Code::Conflict ? MessageId::TuiSettingsConflict : MessageId::TuiSettingsUnsupported;
@@ -508,8 +626,8 @@ namespace ao::tui
 
       if (res.error().code == Error::Code::Conflict)
       {
-        auto const descriptors = tuiActionDescriptors();
-        auto const it = std::ranges::find(descriptors, detail, &TuiActionDescriptor::actionId);
+        auto const descriptors = actionDescriptors();
+        auto const it = std::ranges::find(descriptors, detail, &ActionDescriptor::actionId);
 
         if (it != descriptors.end())
         {
@@ -533,7 +651,7 @@ namespace ao::tui
       return;
     }
 
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
     auto const chords = _keymap.chordsFor(action.actionId);
     _chord = std::min(_chord, chords.empty() ? std::size_t{0} : chords.size() - 1);
 
@@ -541,9 +659,9 @@ namespace ao::tui
     {
       _chord = movedIndex(_chord, event == ftxui::Event::ArrowLeft ? -1 : 1, chords.size());
     }
-    else if (event == ftxui::Event::Return || event == ftxui::Event::Insert)
+    else if (event == ftxui::Event::Return || event == ftxui::Event::Insert || event == ftxui::Event::Character("a"))
     {
-      _addingChord = event == ftxui::Event::Insert || chords.empty();
+      _addingChord = event != ftxui::Event::Return || chords.empty();
       _chordInput.reset(_addingChord ? std::string{} : chords[_chord].toString());
       _editingChord = true;
       _diagnostic.clear();
@@ -565,7 +683,7 @@ namespace ao::tui
 
   std::string SettingsEditor::actionLabel(std::size_t const index) const
   {
-    auto const& descriptor = tuiActionDescriptors()[index];
+    auto const& descriptor = actionDescriptors()[index];
 
     if (auto const optCommand = commandActionForKeyAction(descriptor.action); optCommand)
     {
@@ -580,24 +698,26 @@ namespace ao::tui
 
     switch (descriptor.action)
     {
-      case TuiKeyAction::OpenQuickFilter:
+      case KeyAction::SwitchWorkspaceFocus:
+        return std::string{i18n::requiredText(_textCatalog, MessageId::TuiNavigationFocus)};
+      case KeyAction::OpenQuickFilter:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiShellDetailQuickFilter)};
-      case TuiKeyAction::OpenCommandPalette:
+      case KeyAction::OpenCommandPalette:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPalette)};
-      case TuiKeyAction::PreviousTrack:
+      case KeyAction::PreviousRow:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPreviousRow)};
-      case TuiKeyAction::NextTrack: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextRow)};
-      case TuiKeyAction::PreviousSection:
+      case KeyAction::NextRow: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextRow)};
+      case KeyAction::PreviousSection:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPreviousGroup)};
-      case TuiKeyAction::NextSection:
+      case KeyAction::NextSection:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextGroup)};
-      case TuiKeyAction::SeekBackward:
+      case KeyAction::SeekBackward:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsSeekBack)};
-      case TuiKeyAction::SeekForward:
+      case KeyAction::SeekForward:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsSeekForward)};
-      case TuiKeyAction::VolumeDown:
+      case KeyAction::VolumeDown:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeDown)};
-      case TuiKeyAction::VolumeUp: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeUp)};
+      case KeyAction::VolumeUp: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeUp)};
       default: return descriptor.actionId;
     }
   }
@@ -668,27 +788,51 @@ namespace ao::tui
     using namespace ftxui;
     auto rows = Elements{};
 
+    _rowBoxes.assign(rowCount(), kEmptyMouseBox);
+    auto const labels = keyboardLabels();
+
     for (std::size_t index = 0; index < rowCount(); ++index)
     {
-      auto value = actionLabel(index) + "  ";
+      if (!_search.matches(labels[index]))
+      {
+        continue;
+      }
+
+      auto cells = Elements{};
+      cells.reserve(8);
+      cells.push_back(text(ellipsizeToCellWidth(actionLabel(index), columns / 2)) | size(WIDTH, EQUAL, columns / 2));
       auto const& keymap = _optKeymapCandidate ? *_optKeymapCandidate : _keymap;
-      auto const chords = keymap.chordsFor(tuiActionDescriptors()[index].actionId);
+      auto const chords = keymap.chordsFor(actionDescriptors()[index].actionId);
 
       if (chords.empty())
       {
-        value += i18n::requiredText(_textCatalog, MessageId::TuiSettingsUnbound);
+        _chordBoxes.push_back(ChordHit{.row = index});
+        cells.push_back(text(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsUnbound)}) |
+                        ftxui::reflect(_chordBoxes.back().box));
       }
 
       for (std::size_t chordIndex = 0; chordIndex < chords.size(); ++chordIndex)
       {
         auto const selected = index == _row && chordIndex == _chord;
-        value += (selected ? "[" : " ") + chords[chordIndex].toString() + (selected ? "] " : "  ");
+        _chordBoxes.push_back(ChordHit{.row = index, .chord = chordIndex});
+        cells.push_back(text((selected ? "[" : " ") + keyChordLabel(chords[chordIndex]) + (selected ? "] " : "  ")) |
+                        ftxui::reflect(_chordBoxes.back().box));
       }
 
-      rows.push_back(selectedRow(ellipsizeToCellWidth(value, columns), index == _row));
+      auto rowPtr = hbox(std::move(cells));
+      rows.push_back((index == _row ? std::move(rowPtr) | style::selected() | focus : rowPtr) |
+                     ftxui::reflect(_rowBoxes[index]));
     }
 
-    return vbox(std::move(rows)) | vscroll_indicator | yframe | flex;
+    if (rows.empty())
+    {
+      rows.push_back(text(std::string{i18n::requiredText(_textCatalog, MessageId::TuiListSearchEmpty)}) | dim);
+    }
+
+    return vbox({paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsKeyboardScope)}) | dim,
+                 _search.render(_textCatalog, !_editingChord),
+                 vbox(std::move(rows)) | vscroll_indicator | yframe | flex | reflect(_keyboardViewport)}) |
+           flex;
   }
 
   ftxui::Element SettingsEditor::renderBody(std::int32_t const columns) const
@@ -698,12 +842,15 @@ namespace ao::tui
 
     if (_choosingLanguage)
     {
+      _rowBoxes.assign(languageChoices().size(), kEmptyMouseBox);
+
       for (auto const& [index, choice] : compat::views::enumerate(languageChoices()))
       {
         rows.push_back(
           selectedRow(std::string{choice.tag.empty() ? i18n::requiredText(_textCatalog, MessageId::TuiSettingsSystem)
                                                      : choice.selfName},
-                      std::cmp_equal(index, _language)));
+                      std::cmp_equal(index, _language)) |
+          ftxui::reflect(_rowBoxes[static_cast<std::size_t>(index)]));
       }
     }
     else if (_page == SettingsPage::Keyboard)
@@ -712,11 +859,19 @@ namespace ao::tui
     }
     else
     {
+      _rowBoxes.assign(rowCount(), kEmptyMouseBox);
+      _decreaseBoxes.assign(rowCount(), kEmptyMouseBox);
+      _valueBoxes.assign(rowCount(), kEmptyMouseBox);
+
       for (std::size_t index = 0; index < rowCount(); ++index)
       {
-        rows.push_back(
-          selectedRow(ellipsizeToCellWidth(preferenceLabel(index) + "  < " + preferenceValue(index) + " >", columns),
-                      index == _row));
+        auto rowPtr =
+          hbox({text(ellipsizeToCellWidth(preferenceLabel(index), columns / 2)) | flex,
+                text(" < ") | ftxui::reflect(_decreaseBoxes[index]),
+                text(ellipsizeToCellWidth(preferenceValue(index), (columns / 2) - kPreferenceControlColumns) + " > ") |
+                  ftxui::reflect(_valueBoxes[index])});
+        rows.push_back((index == _row ? std::move(rowPtr) | style::selected() | focus : rowPtr) |
+                       ftxui::reflect(_rowBoxes[index]));
       }
     }
 
@@ -728,6 +883,34 @@ namespace ao::tui
     using namespace ftxui;
     auto rows = Elements{};
     auto line = [&](MessageId id) { rows.push_back(paragraph(settingsText(_textCatalog, id))); };
+    auto buttons = Elements{};
+    auto button = [&](std::string const& label, Event event)
+    { buttons.push_back(_mouseBindings.bind(text(" [" + label + "] ") | bold, std::move(event))); };
+
+    if (_confirmClose || _choosingLanguage || _editingChord || _search.isActive())
+    {
+      button("Enter", Event::Return);
+    }
+    else if (_optPreferenceCandidate || _optKeymapCandidate)
+    {
+      button("Ctrl-R", Event::CtrlR);
+      button("Ctrl-G", Event::CtrlG);
+    }
+    else if (_page == SettingsPage::Keyboard)
+    {
+      button("a", Event::Character("a"));
+      button("Enter", Event::Return);
+      button("Delete", Event::Delete);
+      button("r", Event::Character("r"));
+    }
+    else
+    {
+      button("←", Event::ArrowLeft);
+      button("→", Event::ArrowRight);
+    }
+
+    button("Esc", Event::Escape);
+    rows.push_back(hflow(std::move(buttons)));
 
     if (_confirmClose)
     {
@@ -749,9 +932,7 @@ namespace ao::tui
 
     if (_editingChord)
     {
-      rows.push_back(text(_chordInput.value().substr(0, _chordInput.cursor()) + "▏" +
-                          _chordInput.value().substr(_chordInput.cursor())) |
-                     style::selected());
+      rows.push_back(textFieldValue(_chordInput, &_chordTextBox) | ftxui::reflect(_chordInputBox));
       line(MessageId::TuiSettingsChordKeys);
       return vbox(std::move(rows));
     }
@@ -762,12 +943,19 @@ namespace ao::tui
       return vbox(std::move(rows));
     }
 
+    if (_search.isActive())
+    {
+      line(MessageId::TuiListSearchHint);
+      line(MessageId::TuiSettingsPageKeys);
+      return vbox(std::move(rows));
+    }
+
     if (_page == SettingsPage::Keyboard)
     {
-      auto const id = tuiActionDescriptors()[_row].actionId;
+      auto const id = actionDescriptors()[_row].actionId;
       rows.push_back(text(id) | dim);
 
-      if (auto const res = validateTuiActionBindings(_keymap, id); !res)
+      if (auto const res = validateActionBindings(_keymap, id); !res)
       {
         rows.push_back(paragraph(i18n::requiredFormat(
                          _textCatalog, MessageId::TuiSettingsStoredIssue, {{"detail", res.error().message}})) |

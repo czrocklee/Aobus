@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "LibraryNavigation.h"
+#include "ListNavigationModel.h"
 #include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
@@ -36,12 +36,6 @@ namespace ao::uimodel
 
 namespace ao::tui
 {
-  struct ListOpenResult final
-  {
-    bool opened = false;
-    std::string status{};
-  };
-
   struct SelectedTrackView final
   {
     TrackListEntry const* track = nullptr;
@@ -57,14 +51,12 @@ namespace ao::tui
                       i18n::MessageCatalog textCatalog,
                       uimodel::ListPresentations& listPresentations);
 
-    std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
-    std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
     std::vector<TrackPresentationNavEntry> const& presentationEntries() const noexcept { return _presentationEntries; }
     std::vector<TrackListEntry> const& tracks() const noexcept { return _tracks; }
     std::vector<TrackSection> const& sections() const noexcept { return _sections; }
+    std::uint64_t trackRowsRevision() const noexcept { return _trackRowsRevision; }
     ListId currentListId() const noexcept { return _currentListId; }
     rt::ViewId activeViewId() const noexcept { return _activeViewId; }
-    std::int32_t selectedList() const noexcept { return _selectedList; }
     std::int32_t selectedPresentation() const noexcept { return _selectedPresentation; }
     std::int32_t selectedTrack() const noexcept { return _selectedTrack; }
     std::unordered_set<TrackId> const& markedIds() const noexcept { return _markedIds; }
@@ -76,6 +68,7 @@ namespace ao::tui
     std::string const& filterError() const noexcept { return _filterError; }
     i18n::MessageCatalog const& textCatalog() const noexcept { return _textCatalog; }
 
+    std::string emptyStateText() const;
     std::string currentListTitle() const;
     std::string activePresentationId() const;
     // Borrowed from the active view (or the process-stable default); consume
@@ -86,7 +79,7 @@ namespace ao::tui
     void setTextCatalog(i18n::MessageCatalog textCatalog);
     void setFilterDraft(std::string value);
     void clearFilterDraft();
-    void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);
+    void moveTrackSelection(std::int32_t delta);
     void movePresentationSelection(std::int32_t delta);
     bool trySetSelectedPresentation(std::int32_t index);
     void setSelectedTrackIndex(std::int32_t index);
@@ -100,10 +93,15 @@ namespace ao::tui
 
     std::string jumpToAdjacentSection(std::int32_t delta);
     std::string selectSection(std::int32_t sectionIndex);
-    std::string revealTrack(TrackId trackId);
+    std::string revealTrack(TrackId trackId,
+                            rt::ViewId preferredViewId = rt::kInvalidViewId,
+                            ListId preferredListId = kInvalidListId);
+    Result<> navigateHistory(bool forward);
     std::string setPresentation(std::string_view presentationId);
     std::string selectSelectedPresentation();
-    ListOpenResult openSelectedList();
+    Result<bool> openList(ListId id);
+    ListNavigationModel& navigation() noexcept { return _navigation; }
+    ListNavigationModel const& navigation() const noexcept { return _navigation; }
     std::string reloadActiveList();
     Result<std::string> applyFilter();
 
@@ -122,9 +120,9 @@ namespace ao::tui
     void focusActiveView();
     void syncSelectedPresentation(std::string_view presentationId);
     void refreshPresentationNavigation();
-    std::vector<LibraryNavEntry> loadLibraryNavigation();
     std::vector<TrackPresentationNavEntry> loadPresentationNavigation();
     void refreshFilterError();
+    void refreshNavigationTree();
     struct TrackItemsSnapshot final
     {
       std::vector<TrackListEntry> tracks{};
@@ -143,14 +141,14 @@ namespace ao::tui
     rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
     uimodel::ListPresentations& _listPresentations;
-    std::vector<LibraryNavEntry> _libraryEntries{};
-    std::vector<std::string> _libraryLabels{};
+    ListNavigationModel _navigation{};
+    std::string _viewSyncError{};
     std::vector<TrackPresentationNavEntry> _presentationEntries{};
     std::vector<TrackListEntry> _tracks{};
     std::vector<TrackSection> _sections{};
+    std::uint64_t _trackRowsRevision = 0;
     ListId _currentListId{rt::kAllTracksListId};
     rt::ViewId _activeViewId{rt::kInvalidViewId};
-    std::int32_t _selectedList = 0;
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
     std::unordered_set<TrackId> _markedIds{};

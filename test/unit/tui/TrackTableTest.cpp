@@ -4,8 +4,7 @@
 #include "tui/TrackTable.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include "test/unit/tui/TuiKeymapTestSupport.h"
-#include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
@@ -60,20 +59,6 @@ namespace ao::tui::test
     {
       return ao::tui::trackTableView(
         ao::test::englishMessageCatalog(), tracks, sections, selectedIndex, playingTrackId, presentation, options);
-    }
-
-    std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
-    {
-      return ao::tui::libraryChooserPaneColumns(
-        ao::test::englishMessageCatalog(), labels, defaultTuiKeymapPlan(), terminalColumns);
-    }
-
-    ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
-                                      std::int32_t const selected,
-                                      std::int32_t const columns = 0)
-    {
-      return ao::tui::libraryChooserPane(
-        ao::test::englishMessageCatalog(), labels, selected, defaultTuiKeymapPlan(), columns);
     }
 
     std::string lineContaining(std::string_view text, std::string_view needle)
@@ -262,7 +247,7 @@ namespace ao::tui::test
     auto const text = renderText(trackTableView(tracks, 0, kInvalidTrackId, rt::defaultTrackPresentationSpec()));
 
     CHECK(text.contains("Title"));
-    CHECK(text.contains("No tracks found. Run `aobus init` in this library first."));
+    CHECK(text.contains("This List has no tracks. Choose another List to browse."));
   }
 
   TEST_CASE("TrackTable - presentation controls visible columns", "[tui][unit][track-table]")
@@ -686,20 +671,6 @@ namespace ao::tui::test
     CHECK(row.find("--") == trackNumberColumn + std::string_view{"Track #"}.size() - std::string_view{"--"}.size());
     CHECK(row.at(artistColumn) == '-');
     CHECK(row.contains("--:--"));
-  }
-
-  TEST_CASE("TrackTable - library chooser width follows labels and terminal bounds", "[tui][unit][track-table]")
-  {
-    auto labels = std::vector<std::string>{"All Tracks", "[L] Very Long List Name For Testing"};
-    auto const wideColumns = libraryChooserPaneColumns(labels, 120);
-
-    CHECK(wideColumns > libraryChooserPaneColumns(std::vector<std::string>{"All Tracks"}, 120));
-    CHECK(wideColumns <= 120);
-    CHECK(libraryChooserPaneColumns(labels, 24) == 24);
-
-    auto const text = renderText(libraryChooserPane(labels, 1, wideColumns), wideColumns);
-
-    CHECK(text.contains("Very Long List"));
   }
 
   TEST_CASE("TrackTable - title column expands on wide terminals", "[tui][unit][track-table]")

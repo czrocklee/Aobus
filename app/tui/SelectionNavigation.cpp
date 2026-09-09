@@ -5,15 +5,62 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
+#include <ftxui/component/event.hpp>
+#include <ftxui/screen/box.hpp>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace ao::tui
 {
+  std::int32_t navigationPageRows(ftxui::Box const& viewport)
+  {
+    constexpr std::int32_t kUnmeasuredPageRows = 10;
+    return viewport.IsEmpty() ? kUnmeasuredPageRows : std::max(1, viewport.y_max - viewport.y_min + 1);
+  }
+
+  std::optional<std::int32_t> listNavigationDelta(ftxui::Event const& event,
+                                                  std::int32_t const pageRows,
+                                                  bool const vimKeys)
+  {
+    if (event == ftxui::Event::ArrowUp || (vimKeys && event == ftxui::Event::Character("k")))
+    {
+      return -1;
+    }
+
+    if (event == ftxui::Event::ArrowDown || (vimKeys && event == ftxui::Event::Character("j")))
+    {
+      return 1;
+    }
+
+    if (event == ftxui::Event::PageUp)
+    {
+      return -std::max(1, pageRows);
+    }
+
+    if (event == ftxui::Event::PageDown)
+    {
+      return std::max(1, pageRows);
+    }
+
+    if (event == ftxui::Event::Home)
+    {
+      return -std::numeric_limits<std::int32_t>::max();
+    }
+
+    if (event == ftxui::Event::End)
+    {
+      return std::numeric_limits<std::int32_t>::max();
+    }
+
+    return std::nullopt;
+  }
+
   std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t const trackCount,
                                std::int32_t const selectedIndex,

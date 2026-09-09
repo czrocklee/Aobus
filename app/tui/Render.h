@@ -27,7 +27,8 @@ namespace ftxui
 
 namespace ao::tui
 {
-  class TuiKeymapPlan;
+  class KeymapPlan;
+  struct PanelMouseRegions;
 
   using KittyEscapeSink = std::function<void(std::string_view)>;
   void defaultKittyEscapeSink(std::string_view escapeSequence);
@@ -104,10 +105,9 @@ namespace ao::tui
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
                             std::int32_t columns);
-  std::int32_t helpPaneColumns(i18n::MessageCatalog const& textCatalog,
-                               TuiKeymapPlan const& keymapPlan,
-                               std::int32_t terminalColumns);
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog,
-                          TuiKeymapPlan const& keymapPlan,
-                          std::int32_t terminalColumns = 0);
+                          KeymapPlan const& keymapPlan,
+                          std::int32_t terminalColumns = 0,
+                          PanelMouseRegions* mouseRegions = nullptr,
+                          std::int32_t scrollRow = 0);
 } // namespace ao::tui

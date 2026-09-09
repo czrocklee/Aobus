@@ -11,12 +11,10 @@
 #include <functional>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 
 namespace ao::tui
 {
-  class ShellInteractionModel;
   inline constexpr std::size_t kInputCompletionResultLimit = 8;
 
   struct CommandCompletionContext final
@@ -29,7 +27,7 @@ namespace ao::tui
 
   std::optional<rt::CompletionResult> completeCommandDraft(i18n::MessageCatalog const& textCatalog,
                                                            std::string_view draft,
+                                                           std::size_t cursor,
                                                            CommandCompletionContext const& context,
                                                            std::size_t limit = kInputCompletionResultLimit);
-  std::string commandCompletionSuffix(ShellInteractionModel const& shell);
 } // namespace ao::tui

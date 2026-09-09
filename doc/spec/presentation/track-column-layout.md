@@ -33,7 +33,7 @@ It depends on runtime's stable track-field vocabulary but has no path or GTK dep
 GTK adapts the policy in `app/linux-gtk/track/TrackColumnController` and persists per-list state through `GtkLayoutStateStore`.
 WinUI adapts it in `app/windows-winui/track/TrackListController` and persists
 per-list state through `LibrarySession`.
-TUI adapts the same solver through `app/tui/TerminalTrackColumnLayout`, renders the result in `TrackTable`, and persists per-list canonical state through `TuiLayoutStateStore`. Its concrete widths are terminal cells rather than desktop pixels.
+TUI adapts the same solver through `app/tui/TerminalTrackColumnLayout`, renders the result in `TrackTable`, and persists per-list canonical state through `LayoutStateStore`. Its concrete widths are terminal cells rather than desktop pixels.
 
 ## Terminology
 
@@ -170,7 +170,7 @@ Persisted field order and visibility are merged with the active presentation bef
 - [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) owns explicit YAML mapping, versioned persistence conversion, and validation.
 - [`TrackColumnController.cpp`](../../../app/linux-gtk/track/TrackColumnController.cpp) adapts GTK viewport and drag events.
 - [`TrackListController.cpp`](../../../app/windows-winui/track/TrackListController.cpp) adapts WinUI headers, rows, viewport, reordering, and visibility.
-- [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) adapts shared state and the solver to terminal geometry; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) renders the projected result; [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns the TUI file boundary.
+- [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) adapts shared state and the solver to terminal geometry; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) renders the projected result; [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp) owns the TUI file boundary.
 
 ## Test map
 
@@ -180,7 +180,7 @@ Persisted field order and visibility are merged with the active presentation bef
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.
 - [`TrackColumnLayoutMergingTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp) protects stored visibility and presentation-field filtering.
 - [`TrackColumnControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnControllerTest.cpp) protects the GTK adapter.
-- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
+- [`TerminalTrackColumnLayoutTest.cpp`](../../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect terminal projection, rendering, commit/rollback gestures, and persistence.
 
 ## Related documents
 

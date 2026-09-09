@@ -3,332 +3,62 @@
 
 #include "ShellInteractionModel.h"
 
-#include "TuiKeymap.h"
-#include "TuiText.h"
+#include "Keymap.h"
+#include "ShellText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/utility/String.h>
-#include <ao/utility/UnicodeText.h>
 
 #include <ftxui/component/event.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace ao::tui
 {
-  namespace
+  void ShellInteractionModel::setNavigationEnabled(bool const enabled) noexcept
   {
-    constexpr auto kPrefixCommands = std::to_array<CommandPrefixSpec>({
-      {.prefix = "filter ",
-       .action = CommandAction::QuickFilter,
-       .detail = i18n::MessageId::TuiShellDetailQuickFilter,
-       .category = i18n::MessageId::TuiShellCategoryLibrary,
-       .optShortcutAction = TuiKeyAction::OpenQuickFilter},
-      {.prefix = "presentation ",
-       .action = CommandAction::SetPresentation,
-       .detail = i18n::MessageId::TuiShellDetailTrackView,
-       .category = i18n::MessageId::TuiShellCategoryView},
-      {.prefix = "preset ",
-       .action = CommandAction::SetPresentation,
-       .detail = i18n::MessageId::TuiShellDetailTrackView,
-       .category = i18n::MessageId::TuiShellCategoryView},
-      {.prefix = "view ",
-       .action = CommandAction::SetPresentation,
-       .detail = i18n::MessageId::TuiShellDetailTrackView,
-       .category = i18n::MessageId::TuiShellCategoryView,
-       .optShortcutAction = TuiKeyAction::TogglePresentations},
-    });
+    _navigationEnabled = enabled;
 
-    constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
-      {.alias = "lists",
-       .action = CommandAction::OpenLists,
-       .detail = i18n::MessageId::TuiShellDetailChooseList,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "l",
-       .action = CommandAction::OpenLists,
-       .detail = i18n::MessageId::TuiShellDetailChooseList,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "detail",
-       .action = CommandAction::OpenDetail,
-       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
-       .category = i18n::MessageId::TuiShellCategoryTrack},
-      {.alias = "details",
-       .action = CommandAction::OpenDetail,
-       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
-       .category = i18n::MessageId::TuiShellCategoryTrack},
-      {.alias = "d",
-       .action = CommandAction::OpenDetail,
-       .detail = i18n::MessageId::TuiShellDetailTrackDetail,
-       .category = i18n::MessageId::TuiShellCategoryTrack},
-      {.alias = "quality",
-       .action = CommandAction::OpenQuality,
-       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "audio",
-       .action = CommandAction::OpenQuality,
-       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "pipeline",
-       .action = CommandAction::OpenQuality,
-       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "a",
-       .action = CommandAction::OpenQuality,
-       .detail = i18n::MessageId::TuiShellDetailAudioPipeline,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "output",
-       .action = CommandAction::OpenOutputDevices,
-       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "outputs",
-       .action = CommandAction::OpenOutputDevices,
-       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "device",
-       .action = CommandAction::OpenOutputDevices,
-       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "devices",
-       .action = CommandAction::OpenOutputDevices,
-       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "o",
-       .action = CommandAction::OpenOutputDevices,
-       .detail = i18n::MessageId::TuiShellDetailOutputDevice,
-       .category = i18n::MessageId::TuiShellCategoryAudio},
-      {.alias = "views",
-       .action = CommandAction::OpenPresentationPanel,
-       .detail = i18n::MessageId::TuiShellDetailChooseView,
-       .category = i18n::MessageId::TuiShellCategoryView},
-      {.alias = "p",
-       .action = CommandAction::OpenPresentationPanel,
-       .detail = i18n::MessageId::TuiShellDetailChooseView,
-       .category = i18n::MessageId::TuiShellCategoryView},
-      {.alias = "notifications",
-       .action = CommandAction::OpenNotifications,
-       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
-       .category = i18n::MessageId::TuiShellCategoryStatus},
-      {.alias = "notification",
-       .action = CommandAction::OpenNotifications,
-       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
-       .category = i18n::MessageId::TuiShellCategoryStatus},
-      {.alias = "n",
-       .action = CommandAction::OpenNotifications,
-       .detail = i18n::MessageId::TuiShellDetailNotificationCenter,
-       .category = i18n::MessageId::TuiShellCategoryStatus},
-      {.alias = "close",
-       .action = CommandAction::CloseOverlay,
-       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "hide",
-       .action = CommandAction::CloseOverlay,
-       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "esc",
-       .action = CommandAction::CloseOverlay,
-       .detail = i18n::MessageId::TuiShellDetailCloseOverlay,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "help",
-       .action = CommandAction::ShowHelp,
-       .detail = i18n::MessageId::TuiShellDetailHelp,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "h",
-       .action = CommandAction::ShowHelp,
-       .detail = i18n::MessageId::TuiShellDetailHelp,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "?",
-       .action = CommandAction::ShowHelp,
-       .detail = i18n::MessageId::TuiShellDetailHelp,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "current",
-       .action = CommandAction::RevealCurrentTrack,
-       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "now",
-       .action = CommandAction::RevealCurrentTrack,
-       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "reveal",
-       .action = CommandAction::RevealCurrentTrack,
-       .detail = i18n::MessageId::TuiShellDetailNowPlaying,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "clear",
-       .action = CommandAction::ClearFilter,
-       .detail = i18n::MessageId::TuiShellDetailClearFilter,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "c",
-       .action = CommandAction::ClearFilter,
-       .detail = i18n::MessageId::TuiShellDetailClearFilter,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "reload",
-       .action = CommandAction::Reload,
-       .detail = i18n::MessageId::TuiShellDetailReloadList,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "refresh",
-       .action = CommandAction::Reload,
-       .detail = i18n::MessageId::TuiShellDetailReloadList,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "r",
-       .action = CommandAction::Reload,
-       .detail = i18n::MessageId::TuiShellDetailReloadList,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "scan",
-       .action = CommandAction::Scan,
-       .detail = i18n::MessageId::TuiShellDetailScan,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "rescan",
-       .action = CommandAction::Scan,
-       .detail = i18n::MessageId::TuiShellDetailScan,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "scan cancel",
-       .action = CommandAction::ScanCancel,
-       .detail = i18n::MessageId::TuiShellDetailScanCancel,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "select toggle",
-       .action = CommandAction::SelectToggle,
-       .detail = i18n::MessageId::TuiShellDetailSelectToggle,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "select visual",
-       .action = CommandAction::SelectVisual,
-       .detail = i18n::MessageId::TuiShellDetailSelectVisual,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "select all",
-       .action = CommandAction::SelectAll,
-       .detail = i18n::MessageId::TuiShellDetailSelectAll,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "select clear",
-       .action = CommandAction::SelectClear,
-       .detail = i18n::MessageId::TuiShellDetailSelectClear,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "settings",
-       .action = CommandAction::OpenSettings,
-       .detail = i18n::MessageId::TuiSettingsTitle,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "config",
-       .action = CommandAction::OpenSettings,
-       .detail = i18n::MessageId::TuiSettingsTitle,
-       .category = i18n::MessageId::TuiShellCategoryUi},
-      {.alias = "edit",
-       .action = CommandAction::EditProperties,
-       .detail = i18n::MessageId::TuiShellDetailEditProperties,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "properties",
-       .action = CommandAction::EditProperties,
-       .detail = i18n::MessageId::TuiShellDetailEditProperties,
-       .category = i18n::MessageId::TuiShellCategoryLibrary},
-      {.alias = "play",
-       .action = CommandAction::Play,
-       .detail = i18n::MessageId::TuiShellDetailPlay,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "pause",
-       .action = CommandAction::TogglePlayback,
-       .detail = i18n::MessageId::TuiShellDetailPause,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "toggle",
-       .action = CommandAction::TogglePlayback,
-       .detail = i18n::MessageId::TuiShellDetailTogglePlayback,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "space",
-       .action = CommandAction::TogglePlayback,
-       .detail = i18n::MessageId::TuiShellDetailTogglePlayback,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "stop",
-       .action = CommandAction::Stop,
-       .detail = i18n::MessageId::TuiShellDetailStop,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "s",
-       .action = CommandAction::Stop,
-       .detail = i18n::MessageId::TuiShellDetailStop,
-       .category = i18n::MessageId::TuiShellCategoryPlayback},
-      {.alias = "quit",
-       .action = CommandAction::Quit,
-       .detail = i18n::MessageId::TuiShellDetailQuit,
-       .category = i18n::MessageId::TuiShellCategoryApp},
-      {.alias = "q",
-       .action = CommandAction::Quit,
-       .detail = i18n::MessageId::TuiShellDetailQuit,
-       .category = i18n::MessageId::TuiShellCategoryApp},
-    });
-
-    struct CommandKeyAction final
+    if (!enabled)
     {
-      CommandAction command = CommandAction::Quit;
-      TuiKeyAction key = TuiKeyAction::Quit;
-    };
-
-    constexpr auto kCommandKeyActions = std::to_array<CommandKeyAction>({
-      {.command = CommandAction::OpenLists, .key = TuiKeyAction::ToggleListChooser},
-      {.command = CommandAction::OpenDetail, .key = TuiKeyAction::ToggleDetails},
-      {.command = CommandAction::OpenQuality, .key = TuiKeyAction::ToggleAudioPipeline},
-      {.command = CommandAction::OpenOutputDevices, .key = TuiKeyAction::ToggleOutputDevices},
-      {.command = CommandAction::OpenPresentationPanel, .key = TuiKeyAction::TogglePresentations},
-      {.command = CommandAction::OpenNotifications, .key = TuiKeyAction::ToggleNotifications},
-      {.command = CommandAction::ShowHelp, .key = TuiKeyAction::ShowHelp},
-      {.command = CommandAction::RevealCurrentTrack, .key = TuiKeyAction::RevealCurrentTrack},
-      {.command = CommandAction::ClearFilter, .key = TuiKeyAction::ClearFilter},
-      {.command = CommandAction::Reload, .key = TuiKeyAction::Reload},
-      {.command = CommandAction::Scan, .key = TuiKeyAction::Scan},
-      {.command = CommandAction::ScanCancel, .key = TuiKeyAction::ScanCancel},
-      {.command = CommandAction::SelectToggle, .key = TuiKeyAction::SelectToggle},
-      {.command = CommandAction::SelectVisual, .key = TuiKeyAction::SelectVisual},
-      {.command = CommandAction::SelectAll, .key = TuiKeyAction::SelectAll},
-      {.command = CommandAction::SelectClear, .key = TuiKeyAction::SelectClear},
-      {.command = CommandAction::OpenSettings, .key = TuiKeyAction::OpenSettings},
-      {.command = CommandAction::EditProperties, .key = TuiKeyAction::EditProperties},
-      {.command = CommandAction::Play, .key = TuiKeyAction::PlaySelection},
-      {.command = CommandAction::TogglePlayback, .key = TuiKeyAction::PlaybackPlayPause},
-      {.command = CommandAction::Stop, .key = TuiKeyAction::PlaybackStop},
-      {.command = CommandAction::Quit, .key = TuiKeyAction::Quit},
-    });
-
-    std::string lower(std::string value)
-    {
-      std::ranges::transform(value, value.begin(), utility::toAsciiLower);
-      return value;
+      focusTracks();
     }
-  } // namespace
-
-  std::span<CommandPrefixSpec const> commandPrefixSpecs()
-  {
-    return kPrefixCommands;
   }
 
-  std::span<CommandAliasSpec const> commandAliasSpecs()
+  void ShellInteractionModel::focusNavigation() noexcept
   {
-    return kAliasCommands;
+    _navigationEnabled = true;
+    _workspaceFocus = WorkspaceFocus::Lists;
   }
 
-  std::optional<TuiKeyAction> shortcutActionForCommand(CommandAction const action) noexcept
+  void ShellInteractionModel::toggleNavigation(bool const canDock) noexcept
   {
-    for (auto const& relation : kCommandKeyActions)
+    if (_navigationEnabled && (canDock || isNavigationFocused()))
     {
-      if (relation.command == action)
-      {
-        return relation.key;
-      }
+      setNavigationEnabled(false);
     }
-
-    return std::nullopt;
+    else
+    {
+      focusNavigation();
+    }
   }
 
-  std::optional<CommandAction> commandActionForKeyAction(TuiKeyAction const action) noexcept
+  void ShellInteractionModel::switchWorkspaceFocus(bool const canDock) noexcept
   {
-    for (auto const& relation : kCommandKeyActions)
+    if (isNavigationFocused())
     {
-      if (relation.key == action)
-      {
-        return relation.command;
-      }
+      focusTracks();
     }
-
-    return std::nullopt;
+    else if (_navigationEnabled && canDock)
+    {
+      focusNavigation();
+    }
   }
 
   bool isModalOverlay(Overlay const overlay) noexcept
@@ -337,7 +67,6 @@ namespace ao::tui
     {
       case Overlay::None:
       case Overlay::DetailPanel: return false;
-      case Overlay::ListChooser:
       case Overlay::QualityPanel:
       case Overlay::OutputDevices:
       case Overlay::PresentationPanel:
@@ -348,52 +77,11 @@ namespace ao::tui
     return true;
   }
 
-  std::optional<Command> parseCommand(std::string_view input)
-  {
-    auto value = utility::trim(input);
-
-    if (!value.empty() && value.front() == ':')
-    {
-      value.remove_prefix(1);
-      value = utility::trim(value);
-    }
-
-    if (value.empty())
-    {
-      return std::nullopt;
-    }
-
-    auto command = lower(std::string{value});
-
-    for (auto const& prefixCommand : kPrefixCommands)
-    {
-      if (command.starts_with(prefixCommand.prefix))
-      {
-        return Command{
-          .action = prefixCommand.action,
-          .argument = std::string{utility::trim(value.substr(prefixCommand.prefix.size()))},
-        };
-      }
-    }
-
-    // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
-    auto const aliasIt = std::ranges::find_if(
-      kAliasCommands, [&](CommandAliasSpec const& aliasCommand) { return command == aliasCommand.alias; });
-
-    if (aliasIt != kAliasCommands.end())
-    {
-      return Command{.action = aliasIt->action};
-    }
-
-    return std::nullopt;
-  }
-
   std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay const overlay)
   {
     switch (overlay)
     {
       case Overlay::None: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
-      case Overlay::ListChooser: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayLists);
       case Overlay::DetailPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayDetail);
       case Overlay::QualityPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayPipeline);
       case Overlay::OutputDevices: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayOutput);
@@ -406,21 +94,23 @@ namespace ao::tui
     return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
   }
 
-  std::string_view overlayToggleShortcut(TuiKeymapPlan const& keymapPlan, Overlay const overlay)
+  std::string_view overlayToggleShortcut(KeymapPlan const& keymapPlan, Overlay const overlay)
   {
-    static auto const kSelectionEvents = std::to_array({ftxui::Event::Return});
-    static auto const kNotificationEvents = std::to_array({ftxui::Event::Character("x")});
+    static auto const kSelectionEvents =
+      std::to_array({ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k")});
+    static auto const kSearchEvents = std::to_array(
+      {ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k"), ftxui::Event::Character("/")});
+    static auto const kScrollEvents = std::to_array({ftxui::Event::Character("j"), ftxui::Event::Character("k")});
+    static auto const kNotificationEvents =
+      std::to_array({ftxui::Event::Character("x"), ftxui::Event::Character("j"), ftxui::Event::Character("k")});
 
     switch (overlay)
     {
-      case Overlay::ListChooser: return keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser, kSelectionEvents);
-      case Overlay::DetailPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleDetails);
-      case Overlay::QualityPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleAudioPipeline);
-      case Overlay::OutputDevices: return keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices, kSelectionEvents);
-      case Overlay::PresentationPanel:
-        return keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations, kSelectionEvents);
-      case Overlay::Notifications:
-        return keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications, kNotificationEvents);
+      case Overlay::DetailPanel: return keymapPlan.shortcutFor(KeyAction::ToggleDetails);
+      case Overlay::QualityPanel: return keymapPlan.shortcutFor(KeyAction::ToggleAudioPipeline, kScrollEvents);
+      case Overlay::OutputDevices: return keymapPlan.shortcutFor(KeyAction::ToggleOutputDevices, kSelectionEvents);
+      case Overlay::PresentationPanel: return keymapPlan.shortcutFor(KeyAction::TogglePresentations, kSearchEvents);
+      case Overlay::Notifications: return keymapPlan.shortcutFor(KeyAction::ToggleNotifications, kNotificationEvents);
       case Overlay::None:
       case Overlay::Help: return {};
     }
@@ -428,32 +118,27 @@ namespace ao::tui
     return {};
   }
 
-  std::string overlayHint(i18n::MessageCatalog const& textCatalog,
-                          TuiKeymapPlan const& keymapPlan,
-                          Overlay const overlay)
+  std::string overlayHint(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan, Overlay const overlay)
   {
     switch (overlay)
     {
       case Overlay::None: return {};
-      case Overlay::ListChooser:
-        return tuiOverlayHint(
-          textCatalog, i18n::MessageId::TuiShellHintLists, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::DetailPanel:
-        return tuiOverlayHint(
+        return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintDetail, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::QualityPanel:
-        return tuiOverlayHint(
+        return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintPipeline, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::OutputDevices:
-        return tuiOverlayHint(
+        return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintOutput, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::PresentationPanel:
-        return tuiOverlayHint(
+        return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintViews, overlayToggleShortcut(keymapPlan, overlay));
       case Overlay::Notifications:
-        return tuiOverlayHint(
+        return overlayHintText(
           textCatalog, i18n::MessageId::TuiShellHintNotifications, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::Help: return tuiOverlayHint(textCatalog, i18n::MessageId::TuiShellHintHelp, {});
+      case Overlay::Help: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintHelp, {});
     }
 
     return {};
@@ -471,7 +156,72 @@ namespace ao::tui
 
   std::string const& ShellInteractionModel::inputDraft() const noexcept
   {
-    return _inputDraft;
+    return _input.value();
+  }
+
+  bool ShellInteractionModel::tryEditInput(ftxui::Event const& event)
+  {
+    if (!_input.tryApplyEvent(event))
+    {
+      return false;
+    }
+
+    _inputTouched = true;
+    _optHistoryIndex.reset();
+    return true;
+  }
+
+  bool ShellInteractionModel::tryMoveInputCursor(std::int32_t const column)
+  {
+    return _input.tryMoveToCell(column);
+  }
+
+  void ShellInteractionModel::rememberInput()
+  {
+    if (_input.empty())
+    {
+      return;
+    }
+
+    constexpr std::size_t kHistoryLimit = 50;
+    auto& entries = _inputMode == ShellInputMode::Command ? _commandHistory : _filterHistory;
+    std::erase(entries, _input.value());
+    entries.push_back(_input.value());
+
+    if (entries.size() > kHistoryLimit)
+    {
+      entries.erase(entries.begin());
+    }
+  }
+
+  bool ShellInteractionModel::tryMoveInputHistory(std::int32_t const delta)
+  {
+    auto const& entries = _inputMode == ShellInputMode::Command ? _commandHistory : _filterHistory;
+
+    if (entries.empty() || (delta >= 0 && !_optHistoryIndex))
+    {
+      return false;
+    }
+
+    if (!_optHistoryIndex)
+    {
+      _historyDraft = _input.value();
+      _optHistoryIndex = entries.size();
+    }
+
+    auto const next = std::clamp(
+      static_cast<std::int64_t>(*_optHistoryIndex) + delta, std::int64_t{0}, static_cast<std::int64_t>(entries.size()));
+
+    if (std::cmp_equal(next, *_optHistoryIndex))
+    {
+      return false;
+    }
+
+    _optHistoryIndex = static_cast<std::size_t>(next);
+    _input.reset(*_optHistoryIndex == entries.size() ? _historyDraft : entries[*_optHistoryIndex]);
+    _inputTouched = true;
+    clearCommandCompletion();
+    return true;
   }
 
   bool ShellInteractionModel::isInputTouched() const noexcept
@@ -494,105 +244,95 @@ namespace ao::tui
     return _overlay;
   }
 
+  void ShellInteractionModel::scrollOverlay(std::int32_t const delta, std::int32_t const lastRow)
+  {
+    _overlayScroll = static_cast<std::int32_t>(
+      std::clamp<std::int64_t>(static_cast<std::int64_t>(_overlayScroll) + delta, 0, std::max(0, lastRow)));
+  }
+
   void ShellInteractionModel::beginInput(ShellInputMode const mode, std::string draft)
   {
     _inputMode = mode;
-    _inputDraft = std::move(draft);
-    _inputTouched = !_inputDraft.empty();
+    _input.reset(std::move(draft));
+    _optHistoryIndex.reset();
+    _historyDraft.clear();
+    _inputTouched = !_input.empty();
     clearCommandCompletion();
   }
 
-  void ShellInteractionModel::appendInputText(std::string_view const text)
+  void ShellInteractionModel::insertInputText(std::string_view const text)
   {
-    if (text.empty())
+    if (_input.tryInsert(text))
     {
-      return;
+      _inputTouched = true;
+      _optHistoryIndex.reset();
     }
-
-    _inputDraft.append(text);
-    _inputTouched = true;
   }
 
   void ShellInteractionModel::backspaceInput()
   {
-    if (_inputDraft.empty())
+    if (_input.tryBackspace())
     {
-      return;
-    }
-
-    _inputTouched = true;
-    auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_inputDraft, _inputDraft.size());
-
-    if (boundaryRes)
-    {
-      _inputDraft.resize(*boundaryRes);
-      return;
-    }
-
-    // Terminal input is expected to be valid UTF-8. Preserve the former
-    // code-point fallback if an invalid byte sequence or ICU failure reaches
-    // this UI-only boundary so Backspace still makes progress.
-    constexpr unsigned int kUtf8ContinuationMask = 0xC0U;
-    constexpr unsigned int kUtf8ContinuationTag = 0x80U;
-
-    while (!_inputDraft.empty() &&
-           (static_cast<unsigned char>(_inputDraft.back()) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
-    {
-      _inputDraft.pop_back();
-    }
-
-    if (!_inputDraft.empty())
-    {
-      _inputDraft.pop_back();
+      _inputTouched = true;
+      _optHistoryIndex.reset();
     }
   }
 
   void ShellInteractionModel::closeInput()
   {
     _inputMode = ShellInputMode::None;
-    _inputDraft.clear();
+    _input.reset("");
     _inputTouched = false;
     clearCommandCompletion();
   }
 
   void ShellInteractionModel::setCommandCompletion(std::optional<rt::CompletionResult> optCompletion)
   {
+    _completionNavigated = false;
     _completion.set(std::move(optCompletion));
   }
 
   bool ShellInteractionModel::tryMoveCommandCompletion(std::int32_t const delta)
   {
+    _completionNavigated = true;
     return _completion.tryMoveSelection(delta);
   }
 
   bool ShellInteractionModel::tryMoveCommandCompletionByPage(std::int32_t const delta)
   {
+    _completionNavigated = true;
     return _completion.tryMoveSelectionByPage(delta);
   }
 
   bool ShellInteractionModel::tryApplyCommandCompletion()
   {
-    if (!_completion.tryApplyTo(_inputDraft))
+    if (!_completion.tryApplyTo(_input))
     {
       return false;
     }
 
     _inputTouched = true;
+    _optHistoryIndex.reset();
+    clearCommandCompletion();
     return true;
   }
 
   void ShellInteractionModel::clearCommandCompletion()
   {
+    _completionNavigated = false;
     _completion.clear();
   }
 
   void ShellInteractionModel::openOverlay(Overlay overlay) noexcept
   {
+    _listSearch.clear();
     _overlay = overlay;
+    _overlayScroll = 0;
   }
 
   void ShellInteractionModel::closeOverlay() noexcept
   {
+    _listSearch.clear();
     _overlay = Overlay::None;
   }
 } // namespace ao::tui

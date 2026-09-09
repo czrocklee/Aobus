@@ -81,7 +81,7 @@ namespace ao::tui
 
   std::int32_t outputDevicePanelColumns(i18n::MessageCatalog const& textCatalog,
                                         uimodel::OutputDeviceViewState const& view,
-                                        TuiKeymapPlan const& keymapPlan,
+                                        KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
     auto const title = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle);
@@ -121,9 +121,10 @@ namespace ao::tui
   ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
                                    uimodel::OutputDeviceViewState const& view,
                                    std::int32_t const selectedRow,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::vector<OutputDeviceRowHitRegion>* const rowHitRegions,
-                                   std::int32_t columns)
+                                   std::int32_t columns,
+                                   ftxui::Box* viewportBox)
   {
     using namespace ftxui;
 
@@ -192,7 +193,8 @@ namespace ao::tui
       SelectableListOptions{
         .focusRow = focusRow,
         .height = kOutputDeviceRows,
-        .emptyText = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)}}));
+        .emptyText = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)},
+        .viewportBox = viewportBox}));
     rows.push_back(separator());
     rows.push_back(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true));
     rows.push_back(outputText(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), footerTextColumns, true));

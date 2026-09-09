@@ -4,10 +4,10 @@
 #include "NotificationCenterPanel.h"
 
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "StatusBar.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -29,10 +29,10 @@ namespace ao::tui
 
   std::int32_t notificationCenterPanelColumns(i18n::MessageCatalog const& textCatalog,
                                               uimodel::ActivityStatusViewState const& state,
-                                              TuiKeymapPlan const& keymapPlan,
+                                              KeymapPlan const& keymapPlan,
                                               std::int32_t const terminalColumns)
   {
-    auto const footer = tuiNotificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications));
+    auto const footer = notificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications));
     auto contentColumns = std::max(cellWidth(overlayLabel(textCatalog, Overlay::Notifications)), cellWidth(footer));
 
     if (state.compact.kind != uimodel::ActivityStatusKind::Idle)
@@ -66,7 +66,7 @@ namespace ao::tui
 
   ftxui::Element notificationCenterPanel(i18n::MessageCatalog const& textCatalog,
                                          uimodel::ActivityStatusViewState const& state,
-                                         TuiKeymapPlan const& keymapPlan,
+                                         KeymapPlan const& keymapPlan,
                                          std::vector<NotificationDetailRowHitRegion>* const rowHitRegions,
                                          std::int32_t const columns)
   {
@@ -131,7 +131,7 @@ namespace ao::tui
 
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(
-      tuiNotificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications))));
+      notificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications))));
 
     return style::popupPanel(overlayLabel(textCatalog, Overlay::Notifications), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, panelColumns);

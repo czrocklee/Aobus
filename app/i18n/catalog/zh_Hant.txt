@@ -3,6 +3,12 @@
 
 zh_Hant:table {
   messages:table {
+    tui_workspace_back { "返回上一個檢視" }
+    tui_workspace_forward { "前進到下一個檢視" }
+    tui_workspace_history_unavailable { "沒有可切換的歷史檢視。" }
+    tui_settings_keyboard_scope { "工作區快捷鍵。編輯器和選擇面板使用各自的按鍵。" }
+    tui_playback_modes { "隨機播放：{shuffle, select, on {開} other {關}} · 循環：{repeat, select, one {單曲} all {全部} other {關}}" }
+
     tui_settings_save_failed { "無法儲存設定。{detail}" }
     tui_settings_load_failed { "無法讀取已儲存的偏好設定，已使用預設值。{detail}" }
     tui_settings_title { "設定" }
@@ -19,7 +25,7 @@ zh_Hant:table {
     tui_settings_mouse { "滑鼠操作" }
     tui_settings_wheel { "滾輪移動步長" }
     tui_settings_seek { "鍵盤快轉步長" }
-    tui_settings_volume { "鍵盤音量步長" }
+    tui_settings_volume { "音量步長" }
     tui_settings_hover { "懸停顯示音訊詳情" }
     tui_settings_on { "開啟" }
     tui_settings_off { "關閉" }
@@ -442,6 +448,15 @@ zh_Hant:table {
     gtk_presentation_copy_label { "{label} 複本" }
     tui_shell_command_palette_title { "命令面板" }
     tui_shell_command_palette_no_matches { "無匹配項" }
+    tui_input_history_hint { "Ctrl+P/N 歷史" }
+    tui_navigation_focus { "切換清單與曲目焦點" }
+    tui_navigation_return { "{key} 返回曲目" }
+    tui_navigation_keys { "↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · Esc 返回曲目" }
+    tui_layout_save_failed { "無法儲存工作區配置：{detail}" }
+    tui_navigation_open_failed { "無法開啟清單：{detail}" }
+    tui_navigation_sync_failed { "無法顯示目前清單：{detail}" }
+    tui_list_search_hint { "/ 搜尋 · Esc 清除" }
+    tui_list_search_empty { "無符合項目" }
     tui_shell_command_palette_footer { "{completeKey} 補全  {runKey} 執行  {cancelKey} 取消" }
     tui_shell_quick_filter_title { "快速篩選" }
     tui_shell_quick_filter_footer { "{acceptKey} 接受  {completeKey} 補全  {keepKey} 保留輸入" }
@@ -455,7 +470,6 @@ zh_Hant:table {
     tui_shell_overlay_views { "檢視" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "說明" }
-    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{openKey} 開啟  {closeKey} 關閉" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{selectKey} 選取  {closeKey} 關閉" }
@@ -530,16 +544,24 @@ zh_Hant:table {
     tui_library_no_sections { "此檢視中無分節" }
     tui_library_no_section_selected { "未選取分節" }
     tui_library_no_current_track { "沒有目前曲目" }
-    tui_library_current_track_not_in_view { "目前曲目不在此檢視中" }
+    tui_library_current_track_not_in_view { "無法在音樂庫中定位目前曲目" }
     tui_library_no_active_track_view { "無活動曲目檢視" }
     tui_library_no_views_available { "無可用檢視" }
-    tui_library_no_lists_available { "無可用列表" }
     tui_library_filter_cleared { "篩選已清除" }
     tui_library_filter_applied { "篩選已套用" }
-    tui_library_no_tracks_found { "找不到曲目。請先在此音樂庫執行 `aobus init`。" }
+    tui_library_empty_scan { "尚無已索引的曲目。執行 {command} 掃描此音樂庫。" }
+    tui_library_filter_empty { "沒有曲目符合此篩選條件。請修改或清除篩選。" }
+    tui_library_filter_invalid { "無法套用篩選條件。請修改或清除篩選。" }
+    tui_quick_filter_no_suggestions { "無補全建議，仍可使用輸入的文字。" }
+    tui_quick_filter_literal_footer { "{acceptKey} 套用文字  {keepKey} 保留文字" }
+    tui_quick_filter_empty_footer { "{acceptKey} 清除篩選  {keepKey} 保留篩選" }
+    tui_status_keep_marks { "保留標記" }
+    tui_status_cancel_range { "取消範圍" }
+    tui_status_play { "播放" }
+    tui_status_clear { "清除" }
+    tui_library_no_tracks_found { "此列表中沒有曲目。可選擇其他列表瀏覽。" }
     tui_library_marked_count { "{count, plural, other {已標記 # 首}}" }
     tui_library_visual_mode { "可視選擇" }
-    tui_library_no_lists_found { "未找到列表" }
     tui_library_ready { "就緒" }
     tui_library_scan_already_running { "音樂庫掃描已在進行中" }
     tui_library_scan_cancelling { "正在取消掃描" }
@@ -968,8 +990,6 @@ zh_Hant:table {
     gtk_layout_value_center { "居中" }
     tui_untitled_section { "無標題分節" }
     tui_notification_none { "無通知" }
-    tui_lists_closed { "列表已關閉" }
-    tui_lists_opened { "列表" }
     tui_detail_closed { "詳情已關閉" }
     tui_detail_opened { "詳情面板" }
     tui_pipeline_closed { "音訊鏈路已關閉" }

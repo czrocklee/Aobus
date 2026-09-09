@@ -5,12 +5,20 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
+#include <ftxui/component/event.hpp>
+#include <ftxui/screen/box.hpp>
+
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace ao::tui
 {
+  std::int32_t navigationPageRows(ftxui::Box const& viewport);
+  std::optional<std::int32_t> listNavigationDelta(ftxui::Event const& event,
+                                                  std::int32_t pageRows,
+                                                  bool vimKeys = false);
   std::string selectionSummary(i18n::MessageCatalog const& textCatalog,
                                std::size_t trackCount,
                                std::int32_t selectedIndex,

@@ -42,6 +42,7 @@ namespace ao::tui
     bool scrollIndicator = true;
     bool flex = false;
     bool centerEmpty = false;
+    ftxui::Box* viewportBox = nullptr;
   };
 
   ftxui::Element selectableList(std::vector<SelectableListRow> rows, SelectableListOptions options = {});

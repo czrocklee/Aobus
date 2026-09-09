@@ -1,5 +1,6 @@
 add_library(aobus-tui-lib STATIC
     AnchoredOverlay.cpp
+    Command.cpp
     CommandCompletion.cpp
     CommandPalettePanel.cpp
     CommandCompletionState.cpp
@@ -7,8 +8,13 @@ add_library(aobus-tui-lib STATIC
     Executor.cpp
     ExitController.cpp
     FrameTimer.cpp
+    ListSearch.cpp
+    ListNavigationModel.cpp
+    NavigationPanel.cpp
+    NavigationEvents.cpp
     LibraryController.cpp
     LibraryScanController.cpp
+    MouseBindings.cpp
     NotificationCenterPanel.cpp
     OutputDeviceController.cpp
     OutputDevicePanel.cpp
@@ -21,22 +27,24 @@ add_library(aobus-tui-lib STATIC
     Style.cpp
     TerminalTrackColumnLayout.cpp
     TrackEditController.cpp
+    TrackMetadataEditor.cpp
+    TrackTagEditor.cpp
     TrackPropertiesEditor.cpp
     TrackTable.cpp
-    TuiHitRegions.cpp
-    LibraryNavigation.cpp
+    HitRegions.cpp
     PlaybackStatusFormatter.cpp
     SelectionNavigation.cpp
     TrackDetailLines.cpp
     TrackListEntry.cpp
     TrackPresentationNavigation.cpp
     TrackSection.cpp
-    TuiPreferences.cpp
+    Preferences.cpp
     SettingsEditor.cpp
-    TuiLayoutStateStore.cpp
-    TuiKeymap.cpp
-    TuiText.cpp
-    TuiTextFieldModel.cpp
+    LayoutStateStore.cpp
+    Keymap.cpp
+    ShellText.cpp
+    TextField.cpp
+    TextFieldModel.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp
