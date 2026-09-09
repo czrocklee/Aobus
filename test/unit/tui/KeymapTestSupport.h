@@ -5,10 +5,10 @@
 
 namespace ao::tui
 {
-  class TuiKeymapPlan;
+  class KeymapPlan;
 
   namespace test
   {
-    TuiKeymapPlan const& defaultTuiKeymapPlan();
+    KeymapPlan const& defaultKeymapPlan();
   } // namespace test
 } // namespace ao::tui

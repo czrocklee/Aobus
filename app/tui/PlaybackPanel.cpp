@@ -5,9 +5,9 @@
 
 #include "OutputDevicePanel.h"
 #include "PlaybackStatusFormatter.h"
+#include "ShellText.h"
 #include "SoulButton.h"
 #include "Style.h"
-#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>

@@ -350,11 +350,11 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, rendering, and the one TUI layout-state writer.
-- [`TerminalTrackColumnLayout`](../../app/tui/TerminalTrackColumnLayout.h) adapts shared column semantics to terminal cells; [`TuiLayoutStateStore`](../../app/tui/TuiLayoutStateStore.h) owns the TUI per-library presentation-file boundary.
+- [`TerminalTrackColumnLayout`](../../app/tui/TerminalTrackColumnLayout.h) adapts shared column semantics to terminal cells; [`LayoutStateStore`](../../app/tui/LayoutStateStore.h) owns the TUI per-library presentation-file boundary.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
 - [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`MessageCatalog`](../../app/include/ao/i18n/MessageCatalog.h), its [`ICU implementation`](../../app/i18n/MessageCatalog.cpp), and the canonical [`catalog assets`](../../app/i18n/catalog/root.txt) define the interactive localization leaf.
-- [`GtkText.h`](../../app/linux-gtk/i18n/GtkText.h) and [`TuiText.h`](../../app/tui/TuiText.h) keep frontend-local formatted helpers; [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) defines the native projection boundary. There is no separate frontend message-id space.
+- [`GtkText.h`](../../app/linux-gtk/i18n/GtkText.h) and [`ShellText.h`](../../app/tui/ShellText.h) keep frontend-local formatted helpers; [`WinUiResourceProjection`](../../app/i18n/WinUiResourceProjection.h) defines the native projection boundary. There is no separate frontend message-id space.
 - [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) composes UIModel organization, dependency, and platform-vocabulary constraints into the application audit.
 
 ## Test map
@@ -377,7 +377,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
 - [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.
 - [`LayoutRuntimeBuildTest.cpp`](../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp) protects the UIModel-layout to GTK-widget boundary.
-- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp), [`TerminalTrackColumnLayoutTest.cpp`](../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`TuiLayoutStateStoreTest.cpp`](../../test/unit/tui/TuiLayoutStateStoreTest.cpp), and [`TuiHitRegionsTest.cpp`](../../test/unit/tui/TuiHitRegionsTest.cpp) protect TUI runtime adaptation, terminal-cell projection, per-library persistence, and terminal-only policy.
+- [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp), [`TerminalTrackColumnLayoutTest.cpp`](../../test/unit/tui/TerminalTrackColumnLayoutTest.cpp), [`LayoutStateStoreTest.cpp`](../../test/unit/tui/LayoutStateStoreTest.cpp), and [`HitRegionsTest.cpp`](../../test/unit/tui/HitRegionsTest.cpp) protect TUI runtime adaptation, terminal-cell projection, per-library persistence, and terminal-only policy.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects non-interactive runtime adaptation.
 
 ## Related documents

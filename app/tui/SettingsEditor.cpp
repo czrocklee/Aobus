@@ -3,12 +3,12 @@
 
 #include "SettingsEditor.h"
 
+#include "Command.h"
 #include "CoverArt.h"
-#include "ShellInteractionModel.h"
+#include "Keymap.h"
+#include "Preferences.h"
 #include "Style.h"
 #include "TextCell.h"
-#include "TuiKeymap.h"
-#include "TuiPreferences.h"
 #include <ao/compat/Enumerate.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
@@ -100,7 +100,7 @@ namespace ao::tui
   } // namespace
 
   SettingsEditor::SettingsEditor(i18n::MessageCatalog const& textCatalog,
-                                 TuiPreferences const& preferences,
+                                 Preferences const& preferences,
                                  uimodel::KeymapModel const& keymap,
                                  Outputs outputs)
     : _textCatalog{textCatalog}, _preferences{preferences}, _keymap{keymap}, _outputs{std::move(outputs)}
@@ -265,7 +265,7 @@ namespace ao::tui
       case SettingsPage::General: return 1;
       case SettingsPage::Appearance: return kAppearanceLabels.size();
       case SettingsPage::Interaction: return kInteractionLabels.size();
-      case SettingsPage::Keyboard: return tuiActionDescriptors().size();
+      case SettingsPage::Keyboard: return actionDescriptors().size();
     }
 
     return 0;
@@ -329,7 +329,7 @@ namespace ao::tui
     }
   }
 
-  void SettingsEditor::applyPreferences(TuiPreferences candidate)
+  void SettingsEditor::applyPreferences(Preferences candidate)
   {
     if (auto const res = _outputs.applyPreferences(candidate); !res)
     {
@@ -346,7 +346,7 @@ namespace ao::tui
 
   void SettingsEditor::applyKeymap(uimodel::KeymapModel candidate)
   {
-    auto const chords = candidate.chordsFor(tuiActionDescriptors()[_row].actionId);
+    auto const chords = candidate.chordsFor(actionDescriptors()[_row].actionId);
     _chord = std::min(_chord, chords.empty() ? std::size_t{0} : chords.size() - 1);
 
     if (auto const res = _outputs.applyKeymap(candidate); !res)
@@ -472,7 +472,7 @@ namespace ao::tui
       return;
     }
 
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
     auto const chords = _keymap.chordsFor(action.actionId);
     auto candidate = _keymap;
 
@@ -482,11 +482,11 @@ namespace ao::tui
     }
 
     // Terminal aliases for one action represent a single physical binding.
-    auto const optEvent = tuiEventForChord(*optChord);
+    auto const optEvent = eventForChord(*optChord);
 
     for (auto const& existing : candidate.chordsFor(action.actionId))
     {
-      if (optEvent && tuiEventForChord(existing) == optEvent)
+      if (optEvent && eventForChord(existing) == optEvent)
       {
         std::ignore = candidate.tryUnbind(action.actionId, existing);
       }
@@ -498,9 +498,9 @@ namespace ao::tui
 
   void SettingsEditor::submitKeymap(uimodel::KeymapModel candidate)
   {
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
 
-    if (auto const res = validateTuiActionBindings(candidate, action.actionId); !res)
+    if (auto const res = validateActionBindings(candidate, action.actionId); !res)
     {
       auto const message =
         res.error().code == Error::Code::Conflict ? MessageId::TuiSettingsConflict : MessageId::TuiSettingsUnsupported;
@@ -508,8 +508,8 @@ namespace ao::tui
 
       if (res.error().code == Error::Code::Conflict)
       {
-        auto const descriptors = tuiActionDescriptors();
-        auto const it = std::ranges::find(descriptors, detail, &TuiActionDescriptor::actionId);
+        auto const descriptors = actionDescriptors();
+        auto const it = std::ranges::find(descriptors, detail, &ActionDescriptor::actionId);
 
         if (it != descriptors.end())
         {
@@ -533,7 +533,7 @@ namespace ao::tui
       return;
     }
 
-    auto const& action = tuiActionDescriptors()[_row];
+    auto const& action = actionDescriptors()[_row];
     auto const chords = _keymap.chordsFor(action.actionId);
     _chord = std::min(_chord, chords.empty() ? std::size_t{0} : chords.size() - 1);
 
@@ -565,7 +565,7 @@ namespace ao::tui
 
   std::string SettingsEditor::actionLabel(std::size_t const index) const
   {
-    auto const& descriptor = tuiActionDescriptors()[index];
+    auto const& descriptor = actionDescriptors()[index];
 
     if (auto const optCommand = commandActionForKeyAction(descriptor.action); optCommand)
     {
@@ -580,24 +580,24 @@ namespace ao::tui
 
     switch (descriptor.action)
     {
-      case TuiKeyAction::OpenQuickFilter:
+      case KeyAction::OpenQuickFilter:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiShellDetailQuickFilter)};
-      case TuiKeyAction::OpenCommandPalette:
+      case KeyAction::OpenCommandPalette:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPalette)};
-      case TuiKeyAction::PreviousTrack:
+      case KeyAction::PreviousTrack:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPreviousRow)};
-      case TuiKeyAction::NextTrack: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextRow)};
-      case TuiKeyAction::PreviousSection:
+      case KeyAction::NextTrack: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextRow)};
+      case KeyAction::PreviousSection:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsPreviousGroup)};
-      case TuiKeyAction::NextSection:
+      case KeyAction::NextSection:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsNextGroup)};
-      case TuiKeyAction::SeekBackward:
+      case KeyAction::SeekBackward:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsSeekBack)};
-      case TuiKeyAction::SeekForward:
+      case KeyAction::SeekForward:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsSeekForward)};
-      case TuiKeyAction::VolumeDown:
+      case KeyAction::VolumeDown:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeDown)};
-      case TuiKeyAction::VolumeUp: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeUp)};
+      case KeyAction::VolumeUp: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsVolumeUp)};
       default: return descriptor.actionId;
     }
   }
@@ -672,7 +672,7 @@ namespace ao::tui
     {
       auto value = actionLabel(index) + "  ";
       auto const& keymap = _optKeymapCandidate ? *_optKeymapCandidate : _keymap;
-      auto const chords = keymap.chordsFor(tuiActionDescriptors()[index].actionId);
+      auto const chords = keymap.chordsFor(actionDescriptors()[index].actionId);
 
       if (chords.empty())
       {
@@ -764,10 +764,10 @@ namespace ao::tui
 
     if (_page == SettingsPage::Keyboard)
     {
-      auto const id = tuiActionDescriptors()[_row].actionId;
+      auto const id = actionDescriptors()[_row].actionId;
       rows.push_back(text(id) | dim);
 
-      if (auto const res = validateTuiActionBindings(_keymap, id); !res)
+      if (auto const res = validateActionBindings(_keymap, id); !res)
       {
         rows.push_back(paragraph(i18n::requiredFormat(
                          _textCatalog, MessageId::TuiSettingsStoredIssue, {{"detail", res.error().message}})) |

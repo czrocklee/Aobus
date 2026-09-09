@@ -4,9 +4,9 @@
 #include "StatusBar.h"
 
 #include "CommandCompletion.h"
+#include "Keymap.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
-#include "TuiKeymap.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -27,11 +27,11 @@ namespace ao::tui
   {
     ftxui::Element workspaceEntryPoints(i18n::MessageCatalog const& textCatalog,
                                         StatusBarViewState const& state,
-                                        TuiKeymapPlan const& keymapPlan)
+                                        KeymapPlan const& keymapPlan)
     {
       using namespace ftxui;
 
-      auto settingsPtr = style::shortcutChip(keymapPlan.shortcutFor(TuiKeyAction::OpenSettings),
+      auto settingsPtr = style::shortcutChip(keymapPlan.shortcutFor(KeyAction::OpenSettings),
                                              i18n::requiredText(textCatalog, i18n::MessageId::TuiSettingsTitle));
 
       if (state.settingsHovered)
@@ -45,7 +45,7 @@ namespace ao::tui
       }
 
       auto entryPoints = Elements{std::move(settingsPtr)};
-      auto const helpShortcut = keymapPlan.shortcutFor(TuiKeyAction::ShowHelp);
+      auto const helpShortcut = keymapPlan.shortcutFor(KeyAction::ShowHelp);
 
       if (!helpShortcut.empty())
       {
@@ -149,7 +149,7 @@ namespace ao::tui
 
   ftxui::Element statusBar(i18n::MessageCatalog const& textCatalog,
                            StatusBarViewState const& state,
-                           TuiKeymapPlan const& keymapPlan)
+                           KeymapPlan const& keymapPlan)
   {
     using namespace ftxui;
 
@@ -182,11 +182,11 @@ namespace ao::tui
         parts.push_back(style::shortcutChip(key, label));
       };
 
-      auto appendActionChip = [&](TuiKeyAction const action, std::string_view const label)
+      auto appendActionChip = [&](KeyAction const action, std::string_view const label)
       { appendChip(keymapPlan.shortcutFor(action), label); };
 
       auto const filterLabel = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellFilterLabel);
-      auto const filterShortcut = keymapPlan.shortcutFor(TuiKeyAction::OpenQuickFilter);
+      auto const filterShortcut = keymapPlan.shortcutFor(KeyAction::OpenQuickFilter);
 
       if (state.filterDraft.empty())
       {
@@ -202,20 +202,20 @@ namespace ao::tui
       if (!state.filterDraft.empty())
       {
         appendActionChip(
-          TuiKeyAction::ClearFilter, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusClearFilter));
+          KeyAction::ClearFilter, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusClearFilter));
       }
 
       appendActionChip(
-        TuiKeyAction::OpenCommandPalette, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
+        KeyAction::OpenCommandPalette, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
 
       if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
       {
         appendActionChip(
-          TuiKeyAction::ToggleListChooser, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
+          KeyAction::ToggleListChooser, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
         appendActionChip(
-          TuiKeyAction::TogglePresentations, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
+          KeyAction::TogglePresentations, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
         appendActionChip(
-          TuiKeyAction::ToggleDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
+          KeyAction::ToggleDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
       }
 
       return hbox(std::move(parts));

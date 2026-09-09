@@ -3,10 +3,10 @@
 
 #include "tui/SettingsEditor.h"
 
-#include "TuiPreferences.h"
+#include "Preferences.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "tui/TuiKeymap.h"
+#include "tui/Keymap.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
@@ -32,14 +32,14 @@ namespace ao::tui::test
     struct SettingsFixture final
     {
       i18n::MessageCatalog catalog{ao::test::englishMessageCatalog()};
-      TuiPreferences preferences;
-      uimodel::KeymapModel keymap{tuiDefaultKeymap()};
+      Preferences preferences;
+      uimodel::KeymapModel keymap{defaultKeymap()};
       bool fail = false;
       SettingsEditor editor{
         catalog,
         preferences,
         keymap,
-        SettingsEditor::Outputs{.applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+        SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
                                 {
                                   if (fail)
                                   {

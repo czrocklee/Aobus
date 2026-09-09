@@ -21,7 +21,7 @@ namespace ao::tui
   inline constexpr std::int32_t kDefaultSeekSeconds = 5;
   inline constexpr std::int32_t kDefaultVolumePercent = 5;
 
-  struct TuiPreferences final
+  struct Preferences final
   {
     // Empty means follow the system, rather than pinning its current locale.
     std::string language{};
@@ -34,9 +34,9 @@ namespace ao::tui
     std::int32_t seekSeconds = kDefaultSeekSeconds;
     std::int32_t volumePercent = kDefaultVolumePercent;
 
-    bool operator==(TuiPreferences const&) const = default;
+    bool operator==(Preferences const&) const = default;
   };
 
-  Result<TuiPreferences> loadTuiPreferences(rt::ConfigStore& store);
-  Result<> saveTuiPreferences(rt::ConfigStore& store, TuiPreferences const& preferences);
+  Result<Preferences> loadPreferences(rt::ConfigStore& store);
+  Result<> savePreferences(rt::ConfigStore& store, Preferences const& preferences);
 } // namespace ao::tui

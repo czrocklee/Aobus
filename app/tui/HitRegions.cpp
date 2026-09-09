@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "TuiHitRegions.h"
+#include "HitRegions.h"
 
 #include <ftxui/screen/box.hpp>
 
@@ -20,7 +20,7 @@ namespace ao::tui
     return hasHitArea(box) && column >= box.x_min && column <= box.x_max && row >= box.y_min && row <= box.y_max;
   }
 
-  void TuiHitRegions::clearFrameLocalRows()
+  void HitRegions::clearFrameLocalRows()
   {
     outputDeviceRows.clear();
     presentationRows.clear();
@@ -29,9 +29,9 @@ namespace ao::tui
     trackSectionRows.clear();
   }
 
-  ButtonHitTestResult TuiHitRegions::hitTestButton(std::int32_t const column,
-                                                   std::int32_t const row,
-                                                   HitTestContext const context) const
+  ButtonHitTestResult HitRegions::hitTestButton(std::int32_t const column,
+                                                std::int32_t const row,
+                                                HitTestContext const context) const
   {
     if (context.isTextInputActive)
     {

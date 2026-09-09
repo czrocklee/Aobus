@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "tui/TuiPreferences.h"
+#include "tui/Preferences.h"
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/i18n/MessageCatalog.h>
@@ -18,7 +18,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TuiPreferences - rejects malformed and unsupported saved values without rewriting them",
+  TEST_CASE("Preferences - rejects malformed and unsupported saved values without rewriting them",
             "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
@@ -37,66 +37,65 @@ namespace ao::tui::test
       INFO(document);
       std::ofstream{path} << document;
       auto store = rt::ConfigStore{path};
-      CHECK_FALSE(loadTuiPreferences(store));
+      CHECK_FALSE(loadPreferences(store));
       CHECK(ao::test::readFile(path) == document);
     }
   }
 
-  TEST_CASE("TuiPreferences - missing groups use defaults and valid numeric boundaries round trip",
-            "[tui][unit][config]")
+  TEST_CASE("Preferences - missing groups use defaults and valid numeric boundaries round trip", "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
     auto store = rt::ConfigStore{path};
-    auto loadedRes = loadTuiPreferences(store);
+    auto loadedRes = loadPreferences(store);
     REQUIRE(loadedRes);
-    CHECK(*loadedRes == TuiPreferences{});
+    CHECK(*loadedRes == Preferences{});
 
-    for (auto const& preferences : {TuiPreferences{.wheelStep = 1, .seekSeconds = 1, .volumePercent = 1},
-                                    TuiPreferences{.wheelStep = 10, .seekSeconds = 60, .volumePercent = 10}})
+    for (auto const& preferences : {Preferences{.wheelStep = 1, .seekSeconds = 1, .volumePercent = 1},
+                                    Preferences{.wheelStep = 10, .seekSeconds = 60, .volumePercent = 10}})
     {
-      REQUIRE(saveTuiPreferences(store, preferences));
+      REQUIRE(savePreferences(store, preferences));
       auto reopened = rt::ConfigStore{path};
-      auto rereadRes = loadTuiPreferences(reopened);
+      auto rereadRes = loadPreferences(reopened);
       REQUIRE(rereadRes);
       CHECK(*rereadRes == preferences);
     }
   }
 
-  TEST_CASE("TuiPreferences - round trips language and preserves sibling keymap writes", "[tui][unit][config]")
+  TEST_CASE("Preferences - round trips language and preserves sibling keymap writes", "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
     std::ofstream{path} << "foreign:\n  retained: yes\n";
     auto store = rt::ConfigStore{path};
-    auto preferences = TuiPreferences{.language = "zh-Hant",
-                                      .coverArtMode = "blocks",
-                                      .dimBackdrop = false,
-                                      .reducedMotion = true,
-                                      .mouseEnabled = false,
-                                      .qualityHover = false,
-                                      .wheelStep = 7,
-                                      .seekSeconds = 30,
-                                      .volumePercent = 1};
-    REQUIRE(saveTuiPreferences(store, preferences));
+    auto preferences = Preferences{.language = "zh-Hant",
+                                   .coverArtMode = "blocks",
+                                   .dimBackdrop = false,
+                                   .reducedMotion = true,
+                                   .mouseEnabled = false,
+                                   .qualityHover = false,
+                                   .wheelStep = 7,
+                                   .seekSeconds = 30,
+                                   .volumePercent = 1};
+    REQUIRE(savePreferences(store, preferences));
     auto keymap = uimodel::KeymapModel{uimodel::defaultKeymap()};
     REQUIRE(keymap.tryBind("foreign.action", *uimodel::KeyChord::parse("F12")));
     REQUIRE(uimodel::saveKeymap(store, keymap));
     auto reopened = rt::ConfigStore{path};
-    auto loadedRes = loadTuiPreferences(reopened);
+    auto loadedRes = loadPreferences(reopened);
     REQUIRE(loadedRes);
     CHECK(*loadedRes == preferences);
     CHECK(ao::test::readFile(path).contains("retained: yes"));
     preferences.language.clear();
-    REQUIRE(saveTuiPreferences(reopened, preferences));
+    REQUIRE(savePreferences(reopened, preferences));
     CHECK(uimodel::loadKeymap(reopened, uimodel::defaultKeymap()).chordsFor("foreign.action") ==
           keymap.chordsFor("foreign.action"));
-    auto systemRes = loadTuiPreferences(reopened);
+    auto systemRes = loadPreferences(reopened);
     REQUIRE(systemRes);
     CHECK(systemRes->language.empty());
   }
 
-  TEST_CASE("TuiPreferences - accepts every selectable catalog locale and excludes pseudo", "[tui][unit][config]")
+  TEST_CASE("Preferences - accepts every selectable catalog locale and excludes pseudo", "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
@@ -105,33 +104,33 @@ namespace ao::tui::test
     for (auto const& locale : i18n::availableCatalogLocales())
     {
       INFO(locale.tag);
-      auto preferences = TuiPreferences{.language = std::string{locale.tag}};
-      REQUIRE(saveTuiPreferences(store, preferences));
+      auto preferences = Preferences{.language = std::string{locale.tag}};
+      REQUIRE(savePreferences(store, preferences));
       auto reopened = rt::ConfigStore{path};
-      auto loadedRes = loadTuiPreferences(reopened);
+      auto loadedRes = loadPreferences(reopened);
       REQUIRE(loadedRes);
       CHECK(loadedRes->language == locale.tag);
     }
 
     auto const original = ao::test::readFile(path);
-    CHECK_FALSE(saveTuiPreferences(store, TuiPreferences{.language = "qps-ploc"}));
+    CHECK_FALSE(savePreferences(store, Preferences{.language = "qps-ploc"}));
     CHECK(ao::test::readFile(path) == original);
   }
 
-  TEST_CASE("TuiPreferences - rejects invalid values without replacing the saved document", "[tui][unit][config]")
+  TEST_CASE("Preferences - rejects invalid values without replacing the saved document", "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
     auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
     auto store = rt::ConfigStore{path};
-    REQUIRE(saveTuiPreferences(store, TuiPreferences{}));
+    REQUIRE(savePreferences(store, Preferences{}));
     auto const original = ao::test::readFile(path);
-    auto candidate = TuiPreferences{.language = "en_US!"};
-    CHECK_FALSE(saveTuiPreferences(store, candidate));
+    auto candidate = Preferences{.language = "en_US!"};
+    CHECK_FALSE(savePreferences(store, candidate));
     candidate.language.clear();
     candidate.wheelStep = 0;
-    CHECK_FALSE(saveTuiPreferences(store, candidate));
+    CHECK_FALSE(savePreferences(store, candidate));
     CHECK(ao::test::readFile(path) == original);
     auto noLocation = rt::ConfigStore{rt::ConfigStore::NoLocation{}};
-    CHECK_FALSE(saveTuiPreferences(noLocation, TuiPreferences{}));
+    CHECK_FALSE(savePreferences(noLocation, Preferences{}));
   }
 } // namespace ao::tui::test

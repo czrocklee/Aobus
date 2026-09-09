@@ -27,16 +27,16 @@ namespace ao::uimodel
 
 namespace ao::tui
 {
-  class TuiKeymapPlan;
+  class KeymapPlan;
 
   uimodel::AobusSoulRgb qualityIndicatorColor(uimodel::AudioQualityCategory category);
 
   std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::int32_t terminalColumns);
   ftxui::Element qualityPanel(i18n::MessageCatalog const& textCatalog,
                               rt::PlaybackTransportSnapshot const& state,
-                              TuiKeymapPlan const& keymapPlan,
+                              KeymapPlan const& keymapPlan,
                               std::int32_t columns = 0);
 } // namespace ao::tui

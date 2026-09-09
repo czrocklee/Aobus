@@ -5,10 +5,10 @@
 
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TrackPresentationNavigation.h"
-#include "TuiText.h"
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -46,10 +46,10 @@ namespace ao::tui
   std::int32_t presentationPanelColumns(i18n::MessageCatalog const& textCatalog,
                                         std::vector<TrackPresentationNavEntry> const& items,
                                         std::string_view const activePresentationId,
-                                        TuiKeymapPlan const& keymapPlan,
+                                        KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(cellWidth(tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
+    auto contentColumns = std::max(cellWidth(chromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
                                      kPresentationPanelScrollIndicatorColumns,
                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
@@ -70,7 +70,7 @@ namespace ao::tui
                                    std::vector<TrackPresentationNavEntry> const& items,
                                    std::string_view const activePresentationId,
                                    std::int32_t const selectedIndex,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::vector<PresentationRowHitRegion>* const rowHitRegions,
                                    std::int32_t const columns)
   {
@@ -122,7 +122,7 @@ namespace ao::tui
       std::move(listRows),
       SelectableListOptions{.focusRow = focusRow,
                             .height = kPresentationPanelListRows,
-                            .emptyText = tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)}));
+                            .emptyText = chromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)}));
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
 

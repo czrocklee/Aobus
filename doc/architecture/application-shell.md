@@ -155,9 +155,11 @@ It refuses to write on a tooltip surface, in edit mode, for an anonymous node, w
 The keymap model binds neutral chords to action ids.
 GTK translates those chords to native accelerator syntax and applies eligible window actions; the shortcut editor remains a GTK view over UIModel policy.
 WinUI translates the same neutral values into the keyboard accelerators its live action registry can execute.
-TUI begins with the shared application defaults, adds terminal-only defaults in its adapter, loads the global override group, and builds one immutable `TuiKeymapPlan`.
+TUI begins with the shared application defaults, adds terminal-only defaults in its adapter, loads the global override group, and builds one immutable `KeymapPlan`.
 That plan considers only actions with a TUI handler, resolves collisions after FTXUI projection, and supplies both root dispatch and every configurable shortcut hint.
 Terminal input protocol remains a narrower scope above the plan: Ctrl-C, text editing and completion, list and modal-overlay navigation/activation, notification `x`, mouse sequences, and escape routes cannot be disabled by a root binding.
+
+Command parsing and discovery live in `Command`, independently of the shell input and overlay state.
 
 ## Boundaries and dependency direction
 
@@ -329,7 +331,7 @@ The selected root is persisted only after successor activation; its initial scan
 - UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, schema, actions, component state, promotion, and session policy.
 - GTK layout runtime and component tests under [`test/unit/linux-gtk/layout/`](../../test/unit/linux-gtk/layout/) protect construction, registry injection, actions, surfaces, editor behavior, and component state.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp), [`MenuControllerTest.cpp`](../../test/unit/linux-gtk/app/MenuControllerTest.cpp), [`ShellLayoutControllerTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp), and [`GioActionBridgeTest.cpp`](../../test/unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp) protect scoped action export, replacement identity, retained-action revocation, and window/controller teardown.
-- Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), and [`TuiKeymapTest.cpp`](../../test/unit/tui/TuiKeymapTest.cpp) protect neutral, GTK, and terminal shortcut boundaries.
+- Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/), [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp), and [`KeymapTest.cpp`](../../test/unit/tui/KeymapTest.cpp) protect neutral, GTK, and terminal shortcut boundaries.
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
 - [`AssertWinUiStateSubscriptions.cmake`](../../cmake/AssertWinUiStateSubscriptions.cmake) prevents the removed WinUI virtual-callback and raw-observer fan-out contract from returning on platforms without a native widget-test host.
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) scans the whole WinUI frontend and keeps `LibrarySession` and `AppRuntime` to the composition roots it names, so every other file receives exact capabilities.

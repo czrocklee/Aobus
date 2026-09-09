@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "tui/TuiHitRegions.h"
+#include "tui/HitRegions.h"
 
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDevicePanel.h"
@@ -13,9 +13,9 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TuiHitRegions - hitTestButton resolves clickable buttons", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - hitTestButton resolves clickable buttons", "[tui][unit][hit-region]")
   {
-    auto regions = TuiHitRegions{};
+    auto regions = HitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
     regions.soulButtonBox = ftxui::Box{.x_min = 6, .x_max = 8, .y_min = 0, .y_max = 0};
     regions.libraryButtonBox = ftxui::Box{.x_min = 0, .x_max = 9, .y_min = 10, .y_max = 10};
@@ -35,9 +35,9 @@ namespace ao::tui::test
     CHECK(regions.hitTestButton(60, 10).hoveredButton == HoveredButton::None);
   }
 
-  TEST_CASE("TuiHitRegions - text-input and overlay context applies modal hover policy", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - text-input and overlay context applies modal hover policy", "[tui][unit][hit-region]")
   {
-    auto regions = TuiHitRegions{};
+    auto regions = HitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
     regions.soulButtonBox = ftxui::Box{.x_min = 6, .x_max = 8, .y_min = 0, .y_max = 0};
 
@@ -52,9 +52,9 @@ namespace ao::tui::test
     CHECK(overlaySoulHit.isQualityHoverVisible == false);
   }
 
-  TEST_CASE("TuiHitRegions - clearFrameLocalRows keeps persistent button boxes", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - clearFrameLocalRows keeps persistent button boxes", "[tui][unit][hit-region]")
   {
-    auto regions = TuiHitRegions{};
+    auto regions = HitRegions{};
     regions.libraryButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};
     regions.outputDeviceRows.push_back(OutputDeviceRowHitRegion{.rowIndex = 1});
     regions.presentationRows.push_back(PresentationRowHitRegion{.rowIndex = 2});

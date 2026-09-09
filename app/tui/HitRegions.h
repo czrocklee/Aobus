@@ -41,7 +41,7 @@ namespace ao::tui
   bool hasHitArea(ftxui::Box const& box);
   bool contains(ftxui::Box const& box, std::int32_t column, std::int32_t row);
 
-  struct TuiHitRegions final
+  struct HitRegions final
   {
     ftxui::Box coverBox{};
     ftxui::Box libraryButtonBox{};

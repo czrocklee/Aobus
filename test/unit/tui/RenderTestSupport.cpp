@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>

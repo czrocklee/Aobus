@@ -22,7 +22,7 @@ namespace ftxui
 
 namespace ao::tui
 {
-  class TuiKeymapPlan;
+  class KeymapPlan;
 
   struct OutputDeviceRowHitRegion final
   {
@@ -37,12 +37,12 @@ namespace ao::tui
   ftxui::Element outputDeviceBadge(uimodel::OutputDeviceViewState const* outputView, bool hovered);
   std::int32_t outputDevicePanelColumns(i18n::MessageCatalog const& textCatalog,
                                         uimodel::OutputDeviceViewState const& view,
-                                        TuiKeymapPlan const& keymapPlan,
+                                        KeymapPlan const& keymapPlan,
                                         std::int32_t terminalColumns);
   ftxui::Element outputDevicePanel(i18n::MessageCatalog const& textCatalog,
                                    uimodel::OutputDeviceViewState const& view,
                                    std::int32_t selectedRow,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::vector<OutputDeviceRowHitRegion>* rowHitRegions = nullptr,
                                    std::int32_t columns = 0);
 } // namespace ao::tui

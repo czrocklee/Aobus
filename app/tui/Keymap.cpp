@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiKeymap.h"
+#include "Keymap.h"
 
 #include <ao/Contract.h>
 #include <ao/Error.h>
@@ -59,90 +59,88 @@ namespace ao::tui
     constexpr auto kPlayPauseDefaults = std::to_array<std::string_view>({"Space"});
     constexpr auto kStopDefaults = std::to_array<std::string_view>({"S"});
 
-    std::vector<TuiActionDescriptor> makeDescriptors()
+    std::vector<ActionDescriptor> makeDescriptors()
     {
       using enum uimodel::PlaybackCommand;
 
       return {
         {.actionId = "tui.shell.openSettings",
-         .action = TuiKeyAction::OpenSettings,
+         .action = KeyAction::OpenSettings,
          .defaultChords = kOpenSettingsDefaults},
-        {.actionId = "tui.shell.quit", .action = TuiKeyAction::Quit, .defaultChords = kQuitDefaults},
+        {.actionId = "tui.shell.quit", .action = KeyAction::Quit, .defaultChords = kQuitDefaults},
         {.actionId = "tui.shell.toggleListChooser",
-         .action = TuiKeyAction::ToggleListChooser,
+         .action = KeyAction::ToggleListChooser,
          .defaultChords = kToggleListChooserDefaults},
         {.actionId = "tui.shell.toggleTrackDetail",
-         .action = TuiKeyAction::ToggleDetails,
+         .action = KeyAction::ToggleDetails,
          .defaultChords = kToggleDetailsDefaults},
         {.actionId = "tui.shell.toggleAudioQuality",
-         .action = TuiKeyAction::ToggleAudioPipeline,
+         .action = KeyAction::ToggleAudioPipeline,
          .defaultChords = kToggleAudioPipelineDefaults},
         {.actionId = "tui.shell.toggleOutputDevices",
-         .action = TuiKeyAction::ToggleOutputDevices,
+         .action = KeyAction::ToggleOutputDevices,
          .defaultChords = kToggleOutputDevicesDefaults},
         {.actionId = "tui.shell.togglePresentationChooser",
-         .action = TuiKeyAction::TogglePresentations,
+         .action = KeyAction::TogglePresentations,
          .defaultChords = kTogglePresentationsDefaults},
         {.actionId = "tui.shell.toggleNotifications",
-         .action = TuiKeyAction::ToggleNotifications,
+         .action = KeyAction::ToggleNotifications,
          .defaultChords = kToggleNotificationsDefaults},
-        {.actionId = "tui.shell.showHelp", .action = TuiKeyAction::ShowHelp, .defaultChords = kShowHelpDefaults},
+        {.actionId = "tui.shell.showHelp", .action = KeyAction::ShowHelp, .defaultChords = kShowHelpDefaults},
         {.actionId = "tui.shell.openCommandPalette",
-         .action = TuiKeyAction::OpenCommandPalette,
+         .action = KeyAction::OpenCommandPalette,
          .defaultChords = kOpenCommandPaletteDefaults},
         {.actionId = "tui.library.openQuickFilter",
-         .action = TuiKeyAction::OpenQuickFilter,
+         .action = KeyAction::OpenQuickFilter,
          .defaultChords = kOpenQuickFilterDefaults},
         {.actionId = std::string{uimodel::kRevealCurrentTrackActionId},
-         .action = TuiKeyAction::RevealCurrentTrack,
+         .action = KeyAction::RevealCurrentTrack,
          .defaultChords = kNoDefaults},
         {.actionId = "tui.library.clearFilter",
-         .action = TuiKeyAction::ClearFilter,
+         .action = KeyAction::ClearFilter,
          .defaultChords = kClearFilterDefaults},
-        {.actionId = "tui.library.reloadActiveList", .action = TuiKeyAction::Reload, .defaultChords = kReloadDefaults},
-        {.actionId = "tui.library.scan", .action = TuiKeyAction::Scan, .defaultChords = kNoDefaults},
-        {.actionId = "tui.library.scanCancel", .action = TuiKeyAction::ScanCancel, .defaultChords = kNoDefaults},
+        {.actionId = "tui.library.reloadActiveList", .action = KeyAction::Reload, .defaultChords = kReloadDefaults},
+        {.actionId = "tui.library.scan", .action = KeyAction::Scan, .defaultChords = kNoDefaults},
+        {.actionId = "tui.library.scanCancel", .action = KeyAction::ScanCancel, .defaultChords = kNoDefaults},
         {.actionId = "tui.library.selectToggle",
-         .action = TuiKeyAction::SelectToggle,
+         .action = KeyAction::SelectToggle,
          .defaultChords = kSelectToggleDefaults},
         {.actionId = "tui.library.selectVisual",
-         .action = TuiKeyAction::SelectVisual,
+         .action = KeyAction::SelectVisual,
          .defaultChords = kSelectVisualDefaults},
-        {.actionId = "tui.library.selectAll", .action = TuiKeyAction::SelectAll, .defaultChords = kSelectAllDefaults},
+        {.actionId = "tui.library.selectAll", .action = KeyAction::SelectAll, .defaultChords = kSelectAllDefaults},
         {.actionId = "tui.library.selectClear",
-         .action = TuiKeyAction::SelectClear,
+         .action = KeyAction::SelectClear,
          .defaultChords = kSelectClearDefaults},
         {.actionId = "tui.library.editProperties",
-         .action = TuiKeyAction::EditProperties,
+         .action = KeyAction::EditProperties,
          .defaultChords = kEditPropertiesDefaults},
         {.actionId = "tui.library.playSelection",
-         .action = TuiKeyAction::PlaySelection,
+         .action = KeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},
         {.actionId = "tui.library.previousTrack",
-         .action = TuiKeyAction::PreviousTrack,
+         .action = KeyAction::PreviousTrack,
          .defaultChords = kPreviousTrackDefaults},
-        {.actionId = "tui.library.nextTrack", .action = TuiKeyAction::NextTrack, .defaultChords = kNextTrackDefaults},
+        {.actionId = "tui.library.nextTrack", .action = KeyAction::NextTrack, .defaultChords = kNextTrackDefaults},
         {.actionId = "tui.library.previousSection",
-         .action = TuiKeyAction::PreviousSection,
+         .action = KeyAction::PreviousSection,
          .defaultChords = kPreviousSectionDefaults},
         {.actionId = "tui.library.nextSection",
-         .action = TuiKeyAction::NextSection,
+         .action = KeyAction::NextSection,
          .defaultChords = kNextSectionDefaults},
         {.actionId = "tui.playback.seekBackward",
-         .action = TuiKeyAction::SeekBackward,
+         .action = KeyAction::SeekBackward,
          .defaultChords = kSeekBackwardDefaults},
         {.actionId = "tui.playback.seekForward",
-         .action = TuiKeyAction::SeekForward,
+         .action = KeyAction::SeekForward,
          .defaultChords = kSeekForwardDefaults},
-        {.actionId = "tui.playback.volumeDown",
-         .action = TuiKeyAction::VolumeDown,
-         .defaultChords = kVolumeDownDefaults},
-        {.actionId = "tui.playback.volumeUp", .action = TuiKeyAction::VolumeUp, .defaultChords = kVolumeUpDefaults},
+        {.actionId = "tui.playback.volumeDown", .action = KeyAction::VolumeDown, .defaultChords = kVolumeDownDefaults},
+        {.actionId = "tui.playback.volumeUp", .action = KeyAction::VolumeUp, .defaultChords = kVolumeUpDefaults},
         {.actionId = uimodel::playbackCommandActionId(PlayPause),
-         .action = TuiKeyAction::PlaybackPlayPause,
+         .action = KeyAction::PlaybackPlayPause,
          .defaultChords = kPlayPauseDefaults},
         {.actionId = uimodel::playbackCommandActionId(Stop),
-         .action = TuiKeyAction::PlaybackStop,
+         .action = KeyAction::PlaybackStop,
          .defaultChords = kStopDefaults},
       };
     }
@@ -232,17 +230,17 @@ namespace ao::tui
     }
   } // namespace
 
-  std::span<TuiActionDescriptor const> tuiActionDescriptors()
+  std::span<ActionDescriptor const> actionDescriptors()
   {
     static auto const kDescriptors = makeDescriptors();
     return kDescriptors;
   }
 
-  uimodel::KeymapBindings tuiDefaultKeymap()
+  uimodel::KeymapBindings defaultKeymap()
   {
     auto bindings = uimodel::defaultKeymap();
 
-    for (auto const& descriptor : tuiActionDescriptors())
+    for (auto const& descriptor : actionDescriptors())
     {
       auto& chords = bindings[descriptor.actionId];
       auto local = std::vector<uimodel::KeyChord>{};
@@ -265,7 +263,7 @@ namespace ao::tui
     return bindings;
   }
 
-  std::optional<ftxui::Event> tuiEventForChord(uimodel::KeyChord const& chord)
+  std::optional<ftxui::Event> eventForChord(uimodel::KeyChord const& chord)
   {
     if (!chord.isValid() || chord.isMediaKey() || chord.modifiers.has(KeyModifier::Super))
     {
@@ -349,9 +347,9 @@ namespace ao::tui
     return std::nullopt;
   }
 
-  TuiKeymapPlan::TuiKeymapPlan(uimodel::KeymapModel const& keymap)
+  KeymapPlan::KeymapPlan(uimodel::KeymapModel const& keymap)
   {
-    for (auto const& descriptor : tuiActionDescriptors())
+    for (auto const& descriptor : actionDescriptors())
     {
       auto const bindingIt = keymap.bindings().find(descriptor.actionId);
 
@@ -362,7 +360,7 @@ namespace ao::tui
 
       for (auto const& chord : bindingIt->second)
       {
-        auto optEvent = tuiEventForChord(chord);
+        auto optEvent = eventForChord(chord);
 
         if (!optEvent)
         {
@@ -404,14 +402,14 @@ namespace ao::tui
     }
   }
 
-  std::optional<TuiKeyAction> TuiKeymapPlan::actionFor(ftxui::Event const& event) const
+  std::optional<KeyAction> KeymapPlan::actionFor(ftxui::Event const& event) const
   {
     auto const found = std::ranges::find(_entries, event, &Entry::event);
     return found == _entries.end() ? std::nullopt : std::optional{found->action};
   }
 
-  std::string_view TuiKeymapPlan::shortcutFor(TuiKeyAction const action,
-                                              std::span<ftxui::Event const> const unavailableEvents) const noexcept
+  std::string_view KeymapPlan::shortcutFor(KeyAction const action,
+                                           std::span<ftxui::Event const> const unavailableEvents) const noexcept
   {
     auto const found = std::ranges::find_if(
       _entries,
@@ -420,11 +418,11 @@ namespace ao::tui
     return found == _entries.end() ? std::string_view{} : std::string_view{found->shortcut};
   }
 
-  Result<> validateTuiActionBindings(uimodel::KeymapModel const& candidate, std::string_view const actionId)
+  Result<> validateActionBindings(uimodel::KeymapModel const& candidate, std::string_view const actionId)
   {
     for (auto const& chord : candidate.chordsFor(actionId))
     {
-      auto const optEvent = tuiEventForChord(chord);
+      auto const optEvent = eventForChord(chord);
 
       if (!optEvent)
       {
@@ -436,7 +434,7 @@ namespace ao::tui
         return makeError(Error::Code::InvalidInput, chord.toString());
       }
 
-      for (auto const& descriptor : tuiActionDescriptors())
+      for (auto const& descriptor : actionDescriptors())
       {
         if (descriptor.actionId == actionId)
         {
@@ -445,7 +443,7 @@ namespace ao::tui
 
         for (auto const& other : candidate.chordsFor(descriptor.actionId))
         {
-          if (auto const optOther = tuiEventForChord(other); optOther && *optOther == *optEvent)
+          if (auto const optOther = eventForChord(other); optOther && *optOther == *optEvent)
           {
             return makeError(Error::Code::Conflict, descriptor.actionId);
           }

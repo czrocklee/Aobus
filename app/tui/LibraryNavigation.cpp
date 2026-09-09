@@ -3,7 +3,7 @@
 
 #include "LibraryNavigation.h"
 
-#include "TuiText.h"
+#include "ShellText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListNode.h>
@@ -38,7 +38,7 @@ namespace ao::tui
       if (row.id == rt::kAllTracksListId)
       {
         items.push_back(LibraryNavEntry{
-          .id = row.id, .label = row.name, .detail = tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryDetail)});
+          .id = row.id, .label = row.name, .detail = chromeText(textCatalog, i18n::MessageId::TuiLibraryDetail)});
         return;
       }
 

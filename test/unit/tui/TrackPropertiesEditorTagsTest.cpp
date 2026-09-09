@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
-#include "TuiRenderTestSupport.h"
 #include "tui/TrackPropertiesEditor.h"
 
 #include <catch2/catch_test_macros.hpp>

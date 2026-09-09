@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "TuiTextFieldModel.h"
+#include "TextFieldModel.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
@@ -153,7 +153,7 @@ namespace ao::tui
     struct MetadataRow final
     {
       uimodel::TrackPropertiesFormRow spec{};
-      TuiTextFieldModel input{};
+      TextFieldModel input{};
       /// The aggregate value this row falls back to; empty for a mixed field.
       std::string baselineText{};
       bool mixed = false;
@@ -248,7 +248,7 @@ namespace ao::tui
     std::size_t _tracksRow = 0;
 
     /// Filters the tag list and names the tag a submission would create; never part of the draft.
-    TuiTextFieldModel _tagQuery{};
+    TextFieldModel _tagQuery{};
     /// Rows the query admits, as indices into _tags; the new-tag row trails them.
     std::vector<std::size_t> _visibleTags{};
     /// Suggested rows the display cap left out, so the list can own up to them.

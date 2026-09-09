@@ -153,7 +153,7 @@ GTK accepts one command per physical key-down/key-up cycle, so OS auto-repeat wh
 
 ### TUI terminal projection
 
-The TUI builds a `TuiKeymapPlan` from the effective keymap at startup and replaces its value after a successful Settings save.
+The TUI builds a `KeymapPlan` from the effective keymap at startup and replaces its value after a successful Settings save.
 It considers only stable action ids for which the TUI has a descriptor and handler, and the retained entries drive both root dispatch and every configurable shortcut hint.
 
 The terminal adapter's current representation whitelist projects:
@@ -239,7 +239,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the transport action ids every shell registers.
 - [`GtkAccelTranslator.h`](../../../app/linux-gtk/app/GtkAccelTranslator.h) owns the GDK edge, and [`KeyChordAccelerator.h`](../../../app/windows-winui/include/ao/winui/input/KeyChordAccelerator.h) the Windows one.
 - [`KeymapAcceleratorPlan.h`](../../../app/windows-winui/include/ao/winui/input/KeymapAcceleratorPlan.h) owns which bindings the Windows shell installs.
-- [`TuiKeymap.h`](../../../app/tui/TuiKeymap.h) and [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) own TUI-only descriptors, default additions, the terminal whitelist, collision policy, and the immutable dispatch/hint plan.
+- [`Keymap.h`](../../../app/tui/Keymap.h) and [`Keymap.cpp`](../../../app/tui/Keymap.cpp) own TUI-only descriptors, default additions, the terminal whitelist, collision policy, and the immutable dispatch/hint plan.
 - WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout schema.
 
 ## Test authority
@@ -249,7 +249,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
 - [`GtkAccelTranslatorTest.cpp`](../../../test/unit/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the GDK edge.
 - [`KeyChordAcceleratorTest.cpp`](../../../test/unit/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules plus the shipped native-only reveal and saved-order actions. Both run on every host.
-- [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects descriptor identities, shared/local default composition, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
+- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects descriptor identities, shared/local default composition, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
 
 ## Related documents
 

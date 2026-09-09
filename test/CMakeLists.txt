@@ -727,9 +727,10 @@ target_link_libraries(ao_tui_signal_probe PRIVATE ao_fatal_probe_support aobus-t
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
-    unit/tui/TuiKeymapTestSupport.cpp
-    unit/tui/TuiRenderTestSupport.cpp
+    unit/tui/KeymapTestSupport.cpp
+    unit/tui/RenderTestSupport.cpp
     unit/tui/AnchoredOverlayTest.cpp
+    unit/tui/CommandTest.cpp
     unit/tui/CommandCompletionTest.cpp
     unit/tui/CommandCompletionStateTest.cpp
     unit/tui/CoverArtLoaderTest.cpp
@@ -761,13 +762,13 @@ add_executable(ao_tui_test
     unit/tui/TerminalTrackColumnLayoutTest.cpp
     unit/tui/TextCellTest.cpp
     unit/tui/TrackTableTest.cpp
-    unit/tui/TuiHitRegionsTest.cpp
-    unit/tui/TuiKeymapTest.cpp
+    unit/tui/HitRegionsTest.cpp
+    unit/tui/KeymapTest.cpp
     unit/tui/SettingsEditorTest.cpp
-    unit/tui/TuiPreferencesTest.cpp
-    unit/tui/TuiLayoutStateStoreTest.cpp
+    unit/tui/PreferencesTest.cpp
+    unit/tui/LayoutStateStoreTest.cpp
     unit/tui/TuiSignalProbeTest.cpp
-    unit/tui/TuiTextFieldModelTest.cpp
+    unit/tui/TextFieldModelTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 

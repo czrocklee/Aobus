@@ -1,5 +1,6 @@
 add_library(aobus-tui-lib STATIC
     AnchoredOverlay.cpp
+    Command.cpp
     CommandCompletion.cpp
     CommandPalettePanel.cpp
     CommandCompletionState.cpp
@@ -23,7 +24,7 @@ add_library(aobus-tui-lib STATIC
     TrackEditController.cpp
     TrackPropertiesEditor.cpp
     TrackTable.cpp
-    TuiHitRegions.cpp
+    HitRegions.cpp
     LibraryNavigation.cpp
     PlaybackStatusFormatter.cpp
     SelectionNavigation.cpp
@@ -31,12 +32,12 @@ add_library(aobus-tui-lib STATIC
     TrackListEntry.cpp
     TrackPresentationNavigation.cpp
     TrackSection.cpp
-    TuiPreferences.cpp
+    Preferences.cpp
     SettingsEditor.cpp
-    TuiLayoutStateStore.cpp
-    TuiKeymap.cpp
-    TuiText.cpp
-    TuiTextFieldModel.cpp
+    LayoutStateStore.cpp
+    Keymap.cpp
+    ShellText.cpp
+    TextFieldModel.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
     TextCell.cpp

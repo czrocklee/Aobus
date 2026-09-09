@@ -5,12 +5,12 @@
 
 #include "SelectableList.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "Style.h"
 #include "TerminalTrackColumnLayout.h"
 #include "TextCell.h"
 #include "TrackListEntry.h"
 #include "TrackSection.h"
-#include "TuiText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
@@ -549,7 +549,7 @@ namespace ao::tui
     if (tracks.empty())
     {
       listElementPtr =
-        selectableRows(Elements{}, -1, true, tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryNoTracksFound));
+        selectableRows(Elements{}, -1, true, chromeText(textCatalog, i18n::MessageId::TuiLibraryNoTracksFound));
     }
     else
     {
@@ -641,7 +641,7 @@ namespace ao::tui
 
   std::int32_t libraryChooserPaneColumns(i18n::MessageCatalog const& textCatalog,
                                          std::vector<std::string> const& labels,
-                                         TuiKeymapPlan const& keymapPlan,
+                                         KeymapPlan const& keymapPlan,
                                          std::int32_t const terminalColumns)
   {
     auto contentColumns =
@@ -661,7 +661,7 @@ namespace ao::tui
   ftxui::Element libraryChooserPane(i18n::MessageCatalog const& textCatalog,
                                     std::vector<std::string> const& labels,
                                     std::int32_t const selected,
-                                    TuiKeymapPlan const& keymapPlan,
+                                    KeymapPlan const& keymapPlan,
                                     std::int32_t columns)
   {
     using namespace ftxui;

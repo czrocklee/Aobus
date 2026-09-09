@@ -3,8 +3,8 @@
 
 #include "tui/TrackPropertiesEditor.h"
 
+#include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
-#include "TuiRenderTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>

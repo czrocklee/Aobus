@@ -161,7 +161,7 @@ layout engine for cell or pixel measurement.
   reusable Unicode results into library admission and corruption semantics.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp)
   consumes the previous-boundary operation for command editing.
-- [`TuiTextFieldModel.cpp`](../../../app/tui/TuiTextFieldModel.cpp) consumes
+- [`TextFieldModel.cpp`](../../../app/tui/TextFieldModel.cpp) consumes
   both boundary directions for interior cursor movement and deletion, and the
   boundary predicate for range replacement. Replacement refuses failed boundary
   checks; cursor recovery falls back to the text end if segmentation fails.
@@ -184,6 +184,9 @@ layout engine for cell or pixel measurement.
   corruption detection.
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp)
   protects grapheme-aware Backspace through the frontend consumer.
+- [`TextFieldModelTest.cpp`](../../../test/unit/tui/TextFieldModelTest.cpp)
+  protects grapheme-aware cursor movement and deletion, boundary rejection,
+  and multibyte range replacement in the terminal text-field consumer.
 - Dependency-policy tests and native dependency reports protect the aligned
   ICU release and required imported targets.
 

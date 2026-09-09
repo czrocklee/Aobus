@@ -22,11 +22,11 @@ namespace ao::tui
    * turns a field's Apply intent on for an accepted edit and must not turn it
    * on for a rejected paste or a Backspace at the start of the value.
    */
-  class TuiTextFieldModel final
+  class TextFieldModel final
   {
   public:
-    TuiTextFieldModel() = default;
-    explicit TuiTextFieldModel(std::string value);
+    TextFieldModel() = default;
+    explicit TextFieldModel(std::string value);
 
     std::string const& value() const noexcept { return _value; }
     /// The cursor as a UTF-8 byte offset into @ref value.

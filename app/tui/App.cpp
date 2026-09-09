@@ -12,6 +12,9 @@
 #include "Executor.h"
 #include "ExitController.h"
 #include "FrameTimer.h"
+#include "HitRegions.h"
+#include "Keymap.h"
+#include "LayoutStateStore.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
 #include "NotificationCenterPanel.h"
@@ -19,12 +22,14 @@
 #include "OutputDevicePanel.h"
 #include "PlaybackPanel.h"
 #include "PlaybackStatusFormatter.h"
+#include "Preferences.h"
 #include "PresentationPanel.h"
 #include "QualityPanel.h"
 #include "Render.h"
 #include "SelectionNavigation.h"
 #include "SettingsEditor.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "SignalExitWatcher.h"
 #include "StatusBar.h"
 #include "Style.h"
@@ -32,11 +37,6 @@
 #include "TrackEditController.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
-#include "TuiHitRegions.h"
-#include "TuiKeymap.h"
-#include "TuiLayoutStateStore.h"
-#include "TuiPreferences.h"
-#include "TuiText.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -116,7 +116,7 @@ namespace ao::tui
 
     ftxui::Element commandPalettePopover(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
-                                         TuiKeymapPlan const& keymapPlan,
+                                         KeymapPlan const& keymapPlan,
                                          std::int32_t const terminalColumns,
                                          std::int32_t const terminalRows)
     {
@@ -135,7 +135,7 @@ namespace ao::tui
 
     ftxui::Element quickFilterPopover(i18n::MessageCatalog const& textCatalog,
                                       ShellInteractionModel const& shell,
-                                      TuiKeymapPlan const& keymapPlan,
+                                      KeymapPlan const& keymapPlan,
                                       std::string_view const filterError,
                                       std::int32_t const terminalColumns,
                                       std::int32_t const terminalRows)
@@ -160,7 +160,7 @@ namespace ao::tui
 
     ftxui::Element presentationPopover(i18n::MessageCatalog const& textCatalog,
                                        ShellInteractionModel const& shell,
-                                       TuiKeymapPlan const& keymapPlan,
+                                       KeymapPlan const& keymapPlan,
                                        LibraryController const& library,
                                        ftxui::Box const& presentationButtonBox,
                                        std::int32_t const terminalColumns,
@@ -191,7 +191,7 @@ namespace ao::tui
 
     ftxui::Element notificationPopover(i18n::MessageCatalog const& textCatalog,
                                        ShellInteractionModel const& shell,
-                                       TuiKeymapPlan const& keymapPlan,
+                                       KeymapPlan const& keymapPlan,
                                        uimodel::ActivityStatusViewState const& state,
                                        ftxui::Box const& activityStatusBox,
                                        std::int32_t const terminalColumns,
@@ -334,13 +334,13 @@ namespace ao::tui
       return uimodel::FrameClock::fromMicros(micros);
     }
 
-    struct TuiLocale final
+    struct WorkspaceLocale final
     {
       i18n::MessageCatalog catalog;
       std::shared_ptr<rt::TextOrderingPolicy const> orderingPtr;
     };
 
-    Result<TuiLocale> createTuiLocale(std::string_view language)
+    Result<WorkspaceLocale> createWorkspaceLocale(std::string_view language)
     {
       auto catalogRes =
         language.empty() ? i18n::MessageCatalog::createForSystemLocale() : i18n::MessageCatalog::create(language);
@@ -357,18 +357,18 @@ namespace ao::tui
         return std::unexpected{orderingRes.error()};
       }
 
-      return TuiLocale{.catalog = std::move(*catalogRes), .orderingPtr = std::move(*orderingRes)};
+      return WorkspaceLocale{.catalog = std::move(*catalogRes), .orderingPtr = std::move(*orderingRes)};
     }
 
-    Result<std::optional<TuiLocale>> savePreferences(rt::ConfigStore& store,
-                                                     TuiPreferences const& candidate,
-                                                     TuiPreferences const& current)
+    Result<std::optional<WorkspaceLocale>> savePreferencesWithLocale(rt::ConfigStore& store,
+                                                                     Preferences const& candidate,
+                                                                     Preferences const& current)
     {
-      auto optLocale = std::optional<TuiLocale>{};
+      auto optLocale = std::optional<WorkspaceLocale>{};
 
       if (candidate.language != current.language)
       {
-        auto localeRes = createTuiLocale(candidate.language);
+        auto localeRes = createWorkspaceLocale(candidate.language);
 
         if (!localeRes)
         {
@@ -378,7 +378,7 @@ namespace ao::tui
         optLocale = std::move(*localeRes);
       }
 
-      if (auto const res = saveTuiPreferences(store, candidate); !res)
+      if (auto const res = savePreferences(store, candidate); !res)
       {
         return std::unexpected{res.error()};
       }
@@ -416,7 +416,7 @@ namespace ao::tui
       }
     }
 
-    void checkpointLayout(TuiLayoutStateStore& store,
+    void checkpointLayout(LayoutStateStore& store,
                           uimodel::TrackColumnLayouts const& columns,
                           uimodel::ListPresentations const& presentations,
                           bool& dirty)
@@ -437,7 +437,7 @@ namespace ao::tui
 
     void reportPreferenceLoadFailure(rt::NotificationService& notifications,
                                      i18n::MessageCatalog const& catalog,
-                                     Result<TuiPreferences> const& preferencesRes)
+                                     Result<Preferences> const& preferencesRes)
     {
       if (preferencesRes)
       {
@@ -452,14 +452,14 @@ namespace ao::tui
         rt::NotificationLifetime::history());
     }
 
-    Result<TuiKeymapPlan> saveKeymapPlan(rt::ConfigStore& store, uimodel::KeymapModel const& candidate)
+    Result<KeymapPlan> saveKeymapPlan(rt::ConfigStore& store, uimodel::KeymapModel const& candidate)
     {
       if (!store.hasLocation())
       {
         return makeError(Error::Code::NotFound, "No persistent TUI configuration location");
       }
 
-      auto plan = TuiKeymapPlan{candidate};
+      auto plan = KeymapPlan{candidate};
 
       if (auto const res = uimodel::saveKeymap(store, candidate); !res)
       {
@@ -469,7 +469,7 @@ namespace ao::tui
       return plan;
     }
 
-    CoverArtDeliveryMode coverDeliveryModeFor(AppOptions const& options, TuiPreferences const& preferences)
+    CoverArtDeliveryMode coverDeliveryModeFor(AppOptions const& options, Preferences const& preferences)
     {
       auto const& name = options.coverArtMode.empty() ? preferences.coverArtMode : options.coverArtMode;
       auto const modes = std::span{kCoverArtModes};
@@ -498,16 +498,16 @@ namespace ao::tui
       i18n::MessageCatalog const& textCatalog;
       LibraryController& library;
       ShellInteractionModel& shell;
-      TuiKeymapPlan const& keymapPlan;
+      KeymapPlan const& keymapPlan;
       rt::PlaybackService& playback;
       OutputDeviceController& outputDevices;
       uimodel::ActivityStatusViewModel& activityStatusViewModel;
       EventController& events;
       TrackEditController& trackEdit;
       SettingsEditor& settings;
-      TuiPreferences const& preferences;
+      Preferences const& preferences;
       ExitController& exitController;
-      TuiHitRegions& hitRegions;
+      HitRegions& hitRegions;
       uimodel::TrackColumnLayouts& trackColumnLayouts;
       TrackColumnResizePreview& trackColumnResizePreview;
       uimodel::PlaybackPositionInterpolator& playbackClock;
@@ -627,12 +627,12 @@ namespace ao::tui
             std::move(tableElementPtr),
             style::PanelOptions{
               .leftFooter =
-                style::PanelEdgeButton{.label = tuiChromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceList),
+                style::PanelEdgeButton{.label = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceList),
                                        .value = currentListTitle,
                                        .box = &hitRegions.libraryButtonBox,
                                        .hovered = hoveredButton == HoveredButton::Library},
               .leftFooterRight =
-                style::PanelEdgeButton{.label = tuiChromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceView),
+                style::PanelEdgeButton{.label = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceView),
                                        .value = presentationTitle,
                                        .box = &hitRegions.presentationButtonBox,
                                        .hovered = hoveredButton == HoveredButton::Presentation},
@@ -977,8 +977,7 @@ namespace ao::tui
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
     auto const optAppConfigPath = resolveAppConfigPath();
 
-    if (auto const validatedRes =
-          validateTuiConfigStorePaths(options.libraryRoot, options.configPath, optAppConfigPath);
+    if (auto const validatedRes = validateConfigStorePaths(options.libraryRoot, options.configPath, optAppConfigPath);
         !validatedRes)
     {
       std::println(stderr, "Invalid TUI managed-state paths: {}", validatedRes.error().message);
@@ -986,10 +985,10 @@ namespace ao::tui
     }
 
     auto const appConfigStorePtr = openAppConfigStore(optAppConfigPath);
-    auto preferencesRes = loadTuiPreferences(*appConfigStorePtr);
+    auto preferencesRes = loadPreferences(*appConfigStorePtr);
 
-    auto preferences = preferencesRes.value_or(TuiPreferences{});
-    auto localeRes = createTuiLocale(preferences.language);
+    auto preferences = preferencesRes.value_or(Preferences{});
+    auto localeRes = createWorkspaceLocale(preferences.language);
 
     if (!localeRes)
     {
@@ -1001,8 +1000,8 @@ namespace ao::tui
     auto textOrderingPolicyPtr = std::move(localeRes->orderingPtr);
     auto completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto coverDeliveryMode = coverDeliveryModeFor(options, preferences);
-    auto keymap = uimodel::loadKeymap(*appConfigStorePtr, tuiDefaultKeymap());
-    auto keymapPlan = TuiKeymapPlan{keymap};
+    auto keymap = uimodel::loadKeymap(*appConfigStorePtr, defaultKeymap());
+    auto keymapPlan = KeymapPlan{keymap};
     // Declared before AppRuntime so the executor's borrowed screen reference
     // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
@@ -1049,7 +1048,7 @@ namespace ao::tui
     // all callback targets before Runtime stops producers and its executor.
     auto const runtimeShutdown = gsl_lite::finally([&runtime] { runtime.shutdown(); });
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto layoutStateStore = TuiLayoutStateStore{options.libraryRoot};
+    auto layoutStateStore = LayoutStateStore{options.libraryRoot};
     auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
     auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
     layoutStateStore.load(restoredColumnLayouts, restoredListPresentations);
@@ -1085,7 +1084,7 @@ namespace ao::tui
     }
 
     auto shell = ShellInteractionModel{};
-    auto hitRegions = TuiHitRegions{};
+    auto hitRegions = HitRegions{};
     auto trackColumnResizePreview = TrackColumnResizePreview{};
     auto kittyPaintState = KittyPaintState{};
     auto const cellAspectRatio = queryTerminalCellAspectRatio();
@@ -1133,7 +1132,7 @@ namespace ao::tui
       },
       uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()}};
     runtime.notifications().post(rt::NotificationSeverity::Info,
-                                 tuiChromeText(textCatalog, i18n::MessageId::TuiLibraryReady),
+                                 chromeText(textCatalog, i18n::MessageId::TuiLibraryReady),
                                  rt::NotificationLifetime::transient());
 
     auto playbackSub =
@@ -1182,9 +1181,9 @@ namespace ao::tui
       preferences,
       keymap,
       SettingsEditor::Outputs{
-        .applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+        .applyPreferences = [&](Preferences const& candidate) -> Result<>
         {
-          auto localeRes = savePreferences(*appConfigStorePtr, candidate, preferences);
+          auto localeRes = savePreferencesWithLocale(*appConfigStorePtr, candidate, preferences);
 
           if (!localeRes)
           {

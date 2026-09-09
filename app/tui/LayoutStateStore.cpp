@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiLayoutStateStore.h"
+#include "LayoutStateStore.h"
 
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
@@ -100,16 +100,16 @@ namespace ao::tui
     }
   } // namespace
 
-  std::filesystem::path tuiLayoutStatePath(std::filesystem::path const& musicRoot)
+  std::filesystem::path layoutStatePath(std::filesystem::path const& musicRoot)
   {
     return rt::LibraryPaths{musicRoot}.managedDataPath() / "tui_layout.yaml";
   }
 
-  Result<> validateTuiConfigStorePaths(std::filesystem::path const& musicRoot,
-                                       std::filesystem::path const& workspaceConfigPath,
-                                       std::optional<std::filesystem::path> const& optAppConfigPath)
+  Result<> validateConfigStorePaths(std::filesystem::path const& musicRoot,
+                                    std::filesystem::path const& workspaceConfigPath,
+                                    std::optional<std::filesystem::path> const& optAppConfigPath)
   {
-    auto const layoutPath = tuiLayoutStatePath(musicRoot);
+    auto const layoutPath = layoutStatePath(musicRoot);
 
     if (isSameFilePath(workspaceConfigPath, layoutPath))
     {
@@ -132,9 +132,9 @@ namespace ao::tui
     return {};
   }
 
-  TuiLayoutStateStore::TuiLayoutStateStore(std::filesystem::path const& musicRoot)
+  LayoutStateStore::LayoutStateStore(std::filesystem::path const& musicRoot)
   {
-    auto const configPath = tuiLayoutStatePath(musicRoot);
+    auto const configPath = layoutStatePath(musicRoot);
     auto ec = std::error_code{};
     std::filesystem::create_directories(configPath.parent_path(), ec);
 
@@ -146,13 +146,13 @@ namespace ao::tui
     _storePtr = std::make_unique<rt::ConfigStore>(configPath);
   }
 
-  TuiLayoutStateStore::~TuiLayoutStateStore() = default;
+  LayoutStateStore::~LayoutStateStore() = default;
 
-  TuiLayoutStateStore::TuiLayoutStateStore(TuiLayoutStateStore&&) noexcept = default;
-  TuiLayoutStateStore& TuiLayoutStateStore::operator=(TuiLayoutStateStore&&) noexcept = default;
+  LayoutStateStore::LayoutStateStore(LayoutStateStore&&) noexcept = default;
+  LayoutStateStore& LayoutStateStore::operator=(LayoutStateStore&&) noexcept = default;
 
-  void TuiLayoutStateStore::load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
-                                 uimodel::ListPresentations::Snapshot& listPresentations) const
+  void LayoutStateStore::load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
+                              uimodel::ListPresentations::Snapshot& listPresentations) const
   {
     auto const columnsRes =
       _storePtr->load(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
@@ -171,8 +171,8 @@ namespace ao::tui
     }
   }
 
-  Result<> TuiLayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
-                                     uimodel::ListPresentations::Snapshot const& listPresentations)
+  Result<> LayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
+                                  uimodel::ListPresentations::Snapshot const& listPresentations)
   {
     return _storePtr->saveTogether(
       rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),

@@ -4,13 +4,13 @@
 #include "Render.h"
 
 #include "CoverArt.h"
+#include "Keymap.h"
 #include "ShellInteractionModel.h"
+#include "ShellText.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TrackDetailLines.h"
 #include "TrackListEntry.h"
-#include "TuiKeymap.h"
-#include "TuiText.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
@@ -109,9 +109,9 @@ namespace ao::tui
       std::int32_t gap = 0;
     };
 
-    std::string helpShortcut(TuiKeymapPlan const& keymapPlan, i18n::MessageId const id)
+    std::string helpShortcut(KeymapPlan const& keymapPlan, i18n::MessageId const id)
     {
-      auto joinComplete = [&](std::span<TuiKeyAction const> const actions)
+      auto joinComplete = [&](std::span<KeyAction const> const actions)
       {
         auto result = std::string{};
 
@@ -137,43 +137,43 @@ namespace ao::tui
 
       switch (id)
       {
-        case i18n::MessageId::TuiSettingsTitle: return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenSettings)};
+        case i18n::MessageId::TuiSettingsTitle: return std::string{keymapPlan.shortcutFor(KeyAction::OpenSettings)};
         case i18n::MessageId::TuiShellHelpQuickFilter:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenQuickFilter)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::OpenQuickFilter)};
         case i18n::MessageId::TuiShellHelpChooseList:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ToggleListChooser)};
         case i18n::MessageId::TuiShellHelpTrackDetail:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleDetails)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ToggleDetails)};
         case i18n::MessageId::TuiShellHelpAudioPipeline:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleAudioPipeline)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ToggleAudioPipeline)};
         case i18n::MessageId::TuiShellHelpOutputDevice:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ToggleOutputDevices)};
         case i18n::MessageId::TuiShellHelpChooseView:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::TogglePresentations)};
         case i18n::MessageId::TuiShellHelpNotifications:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ToggleNotifications)};
         case i18n::MessageId::TuiShellHelpCurrentTrack:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::RevealCurrentTrack)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::RevealCurrentTrack)};
         case i18n::MessageId::TuiShellHelpClearFilter:
-          return std::string{keymapPlan.shortcutFor(TuiKeyAction::ClearFilter)};
-        case i18n::MessageId::TuiShellHelpReloadList: return std::string{keymapPlan.shortcutFor(TuiKeyAction::Reload)};
+          return std::string{keymapPlan.shortcutFor(KeyAction::ClearFilter)};
+        case i18n::MessageId::TuiShellHelpReloadList: return std::string{keymapPlan.shortcutFor(KeyAction::Reload)};
         case i18n::MessageId::TuiShellHelpPlayback:
         {
           constexpr auto kActions =
-            std::to_array({TuiKeyAction::PlaySelection, TuiKeyAction::PlaybackPlayPause, TuiKeyAction::PlaybackStop});
+            std::to_array({KeyAction::PlaySelection, KeyAction::PlaybackPlayPause, KeyAction::PlaybackStop});
           return joinComplete(kActions);
         }
         case i18n::MessageId::TuiShellHelpPreviousNextGroup:
         {
-          constexpr auto kActions = std::to_array({TuiKeyAction::PreviousSection, TuiKeyAction::NextSection});
+          constexpr auto kActions = std::to_array({KeyAction::PreviousSection, KeyAction::NextSection});
           return joinComplete(kActions);
         }
-        case i18n::MessageId::TuiShellHelpQuit: return std::string{keymapPlan.shortcutFor(TuiKeyAction::Quit)};
+        case i18n::MessageId::TuiShellHelpQuit: return std::string{keymapPlan.shortcutFor(KeyAction::Quit)};
         default: return {};
       }
     }
 
-    ResolvedHelpPane resolveHelpPane(i18n::MessageCatalog const& textCatalog, TuiKeymapPlan const& keymapPlan)
+    ResolvedHelpPane resolveHelpPane(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan)
     {
       auto result = ResolvedHelpPane{};
 
@@ -189,7 +189,7 @@ namespace ao::tui
         result.descriptionColumns = std::max(result.descriptionColumns, cellWidth(row.description));
       }
 
-      result.footer = tuiChromeText(textCatalog, i18n::MessageId::TuiShellHelpFooter);
+      result.footer = chromeText(textCatalog, i18n::MessageId::TuiShellHelpFooter);
       return result;
     }
 
@@ -549,7 +549,7 @@ namespace ao::tui
   }
 
   std::int32_t helpPaneColumns(i18n::MessageCatalog const& textCatalog,
-                               TuiKeymapPlan const& keymapPlan,
+                               KeymapPlan const& keymapPlan,
                                std::int32_t const terminalColumns)
   {
     auto const help = resolveHelpPane(textCatalog, keymapPlan);
@@ -558,7 +558,7 @@ namespace ao::tui
   }
 
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog,
-                          TuiKeymapPlan const& keymapPlan,
+                          KeymapPlan const& keymapPlan,
                           std::int32_t const terminalColumns)
   {
     using namespace ftxui;

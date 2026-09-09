@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiPreferences.h"
+#include "Preferences.h"
 
 #include "CoverArt.h"
 #include <ao/Error.h>
@@ -20,7 +20,7 @@ namespace ao::tui
 {
   namespace
   {
-    Result<> validatePreferences(TuiPreferences const& value)
+    Result<> validatePreferences(Preferences const& value)
     {
       if ((!value.language.empty() &&
            !std::ranges::contains(i18n::availableCatalogLocales(), value.language, &i18n::CatalogLocale::tag)) ||
@@ -37,7 +37,7 @@ namespace ao::tui
 
     struct PreferencesSchema final
     {
-      Result<> serialize(ryml::NodeRef node, TuiPreferences const& value) const
+      Result<> serialize(ryml::NodeRef node, Preferences const& value) const
       {
         if (auto const res = validatePreferences(value); !res)
         {
@@ -58,7 +58,7 @@ namespace ao::tui
         return std::move(writer).finish();
       }
 
-      Result<TuiPreferences> deserialize(ryml::ConstNodeRef node, TuiPreferences const& /*seed*/) const
+      Result<Preferences> deserialize(ryml::ConstNodeRef node, Preferences const& /*seed*/) const
       {
         constexpr auto kKeys = std::to_array<std::string_view>({"version",
                                                                 "language",
@@ -70,7 +70,7 @@ namespace ao::tui
                                                                 "wheelStep",
                                                                 "seekSeconds",
                                                                 "volumePercent"});
-        auto value = TuiPreferences{};
+        auto value = Preferences{};
         std::int32_t version = 0;
         auto reader = yaml::MapReader{node, kKeys, "TUI preferences"};
         reader.requiredScalar("version", version)
@@ -105,9 +105,9 @@ namespace ao::tui
     };
   } // namespace
 
-  Result<TuiPreferences> loadTuiPreferences(rt::ConfigStore& store)
+  Result<Preferences> loadPreferences(rt::ConfigStore& store)
   {
-    auto preferences = TuiPreferences{};
+    auto preferences = Preferences{};
 
     if (auto const res = store.load("preferences", preferences, PreferencesSchema{}); !res)
     {
@@ -117,7 +117,7 @@ namespace ao::tui
     return preferences;
   }
 
-  Result<> saveTuiPreferences(rt::ConfigStore& store, TuiPreferences const& preferences)
+  Result<> savePreferences(rt::ConfigStore& store, Preferences const& preferences)
   {
     if (!store.hasLocation())
     {

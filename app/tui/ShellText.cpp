@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiText.h"
+#include "ShellText.h"
 
 #include <ao/i18n/MessageCatalog.h>
 
@@ -18,7 +18,7 @@ namespace ao::tui
   using i18n::requiredFormat;
   using i18n::requiredText;
 
-  std::string tuiChromeText(MessageCatalog const& catalog, MessageId const id)
+  std::string chromeText(MessageCatalog const& catalog, MessageId const id)
   {
     switch (id)
     {
@@ -39,7 +39,7 @@ namespace ao::tui
     }
   }
 
-  std::string tuiNotificationFooter(MessageCatalog const& catalog, std::string_view const toggleKey)
+  std::string notificationFooter(MessageCatalog const& catalog, std::string_view const toggleKey)
   {
     auto const toggleState = toggleKey.empty() ? std::string_view{"unbound"} : std::string_view{"bound"};
     return requiredFormat(catalog,
@@ -50,7 +50,7 @@ namespace ao::tui
                            MessageArgument{"closeKey", "Esc"}});
   }
 
-  std::string tuiOverlayHint(MessageCatalog const& catalog, MessageId const id, std::string_view const toggleKey)
+  std::string overlayHintText(MessageCatalog const& catalog, MessageId const id, std::string_view const toggleKey)
   {
     auto const toggleState = toggleKey.empty() ? std::string_view{"unbound"} : std::string_view{"bound"};
 

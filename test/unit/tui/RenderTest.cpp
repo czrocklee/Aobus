@@ -4,15 +4,18 @@
 #include "tui/Render.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include "test/unit/tui/TuiKeymapTestSupport.h"
-#include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/KeymapTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 #include "tui/CommandPalettePanel.h"
 #include "tui/CoverArt.h"
+#include "tui/HitRegions.h"
+#include "tui/Keymap.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PresentationPanel.h"
 #include "tui/QualityPanel.h"
 #include "tui/ShellInteractionModel.h"
+#include "tui/ShellText.h"
 #include "tui/StatusBar.h"
 #include "tui/Style.h"
 #include "tui/TextCell.h"
@@ -20,9 +23,6 @@
 #include "tui/TrackListEntry.h"
 #include "tui/TrackPresentationNavigation.h"
 #include "tui/TrackTable.h"
-#include "tui/TuiHitRegions.h"
-#include "tui/TuiKeymap.h"
-#include "tui/TuiText.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -190,7 +190,7 @@ namespace ao::tui::test
 
     ftxui::Element commandPalettePanel(ShellInteractionModel const& shell, std::int32_t const columns = 0)
     {
-      return ao::tui::commandPalettePanel(ao::test::englishMessageCatalog(), shell, defaultTuiKeymapPlan(), columns);
+      return ao::tui::commandPalettePanel(ao::test::englishMessageCatalog(), shell, defaultKeymapPlan(), columns);
     }
 
     ftxui::Element quickFilterCompletionPanel(ShellInteractionModel const& shell,
@@ -198,15 +198,15 @@ namespace ao::tui::test
                                               std::string_view const filterError = {})
     {
       return ao::tui::quickFilterCompletionPanel(
-        ao::test::englishMessageCatalog(), shell, defaultTuiKeymapPlan(), columns, filterError);
+        ao::test::englishMessageCatalog(), shell, defaultKeymapPlan(), columns, filterError);
     }
 
     ftxui::Element helpPane(std::int32_t const columns = 0)
     {
-      return ao::tui::helpPane(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), columns);
+      return ao::tui::helpPane(ao::test::englishMessageCatalog(), defaultKeymapPlan(), columns);
     }
 
-    ftxui::Element statusBar(StatusBarViewState const& state, TuiKeymapPlan const& keymapPlan = defaultTuiKeymapPlan())
+    ftxui::Element statusBar(StatusBarViewState const& state, KeymapPlan const& keymapPlan = defaultKeymapPlan())
     {
       return ao::tui::statusBar(ao::test::englishMessageCatalog(), state, keymapPlan);
     }
@@ -216,7 +216,7 @@ namespace ao::tui::test
                                            std::int32_t const columns = 0)
     {
       return ao::tui::notificationCenterPanel(
-        ao::test::englishMessageCatalog(), state, defaultTuiKeymapPlan(), rowHitRegions, columns);
+        ao::test::englishMessageCatalog(), state, defaultKeymapPlan(), rowHitRegions, columns);
     }
 
     ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
@@ -229,7 +229,7 @@ namespace ao::tui::test
                                         items,
                                         activePresentationId,
                                         selectedIndex,
-                                        defaultTuiKeymapPlan(),
+                                        defaultKeymapPlan(),
                                         rowHitRegions,
                                         columns);
     }
@@ -239,33 +239,33 @@ namespace ao::tui::test
                                           std::int32_t const terminalColumns)
     {
       return ao::tui::presentationPanelColumns(
-        ao::test::englishMessageCatalog(), items, activePresentationId, defaultTuiKeymapPlan(), terminalColumns);
+        ao::test::englishMessageCatalog(), items, activePresentationId, defaultKeymapPlan(), terminalColumns);
     }
   } // namespace
 
   TEST_CASE("i18n::MessageCatalog - resolves German and pseudo shell copy", "[tui][unit][localization]")
   {
     auto const german = ao::test::messageCatalog("de-AT");
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellCommandPaletteTitle) == "Befehlspalette");
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterTitle) == "Schnellfilter");
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellQuickFilterFooter).contains("Enter übernehmen"));
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiShellOverlayViews) == "Ansichten");
-    CHECK(tuiOverlayHint(german, i18n::MessageId::TuiShellHintLists, "l").contains("Enter öffnen"));
-    CHECK(tuiChromeText(german, i18n::MessageId::TuiLibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
+    CHECK(chromeText(german, i18n::MessageId::TuiShellCommandPaletteTitle) == "Befehlspalette");
+    CHECK(chromeText(german, i18n::MessageId::TuiShellQuickFilterTitle) == "Schnellfilter");
+    CHECK(chromeText(german, i18n::MessageId::TuiShellQuickFilterFooter).contains("Enter übernehmen"));
+    CHECK(chromeText(german, i18n::MessageId::TuiShellOverlayViews) == "Ansichten");
+    CHECK(overlayHintText(german, i18n::MessageId::TuiShellHintLists, "l").contains("Enter öffnen"));
+    CHECK(chromeText(german, i18n::MessageId::TuiLibraryNoSections) == "Keine Abschnitte in dieser Ansicht");
     CHECK(libraryReloadedTracks(german, 2) == "2 Titel neu geladen");
     CHECK(libraryQuickFilterMatched(german, 1) == "Schnellfilter fand 1 Titel");
 
     auto const pseudo = ao::test::messageCatalog("qps-ploc");
-    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellCommandPaletteTitle) != "Command Palette");
-    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
-    CHECK(tuiOverlayHint(pseudo, i18n::MessageId::TuiShellHintViews, "v").contains("Enter"));
-    CHECK(tuiChromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
+    CHECK(chromeText(pseudo, i18n::MessageId::TuiShellCommandPaletteTitle) != "Command Palette");
+    CHECK(chromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
+    CHECK(overlayHintText(pseudo, i18n::MessageId::TuiShellHintViews, "v").contains("Enter"));
+    CHECK(chromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
           "No tracks found. Run `aobus init` in this library first.");
     CHECK(libraryOpenedList(pseudo, "Road Trip").contains("Road Trip"));
 
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "view albums");
-    auto const narrow = renderElement(commandPalettePanel(pseudo, shell, defaultTuiKeymapPlan(), 32), 32, 8);
+    auto const narrow = renderElement(commandPalettePanel(pseudo, shell, defaultKeymapPlan(), 32), 32, 8);
     CHECK(narrow.text.contains(":view albums"));
     CHECK_FALSE(narrow.text.empty());
   }
@@ -289,7 +289,7 @@ namespace ao::tui::test
   {
     auto checkAligned = [](i18n::MessageCatalog const& textCatalog, std::array<std::string_view, 5> const descriptions)
     {
-      auto const rendered = renderText(helpPane(textCatalog, defaultTuiKeymapPlan(), 120), 120);
+      auto const rendered = renderText(helpPane(textCatalog, defaultKeymapPlan(), 120), 120);
       auto const optExpectedColumn = textColumn(rendered, descriptions.front());
       REQUIRE(optExpectedColumn);
 
@@ -324,8 +324,8 @@ namespace ao::tui::test
     std::ignore = renderBesideWorkspace(helpPane(120), wideHelpBox, 120);
     std::ignore = renderBesideWorkspace(helpPane(30), narrowHelpBox, 30);
 
-    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), 120));
-    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultTuiKeymapPlan(), 30));
+    CHECK(boxColumns(wideHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultKeymapPlan(), 120));
+    CHECK(boxColumns(narrowHelpBox) == helpPaneColumns(ao::test::englishMessageCatalog(), defaultKeymapPlan(), 30));
     CHECK(englishDetailPaneColumns(120) > 0);
     CHECK(englishDetailPaneColumns(40) == 40);
   }
@@ -845,7 +845,7 @@ namespace ao::tui::test
                                                                          .terminalColumns = columns,
                                                                          .filterDraft = std::string(200, 'f'),
                                                                          .settingsButtonBox = &box},
-                                                      defaultTuiKeymapPlan()),
+                                                      defaultKeymapPlan()),
                                             columns,
                                             1);
         CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiSettingsTitle)));
@@ -862,9 +862,9 @@ namespace ao::tui::test
   {
     auto shell = ShellInteractionModel{};
     auto box = ftxui::Box{};
-    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({{"tui.shell.openSettings", {"F12"}}});
-    auto plan = TuiKeymapPlan{model};
+    auto plan = KeymapPlan{model};
     auto state = StatusBarViewState{.terminalColumns = 80, .shell = &shell, .settingsButtonBox = &box};
     auto rendered = renderElement(statusBar(state, plan), 80, 1);
     CHECK(rendered.text.contains("F12 Settings"));
@@ -873,7 +873,7 @@ namespace ao::tui::test
     CHECK(help.contains(":settings / :config"));
     CHECK(help.contains("Settings"));
     model.applyOverrides({{"tui.shell.openSettings", {}}});
-    plan = TuiKeymapPlan{model};
+    plan = KeymapPlan{model};
     rendered = renderElement(statusBar(state, plan), 80, 1);
     CHECK(rendered.text.contains("Settings"));
     CHECK_FALSE(rendered.text.contains("F12"));
@@ -900,9 +900,9 @@ namespace ao::tui::test
 
   TEST_CASE("Render - an applied filter remains visible when its entry shortcut is unbound", "[tui][unit][keymap]")
   {
-    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({{"tui.library.openQuickFilter", {}}});
-    auto const plan = TuiKeymapPlan{model};
+    auto const plan = KeymapPlan{model};
     auto shell = ShellInteractionModel{};
     auto const rendered = renderText(statusBar(StatusBarViewState{.filterDraft = "Aimer", .shell = &shell}, plan), 140);
 
@@ -944,7 +944,7 @@ namespace ao::tui::test
 
   TEST_CASE("Render - one effective keymap drives status, overlay, palette, and help hints", "[tui][unit][keymap]")
   {
-    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
       {"tui.shell.toggleListChooser", {"F2"}},
       {"tui.shell.toggleTrackDetail", {}},
@@ -955,7 +955,7 @@ namespace ao::tui::test
       {"tui.library.openQuickFilter", {"F3"}},
       {"tui.shell.openCommandPalette", {"F4"}},
     });
-    auto const keymapPlan = TuiKeymapPlan{model};
+    auto const keymapPlan = KeymapPlan{model};
     auto shell = ShellInteractionModel{};
 
     auto const status =
@@ -1022,7 +1022,7 @@ namespace ao::tui::test
     CHECK(notification.contains("click clearable row"));
 
     model.applyOverrides({{"tui.shell.toggleNotifications", {}}});
-    auto const unboundPlan = TuiKeymapPlan{model};
+    auto const unboundPlan = KeymapPlan{model};
     auto const unboundNotification = renderText(
       notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, unboundPlan, nullptr, 100), 100);
     CHECK_FALSE(unboundNotification.contains("toggle"));
@@ -1031,12 +1031,12 @@ namespace ao::tui::test
 
   TEST_CASE("Render - combined help rows omit ambiguous partial shortcut sets", "[tui][unit][keymap]")
   {
-    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
       {"tui.library.previousSection", {}},
       {"tui.library.playSelection", {}},
     });
-    auto const plan = TuiKeymapPlan{model};
+    auto const plan = KeymapPlan{model};
     auto const rendered = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
 
     CHECK(rendered.contains("previous / next group"));
@@ -1156,7 +1156,7 @@ namespace ao::tui::test
   TEST_CASE("Render - notification center width includes complete row chrome", "[tui][unit][render]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto const& keymapPlan = defaultTuiKeymapPlan();
+    auto const& keymapPlan = defaultKeymapPlan();
 
     SECTION("library task progress rail")
     {

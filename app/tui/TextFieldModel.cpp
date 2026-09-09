@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "TuiTextFieldModel.h"
+#include "TextFieldModel.h"
 
 #include <ao/utility/UnicodeText.h>
 
@@ -68,12 +68,12 @@ namespace ao::tui
     }
   } // namespace
 
-  TuiTextFieldModel::TuiTextFieldModel(std::string value)
+  TextFieldModel::TextFieldModel(std::string value)
   {
     reset(std::move(value));
   }
 
-  void TuiTextFieldModel::reset(std::string value)
+  void TextFieldModel::reset(std::string value)
   {
     // A field is loaded from library text that admission already validated. A
     // malformed value would still make every later boundary call fail, so it is
@@ -89,7 +89,7 @@ namespace ao::tui
     _cursor = _value.size();
   }
 
-  bool TuiTextFieldModel::tryInsert(std::string_view const text)
+  bool TextFieldModel::tryInsert(std::string_view const text)
   {
     if (text.empty() || containsControlCharacter(text) || !utility::validateUtf8(text))
     {
@@ -103,7 +103,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryReplaceRange(std::size_t const begin, std::size_t const end, std::string_view const text)
+  bool TextFieldModel::tryReplaceRange(std::size_t const begin, std::size_t const end, std::string_view const text)
   {
     if (begin > end || end > _value.size())
     {
@@ -134,7 +134,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryBackspace()
+  bool TextFieldModel::tryBackspace()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_value, _cursor);
 
@@ -148,7 +148,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryDeleteForward()
+  bool TextFieldModel::tryDeleteForward()
   {
     auto const boundaryRes = utility::nextUtf8GraphemeBoundary(_value, _cursor);
 
@@ -162,7 +162,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryMoveLeft()
+  bool TextFieldModel::tryMoveLeft()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_value, _cursor);
 
@@ -175,7 +175,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryMoveRight()
+  bool TextFieldModel::tryMoveRight()
   {
     auto const boundaryRes = utility::nextUtf8GraphemeBoundary(_value, _cursor);
 
@@ -188,7 +188,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryMoveToBegin()
+  bool TextFieldModel::tryMoveToBegin()
   {
     if (_cursor == 0)
     {
@@ -199,7 +199,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::tryMoveToEnd()
+  bool TextFieldModel::tryMoveToEnd()
   {
     if (_cursor == _value.size())
     {
@@ -210,7 +210,7 @@ namespace ao::tui
     return true;
   }
 
-  std::size_t TuiTextFieldModel::settledCursor(std::size_t const offset) const
+  std::size_t TextFieldModel::settledCursor(std::size_t const offset) const
   {
     if (offset == 0 || offset >= _value.size())
     {

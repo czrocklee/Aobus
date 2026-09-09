@@ -18,21 +18,21 @@ namespace ao::rt
 
 namespace ao::tui
 {
-  std::filesystem::path tuiLayoutStatePath(std::filesystem::path const& musicRoot);
-  Result<> validateTuiConfigStorePaths(std::filesystem::path const& musicRoot,
-                                       std::filesystem::path const& workspaceConfigPath,
-                                       std::optional<std::filesystem::path> const& optAppConfigPath);
+  std::filesystem::path layoutStatePath(std::filesystem::path const& musicRoot);
+  Result<> validateConfigStorePaths(std::filesystem::path const& musicRoot,
+                                    std::filesystem::path const& workspaceConfigPath,
+                                    std::optional<std::filesystem::path> const& optAppConfigPath);
 
-  class TuiLayoutStateStore final
+  class LayoutStateStore final
   {
   public:
-    explicit TuiLayoutStateStore(std::filesystem::path const& musicRoot);
-    ~TuiLayoutStateStore();
+    explicit LayoutStateStore(std::filesystem::path const& musicRoot);
+    ~LayoutStateStore();
 
-    TuiLayoutStateStore(TuiLayoutStateStore const&) = delete;
-    TuiLayoutStateStore& operator=(TuiLayoutStateStore const&) = delete;
-    TuiLayoutStateStore(TuiLayoutStateStore&&) noexcept;
-    TuiLayoutStateStore& operator=(TuiLayoutStateStore&&) noexcept;
+    LayoutStateStore(LayoutStateStore const&) = delete;
+    LayoutStateStore& operator=(LayoutStateStore const&) = delete;
+    LayoutStateStore(LayoutStateStore&&) noexcept;
+    LayoutStateStore& operator=(LayoutStateStore&&) noexcept;
 
     void load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
               uimodel::ListPresentations::Snapshot& listPresentations) const;

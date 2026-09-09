@@ -3,6 +3,9 @@
 
 #include "EventController.h"
 
+#include "Command.h"
+#include "HitRegions.h"
+#include "Keymap.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
 #include "NotificationCenterPanel.h"
@@ -18,8 +21,6 @@
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
-#include "TuiHitRegions.h"
-#include "TuiKeymap.h"
 #include <ao/Contract.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -191,7 +192,7 @@ namespace ao::tui
                                    LibraryController& library,
                                    async::Runtime& asyncRuntime,
                                    rt::PlaybackService& playback,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    EventControllerBindings bindings)
     : _shell{shell}
     , _library{library}
@@ -418,7 +419,7 @@ namespace ao::tui
     }
   }
 
-  void EventController::executeKeyAction(TuiKeyAction const action)
+  void EventController::executeKeyAction(KeyAction const action)
   {
     if (auto const optCommandAction = commandActionForKeyAction(action); optCommandAction)
     {
@@ -426,7 +427,7 @@ namespace ao::tui
       return;
     }
 
-    using enum TuiKeyAction;
+    using enum KeyAction;
 
     switch (action)
     {
@@ -1256,7 +1257,7 @@ namespace ao::tui
           return true;
         }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleListChooser)
+        if (_keymapPlan.actionFor(event) == KeyAction::ToggleListChooser)
         {
           toggleListChooser();
         }
@@ -1267,7 +1268,7 @@ namespace ao::tui
         // belongs to the workspace it is watching.
         return false;
       case Overlay::QualityPanel:
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleAudioPipeline)
+        if (_keymapPlan.actionFor(event) == KeyAction::ToggleAudioPipeline)
         {
           toggleQualityPanel();
         }
@@ -1286,7 +1287,7 @@ namespace ao::tui
           return true;
         }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleOutputDevices)
+        if (_keymapPlan.actionFor(event) == KeyAction::ToggleOutputDevices)
         {
           toggleOutputDevices();
         }
@@ -1305,7 +1306,7 @@ namespace ao::tui
           return true;
         }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::TogglePresentations)
+        if (_keymapPlan.actionFor(event) == KeyAction::TogglePresentations)
         {
           togglePresentationPanel();
         }
@@ -1322,7 +1323,7 @@ namespace ao::tui
           return true;
         }
 
-        if (_keymapPlan.actionFor(event) == TuiKeyAction::ToggleNotifications)
+        if (_keymapPlan.actionFor(event) == KeyAction::ToggleNotifications)
         {
           toggleNotificationCenter();
         }

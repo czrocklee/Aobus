@@ -3,8 +3,9 @@
 
 #include "CommandCompletion.h"
 
+#include "Command.h"
 #include "ShellInteractionModel.h"
-#include "TuiText.h"
+#include "ShellText.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -68,11 +69,8 @@ namespace ao::tui
 
         if (auto const text = commandDisplayText(spec.prefix); rt::startsWithCompletionPrefixInsensitive(text, prefix))
         {
-          if (!tryAppendItem(items,
-                             limit,
-                             ":" + std::string{text},
-                             std::string{spec.prefix},
-                             tuiChromeText(textCatalog, spec.detail)))
+          if (!tryAppendItem(
+                items, limit, ":" + std::string{text}, std::string{spec.prefix}, chromeText(textCatalog, spec.detail)))
           {
             return;
           }
@@ -92,7 +90,7 @@ namespace ao::tui
                              limit,
                              ":" + std::string{spec.alias},
                              std::string{spec.alias},
-                             tuiChromeText(textCatalog, spec.detail)))
+                             chromeText(textCatalog, spec.detail)))
           {
             return;
           }

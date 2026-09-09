@@ -228,7 +228,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`ResourceByteMemoryCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteMemoryCacheTest.cpp) protects bounded retention, coalescing, retry, callback affinity, cancellation, and destruction fencing.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
-- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.
+- [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`RenderTestSupport.h`](../../test/unit/tui/RenderTestSupport.h) support frontend-boundary tests.
 - Tests under [`test/unit/desktop/`](../../test/unit/desktop/) protect the shared
   desktop boundary on Linux and Windows.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI use of the shared runtime.

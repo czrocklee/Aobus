@@ -12,7 +12,9 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
-#include "test/unit/tui/TuiKeymapTestSupport.h"
+#include "test/unit/tui/KeymapTestSupport.h"
+#include "tui/HitRegions.h"
+#include "tui/Keymap.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryNavigation.h"
 #include "tui/LibraryScanController.h"
@@ -20,6 +22,7 @@
 #include "tui/OutputDeviceController.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PlaybackPanel.h"
+#include "tui/Preferences.h"
 #include "tui/PresentationPanel.h"
 #include "tui/SettingsEditor.h"
 #include "tui/ShellInteractionModel.h"
@@ -31,9 +34,6 @@
 #include "tui/TrackPropertiesEditor.h"
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
-#include "tui/TuiHitRegions.h"
-#include "tui/TuiKeymap.h"
-#include "tui/TuiPreferences.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
@@ -102,7 +102,7 @@ namespace ao::tui::test
       uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
       uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
       ShellInteractionModel shell{};
-      TuiHitRegions hitRegions{};
+      HitRegions hitRegions{};
       uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
       TrackColumnResizePreview trackColumnResizePreview{};
       OutputDeviceController outputDevices{runtimePtr->playback(),
@@ -113,8 +113,8 @@ namespace ao::tui::test
                                                                [](uimodel::ActivityStatusViewState const&) {}};
       std::unique_ptr<LibraryScanController> libraryScanPtr{};
       std::unique_ptr<TrackEditController> trackEditPtr{};
-      TuiPreferences preferences{};
-      uimodel::KeymapModel settingsKeymap{tuiDefaultKeymap()};
+      Preferences preferences{};
+      uimodel::KeymapModel settingsKeymap{defaultKeymap()};
       std::unique_ptr<SettingsEditor> settingsPtr;
       std::size_t exitRequestCount = 0;
       bool exitWaiting = false;
@@ -142,7 +142,7 @@ namespace ao::tui::test
 
       /// Every collaborator an EventController requires, all owned by this fixture.
       EventController makeEvents(LibraryController& library,
-                                 TuiKeymapPlan const& keymapPlan = defaultTuiKeymapPlan(),
+                                 KeymapPlan const& keymapPlan = defaultKeymapPlan(),
                                  InputCompletionCallback commandCompletion = {},
                                  InputCompletionCallback filterCompletion = {})
       {
@@ -169,7 +169,7 @@ namespace ao::tui::test
           ao::test::englishMessageCatalog(),
           preferences,
           settingsKeymap,
-          SettingsEditor::Outputs{.applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+          SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
                                   {
                                     preferences = candidate;
                                     return {};
@@ -689,7 +689,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{true};
     fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
     auto library = fixture.makeLibrary();
-    auto controller = fixture.makeEvents(library, defaultTuiKeymapPlan(), {}, completeYuduo);
+    auto controller = fixture.makeEvents(library, defaultKeymapPlan(), {}, completeYuduo);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("/")));
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("yuduo")));
@@ -710,7 +710,7 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
-    auto controller = fixture.makeEvents(library, defaultTuiKeymapPlan(), {}, completeYuduo);
+    auto controller = fixture.makeEvents(library, defaultKeymapPlan(), {}, completeYuduo);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("/")));
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("yuduo")));
@@ -727,7 +727,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{true};
     fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
     auto library = fixture.makeLibrary();
-    auto controller = fixture.makeEvents(library, defaultTuiKeymapPlan(), {}, completeYuduo);
+    auto controller = fixture.makeEvents(library, defaultKeymapPlan(), {}, completeYuduo);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("/")));
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("yuduo")));
@@ -810,7 +810,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller =
       fixture.makeEvents(library,
-                         defaultTuiKeymapPlan(),
+                         defaultKeymapPlan(),
                          [](std::string_view const draft) -> std::optional<rt::CompletionResult>
                          {
                            if (draft != "de")
@@ -919,12 +919,12 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({
       {"tui.shell.toggleListChooser", {}},
       {"tui.shell.toggleTrackDetail", {"F2"}},
     });
-    auto const keymapPlan = TuiKeymapPlan{keymap};
+    auto const keymapPlan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, keymapPlan);
 
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character("l")));
@@ -945,13 +945,13 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({
       {"tui.shell.toggleListChooser", {"Enter"}},
       {"tui.shell.toggleTrackDetail", {"Down", "Q"}},
       {"tui.shell.quit", {"Escape"}},
     });
-    auto const keymapPlan = TuiKeymapPlan{keymap};
+    auto const keymapPlan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, keymapPlan);
 
     REQUIRE(library.selectedTrack() == 0);
@@ -1206,9 +1206,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({{"tui.shell.toggleListChooser", {"F2"}}});
-    auto const keymapPlan = TuiKeymapPlan{keymap};
+    auto const keymapPlan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, keymapPlan);
 
     REQUIRE(library.selectedTrack() == 0);
@@ -1244,9 +1244,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({{"tui.shell.toggleNotifications", {"X"}}});
-    auto const keymapPlan = TuiKeymapPlan{keymap};
+    auto const keymapPlan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, keymapPlan);
     fixture.shell.openOverlay(Overlay::Notifications);
 
@@ -1594,9 +1594,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
     keymap.applyOverrides({{"tui.shell.openSettings", {}}});
-    auto const plan = TuiKeymapPlan{keymap};
+    auto const plan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, plan);
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(36), ftxui::Dimension::Fixed(1));
     auto& box = fixture.hitRegions.settingsButtonBox;

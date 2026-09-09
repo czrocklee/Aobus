@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "tui/TuiLayoutStateStore.h"
+#include "tui/LayoutStateStore.h"
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
@@ -19,11 +19,13 @@
 
 #ifdef __APPLE__
 #include <unistd.h>
+
+#include <sys/unistd.h>
 #endif
 
 namespace ao::tui::test
 {
-  TEST_CASE("TuiLayoutStateStore - missing file preserves seeded state", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - missing file preserves seeded state", "[tui][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -31,7 +33,7 @@ namespace ao::tui::test
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
-    auto const store = TuiLayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath};
 
     store.load(columns, presentations);
 
@@ -41,21 +43,22 @@ namespace ao::tui::test
     CHECK(presentations.at(ListId{7}) == "songs");
   }
 
-  TEST_CASE("TuiLayoutStateStore - rejects aliases between TUI ConfigStore writers", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - rejects aliases between TUI ConfigStore writers", "[tui][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
     auto const workspacePath = libraryPath / ".aobus" / "tui-workspace.yaml";
-    auto const layoutPath = tuiLayoutStatePath(libraryPath);
+    auto const layoutPath = layoutStatePath(libraryPath);
     auto const appConfigPath = libraryPath / "config" / "tui.yaml";
 
-    CHECK(validateTuiConfigStorePaths(libraryPath, workspacePath, appConfigPath));
+    CHECK(validateConfigStorePaths(libraryPath, workspacePath, appConfigPath));
 
 #if defined(_WIN32) || defined(__APPLE__)
     auto const caseVariantCollisionRes =
-      validateTuiConfigStorePaths(libraryPath, layoutPath.parent_path() / "TUI_LAYOUT.YAML", appConfigPath);
+      validateConfigStorePaths(libraryPath, layoutPath.parent_path() / "TUI_LAYOUT.YAML", appConfigPath);
 
 #ifdef __APPLE__
+
     if (::pathconf(libraryPath.c_str(), _PC_CASE_SENSITIVE) == 1)
     {
       CHECK(caseVariantCollisionRes);
@@ -66,9 +69,10 @@ namespace ao::tui::test
       REQUIRE_FALSE(caseVariantCollisionRes);
       CHECK(caseVariantCollisionRes.error().code == Error::Code::InvalidInput);
     }
+
 #endif
 
-    auto const layoutCollisionRes = validateTuiConfigStorePaths(libraryPath, layoutPath, appConfigPath);
+    auto const layoutCollisionRes = validateConfigStorePaths(libraryPath, layoutPath, appConfigPath);
     REQUIRE_FALSE(layoutCollisionRes);
     CHECK(layoutCollisionRes.error().code == Error::Code::InvalidInput);
 
@@ -76,27 +80,27 @@ namespace ao::tui::test
     std::ofstream{layoutPath, std::ios::binary} << "layout-sentinel\n";
     auto const layoutAliasPath = libraryPath / "layout-alias.yaml";
     std::filesystem::create_hard_link(layoutPath, layoutAliasPath);
-    auto const physicalCollisionRes = validateTuiConfigStorePaths(libraryPath, layoutAliasPath, appConfigPath);
+    auto const physicalCollisionRes = validateConfigStorePaths(libraryPath, layoutAliasPath, appConfigPath);
     REQUIRE_FALSE(physicalCollisionRes);
     CHECK(physicalCollisionRes.error().code == Error::Code::InvalidInput);
 
-    auto const appCollisionRes = validateTuiConfigStorePaths(libraryPath, appConfigPath, appConfigPath);
+    auto const appCollisionRes = validateConfigStorePaths(libraryPath, appConfigPath, appConfigPath);
     REQUIRE_FALSE(appCollisionRes);
     CHECK(appCollisionRes.error().code == Error::Code::InvalidInput);
 
-    auto const fixedPathCollisionRes = validateTuiConfigStorePaths(libraryPath, workspacePath, layoutPath);
+    auto const fixedPathCollisionRes = validateConfigStorePaths(libraryPath, workspacePath, layoutPath);
     REQUIRE_FALSE(fixedPathCollisionRes);
     CHECK(fixedPathCollisionRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("TuiLayoutStateStore - owns the per-library terminal layout document", "[tui][unit][config][track-columns]")
+  TEST_CASE("LayoutStateStore - owns the per-library terminal layout document", "[tui][unit][config][track-columns]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
 
-    CHECK(tuiLayoutStatePath(libraryPath) == libraryPath / ".aobus" / "tui_layout.yaml");
+    CHECK(layoutStatePath(libraryPath) == libraryPath / ".aobus" / "tui_layout.yaml");
 
-    auto store = TuiLayoutStateStore{libraryPath};
+    auto store = LayoutStateStore{libraryPath};
     auto const runtimeSessionPath = libraryPath / ".aobus" / "tui-workspace.yaml";
     std::ofstream{runtimeSessionPath, std::ios::binary} << "workspace-sentinel\n";
     auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
@@ -109,7 +113,7 @@ namespace ao::tui::test
     REQUIRE(store.save(columnLayouts, presentations));
     CHECK(ao::test::readFile(runtimeSessionPath) == "workspace-sentinel\n");
 
-    auto const serialized = ao::test::readFile(tuiLayoutStatePath(libraryPath));
+    auto const serialized = ao::test::readFile(layoutStatePath(libraryPath));
     CHECK(serialized == "trackView.columnLayouts:\n"
                         "  version: 2\n"
                         "  layouts:\n"
@@ -131,19 +135,19 @@ namespace ao::tui::test
 
     auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPresentations = uimodel::ListPresentations::Snapshot{};
-    auto const reopenedStore = TuiLayoutStateStore{libraryPath};
+    auto const reopenedStore = LayoutStateStore{libraryPath};
     reopenedStore.load(loadedColumns, loadedPresentations);
 
     CHECK(loadedColumns == columnLayouts);
     CHECK(loadedPresentations == presentations);
   }
 
-  TEST_CASE("TuiLayoutStateStore - loads valid groups independently and never rewrites on load",
+  TEST_CASE("LayoutStateStore - loads valid groups independently and never rewrites on load",
             "[tui][regression][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
-    auto const configPath = tuiLayoutStatePath(libraryPath);
+    auto const configPath = layoutStatePath(libraryPath);
     std::filesystem::create_directories(configPath.parent_path());
     auto const stored = std::string{"future.owner:\n"
                                     "  value: keep-me\n"
@@ -156,7 +160,7 @@ namespace ao::tui::test
                                     "    - listId: 42\n"
                                     "      presentationId: albums\n"};
     std::ofstream{configPath, std::ios::binary} << stored;
-    auto const store = TuiLayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
@@ -171,12 +175,12 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
-  TEST_CASE("TuiLayoutStateStore - valid columns load when presentation preferences are rejected",
+  TEST_CASE("LayoutStateStore - valid columns load when presentation preferences are rejected",
             "[tui][regression][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
-    auto const configPath = tuiLayoutStatePath(libraryPath);
+    auto const configPath = layoutStatePath(libraryPath);
     std::filesystem::create_directories(configPath.parent_path());
     auto const stored = std::string{"trackView.columnLayouts:\n"
                                     "  version: 2\n"
@@ -191,7 +195,7 @@ namespace ao::tui::test
                                     "  version: 99\n"
                                     "  preferences: []\n"};
     std::ofstream{configPath, std::ios::binary} << stored;
-    auto const store = TuiLayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
@@ -206,15 +210,15 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
-  TEST_CASE("TuiLayoutStateStore - serialization failure preserves state and permits a later retry",
+  TEST_CASE("LayoutStateStore - serialization failure preserves state and permits a later retry",
             "[tui][regression][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
-    auto const configPath = tuiLayoutStatePath(libraryPath);
+    auto const configPath = layoutStatePath(libraryPath);
     std::filesystem::create_directories(configPath.parent_path());
     std::ofstream{configPath, std::ios::binary} << "future.owner:\n  value: keep-me\n";
-    auto store = TuiLayoutStateStore{libraryPath};
+    auto store = LayoutStateStore{libraryPath};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17}}},
     };

@@ -3,7 +3,7 @@
 
 #include "TrackPropertiesEditorTestSupport.h"
 
-#include "TuiRenderTestSupport.h"
+#include "RenderTestSupport.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "tui/TrackPropertiesEditor.h"
 #include <ao/CoreIds.h>

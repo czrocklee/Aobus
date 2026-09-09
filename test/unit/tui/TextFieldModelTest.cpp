@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "tui/TuiTextFieldModel.h"
+#include "tui/TextFieldModel.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,9 +17,9 @@ namespace ao::tui::test
     constexpr auto kCombiningAcute = std::string_view{"́"};
   } // namespace
 
-  TEST_CASE("TuiTextFieldModel - loads a value with the cursor at its end", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - loads a value with the cursor at its end", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{std::string{"Blue"}};
+    auto field = TextFieldModel{std::string{"Blue"}};
 
     CHECK(field.value() == "Blue");
     CHECK(field.cursor() == 4);
@@ -43,9 +43,9 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TuiTextFieldModel - moves and edits on whole grapheme clusters", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - moves and edits on whole grapheme clusters", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{std::string{"a"} + std::string{kFamily} + "b"};
+    auto field = TextFieldModel{std::string{"a"} + std::string{kFamily} + "b"};
 
     SECTION("A cursor step crosses a joined sequence in one move")
     {
@@ -89,9 +89,9 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TuiTextFieldModel - inserts at the cursor and reports acceptance", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - inserts at the cursor and reports acceptance", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{std::string{"Blue"}};
+    auto field = TextFieldModel{std::string{"Blue"}};
 
     SECTION("Interior insertion keeps the cursor after the typed text")
     {
@@ -123,9 +123,9 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TuiTextFieldModel - refuses input a single-line field cannot hold", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - refuses input a single-line field cannot hold", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{std::string{"Blue"}};
+    auto field = TextFieldModel{std::string{"Blue"}};
 
     auto const checkRejected = [&field](std::string_view const text)
     {
@@ -146,9 +146,9 @@ namespace ao::tui::test
     checkRejected(std::string{"Bl"} + static_cast<char>(0x80) + "ue");
   }
 
-  TEST_CASE("TuiTextFieldModel - refuses Unicode line and paragraph separators", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - refuses Unicode line and paragraph separators", "[tui][unit][editor]")
   {
-    auto model = TuiTextFieldModel{"Kind of Blue"};
+    auto model = TextFieldModel{"Kind of Blue"};
 
     // U+2028 and U+2029 break a line as surely as U+000A, so a single-line
     // value refuses them on the same grounds and leaves itself untouched.
@@ -163,9 +163,9 @@ namespace ao::tui::test
     CHECK(model.value() == "Kind of Blue\u2027");
   }
 
-  TEST_CASE("TuiTextFieldModel - reports no change at the value's edges", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - reports no change at the value's edges", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{};
+    auto field = TextFieldModel{};
 
     SECTION("An empty value has nothing to move across or delete")
     {
@@ -190,9 +190,9 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TuiTextFieldModel - replaces ranges with checked invariants", "[tui][unit][editor]")
+  TEST_CASE("TextFieldModel - replaces ranges with checked invariants", "[tui][unit][editor]")
   {
-    auto field = TuiTextFieldModel{std::string{"Blue"}};
+    auto field = TextFieldModel{std::string{"Blue"}};
 
     SECTION("Replaces entire text and parks cursor at end")
     {

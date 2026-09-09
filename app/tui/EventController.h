@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include "Command.h"
+#include "HitRegions.h"
+#include "Keymap.h"
 #include "LibraryController.h"
 #include "OutputDeviceController.h"
+#include "Preferences.h"
 #include "ShellInteractionModel.h"
-#include "TuiHitRegions.h"
-#include "TuiKeymap.h"
-#include "TuiPreferences.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -63,7 +64,7 @@ namespace ao::tui
   struct EventControllerBindings final
   {
     OutputDeviceController& outputDevices;
-    TuiHitRegions& hitRegions;
+    HitRegions& hitRegions;
     uimodel::TrackColumnLayouts& trackColumnLayouts;
     TrackColumnResizePreview& trackColumnResizePreview;
     uimodel::ActivityStatusViewModel& activityStatusViewModel;
@@ -71,7 +72,7 @@ namespace ao::tui
     LibraryScanController& libraryScan;
     TrackEditController& trackEdit;
     SettingsEditor& settings;
-    TuiPreferences const& preferences;
+    Preferences const& preferences;
     std::function<void()> requestExit;
     /// Whether the shell is holding input while a submitted write settles.
     std::function<bool()> isExitWaiting{};
@@ -86,7 +87,7 @@ namespace ao::tui
                     LibraryController& library,
                     async::Runtime& asyncRuntime,
                     rt::PlaybackService& playback,
-                    TuiKeymapPlan const& keymapPlan,
+                    KeymapPlan const& keymapPlan,
                     EventControllerBindings bindings);
 
     bool isQualityHoverVisible() const noexcept { return _preferences.qualityHover && _qualityHoverVisible; }
@@ -110,7 +111,7 @@ namespace ao::tui
     void revealCurrentTrack();
     void playSelectedTrack();
     void executePlaybackCommand(uimodel::PlaybackCommand command);
-    void executeKeyAction(TuiKeyAction action);
+    void executeKeyAction(KeyAction action);
     void runCommand(Command const& command);
     void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
@@ -173,14 +174,14 @@ namespace ao::tui
 
     ShellInteractionModel& _shell;
     LibraryController& _library;
-    TuiKeymapPlan const& _keymapPlan;
+    KeymapPlan const& _keymapPlan;
     async::Runtime& _asyncRuntime;
     rt::PlaybackService& _playback;
     uimodel::PlaybackActions _playbackActions;
     uimodel::PlaybackPositionViewModel _seekViewModel;
     uimodel::VolumeViewModel _volumeViewModel;
     OutputDeviceController& _outputDevices;
-    TuiHitRegions& _hitRegions;
+    HitRegions& _hitRegions;
     uimodel::TrackColumnLayouts& _trackColumnLayouts;
     TrackColumnResizePreview& _trackColumnResizePreview;
     std::optional<TrackColumnResizeDrag> _optTrackColumnResizeDrag{};
@@ -192,7 +193,7 @@ namespace ao::tui
     LibraryScanController& _libraryScan;
     TrackEditController& _trackEdit;
     SettingsEditor& _settings;
-    TuiPreferences const& _preferences;
+    Preferences const& _preferences;
     std::function<void()> _requestExit;
     std::function<bool()> _isExitWaiting;
     InputCompletionCallback _commandCompletionCallback;

@@ -26,7 +26,7 @@ There is no migration from earlier or unversioned payloads.
 This surface spans the application runtime, UIModel, and interactive-frontend persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
 The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
-`GtkLayoutStateStore`, `TuiLayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
+`GtkLayoutStateStore`, `LayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
 Every writer keys entries by a list id that is only meaningful inside one library, which is why all three documents are per-library.
 
 ## Stable vocabulary
@@ -168,7 +168,7 @@ Each literal group carries and gates its own payload version.
 - [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) own the layout document and conversion.
 - [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.cpp`](../../../app/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp) own the preference document and conversion.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns GTK group selection, load policy, and the file save boundary.
-- [`TuiLayoutStateStore.cpp`](../../../app/tui/TuiLayoutStateStore.cpp) owns TUI group selection, independent-load policy, and the terminal file save boundary.
+- [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp) owns TUI group selection, independent-load policy, and the terminal file save boundary.
 - [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI group selection, load policy, and atomic file save boundary.
 - [`RetainKnownLists.h`](../../../app/uimodel/library/presentation/RetainKnownLists.h) owns the rule both stores apply when restoring a document.
 
@@ -177,7 +177,7 @@ Each literal group carries and gates its own payload version.
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
 
 ## Related documents

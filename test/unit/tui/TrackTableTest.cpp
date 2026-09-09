@@ -4,8 +4,8 @@
 #include "tui/TrackTable.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include "test/unit/tui/TuiKeymapTestSupport.h"
-#include "test/unit/tui/TuiRenderTestSupport.h"
+#include "test/unit/tui/KeymapTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
@@ -65,7 +65,7 @@ namespace ao::tui::test
     std::int32_t libraryChooserPaneColumns(std::vector<std::string> const& labels, std::int32_t const terminalColumns)
     {
       return ao::tui::libraryChooserPaneColumns(
-        ao::test::englishMessageCatalog(), labels, defaultTuiKeymapPlan(), terminalColumns);
+        ao::test::englishMessageCatalog(), labels, defaultKeymapPlan(), terminalColumns);
     }
 
     ftxui::Element libraryChooserPane(std::vector<std::string> const& labels,
@@ -73,7 +73,7 @@ namespace ao::tui::test
                                       std::int32_t const columns = 0)
     {
       return ao::tui::libraryChooserPane(
-        ao::test::englishMessageCatalog(), labels, selected, defaultTuiKeymapPlan(), columns);
+        ao::test::englishMessageCatalog(), labels, selected, defaultKeymapPlan(), columns);
     }
 
     std::string lineContaining(std::string_view text, std::string_view needle)

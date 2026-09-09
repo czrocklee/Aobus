@@ -130,7 +130,7 @@ The completed frontend migration owns these families:
 | Frontend | Typed or native owner | Exact scope |
 |---|---|---|
 | GTK | Canonical `MessageId` values through `requiredText` / `requiredFormat` | application menus; shell/playback accessibility copy; library and authoring dialogs; preferences and shortcut/action descriptors; presentation and metadata/property editing; Layout Editor display vocabulary; tooltips, empty states, startup, and recoverable errors |
-| TUI | Canonical `MessageId` values through `requiredText` / `requiredFormat` / `tuiChromeText` | workspace and overlay copy, status shortcuts, command metadata, help, playback/output empty states, library navigation/filter status, presentation-navigation qualifiers, accessibility states, and recoverable errors |
+| TUI | Canonical `MessageId` values through `requiredText` / `requiredFormat` / `chromeText` | workspace and overlay copy, status shortcuts, command metadata, help, playback/output empty states, library navigation/filter status, presentation-navigation qualifiers, accessibility states, and recoverable errors |
 | WinUI | generated MRT resources | shell menus/actions, playback/output, library, metadata, tooltips, accessibility, empty states, and recoverable native wrappers |
 
 TUI command strings and key names remain shell identity, not translated copy.
@@ -383,7 +383,7 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 - [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp)
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt)
 - [`GtkText.h`](../../../app/linux-gtk/i18n/GtkText.h) and [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp)
-- [`TuiText.h`](../../../app/tui/TuiText.h) and [`TuiText.cpp`](../../../app/tui/TuiText.cpp)
+- [`ShellText.h`](../../../app/tui/ShellText.h) and [`ShellText.cpp`](../../../app/tui/ShellText.cpp)
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h)
 - [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp)
 

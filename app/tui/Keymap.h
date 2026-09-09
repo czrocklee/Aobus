@@ -19,7 +19,7 @@
 namespace ao::tui
 {
   /// An application action the terminal shell can execute at its root scope.
-  enum class TuiKeyAction : std::uint8_t
+  enum class KeyAction : std::uint8_t
   {
     Quit,
     ToggleListChooser,
@@ -56,24 +56,24 @@ namespace ao::tui
     Count,
   };
 
-  struct TuiActionDescriptor final
+  struct ActionDescriptor final
   {
     std::string actionId;
-    TuiKeyAction action = TuiKeyAction::Quit;
+    KeyAction action = KeyAction::Quit;
     std::span<std::string_view const> defaultChords{};
   };
 
   /// Stable action identities and TUI-local default additions, in conflict-winner order.
-  std::span<TuiActionDescriptor const> tuiActionDescriptors();
+  std::span<ActionDescriptor const> actionDescriptors();
 
   /// Shared application defaults plus TUI-only defaults and preferred terminal aliases.
-  uimodel::KeymapBindings tuiDefaultKeymap();
+  uimodel::KeymapBindings defaultKeymap();
 
   /// Validates only the edited action against executable terminal ownership.
-  Result<> validateTuiActionBindings(uimodel::KeymapModel const& candidate, std::string_view actionId);
+  Result<> validateActionBindings(uimodel::KeymapModel const& candidate, std::string_view actionId);
 
   /// Projects one neutral chord when the pinned terminal protocol can represent it safely.
-  std::optional<ftxui::Event> tuiEventForChord(uimodel::KeyChord const& chord);
+  std::optional<ftxui::Event> eventForChord(uimodel::KeyChord const& chord);
 
   /**
    * @brief Immutable executable projection of one effective keymap.
@@ -83,20 +83,19 @@ namespace ao::tui
    * shortcut shown there, so behavior and hints cannot select different
    * winners.
    */
-  class TuiKeymapPlan final
+  class KeymapPlan final
   {
   public:
-    explicit TuiKeymapPlan(uimodel::KeymapModel const& keymap);
+    explicit KeymapPlan(uimodel::KeymapModel const& keymap);
 
-    std::optional<TuiKeyAction> actionFor(ftxui::Event const& event) const;
-    std::string_view shortcutFor(TuiKeyAction action,
-                                 std::span<ftxui::Event const> unavailableEvents = {}) const noexcept;
+    std::optional<KeyAction> actionFor(ftxui::Event const& event) const;
+    std::string_view shortcutFor(KeyAction action, std::span<ftxui::Event const> unavailableEvents = {}) const noexcept;
 
   private:
     struct Entry final
     {
       ftxui::Event event;
-      TuiKeyAction action = TuiKeyAction::Quit;
+      KeyAction action = KeyAction::Quit;
       std::string_view actionId;
       std::string shortcut;
     };

@@ -98,7 +98,7 @@ namespace ao::tui
 
   std::int32_t qualityPanelColumns(i18n::MessageCatalog const& textCatalog,
                                    rt::PlaybackTransportSnapshot const& state,
-                                   TuiKeymapPlan const& keymapPlan,
+                                   KeymapPlan const& keymapPlan,
                                    std::int32_t const terminalColumns)
   {
     auto const deviceName = selectedDeviceName(state);
@@ -138,7 +138,7 @@ namespace ao::tui
 
   ftxui::Element qualityPanel(i18n::MessageCatalog const& textCatalog,
                               rt::PlaybackTransportSnapshot const& state,
-                              TuiKeymapPlan const& keymapPlan,
+                              KeymapPlan const& keymapPlan,
                               std::int32_t columns)
   {
     using namespace ftxui;

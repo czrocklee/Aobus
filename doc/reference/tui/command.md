@@ -15,8 +15,8 @@ The surface is unversioned; modal and rendering behavior belongs to the [TUI int
 ## Code boundary
 
 Startup option authority is `app/tui/Main.cpp`.
-Command-prefix and alias authority is `ShellInteractionModel.cpp`.
-Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translation, projected collision selection, and effective display chords belong to `TuiKeymap.cpp`.
+Command-prefix and alias authority is `Command.cpp`.
+Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translation, projected collision selection, and effective display chords belong to `Keymap.cpp`.
 The replaceable plan value built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
@@ -249,8 +249,8 @@ Changing a default key, alias, option, or default path requires updating this re
 ## Implementation authority
 
 - [`Main.cpp`](../../../app/tui/Main.cpp) registers startup options.
-- [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) registers prefixes and aliases.
-- [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) registers stable terminal action ids and defaults and owns executable projection plus dynamic shortcut selection.
+- [`Command.cpp`](../../../app/tui/Command.cpp) registers prefixes and aliases.
+- [`Keymap.cpp`](../../../app/tui/Keymap.cpp) registers stable terminal action ids and defaults and owns executable projection plus dynamic shortcut selection.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) routes command, presentation, and shared filter completion.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) applies the prepared root plan after fixed scoped protocol and maps mouse events.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single scan flight.
@@ -259,9 +259,9 @@ Changing a default key, alias, option, or default path requires updating this re
 
 ## Test authority
 
-- [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects commands and aliases.
+- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects commands and aliases.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects keyboard and mouse mappings.
-- [`TuiKeymapTest.cpp`](../../../test/unit/tui/TuiKeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
+- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
 - [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.

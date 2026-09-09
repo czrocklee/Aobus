@@ -146,14 +146,14 @@ Quick-filter controls and List editors may display the current presentation, but
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
 - [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) owns view navigation snapshots and replay under the [workspace navigation specification](../workspace/navigation.md).
-- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; [`TuiLayoutStateStore`](../../../app/tui/TuiLayoutStateStore.h) and [`LibraryController`](../../../app/tui/LibraryController.h) own the TUI file and navigation adaptation; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) adapts the shared picker model.
+- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; [`LayoutStateStore`](../../../app/tui/LayoutStateStore.h) and [`LibraryController`](../../../app/tui/LibraryController.h) own the TUI file and navigation adaptation; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its retained preference store and platform settings checkpoint, while [`PresentationButtonComponent`](../../../app/windows-winui/layout/component/track/TrackComponents.cpp) adapts the shared picker model.
 
 ## Test map
 
 - [`ListPresentationsTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationsTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
 - [`ListPresentationRecommendationTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationRecommendationTest.cpp) proves source-aware recommendations.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`TuiLayoutStateStoreTest.cpp`](../../../test/unit/tui/TuiLayoutStateStoreTest.cpp) prove independent per-library persistence.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) prove independent per-library persistence.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) proves TUI preference/recommendation navigation and exact restored-view precedence.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime/) prove snapshot replay semantics.
