@@ -4,6 +4,7 @@
 #include "TuiKeymap.h"
 
 #include <ao/Contract.h>
+#include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -28,6 +29,7 @@ namespace ao::tui
     using uimodel::KeyModifier;
 
     constexpr auto kNoDefaults = std::array<std::string_view, 0>{};
+    constexpr auto kOpenSettingsDefaults = std::to_array<std::string_view>({","});
     constexpr auto kQuitDefaults = std::to_array<std::string_view>({"Q"});
     constexpr auto kToggleListChooserDefaults = std::to_array<std::string_view>({"L"});
     constexpr auto kToggleDetailsDefaults = std::to_array<std::string_view>({"D"});
@@ -62,6 +64,9 @@ namespace ao::tui
       using enum uimodel::PlaybackCommand;
 
       return {
+        {.actionId = "tui.shell.openSettings",
+         .action = TuiKeyAction::OpenSettings,
+         .defaultChords = kOpenSettingsDefaults},
         {.actionId = "tui.shell.quit", .action = TuiKeyAction::Quit, .defaultChords = kQuitDefaults},
         {.actionId = "tui.shell.toggleListChooser",
          .action = TuiKeyAction::ToggleListChooser,
@@ -413,5 +418,41 @@ namespace ao::tui
       [&](Entry const& entry)
       { return entry.action == action && !std::ranges::contains(unavailableEvents, entry.event); });
     return found == _entries.end() ? std::string_view{} : std::string_view{found->shortcut};
+  }
+
+  Result<> validateTuiActionBindings(uimodel::KeymapModel const& candidate, std::string_view const actionId)
+  {
+    for (auto const& chord : candidate.chordsFor(actionId))
+    {
+      auto const optEvent = tuiEventForChord(chord);
+
+      if (!optEvent)
+      {
+        return makeError(Error::Code::NotSupported, chord.toString());
+      }
+
+      if (isReservedRootEvent(*optEvent))
+      {
+        return makeError(Error::Code::InvalidInput, chord.toString());
+      }
+
+      for (auto const& descriptor : tuiActionDescriptors())
+      {
+        if (descriptor.actionId == actionId)
+        {
+          continue;
+        }
+
+        for (auto const& other : candidate.chordsFor(descriptor.actionId))
+        {
+          if (auto const optOther = tuiEventForChord(other); optOther && *optOther == *optEvent)
+          {
+            return makeError(Error::Code::Conflict, descriptor.actionId);
+          }
+        }
+      }
+    }
+
+    return {};
   }
 } // namespace ao::tui

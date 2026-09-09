@@ -3,6 +3,54 @@
 
 de:table {
   messages:table {
+    tui_settings_save_failed { "Einstellungen konnten nicht gespeichert werden. {detail}" }
+    tui_settings_load_failed { "Gespeicherte Einstellungen konnten nicht geladen werden; Standardwerte werden verwendet. {detail}" }
+    tui_settings_title { "Einstellungen" }
+    tui_settings_general { "Allgemein" }
+    tui_settings_appearance { "Darstellung" }
+    tui_settings_interaction { "Bedienung" }
+    tui_settings_keyboard { "Tastatur" }
+    tui_settings_language { "Sprache" }
+    tui_settings_system { "Systemsprache" }
+    tui_settings_global { "Globale TUI-Einstellungen" }
+    tui_settings_dim { "Dialoghintergrund abdunkeln" }
+    tui_settings_motion { "Bewegungen reduzieren" }
+    tui_settings_cover { "Cover-Darstellung" }
+    tui_settings_mouse { "Maussteuerung" }
+    tui_settings_wheel { "Schrittweite des Mausrads" }
+    tui_settings_seek { "Sprungweite per Tastatur" }
+    tui_settings_volume { "Lautstärkeschritt per Tastatur" }
+    tui_settings_hover { "Audiodetails beim Zeigen" }
+    tui_settings_on { "Ein" }
+    tui_settings_off { "Aus" }
+    tui_settings_unbound { "Nicht belegt" }
+    tui_settings_immediate { "Bestätigte Änderungen werden sofort gespeichert." }
+    tui_settings_language_hint { "Die Sprache gilt sofort, auch für die Textsortierung. Die Wiedergabe läuft weiter." }
+    tui_settings_invalid_chord { "Gültige Tastenkombination eingeben, zum Beispiel {example}." }
+    tui_settings_close_prompt { "Schließen und ungespeicherte Änderungen verwerfen?" }
+    tui_settings_palette { "Befehlspalette" }
+    tui_settings_previous_row { "Vorherige Zeile" }
+    tui_settings_next_row { "Nächste Zeile" }
+    tui_settings_previous_group { "Vorherige Gruppe" }
+    tui_settings_next_group { "Nächste Gruppe" }
+    tui_settings_seek_back { "Zurückspringen" }
+    tui_settings_seek_forward { "Vorspringen" }
+    tui_settings_volume_down { "Leiser" }
+    tui_settings_volume_up { "Lauter" }
+    tui_settings_tracks { "{count, plural, one {# Titel} other {# Titel}}" }
+    tui_settings_seconds { "{count, plural, one {# Sekunde} other {# Sekunden}}" }
+    tui_settings_effective_cover { "Aktuelle Darstellung: {mode}" }
+    tui_settings_conflict { "Bereits {detail} zugewiesen; diese Belegung zuerst entfernen." }
+    tui_settings_unsupported { "Nicht verfügbare oder reservierte Terminaltaste: {detail}" }
+    tui_settings_stored_issue { "Gespeicherte Belegung prüfen: {detail}" }
+    tui_settings_page_keys { "{pages} Seiten · {close} Schließen" }
+    tui_settings_preference_keys { "{change} Wert ändern" }
+    tui_settings_language_keys { "{move} Auswählen · {apply} Anwenden · {close} Abbrechen" }
+    tui_settings_chord_keys { "{apply} Belegung speichern · {close} Abbrechen" }
+    tui_settings_confirm_keys { "{apply} Bestätigen · {retry} Speichern wiederholen · {close} Weiter bearbeiten" }
+    tui_settings_retry_keys { "{retry} Wiederholen · {discard} Entwurf verwerfen · {close} Schließen" }
+    tui_settings_keyboard_keys { "{choose} Belegung · {edit} Ersetzen · {add} Hinzufügen · {remove} Entfernen · {reset} Aktion zurücksetzen" }
+
     pilot_library_title { "Musikbibliothek" }
     pilot_greeting { "Willkommen, {name}" }
     pilot_copy_summary { "Nach {destination} wurden {count} Titel kopiert" }

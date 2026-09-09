@@ -56,6 +56,8 @@ namespace ao::uimodel
 
     async::Signal<>& signalChanged() noexcept { return _changed; }
 
+    void setTextCatalog(i18n::MessageCatalog textCatalog);
+
   private:
     rt::CustomTrackPresentationPreset const* findCustomPresetById(std::string_view id) const;
 

@@ -133,4 +133,10 @@ namespace ao::uimodel
       APP_LOG_ERROR("Failed to add custom track presentation: {}", res.error().message);
     }
   }
+
+  void TrackPresentationCatalog::setTextCatalog(i18n::MessageCatalog textCatalog)
+  {
+    _textCatalog = std::move(textCatalog);
+    _changed.emit();
+  }
 } // namespace ao::uimodel

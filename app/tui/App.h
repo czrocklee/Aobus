@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 
 #include <cstdint>
@@ -23,12 +22,9 @@ namespace ao::tui
     std::filesystem::path libraryRoot{"."};
     std::filesystem::path databasePath{};
     std::filesystem::path configPath{};
-    std::string coverArtMode{"auto"};
+    std::string coverArtMode{}; // Empty means use the persisted preference.
     rt::LogLevel logLevel = rt::LogLevel::Info;
   };
 
-  std::int32_t run(AppOptions const& options,
-                   i18n::MessageCatalog const& textCatalog,
-                   rt::TextOrderingPolicy const& textOrderingPolicy,
-                   rt::CompletionAliasPolicy const& completionAliasPolicy);
+  std::int32_t run(AppOptions const& options);
 } // namespace ao::tui

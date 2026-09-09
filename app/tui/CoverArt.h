@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ftxui
@@ -37,6 +39,20 @@ namespace ao::tui
     Blocks,
     Kitty,
   };
+
+  struct CoverArtModeDescriptor final
+  {
+    std::string_view name;
+    std::optional<CoverArtDeliveryMode> optDeliveryMode;
+  };
+
+  // Auto defers delivery selection to the terminal capability probe.
+  inline constexpr auto kCoverArtModes = std::to_array<CoverArtModeDescriptor>({
+    {.name = "auto", .optDeliveryMode = std::nullopt},
+    {.name = "kitty", .optDeliveryMode = CoverArtDeliveryMode::Kitty},
+    {.name = "blocks", .optDeliveryMode = CoverArtDeliveryMode::Blocks},
+    {.name = "off", .optDeliveryMode = CoverArtDeliveryMode::Off},
+  });
 
   /**
    * @brief The terminal cells one artwork slot occupies in every delivery mode.

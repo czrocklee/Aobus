@@ -60,6 +60,7 @@ namespace ao::tui
     CoverArtLoader& operator=(CoverArtLoader&&) = delete;
 
     void request(ResourceId resourceId);
+    void setMode(CoverArtDeliveryMode mode);
     void clear();
     void cancel() noexcept;
 

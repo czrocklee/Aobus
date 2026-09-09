@@ -2,22 +2,58 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/ordering/TextOrderingPolicy.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace ao::rt::test
 {
+  TEST_CASE("ViewService - live locale change preserves captured playbackPtr ordering",
+            "[runtime][unit][view][collation]")
+  {
+    auto env = ViewServiceFixture{};
+    auto const umlaut = env.addTrack(library::test::TrackSpec{.title = "ä"});
+    auto const zed = env.addTrack(library::test::TrackSpec{.title = "z"});
+    auto germanPtr =
+      std::shared_ptr<TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))};
+    auto oldPolicyPtr = std::weak_ptr<TextOrderingPolicy const>{germanPtr};
+    env.service.setTextOrderingPolicy(germanPtr);
+    auto const presentation = TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {{.field = TrackSortField::Title, .ascending = true}}};
+    auto const viewId = env.requireView({.optPresentation = presentation});
+    auto const browsePtr = env.requireProjection(viewId);
+    auto playbackPtr = env.service.createTransientTrackListProjection(
+      ao::test::requireValue(env.cachePtr->acquire(kAllTracksListId)), TrackOrderSpec{.sortBy = presentation.sortBy});
+    CHECK(browsePtr->trackIdAt(0) == umlaut);
+    CHECK(playbackPtr->trackIdAt(0) == umlaut);
+    germanPtr.reset();
+    env.service.setTextOrderingPolicy(
+      std::shared_ptr<TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("sv"))});
+    CHECK(browsePtr->trackIdAt(0) == zed);
+    CHECK(playbackPtr->trackIdAt(0) == umlaut);
+    CHECK_FALSE(oldPolicyPtr.expired());
+    playbackPtr.reset();
+    CHECK(oldPolicyPtr.expired());
+    auto const next = env.requireView({.optPresentation = presentation});
+    CHECK(env.requireProjection(next)->trackIdAt(0) == zed);
+  }
+
   TEST_CASE("ViewService - createView with groupBy applies effective sort", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};

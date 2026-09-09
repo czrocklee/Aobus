@@ -98,6 +98,7 @@ The resulting additional defaults are:
 
 | Action id | Chords prepended or added by the TUI |
 |---|---|
+| `tui.shell.openSettings` | `,` |
 | `tui.shell.quit` | `Q` |
 | `tui.shell.toggleListChooser` | `L` |
 | `tui.shell.toggleTrackDetail` | `D` |
@@ -152,7 +153,7 @@ GTK accepts one command per physical key-down/key-up cycle, so OS auto-repeat wh
 
 ### TUI terminal projection
 
-The TUI builds one immutable `TuiKeymapPlan` from the effective keymap at startup.
+The TUI builds a `TuiKeymapPlan` from the effective keymap at startup and replaces its value after a successful Settings save.
 It considers only stable action ids for which the TUI has a descriptor and handler, and the retained entries drive both root dispatch and every configurable shortcut hint.
 
 The terminal adapter's current representation whitelist projects:
@@ -194,7 +195,7 @@ A present action replaces its complete default list.
 An empty sequence explicitly unbinds the action.
 An absent action retains its current default.
 Saving emits only actions whose effective ordered chords differ from their defaults.
-The TUI currently has no shortcut editor and never calls `saveKeymap()` during ordinary shutdown; it only loads this group and preserves it while saving sibling application preferences.
+The TUI Keyboard page adds, replaces, removes, and resets bindings per action. It validates terminal event support, reserved protocol keys, and conflicts with other actions before saving. Same-action terminal aliases collapse to one physical binding. Persistence succeeds before the live dispatch/hint plan is replaced; failure retains the candidate for retry or discard. Ordinary shutdown does not rewrite untouched shortcuts.
 
 Example:
 
@@ -239,7 +240,6 @@ There is no explicit migration table for renamed actions or key tokens.
 - [`GtkAccelTranslator.h`](../../../app/linux-gtk/app/GtkAccelTranslator.h) owns the GDK edge, and [`KeyChordAccelerator.h`](../../../app/windows-winui/include/ao/winui/input/KeyChordAccelerator.h) the Windows one.
 - [`KeymapAcceleratorPlan.h`](../../../app/windows-winui/include/ao/winui/input/KeymapAcceleratorPlan.h) owns which bindings the Windows shell installs.
 - [`TuiKeymap.h`](../../../app/tui/TuiKeymap.h) and [`TuiKeymap.cpp`](../../../app/tui/TuiKeymap.cpp) own TUI-only descriptors, default additions, the terminal whitelist, collision policy, and the immutable dispatch/hint plan.
-- The `tui_keymap_load_only` rule in [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) prevents the TUI from acquiring a keymap write path before it has an acknowledged editing surface.
 - WinUI [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers reveal and saved-order handlers directly in the live action registry; those native component commands remain outside the Windows layout schema.
 
 ## Test authority

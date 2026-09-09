@@ -106,14 +106,16 @@ namespace ao::rt
       return presentationForGroup(initial.groupBy);
     }
 
-    Result<PreparedViewResources> prepareViewResources(ViewId const viewId,
-                                                       ListId const baseListId,
-                                                       TrackSourceLease baseSourceLease,
-                                                       std::string const& filterExpression,
-                                                       TrackPresentationSpec const& presentation,
-                                                       library::MusicLibrary const& library,
-                                                       TrackSourceCache& sources,
-                                                       TextOrderingPolicy const* textOrderingPolicy)
+    Result<PreparedViewResources> prepareViewResources(
+      ViewId const viewId,
+      ListId const baseListId,
+      TrackSourceLease baseSourceLease,
+      std::string const& filterExpression,
+      TrackPresentationSpec const& presentation,
+      library::MusicLibrary const& library,
+      TrackSourceCache& sources,
+      TextOrderingPolicy const* textOrderingPolicy,
+      std::shared_ptr<TextOrderingPolicy const> const& updatedPolicyPtr)
     {
       auto activeSourceLease = baseSourceLease;
       auto optFilterError = sources.sourceError(baseSourceLease);
@@ -137,6 +139,12 @@ namespace ao::rt
 
       auto projectionPtr =
         std::make_shared<TrackListProjection>(viewId, activeSourceLease, library, textOrderingPolicy);
+
+      if (updatedPolicyPtr)
+      {
+        projectionPtr->setTextOrderingPolicy(updatedPolicyPtr);
+      }
+
       projectionPtr->setPresentation(presentation);
 
       return PreparedViewResources{
@@ -193,6 +201,7 @@ namespace ao::rt
     library::MusicLibrary const& library;
     TrackSourceCache& sources;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
+    std::shared_ptr<TextOrderingPolicy const> updatedTextOrderingPolicyPtr;
 
     Impl(async::Executor& exec,
          library::MusicLibrary const& lib,
@@ -305,7 +314,8 @@ namespace ao::rt
                                              presentation,
                                              _implPtr->library,
                                              _implPtr->sources,
-                                             _implPtr->textOrderingPolicy);
+                                             _implPtr->textOrderingPolicy,
+                                             _implPtr->updatedTextOrderingPolicyPtr);
 
     if (!resourcesRes)
     {
@@ -367,7 +377,8 @@ namespace ao::rt
                                              entry.state.presentation,
                                              _implPtr->library,
                                              _implPtr->sources,
-                                             _implPtr->textOrderingPolicy);
+                                             _implPtr->textOrderingPolicy,
+                                             _implPtr->updatedTextOrderingPolicyPtr);
 
     if (!resourcesRes)
     {
@@ -543,8 +554,15 @@ namespace ao::rt
     TrackOrderSpec const& order) const
   {
     _implPtr->ensureOnExecutor();
-    return std::make_unique<TrackListProjection>(
+    auto projectionPtr = std::make_unique<TrackListProjection>(
       kInvalidViewId, std::move(sourceLease), _implPtr->library, order, _implPtr->textOrderingPolicy);
+
+    if (_implPtr->updatedTextOrderingPolicyPtr)
+    {
+      projectionPtr->setTextOrderingPolicy(_implPtr->updatedTextOrderingPolicyPtr);
+    }
+
+    return projectionPtr;
   }
 
   Result<TrackSourceState> ViewService::listSourceState(ViewId const viewId) const
@@ -594,5 +612,23 @@ namespace ao::rt
   {
     _implPtr->ensureOnExecutor();
     return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
+  }
+
+  void ViewService::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->updatedTextOrderingPolicyPtr = std::move(policyPtr);
+    _implPtr->textOrderingPolicy = _implPtr->updatedTextOrderingPolicyPtr.get();
+    auto projections = std::vector<std::shared_ptr<TrackListProjection>>{};
+
+    for (auto const& [id, entry] : _implPtr->views)
+    {
+      projections.push_back(entry.projectionPtr);
+    }
+
+    for (auto const& projectionPtr : projections)
+    {
+      projectionPtr->setTextOrderingPolicy(_implPtr->updatedTextOrderingPolicyPtr);
+    }
   }
 } // namespace ao::rt

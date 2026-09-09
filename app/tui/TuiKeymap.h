@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
@@ -40,6 +41,7 @@ namespace ao::tui
     SelectAll,
     SelectClear,
     EditProperties,
+    OpenSettings,
     PlaySelection,
     PreviousTrack,
     NextTrack,
@@ -66,6 +68,9 @@ namespace ao::tui
 
   /// Shared application defaults plus TUI-only defaults and preferred terminal aliases.
   uimodel::KeymapBindings tuiDefaultKeymap();
+
+  /// Validates only the edited action against executable terminal ownership.
+  Result<> validateTuiActionBindings(uimodel::KeymapModel const& candidate, std::string_view actionId);
 
   /// Projects one neutral chord when the pinned terminal protocol can represent it safely.
   std::optional<ftxui::Event> tuiEventForChord(uimodel::KeyChord const& chord);

@@ -11,6 +11,7 @@
 #include "PlaybackPanel.h"
 #include "PresentationPanel.h"
 #include "SelectionNavigation.h"
+#include "SettingsEditor.h"
 #include "ShellInteractionModel.h"
 #include "TerminalTrackColumnLayout.h"
 #include "TrackEditController.h"
@@ -57,10 +58,7 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::int32_t kMouseWheelSelectionDelta = 3;
-    constexpr auto kKeyboardSeekDelta = std::chrono::seconds{5};
     constexpr auto kFilterDebounceInterval = std::chrono::milliseconds{200};
-    constexpr float kKeyboardVolumeDelta = 0.05F;
     constexpr std::int32_t kPageSelectionDelta = 10;
     constexpr std::int32_t kBoundarySelectionDelta = 1'000'000;
 
@@ -211,6 +209,8 @@ namespace ao::tui
     , _notifications{bindings.notifications}
     , _libraryScan{bindings.libraryScan}
     , _trackEdit{bindings.trackEdit}
+    , _settings{bindings.settings}
+    , _preferences{bindings.preferences}
     , _requestExit{std::move(bindings.requestExit)}
     , _isExitWaiting{std::move(bindings.isExitWaiting)}
     , _commandCompletionCallback{std::move(bindings.commandCompletionCallback)}
@@ -440,10 +440,10 @@ namespace ao::tui
       case NextTrack: _library.moveFocusedSelection(false, 1); break;
       case PreviousSection: _library.jumpToAdjacentSection(-1); break;
       case NextSection: _library.jumpToAdjacentSection(1); break;
-      case SeekBackward: _seekViewModel.seekBy(-kKeyboardSeekDelta); break;
-      case SeekForward: _seekViewModel.seekBy(kKeyboardSeekDelta); break;
-      case VolumeDown: _volumeViewModel.adjustVolume(-kKeyboardVolumeDelta); break;
-      case VolumeUp: _volumeViewModel.adjustVolume(kKeyboardVolumeDelta); break;
+      case SeekBackward: _seekViewModel.seekBy(-std::chrono::seconds{_preferences.seekSeconds}); break;
+      case SeekForward: _seekViewModel.seekBy(std::chrono::seconds{_preferences.seekSeconds}); break;
+      case VolumeDown: _volumeViewModel.adjustVolume(-static_cast<float>(_preferences.volumePercent) / 100.0F); break;
+      case VolumeUp: _volumeViewModel.adjustVolume(static_cast<float>(_preferences.volumePercent) / 100.0F); break;
       case Quit:
       case ToggleListChooser:
       case ToggleDetails:
@@ -462,6 +462,7 @@ namespace ao::tui
       case SelectAll:
       case SelectClear:
       case EditProperties:
+      case OpenSettings:
       case PlaySelection:
       case PlaybackPlayPause:
       case PlaybackStop: AO_FATAL("Command-backed TUI key action was not mapped");
@@ -531,6 +532,12 @@ namespace ao::tui
       case CommandAction::SelectAll: _library.markAllTracks(); break;
       case CommandAction::SelectClear: _library.clearMarks(); break;
       case CommandAction::EditProperties: editSelectedTrackProperties(); break;
+      case CommandAction::OpenSettings:
+        cancelTransientInteractions();
+        _library.commitVisualSelection();
+        _shell.closeInput();
+        _settings.open();
+        break;
       case CommandAction::Play: playSelectedTrack(); break;
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
@@ -814,8 +821,7 @@ namespace ao::tui
     {
       if (!isModalOverlay(_shell.overlay()) && contains(_hitRegions.trackTableBox, mouse.x, mouse.y))
       {
-        auto const delta =
-          mouse.button == ftxui::Mouse::WheelUp ? -kMouseWheelSelectionDelta : kMouseWheelSelectionDelta;
+        auto const delta = mouse.button == ftxui::Mouse::WheelUp ? -_preferences.wheelStep : _preferences.wheelStep;
         _library.moveFocusedSelection(false, delta);
         return true;
       }
@@ -944,6 +950,12 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
   {
+    if (contains(_hitRegions.settingsButtonBox, mouse.x, mouse.y))
+    {
+      runCommand(Command{.action = CommandAction::OpenSettings});
+      return true;
+    }
+
     if (contains(_hitRegions.outputDeviceButtonBox, mouse.x, mouse.y))
     {
       toggleOutputDevices();
@@ -1362,13 +1374,18 @@ namespace ao::tui
 
     // An open editor owns the whole surface, including keys and mouse events
     // it has no use for, so nothing behind it can act on stale geometry.
-    if (_trackEdit.tryHandleEvent(event))
+    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
     {
       return true;
     }
 
     if (event.is_mouse())
     {
+      if (!_preferences.mouseEnabled)
+      {
+        return true;
+      }
+
       auto mouseEvent = event;
       return tryHandleMouse(mouseEvent.mouse());
     }
@@ -1409,5 +1426,7 @@ namespace ao::tui
   {
     cancelFilterDebounce();
     cancelWorkspaceGestures();
+    _qualityHoverVisible = false;
+    _hoveredButton = HoveredButton::None;
   }
 } // namespace ao::tui

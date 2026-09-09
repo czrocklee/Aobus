@@ -344,6 +344,28 @@ namespace ao::tui::test
     CHECK(fixture.readCount() == 0);
   }
 
+  TEST_CASE("CoverArtLoader - live mode change cancels pending delivery and can resume",
+            "[tui][unit][cover-art][concurrency]")
+  {
+    auto fixture = CoverArtLoaderFixture{};
+    auto const resourceId = fixture.addResource(support::onePixelRedPng());
+    auto loader = CoverArtLoader{
+      fixture.byteCache(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, kCoverArtDefaultColumns};
+    loader.request(resourceId);
+    REQUIRE(fixture.sleeper().tryWaitForCallCount(1));
+    loader.setMode(CoverArtDeliveryMode::Off);
+    fixture.executor().drain();
+    CHECK_FALSE(loader.preview());
+    CHECK_FALSE(loader.kittyPng());
+    CHECK(fixture.readCount() == 0);
+    CHECK(fixture.sleeper().tryWaitForCancellation(0));
+    loader.setMode(CoverArtDeliveryMode::Blocks);
+    loader.request(resourceId);
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
+    CHECK(loader.resourceId() == resourceId);
+  }
+
   TEST_CASE("CoverArtLoader - cancellation suppresses decode completion", "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};

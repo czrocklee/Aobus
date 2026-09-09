@@ -1081,6 +1081,21 @@ namespace ao::rt::test
       return 3;
     }
 
+    std::int32_t runRuntimeOrderingOffExecutor(std::string_view const scratchName)
+    {
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::make_unique<ProbeQueuedExecutor>());
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto worker = std::jthread{[&runtimePtr] { runtimePtr->setTextOrderingPolicy(nullptr); }};
+      worker.join();
+      return 3;
+    }
+
     std::int32_t runWorkspaceObservationAdmissionException(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<RejectingDeferExecutor>();
@@ -1379,6 +1394,11 @@ namespace ao::rt::test
     if (name == "playback-service-event-off-executor")
     {
       return runPlaybackServiceEventOffExecutor(scratchName);
+    }
+
+    if (name == "runtime-ordering-off-executor")
+    {
+      return runRuntimeOrderingOffExecutor(scratchName);
     }
 
     if (name == "view-service-read-off-executor")

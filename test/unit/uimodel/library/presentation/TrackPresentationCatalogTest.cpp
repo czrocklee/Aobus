@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
 
@@ -10,10 +11,31 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("TrackPresentationCatalog - language replacement notifies observers after labels change",
+            "[uimodel][regression][presentation]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    auto& catalog = fixture.catalog;
+    auto const optPreviousSpec = catalog.specForId("library");
+    std::int32_t notifications = 0;
+    auto observedLabel = std::string{};
+    auto sub = catalog.signalChanged().connect(
+      [&]
+      {
+        ++notifications;
+        observedLabel = catalog.labelForId("library");
+      });
+    catalog.setTextCatalog(ao::test::messageCatalog("de"));
+    CHECK(notifications == 1);
+    CHECK(observedLabel == "Bibliothek");
+    CHECK(catalog.specForId("library") == optPreviousSpec);
+  }
+
   TEST_CASE("TrackPresentationCatalog - projects builtin and custom presentation choices",
             "[uimodel][unit][library][presentation]")
   {

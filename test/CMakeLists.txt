@@ -763,6 +763,8 @@ add_executable(ao_tui_test
     unit/tui/TrackTableTest.cpp
     unit/tui/TuiHitRegionsTest.cpp
     unit/tui/TuiKeymapTest.cpp
+    unit/tui/SettingsEditorTest.cpp
+    unit/tui/TuiPreferencesTest.cpp
     unit/tui/TuiLayoutStateStoreTest.cpp
     unit/tui/TuiSignalProbeTest.cpp
     unit/tui/TuiTextFieldModelTest.cpp
@@ -770,6 +772,7 @@ add_executable(ao_tui_test
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 
 target_link_libraries(ao_tui_test PRIVATE
+    ao_app_i18n_ordering
     aobus-tui-lib
     ao_app_uimodel
     ao_app_runtime

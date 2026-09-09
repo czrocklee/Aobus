@@ -53,6 +53,8 @@ namespace ao::uimodel
     void dismissCompact();
     void hideDetailNotification(rt::NotificationId id);
 
+    void setTextCatalog(i18n::MessageCatalog const& textCatalog);
+
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

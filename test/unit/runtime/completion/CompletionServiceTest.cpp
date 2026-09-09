@@ -30,6 +30,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -122,6 +123,29 @@ namespace ao::rt::test
     CHECK(pairs(german.valuesFor(TrackField::Artist)) ==
           std::vector<std::pair<std::string, std::uint32_t>>{{"ä", 1}, {"z", 1}});
     CHECK(pairs(swedish.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"z", 1}, {"ä", 1}});
+  }
+
+  TEST_CASE("CompletionService - live locale change invalidates materialized vocabulary",
+            "[runtime][unit][completion][collation]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "One", .artist = "ä"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Two", .artist = "z"});
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto germanPolicyRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishPolicyRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanPolicyRes);
+    REQUIRE(swedishPolicyRes);
+
+    auto completion = CompletionService{libraryFixture.library(), changes};
+    completion.setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const>{std::move(*germanPolicyRes)});
+    CHECK(pairs(completion.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"ä", 1}, {"z", 1}});
+    completion.setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const>{std::move(*swedishPolicyRes)});
+    CHECK(pairs(completion.valuesFor(TrackField::Artist)) ==
           std::vector<std::pair<std::string, std::uint32_t>>{{"z", 1}, {"ä", 1}});
   }
 

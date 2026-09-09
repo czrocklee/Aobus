@@ -729,6 +729,7 @@ namespace ao::rt
     TrackSourceLease sourceLease;
     library::MusicLibrary const& library;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
+    std::shared_ptr<TextOrderingPolicy const> updatedTextOrderingPolicyPtr;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
     std::string presentationId = std::string{kDefaultTrackPresentationId};
@@ -1735,4 +1736,19 @@ namespace ao::rt
       return projection._implPtr->operationCounts;
     }
   } // namespace detail
+  void TrackListProjection::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)
+  {
+    auto const changed = _implPtr->textOrderingPolicy != policyPtr.get();
+    _implPtr->updatedTextOrderingPolicyPtr = std::move(policyPtr);
+    _implPtr->textOrderingPolicy = _implPtr->updatedTextOrderingPolicyPtr.get();
+
+    if (!changed || _implPtr->sourceInvalidated)
+    {
+      return;
+    }
+
+    auto const previousSize = size();
+    _implPtr->rebuildOrderIndex();
+    _implPtr->publishReset(previousSize);
+  }
 } // namespace ao::rt

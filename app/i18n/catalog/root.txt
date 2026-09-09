@@ -3,6 +3,54 @@
 
 root:table {
   messages:table {
+    tui_settings_save_failed { "Could not save settings. {detail}" }
+    tui_settings_load_failed { "Could not load saved preferences; using defaults. {detail}" }
+    tui_settings_title { "Settings" }
+    tui_settings_general { "General" }
+    tui_settings_appearance { "Appearance" }
+    tui_settings_interaction { "Interaction" }
+    tui_settings_keyboard { "Keyboard" }
+    tui_settings_language { "Language" }
+    tui_settings_system { "System default" }
+    tui_settings_global { "Global TUI preferences" }
+    tui_settings_dim { "Dim modal background" }
+    tui_settings_motion { "Reduce motion" }
+    tui_settings_cover { "Cover art renderer" }
+    tui_settings_mouse { "Mouse control" }
+    tui_settings_wheel { "Wheel selection step" }
+    tui_settings_seek { "Keyboard seek step" }
+    tui_settings_volume { "Keyboard volume step" }
+    tui_settings_hover { "Audio details on hover" }
+    tui_settings_on { "On" }
+    tui_settings_off { "Off" }
+    tui_settings_unbound { "Unbound" }
+    tui_settings_immediate { "Accepted changes save immediately." }
+    tui_settings_language_hint { "Language changes apply immediately, including text ordering. Playback continues." }
+    tui_settings_invalid_chord { "Enter a valid key chord, for example {example}." }
+    tui_settings_close_prompt { "Close and discard unsaved changes?" }
+    tui_settings_palette { "Command palette" }
+    tui_settings_previous_row { "Previous row" }
+    tui_settings_next_row { "Next row" }
+    tui_settings_previous_group { "Previous group" }
+    tui_settings_next_group { "Next group" }
+    tui_settings_seek_back { "Seek backward" }
+    tui_settings_seek_forward { "Seek forward" }
+    tui_settings_volume_down { "Lower volume" }
+    tui_settings_volume_up { "Raise volume" }
+    tui_settings_tracks { "{count, plural, one {# track} other {# tracks}}" }
+    tui_settings_seconds { "{count, plural, one {# second} other {# seconds}}" }
+    tui_settings_effective_cover { "Current renderer: {mode}" }
+    tui_settings_conflict { "Already assigned to {detail}; remove that binding first." }
+    tui_settings_unsupported { "Unavailable or reserved terminal chord: {detail}" }
+    tui_settings_stored_issue { "Stored binding needs attention: {detail}" }
+    tui_settings_page_keys { "{pages} Pages · {close} Close" }
+    tui_settings_preference_keys { "{change} Change value" }
+    tui_settings_language_keys { "{move} Choose · {apply} Apply · {close} Cancel" }
+    tui_settings_chord_keys { "{apply} Save chord · {close} Cancel" }
+    tui_settings_confirm_keys { "{apply} Confirm · {retry} Retry save · {close} Keep editing" }
+    tui_settings_retry_keys { "{retry} Retry · {discard} Discard candidate · {close} Close" }
+    tui_settings_keyboard_keys { "{choose} Binding · {edit} Replace · {add} Add · {remove} Remove · {reset} Reset action" }
+
     pilot_library_title { "Music library" }
     pilot_greeting { "Welcome, {name}" }
     pilot_copy_summary { "Copied {count} tracks to {destination}" }

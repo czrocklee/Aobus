@@ -51,6 +51,7 @@ namespace ao::rt
     NotificationService notificationService;
     ResourceByteReader resourceByteReader;
     TextOrderingPolicy const* textOrderingPolicy = nullptr;
+    std::shared_ptr<TextOrderingPolicy const> updatedTextOrderingPolicyPtr;
     bool stopped = false;
 
     Impl(std::unique_ptr<async::Executor> execPtr,
@@ -221,5 +222,13 @@ namespace ao::rt
     std::stop_token const stopToken)
   {
     return _implPtr->resourceByteReader.readInteractiveAsync(resourceId, stopToken);
+  }
+
+  void CoreRuntime::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)
+  {
+    AO_EXPECTS(_implPtr->executorPtr->isCurrent(), "CoreRuntime ordering update invoked off the executor thread");
+    _implPtr->completionService.setTextOrderingPolicy(policyPtr);
+    _implPtr->updatedTextOrderingPolicyPtr = std::move(policyPtr);
+    _implPtr->textOrderingPolicy = _implPtr->updatedTextOrderingPolicyPtr.get();
   }
 } // namespace ao::rt

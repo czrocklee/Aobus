@@ -107,7 +107,7 @@ This allows a changed shipped default to reach users who did not customize that 
 The exact group and shape belong to the keymap and application managed-state references.
 
 TUI loads `shortcuts` from its global `<config>/tui.yaml` store, not from the selected library's workspace store and not from `--config`.
-It has no shortcut editor and does not save the keymap on ordinary exit; this avoids normalizing untouched invalid source text without an acknowledged TUI mutation.
+Its Settings Keyboard page saves an acknowledged candidate before replacing the live dispatch/hint plan. Ordinary exit does not rewrite untouched keymaps. The editor preserves other chords when removing a binding and rejects conflicts, reserved root events, and unsupported terminal encodings when adding or replacing bindings.
 Saving the sibling `runtime` preference group through the same `ConfigStore` preserves the loaded shortcut group.
 
 Stable action ids and canonical chord strings are compatibility surfaces.

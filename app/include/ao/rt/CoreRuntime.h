@@ -88,6 +88,9 @@ namespace ao::rt
       ResourceId resourceId,
       std::stop_token stopToken = {});
 
+    /// Updates completion ordering and the policy supplied to new consumers on the callback executor.
+    void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
+
   private:
     friend class AppRuntime;
 

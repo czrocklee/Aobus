@@ -29,6 +29,8 @@ namespace ao::uimodel
 
     ActivityStatusViewState const& viewState() const noexcept;
 
+    void setTextCatalog(i18n::MessageCatalog textCatalog, rt::NotificationFeedState const& feed);
+
   private:
     struct LibraryProgressState final
     {

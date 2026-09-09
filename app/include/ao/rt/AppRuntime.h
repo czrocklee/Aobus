@@ -111,6 +111,9 @@ namespace ao::rt
     Result<> jumpToAlbum(TrackId trackId);
     void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
 
+    /// Updates ordering on the callback executor. Captured playback projections retain their prior order.
+    void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
+
   private:
     struct Impl;
     AppRuntime(CoreRuntime&& core,

@@ -70,6 +70,17 @@ namespace ao::tui
                                 "TUI cover-art selection settle");
   }
 
+  void CoverArtLoader::setMode(CoverArtDeliveryMode const mode)
+  {
+    if (_mode == mode)
+    {
+      return;
+    }
+
+    clear();
+    _mode = mode;
+  }
+
   void CoverArtLoader::clear()
   {
     if (_resourceId == kInvalidResourceId && !_optPreview && !_optKittyPng)

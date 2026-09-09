@@ -3,6 +3,54 @@
 
 zh_Hans:table {
   messages:table {
+    tui_settings_save_failed { "无法保存设置。{detail}" }
+    tui_settings_load_failed { "无法读取已保存的偏好设置，已使用默认值。{detail}" }
+    tui_settings_title { "设置" }
+    tui_settings_general { "常规" }
+    tui_settings_appearance { "外观" }
+    tui_settings_interaction { "操作" }
+    tui_settings_keyboard { "快捷键" }
+    tui_settings_language { "语言" }
+    tui_settings_system { "跟随系统" }
+    tui_settings_global { "TUI 全局设置" }
+    tui_settings_dim { "弱化弹窗背景" }
+    tui_settings_motion { "减少动态效果" }
+    tui_settings_cover { "封面显示模式" }
+    tui_settings_mouse { "鼠标操作" }
+    tui_settings_wheel { "滚轮移动步长" }
+    tui_settings_seek { "键盘快进步长" }
+    tui_settings_volume { "键盘音量步长" }
+    tui_settings_hover { "悬停显示音频详情" }
+    tui_settings_on { "开启" }
+    tui_settings_off { "关闭" }
+    tui_settings_unbound { "未绑定" }
+    tui_settings_immediate { "确认修改后立即保存。" }
+    tui_settings_language_hint { "语言立即生效，包括文字排序。播放不会中断。" }
+    tui_settings_invalid_chord { "请输入有效的按键组合，例如 {example}。" }
+    tui_settings_close_prompt { "关闭并放弃未保存的修改？" }
+    tui_settings_palette { "命令面板" }
+    tui_settings_previous_row { "上一行" }
+    tui_settings_next_row { "下一行" }
+    tui_settings_previous_group { "上一组" }
+    tui_settings_next_group { "下一组" }
+    tui_settings_seek_back { "快退" }
+    tui_settings_seek_forward { "快进" }
+    tui_settings_volume_down { "降低音量" }
+    tui_settings_volume_up { "提高音量" }
+    tui_settings_tracks { "{count, plural, other {# 首曲目}}" }
+    tui_settings_seconds { "{count, plural, other {# 秒}}" }
+    tui_settings_effective_cover { "当前显示模式：{mode}" }
+    tui_settings_conflict { "已由 {detail} 使用，请先移除该绑定。" }
+    tui_settings_unsupported { "终端不支持或保留此按键：{detail}" }
+    tui_settings_stored_issue { "已有绑定需要处理：{detail}" }
+    tui_settings_page_keys { "{pages} 切页 · {close} 关闭" }
+    tui_settings_preference_keys { "{change} 修改值" }
+    tui_settings_language_keys { "{move} 选择 · {apply} 应用 · {close} 取消" }
+    tui_settings_chord_keys { "{apply} 保存按键 · {close} 取消" }
+    tui_settings_confirm_keys { "{apply} 确认 · {retry} 重试保存 · {close} 继续编辑" }
+    tui_settings_retry_keys { "{retry} 重试 · {discard} 放弃候选修改 · {close} 关闭" }
+    tui_settings_keyboard_keys { "{choose} 选择绑定 · {edit} 替换 · {add} 添加 · {remove} 移除 · {reset} 重置动作" }
+
     pilot_library_title { "音乐库" }
     pilot_greeting { "欢迎，{name}" }
     pilot_copy_summary { "已将 {count} 首曲目复制到 {destination}" }

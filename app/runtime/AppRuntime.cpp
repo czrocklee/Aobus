@@ -345,4 +345,10 @@ namespace ao::rt
   {
     _implPtr->playbackBootstrap.addProvider(std::move(providerPtr));
   }
+
+  void AppRuntime::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)
+  {
+    _implPtr->core.setTextOrderingPolicy(policyPtr);
+    _implPtr->viewService.setTextOrderingPolicy(std::move(policyPtr));
+  }
 } // namespace ao::rt

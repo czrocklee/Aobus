@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <string>
@@ -610,5 +611,17 @@ namespace ao::rt
 
     _aggregateValues = std::move(values);
     _aggregateValuesReady = true;
+  }
+
+  void CompletionService::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)
+  {
+    requireOwnerThread();
+    _updatedTextOrderingPolicyPtr = std::move(policyPtr);
+    _textOrderingPolicy = _updatedTextOrderingPolicyPtr.get();
+    // Preserve frequencies and aliases; only materialized ordering is stale.
+    _tagsReady = false;
+    _customKeysReady = false;
+    _aggregateValuesReady = false;
+    _valuesReady.fill(false);
   }
 } // namespace ao::rt

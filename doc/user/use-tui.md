@@ -76,7 +76,7 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
 These are the shipped shortcuts.
 The TUI loads global overrides from the `shortcuts` group in `<config>/tui.yaml`; supported changes update both behavior and the key shown in status chips, panels, Help, and the Command Palette.
 An empty chord list unbinds a configurable action.
-The TUI currently has no shortcut editor and does not rewrite that group on ordinary exit, so edit the YAML only while Aobus is not running and use the stable action ids and chord syntax in the [keyboard map reference](../reference/shell/keymap.md).
+Press `,` or click Settings at the bottom right, then choose Keyboard to edit shortcuts live. Left/Right selects one chord; Insert adds, Enter replaces, Delete removes it, and `r` restores that action's defaults. Conflicts and unsupported terminal chords are rejected. Ordinary exit does not rewrite untouched shortcuts; see the [keyboard map reference](../reference/shell/keymap.md).
 Ctrl+C, text-entry editing/submission/cancellation keys, overlay navigation/activation/Escape, notification `x`, and mouse input remain fixed protocol and cannot be disabled by a root shortcut override.
 
 The default session file is `<root>/.aobus/tui-workspace.yaml` unless `--config` selects another path.
@@ -93,7 +93,19 @@ Opening a list uses its remembered presentation, while startup still keeps the e
 
 Normal quit retires an in-flight scan and an open editor without presenting a late outcome, waits for an already submitted metadata write, cancels unfinished input and pointer interactions, saves committed layout/presentation preferences plus workspace and playback state, and then stops playback.
 Track selection, an unfinished Quick Filter draft, open panels, pointer state, and an unfinished column-width preview are not restored.
-The output device you select is remembered separately as a global TUI preference in `<config>/tui.yaml` rather than in the per-library session file; saving it preserves the load-only `shortcuts` sibling.
+The output device you select is remembered separately as a global TUI preference in `<config>/tui.yaml` rather than in the per-library session file; saving it preserves the `shortcuts` and `preferences` siblings.
+
+## Settings
+
+If saved preferences are invalid or unreadable, TUI starts with defaults and shows a warning. The original preference group is retained until an explicit successful Settings save.
+
+Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser or shortcut capture only cancels that unconfirmed choice.
+
+General includes system language, English, Deutsch, Español, Français, 日本語, 简体中文, and 繁體中文. Confirming a language updates the open Settings dialog and workspace immediately, including localized headings and browsing/completion ordering. Focus and marks remain on the same tracks; playback and its captured sequence continue. Existing literal notification messages retain their original wording; structured notifications and new scan results use the selected language. Close Track Properties before opening Settings.
+
+Appearance controls the dimmed modal backdrop, reduced motion, and cover renderer. Dimming uses your terminal's dim attribute, so its strength depends on the terminal theme. Reduced motion uses a static frame for time-driven decoration and pauses the soul animation; the playhead keeps moving. A command-line cover-mode override stays effective for this session and is shown beside the preference. Editing that preference still saves the renderer for future launches without the override.
+
+Interaction controls mouse input, wheel movement (1–10 tracks), keyboard seek (1–60 seconds), keyboard volume (1–10 percentage points), and the quality hover popup. Preference and shortcut changes save immediately. On failure the applied setting stays unchanged; the dialog keeps the attempted value visible and offers Ctrl+R to retry or Ctrl+G to discard.
 
 ## Verify the result
 

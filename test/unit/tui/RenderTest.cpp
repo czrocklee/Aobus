@@ -811,7 +811,7 @@ namespace ao::tui::test
     CHECK(shortcutPixel.bold);
   }
 
-  TEST_CASE("Render - compact status bar keeps only input and help entry points", "[tui][unit][render]")
+  TEST_CASE("Render - compact status bar keeps input, Settings, and help entry points", "[tui][unit][render]")
   {
     auto shell = ShellInteractionModel{};
     auto const rendered = renderElement(statusBar(StatusBarViewState{.terminalColumns = 80, .shell = &shell}), 80, 1);
@@ -825,6 +825,66 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("v view"));
     CHECK_FALSE(rendered.text.contains("d detail"));
     CHECK_FALSE(rendered.text.contains("q quit"));
+  }
+
+  TEST_CASE("Render - Settings and help survive long workspace text in narrow terminals", "[tui][unit][render]")
+  {
+    for (auto const* locale : {"en", "de", "zh-Hans"})
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+
+      for (auto const columns : {36, 80, 140})
+      {
+        INFO(locale);
+        INFO(columns);
+        auto box = ftxui::Box{};
+        auto activity = uimodel::ActivityStatusViewState{
+          .compact = {.kind = uimodel::ActivityStatusKind::Warning, .text = std::string(200, 'w')}};
+        auto const rendered = renderElement(statusBar(catalog,
+                                                      StatusBarViewState{.activityStatus = &activity,
+                                                                         .terminalColumns = columns,
+                                                                         .filterDraft = std::string(200, 'f'),
+                                                                         .settingsButtonBox = &box},
+                                                      defaultTuiKeymapPlan()),
+                                            columns,
+                                            1);
+        CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiSettingsTitle)));
+        CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellStatusHelp)));
+        REQUIRE(hasHitArea(box));
+        CHECK(box.x_min >= 0);
+        CHECK(box.x_max < columns);
+      }
+    }
+  }
+
+  TEST_CASE("Render - Settings hints follow rebinding and hidden entry clears its hit box",
+            "[tui][unit][render][keymap]")
+  {
+    auto shell = ShellInteractionModel{};
+    auto box = ftxui::Box{};
+    auto model = uimodel::KeymapModel{tuiDefaultKeymap()};
+    model.applyOverrides({{"tui.shell.openSettings", {"F12"}}});
+    auto plan = TuiKeymapPlan{model};
+    auto state = StatusBarViewState{.terminalColumns = 80, .shell = &shell, .settingsButtonBox = &box};
+    auto rendered = renderElement(statusBar(state, plan), 80, 1);
+    CHECK(rendered.text.contains("F12 Settings"));
+    auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
+    CHECK(help.contains("F12"));
+    CHECK(help.contains(":settings / :config"));
+    CHECK(help.contains("Settings"));
+    model.applyOverrides({{"tui.shell.openSettings", {}}});
+    plan = TuiKeymapPlan{model};
+    rendered = renderElement(statusBar(state, plan), 80, 1);
+    CHECK(rendered.text.contains("Settings"));
+    CHECK_FALSE(rendered.text.contains("F12"));
+    REQUIRE(hasHitArea(box));
+    shell.beginInput(ShellInputMode::QuickFilter);
+    rendered = renderElement(statusBar(state, plan), 80, 1);
+    CHECK_FALSE(hasHitArea(box));
+    shell.closeInput();
+    shell.openOverlay(Overlay::Help);
+    rendered = renderElement(statusBar(state, plan), 80, 1);
+    CHECK_FALSE(hasHitArea(box));
   }
 
   TEST_CASE("Render - status bar shows filter only when applied", "[tui][unit][render]")

@@ -202,4 +202,10 @@ namespace ao::uimodel
       _onRender(view);
     }
   }
+
+  void OutputDeviceViewModel::setTextCatalog(i18n::MessageCatalog textCatalog)
+  {
+    _textCatalog = std::move(textCatalog);
+    refresh();
+  }
 } // namespace ao::uimodel

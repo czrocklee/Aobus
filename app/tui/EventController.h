@@ -8,6 +8,7 @@
 #include "ShellInteractionModel.h"
 #include "TuiHitRegions.h"
 #include "TuiKeymap.h"
+#include "TuiPreferences.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -43,6 +44,7 @@ namespace ao::rt
 namespace ao::tui
 {
   class LibraryScanController;
+  class SettingsEditor;
   class TrackEditController;
 
   using InputCompletionCallback = std::function<std::optional<rt::CompletionResult>(std::string_view draft)>;
@@ -68,6 +70,8 @@ namespace ao::tui
     rt::NotificationService& notifications;
     LibraryScanController& libraryScan;
     TrackEditController& trackEdit;
+    SettingsEditor& settings;
+    TuiPreferences const& preferences;
     std::function<void()> requestExit;
     /// Whether the shell is holding input while a submitted write settles.
     std::function<bool()> isExitWaiting{};
@@ -85,7 +89,7 @@ namespace ao::tui
                     TuiKeymapPlan const& keymapPlan,
                     EventControllerBindings bindings);
 
-    bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
+    bool isQualityHoverVisible() const noexcept { return _preferences.qualityHover && _qualityHoverVisible; }
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     bool tryHandleEvent(ftxui::Event const& event);
     void cancelTransientInteractions();
@@ -187,6 +191,8 @@ namespace ao::tui
     rt::NotificationService& _notifications;
     LibraryScanController& _libraryScan;
     TrackEditController& _trackEdit;
+    SettingsEditor& _settings;
+    TuiPreferences const& _preferences;
     std::function<void()> _requestExit;
     std::function<bool()> _isExitWaiting;
     InputCompletionCallback _commandCompletionCallback;

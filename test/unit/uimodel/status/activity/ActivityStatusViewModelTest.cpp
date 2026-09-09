@@ -91,6 +91,29 @@ namespace ao::uimodel::test
       CHECK(notifications.feed().entries.size() == 1);
     }
 
+    SECTION("language replacement preserves the visible notification deadline")
+    {
+      notifications.post(rt::NotificationRequest{
+        .severity = rt::NotificationSeverity::Info,
+        .message = rt::NotificationReport{.templateId = rt::NotificationReportTemplate::PlaybackSequenceFinished},
+        .lifetime = rt::NotificationLifetime::history(),
+      });
+      REQUIRE(latest.compact.kind == ActivityStatusKind::Info);
+      REQUIRE(latest.compact.optAutoDismissTimeout);
+      auto const previousText = latest.compact.text;
+      auto const sourceId = notifications.feed().entries.front().id;
+      now += kActivityStatusDefaultAutoDismissTimeout - std::chrono::milliseconds{1};
+
+      viewModel.setTextCatalog(ao::test::messageCatalog("de"));
+
+      CHECK(latest.compact.text != previousText);
+      CHECK(notifications.feed().entries.front().id == sourceId);
+      CHECK_FALSE(viewModel.tryAutoDismissCompactIfDue());
+      now += std::chrono::milliseconds{1};
+      CHECK(viewModel.tryAutoDismissCompactIfDue());
+      CHECK(latest.compact.kind == ActivityStatusKind::Idle);
+    }
+
     SECTION("runtime-transient info does not create a presentation-local deadline")
     {
       notifications.post(rt::NotificationSeverity::Info, "Saved playlist", rt::NotificationLifetime::transient());

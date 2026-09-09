@@ -195,4 +195,17 @@ namespace ao::uimodel
   {
     _implPtr->hideDetailNotification(id);
   }
+
+  void ActivityStatusViewModel::setTextCatalog(i18n::MessageCatalog const& textCatalog)
+  {
+    _implPtr->feedProjection.setTextCatalog(textCatalog, _implPtr->notifications.feed());
+
+    if (_implPtr->optScheduledCompact)
+    {
+      // Rewording the same notification preserves its existing dismissal deadline.
+      _implPtr->optScheduledCompact->text = _implPtr->feedProjection.viewState().compact.text;
+    }
+
+    _implPtr->publish();
+  }
 } // namespace ao::uimodel

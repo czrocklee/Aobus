@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -59,6 +60,9 @@ namespace ao::rt
     std::span<VocabularyEntry const> valuesFor(TrackField field);
     std::span<VocabularyEntry const> aggregateValues(TrackValueVocabularySpec spec);
 
+    /// Replaces the retained ordering policy on the owner thread and invalidates materialized vocabulary order.
+    void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
+
   private:
     struct DictionaryFrequency final
     {
@@ -105,6 +109,7 @@ namespace ao::rt
 
     library::MusicLibrary const& _library;
     TextOrderingPolicy const* _textOrderingPolicy = nullptr;
+    std::shared_ptr<TextOrderingPolicy const> _updatedTextOrderingPolicyPtr;
     CompletionAliasPolicy const* _completionAliasPolicy = nullptr;
     std::thread::id _ownerThread;
     async::Subscription _libraryChangeSubscription;

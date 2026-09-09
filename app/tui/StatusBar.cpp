@@ -23,6 +23,41 @@
 
 namespace ao::tui
 {
+  namespace
+  {
+    ftxui::Element workspaceEntryPoints(i18n::MessageCatalog const& textCatalog,
+                                        StatusBarViewState const& state,
+                                        TuiKeymapPlan const& keymapPlan)
+    {
+      using namespace ftxui;
+
+      auto settingsPtr = style::shortcutChip(keymapPlan.shortcutFor(TuiKeyAction::OpenSettings),
+                                             i18n::requiredText(textCatalog, i18n::MessageId::TuiSettingsTitle));
+
+      if (state.settingsHovered)
+      {
+        settingsPtr = std::move(settingsPtr) | style::buttonHover();
+      }
+
+      if (state.settingsButtonBox != nullptr)
+      {
+        settingsPtr = std::move(settingsPtr) | reflect(*state.settingsButtonBox);
+      }
+
+      auto entryPoints = Elements{std::move(settingsPtr)};
+      auto const helpShortcut = keymapPlan.shortcutFor(TuiKeyAction::ShowHelp);
+
+      if (!helpShortcut.empty())
+      {
+        entryPoints.push_back(style::mutedSeparator());
+        entryPoints.push_back(
+          style::shortcutChip(helpShortcut, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusHelp)));
+      }
+
+      return hbox(std::move(entryPoints));
+    }
+  } // namespace
+
   std::string_view activityKindLabel(uimodel::ActivityStatusKind const kind)
   {
     switch (kind)
@@ -118,6 +153,11 @@ namespace ao::tui
   {
     using namespace ftxui;
 
+    if (state.settingsButtonBox != nullptr)
+    {
+      *state.settingsButtonBox = {};
+    }
+
     constexpr std::int32_t kExpandedWorkspaceHintColumns = 100;
     auto workspaceHintPtr = [&]
     {
@@ -178,7 +218,6 @@ namespace ao::tui
           TuiKeyAction::ToggleDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
       }
 
-      appendActionChip(TuiKeyAction::ShowHelp, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusHelp));
       return hbox(std::move(parts));
     };
 
@@ -243,10 +282,11 @@ namespace ao::tui
       });
     }
 
+    // Reserve the entry points before clipping long filter or activity text.
     return hbox({
-      leftStatusAreaPtr(),
-      text(" "),
-      workspaceHintPtr(),
+      hbox({leftStatusAreaPtr(), text(" "), workspaceHintPtr()}) | xflex | xframe,
+      style::mutedSeparator(),
+      workspaceEntryPoints(textCatalog, state, keymapPlan),
     });
   }
 } // namespace ao::tui

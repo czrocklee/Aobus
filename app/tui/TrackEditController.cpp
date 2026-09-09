@@ -758,4 +758,9 @@ namespace ao::tui
     co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
     statePtr->completeSubmission(cancelled, std::move(submitRes), unexpected);
   }
+  void TrackEditController::setTextOrderingPolicy(rt::TextOrderingPolicy const* policy)
+  {
+    AO_EXPECTS(!isActive(), "Cannot replace ordering inside an open editor");
+    _statePtr->textOrderingPolicy = policy;
+  }
 } // namespace ao::tui

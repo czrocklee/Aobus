@@ -6,12 +6,14 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "tui/ShellInteractionModel.h"
+#include <ao/Error.h>
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
 
@@ -46,9 +48,33 @@ namespace ao::tui::test
     }
   } // namespace
 
+  TEST_CASE("TuiKeymap - editing validates terminal aliases and reserved or unsupported events", "[tui][unit][keymap]")
+  {
+    auto keymap = uimodel::KeymapModel{};
+    REQUIRE(keymap.tryBind("tui.shell.openSettings", *uimodel::KeyChord::parse("F12")));
+    CHECK(validateTuiActionBindings(keymap, "tui.shell.openSettings"));
+
+    for (auto const* chord : {"Ctrl+C", "Escape", "Ctrl+Alt+F12"})
+    {
+      INFO(chord);
+      auto candidate = uimodel::KeymapModel{};
+      REQUIRE(candidate.tryBind("tui.shell.openSettings", *uimodel::KeyChord::parse(chord)));
+      CHECK_FALSE(validateTuiActionBindings(candidate, "tui.shell.openSettings"));
+    }
+
+    auto aliases = uimodel::KeymapModel{};
+    REQUIRE(aliases.tryBind("tui.shell.openSettings", *uimodel::KeyChord::parse("Enter")));
+    REQUIRE(aliases.tryBind("tui.shell.quit", *uimodel::KeyChord::parse("Ctrl+M")));
+    auto conflictRes = validateTuiActionBindings(aliases, "tui.shell.openSettings");
+    REQUIRE_FALSE(conflictRes);
+    CHECK(conflictRes.error().code == Error::Code::Conflict);
+    CHECK(conflictRes.error().message == "tui.shell.quit");
+  }
+
   TEST_CASE("TuiKeymap - descriptors have stable unique identities and valid defaults", "[tui][unit][keymap]")
   {
     constexpr auto kExpected = std::to_array<std::pair<TuiKeyAction, std::string_view>>({
+      {TuiKeyAction::OpenSettings, "tui.shell.openSettings"},
       {TuiKeyAction::Quit, "tui.shell.quit"},
       {TuiKeyAction::ToggleListChooser, "tui.shell.toggleListChooser"},
       {TuiKeyAction::ToggleDetails, "tui.shell.toggleTrackDetail"},
