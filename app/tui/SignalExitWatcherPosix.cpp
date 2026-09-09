@@ -75,7 +75,7 @@ namespace ao::tui
       explicit State(compat::MoveOnlyFunction<void()> onExit)
         : _onExit{std::move(onExit)}
       {
-        if (::pipe(_pipe.data()) == 0 && !makeWriteEndNonBlocking())
+        if (::pipe(_pipe.data()) == 0 && !tryMakeWriteEndNonBlocking())
         {
           closePipe();
         }
@@ -145,7 +145,7 @@ namespace ao::tui
         }
       }
 
-      bool makeWriteEndNonBlocking() const
+      bool tryMakeWriteEndNonBlocking() const
       {
         if (auto const flags = ::fcntl(_pipe[1], F_GETFL, 0); flags >= 0)
         {
@@ -196,7 +196,7 @@ namespace ao::tui
     };
     using SignalAction = struct sigaction;
 
-    static bool install(int const signal, SignalAction& oldAction)
+    static bool tryInstall(int const signal, SignalAction& oldAction)
     {
       auto action = SignalAction{};
       action.sa_handler = exitSignalHandler;
@@ -239,9 +239,9 @@ namespace ao::tui
 
     if (_ownsSignalHandlers)
     {
-      _intInstalled = install(SIGINT, _oldInt);
-      _termInstalled = install(SIGTERM, _oldTerm);
-      _hupInstalled = install(SIGHUP, _oldHup);
+      _intInstalled = tryInstall(SIGINT, _oldInt);
+      _termInstalled = tryInstall(SIGTERM, _oldTerm);
+      _hupInstalled = tryInstall(SIGHUP, _oldHup);
     }
   }
 

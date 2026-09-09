@@ -53,7 +53,7 @@ namespace ao::rt::test
       async::Subscription listsSub;
     };
 
-    bool trackExists(MusicLibraryFixture& libraryFixture, TrackId trackId)
+    bool hasTrack(MusicLibraryFixture& libraryFixture, TrackId trackId)
     {
       auto transaction = libraryFixture.library().readTransaction();
       return libraryFixture.library()
@@ -85,7 +85,7 @@ namespace ao::rt::test
       return std::string{optView->metadata().title()};
     }
 
-    bool trackHasTag(MusicLibraryFixture& libraryFixture, TrackId trackId, std::string_view tag)
+    bool hasTrackTag(MusicLibraryFixture& libraryFixture, TrackId trackId, std::string_view tag)
     {
       auto transaction = libraryFixture.library().readTransaction();
       auto const optView =
@@ -95,7 +95,7 @@ namespace ao::rt::test
       return std::ranges::contains(builder.tags().names(), tag);
     }
 
-    bool listExists(MusicLibraryFixture& libraryFixture, ListId listId)
+    bool hasList(MusicLibraryFixture& libraryFixture, ListId listId)
     {
       auto transaction = libraryFixture.library().readTransaction();
       return libraryFixture.library().lists().reader(transaction).get(listId).has_value();
@@ -122,7 +122,7 @@ namespace ao::rt::test
       return std::string{optView->name()};
     }
 
-    bool listOrderContainsTrack(MusicLibraryFixture& libraryFixture, ListId listId, TrackId trackId)
+    bool containsListOrderTrack(MusicLibraryFixture& libraryFixture, ListId listId, TrackId trackId)
     {
       auto transaction = libraryFixture.library().readTransaction();
       auto const optView = libraryFixture.library().lists().reader(transaction).get(listId);
@@ -176,7 +176,7 @@ namespace ao::rt::test
     auto recorder = ChangeRecorder{changes};
     auto const patch = MetadataPatch{.optTitle = "After"};
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewUpdateMetadata(std::vector{trackId}, patch));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewUpdateMetadataAsync(std::vector{trackId}, patch));
 
     REQUIRE(dryRunRes);
     REQUIRE(dryRunRes->changes.size() == 1);
@@ -211,7 +211,7 @@ namespace ao::rt::test
     auto patch = MetadataPatch{.optArtist = "Preview Artist"};
     patch.customUpdates.emplace("Preview Key", "Preview Value");
 
-    auto const previewRes = commandsFixture.runTask(commands.previewUpdateMetadata(std::vector{trackId}, patch));
+    auto const previewRes = commandsFixture.runTask(commands.previewUpdateMetadataAsync(std::vector{trackId}, patch));
 
     REQUIRE(previewRes);
     CHECK(dictionary.size() == initialSize);
@@ -243,12 +243,12 @@ namespace ao::rt::test
     auto const initialGeneration = dictionary.generation();
 
     auto const dryRunRes =
-      commandsFixture.runTask(commands.previewEditTags(std::vector{trackId}, {tags.begin(), tags.end()}, {}));
+      commandsFixture.runTask(commands.previewEditTagsAsync(std::vector{trackId}, {tags.begin(), tags.end()}, {}));
 
     REQUIRE(dryRunRes);
     REQUIRE(dryRunRes->changes.size() == 1);
     CHECK(dryRunRes->changes[0].addedTags == std::vector<std::string>{"Favorite"});
-    CHECK_FALSE(trackHasTag(libraryFixture, trackId, "Favorite"));
+    CHECK_FALSE(hasTrackTag(libraryFixture, trackId, "Favorite"));
     CHECK_FALSE(dictionary.findId("Favorite"));
     CHECK(dictionary.size() == initialSize);
     CHECK(dictionary.generation() == initialGeneration);
@@ -257,7 +257,7 @@ namespace ao::rt::test
     auto const commitRes = commandsFixture.editTags(std::array{trackId}, tags, {});
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
-    CHECK(trackHasTag(libraryFixture, trackId, "Favorite"));
+    CHECK(hasTrackTag(libraryFixture, trackId, "Favorite"));
     CHECK(dictionary.findId("Favorite"));
     CHECK(dictionary.size() == initialSize + 1);
     CHECK(dictionary.generation() == initialGeneration + 1);
@@ -273,15 +273,15 @@ namespace ao::rt::test
     auto recorder = ChangeRecorder{changes};
     auto draft = ListDraft{.name = "Draft"};
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewCreateList(draft));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewCreateListAsync(draft));
 
     REQUIRE(dryRunRes);
     CHECK(listCount(libraryFixture) == 0);
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = commandsFixture.runTask(commands.createList(draft));
+    auto const commitRes = commandsFixture.runTask(commands.createListAsync(draft));
     REQUIRE(commitRes);
-    CHECK(listExists(libraryFixture, *commitRes));
+    CHECK(hasList(libraryFixture, *commitRes));
     CHECK(recorder.listsMutated == 1);
   }
 
@@ -296,20 +296,20 @@ namespace ao::rt::test
     auto recorder = ChangeRecorder{changes};
     auto draft = ListDraft{.listId = listId, .name = "After"};
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewUpdateList(draft));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewUpdateListAsync(draft));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->changed);
     CHECK(dryRunRes->fieldChanges[0] == ListFieldChange{.field = "name", .oldValue = "Before", .newValue = "After"});
     CHECK(listName(libraryFixture, listId) == "Before");
-    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
+    CHECK(containsListOrderTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = commandsFixture.runTask(commands.updateList(draft));
+    auto const commitRes = commandsFixture.runTask(commands.updateListAsync(draft));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
     CHECK(listName(libraryFixture, listId) == "After");
-    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
+    CHECK(containsListOrderTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 1);
   }
 
@@ -323,18 +323,18 @@ namespace ao::rt::test
     auto& commands = commandsFixture.commands();
     auto recorder = ChangeRecorder{changes};
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewDeleteList(listId));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewDeleteListAsync(listId));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->name == "Delete Me");
     CHECK(dryRunRes->orderTrackIdCount == 1);
-    CHECK(listExists(libraryFixture, listId));
+    CHECK(hasList(libraryFixture, listId));
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = commandsFixture.runTask(commands.deleteList(listId));
+    auto const commitRes = commandsFixture.runTask(commands.deleteListAsync(listId));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
-    CHECK_FALSE(listExists(libraryFixture, listId));
+    CHECK_FALSE(hasList(libraryFixture, listId));
     CHECK(recorder.listsMutated == 1);
   }
 
@@ -348,23 +348,23 @@ namespace ao::rt::test
     auto& commands = commandsFixture.commands();
     auto recorder = ChangeRecorder{changes};
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewDeleteTrack(trackId));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewDeleteTrackAsync(trackId));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->trackId == trackId);
     CHECK(dryRunRes->title == "Delete Track");
     CHECK(dryRunRes->removedFromListIds == std::vector<ListId>{listId});
-    CHECK(trackExists(libraryFixture, trackId));
-    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
+    CHECK(hasTrack(libraryFixture, trackId));
+    CHECK(containsListOrderTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
     CHECK(recorder.listsMutated == 0);
 
-    auto const commitRes = commandsFixture.runTask(commands.deleteTrack(trackId));
+    auto const commitRes = commandsFixture.runTask(commands.deleteTrackAsync(trackId));
     REQUIRE(commitRes);
     CHECK(*commitRes == *dryRunRes);
-    CHECK_FALSE(trackExists(libraryFixture, trackId));
-    CHECK_FALSE(listOrderContainsTrack(libraryFixture, listId, trackId));
+    CHECK_FALSE(hasTrack(libraryFixture, trackId));
+    CHECK_FALSE(containsListOrderTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 1);
     CHECK(recorder.listsMutated == 1);
@@ -385,7 +385,7 @@ namespace ao::rt::test
       return;
     }
 
-    auto const dryRunRes = commandsFixture.runTask(commands.previewCreateTrackFromFile(absValidFile));
+    auto const dryRunRes = commandsFixture.runTask(commands.previewCreateTrackFromFileAsync(absValidFile));
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->uri == "music/song.flac");
@@ -395,12 +395,12 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
 
-    auto const commitRes = commandsFixture.runTask(commands.createTrackFromFile(absValidFile));
+    auto const commitRes = commandsFixture.runTask(commands.createTrackFromFileAsync(absValidFile));
     REQUIRE(commitRes);
     CHECK(commitRes->uri == dryRunRes->uri);
     CHECK(commitRes->title == dryRunRes->title);
     CHECK(commitRes->artist == dryRunRes->artist);
-    CHECK(trackExists(libraryFixture, commitRes->trackId));
+    CHECK(hasTrack(libraryFixture, commitRes->trackId));
     CHECK(
       libraryFixture.library().manifest().reader(libraryFixture.library().readTransaction()).get("music/song.flac"));
     CHECK(recorder.tracksMutated == 0);

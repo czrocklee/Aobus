@@ -74,7 +74,7 @@ namespace ao::rt::test
         auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
         audio::test::installAudioFixture(application.libraryFixture.root(), "basic_metadata.flac", playableUri);
         auto const created = ao::test::requireValue(application.commandsFixture.runTask(
-          libraryCommands().createTrackFromFile(application.libraryFixture.root() / playableUri)));
+          libraryCommands().createTrackFromFileAsync(application.libraryFixture.root() / playableUri)));
 
         if constexpr (requires { application.executor.drain(); })
         {
@@ -99,7 +99,7 @@ namespace ao::rt::test
         thirdTrackId = addPlayableTrack("Third");
         application.sources.reloadAllTracks();
         listId = ao::test::requireValue(
-          application.commandsFixture.runTask(libraryCommands().createList(ListDraft{.name = "Playback order"})));
+          application.commandsFixture.runTask(libraryCommands().createListAsync(ListDraft{.name = "Playback order"})));
         viewId = ao::test::requireValue(application.workspace.navigate({.target = listId}));
         application.addReadyProvider();
         application.executor.drain();
@@ -107,12 +107,12 @@ namespace ao::rt::test
 
       PlaybackCommands& commands() { return application.commands(); }
       PlaybackService& playback() { return application.playback; }
-      bool waitForTrack(TrackId const trackId)
+      bool tryWaitForTrack(TrackId const trackId)
       {
         auto const settled =
-          waitForPlaybackSettlement(application.executor,
-                                    observedPositionRevision,
-                                    [this] { return playback().snapshot().transport.positionRevision; });
+          tryWaitForPlaybackSettlement(application.executor,
+                                       observedPositionRevision,
+                                       [this] { return playback().snapshot().transport.positionRevision; });
         observedPositionRevision = playback().snapshot().transport.positionRevision;
         return settled && playback().snapshot().transport.nowPlaying.trackId == trackId;
       }
@@ -159,7 +159,7 @@ namespace ao::rt::test
 
     auto const startedRes = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
     REQUIRE(startedRes);
-    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
 
     // One accepted command publishes exactly one snapshot even though it drives
     // several lower transport and succession signals.
@@ -193,7 +193,7 @@ namespace ao::rt::test
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
-    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
@@ -235,7 +235,7 @@ namespace ao::rt::test
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
-    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
     auto const started = snapshots.back();
     CHECK(started.transport.positionRevision.value == 1);
@@ -268,7 +268,8 @@ namespace ao::rt::test
                                          fixture.notificationService,
                                          fixture.asyncRuntime};
     auto bootstrap = PlaybackBootstrap{fixture.playbackTransport};
-    auto playback = bootstrap.createPlaybackService(fixture.executor, succession);
+    auto playback =
+      bootstrap.createPlaybackService(fixture.executor, succession, fixture.libraryFixture.library(), changes);
     auto playbackActions = uimodel::PlaybackActions{playback, [] {}};
     std::size_t availabilityChanged = 0;
     auto const availabilitySubscription =
@@ -282,7 +283,7 @@ namespace ao::rt::test
     auto const fixtureUri = fixture.installAudioFixture();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Clock", .uri = fixtureUri});
     REQUIRE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&fixture] { return fixture.playbackTransport.state().transport == audio::Transport::Playing; }));
     fixture.executor.drain();
     REQUIRE(fixture.renderTarget != nullptr);
@@ -373,7 +374,7 @@ namespace ao::rt::test
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
-    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
     fixture.commands().setRepeatMode(RepeatMode::One);
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -396,14 +397,14 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     fixture.application.executor.drain();
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
-    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot(
       [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback().snapshot();
 
-    REQUIRE(fixture.application.succession.next());
+    REQUIRE(fixture.application.succession.tryMoveNext());
     fixture.application.executor.drain();
 
     REQUIRE(snapshots.size() == 1);

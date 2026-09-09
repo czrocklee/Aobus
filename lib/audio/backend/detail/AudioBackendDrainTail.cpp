@@ -8,23 +8,23 @@
 
 namespace ao::audio::backend::detail
 {
-  bool AudioBackendDrainTail::start(std::uint64_t const presentationTailFrames,
-                                    std::uint64_t const silentSuffixFrames) noexcept
+  DrainTailEvent AudioBackendDrainTail::start(std::uint64_t const presentationTailFrames,
+                                              std::uint64_t const silentSuffixFrames) noexcept
   {
     _active = true;
     _remainingFrames = presentationTailFrames - std::min(presentationTailFrames, silentSuffixFrames);
-    return _remainingFrames == 0U;
+    return _remainingFrames == 0U ? DrainTailEvent::Completed : DrainTailEvent::None;
   }
 
-  bool AudioBackendDrainTail::consume(std::uint64_t const silentFrames) noexcept
+  DrainTailEvent AudioBackendDrainTail::consume(std::uint64_t const silentFrames) noexcept
   {
     if (!_active || _remainingFrames == 0U)
     {
-      return false;
+      return DrainTailEvent::None;
     }
 
     _remainingFrames -= std::min(_remainingFrames, silentFrames);
-    return _remainingFrames == 0U;
+    return _remainingFrames == 0U ? DrainTailEvent::Completed : DrainTailEvent::None;
   }
 
   void AudioBackendDrainTail::reset() noexcept
@@ -33,7 +33,7 @@ namespace ao::audio::backend::detail
     _active = false;
   }
 
-  bool AudioBackendDrainTail::active() const noexcept
+  bool AudioBackendDrainTail::isActive() const noexcept
   {
     return _active;
   }

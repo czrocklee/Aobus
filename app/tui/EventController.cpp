@@ -100,7 +100,7 @@ namespace ao::tui
     }
 
     template<typename MoveSelection>
-    bool handleListNavigation(ftxui::Event const& event, MoveSelection moveSelection)
+    bool tryHandleListNavigation(ftxui::Event const& event, MoveSelection moveSelection)
     {
       auto const optDelta = listNavigationDelta(event);
 
@@ -113,10 +113,10 @@ namespace ao::tui
       return true;
     }
 
-    bool playSelected(rt::PlaybackCommands& commands,
-                      std::vector<TrackListEntry> const& tracks,
-                      std::int32_t const selected,
-                      rt::ViewId const sourceViewId)
+    bool tryPlaySelected(rt::PlaybackCommands& commands,
+                         std::vector<TrackListEntry> const& tracks,
+                         std::int32_t const selected,
+                         rt::ViewId const sourceViewId)
     {
       if (tracks.empty())
       {
@@ -255,16 +255,16 @@ namespace ao::tui
 
   void EventController::applyFilter(bool const reportError)
   {
-    if (auto result = _library.applyFilter(); !result)
+    if (auto res = _library.applyFilter(); !res)
     {
-      APP_LOG_ERROR("Failed to apply TUI filter: {}", result.error().message);
+      APP_LOG_ERROR("Failed to apply TUI filter: {}", res.error().message);
 
       if (reportError)
       {
         postActivityNotification(
           rt::NotificationSeverity::Error,
           i18n::requiredFormat(
-            _library.textCatalog(), i18n::MessageId::TuiFilterFailed, {{"detail", result.error().message}}));
+            _library.textCatalog(), i18n::MessageId::TuiFilterFailed, {{"detail", res.error().message}}));
       }
 
       return;
@@ -383,7 +383,7 @@ namespace ao::tui
 
   void EventController::selectOutputDevice()
   {
-    _outputDevices.selectSelected();
+    _outputDevices.trySelectSelected();
     closeOverlay();
   }
 
@@ -400,7 +400,7 @@ namespace ao::tui
 
   void EventController::playSelectedTrack()
   {
-    if (!playSelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
+    if (!tryPlaySelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning,
@@ -410,7 +410,7 @@ namespace ao::tui
 
   void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
   {
-    if (!_playbackActions.execute(command) && command != uimodel::PlaybackCommand::Stop)
+    if (!_playbackActions.tryExecute(command) && command != uimodel::PlaybackCommand::Stop)
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning,
@@ -471,7 +471,7 @@ namespace ao::tui
 
   void EventController::editSelectedTrackProperties()
   {
-    if (!_trackEdit.open(_library.selectedTrackIds()))
+    if (!_trackEdit.tryOpen(_library.selectedTrackIds()))
     {
       return;
     }
@@ -569,7 +569,7 @@ namespace ao::tui
     auto const generation = _filterDebounceGeneration;
     _filterDebounceTask = _asyncRuntime.spawnCancellable(
       [runtime = &_asyncRuntime, owner = this, generation](std::stop_token const stopToken)
-      { return waitForFilterDebounce(runtime, owner, generation, stopToken); },
+      { return waitForFilterDebounceAsync(runtime, owner, generation, stopToken); },
       "TUI Quick-filter debounce");
   }
 
@@ -579,13 +579,13 @@ namespace ao::tui
     ++_filterDebounceGeneration;
   }
 
-  async::Task<void> EventController::waitForFilterDebounce(async::Runtime* const runtime,
-                                                           EventController* const owner,
-                                                           std::uint64_t const generation,
-                                                           std::stop_token const stopToken)
+  async::Task<void> EventController::waitForFilterDebounceAsync(async::Runtime* const runtime,
+                                                                EventController* const owner,
+                                                                std::uint64_t const generation,
+                                                                std::stop_token const stopToken)
   {
-    co_await runtime->sleepFor(kFilterDebounceInterval, stopToken);
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->sleepForAsync(kFilterDebounceInterval, stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
     owner->applyPendingFilter(generation);
   }
 
@@ -613,7 +613,7 @@ namespace ao::tui
 
     if (acceptCompletion)
     {
-      _shell.applyCommandCompletion();
+      _shell.tryApplyCommandCompletion();
     }
 
     _library.setFilterDraft(_shell.inputDraft());
@@ -621,7 +621,7 @@ namespace ao::tui
     _shell.closeInput();
   }
 
-  bool EventController::selectTrackFromScrollbar(std::int32_t const row)
+  bool EventController::trySelectTrackFromScrollbar(std::int32_t const row)
   {
     if (_library.tracks().empty())
     {
@@ -715,7 +715,7 @@ namespace ao::tui
     _shell.closeOverlay();
   }
 
-  bool EventController::handleTrackColumnResizeDrag(ftxui::Mouse const& mouse)
+  bool EventController::tryHandleTrackColumnResizeDrag(ftxui::Mouse const& mouse)
   {
     if (mouse.motion != ftxui::Mouse::Moved && mouse.motion != ftxui::Mouse::Released)
     {
@@ -786,7 +786,7 @@ namespace ao::tui
     {
       if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
       {
-        auto const handled = selectTrackFromScrollbar(mouse.y);
+        auto const handled = trySelectTrackFromScrollbar(mouse.y);
 
         if (mouse.motion == ftxui::Mouse::Released)
         {
@@ -801,7 +801,7 @@ namespace ao::tui
 
     if (_optTrackColumnResizeDrag)
     {
-      return handleTrackColumnResizeDrag(mouse);
+      return tryHandleTrackColumnResizeDrag(mouse);
     }
 
     return std::nullopt;
@@ -826,7 +826,7 @@ namespace ao::tui
     return std::nullopt;
   }
 
-  bool EventController::handleMouseMove(ftxui::Mouse const& mouse)
+  bool EventController::tryHandleMouseMove(ftxui::Mouse const& mouse)
   {
     auto const buttonHit =
       _hitRegions.hitTestButton(mouse.x,
@@ -859,7 +859,7 @@ namespace ao::tui
 
     syncSeekSlider();
 
-    if (!_seekSlider.beginPointerInteraction())
+    if (!_seekSlider.tryBeginPointerInteraction())
     {
       return false;
     }
@@ -904,7 +904,7 @@ namespace ao::tui
 
     _optTrackScrollbarDrag = TrackScrollbarDrag{};
 
-    if (!selectTrackFromScrollbar(mouse.y))
+    if (!trySelectTrackFromScrollbar(mouse.y))
     {
       _optTrackScrollbarDrag.reset();
       return false;
@@ -990,7 +990,7 @@ namespace ao::tui
     return std::nullopt;
   }
 
-  bool EventController::handleOverlayPress(ftxui::Mouse const& mouse)
+  bool EventController::tryHandleOverlayPress(ftxui::Mouse const& mouse)
   {
     if (_shell.overlay() == Overlay::PresentationPanel)
     {
@@ -1000,7 +1000,7 @@ namespace ao::tui
 
       if (hitRegionIt != _hitRegions.presentationRows.end())
       {
-        if (_library.setSelectedPresentation(hitRegionIt->rowIndex))
+        if (_library.trySetSelectedPresentation(hitRegionIt->rowIndex))
         {
           selectPresentation();
           return true;
@@ -1055,7 +1055,7 @@ namespace ao::tui
         return true;
       }
 
-      if (_outputDevices.selectRow(hitRegionIt->rowIndex))
+      if (_outputDevices.trySelectRow(hitRegionIt->rowIndex))
       {
         closeOverlay();
       }
@@ -1066,7 +1066,7 @@ namespace ao::tui
     return false;
   }
 
-  bool EventController::handleMouse(ftxui::Mouse const& mouse)
+  bool EventController::tryHandleMouse(ftxui::Mouse const& mouse)
   {
     auto const modalInputActive = _shell.isInputActive() || isModalOverlay(_shell.overlay());
 
@@ -1095,7 +1095,7 @@ namespace ao::tui
 
     if (mouse.motion == ftxui::Mouse::Moved)
     {
-      return handleMouseMove(mouse);
+      return tryHandleMouseMove(mouse);
     }
 
     if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
@@ -1128,10 +1128,10 @@ namespace ao::tui
       return *optHandled;
     }
 
-    return handleOverlayPress(mouse);
+    return tryHandleOverlayPress(mouse);
   }
 
-  bool EventController::handleCommandEvent(ftxui::Event const& event)
+  bool EventController::tryHandleCommandEvent(ftxui::Event const& event)
   {
     if (event == ftxui::Event::Escape)
     {
@@ -1182,7 +1182,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Tab)
     {
-      if (_shell.applyCommandCompletion())
+      if (_shell.tryApplyCommandCompletion())
       {
         refreshCommandCompletion();
         scheduleFilterDebounce();
@@ -1193,19 +1193,19 @@ namespace ao::tui
 
     if (event == ftxui::Event::ArrowUp)
     {
-      _shell.moveCommandCompletion(-1);
+      _shell.tryMoveCommandCompletion(-1);
       return true;
     }
 
     if (event == ftxui::Event::ArrowDown)
     {
-      _shell.moveCommandCompletion(1);
+      _shell.tryMoveCommandCompletion(1);
       return true;
     }
 
     if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
     {
-      _shell.moveCommandCompletionByPage(listNavigationDelta(event).value_or(0));
+      _shell.tryMoveCommandCompletionByPage(listNavigationDelta(event).value_or(0));
       return true;
     }
 
@@ -1227,12 +1227,12 @@ namespace ao::tui
     return true;
   }
 
-  bool EventController::handleOverlayEvent(ftxui::Event const& event)
+  bool EventController::tryHandleOverlayEvent(ftxui::Event const& event)
   {
     switch (_shell.overlay())
     {
       case Overlay::ListChooser:
-        if (handleListNavigation(
+        if (tryHandleListNavigation(
               event, [this](std::int32_t const delta) { _library.moveFocusedSelection(true, delta); }))
         {
           return true;
@@ -1262,7 +1262,8 @@ namespace ao::tui
 
         return true;
       case Overlay::OutputDevices:
-        if (handleListNavigation(event, [this](std::int32_t const delta) { _outputDevices.moveSelection(delta); }))
+        if (tryHandleListNavigation(
+              event, [this](std::int32_t const delta) { _outputDevices.tryMoveSelection(delta); }))
         {
           return true;
         }
@@ -1280,7 +1281,7 @@ namespace ao::tui
 
         return true;
       case Overlay::PresentationPanel:
-        if (handleListNavigation(
+        if (tryHandleListNavigation(
               event, [this](std::int32_t const delta) { _library.movePresentationSelection(delta); }))
         {
           return true;
@@ -1322,9 +1323,10 @@ namespace ao::tui
     return false;
   }
 
-  bool EventController::handleRootEvent(ftxui::Event const& event)
+  bool EventController::tryHandleRootEvent(ftxui::Event const& event)
   {
-    if (handleListNavigation(event, [this](std::int32_t const delta) { _library.moveFocusedSelection(false, delta); }))
+    if (tryHandleListNavigation(
+          event, [this](std::int32_t const delta) { _library.moveFocusedSelection(false, delta); }))
     {
       return true;
     }
@@ -1338,7 +1340,7 @@ namespace ao::tui
     return false;
   }
 
-  bool EventController::handleEvent(ftxui::Event const& event)
+  bool EventController::tryHandleEvent(ftxui::Event const& event)
   {
     if (event == ftxui::Event::CtrlC)
     {
@@ -1360,7 +1362,7 @@ namespace ao::tui
 
     // An open editor owns the whole surface, including keys and mouse events
     // it has no use for, so nothing behind it can act on stale geometry.
-    if (_trackEdit.handleEvent(event))
+    if (_trackEdit.tryHandleEvent(event))
     {
       return true;
     }
@@ -1368,12 +1370,12 @@ namespace ao::tui
     if (event.is_mouse())
     {
       auto mouseEvent = event;
-      return handleMouse(mouseEvent.mouse());
+      return tryHandleMouse(mouseEvent.mouse());
     }
 
     if (_shell.isInputActive())
     {
-      return handleCommandEvent(event);
+      return tryHandleCommandEvent(event);
     }
 
     // Escape is protocol-owned before any overlay sees it, so rebinding cannot
@@ -1395,12 +1397,12 @@ namespace ao::tui
 
     // A modal overlay answers everything, so reaching the workspace below means
     // the open overlay left this key alone.
-    if (isOverlayActive(_shell.overlay()) && handleOverlayEvent(event))
+    if (isOverlayActive(_shell.overlay()) && tryHandleOverlayEvent(event))
     {
       return true;
     }
 
-    return handleRootEvent(event);
+    return tryHandleRootEvent(event);
   }
 
   void EventController::cancelTransientInteractions()

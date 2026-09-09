@@ -13,8 +13,8 @@ namespace ao::audio::detail
                                          std::chrono::milliseconds duration,
                                          std::size_t capacity) noexcept;
 
-  bool permitsDecode(std::size_t targetByteCount,
-                     std::size_t bufferedByteCount,
-                     std::size_t writableByteCount,
-                     std::size_t previousBlockByteCount) noexcept;
+  bool canDecode(std::size_t targetByteCount,
+                 std::size_t bufferedByteCount,
+                 std::size_t writableByteCount,
+                 std::size_t previousBlockByteCount) noexcept;
 } // namespace ao::audio::detail

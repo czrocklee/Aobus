@@ -126,7 +126,7 @@ namespace ao::audio::backend::detail
 
   namespace
   {
-    bool copyFloatValues(::spa_pod const& pod, std::vector<float>& output)
+    bool tryCopyFloatValues(::spa_pod const& pod, std::vector<float>& output)
     {
       std::uint32_t count = 0;
       std::uint32_t valueSize = 0;
@@ -175,7 +175,7 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes); prop != nullptr)
     {
-      if (copyFloatValues(prop->value, sinkProps.channelVolumes))
+      if (tryCopyFloatValues(prop->value, sinkProps.channelVolumes))
       {
         sinkProps.hasChannelVolumes = true;
 
@@ -196,7 +196,7 @@ namespace ao::audio::backend::detail
 
     if (auto const* prop = ::spa_pod_find_prop(param, nullptr, SPA_PROP_softVolumes); prop != nullptr)
     {
-      if (copyFloatValues(prop->value, sinkProps.softVolumes))
+      if (tryCopyFloatValues(prop->value, sinkProps.softVolumes))
       {
         sinkProps.hasSoftVolumes = true;
       }

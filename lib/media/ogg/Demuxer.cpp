@@ -29,7 +29,7 @@ namespace ao::media::ogg
       std::size_t totalSize = 0;
     };
 
-    bool beginsPage(std::span<std::byte const> bytes) noexcept
+    bool isPageBeginning(std::span<std::byte const> bytes) noexcept
     {
       return bytes.size() >= PageHeaderLayout::kSize &&
              std::ranges::equal(bytes.first(kCapturePattern.size()), utility::bytes::view(kCapturePattern));
@@ -70,7 +70,7 @@ namespace ao::media::ogg
                       .totalSize = payloadOffset + payloadSize};
     }
 
-    bool continuesPacket(std::span<std::byte const> segmentTable) noexcept
+    bool isPacketContinuation(std::span<std::byte const> segmentTable) noexcept
     {
       return !segmentTable.empty() && static_cast<std::uint8_t>(segmentTable.back()) == kContinuationLacingValue;
     }
@@ -119,7 +119,7 @@ namespace ao::media::ogg
       runSize = 0;
     }
 
-    if (!continuesPacket(segmentTable))
+    if (!isPacketContinuation(segmentTable))
     {
       return;
     }
@@ -135,7 +135,7 @@ namespace ao::media::ogg
 
   Result<Demuxer> Demuxer::parse(std::span<std::byte const> fileBytes)
   {
-    if (!beginsPage(fileBytes))
+    if (!isPageBeginning(fileBytes))
     {
       return makeError(Error::Code::CorruptData, "unrecognized ogg file content");
     }
@@ -159,7 +159,7 @@ namespace ao::media::ogg
     auto optPreviousSequence = std::optional<std::uint32_t>{};
     std::size_t offset = 0;
 
-    while (beginsPage(fileBytes.subspan(offset)))
+    while (isPageBeginning(fileBytes.subspan(offset)))
     {
       auto const optPage = viewPage(fileBytes, offset);
 

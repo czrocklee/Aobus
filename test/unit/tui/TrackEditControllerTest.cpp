@@ -81,7 +81,7 @@ namespace ao::tui::test
       void commitUnrelatedChange() const
       {
         REQUIRE(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().createList(rt::ListDraft{.name = "Other"})));
+          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
       }
 
       std::string lastMessage() const
@@ -118,12 +118,12 @@ namespace ao::tui::test
 
       for (std::size_t step = 0; step < 50; ++step)
       {
-        controller.handleEvent(ftxui::Event::ArrowUp);
+        controller.tryHandleEvent(ftxui::Event::ArrowUp);
       }
 
       for (std::size_t step = 0; step < targetIndex; ++step)
       {
-        controller.handleEvent(ftxui::Event::ArrowDown);
+        controller.tryHandleEvent(ftxui::Event::ArrowDown);
       }
     }
 
@@ -131,7 +131,7 @@ namespace ao::tui::test
     {
       for (auto const character : text)
       {
-        controller.handleEvent(ftxui::Event::Character(character));
+        controller.tryHandleEvent(ftxui::Event::Character(character));
       }
     }
 
@@ -139,11 +139,11 @@ namespace ao::tui::test
     void replaceField(TrackEditController& controller, std::string_view const label, std::string_view const value)
     {
       focusRowInput(controller, label);
-      controller.handleEvent(ftxui::Event::End);
+      controller.tryHandleEvent(ftxui::Event::End);
 
       for (std::size_t step = 0; step < 64; ++step)
       {
-        controller.handleEvent(ftxui::Event::Backspace);
+        controller.tryHandleEvent(ftxui::Event::Backspace);
       }
 
       typeText(controller, value);
@@ -152,7 +152,7 @@ namespace ao::tui::test
     void clearField(TrackEditController& controller, std::string_view const label)
     {
       focusRowInput(controller, label);
-      controller.handleEvent(ftxui::Event::Character(static_cast<char>(0x15)));
+      controller.tryHandleEvent(ftxui::Event::Character(static_cast<char>(0x15)));
     }
   } // namespace
 
@@ -163,7 +163,7 @@ namespace ao::tui::test
     auto const secondId = fixture.addTrack({.title = "Second", .album = "Blue", .uri = "second.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({firstId, secondId}));
+    REQUIRE(controller.tryOpen({firstId, secondId}));
     REQUIRE(controller.isActive());
 
     auto const* const editor = controller.activeEditor();
@@ -183,7 +183,7 @@ namespace ao::tui::test
     auto fixture = EditFixture{};
     auto controller = fixture.makeController();
 
-    CHECK_FALSE(controller.open({}));
+    CHECK_FALSE(controller.tryOpen({}));
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.lastMessage() == "No track is selected");
   }
@@ -194,7 +194,7 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Present", .uri = "present.flac"});
     auto controller = fixture.makeController();
 
-    CHECK_FALSE(controller.open({trackId, TrackId{9999}}));
+    CHECK_FALSE(controller.tryOpen({trackId, TrackId{9999}}));
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.lastMessage().starts_with("The complete selection could not be opened"));
   }
@@ -205,10 +205,10 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     auto const* const editor = controller.activeEditor();
 
-    CHECK_FALSE(controller.open({trackId}));
+    CHECK_FALSE(controller.tryOpen({trackId}));
     CHECK(controller.activeEditor() == editor);
   }
 
@@ -220,7 +220,7 @@ namespace ao::tui::test
 
     controller.retire();
 
-    CHECK_FALSE(controller.open({trackId}));
+    CHECK_FALSE(controller.tryOpen({trackId}));
     CHECK_FALSE(controller.isActive());
     CHECK_FALSE(fixture.hasNotifications());
   }
@@ -231,12 +231,12 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
-    CHECK(controller.handleEvent(ftxui::Event::Escape));
+    REQUIRE(controller.tryOpen({trackId}));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
 
     CHECK_FALSE(controller.isActive());
     // The workspace is still hidden behind nothing, so a later key is not ours.
-    CHECK_FALSE(controller.handleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Escape));
   }
 
   TEST_CASE("TrackEditController - Apply writes one patch to every captured target", "[tui][unit][editor]")
@@ -246,15 +246,15 @@ namespace ao::tui::test
     auto const secondId = fixture.addTrack({.title = "Second", .album = "Older", .uri = "second.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({firstId, secondId}));
+    REQUIRE(controller.tryOpen({firstId, secondId}));
     replaceField(controller, "Album", "Blue");
     REQUIRE(controller.activeEditor()->canApply());
 
-    CHECK(controller.handleEvent(applyEvent()));
+    CHECK(controller.tryHandleEvent(applyEvent()));
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Submitting);
     CHECK(controller.hasPendingSubmission());
 
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.settledCount == 1);
@@ -273,11 +273,11 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     replaceField(controller, "Album", "Blue");
     fixture.executor->drain();
-    controller.handleEvent(applyEvent());
-    REQUIRE(fixture.executor->waitUntilQueued());
+    controller.tryHandleEvent(applyEvent());
+    REQUIRE(fixture.executor->tryWaitUntilQueued());
 
     // The session must enter its owning executor before a worker can write.
     // Waiting until publication to hop back would already have changed storage.
@@ -285,7 +285,7 @@ namespace ao::tui::test
     CHECK(controller.hasPendingSubmission());
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Submitting);
 
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
     CHECK(fixture.trackSpec(trackId).album == "Blue");
     CHECK(fixture.settledCount == 1);
     CHECK_FALSE(controller.isActive());
@@ -297,12 +297,12 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .album = "", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     clearField(controller, "Album");
     REQUIRE(controller.activeEditor()->canApply());
-    controller.handleEvent(applyEvent());
+    controller.tryHandleEvent(applyEvent());
     REQUIRE(controller.hasPendingSubmission());
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.lastMessage() == "No changes were needed");
@@ -315,7 +315,7 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     replaceField(controller, "Album", "Blue");
     fixture.commitUnrelatedChange();
 
@@ -323,7 +323,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Stale);
     CHECK_FALSE(controller.activeEditor()->canApply());
 
-    CHECK(controller.handleEvent(applyEvent()));
+    CHECK(controller.tryHandleEvent(applyEvent()));
 
     CHECK_FALSE(controller.hasPendingSubmission());
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Stale);
@@ -336,15 +336,15 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     replaceField(controller, "Album", "Blue");
     fixture.commitUnrelatedChange();
     REQUIRE(controller.activeEditor()->status() == TrackEditorStatus::Stale);
 
     // Reload is destructive while dirty, so it asks before discarding.
-    controller.handleEvent(reloadEvent());
+    controller.tryHandleEvent(reloadEvent());
     REQUIRE(controller.activeEditor()->isConfirmingReload());
-    controller.handleEvent(ftxui::Event::Return);
+    controller.tryHandleEvent(ftxui::Event::Return);
 
     REQUIRE(controller.activeEditor() != nullptr);
     CHECK(controller.activeEditor()->status() == TrackEditorStatus::Ready);
@@ -354,9 +354,9 @@ namespace ao::tui::test
     // The rebound session can write, which is the point of reloading.
     replaceField(controller, "Album", "Green");
     REQUIRE(controller.activeEditor()->canApply());
-    controller.handleEvent(applyEvent());
+    controller.tryHandleEvent(applyEvent());
     REQUIRE(controller.hasPendingSubmission());
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK(fixture.trackSpec(trackId).album == "Green");
   }
@@ -368,10 +368,10 @@ namespace ao::tui::test
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({trackId}));
+    REQUIRE(controller.tryOpen({trackId}));
     replaceField(controller, "Album", "Blue");
     REQUIRE(controller.activeEditor()->canApply());
-    controller.handleEvent(applyEvent());
+    controller.tryHandleEvent(applyEvent());
     REQUIRE(controller.hasPendingSubmission());
 
     // Graceful exit takes the editor away without waiting for the write.
@@ -379,7 +379,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
     CHECK(controller.hasPendingSubmission());
 
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK(fixture.settledCount == 1);
     CHECK(fixture.trackSpec(trackId).album == "Blue");
@@ -395,24 +395,24 @@ namespace ao::tui::test
     auto const secondId = fixture.addTrack({.title = "Second", .album = "Older", .uri = "second.flac"});
     auto controller = fixture.makeController();
 
-    REQUIRE(controller.open({firstId, secondId}));
+    REQUIRE(controller.tryOpen({firstId, secondId}));
 
     // Edit metadata: replace Album with "Blue"
     replaceField(controller, "Album", "Blue");
 
     // Switch to Tags tab
-    controller.handleEvent(ftxui::Event::Tab);
+    controller.tryHandleEvent(ftxui::Event::Tab);
     REQUIRE(controller.activeEditor()->tab() == TrackEditorTab::Tags);
 
     // The tag query is always live, so a new tag is named by typing it
     typeText(controller, "jazz");
     // Enter to add tag to all
-    controller.handleEvent(ftxui::Event::Return);
+    controller.tryHandleEvent(ftxui::Event::Return);
 
     REQUIRE(controller.activeEditor()->canApply());
-    controller.handleEvent(applyEvent());
+    controller.tryHandleEvent(applyEvent());
     REQUIRE(controller.hasPendingSubmission());
-    REQUIRE(fixture.executor->drainUntil([&] { return !controller.hasPendingSubmission(); }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
 
     CHECK_FALSE(controller.isActive());
     CHECK(fixture.settledCount == 1);

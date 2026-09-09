@@ -78,10 +78,10 @@ namespace ao::tui::test
       CHECK(rendered.contains("Kind of Red"));
 
       // Arrow down moves candidate selection
-      editor.handleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
 
       // Enter accepts candidate
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(editor.isDirty());
       CHECK(frame(editor).contains("Kind of Red"));
 
@@ -96,7 +96,7 @@ namespace ao::tui::test
       typeText(editor, "K");
       CHECK(frame(editor).contains("Kind of Blue"));
 
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK_FALSE(frame(editor).contains("Kind of Blue"));
     }
@@ -104,7 +104,7 @@ namespace ao::tui::test
     SECTION("Explicit trigger with Ctrl-N requests completion on empty input")
     {
       focusRow(editor, "Album");
-      editor.handleEvent(completeEvent());
+      editor.tryHandleEvent(completeEvent());
 
       CHECK(completionInvoked);
       CHECK(frame(editor).contains("Kind of Blue"));
@@ -116,7 +116,7 @@ namespace ao::tui::test
       typeText(editor, "K");
       CHECK(frame(editor).contains("Kind of Blue"));
 
-      editor.handleEvent(ftxui::Event::Tab);
+      editor.tryHandleEvent(ftxui::Event::Tab);
       CHECK(editor.tab() == TrackEditorTab::Tags);
     }
   }
@@ -148,7 +148,7 @@ namespace ao::tui::test
 
     SECTION("Ctrl-R closes it on the way past")
     {
-      editor.handleEvent(reloadEvent());
+      editor.tryHandleEvent(reloadEvent());
 
       // Every other chord the popup declines closes it first, so a reload
       // prompt is never drawn under candidates it cannot take input for.
@@ -171,7 +171,7 @@ namespace ao::tui::test
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
-    editor.handleEvent(completeEvent());
+    editor.tryHandleEvent(completeEvent());
 
     SECTION("PageDown moves by the visible page, not by one")
     {
@@ -179,21 +179,21 @@ namespace ao::tui::test
       CHECK(first.contains("Cand00"));
       CHECK_FALSE(first.contains("Cand06"));
 
-      editor.handleEvent(ftxui::Event::PageDown);
+      editor.tryHandleEvent(ftxui::Event::PageDown);
 
       auto const second = frame(editor);
       CHECK(second.contains("Cand06"));
       CHECK_FALSE(second.contains("Cand00"));
 
-      editor.handleEvent(ftxui::Event::PageUp);
+      editor.tryHandleEvent(ftxui::Event::PageUp);
       CHECK(frame(editor).contains("Cand00"));
     }
 
     SECTION("browsing candidates is not an edit")
     {
-      editor.handleEvent(ftxui::Event::ArrowDown);
-      editor.handleEvent(ftxui::Event::ArrowDown);
-      editor.handleEvent(ftxui::Event::PageDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::PageDown);
 
       CHECK_FALSE(editor.isDirty());
       CHECK_FALSE(editor.buildPatch().metadata.optAlbum);
@@ -201,10 +201,10 @@ namespace ao::tui::test
 
     SECTION("a dismissed candidate cannot reach the row the caret moved to")
     {
-      editor.handleEvent(ftxui::Event::ArrowDown); // select Cand01
-      editor.handleEvent(ftxui::Event::Escape);    // closes the popup, not the editor
-      editor.handleEvent(ftxui::Event::ArrowDown); // move to the next row
-      editor.handleEvent(ftxui::Event::Return);    // no candidate is live any more
+      editor.tryHandleEvent(ftxui::Event::ArrowDown); // select Cand01
+      editor.tryHandleEvent(ftxui::Event::Escape);    // closes the popup, not the editor
+      editor.tryHandleEvent(ftxui::Event::ArrowDown); // move to the next row
+      editor.tryHandleEvent(ftxui::Event::Return);    // no candidate is live any more
 
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK_FALSE(editor.isDirty());
@@ -222,11 +222,11 @@ namespace ao::tui::test
         {
           auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}}, numberedCandidates());
           focusRow(editor, label);
-          editor.handleEvent(completeEvent());
+          editor.tryHandleEvent(completeEvent());
 
           for (std::size_t step = 0; step < 5; ++step)
           {
-            editor.handleEvent(ftxui::Event::ArrowDown);
+            editor.tryHandleEvent(ftxui::Event::ArrowDown);
           }
 
           auto const rendered = renderElement(editor.renderModal(80, height), 80, height);
@@ -242,15 +242,15 @@ namespace ao::tui::test
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
-    editor.handleEvent(completeEvent());
+    editor.tryHandleEvent(completeEvent());
 
     for (std::size_t step = 0; step < 6; ++step)
     {
-      editor.handleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
     }
 
     REQUIRE(frame(editor).contains("> Cand06"));
-    editor.handleEvent(ftxui::Event::ArrowUp);
+    editor.tryHandleEvent(ftxui::Event::ArrowUp);
 
     auto const rendered = frame(editor);
     CHECK(rendered.contains("> Cand05"));
@@ -263,15 +263,15 @@ namespace ao::tui::test
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
-    editor.handleEvent(completeEvent());
-    editor.handleEvent(ftxui::Event::PageDown);
+    editor.tryHandleEvent(completeEvent());
+    editor.tryHandleEvent(ftxui::Event::PageDown);
 
     auto const rendered = frame(editor);
     CHECK(rendered.contains("> Cand06"));
     CHECK(rendered.contains("Cand11"));
     CHECK_FALSE(rendered.contains("Cand05"));
 
-    editor.handleEvent(ftxui::Event::Return);
+    editor.tryHandleEvent(ftxui::Event::Return);
     CHECK(editor.buildPatch().metadata.optAlbum == "Cand06");
   }
 } // namespace ao::tui::test

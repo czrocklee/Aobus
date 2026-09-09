@@ -148,7 +148,7 @@ namespace ao::media::file::mp4
              static_cast<std::uint32_t>(byteValue(bytes[offset + 3]));
     }
 
-    bool equalsAsciiCaseInsensitive(std::string_view lhs, std::string_view rhs) noexcept
+    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
     {
       if (lhs.size() != rhs.size())
       {
@@ -276,16 +276,16 @@ namespace ao::media::file::mp4
         return;
       }
 
-      if (equalsAsciiCaseInsensitive(name, "conductor"))
+      if (isEqualIgnoringAsciiCase(name, "conductor"))
       {
         builder.metadata().conductor(value);
       }
-      else if (equalsAsciiCaseInsensitive(name, "ensemble") ||
-               (equalsAsciiCaseInsensitive(name, "orchestra") && builder.metadata().ensemble().empty()))
+      else if (isEqualIgnoringAsciiCase(name, "ensemble") ||
+               (isEqualIgnoringAsciiCase(name, "orchestra") && builder.metadata().ensemble().empty()))
       {
         builder.metadata().ensemble(value);
       }
-      else if (equalsAsciiCaseInsensitive(name, "soloist"))
+      else if (isEqualIgnoringAsciiCase(name, "soloist"))
       {
         builder.metadata().soloist(value);
       }
@@ -502,77 +502,77 @@ namespace ao::media::file::mp4
 
     void handleMdtaMetadataValue(detail::ContentBuilder& builder, std::string_view key, std::string_view value)
     {
-      if (equalsAsciiCaseInsensitive(key, "title"))
+      if (isEqualIgnoringAsciiCase(key, "title"))
       {
         builder.metadata().title(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "artist"))
+      else if (isEqualIgnoringAsciiCase(key, "artist"))
       {
         builder.metadata().artist(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "album"))
+      else if (isEqualIgnoringAsciiCase(key, "album"))
       {
         builder.metadata().album(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "album_artist") || equalsAsciiCaseInsensitive(key, "albumartist"))
+      else if (isEqualIgnoringAsciiCase(key, "album_artist") || isEqualIgnoringAsciiCase(key, "albumartist"))
       {
         builder.metadata().albumArtist(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "genre"))
+      else if (isEqualIgnoringAsciiCase(key, "genre"))
       {
         builder.metadata().genre(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "composer"))
+      else if (isEqualIgnoringAsciiCase(key, "composer"))
       {
         builder.metadata().composer(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "conductor"))
+      else if (isEqualIgnoringAsciiCase(key, "conductor"))
       {
         builder.metadata().conductor(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "ensemble") ||
-               (equalsAsciiCaseInsensitive(key, "orchestra") && builder.metadata().ensemble().empty()))
+      else if (isEqualIgnoringAsciiCase(key, "ensemble") ||
+               (isEqualIgnoringAsciiCase(key, "orchestra") && builder.metadata().ensemble().empty()))
       {
         builder.metadata().ensemble(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "soloist"))
+      else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
         builder.metadata().soloist(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "work") || equalsAsciiCaseInsensitive(key, "grouping"))
+      else if (isEqualIgnoringAsciiCase(key, "work") || isEqualIgnoringAsciiCase(key, "grouping"))
       {
         builder.metadata().work(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "movementname") || equalsAsciiCaseInsensitive(key, "movement_name") ||
-               equalsAsciiCaseInsensitive(key, "mvnm"))
+      else if (isEqualIgnoringAsciiCase(key, "movementname") || isEqualIgnoringAsciiCase(key, "movement_name") ||
+               isEqualIgnoringAsciiCase(key, "mvnm"))
       {
         builder.metadata().movement(value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "movement") || equalsAsciiCaseInsensitive(key, "mvin"))
+      else if (isEqualIgnoringAsciiCase(key, "movement") || isEqualIgnoringAsciiCase(key, "mvin"))
       {
         handleSlashNumber<&detail::ContentBuilder::MetadataBuilder::movementNumber,
                           &detail::ContentBuilder::MetadataBuilder::movementTotal>(builder, value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "movementnumber") || equalsAsciiCaseInsensitive(key, "movement_number"))
+      else if (isEqualIgnoringAsciiCase(key, "movementnumber") || isEqualIgnoringAsciiCase(key, "movement_number"))
       {
         handleTextNumber<&detail::ContentBuilder::MetadataBuilder::movementNumber>(builder, value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "movementtotal") || equalsAsciiCaseInsensitive(key, "movement_total"))
+      else if (isEqualIgnoringAsciiCase(key, "movementtotal") || isEqualIgnoringAsciiCase(key, "movement_total"))
       {
         handleTextNumber<&detail::ContentBuilder::MetadataBuilder::movementTotal>(builder, value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "track") || equalsAsciiCaseInsensitive(key, "tracknumber"))
+      else if (isEqualIgnoringAsciiCase(key, "track") || isEqualIgnoringAsciiCase(key, "tracknumber"))
       {
         handleSlashNumber<&detail::ContentBuilder::MetadataBuilder::trackNumber,
                           &detail::ContentBuilder::MetadataBuilder::trackTotal>(builder, value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "disc") || equalsAsciiCaseInsensitive(key, "disk") ||
-               equalsAsciiCaseInsensitive(key, "discnumber"))
+      else if (isEqualIgnoringAsciiCase(key, "disc") || isEqualIgnoringAsciiCase(key, "disk") ||
+               isEqualIgnoringAsciiCase(key, "discnumber"))
       {
         handleSlashNumber<&detail::ContentBuilder::MetadataBuilder::discNumber,
                           &detail::ContentBuilder::MetadataBuilder::discTotal>(builder, value);
       }
-      else if (equalsAsciiCaseInsensitive(key, "date") || equalsAsciiCaseInsensitive(key, "year"))
+      else if (isEqualIgnoringAsciiCase(key, "date") || isEqualIgnoringAsciiCase(key, "year"))
       {
         handleTextNumber<&detail::ContentBuilder::MetadataBuilder::year>(builder, value);
       }
@@ -820,14 +820,14 @@ namespace ao::media::file::mp4
 
   Result<detail::Content> File::readContent() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    auto const& root = indexResult->root;
+    auto const& root = indexRes->root;
     auto const ilstRes = findAtom(root, kIlstPath);
     auto const keysRes = findAtom(root, kMdtaKeysPath);
     auto const optMdtaKeys = readMdtaKeys(keysRes ? *keysRes : std::optional<AtomView>{});
@@ -864,13 +864,13 @@ namespace ao::media::file::mp4
 
   Result<PayloadView> File::audioPayload() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    return indexResult->payload;
+    return indexRes->payload;
   }
 } // namespace ao::media::file::mp4

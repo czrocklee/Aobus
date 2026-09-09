@@ -16,6 +16,8 @@ namespace winrt::Aobus::implementation
     hstring Text() const noexcept { return _text; }
     hstring FieldId() const noexcept { return _fieldId; }
     double Width() const noexcept { return _width; }
+    // Project.idl fixes this property name for the generated TrackCellItem projection.
+    // NOLINTNEXTLINE(aobus-readability-bool-function-naming)
     bool Sortable() const noexcept { return _sortable; }
     Microsoft::UI::Xaml::TextAlignment Alignment() const noexcept { return _alignment; }
 

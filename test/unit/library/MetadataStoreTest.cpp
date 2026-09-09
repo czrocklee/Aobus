@@ -7,10 +7,13 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ReadTransaction.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
@@ -46,9 +49,9 @@ namespace ao::library::test
       REQUIRE(wtxn.commit());
     }
 
-    auto const result = MusicLibrary::open(temp.path(), temp.path());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    auto const res = MusicLibrary::open(temp.path(), temp.path());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header", "[library][unit][music-library]")
@@ -174,5 +177,56 @@ namespace ao::library::test
 
     auto read = library.readTransaction();
     CHECK(library.libraryRevision(read) == 2);
+  }
+
+  TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission",
+            "[library][regression][dictionary][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto originalId = DictionaryId{};
+    {
+      auto write = writeTransaction(library);
+      originalId = ao::test::requireValue(physicalDictionary(write).intern("Original borrowed text"));
+      REQUIRE(write.commit());
+    }
+
+    auto const original = library.dictionary().get(originalId);
+    auto const* originalAddress = original.data();
+    auto oldRead = library.readTransaction();
+    auto const previousGeneration = library.dictionary().generation();
+    auto const result = ao::test::runProbeProcess(ao::test::siblingProbeExecutablePath("ao_library_probe"),
+                                                  std::string{"commit-dictionary:"} + temp.path().filename().string(),
+                                                  std::chrono::seconds{15});
+    REQUIRE(result.hasSuccessfulExit());
+    REQUIRE(result.standardOutput == "committed-dictionary");
+
+    SECTION("a fresh read resolves every newly referenced dictionary value")
+    {
+      auto fresh = library.readTransaction();
+      auto const optTrack = library.tracks().reader(fresh).get(TrackId{1});
+      REQUIRE(optTrack);
+      CHECK(optTrack->metadata().title() == "Child title");
+      CHECK(library.dictionary().get(optTrack->metadata().artistId()) == "Child artist");
+      CHECK_FALSE(library.tracks().reader(oldRead).get(TrackId{1}));
+    }
+
+    SECTION("writer acquisition refreshes the open-to-lease gap without a preceding fresh read")
+    {
+      auto writer = requireWritableLibrary(library);
+      REQUIRE(library.dictionary().findId("Child artist"));
+      auto write = writer.writeTransaction();
+      auto const childId = ao::test::requireValue(physicalDictionary(write).intern("Child artist"));
+      CHECK(library.dictionary().get(childId) == "Child artist");
+      auto const addedRes = physicalDictionary(write).intern("Later parent value");
+      REQUIRE(addedRes);
+      REQUIRE(write.commit());
+      CHECK(library.dictionary().get(*addedRes) == "Later parent value");
+    }
+
+    CHECK(library.dictionary().generation() > previousGeneration);
+    CHECK(original == "Original borrowed text");
+    CHECK(original.data() == originalAddress);
+    CHECK(library.dictionary().get(originalId).data() == originalAddress);
   }
 } // namespace ao::library::test

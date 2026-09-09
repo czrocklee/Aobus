@@ -24,5 +24,5 @@ namespace ao::rt
    * A regular script must be non-empty and canonical. Reset and Invalidated
    * carry no coordinate payload.
    */
-  bool validateTrackSourceDelta(TrackSourceDelta const& message, std::size_t initialSize) noexcept;
+  bool isValidTrackSourceDelta(TrackSourceDelta const& message, std::size_t initialSize) noexcept;
 } // namespace ao::rt

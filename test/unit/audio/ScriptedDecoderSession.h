@@ -25,7 +25,7 @@ namespace ao::audio::test
     {
       std::vector<std::byte> data = {};
       bool endOfStream = false;
-      Result<> result = {};
+      Result<> res = {};
     };
 
     explicit ScriptedDecoderSession(DecodedStreamInfo info);
@@ -62,7 +62,7 @@ namespace ao::audio::test
     std::size_t readCount() const;
 
     // Configuration
-    void setSeekResult(Result<> resRes);
+    void setSeekResult(Result<> res);
 
   private:
     DecodedStreamInfo _info;

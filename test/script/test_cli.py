@@ -27,6 +27,35 @@ from ao.core import builddir, buildenv
 
 
 class NativePortalTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux Nix portal boundary")
+    def test_nix_reentry_selects_bash_without_a_nix_search_path(self):
+        portal = Path(__file__).resolve().parents[2] / "ao"
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        with tempfile.TemporaryDirectory() as temporary:
+            shell_package = Path(temporary) / "pinned-bash"
+            builder = Path(temporary) / "nix-build"
+            builder.write_text(f'#!/bin/sh\nprintf "%s\\n" "{shell_package}"\n', encoding="utf-8")
+            builder.chmod(0o755)
+            stub = Path(temporary) / "nix-shell"
+            stub.write_text('#!/bin/sh\nprintf "%s\\n" "$NIX_BUILD_SHELL" "$@"\n', encoding="utf-8")
+            stub.chmod(0o755)
+            for selected_shell in (None, "/explicit/bash"):
+                with self.subTest(selected_shell=selected_shell):
+                    env = {**os.environ, "PATH": f"{temporary}{os.pathsep}{os.environ['PATH']}", "NIX_PATH": ""}
+                    env.pop("AO_IN_NIX_PORTAL", None)
+                    env.pop("NIX_BUILD_SHELL", None)
+                    if selected_shell is not None:
+                        env["NIX_BUILD_SHELL"] = selected_shell
+                    result = subprocess.run(
+                        [bash, str(portal), "help"], env=env, capture_output=True, text=True, timeout=30
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    lines = result.stdout.splitlines()
+                    self.assertEqual(lines[0], selected_shell or str(shell_package / "bin/bash"))
+                    self.assertEqual(lines[1:3], [str(portal.parent / "shell.nix"), "--run"])
+                    self.assertIn("AO_IN_NIX_PORTAL=1", lines[3])
+
     def test_nix_reentry_discards_python_paths_from_a_stale_shell(self):
         portal = Path(__file__).resolve().parents[2] / "ao"
         content = portal.read_text(encoding="utf-8")
@@ -543,7 +572,8 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(environment["AOBUS_PERF_LIBRARY_ROOT"], temp_dir)
         self.assertEqual(environment["AOBUS_PERF_LIBRARY_LOCALE"], "de-DE")
 
-    def test_perf_rejects_a_stale_report_when_the_workload_writes_nothing(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    def test_perf_rejects_a_stale_report_when_the_workload_writes_nothing(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "review.json"
             output.write_text("stale report", encoding="utf-8")
@@ -627,9 +657,9 @@ class CliParseTest(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 perf_command._print_report(report_path)
 
-        self.assertIn("ordering/icu-secondary/construction/de-DE/none-0", output.getvalue())
-        self.assertIn("completion-alias/direct-hit/ascii-50000", output.getvalue())
-        self.assertIn("completion-alias/icu-transliteration/alias-hit/cjk-5000", output.getvalue())
+        self.assertIn("ordering/icu-secondary/construction/de-DE/none (input_count=0)", output.getvalue())
+        self.assertIn("completion-alias/direct-hit/ascii (input_count=50000)", output.getvalue())
+        self.assertIn("completion-alias/icu-transliteration/alias-hit/cjk (input_count=5000)", output.getvalue())
         self.assertIn("2048 snapshot-alias-bytes", output.getvalue())
 
     def test_perf_summary_rejects_missing_required_measurement_fields(self):
@@ -810,7 +840,8 @@ class CliParseTest(unittest.TestCase):
         self.assertTrue(self.parse(["doctor", "winui", "--build-only"]).build_only)
         self.assertEqual(self.parse(["setup", "winui-runtime"]).component, "winui-runtime")
 
-    def test_windows_build_selects_the_shared_flavor_preset(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_build_selects_the_shared_flavor_preset(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "-p", temp_dir])
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -822,7 +853,8 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(result.preset, "windows-debug")
         self.assertEqual(result.compiler, "msvc")
 
-    def test_windows_winui_build_selects_the_visual_studio_preset(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_build_selects_the_visual_studio_preset(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "-p", temp_dir, "--target", "winui"])
             with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
@@ -845,7 +877,8 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(build_env["CL_MPCount"], "8")
         self.assertEqual(result.preset, "windows-winui")
 
-    def test_windows_release_selects_the_normal_release_preset(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_release_selects_the_normal_release_preset(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "release", "-p", temp_dir])
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -855,7 +888,8 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("windows-release", run.call_args_list[0].args[0])
         self.assertEqual(result.preset, "windows-release")
 
-    def test_windows_winui_release_uses_the_normal_visual_studio_tree(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_release_uses_the_normal_visual_studio_tree(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "release", "-p", temp_dir, "--target", "winui"])
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -884,7 +918,8 @@ class CliParseTest(unittest.TestCase):
             r"\\?\UNC\server\share\aobus-build",
         )
 
-    def test_windows_asan_build_enables_instrumentation(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_asan_build_enables_instrumentation(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "--asan", "-p", temp_dir])
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -963,7 +998,9 @@ class CliParseTest(unittest.TestCase):
             },
         )
 
-    def test_test_all_runs_every_suite(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_test_all_runs_every_suite(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build"])
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -1184,7 +1221,8 @@ class CliParseTest(unittest.TestCase):
             log=result.log,
         )
 
-    def test_windows_test_reuses_the_shared_debug_tree(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_test_reuses_the_shared_debug_tree(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["test", "-p", temp_dir])
             build_dir = Path(temp_dir)
@@ -1305,7 +1343,9 @@ class CliParseTest(unittest.TestCase):
         winui_args = do_build.call_args_list[1].args[0]
         self.assertEqual(Path(winui_args.path), Path("C:/local/explicit-native-winui"))
 
-    def test_tsan_defaults_to_the_baselined_suite_group(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_tsan_defaults_to_the_baselined_suite_group(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -1349,7 +1389,9 @@ class CliParseTest(unittest.TestCase):
 
         run_suites.assert_not_called()
 
-    def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--concurrency", "--repeat", "3", "-n", "-p", "/tmp/aobus-test-build"])
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -1368,7 +1410,9 @@ class CliParseTest(unittest.TestCase):
             tsan=False,
         )
 
-    def test_tsan_concurrency_group_intersects_with_baselined_suites(self):
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_tsan_concurrency_group_intersects_with_baselined_suites(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--concurrency", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -1614,6 +1658,11 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.scope, ["app/linux-gtk", "include/aobus"])
         self.assertEqual(args.summary_limit, 7)
         self.assertEqual(args.filter, "[layout]")
+
+    def test_coverage_accepts_cli_suite_shortcut(self):
+        args = self.parse(["coverage", "--cli", "--scope", "app/cli"])
+        self.assertEqual(args.suite, "cli")
+        self.assertEqual(args.scope, ["app/cli"])
 
     def test_coverage_accepts_tui_suite_shortcut(self):
         args = self.parse(["coverage", "--tui", "--scope", "app/tui", "[tui]"])

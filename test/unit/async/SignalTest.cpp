@@ -231,11 +231,11 @@ namespace ao::async::test
     payload = "changed";
 
     CHECK(observed.empty());
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(observed == std::vector<std::string>{"first", "handler returned"});
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(observed == std::vector<std::string>{"first", "handler returned", "second"});
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("Signal - posted emission becomes a no-op after owner destruction", "[core][unit][signal]")
@@ -248,7 +248,7 @@ namespace ao::async::test
     signalPtr->post(executor, 1);
     signalPtr.reset();
 
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(callCount == 0);
 
     sub.reset();

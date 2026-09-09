@@ -66,7 +66,7 @@ namespace ao::gtk::test
     ListId createList(rt::AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(runGtkTask(runtime,
-                                               runtime.library().commands().createList(rt::ListDraft{
+                                               runtime.library().commands().createListAsync(rt::ListDraft{
                                                  .name = std::move(name),
                                                })));
     }
@@ -210,7 +210,7 @@ namespace ao::gtk::test
           },
       }));
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
@@ -245,7 +245,7 @@ namespace ao::gtk::test
       runtimePtr->sources().reloadAllTracks();
       auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = rt::kAllTracksListId}));
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->playback().commands().stop();
     }
@@ -288,7 +288,7 @@ namespace ao::gtk::test
       }));
       drainGtkEvents();
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
@@ -341,7 +341,7 @@ namespace ao::gtk::test
       listId = createList(*runtimePtr, "Restored new-view list");
       auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = listId}));
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       savePresentationPreference(tempDir, listId, "albums");
       runtimePtr->playback().commands().stop();

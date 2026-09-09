@@ -3,7 +3,9 @@
 
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
+#include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
+#include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -19,11 +21,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test Title"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Another Title"};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }
 
@@ -33,7 +35,7 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
     auto track = TestTrack{"Dvořák Straße"};
 
-    CHECK(evaluator.evaluateFull(plan, track.view()));
+    CHECK(evaluator.matchesFullPlan(plan, track.view()));
   }
 
   TEST_CASE("PlanEvaluator - applies full Unicode case folding", "[query][unit][plan-evaluator][unicode]")
@@ -42,8 +44,8 @@ namespace ao::query::test
     auto germanTrack = TestTrack{"Die Straße"};
     auto greekTrack = TestTrack{"Οδυσσεύς"};
 
-    CHECK(evaluator.evaluateFull(compileOk(parseOk(R"($title ~ "STRASSE")")), germanTrack.view()));
-    CHECK(evaluator.evaluateFull(compileOk(parseOk(R"($title ~ "ΟΔΥΣΣΕΎΣ")")), greekTrack.view()));
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk(R"($title ~ "STRASSE")")), germanTrack.view()));
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk(R"($title ~ "ΟΔΥΣΣΕΎΣ")")), greekTrack.view()));
   }
 
   TEST_CASE("PlanEvaluator - keeps URI substring matching byte-exact", "[query][unit][plan-evaluator][unicode]")
@@ -58,7 +60,7 @@ namespace ao::query::test
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
       plan.instructions.push_back({.op = OpCode::Like, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 1});
-      return evaluator.evaluateFull(plan, track.view());
+      return evaluator.matchesFullPlan(plan, track.view());
     };
 
     CHECK(matches("Cafe\u0301"));
@@ -73,15 +75,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"hello world"}; // case-sensitive
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     auto track3 = TestTrack{"Hello"};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -92,11 +94,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Hello World"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Hello"};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }
 
@@ -107,15 +109,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"apple"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"zoo"};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     auto track3 = TestTrack{"zooExtra"};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -126,15 +128,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"banana"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"apple"};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     auto track3 = TestTrack{"Apple"}; // case-sensitive
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -147,17 +149,17 @@ namespace ao::query::test
 
     // Track with title containing "Bach"
     auto track1 = TestTrack{"Bach Greatest Hits"};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     // Track with title not containing "Bach"
     auto track2 = TestTrack{"Mozart Symphony"};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     // Track with exact match
     auto track3 = TestTrack{"Bach"};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == true);
   }
 
@@ -169,7 +171,7 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "path", 2021};
-    auto result = evaluator.evaluateFull(plan, track.view());
+    auto result = evaluator.matchesFullPlan(plan, track.view());
     CHECK(result == true);
   }
 } // namespace ao::query::test

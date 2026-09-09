@@ -20,10 +20,10 @@ Prefer:
   owner; accepted deferred delivery and synchronous `Signal::emit()` own exception-aware fatal containment.
 - Production `LoopExecutor` when owner affinity and real turn semantics are the behavior under test.
 - `ManualExecutor` when a test needs one-task control. Producers may submit from any thread, but only its construction
-  thread may call `runOne()` or `runUntilIdle()`.
+  thread may call `tryRunOne()` or `runUntilIdle()`.
 - The Loop-backed `QueuedExecutor` when a test needs production-like owner affinity, forced queuing, bounded waiting,
   or queue observations.
-- Explicit `runOne()` / `runUntilIdle()` or `runOneTurn()` / `runReadyTurn()` progression.
+- Explicit `tryRunOne()` / `runUntilIdle()` or `runOneTurn()` / `tryRunReadyTurn()` progression.
 - Barriers or captured callbacks to create known ordering points.
 - `AsyncTestState` only as a bounded observation aid, not as the primary scheduler.
 
@@ -40,7 +40,7 @@ Avoid or minimize:
 - Wall-clock time as proof of correctness.
 
 If a timeout helper is necessary, keep it centralized and make failure diagnostics useful.
-`runLoopUntil()` provides the bounded test-only driver for a production `LoopExecutor`; do not add local polling loops for the same job.
+`tryRunLoopUntil()` provides the bounded test-only driver for a production `LoopExecutor`; do not add local polling loops for the same job.
 
 Example shape:
 
@@ -49,7 +49,7 @@ runtime.spawnWithLifetime(
   scope,
   [&runtime](std::stop_token stopToken)
   { return task(&runtime, stopToken); });
-REQUIRE(executor.waitUntilQueued());
+REQUIRE(executor.tryWaitUntilQueued());
 
 scope.cancelAll();
 executor.runOne();

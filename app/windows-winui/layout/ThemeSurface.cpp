@@ -92,7 +92,7 @@ namespace ao::winui
     return theme.shared.windowBackground;
   }
 
-  bool elementKindAcceptsSurface(ElementKind const kind) noexcept
+  bool acceptsSurfaceForElementKind(ElementKind const kind) noexcept
   {
     // The three XAML types that own a Background between them; everything the
     // presets construct either derives from one of these or paints nothing.

@@ -67,12 +67,12 @@ namespace ao::rt::test
     return admittedRes;
   }
 
-  bool PlaybackUiFixture::waitForPlayback(TrackId const trackId)
+  bool PlaybackUiFixture::tryWaitForPlayback(TrackId const trackId)
   {
     auto const settled =
-      waitForPlaybackSettlement(*executor,
-                                observedPositionRevision,
-                                [this] { return runtime().playback().snapshot().transport.positionRevision; });
+      tryWaitForPlaybackSettlement(*executor,
+                                   observedPositionRevision,
+                                   [this] { return runtime().playback().snapshot().transport.positionRevision; });
     observedPositionRevision = runtime().playback().snapshot().transport.positionRevision;
     return settled && runtime().playback().snapshot().transport.nowPlaying.trackId == trackId;
   }

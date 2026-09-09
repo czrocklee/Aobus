@@ -16,7 +16,7 @@ namespace ao::rt
 {
   namespace
   {
-    bool expressionReferencesTag(query::Expression const& expression, std::string_view const tag)
+    bool hasExpressionTagReference(query::Expression const& expression, std::string_view const tag)
     {
       if (auto const* variable = std::get_if<query::VariableExpression>(&expression); variable != nullptr)
       {
@@ -26,14 +26,14 @@ namespace ao::rt
       if (auto const* binary = std::get_if<std::unique_ptr<query::BinaryExpression>>(&expression);
           binary != nullptr && *binary != nullptr)
       {
-        return expressionReferencesTag((*binary)->operand, tag) ||
-               ((*binary)->optOperation && expressionReferencesTag((*binary)->optOperation->operand, tag));
+        return hasExpressionTagReference((*binary)->operand, tag) ||
+               ((*binary)->optOperation && hasExpressionTagReference((*binary)->optOperation->operand, tag));
       }
 
       if (auto const* unary = std::get_if<std::unique_ptr<query::UnaryExpression>>(&expression);
           unary != nullptr && *unary != nullptr)
       {
-        return expressionReferencesTag((*unary)->operand, tag);
+        return hasExpressionTagReference((*unary)->operand, tag);
       }
 
       return false;
@@ -59,9 +59,9 @@ namespace ao::rt
     return variable->name;
   }
 
-  bool listExpressionReferencesTag(std::string_view const expression, std::string_view const tag)
+  bool hasListExpressionTagReference(std::string_view const expression, std::string_view const tag)
   {
     auto parsedRes = query::parse(expression);
-    return parsedRes && expressionReferencesTag(*parsedRes, tag);
+    return parsedRes && hasExpressionTagReference(*parsedRes, tag);
   }
 } // namespace ao::rt

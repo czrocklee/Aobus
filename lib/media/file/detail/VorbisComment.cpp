@@ -138,7 +138,7 @@ namespace ao::media::file::detail
     return VorbisCommentField{.key = comment.substr(0, equalsOffset), .value = comment.substr(equalsOffset + 1)};
   }
 
-  bool applyVorbisComment(ContentBuilder& builder, VorbisCommentField field)
+  bool tryApplyVorbisComment(ContentBuilder& builder, VorbisCommentField field)
   {
     auto const* const entry = VorbisCommentDispatchTable::lookupVorbisField(field.key.data(), field.key.size());
 

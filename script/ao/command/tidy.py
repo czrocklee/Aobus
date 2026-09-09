@@ -135,6 +135,8 @@ EXPECTED_AOBUS_CHECKS = frozenset(
         "aobus-modernize-use-std-numbers",
         "aobus-modernize-use-std-to-array",
         "aobus-portability-explicit-path-conversion",
+        "aobus-readability-async-function-naming",
+        "aobus-readability-bool-function-naming",
         "aobus-readability-c-api-global-qualification",
         "aobus-readability-chrono-naming-convention",
         "aobus-readability-control-block-spacing",

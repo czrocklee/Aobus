@@ -28,8 +28,9 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       helper/support allocation.
     - 2.2.2. Common identifier shapes: types and classes use `PascalCase`;
       functions and variables use `camelCase`; non-static class data members use
-      `_camelCase`; struct data members use plain `camelCase`; constants use
-      `kCamelCase`.
+      `_camelCase`; struct data members use plain `camelCase`; `constexpr`
+      variables and namespace, static, or class constants use `kCamelCase`. Ordinary
+      non-static local `const` variables remain `camelCase`.
     - 2.2.3. Test case names and Catch2 tags are covered in
       `doc/development/test/naming-and-assertion.md`.
   - 2.3. Headers
@@ -195,7 +196,7 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       protocol, and keep the raw owner alive until that settlement completes.
   - 4.3. Const Correctness
     - 4.3.1. Use `const` wherever possible
-      - locals: `auto const result = compute();`
+      - locals: `auto const value = compute();`
       - member functions: `std::size_t size() const;`
       - pointers to constant data: `char const* name;`
       - input parameters: `void addTrack(Track const& track);`

@@ -42,7 +42,7 @@ namespace ao::tui
     _selection = 0;
   }
 
-  bool CommandCompletionState::moveSelection(std::int32_t const delta)
+  bool CommandCompletionState::tryMoveSelection(std::int32_t const delta)
   {
     if (!_optResult || _optResult->items.empty())
     {
@@ -54,7 +54,7 @@ namespace ao::tui
     return true;
   }
 
-  bool CommandCompletionState::moveSelectionByPage(std::int32_t const delta)
+  bool CommandCompletionState::tryMoveSelectionByPage(std::int32_t const delta)
   {
     if (!_optResult || _optResult->items.empty())
     {
@@ -65,7 +65,7 @@ namespace ao::tui
     return true;
   }
 
-  bool CommandCompletionState::applyTo(std::string& draft)
+  bool CommandCompletionState::tryApplyTo(std::string& draft)
   {
     if (!_optResult || _optResult->items.empty())
     {

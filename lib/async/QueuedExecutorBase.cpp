@@ -61,7 +61,7 @@ namespace ao::async
 
   void QueuedExecutorBase::drainQueuedTasks()
   {
-    drainQueuedTasksTurn(true);
+    tryContinueDraining(true);
   }
 
   void QueuedExecutorBase::drainQueuedTasksUntilIdle()
@@ -75,7 +75,7 @@ namespace ao::async
 
     for (std::size_t turn = 0; turn < kMaxFinalDrainTurns; ++turn)
     {
-      if (!drainQueuedTasksTurn(false))
+      if (!tryContinueDraining(false))
       {
         return;
       }
@@ -84,7 +84,7 @@ namespace ao::async
     AO_FATAL("Queued executor final drain did not reach quiescence after {} turns", kMaxFinalDrainTurns);
   }
 
-  bool QueuedExecutorBase::drainQueuedTasksTurn(bool const wakeRemaining)
+  bool QueuedExecutorBase::tryContinueDraining(bool const wakeRemaining)
   {
     AO_EXPECTS(isCurrent());
 

@@ -31,10 +31,10 @@ namespace ao::gtk::layout::test
 
     std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
     void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
-    bool prune(std::string_view presetId,
-               uimodel::PreparedLayout const& layout,
-               uimodel::LayoutSchema const& schema) override;
-    bool removePreset(std::string_view presetId) override;
+    bool tryPrune(std::string_view presetId,
+                  uimodel::PreparedLayout const& layout,
+                  uimodel::LayoutSchema const& schema) override;
+    bool tryRemovePreset(std::string_view presetId) override;
 
     uimodel::LayoutComponentStateDocument const& document() const noexcept;
     void setDocument(uimodel::LayoutComponentStateDocument doc);

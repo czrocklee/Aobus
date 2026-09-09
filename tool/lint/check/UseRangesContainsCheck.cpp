@@ -195,7 +195,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (isFindGroup && !aobus::verifyEndObject(*result.Nodes.getNodeAs<CallExpr>("end_call"), rangeStr, sm, langOpts))
+    if (isFindGroup &&
+        !aobus::isMatchingEndObject(*result.Nodes.getNodeAs<CallExpr>("end_call"), rangeStr, sm, langOpts))
     {
       return;
     }

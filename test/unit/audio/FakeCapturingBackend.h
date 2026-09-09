@@ -63,7 +63,7 @@ namespace ao::audio::test
 
     // Helpers for tests
     void setMockPropertyInfo(PropertyId id, PropertyInfo const& info);
-    void setOpenResult(Result<> resRes);
+    void setOpenResult(Result<> res);
     void setPrewarmEncoding(std::optional<SampleEncoding> optEncoding);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
 

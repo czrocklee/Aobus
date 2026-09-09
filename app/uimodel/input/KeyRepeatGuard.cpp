@@ -7,7 +7,7 @@
 
 namespace ao::uimodel
 {
-  bool KeyRepeatGuard::acceptPress(std::uint32_t const physicalKeycode)
+  bool KeyRepeatGuard::tryAcceptPress(std::uint32_t const physicalKeycode)
   {
     return _pressedKeycodes.insert(physicalKeycode).second;
   }

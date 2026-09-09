@@ -29,7 +29,7 @@ namespace ao::uimodel::test
     auto& playback = fixture.playback;
     auto& playbackTransport = fixture.playbackTransport;
     fixture.addReadyProvider();
-    REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return playbackTransport.state().ready; }));
 
     auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
     auto viewModel = PlaybackPositionViewModel{playback, [&log](auto const& state) { log.render(state); }};
@@ -57,8 +57,8 @@ namespace ao::uimodel::test
         .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
       };
       REQUIRE(playbackTransport.play(desc, kInvalidListId));
-      REQUIRE(
-        fixture.executor.drainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
+      REQUIRE(fixture.executor.tryDrainUntil(
+        [&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
       fixture.executor.drain();
       auto const expectedDuration = playbackTransport.state().duration;
       REQUIRE(expectedDuration > std::chrono::milliseconds{0});
@@ -146,7 +146,7 @@ namespace ao::uimodel::test
     auto& playback = fixture.playback;
     auto& playbackTransport = fixture.playbackTransport;
     fixture.addReadyProvider();
-    REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return playbackTransport.state().ready; }));
 
     auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
     auto const viewModel = PlaybackPositionViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -160,7 +160,7 @@ namespace ao::uimodel::test
     log.clear();
     REQUIRE(playbackTransport.play(desc, kInvalidListId));
     REQUIRE(
-      fixture.executor.drainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
+      fixture.executor.tryDrainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
     fixture.executor.drain();
     auto const expectedDuration = playbackTransport.state().duration;
     REQUIRE(expectedDuration > std::chrono::milliseconds{0});

@@ -314,7 +314,7 @@ namespace ao::winui
     auto const hadEarlyValueChange = _finalSeekPending;
     auto const earlyElapsed = _pendingFinalElapsed;
 
-    if (!_presentationActive || !_viewModelPtr || !_interaction.beginPointerInteraction())
+    if (!_presentationActive || !_viewModelPtr || !_interaction.tryBeginPointerInteraction())
     {
       return;
     }

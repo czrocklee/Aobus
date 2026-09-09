@@ -103,9 +103,9 @@ namespace ao::gtk::test
       CHECK_FALSE(row1Ptr->isPlaying());
 
       // Verify custom string fields and failure paths
-      CHECK(row1Ptr->setStringField(rt::TrackField::Artist, "New Artist"));
+      CHECK(row1Ptr->trySetStringField(rt::TrackField::Artist, "New Artist"));
       CHECK(row1Ptr->fieldText(rt::TrackField::Artist) == "New Artist");
-      CHECK_FALSE(row1Ptr->setStringField(rt::TrackField::Duration, "Failed"));
+      CHECK_FALSE(row1Ptr->trySetStringField(rt::TrackField::Duration, "Failed"));
 
       // Verify other metadata and resource/playback properties
       row1Ptr->setYear(2025);

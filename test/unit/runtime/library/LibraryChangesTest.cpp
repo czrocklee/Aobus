@@ -69,7 +69,7 @@ namespace ao::rt::test
             completed.set(true);
           });
 
-        if (!completed.waitUntil(true))
+        if (!completed.tryWaitUntil(true))
         {
           throw std::runtime_error{"Timed out waiting for controlled foreign dispatch completion"};
         }
@@ -79,26 +79,26 @@ namespace ao::rt::test
 
       void defer(compat::MoveOnlyFunction<void()> task) override { _delegate.defer(std::move(task)); }
       void drain() { _delegate.drain(); }
-      bool waitUntilQueued() const { return _delegate.waitUntilQueued(); }
-      bool foreignDispatchReturned() const { return _foreignDispatchReturned.load(); }
+      bool tryWaitUntilQueued() const { return _delegate.tryWaitUntilQueued(); }
+      bool hasForeignDispatchReturned() const { return _foreignDispatchReturned.load(); }
 
     private:
       QueuedExecutor _delegate;
       AsyncTestState<bool> _foreignDispatchReturned = AsyncTestState<bool>::create(false);
     };
 
-    async::Task<Result<MutationExecution<std::uint8_t>>> executeRevisionOnly(
+    async::Task<Result<MutationExecution<std::uint8_t>>> executeRevisionOnlyAsync(
       LibraryWriteLane::Submission submission,
       library::WriteTransaction::Options options = {})
     {
-      return executeInteractiveMutation(
+      return executeInteractiveMutationAsync(
         std::move(submission),
         [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
         { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; },
         std::move(options));
     }
 
-    async::Task<Result<>> abortInteractive(LibraryWriteLane::Submission submission)
+    async::Task<Result<>> abortInteractiveAsync(LibraryWriteLane::Submission submission)
     {
       auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
@@ -111,7 +111,7 @@ namespace ao::rt::test
       co_return Result<>{};
     }
 
-    async::Task<Result<>> moveAndAbortInteractive(LibraryWriteLane::Submission submission)
+    async::Task<Result<>> moveAndAbortInteractiveAsync(LibraryWriteLane::Submission submission)
     {
       auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
 
@@ -131,10 +131,10 @@ namespace ao::rt::test
       co_return Result<>{};
     }
 
-    async::Task<void> holdMovedInteractiveMutation(LibraryWriteLane::Submission submission,
-                                                   AsyncTestState<bool> ready,
-                                                   AsyncTestState<bool> closingObserved,
-                                                   AsyncBarrier* release)
+    async::Task<void> holdMovedInteractiveMutationAsync(LibraryWriteLane::Submission submission,
+                                                        AsyncTestState<bool> ready,
+                                                        AsyncTestState<bool> closingObserved,
+                                                        AsyncBarrier* release)
     {
       REQUIRE(release != nullptr);
       auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
@@ -158,8 +158,8 @@ namespace ao::rt::test
       finalOwner.abort();
     }
 
-    async::Task<Result<>> abortMaintenanceMutation(LibraryWriteLane::Submission submission,
-                                                   LibraryWriteLane::MaintenanceGuard const* guard)
+    async::Task<Result<>> abortMaintenanceMutationAsync(LibraryWriteLane::Submission submission,
+                                                        LibraryWriteLane::MaintenanceGuard const* guard)
     {
       REQUIRE(guard != nullptr);
       auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(std::move(submission), *guard);
@@ -173,8 +173,8 @@ namespace ao::rt::test
       co_return Result<>{};
     }
 
-    async::Task<AuthoringStatus> beginAndAbortAuthoring(LibraryWriteLane::Submission submission,
-                                                        BoundTrackTargets targets)
+    async::Task<AuthoringStatus> beginAndAbortAuthoringAsync(LibraryWriteLane::Submission submission,
+                                                             BoundTrackTargets targets)
     {
       auto start = co_await LibraryWriteLane::beginAuthoringMutationAsync(std::move(submission), std::move(targets));
 
@@ -186,7 +186,7 @@ namespace ao::rt::test
       co_return start.status;
     }
 
-    async::Task<void> holdWorker(AsyncTestState<bool> ready, AsyncBarrier* release)
+    async::Task<void> holdWorkerAsync(AsyncTestState<bool> ready, AsyncBarrier* release)
     {
       REQUIRE(release != nullptr);
       ready.set(true);
@@ -194,7 +194,7 @@ namespace ao::rt::test
       co_return;
     }
 
-    async::Task<Result<MutationExecution<std::uint8_t>>> executeMaintenanceRevision(
+    async::Task<Result<MutationExecution<std::uint8_t>>> executeMaintenanceRevisionAsync(
       LibraryWriteLane::Submission enterSubmission,
       LibraryWriteLane::Submission mutationSubmission)
     {
@@ -277,7 +277,7 @@ namespace ao::rt::test
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       env.changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
-    auto executionRes = env.run(executeInteractiveMutation(
+    auto executionRes = env.run(executeInteractiveMutationAsync(
       env.lane.captureSubmission(),
       [&env](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
@@ -306,7 +306,7 @@ namespace ao::rt::test
     auto env = MutationTestEnvironment{};
     std::size_t changedCount = 0;
     auto subscription = env.changes.onChanged([&changedCount](LibraryChangeSet const&) noexcept { ++changedCount; });
-    auto executionRes = env.run(executeInteractiveMutation(
+    auto executionRes = env.run(executeInteractiveMutationAsync(
       env.lane.captureSubmission(),
       [&env](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
@@ -322,7 +322,7 @@ namespace ao::rt::test
     CHECK(env.libraryFixture.library().libraryRevision(read) == 0);
     CHECK_FALSE(env.libraryFixture.library().tracks().reader(read).get(
       executionRes->value, library::TrackStore::Reader::LoadMode::Both));
-    REQUIRE(env.run(executeRevisionOnly(env.lane.captureSubmission())));
+    REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
   }
 
   TEST_CASE("Library mutation - move chains preserve one live command admission",
@@ -332,8 +332,8 @@ namespace ao::rt::test
     STATIC_REQUIRE_FALSE(std::is_move_assignable_v<LibraryWriteLane::Mutation>);
     auto env = MutationTestEnvironment{};
 
-    REQUIRE(env.run(moveAndAbortInteractive(env.lane.captureSubmission())));
-    REQUIRE(env.run(abortInteractive(env.lane.captureSubmission())));
+    REQUIRE(env.run(moveAndAbortInteractiveAsync(env.lane.captureSubmission())));
+    REQUIRE(env.run(abortInteractiveAsync(env.lane.captureSubmission())));
   }
 
   TEST_CASE("Library mutation - Closing waits for the final owner in a move chain",
@@ -350,9 +350,9 @@ namespace ao::rt::test
     auto ready = AsyncTestState<bool>::create(false);
     auto closingObserved = AsyncTestState<bool>::create(false);
     auto release = AsyncBarrier{};
-    auto future =
-      runtime.spawn(holdMovedInteractiveMutation(servicePtr->captureSubmission(), ready, closingObserved, &release));
-    auto const entered = ready.waitUntil(true);
+    auto future = runtime.spawn(
+      holdMovedInteractiveMutationAsync(servicePtr->captureSubmission(), ready, closingObserved, &release));
+    auto const entered = ready.tryWaitUntil(true);
 
     if (!entered)
     {
@@ -380,29 +380,29 @@ namespace ao::rt::test
     SECTION("Result error")
     {
       auto executionRes =
-        env.run(executeInteractiveMutation(env.lane.captureSubmission(),
-                                           [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
-                                           { return makeError(Error::Code::Conflict, "rejected"); }));
+        env.run(executeInteractiveMutationAsync(env.lane.captureSubmission(),
+                                                [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                                { return makeError(Error::Code::Conflict, "rejected"); }));
 
       REQUIRE_FALSE(executionRes);
       CHECK(executionRes.error().code == Error::Code::Conflict);
-      REQUIRE(env.run(executeRevisionOnly(env.lane.captureSubmission())));
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
     }
 
     SECTION("exception")
     {
       CHECK_THROWS_WITH(
-        env.run(executeInteractiveMutation(env.lane.captureSubmission(),
-                                           [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
-                                           { throw std::runtime_error{"execute failure"}; })),
+        env.run(executeInteractiveMutationAsync(env.lane.captureSubmission(),
+                                                [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                                { throw std::runtime_error{"execute failure"}; })),
         "execute failure");
-      REQUIRE(env.run(executeRevisionOnly(env.lane.captureSubmission())));
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
     }
 
     SECTION("explicit abort")
     {
-      REQUIRE(env.run(abortInteractive(env.lane.captureSubmission())));
-      REQUIRE(env.run(executeRevisionOnly(env.lane.captureSubmission())));
+      REQUIRE(env.run(abortInteractiveAsync(env.lane.captureSubmission())));
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
     }
   }
 
@@ -414,7 +414,7 @@ namespace ao::rt::test
     auto subscription =
       env.changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
     auto stagedTrackId = kInvalidTrackId;
-    auto executionRes = env.run(executeInteractiveMutation(
+    auto executionRes = env.run(executeInteractiveMutationAsync(
       env.lane.captureSubmission(),
       [&env, &stagedTrackId](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
@@ -441,7 +441,7 @@ namespace ao::rt::test
         stagedTrackId, library::TrackStore::Reader::LoadMode::Both));
     }
 
-    auto retryRes = env.run(executeRevisionOnly(env.lane.captureSubmission()));
+    auto retryRes = env.run(executeRevisionOnlyAsync(env.lane.captureSubmission()));
     REQUIRE(retryRes);
     REQUIRE(retryRes->optCommittedRevision);
     CHECK(*retryRes->optCommittedRevision == 1);
@@ -502,7 +502,7 @@ namespace ao::rt::test
       *changesPtr, "Replica", [&deliveryCount](LibraryChangeSet const&) noexcept { ++deliveryCount; });
 
     LibraryChangesAccess::publish(*changesPtr, LibraryChangeSet{.libraryRevision = 1});
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
 
     changesPtr.reset();
     CHECK_NOTHROW(executor.drain());
@@ -521,9 +521,9 @@ namespace ao::rt::test
       runtime.callbackExecutor(),
       ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
       changes);
-    auto future = runtime.spawn(executeRevisionOnly(servicePtr->captureSubmission()));
+    auto future = runtime.spawn(executeRevisionOnlyAsync(servicePtr->captureSubmission()));
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     CHECK(executor.queuedCount() == 1);
 
     servicePtr.reset();
@@ -547,7 +547,7 @@ namespace ao::rt::test
     auto const enterSubmission = env.lane.captureSubmission();
     auto const mutationSubmission = env.lane.captureSubmission();
 
-    auto executionRes = env.run(executeMaintenanceRevision(enterSubmission, mutationSubmission));
+    auto executionRes = env.run(executeMaintenanceRevisionAsync(enterSubmission, mutationSubmission));
 
     REQUIRE(executionRes);
     REQUIRE(executionRes->optCommittedRevision);
@@ -572,26 +572,26 @@ namespace ao::rt::test
                                       { observed.push_back(availability.state); });
     auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(writeLane.captureSubmission()));
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     CHECK(executor.queuedCount() == 1);
     CHECK(writeLane.availability().state == LibraryAuthoringState::Maintenance);
-    REQUIRE(executor.runOne());
+    REQUIRE(executor.tryRunOne());
     auto enterRes = enter.get();
     REQUIRE(enterRes);
     auto guard = std::move(*enterRes);
-    auto maintenanceMutation = runtime.spawn(abortMaintenanceMutation(writeLane.captureSubmission(), &guard));
+    auto maintenanceMutation = runtime.spawn(abortMaintenanceMutationAsync(writeLane.captureSubmission(), &guard));
     REQUIRE(maintenanceMutation.get());
 
     auto exit = runtime.spawn(guard.finishAsync());
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     CHECK(executor.queuedCount() == 1);
     CHECK(writeLane.availability().state == LibraryAuthoringState::Available);
-    REQUIRE(executor.runOne());
+    REQUIRE(executor.tryRunOne());
     CHECK_NOTHROW(exit.get());
 
     CHECK(observed ==
           std::vector<LibraryAuthoringState>{LibraryAuthoringState::Maintenance, LibraryAuthoringState::Available});
-    auto next = runtime.spawn(abortInteractive(writeLane.captureSubmission()));
+    auto next = runtime.spawn(abortInteractiveAsync(writeLane.captureSubmission()));
     REQUIRE(next.get());
   }
 
@@ -610,7 +610,7 @@ namespace ao::rt::test
     SECTION("MaintenanceEnter")
     {
       auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(servicePtr->captureSubmission()));
-      REQUIRE(executor.waitUntilQueued());
+      REQUIRE(executor.tryWaitUntilQueued());
       CHECK(executor.queuedCount() == 1);
       servicePtr.reset();
       auto const exceptionPtr = captureTaskFutureException(enter);
@@ -621,13 +621,13 @@ namespace ao::rt::test
     SECTION("MaintenanceExit")
     {
       auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(servicePtr->captureSubmission()));
-      REQUIRE(executor.waitUntilQueued());
-      REQUIRE(executor.runOne());
+      REQUIRE(executor.tryWaitUntilQueued());
+      REQUIRE(executor.tryRunOne());
       auto enterRes = enter.get();
       REQUIRE(enterRes);
       auto guard = std::move(*enterRes);
       auto exit = runtime.spawn(guard.finishAsync());
-      REQUIRE(executor.waitUntilQueued());
+      REQUIRE(executor.tryWaitUntilQueued());
       CHECK(executor.queuedCount() == 1);
       servicePtr.reset();
       auto const exceptionPtr = captureTaskFutureException(exit);
@@ -656,11 +656,11 @@ namespace ao::rt::test
       [&executor, &notified, &notifiedBeforeSubmissionReturned](LibraryChangeSet const&) noexcept
       {
         notified = true;
-        notifiedBeforeSubmissionReturned = !executor.foreignDispatchReturned();
+        notifiedBeforeSubmissionReturned = !executor.hasForeignDispatchReturned();
       });
-    auto committed = runtime.spawn(executeRevisionOnly(writeLane.captureSubmission()));
+    auto committed = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     executor.drain();
 
     REQUIRE(committed.get());
@@ -682,11 +682,11 @@ namespace ao::rt::test
                        changes};
     auto const firstSubmission = writeLane.captureSubmission();
     auto const secondSubmission = writeLane.captureSubmission();
-    auto first = runtime.spawn(executeRevisionOnly(firstSubmission));
+    auto first = runtime.spawn(executeRevisionOnlyAsync(firstSubmission));
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     REQUIRE(executor.queuedCount() == 1);
-    auto second = runtime.spawn(executeRevisionOnly(secondSubmission));
+    auto second = runtime.spawn(executeRevisionOnlyAsync(secondSubmission));
 
     auto secondRes = second.get();
     REQUIRE_FALSE(secondRes);
@@ -695,8 +695,8 @@ namespace ao::rt::test
     executor.runUntilIdle();
     REQUIRE(first.get());
 
-    auto third = runtime.spawn(executeRevisionOnly(writeLane.captureSubmission()));
-    REQUIRE(executor.waitUntilQueued());
+    auto third = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
+    REQUIRE(executor.tryWaitUntilQueued());
     executor.runUntilIdle();
     REQUIRE(third.get());
   }
@@ -713,16 +713,16 @@ namespace ao::rt::test
       LibraryWriteLane{runtime.callbackExecutor(),
                        ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
                        changes};
-    auto committed = runtime.spawn(executeRevisionOnly(writeLane.captureSubmission()));
+    auto committed = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
 
     auto workerReady = AsyncTestState<bool>::create(false);
     auto releaseWorker = AsyncBarrier{};
-    auto workerBlocker = runtime.spawn(holdWorker(workerReady, &releaseWorker));
-    REQUIRE(workerReady.waitUntil(true));
+    auto workerBlocker = runtime.spawn(holdWorkerAsync(workerReady, &releaseWorker));
+    REQUIRE(workerReady.tryWaitUntil(true));
 
-    REQUIRE(executor.runOne());
+    REQUIRE(executor.tryRunOne());
     CHECK(executor.queuedCount() == 0);
 
     auto const trackIds = std::array{trackId};
@@ -731,7 +731,7 @@ namespace ao::rt::test
     CHECK(targetsRes->matches(writeLane.availability()));
 
     auto contenderRuntime = async::Runtime{executor, 1};
-    auto contender = contenderRuntime.spawn(beginAndAbortAuthoring(writeLane.captureSubmission(), *targetsRes));
+    auto contender = contenderRuntime.spawn(beginAndAbortAuthoringAsync(writeLane.captureSubmission(), *targetsRes));
 
     CHECK(contender.get() == AuthoringStatus::Busy);
     CHECK(targetsRes->matches(writeLane.availability()));

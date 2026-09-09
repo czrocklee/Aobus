@@ -82,7 +82,6 @@ namespace ao::rt
     void handleLibraryReset();
     void handleIncrementalLibraryChange(LibraryChangeSet const& event);
     std::vector<ListId> applyListOrderChanges(LibraryChangeSet const& event);
-    void notifyMetadataUpdates(LibraryChangeSet const& event);
     void refreshList(ListId listId);
     void eraseList(ListId listId);
     void applyListMutation(compat::MoveOnlyFunction<void()> mutation);
@@ -189,11 +188,10 @@ namespace ao::rt
       eraseList(id);
     }
 
-    _allTracksPtr->applyCollectionChange(event.tracksInserted, event.tracksDeleted);
     // Membership changes must reach predicate parents before an accompanying
     // raw-rank edit. Remove-from-List then publishes one final visible removal
     // instead of a transient reorder followed by departure.
-    notifyMetadataUpdates(event);
+    _allTracksPtr->applyChanges(event.tracksInserted, event.tracksDeleted, event.tracksMutated);
     auto const detailedListIds = applyListOrderChanges(event);
 
     for (auto const id : event.listsUpserted)
@@ -247,22 +245,6 @@ namespace ao::rt
     }
 
     return detailedListIds;
-  }
-
-  void TrackSourceCache::Impl::notifyMetadataUpdates(LibraryChangeSet const& event)
-  {
-    auto metadataTrackIds = std::vector<TrackId>{};
-    metadataTrackIds.reserve(event.tracksMutated.size());
-
-    for (auto const trackId : event.tracksMutated)
-    {
-      if (!std::ranges::contains(event.tracksInserted, trackId) && !std::ranges::contains(event.tracksDeleted, trackId))
-      {
-        metadataTrackIds.push_back(trackId);
-      }
-    }
-
-    _allTracksPtr->applyMetadataChange(metadataTrackIds);
   }
 
   Result<TrackSourceLease> TrackSourceCache::Impl::acquire(ListId const listId)

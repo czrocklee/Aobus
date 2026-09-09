@@ -18,23 +18,23 @@ namespace ao::query::test
 {
   Expression parseOk(std::string_view const text)
   {
-    auto result = ::ao::query::parse(text);
-    REQUIRE(result.has_value());
-    return std::move(*result);
+    auto res = ::ao::query::parse(text);
+    REQUIRE(res.has_value());
+    return std::move(*res);
   }
 
   ExecutionPlan compileOk(Expression const& expr)
   {
-    auto result = compileQuery(expr);
-    REQUIRE(result.has_value());
-    return std::move(*result);
+    auto res = compileQuery(expr);
+    REQUIRE(res.has_value());
+    return std::move(*res);
   }
 
   Error compileError(Expression const& expr)
   {
-    auto result = compileQuery(expr);
-    REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().code == Error::Code::FormatRejected);
-    return result.error();
+    auto res = compileQuery(expr);
+    REQUIRE_FALSE(res.has_value());
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    return res.error();
   }
 } // namespace ao::query::test

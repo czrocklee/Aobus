@@ -40,6 +40,10 @@ The compiler and evaluator are public under `include/ao/query/` and implemented 
 
 ## Compilation
 
+Text input passes through the shared parser's
+[complexity admission](../../reference/query/predicate-language.md#complexity-admission)
+before constructing an AST.
+
 `compileFormat(ast)` returns `Result<FormatPlan>` without reading or mutating a dictionary.
 Compilation flattens grouping and concatenation into ordered append instructions and deduplicates repeated literal storage without changing output order.
 

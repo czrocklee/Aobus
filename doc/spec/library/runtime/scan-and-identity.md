@@ -19,7 +19,7 @@ Manifest keys and fields belong to the [library database reference](../../../ref
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
 The runtime surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryJobs.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
-`app/include/ao/uimodel/library/task/LibraryScanOutcome.h` exposes the frontend-shared `runLibraryScan` operation and final outcome. Its private implementation owns build/classify/apply orchestration, including the eager versus fast-bootstrap identity strategy.
+`app/include/ao/uimodel/library/task/LibraryScanOutcome.h` exposes the frontend-shared `runLibraryScanAsync` operation and final outcome. Its private implementation owns build/classify/apply orchestration, including the eager versus fast-bootstrap identity strategy.
 `LibraryScan` is read-only plan construction.
 Live committing application is a runtime-private coordinator operation.
 The runtime-private `ScanApplyOperation::run()` is the distinct offline composition used by focused storage workflows and tests.

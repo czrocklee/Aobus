@@ -26,7 +26,7 @@ namespace ao::lmdb::detail
     ReadFaultInjection(ReadFaultInjection&&) = delete;
     ReadFaultInjection& operator=(ReadFaultInjection&&) = delete;
 
-    bool wasConsumed() const noexcept { return _consumed; }
+    bool hasBeenConsumed() const noexcept { return _consumed; }
 
   private:
     std::thread::id _ownerThreadId;

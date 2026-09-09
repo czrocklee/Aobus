@@ -7,6 +7,7 @@ from pathlib import Path
 
 from . import gitfiles
 from .paths import PROJECT_ROOT
+from .proc import die
 
 AUDIT_FOLDERS = ("app", "include", "lib", "test", "tool")
 LINT_FIXTURE_PARTS = ("test", "integration", "lint", "fixture")
@@ -86,6 +87,8 @@ def resolve_files(paths: Iterable[str], root: Path = PROJECT_ROOT) -> list[Path]
         path = Path(name)
         if not path.is_absolute():
             path = root / path
+        if not path.exists():
+            raise die(f"explicitly selected audit path does not exist: {name}")
 
         if path.is_dir():
             candidates = sorted(candidate for candidate in path.rglob("*") if candidate.suffix in gitfiles.CPP_SUFFIXES)

@@ -50,7 +50,7 @@ namespace ao::winui
 
     void importLibrary();
     void exportLibrary();
-    bool active() const noexcept;
+    bool isActive() const noexcept;
     void retire() noexcept;
 
   private:

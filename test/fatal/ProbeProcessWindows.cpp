@@ -99,10 +99,10 @@ namespace ao::test
       return std::string{operation} + " failed with Windows error " + std::to_string(::GetLastError());
     }
 
-    bool createCapturedPipe(SECURITY_ATTRIBUTES& securityAttributes,
-                            UniqueHandle& readHandle,
-                            UniqueHandle& writeHandle,
-                            std::string& launchError)
+    bool tryCreateCapturedPipe(SECURITY_ATTRIBUTES& securityAttributes,
+                               UniqueHandle& readHandle,
+                               UniqueHandle& writeHandle,
+                               std::string& launchError)
     {
       auto* rawReadHandle = HANDLE{};
       auto* rawWriteHandle = HANDLE{};
@@ -189,9 +189,10 @@ namespace ao::test
     auto standardErrorReadHandle = UniqueHandle{};
     auto standardErrorWriteHandle = UniqueHandle{};
 
-    if (!createCapturedPipe(
+    if (!tryCreateCapturedPipe(
           securityAttributes, standardOutputReadHandle, standardOutputWriteHandle, result.launchError) ||
-        !createCapturedPipe(securityAttributes, standardErrorReadHandle, standardErrorWriteHandle, result.launchError))
+        !tryCreateCapturedPipe(
+          securityAttributes, standardErrorReadHandle, standardErrorWriteHandle, result.launchError))
     {
       return result;
     }

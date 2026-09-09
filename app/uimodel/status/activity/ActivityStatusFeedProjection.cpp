@@ -123,7 +123,7 @@ namespace ao::uimodel
       return;
     }
 
-    if (refreshesVisibleTransient(update))
+    if (shouldRefreshVisibleTransient(update))
     {
       auto const sourceId = _compactSourceNotificationIds.front();
       auto const iter = std::ranges::find(feed.entries, sourceId, &rt::NotificationEntry::id);
@@ -143,14 +143,14 @@ namespace ao::uimodel
   {
     projectDetail(feed);
 
-    if (libraryTaskActive())
+    if (isLibraryTaskActive())
     {
       return;
     }
 
     if (auto const persistentKind = isPersistentCompact(_state.compact.kind);
         persistentKind && hasPresentedCompactSource(_compactSourceNotificationIds, feed) &&
-        !areCompactSourcesHidden(_compactSourceNotificationIds))
+        !hasOnlyHiddenCompactSources(_compactSourceNotificationIds))
     {
       projectPersistentCompact(feed);
       return;
@@ -168,7 +168,7 @@ namespace ao::uimodel
       projectPersistentCompact(feed);
 
       bool const sourceStillValid = previousSourceIds.empty() || (hasPresentedCompactSource(previousSourceIds, feed) &&
-                                                                  !areCompactSourcesHidden(previousSourceIds));
+                                                                  !hasOnlyHiddenCompactSources(previousSourceIds));
 
       if (_state.compact.kind == ActivityStatusKind::Idle && sourceStillValid)
       {
@@ -189,7 +189,7 @@ namespace ao::uimodel
       return;
     }
 
-    if (libraryTaskActive())
+    if (isLibraryTaskActive())
     {
       return;
     }
@@ -208,9 +208,9 @@ namespace ao::uimodel
     }
   }
 
-  bool ActivityStatusFeedProjection::refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const
+  bool ActivityStatusFeedProjection::shouldRefreshVisibleTransient(rt::NotificationFeedUpdate const& update) const
   {
-    if (libraryTaskActive() || _state.compact.kind != ActivityStatusKind::Info ||
+    if (isLibraryTaskActive() || _state.compact.kind != ActivityStatusKind::Info ||
         _compactSourceNotificationIds.size() != 1)
     {
       return false;
@@ -239,7 +239,7 @@ namespace ao::uimodel
     projectLibraryProgress(_libraryProgressStates.back());
   }
 
-  bool ActivityStatusFeedProjection::libraryTaskActive() const noexcept
+  bool ActivityStatusFeedProjection::isLibraryTaskActive() const noexcept
   {
     return !_libraryProgressStates.empty();
   }
@@ -277,7 +277,7 @@ namespace ao::uimodel
 
     projectDetail(feed);
 
-    if (libraryTaskActive())
+    if (isLibraryTaskActive())
     {
       projectLibraryProgress(_libraryProgressStates.back());
     }
@@ -312,7 +312,7 @@ namespace ao::uimodel
     bool const compactReferencedHiddenSource = std::ranges::contains(_compactSourceNotificationIds, id);
     projectDetail(feed);
 
-    if (compactReferencedHiddenSource && !libraryTaskActive())
+    if (compactReferencedHiddenSource && !isLibraryTaskActive())
     {
       projectPersistentCompact(feed);
     }
@@ -355,7 +355,7 @@ namespace ao::uimodel
 
     auto optLibraryTask = std::optional<ActivityTaskDetail>{};
 
-    if (libraryTaskActive())
+    if (isLibraryTaskActive())
     {
       auto const& progress = _libraryProgressStates.back();
       optLibraryTask = ActivityTaskDetail{
@@ -460,7 +460,7 @@ namespace ao::uimodel
                                });
   }
 
-  bool ActivityStatusFeedProjection::areCompactSourcesHidden(std::vector<rt::NotificationId> const& sourceIds) const
+  bool ActivityStatusFeedProjection::hasOnlyHiddenCompactSources(std::vector<rt::NotificationId> const& sourceIds) const
   {
     return !sourceIds.empty() &&
            std::ranges::all_of(sourceIds, [this](auto const id) { return isCompactSourceHidden(id); });

@@ -72,7 +72,7 @@ namespace ao::tui
     }
 
     /// Whether @p text parses under the field's own codec, which is what Save will use.
-    bool parsesForRow(uimodel::TrackPropertiesFormRow const& row, std::string_view const text)
+    bool isValidForRow(uimodel::TrackPropertiesFormRow const& row, std::string_view const text)
     {
       return isNumberRow(row) ? uimodel::parseUint16EditValue(text).has_value()
                               : uimodel::parseTextEditValue(text).has_value();
@@ -301,7 +301,7 @@ namespace ao::tui
     return patch;
   }
 
-  bool TrackPropertiesEditor::handleEvent(ftxui::Event const& event)
+  bool TrackPropertiesEditor::tryHandleEvent(ftxui::Event const& event)
   {
     // A write in flight cannot be steered, cancelled, or escaped from, so the
     // surface stays visible and inert until its terminal result arrives.
@@ -310,7 +310,7 @@ namespace ao::tui
       return true;
     }
 
-    if (handleConfirmationEvent(event))
+    if (tryHandleConfirmationEvent(event))
     {
       return true;
     }
@@ -322,7 +322,7 @@ namespace ao::tui
 
     if (_tab == TrackEditorTab::Metadata && _optActiveCompletion)
     {
-      if (handleCompletionEvent(event))
+      if (tryHandleCompletionEvent(event))
       {
         return true;
       }
@@ -401,7 +401,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TrackPropertiesEditor::handleConfirmationEvent(ftxui::Event const& event)
+  bool TrackPropertiesEditor::tryHandleConfirmationEvent(ftxui::Event const& event)
   {
     // A confirmation owns the keyboard until it is answered, so a stray key
     // cannot both dismiss the question and act on the form behind it.
@@ -467,31 +467,31 @@ namespace ao::tui
 
     if (event == ftxui::Event::ArrowLeft)
     {
-      row.input.moveLeft();
+      row.input.tryMoveLeft();
       return;
     }
 
     if (event == ftxui::Event::ArrowRight)
     {
-      row.input.moveRight();
+      row.input.tryMoveRight();
       return;
     }
 
     if (event == ftxui::Event::Home)
     {
-      row.input.moveToBegin();
+      row.input.tryMoveToBegin();
       return;
     }
 
     if (event == ftxui::Event::End)
     {
-      row.input.moveToEnd();
+      row.input.tryMoveToEnd();
       return;
     }
 
     if (event == ftxui::Event::Backspace)
     {
-      if (row.input.backspace())
+      if (row.input.tryBackspace())
       {
         noteRowEdited(row);
         maybeTriggerCompletion(row, false);
@@ -502,7 +502,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Delete)
     {
-      if (row.input.deleteForward())
+      if (row.input.tryDeleteForward())
       {
         noteRowEdited(row);
         maybeTriggerCompletion(row, false);
@@ -511,7 +511,7 @@ namespace ao::tui
       return;
     }
 
-    if (event.is_character() && row.input.insert(event.character()))
+    if (event.is_character() && row.input.tryInsert(event.character()))
     {
       noteRowEdited(row);
       maybeTriggerCompletion(row, false);
@@ -571,31 +571,31 @@ namespace ao::tui
     // leaves out, and it is what names a tag the library does not have yet.
     if (event == ftxui::Event::ArrowLeft)
     {
-      _tagQuery.moveLeft();
+      _tagQuery.tryMoveLeft();
       return;
     }
 
     if (event == ftxui::Event::ArrowRight)
     {
-      _tagQuery.moveRight();
+      _tagQuery.tryMoveRight();
       return;
     }
 
     if (event == ftxui::Event::Home)
     {
-      _tagQuery.moveToBegin();
+      _tagQuery.tryMoveToBegin();
       return;
     }
 
     if (event == ftxui::Event::End)
     {
-      _tagQuery.moveToEnd();
+      _tagQuery.tryMoveToEnd();
       return;
     }
 
     if (event == ftxui::Event::Backspace)
     {
-      if (_tagQuery.backspace())
+      if (_tagQuery.tryBackspace())
       {
         refreshVisibleTags();
       }
@@ -605,7 +605,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Delete)
     {
-      if (_tagQuery.deleteForward())
+      if (_tagQuery.tryDeleteForward())
       {
         refreshVisibleTags();
       }
@@ -613,7 +613,7 @@ namespace ao::tui
       return;
     }
 
-    if (event.is_character() && _tagQuery.insert(event.character()))
+    if (event.is_character() && _tagQuery.tryInsert(event.character()))
     {
       refreshVisibleTags();
     }
@@ -760,7 +760,7 @@ namespace ao::tui
 
   void TrackPropertiesEditor::revalidate(MetadataRow& row)
   {
-    row.invalid = (row.intent != FieldIntent::Unchanged) && !parsesForRow(row.spec, row.input.value());
+    row.invalid = (row.intent != FieldIntent::Unchanged) && !isValidForRow(row.spec, row.input.value());
   }
 
   void TrackPropertiesEditor::maybeTriggerCompletion(MetadataRow const& row, bool const explicitRequest)
@@ -803,7 +803,7 @@ namespace ao::tui
     _completionWindowStart = 0;
   }
 
-  bool TrackPropertiesEditor::handleCompletionNavigation(ftxui::Event const& event, std::size_t const itemCount)
+  bool TrackPropertiesEditor::tryHandleCompletionNavigation(ftxui::Event const& event, std::size_t const itemCount)
   {
     std::int32_t delta = 0;
     auto const pageSize = static_cast<std::int32_t>(kCompletionPageSize);
@@ -851,9 +851,9 @@ namespace ao::tui
     return true;
   }
 
-  bool TrackPropertiesEditor::handleCompletionEvent(ftxui::Event const& event)
+  bool TrackPropertiesEditor::tryHandleCompletionEvent(ftxui::Event const& event)
   {
-    if (_optActiveCompletion && handleCompletionNavigation(event, _optActiveCompletion->items.size()))
+    if (_optActiveCompletion && tryHandleCompletionNavigation(event, _optActiveCompletion->items.size()))
     {
       return true;
     }
@@ -866,7 +866,7 @@ namespace ao::tui
         auto& row = _metadataRows[_focusedMetadataRow];
         auto const& item = _optActiveCompletion->items[_selectedCandidate];
 
-        if (auto const beforeVal = row.input.value(); row.input.replaceRange(
+        if (auto const beforeVal = row.input.value(); row.input.tryReplaceRange(
               _optActiveCompletion->replaceBegin, _optActiveCompletion->replaceEnd, item.insertText))
         {
           if (row.input.value() != beforeVal)

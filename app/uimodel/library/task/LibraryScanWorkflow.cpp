@@ -47,7 +47,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  bool LibraryScanWorkflowResult::mutatedLibrary() const noexcept
+  bool LibraryScanWorkflowResult::hasMutatedLibrary() const noexcept
   {
     return optApplyResult && (!optApplyResult->insertedIds.empty() || !optApplyResult->mutatedIds.empty() ||
                               !optApplyResult->relinkedIds.empty());
@@ -64,7 +64,7 @@ namespace ao::uimodel
   }
 
   async::Task<std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure>>
-  runLibraryScanWorkflow(rt::LibraryJobs* const jobs, LibraryScanMode const mode, std::stop_token const stopToken)
+  runLibraryScanWorkflowAsync(rt::LibraryJobs* const jobs, LibraryScanMode const mode, std::stop_token const stopToken)
   {
     auto planRes = co_await jobs->buildScanPlanAsync(stopToken);
 

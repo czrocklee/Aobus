@@ -84,10 +84,10 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
-    auto const result = runtime.jumpToAlbum(kInvalidTrackId);
+    auto const res = runtime.jumpToAlbum(kInvalidTrackId);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
   }
@@ -118,7 +118,7 @@ namespace ao::rt::test
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
 
-    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(listId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteListAsync(listId)));
 
     auto layout = runtime.workspace().snapshot();
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
@@ -136,7 +136,7 @@ namespace ao::rt::test
     auto const sub =
       runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
 
-    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.firstListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteListAsync(fixture.firstListId)));
 
     REQUIRE(changes.size() == 1);
     CHECK(changes.front().cause == WorkspaceChangeCause::ListDeletion);
@@ -174,8 +174,8 @@ namespace ao::rt::test
         }
       });
 
-    auto const result = runtime.jumpToAlbum(trackId);
-    REQUIRE(result);
+    auto const res = runtime.jumpToAlbum(trackId);
+    REQUIRE(res);
     CHECK(revealCalled == true);
 
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -189,10 +189,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const result = runtime.workspace().navigate({.target = static_cast<GlobalViewKind>(999)});
+    auto const res = runtime.workspace().navigate({.target = static_cast<GlobalViewKind>(999)});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
   }
 
@@ -202,10 +202,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const result = runtime.workspace().navigate({});
+    auto const res = runtime.workspace().navigate({});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
     CHECK(runtime.workspace().snapshot().openViews.empty());
   }
@@ -218,10 +218,10 @@ namespace ao::rt::test
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const beforeLayout = runtime.workspace().snapshot();
 
-    auto const result = runtime.workspace().navigate({.target = ListId{999999}});
+    auto const res = runtime.workspace().navigate({.target = ListId{999999}});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     auto const afterLayout = runtime.workspace().snapshot();
     CHECK(afterLayout.activeViewId == beforeLayout.activeViewId);
     CHECK(afterLayout.openViews == beforeLayout.openViews);
@@ -239,8 +239,8 @@ namespace ao::rt::test
 
     for (auto const viewId : {kInvalidViewId, ViewId{999999}})
     {
-      auto const result = runtime.workspace().focusView(viewId);
-      REQUIRE_FALSE(result);
+      auto const res = runtime.workspace().focusView(viewId);
+      REQUIRE_FALSE(res);
     }
 
     CHECK(runtime.workspace().snapshot() == before);
@@ -322,11 +322,11 @@ namespace ao::rt::test
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
     auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
-    auto const firstListId = ao::test::requireValue(
-      runRuntimeTask(*runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "First observed"})));
+    auto const firstListId = ao::test::requireValue(runRuntimeTask(
+      *runtimePtr, runtimePtr->library().commands().createListAsync(ListDraft{.name = "First observed"})));
     executor->drain();
-    auto const secondListId = ao::test::requireValue(
-      runRuntimeTask(*runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "Second observed"})));
+    auto const secondListId = ao::test::requireValue(runRuntimeTask(
+      *runtimePtr, runtimePtr->library().commands().createListAsync(ListDraft{.name = "Second observed"})));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;
@@ -343,7 +343,7 @@ namespace ao::rt::test
 
     REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
     auto const firstRevision = runtimePtr->workspace().snapshot().revision;
-    REQUIRE(executor->drainUntil([&] { return received.size() == 1; }));
+    REQUIRE(executor->tryDrainUntil([&] { return received.size() == 1; }));
 
     REQUIRE(received.size() == 1);
     CHECK(reentrantNavigateSucceeded);
@@ -352,7 +352,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->workspace().snapshot().revision == firstRevision + 1);
     CHECK(received.front() == firstObservation);
 
-    REQUIRE(executor->drainUntil([&] { return received.size() == 2; }));
+    REQUIRE(executor->tryDrainUntil([&] { return received.size() == 2; }));
     CHECK(received.back().snapshot == runtimePtr->workspace().snapshot());
   }
 } // namespace ao::rt::test

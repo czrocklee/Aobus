@@ -68,14 +68,16 @@ namespace ao::gtk::portal
     void exportTo(std::filesystem::path path, rt::ExportMode mode);
 
   private:
-    async::Task<void> scanWorkflow(ScanRequestMode mode, std::stop_token stopToken);
-    async::Task<void> backfillAudioIdentityWorkflow(std::stop_token stopToken);
-    async::Task<void> prepareImportWorkflow(ImportExportCallbacks callbacks,
-                                            std::filesystem::path importPath,
-                                            std::stop_token stopToken);
-    async::Task<void> applyImportWorkflow(rt::LibraryImportPlan plan, std::stop_token stopToken);
+    async::Task<void> scanWorkflowAsync(ScanRequestMode mode, std::stop_token stopToken);
+    async::Task<void> backfillAudioIdentityWorkflowAsync(std::stop_token stopToken);
+    async::Task<void> prepareImportWorkflowAsync(ImportExportCallbacks callbacks,
+                                                 std::filesystem::path importPath,
+                                                 std::stop_token stopToken);
+    async::Task<void> applyImportWorkflowAsync(rt::LibraryImportPlan plan, std::stop_token stopToken);
     void applyPreparedImport(rt::LibraryImportPlan plan);
-    async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
+    async::Task<void> exportWorkflowAsync(std::filesystem::path exportPath,
+                                          rt::ExportMode mode,
+                                          std::stop_token stopToken);
 
     void startAudioIdentityIndexing();
     void presentScanOutcome(uimodel::LibraryScanOutcome const& outcome);

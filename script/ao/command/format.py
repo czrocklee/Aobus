@@ -45,6 +45,12 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def resolve_files(args: argparse.Namespace) -> list[str]:
+    for name in args.files:
+        if not _file_exists(name):
+            raise die(f"explicitly selected path does not exist or is not a file: {name}")
+    for folder in getattr(args, "folder", []):
+        if not (PROJECT_ROOT / folder).is_dir():
+            raise die(f"explicitly selected folder does not exist or is not a directory: {folder}")
     if (prepared := getattr(args, "_resolved_sources", None)) is not None:
         return list(prepared)
     if args.files:

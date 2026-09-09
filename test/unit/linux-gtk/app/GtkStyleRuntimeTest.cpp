@@ -61,7 +61,7 @@ namespace ao::gtk::test
 
       manager.reload();
 
-      CHECK(pumpGtkEventsUntil([&] { return refreshed; }));
+      CHECK(tryPumpGtkEventsUntil([&] { return refreshed; }));
       conn.disconnect();
     }
 

@@ -701,11 +701,15 @@ def run_command(args: argparse.Namespace) -> int:
     suites = suites_for(args.suite, tsan=args.tsan)
     test_filter = "[concurrency]" if args.suite == "concurrency" else args.filter
 
+    if any(SUITES[suite].kind != "tooling" for suite in suites):
+        if not build_dir.is_dir():
+            portal = "ao.bat" if builddir.platform_profile().name == "windows" else "./ao"
+            raise die(f"build directory {build_dir} does not exist. Run {portal} build first to configure the project.")
+        build.validate_build_tree(args, build_dir)
+
     if not args.no_build:
         targets = [target for suite in suites if (target := SUITES[suite].target) is not None]
         if targets:
-            if not build_dir.is_dir():
-                raise die(f"build directory {build_dir} does not exist. Run ./ao build first to configure the project.")
             print("=====================================")
             print(f"Building {', '.join(targets)} in {build_dir}...")
             print("=====================================")

@@ -48,11 +48,11 @@ namespace ao::tui::test
       return std::get<std::string>(feed.entries.back().message);
     }
 
-    async::Task<uimodel::LibraryScanOutcome> waitThenOutcome(async::Runtime* const runtime,
-                                                             uimodel::LibraryScanOutcome outcome,
-                                                             std::stop_token const stopToken)
+    async::Task<uimodel::LibraryScanOutcome> waitThenOutcomeAsync(async::Runtime* const runtime,
+                                                                  uimodel::LibraryScanOutcome outcome,
+                                                                  std::stop_token const stopToken)
     {
-      co_await runtime->sleepFor(std::chrono::seconds{30}, stopToken);
+      co_await runtime->sleepForAsync(std::chrono::seconds{30}, stopToken);
       co_return outcome;
     }
 
@@ -85,7 +85,7 @@ namespace ao::tui::test
       });
 
     controller.start();
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
     CHECK(controller.phase() == LibraryScanController::Phase::Idle);
     CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
@@ -99,10 +99,10 @@ namespace ao::tui::test
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
     auto controller = fixture.makeController([runtime](std::stop_token const stopToken)
-                                             { return waitThenOutcome(runtime, {}, stopToken); });
+                                             { return waitThenOutcomeAsync(runtime, {}, stopToken); });
 
     controller.start();
-    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
     CHECK(controller.phase() == LibraryScanController::Phase::Running);
 
     controller.start();
@@ -111,7 +111,7 @@ namespace ao::tui::test
           rt::NotificationLifetimeKind::Transient);
 
     controller.retire();
-    REQUIRE(fixture.sleeperPtr->waitForCancellation(0));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
     fixture.executor->drain();
     CHECK(controller.phase() == LibraryScanController::Phase::Retired);
   }
@@ -122,18 +122,18 @@ namespace ao::tui::test
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
     auto controller = fixture.makeController([runtime](std::stop_token const stopToken)
-                                             { return waitThenOutcome(runtime, {}, stopToken); });
+                                             { return waitThenOutcomeAsync(runtime, {}, stopToken); });
 
     controller.start();
-    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
     controller.cancel();
     CHECK(controller.phase() == LibraryScanController::Phase::Cancelling);
 
     controller.start();
     CHECK(lastMessage(fixture.runtimePtr->notifications()) == "Scan cancellation is already in progress");
 
-    REQUIRE(fixture.sleeperPtr->waitForCancellation(0));
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
   }
 
   TEST_CASE("LibraryScanController - cancellation is silent and returns to Idle", "[tui][unit][scan][concurrency]")
@@ -142,13 +142,13 @@ namespace ao::tui::test
     auto* const runtime = &fixture.runtimePtr->async();
     auto controller = fixture.makeController(
       [runtime](std::stop_token const stopToken)
-      { return waitThenOutcome(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
+      { return waitThenOutcomeAsync(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
 
     controller.start();
-    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
     controller.cancel();
-    REQUIRE(fixture.sleeperPtr->waitForCancellation(0));
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
@@ -163,7 +163,7 @@ namespace ao::tui::test
 
     controller.start();
     controller.cancel();
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
 
     CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
           uimodel::formatLibraryScanMessage(
@@ -176,12 +176,12 @@ namespace ao::tui::test
     auto* const runtime = &fixture.runtimePtr->async();
     auto controller = fixture.makeController(
       [runtime](std::stop_token const stopToken)
-      { return waitThenOutcome(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
+      { return waitThenOutcomeAsync(runtime, {.verdict = uimodel::LibraryScanVerdict::Complete}, stopToken); });
 
     controller.start();
-    REQUIRE(fixture.sleeperPtr->waitForCallCount(1));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCallCount(1));
     controller.retire();
-    REQUIRE(fixture.sleeperPtr->waitForCancellation(0));
+    REQUIRE(fixture.sleeperPtr->tryWaitForCancellation(0));
     fixture.executor->drain();
 
     CHECK(controller.phase() == LibraryScanController::Phase::Retired);
@@ -215,14 +215,14 @@ namespace ao::tui::test
                                             ao::test::englishMessageCatalog()};
 
     controller.start();
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
     CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
           uimodel::formatLibraryScanMessage(
             ao::test::englishMessageCatalog(),
             {.verdict = uimodel::LibraryScanVerdict::Complete, .summary = {.newCount = 1}}));
 
     controller.start();
-    REQUIRE(fixture.executor->drainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
     CHECK(lastMessage(fixture.runtimePtr->notifications()) ==
           uimodel::formatLibraryScanMessage(
             ao::test::englishMessageCatalog(), {.verdict = uimodel::LibraryScanVerdict::UpToDate}));

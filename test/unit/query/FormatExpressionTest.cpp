@@ -30,17 +30,17 @@ namespace ao::query::test
   {
     FormatPlan compileFormatOk(Expression const& expr)
     {
-      auto result = compileFormat(expr);
-      REQUIRE(result.has_value());
-      return std::move(*result);
+      auto res = compileFormat(expr);
+      REQUIRE(res.has_value());
+      return std::move(*res);
     }
 
     Error compileFormatError(Expression const& expr)
     {
-      auto result = compileFormat(expr);
-      REQUIRE_FALSE(result.has_value());
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      return result.error();
+      auto res = compileFormat(expr);
+      REQUIRE_FALSE(res.has_value());
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      return res.error();
     }
 
     TrackSpec formatTrackSpec()

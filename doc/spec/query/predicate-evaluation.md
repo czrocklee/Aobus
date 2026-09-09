@@ -114,7 +114,7 @@ A scaled result that is not an integer is rejected during compilation.
 Compilation classifies a plan as `NoTrackData`, `HotOnly`, `ColdOnly`, or `HotAndCold`.
 The profile is the union of the storage tiers required by all field loads in the predicate.
 
-Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `evaluateFull()`.
+Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `matchesFullPlan()`.
 The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
 Constant true and false predicates require no track fields.
 The [track-source specification](../library/source/track-source.md) owns how Saved-List evaluation maps the semantic profile to the concrete TrackStore modes available for batch traversal and row-existence checks.

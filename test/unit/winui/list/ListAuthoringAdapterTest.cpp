@@ -34,12 +34,12 @@ namespace ao::winui::test
 
   TEST_CASE("List tree invalidation - ignores track-only publications", "[winui][unit][list-authoring]")
   {
-    CHECK_FALSE(listTreeChangeRequiresRebuild(rt::LibraryChangeSet{.tracksMutated = {TrackId{4}}}));
-    CHECK_FALSE(listTreeChangeRequiresRebuild(
+    CHECK_FALSE(needsListTreeRebuild(rt::LibraryChangeSet{.tracksMutated = {TrackId{4}}}));
+    CHECK_FALSE(needsListTreeRebuild(
       rt::LibraryChangeSet{.listOrderChanges = {{.listId = ListId{7}, .operation = rt::ListOrderReset{}}}}));
-    CHECK(listTreeChangeRequiresRebuild(rt::LibraryChangeSet{.listsUpserted = {ListId{7}}}));
-    CHECK(listTreeChangeRequiresRebuild(rt::LibraryChangeSet{.listsDeleted = {ListId{7}}}));
-    CHECK(listTreeChangeRequiresRebuild(rt::LibraryChangeSet{.libraryReset = true}));
+    CHECK(needsListTreeRebuild(rt::LibraryChangeSet{.listsUpserted = {ListId{7}}}));
+    CHECK(needsListTreeRebuild(rt::LibraryChangeSet{.listsDeleted = {ListId{7}}}));
+    CHECK(needsListTreeRebuild(rt::LibraryChangeSet{.libraryReset = true}));
   }
 
   TEST_CASE("List tree restoration - preserves surviving expansion and chooses a stable fallback",

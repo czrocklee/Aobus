@@ -70,10 +70,10 @@ namespace ao::uimodel
     std::vector<KeymapConflict> conflicts() const;
 
     /// Adds @p chord to @p actionId. Returns false if the chord is invalid or already bound there.
-    bool bind(std::string actionId, KeyChord chord);
+    bool tryBind(std::string actionId, KeyChord chord);
 
     /// Removes @p chord from @p actionId. Returns false if it was not bound.
-    bool unbind(std::string_view actionId, KeyChord const& chord);
+    bool tryUnbind(std::string_view actionId, KeyChord const& chord);
 
     void resetToDefault(std::string_view actionId);
     void resetAllToDefault();

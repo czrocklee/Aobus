@@ -31,7 +31,7 @@ namespace ao::rt::test
     ListId createList(AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(
-        runRuntimeTask(runtime, runtime.library().commands().createList(ListDraft{.name = std::move(name)})));
+        runRuntimeTask(runtime, runtime.library().commands().createListAsync(ListDraft{.name = std::move(name)})));
     }
   } // namespace
 

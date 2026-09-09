@@ -417,7 +417,7 @@ namespace ao::rt::test
     CHECK(startedCount == 0);
     CHECK(nowPlaying.empty());
     CHECK(notificationCount == 0);
-    REQUIRE(executor.drainUntil([&] { return notificationCount == 1; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return notificationCount == 1; }, std::chrono::seconds{5}));
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
@@ -427,6 +427,42 @@ namespace ao::rt::test
     CHECK(report.templateId == NotificationReportTemplate::PlaybackTrackOpenFailed);
     CHECK(report.trackId == candidate.item.trackId);
     CHECK(report.detail.contains("final decoder setup failed"));
+  }
+
+  TEST_CASE("PlaybackTransport token - accepted empty playback ends naturally without a start or failure",
+            "[runtime][regression][playback][token]")
+  {
+    auto const factory = [](auto const&, std::optional<audio::SampleEncoding> optOutputEncoding)
+    {
+      auto const sourceFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
+      return std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le)),
+        .codec = AudioCodec::Flac,
+      });
+    };
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{factory};
+    makeReady(fixture);
+    fixture.executor.drain();
+    std::size_t idleEvents = 0;
+    std::size_t startedEvents = 0;
+    std::size_t nowPlayingEvents = 0;
+    auto const idleSubscription = fixture.playbackTransport.onIdle([&] { ++idleEvents; });
+    auto const startedSubscription = fixture.playbackTransport.onStarted([&] { ++startedEvents; });
+    auto const nowPlayingSubscription = fixture.playbackTransport.onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const&) { ++nowPlayingEvents; });
+    auto const candidate = request(TrackId{34}, "empty.flac", "Empty track");
+    auto stagedRes = fixture.playbackTransport.stagePlayback(candidate, kSourceListId);
+    REQUIRE(stagedRes);
+
+    auto const committedRes = fixture.playbackTransport.commitPlayback(std::move(*stagedRes));
+    REQUIRE(committedRes);
+    CHECK(committedRes->generation > 0);
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return idleEvents == 1; }));
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
+    CHECK(startedEvents == 0);
+    CHECK(nowPlayingEvents == 0);
+    CHECK(fixture.notificationService.feed().entries.empty());
   }
 
   TEST_CASE("PlaybackTransport token - drain fallback returns exact disarm acknowledgement",
@@ -533,7 +569,7 @@ namespace ao::rt::test
     REQUIRE(failingToken != firstToken);
 
     releaseGuard.release();
-    REQUIRE(executor.drainUntil([&] { return !notifications.feed().entries.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return !notifications.feed().entries.empty(); }, std::chrono::seconds{5}));
 
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);

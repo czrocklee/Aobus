@@ -221,18 +221,18 @@ namespace ao::gtk::test
     auto const appImage = ao::test::TempFile{".AppImage"};
     std::filesystem::permissions(appImage.path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
 
-    auto result =
+    auto res =
       planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "/music/../library", .scanAfterOpen = true},
                           std::string_view{"activation-token"},
                           appImage.path);
 
-    REQUIRE(result);
-    CHECK(result->executable == appImage.path);
-    CHECK(result->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
-                                                        std::string{desktop::kLibraryRootOption},
-                                                        "/library",
-                                                        std::string{desktop::kScanAfterOpenOption}});
-    CHECK(result->optActivationToken == std::optional<std::string>{"activation-token"});
+    REQUIRE(res);
+    CHECK(res->executable == appImage.path);
+    CHECK(res->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
+                                                     std::string{desktop::kLibraryRootOption},
+                                                     "/library",
+                                                     std::string{desktop::kScanAfterOpenOption}});
+    CHECK(res->optActivationToken == std::optional<std::string>{"activation-token"});
   }
 
   TEST_CASE("SuccessorProcessLauncher - launch plan falls back to proc and omits empty optional state",
@@ -240,24 +240,24 @@ namespace ao::gtk::test
   {
     auto const nonExecutableAppImage = ao::test::TempFile{".AppImage"};
 
-    auto result = planSuccessorLaunch(
+    auto res = planSuccessorLaunch(
       desktop::LibrarySwitchRequest{.libraryRoot = "/music"}, std::string_view{}, nonExecutableAppImage.path);
 
-    REQUIRE(result);
-    CHECK(result->executable == std::filesystem::path{"/proc/self/exe"});
-    CHECK(result->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
-                                                        std::string{desktop::kLibraryRootOption},
-                                                        "/music"});
-    CHECK_FALSE(result->optActivationToken);
+    REQUIRE(res);
+    CHECK(res->executable == std::filesystem::path{"/proc/self/exe"});
+    CHECK(res->arguments == std::vector<std::string>{std::string{desktop::kLibrarySuccessorOption},
+                                                     std::string{desktop::kLibraryRootOption},
+                                                     "/music"});
+    CHECK_FALSE(res->optActivationToken);
   }
 
   TEST_CASE("SuccessorProcessLauncher - relative library root cannot produce a launch plan", "[gtk][unit][process]")
   {
-    auto result = planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "music"});
+    auto res = planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "music"});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("absolute"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("absolute"));
   }
 
   TEST_CASE("SuccessorProcessLauncher - process creation reports exec failure and detaches success",
@@ -271,11 +271,11 @@ namespace ao::gtk::test
         .optActivationToken = std::nullopt,
       };
 
-      auto result = launchDetachedSuccessor(plan);
+      auto res = launchDetachedSuccessor(plan);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InitFailed);
-      CHECK(result.error().message.contains("Failed to launch successor"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InitFailed);
+      CHECK(res.error().message.contains("Failed to launch successor"));
     }
 
     SECTION("successful process creation")

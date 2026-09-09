@@ -500,9 +500,9 @@ namespace ao::audio::test
     {
       // Use this source file itself as a fake FLAC
       auto const testFile = std::filesystem::path{__FILE__};
-      auto const resRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      auto const res = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
 
-      CHECK_FALSE(resRes);
+      CHECK_FALSE(res);
     }
 
     SECTION("MP3: Seek near EOF")

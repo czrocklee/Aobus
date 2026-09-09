@@ -26,17 +26,17 @@ namespace ao::cli::test
       std::thread::id callbackThread;
     };
 
-    async::Task<ThreadHopResult> workerRoundTrip(async::Runtime* runtime)
+    async::Task<ThreadHopResult> workerRoundTripAsync(async::Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       auto const workerThread = std::this_thread::get_id();
-      co_await runtime->resumeOnCallbackExecutor();
+      co_await runtime->resumeOnCallbackExecutorAsync();
       co_return ThreadHopResult{.workerThread = workerThread, .callbackThread = std::this_thread::get_id()};
     }
 
-    async::Task<void> failOnWorker(async::Runtime* runtime)
+    async::Task<void> failOnWorkerAsync(async::Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       throw std::runtime_error{"worker task failed"};
     }
   } // namespace
@@ -52,7 +52,7 @@ namespace ao::cli::test
     auto const ownerThread = std::this_thread::get_id();
     auto& asyncRuntime = cli.core().async();
 
-    auto const result = cli.runTask(workerRoundTrip(&asyncRuntime));
+    auto const result = cli.runTask(workerRoundTripAsync(&asyncRuntime));
 
     CHECK(result.workerThread != ownerThread);
     CHECK(result.callbackThread == ownerThread);
@@ -67,7 +67,7 @@ namespace ao::cli::test
     cli.options().root = temp.path();
     auto& asyncRuntime = cli.core().async();
 
-    CHECK_THROWS_AS(cli.runTask(failOnWorker(&asyncRuntime)), std::runtime_error);
+    CHECK_THROWS_AS(cli.runTask(failOnWorkerAsync(&asyncRuntime)), std::runtime_error);
   }
 
   TEST_CASE("CliRuntime - teardown drains callbacks queued by a foreign producer", "[cli][unit][runtime][concurrency]")

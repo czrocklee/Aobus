@@ -24,6 +24,31 @@ Its public API is under `include/ao/query/`, its implementation is under `lib/qu
 
 ## Surface
 
+### Complexity admission
+
+Before constructing the recursive AST, the shared parser admits at most 65,536
+input bytes, 512 structural tokens, and 64 nested parenthesized groups.
+Whitespace does not count toward the token limit. A scalar list counts as one
+structural token; its elements remain bounded by the input byte limit. Quoted
+text, including quoted variable names, does not contribute internal punctuation
+as structure. These limits also apply to format expressions through the same
+parser; the grammar may reject an expression within these limits independently.
+Only scalar tokens and commas receive the list exemption. Nested or unclosed
+lists, and lists containing operators or parenthesized groups, are rejected by
+admission before the recursive grammar runs.
+
+Admission uses the completion tokenizer before the lexy grammar runs; it does
+not replace syntax validation. Changes to either tokenizer or grammar must keep
+structural counting aligned and update admission boundary tests, including
+quoted punctuation and flat scalar lists.
+
+Exceeding a limit returns `FormatRejected`; syntax matching returns false.
+The check precedes AST allocation, normalization, compilation, serialization,
+and recursive destruction. It does not constrain ASTs manually built by C++
+callers. Previously persisted filter text remains opaque storage: opening a
+library preserves it, while interpreting an oversized filter reports the normal
+source filter error without rewriting its bytes.
+
 ### Grammar
 
 The grammar below is EBNF-style and describes the user-facing token shape:

@@ -216,7 +216,7 @@ Integer `maxKey` reads the last database key at the time of the transaction snap
 | `create(key, data)` | Insert without overwrite. | Existing key is `Conflict`. | Other LMDB mutation faults throw `detail::TransactionFailure`. |
 | `update(key, data)` | Upsert the supplied value. | None. | An LMDB mutation fault throws `detail::TransactionFailure`. |
 | `IntegerKeyDatabase::Writer::append(data)` | Allocate cached maximum plus one and exclusively create it. | Exhaustion is `ResourceExhausted`. | Other create failure is propagated. |
-| `del(key)` | Remove an existing record. | Missing key returns `false`; deletion returns `true`. | Other faults use `detail::TransactionFailure`. |
+| `tryDelete(key)` | Remove an existing record. | Missing key returns `false`; deletion returns `true`. | Other faults use `detail::TransactionFailure`. |
 | `clear()` | Remove all records while retaining the named database; an integer writer also resets its cached append maximum to zero. | Empty clear succeeds. | An LMDB mutation fault throws `detail::TransactionFailure`. |
 
 The public create, update, and append operations on `IntegerKeyDatabase::Writer` and `ByteKeyDatabase::Writer` accept only copied input bytes.

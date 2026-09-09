@@ -247,7 +247,7 @@ namespace ao::rt
 
       if (request.recordHistory)
       {
-        changed = nextHistory.commit(navigationPoint(state, presentation)) || changed;
+        changed = nextHistory.tryCommit(navigationPoint(state, presentation)) || changed;
       }
 
       if (!changed)
@@ -259,9 +259,9 @@ namespace ao::rt
 
       if (presentationChanged)
       {
-        if (auto result = views.setPresentation(viewId, presentation); !result)
+        if (auto res = views.setPresentation(viewId, presentation); !res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
       }
 
@@ -313,7 +313,7 @@ namespace ao::rt
 
         if (request.recordHistory)
         {
-          std::ignore = nextHistory.commit(navigationPoint(state, state.presentation));
+          std::ignore = nextHistory.tryCommit(navigationPoint(state, state.presentation));
         }
 
         installCommit(prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation));
@@ -414,7 +414,7 @@ namespace ao::rt
 
       if (options.recordHistory)
       {
-        changed = nextHistory.commit(navigationPoint(*stateRes, presentation)) || changed;
+        changed = nextHistory.tryCommit(navigationPoint(*stateRes, presentation)) || changed;
       }
 
       if (!changed)
@@ -426,9 +426,9 @@ namespace ao::rt
 
       if (stateRes->presentation != presentation)
       {
-        if (auto result = views.setPresentation(viewId, presentation); !result)
+        if (auto res = views.setPresentation(viewId, presentation); !res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
       }
 
@@ -456,18 +456,18 @@ namespace ao::rt
 
       if (matchingViewId == kInvalidViewId)
       {
-        auto result = views.createView(TrackListViewConfig{
+        auto res = views.createView(TrackListViewConfig{
           .listId = point.listId,
           .filterExpression = point.filterExpression,
           .optPresentation = point.presentation,
         });
 
-        if (!result)
+        if (!res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
 
-        matchingViewId = *result;
+        matchingViewId = *res;
         createdView = true;
       }
 
@@ -486,9 +486,9 @@ namespace ao::rt
 
         if (presentationChanged)
         {
-          if (auto result = views.setPresentation(matchingViewId, point.presentation); !result)
+          if (auto res = views.setPresentation(matchingViewId, point.presentation); !res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
         }
 
@@ -645,11 +645,11 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, std::format("Unknown track presentation '{}'", presentationId));
     }
 
-    auto result = _implPtr->applyPresentation(*optPresentation, options);
+    auto res = _implPtr->applyPresentation(*optPresentation, options);
 
-    if (!result)
+    if (!res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return normalizeTrackPresentationSpec(*optPresentation);
@@ -737,9 +737,9 @@ namespace ao::rt
       });
     }
 
-    if (auto const result = store.save("workspace", state, detail::WorkspaceSessionYamlSchema{}); !result)
+    if (auto const res = store.save("workspace", state, detail::WorkspaceSessionYamlSchema{}); !res)
     {
-      APP_LOG_ERROR("WorkspaceService: Failed to save session - {}", result.error().message);
+      APP_LOG_ERROR("WorkspaceService: Failed to save session - {}", res.error().message);
     }
   }
 
@@ -769,19 +769,19 @@ namespace ao::rt
 
     for (auto const& viewConfig : state.openViews)
     {
-      auto result = _implPtr->views.createView(viewConfig);
+      auto res = _implPtr->views.createView(viewConfig);
 
-      if (!result)
+      if (!res)
       {
         for (auto const viewId : createdViewIds)
         {
           _implPtr->views.destroyView(viewId);
         }
 
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      createdViewIds.push_back(*result);
+      createdViewIds.push_back(*res);
     }
 
     try
@@ -808,7 +808,7 @@ namespace ao::rt
       if (focused != kInvalidViewId)
       {
         auto const viewState = _implPtr->views.trackListState(focused);
-        historyChanged = nextHistory.commit(Impl::navigationPoint(viewState, viewState.presentation));
+        historyChanged = nextHistory.tryCommit(Impl::navigationPoint(viewState, viewState.presentation));
       }
 
       auto const aggregateChanged = !createdViewIds.empty() ||

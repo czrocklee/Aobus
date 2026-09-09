@@ -46,10 +46,10 @@ namespace ao::gtk::test
     SECTION("load on a missing file returns nullopt")
     {
       auto const store = ShellLayoutStore{layoutsDir};
-      auto const result = store.load("classic");
+      auto const res = store.load("classic");
 
-      REQUIRE(result);
-      CHECK_FALSE(*result);
+      REQUIRE(res);
+      CHECK_FALSE(*res);
     }
 
     SECTION("save creates directory and layout file, and load retrieves it")
@@ -81,10 +81,10 @@ namespace ao::gtk::test
       }
 
       auto const store = ShellLayoutStore{layoutsDir};
-      auto const result = store.load("corrupted");
+      auto const res = store.load("corrupted");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("load rejects an existing file without the layout group")
@@ -93,10 +93,10 @@ namespace ao::gtk::test
       std::ofstream{layoutsDir / "missing-group.yaml"} << "other: {}\n";
 
       auto const store = ShellLayoutStore{layoutsDir};
-      auto const result = store.load("missing-group");
+      auto const res = store.load("missing-group");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("load rejects an oversized file before parsing and preserves it")
@@ -109,10 +109,10 @@ namespace ao::gtk::test
       auto limits = uimodel::LayoutDocumentLimits{};
       limits.maxFileBytes = 64;
       auto const store = ShellLayoutStore{layoutsDir, limits};
-      auto const result = store.load("classic");
+      auto const res = store.load("classic");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
       CHECK(ao::test::readFile(filePath) == original);
     }
 
@@ -130,10 +130,10 @@ namespace ao::gtk::test
       auto store = ShellLayoutStore{layoutsDir, limits};
       auto replacement = initial;
       replacement.root.children.push_back(uimodel::LayoutNode{.type = "spacer"});
-      auto const result = store.save(replacement, "classic");
+      auto const res = store.save(replacement, "classic");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
       CHECK(ao::test::readFile(filePath) == original);
     }
 
@@ -147,10 +147,10 @@ namespace ao::gtk::test
       auto store = ShellLayoutStore{layoutsDir};
       auto replacement = uimodel::LayoutDocument{};
       replacement.root.type = "spacer";
-      auto const result = store.save(replacement, "classic");
+      auto const res = store.save(replacement, "classic");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(ao::test::readFile(filePath) == original);
     }
 

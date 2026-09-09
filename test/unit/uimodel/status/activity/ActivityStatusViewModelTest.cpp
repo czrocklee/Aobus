@@ -81,11 +81,11 @@ namespace ao::uimodel::test
       REQUIRE(latest.compact.optAutoDismissTimeout);
 
       now += kActivityStatusDefaultAutoDismissTimeout - std::chrono::milliseconds{1};
-      CHECK_FALSE(viewModel.autoDismissCompactIfDue());
+      CHECK_FALSE(viewModel.tryAutoDismissCompactIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
 
       now += std::chrono::milliseconds{1};
-      CHECK(viewModel.autoDismissCompactIfDue());
+      CHECK(viewModel.tryAutoDismissCompactIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Idle);
       CHECK_FALSE(latest.compact.optAutoDismissTimeout);
       CHECK(notifications.feed().entries.size() == 1);
@@ -119,7 +119,7 @@ namespace ao::uimodel::test
       CHECK(latest.compact.text == "Saved playlist");
 
       now += std::chrono::milliseconds{1};
-      CHECK(viewModel.autoDismissCompactIfDue());
+      CHECK(viewModel.tryAutoDismissCompactIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Idle);
     }
 
@@ -214,10 +214,10 @@ namespace ao::uimodel::test
     auto plan = rt::LibraryScan{libraryFixture.library()}.buildPlan().value();
     std::filesystem::remove(targetFile);
 
-    auto const result = rt::test::runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
+    auto const res = rt::test::runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
 
-    REQUIRE(result);
-    CHECK(result->failureCount == 1);
+    REQUIRE(res);
+    CHECK(res->failureCount == 1);
 
     auto const* progressView = static_cast<ActivityStatusViewState const*>(nullptr);
 

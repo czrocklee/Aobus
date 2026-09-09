@@ -91,7 +91,7 @@ namespace ao::rt
     _optForwardCandidate.reset();
   }
 
-  bool ShuffleHistory::discardForwardCandidate(TrackId const candidate) noexcept
+  bool ShuffleHistory::tryDiscardForwardCandidate(TrackId const candidate) noexcept
   {
     if (!_optForwardCandidate || *_optForwardCandidate != candidate)
     {

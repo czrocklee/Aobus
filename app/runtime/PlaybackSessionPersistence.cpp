@@ -224,7 +224,7 @@ namespace ao::rt
     auto launchSpec = PlaybackLaunchSpec{};
     auto trackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
-    return _succession.capturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
+    return _succession.tryCapturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
   }
 
   void PlaybackSessionPersistence::requestDebouncedSave()
@@ -244,16 +244,16 @@ namespace ao::rt
     cancelScheduledSave();
     _scheduledTask = _asyncRuntime.spawnCancellable(
       [asyncRuntime = &_asyncRuntime, owner = this, delay](std::stop_token const stopToken)
-      { return waitForScheduledSave(asyncRuntime, owner, delay, stopToken); });
+      { return waitForScheduledSaveAsync(asyncRuntime, owner, delay, stopToken); });
   }
 
-  async::Task<void> PlaybackSessionPersistence::waitForScheduledSave(async::Runtime* asyncRuntime,
-                                                                     PlaybackSessionPersistence* owner,
-                                                                     Delay const delay,
-                                                                     std::stop_token const stopToken)
+  async::Task<void> PlaybackSessionPersistence::waitForScheduledSaveAsync(async::Runtime* asyncRuntime,
+                                                                          PlaybackSessionPersistence* owner,
+                                                                          Delay const delay,
+                                                                          std::stop_token const stopToken)
   {
-    co_await asyncRuntime->sleepFor(delay, stopToken);
-    co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
+    co_await asyncRuntime->sleepForAsync(delay, stopToken);
+    co_await asyncRuntime->resumeOnCallbackExecutorAsync(stopToken);
     owner->handleScheduledSave();
   }
 
@@ -288,7 +288,7 @@ namespace ao::rt
     auto currentTrackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
 
-    if (!_succession.capturePlaybackSessionSnapshot(launchSpec, currentTrackId, anchorIndex))
+    if (!_succession.tryCapturePlaybackSessionSnapshot(launchSpec, currentTrackId, anchorIndex))
     {
       return {};
     }

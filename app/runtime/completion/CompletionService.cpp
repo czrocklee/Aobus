@@ -62,11 +62,13 @@ namespace ao::rt
       }
     }
 
-    void countDictionaryId(std::span<std::uint32_t> frequencies, DictionaryId id, std::uint32_t frequency = 1)
+    using DictionaryCounts = boost::unordered_flat_map<std::uint32_t, std::uint32_t>;
+
+    void countDictionaryId(DictionaryCounts& frequencies, DictionaryId id)
     {
-      if (id != kInvalidDictionaryId && id.raw() < frequencies.size())
+      if (id != kInvalidDictionaryId)
       {
-        frequencies[id.raw()] += frequency;
+        ++frequencies[id.raw()];
       }
     }
 
@@ -141,7 +143,7 @@ namespace ao::rt
           entries.push_back(VocabularyEntry{
             .value = std::string{value},
             .frequency = entry.frequency,
-            .aliases = std::invoke(getAliases, entry.id, value),
+            .aliases = std::invoke(getAliases, entry.aliasIndex, value),
           });
         }
       }
@@ -295,12 +297,15 @@ namespace ao::rt
     };
 
     auto const transaction = _library.readTransaction();
-    auto const dictionarySize = _library.dictionary().size();
+    auto const reader = _library.tracks().reader(transaction);
     auto titleCounts = OwnedValueFrequencies{};
-    titleCounts.reserve(dictionarySize);
-    auto tagCounts = std::vector<std::uint32_t>(dictionarySize + 1);
-    auto customKeyCounts = std::vector<std::uint32_t>(dictionarySize + 1);
-    auto valueCounts = std::array<std::vector<std::uint32_t>, kTrackFieldCount>{};
+    // The validated store guarantees matching hot/cold counts; reserve for the first build too.
+    titleCounts.reserve(reader.entryCount());
+    auto tagCounts = DictionaryCounts{};
+    tagCounts.reserve(_tagFrequencies.size());
+    auto customKeyCounts = DictionaryCounts{};
+    customKeyCounts.reserve(_customKeyFrequencies.size());
+    auto valueCounts = std::array<DictionaryCounts, kTrackFieldCount>{};
     auto fieldSources = std::vector<FieldSource>{};
 
     for (auto const& definition : trackFieldDefinitions())
@@ -308,11 +313,10 @@ namespace ao::rt
       if (definition.optQueryField && query::isDictionaryField(*definition.optQueryField))
       {
         fieldSources.push_back(FieldSource{.field = definition.field, .queryField = *definition.optQueryField});
-        trackFieldArrayAt(valueCounts, definition.field).resize(dictionarySize + 1);
+        trackFieldArrayAt(valueCounts, definition.field)
+          .reserve(trackFieldArrayAt(_valueFrequencies, definition.field).size());
       }
     }
-
-    auto const reader = _library.tracks().reader(transaction);
 
     for (auto const& [_, view] : reader)
     {
@@ -340,19 +344,14 @@ namespace ao::rt
       }
     }
 
-    auto compress = [](std::span<std::uint32_t const> counts)
+    auto compress = [](DictionaryCounts const& counts)
     {
       auto frequencies = std::vector<DictionaryFrequency>{};
+      frequencies.reserve(counts.size());
 
-      for (std::size_t rawId = 1; rawId < counts.size(); ++rawId)
+      for (auto const& [rawId, frequency] : counts)
       {
-        if (auto const frequency = counts[rawId]; frequency != 0)
-        {
-          frequencies.push_back(DictionaryFrequency{
-            .id = DictionaryId{static_cast<std::uint32_t>(rawId)},
-            .frequency = frequency,
-          });
-        }
+        frequencies.push_back(DictionaryFrequency{.id = DictionaryId{rawId}, .frequency = frequency});
       }
 
       return frequencies;
@@ -390,13 +389,38 @@ namespace ao::rt
 
     if (_completionAliasPolicy != nullptr)
     {
-      _dictionaryAliases = std::vector<AliasRecord>(dictionarySize + 1);
+      std::size_t entryCount = _tagFrequencies.size() + _customKeyFrequencies.size();
+
+      for (auto const source : fieldSources)
+      {
+        entryCount += trackFieldArrayAt(_valueFrequencies, source.field).size();
+      }
+
+      auto aliasIndices = boost::unordered_flat_map<std::uint32_t, std::uint32_t>{};
+      aliasIndices.reserve(entryCount);
+      auto collectAliases = [&](std::span<DictionaryFrequency> const frequencies)
+      {
+        for (auto& entry : frequencies)
+        {
+          entry.aliasIndex =
+            aliasIndices.try_emplace(entry.id.raw(), static_cast<std::uint32_t>(aliasIndices.size())).first->second;
+        }
+      };
+      collectAliases(_tagFrequencies);
+      collectAliases(_customKeyFrequencies);
+
+      for (auto const source : fieldSources)
+      {
+        collectAliases(trackFieldArrayAt(_valueFrequencies, source.field));
+      }
+
+      _dictionaryAliases = std::vector<AliasRecord>(aliasIndices.size());
       _titleAliases = std::vector<AliasRecord>(_titleFrequencies.size());
     }
     else
     {
-      _dictionaryAliases.clear();
-      _titleAliases.clear();
+      _dictionaryAliases = std::vector<AliasRecord>{};
+      _titleAliases = std::vector<AliasRecord>{};
     }
 
     _tagsReady = false;
@@ -411,8 +435,8 @@ namespace ao::rt
     _tags = sortedDictionaryVocabulary(_tagFrequencies,
                                        _library.dictionary(),
                                        _textOrderingPolicy,
-                                       [this](DictionaryId const id, std::string_view const text)
-                                       { return aliasesForDictionary(id, text); });
+                                       [this](std::size_t const aliasIndex, std::string_view const text)
+                                       { return aliasesForDictionary(aliasIndex, text); });
     _tagsReady = true;
   }
 
@@ -421,22 +445,23 @@ namespace ao::rt
     _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies,
                                              _library.dictionary(),
                                              _textOrderingPolicy,
-                                             [this](DictionaryId const id, std::string_view const text)
-                                             { return aliasesForDictionary(id, text); });
+                                             [this](std::size_t const aliasIndex, std::string_view const text)
+                                             { return aliasesForDictionary(aliasIndex, text); });
     _customKeysReady = true;
   }
 
   void CompletionService::materializeValues(TrackField field)
   {
-    trackFieldArrayAt(_values, field) = sortedDictionaryVocabulary(
-      trackFieldArrayAt(_valueFrequencies, field),
-      _library.dictionary(),
-      _textOrderingPolicy,
-      [this](DictionaryId const id, std::string_view const text) { return aliasesForDictionary(id, text); });
+    trackFieldArrayAt(_values, field) =
+      sortedDictionaryVocabulary(trackFieldArrayAt(_valueFrequencies, field),
+                                 _library.dictionary(),
+                                 _textOrderingPolicy,
+                                 [this](std::size_t const aliasIndex, std::string_view const text)
+                                 { return aliasesForDictionary(aliasIndex, text); });
     trackFieldArrayAt(_valuesReady, field) = true;
   }
 
-  std::span<std::string const> CompletionService::aliasesForDictionary(DictionaryId const id,
+  std::span<std::string const> CompletionService::aliasesForDictionary(std::size_t const aliasIndex,
                                                                        std::string_view const text)
   {
     if (_completionAliasPolicy == nullptr)
@@ -444,8 +469,11 @@ namespace ao::rt
       return {};
     }
 
-    AO_INVARIANT(id != kInvalidDictionaryId && id.raw() < _dictionaryAliases.size());
-    return resolveAliases(_dictionaryAliases[id.raw()], text);
+    AO_INVARIANT(aliasIndex < _dictionaryAliases.size(),
+                 "Dictionary alias index {} exceeds record count {}",
+                 aliasIndex,
+                 _dictionaryAliases.size());
+    return resolveAliases(_dictionaryAliases[aliasIndex], text);
   }
 
   std::span<std::string const> CompletionService::aliasesForTitle(std::size_t const titleIndex,
@@ -456,7 +484,10 @@ namespace ao::rt
       return {};
     }
 
-    AO_INVARIANT(titleIndex < _titleAliases.size());
+    AO_INVARIANT(titleIndex < _titleAliases.size(),
+                 "Title alias index {} exceeds record count {}",
+                 titleIndex,
+                 _titleAliases.size());
     return resolveAliases(_titleAliases[titleIndex], text);
   }
 
@@ -464,8 +495,7 @@ namespace ao::rt
   {
     switch (handle.source)
     {
-      case AliasSource::Dictionary:
-        return aliasesForDictionary(DictionaryId{static_cast<std::uint32_t>(handle.index)}, text);
+      case AliasSource::Dictionary: return aliasesForDictionary(handle.index, text);
       case AliasSource::Title: return aliasesForTitle(handle.index, text);
     }
 
@@ -481,8 +511,8 @@ namespace ao::rt
 
     if (!record.resolved)
     {
-      auto const result = _completionAliasPolicy->makeAliasesInto(record.values, text);
-      AO_INVARIANT(result.has_value(), "Admitted completion text failed alias derivation: {}", result.error().message);
+      auto const res = _completionAliasPolicy->makeAliasesInto(record.values, text);
+      AO_INVARIANT(res.has_value(), "Admitted completion text failed alias derivation: {}", res.error().message);
       record.resolved = true;
     }
 
@@ -500,9 +530,16 @@ namespace ao::rt
     using OwnedAggregateValues =
       boost::unordered_flat_map<std::string, AggregateValue, TransparentStringHash, std::equal_to<>>;
 
+    std::size_t entryCount = _aggregateIncludesTags ? _tagFrequencies.size() : 0;
+
+    for (auto const field : _aggregateFields)
+    {
+      entryCount +=
+        field == TrackField::Title ? _titleFrequencies.size() : trackFieldArrayAt(_valueFrequencies, field).size();
+    }
+
     auto counts = OwnedAggregateValues{};
-    counts.reserve(_library.dictionary().size());
-    auto dictionaryFrequencies = std::vector<std::uint32_t>(_library.dictionary().size() + 1);
+    counts.reserve(entryCount);
     auto const addAggregateValue =
       [&](std::string_view const value, std::uint32_t const frequency, AliasHandle const aliasHandle)
     {
@@ -526,6 +563,8 @@ namespace ao::rt
       }
     };
 
+    auto const& dictionary = _library.dictionary();
+
     for (auto const field : _aggregateFields)
     {
       if (field == TrackField::Title)
@@ -541,7 +580,9 @@ namespace ao::rt
 
       for (auto const& entry : trackFieldArrayAt(_valueFrequencies, field))
       {
-        countDictionaryId(dictionaryFrequencies, entry.id, entry.frequency);
+        addAggregateValue(dictionary.getOrDefault(entry.id),
+                          entry.frequency,
+                          AliasHandle{.source = AliasSource::Dictionary, .index = entry.aliasIndex});
       }
     }
 
@@ -549,19 +590,9 @@ namespace ao::rt
     {
       for (auto const& entry : _tagFrequencies)
       {
-        countDictionaryId(dictionaryFrequencies, entry.id, entry.frequency);
-      }
-    }
-
-    auto const& dictionary = _library.dictionary();
-
-    for (std::size_t rawId = 1; rawId < dictionaryFrequencies.size(); ++rawId)
-    {
-      if (auto const frequency = dictionaryFrequencies[rawId]; frequency != 0)
-      {
-        addAggregateValue(dictionary.getOrDefault(DictionaryId{static_cast<std::uint32_t>(rawId)}),
-                          frequency,
-                          AliasHandle{.source = AliasSource::Dictionary, .index = rawId});
+        addAggregateValue(dictionary.getOrDefault(entry.id),
+                          entry.frequency,
+                          AliasHandle{.source = AliasSource::Dictionary, .index = entry.aliasIndex});
       }
     }
 

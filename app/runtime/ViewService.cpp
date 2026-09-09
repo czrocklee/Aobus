@@ -6,6 +6,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
@@ -35,6 +36,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -171,7 +173,7 @@ namespace ao::rt
       }
     }
 
-    bool sameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
+    bool isSameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
     {
       if (first.has_value() != second.has_value())
       {
@@ -202,15 +204,21 @@ namespace ao::rt
       libraryChangesSubscription = changes.onChanged([this](LibraryChangeSet const&) { refreshFilterErrors(); });
     }
 
+    void ensureOnExecutor(std::source_location location = std::source_location::current()) const
+    {
+      AO_EXPECTS_AT(location, executor.isCurrent(), "ViewService invoked off the executor thread");
+    }
+
     void refreshFilterErrors()
     {
+      ensureOnExecutor();
       auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
 
       for (auto& [viewId, entry] : views)
       {
         auto optFilterError = sources.sourceError(entry.activeSourceLease);
 
-        if (sameRecoverableError(entry.state.optFilterError, optFilterError))
+        if (isSameRecoverableError(entry.state.optFilterError, optFilterError))
         {
           continue;
         }
@@ -248,33 +256,39 @@ namespace ao::rt
   async::Subscription ViewService::onProjectionChanged(
     compat::MoveOnlyFunction<void(TrackListProjectionChanged const&)> handler)
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onPresentationChanged(
     compat::MoveOnlyFunction<void(PresentationChanged const&)> handler)
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onSelectionChanged(compat::MoveOnlyFunction<void(SelectionChanged const&)> handler)
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onViewDestroyed(compat::MoveOnlyFunction<void(ViewDestroyed const&)> handler)
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->viewDestroyedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onFilterErrorChanged(
     compat::MoveOnlyFunction<void(FilterErrorChanged const&)> handler)
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->filterErrorChangedSignal.connect(std::move(handler));
   }
 
   Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
   {
+    _implPtr->ensureOnExecutor();
     auto baseSourceRes = _implPtr->sources.acquire(initial.listId);
 
     if (!baseSourceRes)
@@ -321,6 +335,7 @@ namespace ao::rt
 
   void ViewService::destroyView(ViewId viewId)
   {
+    _implPtr->ensureOnExecutor();
     auto const it = _implPtr->views.find(viewId);
     AO_INVARIANT(it != _implPtr->views.end());
     _implPtr->views.erase(it);
@@ -329,6 +344,7 @@ namespace ao::rt
 
   Result<> ViewService::setFilter(ViewId const viewId, std::string filterExpression)
   {
+    _implPtr->ensureOnExecutor();
     auto const timer = rt::ScopedTimer{"ViewService::setFilter"};
     auto it = _implPtr->views.find(viewId);
 
@@ -377,6 +393,7 @@ namespace ao::rt
 
   Result<> ViewService::setPresentation(ViewId viewId, TrackPresentationSpec const& presentation)
   {
+    _implPtr->ensureOnExecutor();
     auto it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())
@@ -409,6 +426,7 @@ namespace ao::rt
 
   Result<> ViewService::setSelection(ViewId viewId, std::vector<TrackId> selection)
   {
+    _implPtr->ensureOnExecutor();
     auto it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())
@@ -425,6 +443,7 @@ namespace ao::rt
 
   Result<PlaybackLaunchSpec> ViewService::capturePlaybackLaunchSpec(ViewId const viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end())
@@ -442,6 +461,7 @@ namespace ao::rt
 
   std::vector<ViewId> ViewService::listViews() const
   {
+    _implPtr->ensureOnExecutor();
     auto viewIds = std::vector<ViewId>{};
     viewIds.reserve(_implPtr->views.size());
 
@@ -455,11 +475,13 @@ namespace ao::rt
 
   TrackListViewState ViewService::trackListState(ViewId viewId) const
   {
+    _implPtr->ensureOnExecutor();
     return _implPtr->views.at(viewId).state;
   }
 
   Result<TrackListViewState> ViewService::findTrackListState(ViewId const viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const iter = _implPtr->views.find(viewId);
 
     if (iter == _implPtr->views.end())
@@ -472,12 +494,14 @@ namespace ao::rt
 
   TrackPresentationSpec const* ViewService::findTrackListPresentation(ViewId const viewId) const noexcept
   {
+    _implPtr->ensureOnExecutor();
     auto const iter = _implPtr->views.find(viewId);
     return iter == _implPtr->views.end() ? nullptr : &iter->second.state.presentation;
   }
 
   std::chrono::milliseconds ViewService::selectionDuration(ViewId viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const it = _implPtr->views.find(viewId);
 
     if (it == _implPtr->views.end() || it->second.state.selection.empty())
@@ -503,6 +527,7 @@ namespace ao::rt
 
   Result<std::shared_ptr<TrackListProjection const>> ViewService::findTrackListProjection(ViewId const viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const iter = _implPtr->views.find(viewId);
 
     if (iter == _implPtr->views.end())
@@ -517,12 +542,14 @@ namespace ao::rt
     TrackSourceLease sourceLease,
     TrackOrderSpec const& order) const
   {
+    _implPtr->ensureOnExecutor();
     return std::make_unique<TrackListProjection>(
       kInvalidViewId, std::move(sourceLease), _implPtr->library, order, _implPtr->textOrderingPolicy);
   }
 
   Result<TrackSourceState> ViewService::listSourceState(ViewId const viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const iter = _implPtr->views.find(viewId);
 
     if (iter == _implPtr->views.end())
@@ -535,6 +562,7 @@ namespace ao::rt
 
   Result<std::vector<TrackId>> ViewService::listSourceTrackIds(ViewId const viewId) const
   {
+    _implPtr->ensureOnExecutor();
     auto const iter = _implPtr->views.find(viewId);
 
     if (iter == _implPtr->views.end())
@@ -564,6 +592,7 @@ namespace ao::rt
                                                                        WorkspaceService& workspace,
                                                                        LibraryChanges const& changes)
   {
+    _implPtr->ensureOnExecutor();
     return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
   }
 } // namespace ao::rt

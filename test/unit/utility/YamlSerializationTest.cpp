@@ -268,8 +268,8 @@ namespace ao::test
                { return makeError(Error::Code::InvalidState, "intentional writer failure"); })
         .scalar("skipped", true);
 
-      auto result = std::move(writer).finish();
-      REQUIRE_FALSE(result);
+      auto res = std::move(writer).finish();
+      REQUIRE_FALSE(res);
       CHECK_FALSE(yaml::findChild(tree.rootref(), "skipped").readable());
       CHECK(yaml::findChild(tree.rootref(), "nested").is_map());
     }

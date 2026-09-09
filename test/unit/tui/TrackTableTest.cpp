@@ -175,7 +175,7 @@ namespace ao::tui::test
       return rows;
     }
 
-    bool sameRowRef(TrackTableRowRef const& lhs, TrackTableRowRef const& rhs)
+    bool isSameRowRef(TrackTableRowRef const& lhs, TrackTableRowRef const& rhs)
     {
       if (lhs.isSectionHeader != rhs.isSectionHeader)
       {
@@ -809,7 +809,7 @@ namespace ao::tui::test
 
           for (std::size_t index = 0; index < windowed.size(); ++index)
           {
-            CHECK(sameRowRef(windowed[index], full[static_cast<std::size_t>(start) + index]));
+            CHECK(isSameRowRef(windowed[index], full[static_cast<std::size_t>(start) + index]));
           }
         }
       }

@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "check/AsyncCancellationGuardCheck.h"
+#include "check/AsyncFunctionNamingCheck.h"
+#include "check/BoolFunctionNamingCheck.h"
 #include "check/BracedInitializationCheck.h"
 #include "check/CApiGlobalQualificationCheck.h"
 #include "check/ChronoNamingConventionCheck.h"
@@ -58,6 +60,8 @@ namespace clang::tidy::readability
       {
         checkFactories.registerCheck<CApiGlobalQualificationCheck>("aobus-readability-c-api-global-qualification");
         checkFactories.registerCheck<AsyncCancellationGuardCheck>("aobus-async-cancellation-guard");
+        checkFactories.registerCheck<AsyncFunctionNamingCheck>("aobus-readability-async-function-naming");
+        checkFactories.registerCheck<BoolFunctionNamingCheck>("aobus-readability-bool-function-naming");
         checkFactories.registerCheck<ConcreteFinalCheck>("aobus-modernize-concrete-final");
         checkFactories.registerCheck<ControlBlockSpacingCheck>("aobus-readability-control-block-spacing");
         checkFactories.registerCheck<ExplicitPathConversionCheck>("aobus-portability-explicit-path-conversion");
@@ -100,8 +104,8 @@ namespace clang::tidy::readability
     };
 
     // LLVM requires registration through a namespace-scope constructor.
-    ClangTidyModuleRegistry::Add<AobusLintModule> const aobusLintModuleRegistration{"aobus-lint-module",
-                                                                                    "Adds Aobus custom checks."};
+    ClangTidyModuleRegistry::Add<AobusLintModule> const kAobusLintModuleRegistration{"aobus-lint-module",
+                                                                                     "Adds Aobus custom checks."};
   } // namespace
 } // namespace clang::tidy::readability
 

@@ -85,10 +85,10 @@ namespace ao::rt::test
     {
       auto library = library::test::makeTestMusicLibrary(musicRoot, databasePath);
       auto transaction = library::test::writeTransaction(library);
-      auto result = library::test::physicalWriter(library.resources(), transaction).create(bytes);
-      REQUIRE(result);
+      auto res = library::test::physicalWriter(library.resources(), transaction).create(bytes);
+      REQUIRE(res);
       REQUIRE(transaction.commit());
-      return *result;
+      return *res;
     }
 
     /// The row names content and holds none, so a read has to find it somewhere.
@@ -102,10 +102,11 @@ namespace ao::rt::test
       cache.store(utility::computeSha256(bytes), bytes);
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> waitForRelease(AsyncTestState<std::size_t> readCount,
-                                                                              AsyncBarrier* release,
-                                                                              std::vector<std::byte> bytes,
-                                                                              std::stop_token const stopToken)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> waitForReleaseAsync(
+      AsyncTestState<std::size_t> readCount,
+      AsyncBarrier* release,
+      std::vector<std::byte> bytes,
+      std::stop_token const stopToken)
     {
       readCount.increment();
       release->wait();
@@ -113,16 +114,17 @@ namespace ao::rt::test
       co_return std::optional{std::move(bytes)};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readAfterRelease(AsyncTestState<std::size_t> readCount,
-                                                                                AsyncBarrier* release,
-                                                                                std::vector<std::byte> bytes,
-                                                                                ResourceId /*resourceId*/,
-                                                                                std::stop_token const stopToken)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readAfterReleaseAsync(
+      AsyncTestState<std::size_t> readCount,
+      AsyncBarrier* release,
+      std::vector<std::byte> bytes,
+      ResourceId /*resourceId*/,
+      std::stop_token const stopToken)
     {
-      return waitForRelease(std::move(readCount), release, std::move(bytes), stopToken);
+      return waitForReleaseAsync(std::move(readCount), release, std::move(bytes), stopToken);
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> failOneRead(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> failOneReadAsync(
       std::shared_ptr<std::atomic_bool> failNextPtr,
       AsyncTestState<std::size_t> readCount,
       std::vector<std::byte> bytes)
@@ -137,43 +139,44 @@ namespace ao::rt::test
       co_return std::optional{std::move(bytes)};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readAfterOneFailure(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readAfterOneFailureAsync(
       std::shared_ptr<std::atomic_bool> failNextPtr,
       AsyncTestState<std::size_t> readCount,
       std::vector<std::byte> bytes,
       ResourceId /*resourceId*/,
       std::stop_token /*stopToken*/)
     {
-      return failOneRead(std::move(failNextPtr), std::move(readCount), std::move(bytes));
+      return failOneReadAsync(std::move(failNextPtr), std::move(readCount), std::move(bytes));
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> returnBytes(std::vector<std::byte> bytes)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> returnBytesAsync(std::vector<std::byte> bytes)
     {
       co_return std::optional{std::move(bytes)};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readCustomBytes(std::vector<std::byte> bytes,
-                                                                               ResourceId /*resourceId*/,
-                                                                               std::stop_token /*stopToken*/)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readCustomBytesAsync(std::vector<std::byte> bytes,
+                                                                                    ResourceId /*resourceId*/,
+                                                                                    std::stop_token /*stopToken*/)
     {
-      return returnBytes(std::move(bytes));
+      return returnBytesAsync(std::move(bytes));
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelReadTask(AsyncTestState<std::size_t> readCount)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelReadTaskAsync(
+      AsyncTestState<std::size_t> readCount)
     {
       readCount.increment();
       async::throwOperationCancelled();
       co_return std::optional<std::vector<std::byte>>{};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelRead(AsyncTestState<std::size_t> readCount,
-                                                                          ResourceId /*resourceId*/,
-                                                                          std::stop_token /*stopToken*/)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelReadAsync(AsyncTestState<std::size_t> readCount,
+                                                                               ResourceId /*resourceId*/,
+                                                                               std::stop_token /*stopToken*/)
     {
-      return cancelReadTask(std::move(readCount));
+      return cancelReadTaskAsync(std::move(readCount));
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readAcrossRebindTask(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readAcrossRebindTaskAsync(
       AsyncTestState<std::size_t> readCount,
       AsyncTestState<bool> firstReadReleased,
       AsyncBarrier* release,
@@ -189,19 +192,21 @@ namespace ao::rt::test
       co_return std::optional{std::vector{std::byte{0x21}, std::byte{0x22}}};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readAcrossRebind(AsyncTestState<std::size_t> readCount,
-                                                                                AsyncTestState<bool> firstReadReleased,
-                                                                                AsyncBarrier* release,
-                                                                                ResourceId /*resourceId*/,
-                                                                                std::stop_token const stopToken)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readAcrossRebindAsync(
+      AsyncTestState<std::size_t> readCount,
+      AsyncTestState<bool> firstReadReleased,
+      AsyncBarrier* release,
+      ResourceId /*resourceId*/,
+      std::stop_token const stopToken)
     {
-      return readAcrossRebindTask(std::move(readCount), std::move(firstReadReleased), release, stopToken);
+      return readAcrossRebindTaskAsync(std::move(readCount), std::move(firstReadReleased), release, stopToken);
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readSizedBytes(AsyncTestState<std::size_t> readCount,
-                                                                              bool const oversizedFourthResource,
-                                                                              ResourceId const resourceId,
-                                                                              std::stop_token /*stopToken*/)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readSizedBytesAsync(
+      AsyncTestState<std::size_t> readCount,
+      bool const oversizedFourthResource,
+      ResourceId const resourceId,
+      std::stop_token /*stopToken*/)
     {
       readCount.increment();
       auto const byteCount = oversizedFourthResource && resourceId == ResourceId{4} ? std::size_t{6} : std::size_t{2};
@@ -224,7 +229,7 @@ namespace ao::rt::test
       if (!completed)
       {
         REQUIRE(request);
-        REQUIRE(owner.executor().drainUntil([&] { return completed; }));
+        REQUIRE(owner.executor().tryDrainUntil([&] { return completed; }));
       }
 
       return received;
@@ -259,7 +264,7 @@ namespace ao::rt::test
                                                        });
 
     REQUIRE(request);
-    REQUIRE(executor->drainUntil([&] { return received.size() == expected.size(); }));
+    REQUIRE(executor->tryDrainUntil([&] { return received.size() == expected.size(); }));
     CHECK(received == std::vector<std::byte>(expected.begin(), expected.end()));
     CHECK(callbackOnExecutor);
 
@@ -275,7 +280,7 @@ namespace ao::rt::test
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto const expected = std::vector{std::byte{0x31}, std::byte{0x32}};
     auto cache = ResourceByteMemoryCache{
-      owner.runtimePtr()->async(), std::bind_front(readAfterRelease, readCount, &release, expected)};
+      owner.runtimePtr()->async(), std::bind_front(readAfterReleaseAsync, readCount, &release, expected)};
     auto callbackOrder = std::vector<std::int32_t>{};
     auto received = std::vector<std::vector<std::byte>>{};
     auto first = cache.request(ResourceId{7},
@@ -285,7 +290,7 @@ namespace ao::rt::test
                                  received.emplace_back(bytes.view().begin(), bytes.view().end());
                                });
     REQUIRE(first);
-    REQUIRE(readCount.waitUntil(1));
+    REQUIRE(readCount.tryWaitUntil(1));
     auto second = cache.request(ResourceId{7},
                                 [&](ResourceBytes bytes)
                                 {
@@ -296,7 +301,7 @@ namespace ao::rt::test
     CHECK(readCount.load() == 1);
 
     release.release();
-    REQUIRE(owner.executor().drainUntil([&] { return received.size() == 2; }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return received.size() == 2; }));
     CHECK(callbackOrder == std::vector<std::int32_t>{1, 2});
     CHECK(received == std::vector<std::vector<std::byte>>{expected, expected});
 
@@ -317,8 +322,8 @@ namespace ao::rt::test
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
-    auto cache =
-      ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytes, readCount, false), 2, 100};
+    auto cache = ResourceByteMemoryCache{
+      owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false), 2, 100};
 
     CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
     CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
@@ -341,7 +346,7 @@ namespace ao::rt::test
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto cache =
-      ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytes, readCount, true), 4, 5};
+      ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, true), 4, 5};
 
     CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
     CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
@@ -363,8 +368,8 @@ namespace ao::rt::test
 
     SECTION("zero entries retains exactly one entry")
     {
-      auto cache =
-        ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytes, readCount, false), 0, 100};
+      auto cache = ResourceByteMemoryCache{
+        owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false), 0, 100};
 
       CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
       CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
@@ -374,8 +379,8 @@ namespace ao::rt::test
 
     SECTION("zero bytes retains no payload larger than one byte")
     {
-      auto cache =
-        ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytes, readCount, false), 4, 0};
+      auto cache = ResourceByteMemoryCache{
+        owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false), 4, 0};
 
       CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
       CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
@@ -388,12 +393,12 @@ namespace ao::rt::test
   {
     auto owner = RuntimeOwner{};
     auto const expected = std::vector{std::byte{0x23}, std::byte{0x24}};
-    auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readCustomBytes, expected)};
+    auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readCustomBytesAsync, expected)};
     auto warmedBytes = ResourceBytes{};
     auto warmRequest = cache.request(ResourceId{73}, [&](ResourceBytes bytes) { warmedBytes = std::move(bytes); });
 
     REQUIRE(warmRequest);
-    REQUIRE(owner.executor().drainUntil([&] { return !warmedBytes.empty(); }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return !warmedBytes.empty(); }));
 
     bool requestReturned = false;
     bool callbackBeforeReturn = false;
@@ -420,12 +425,12 @@ namespace ao::rt::test
     auto owner = RuntimeOwner{};
     auto const expected = std::vector{std::byte{0x27}, std::byte{0x28}};
     auto cachePtr = std::make_unique<ResourceByteMemoryCache>(
-      owner.runtimePtr()->async(), std::bind_front(readCustomBytes, expected));
+      owner.runtimePtr()->async(), std::bind_front(readCustomBytesAsync, expected));
     auto retained = ResourceBytes{};
     auto request = cachePtr->request(ResourceId{72}, [&](ResourceBytes bytes) { retained = std::move(bytes); });
 
     REQUIRE(request);
-    REQUIRE(owner.executor().drainUntil([&] { return !retained.empty(); }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return !retained.empty(); }));
     auto const* storage = retained.view().data();
     cachePtr.reset();
 
@@ -441,19 +446,19 @@ namespace ao::rt::test
     auto failNextPtr = std::make_shared<std::atomic_bool>(true);
     auto const expected = std::vector{std::byte{0x41}, std::byte{0x42}};
     auto cache = ResourceByteMemoryCache{
-      owner.runtimePtr()->async(), std::bind_front(readAfterOneFailure, failNextPtr, readCount, expected)};
+      owner.runtimePtr()->async(), std::bind_front(readAfterOneFailureAsync, failNextPtr, readCount, expected)};
     auto received = std::vector<std::vector<std::byte>>{};
     auto first = cache.request(
       ResourceId{8}, [&](ResourceBytes bytes) { received.emplace_back(bytes.view().begin(), bytes.view().end()); });
 
     REQUIRE(first);
-    REQUIRE(owner.executor().drainUntil([&] { return received.size() == 1; }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return received.size() == 1; }));
     CHECK(received.front().empty());
 
     auto retry = cache.request(
       ResourceId{8}, [&](ResourceBytes bytes) { received.emplace_back(bytes.view().begin(), bytes.view().end()); });
     REQUIRE(retry);
-    REQUIRE(owner.executor().drainUntil([&] { return received.size() == 2; }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return received.size() == 2; }));
     CHECK(readCount.load() == 2);
     CHECK(received.back() == expected);
   }
@@ -463,12 +468,12 @@ namespace ao::rt::test
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
-    auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(cancelRead, readCount)};
+    auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(cancelReadAsync, readCount)};
     auto callbackCount = AsyncTestState<std::size_t>::create(0);
     auto request = cache.request(ResourceId{9}, [callbackCount](ResourceBytes) { callbackCount.increment(); });
 
     REQUIRE(request);
-    REQUIRE(readCount.waitUntil(1));
+    REQUIRE(readCount.tryWaitUntil(1));
     owner.runtimePtr()->async().requestStop();
     owner.runtimePtr()->async().join();
     CHECK(callbackCount.load() == 0);
@@ -481,17 +486,17 @@ namespace ao::rt::test
     auto release = AsyncBarrier{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto firstReadReleased = AsyncTestState<bool>::create(false);
-    auto const readBytes = std::bind_front(readAcrossRebind, readCount, firstReadReleased, &release);
+    auto const readBytes = std::bind_front(readAcrossRebindAsync, readCount, firstReadReleased, &release);
     auto cachePtr = std::make_unique<ResourceByteMemoryCache>(owner.runtimePtr()->async(), readBytes);
     auto callbackCount = AsyncTestState<std::size_t>::create(0);
     auto received = std::vector<std::byte>{};
     auto oldRequest = cachePtr->request(ResourceId{10}, [callbackCount](ResourceBytes) { callbackCount.increment(); });
 
     REQUIRE(oldRequest);
-    REQUIRE(readCount.waitUntil(1));
+    REQUIRE(readCount.tryWaitUntil(1));
     cachePtr.reset();
     release.release();
-    REQUIRE(firstReadReleased.waitUntil(true));
+    REQUIRE(firstReadReleased.tryWaitUntil(true));
 
     auto replacementCache = ResourceByteMemoryCache{owner.runtimePtr()->async(), readBytes};
     auto replacement = replacementCache.request(ResourceId{10},
@@ -501,7 +506,7 @@ namespace ao::rt::test
                                                   callbackCount.increment();
                                                 });
     REQUIRE(replacement);
-    REQUIRE(owner.executor().drainUntil([&] { return callbackCount.load() == 1; }));
+    REQUIRE(owner.executor().tryDrainUntil([&] { return callbackCount.load() == 1; }));
     CHECK(readCount.load() == 2);
     CHECK(received == std::vector<std::byte>{std::byte{0x21}, std::byte{0x22}});
 

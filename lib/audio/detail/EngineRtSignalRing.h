@@ -33,7 +33,7 @@ namespace ao::audio::detail
       AO_RT_INVARIANT(pushed, "RT signal ring capacity exceeded");
     }
 
-    bool pop(Signal& signal) noexcept { return _ring.pop(signal); }
+    bool tryPop(Signal& signal) noexcept { return _ring.pop(signal); }
 
     std::size_t readAvailable() const noexcept { return _ring.read_available(); }
 

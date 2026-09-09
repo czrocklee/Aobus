@@ -255,14 +255,14 @@ namespace ao::library
 
     try
     {
-      auto result = std::invoke(function, write);
+      auto res = std::invoke(function, write);
       AO_INVARIANT((_implPtr != nullptr && _implPtr->transaction.isActive()),
                    "Library write operation terminated its transaction");
 
-      if (!result)
+      if (!res)
       {
         abort();
-        return std::unexpected{std::move(result.error())};
+        return std::unexpected{std::move(res.error())};
       }
 
       _implPtr->operationActive = false;
@@ -305,7 +305,7 @@ namespace ao::library
 
     AO_EXPECTS(!_implPtr->operationActive, "Cannot commit during a library write operation");
 
-    auto result = Result<>{};
+    auto res = Result<>{};
 
     try
     {
@@ -328,11 +328,11 @@ namespace ao::library
       if (_implPtr->optInjectedCommitFailure)
       {
         _implPtr->transaction.abort();
-        result = std::unexpected{std::move(*_implPtr->optInjectedCommitFailure)};
+        res = std::unexpected{std::move(*_implPtr->optInjectedCommitFailure)};
       }
       else
       {
-        result = _implPtr->transaction.commit();
+        res = _implPtr->transaction.commit();
       }
     }
     catch (lmdb::detail::TransactionFailure const& failure)
@@ -346,9 +346,9 @@ namespace ao::library
       throw;
     }
 
-    if (!result)
+    if (!res)
     {
-      auto error = std::move(result.error());
+      auto error = std::move(res.error());
       _implPtr->finishFailure();
       return std::unexpected{std::move(error)};
     }

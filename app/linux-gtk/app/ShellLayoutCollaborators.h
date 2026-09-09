@@ -44,7 +44,8 @@ namespace ao::gtk
    * re-exports the aggregate and no build traversal reaches it.
    *
    * A null pointer means the owner deliberately supplies no such collaborator,
-   * which the components and actions that name it must tolerate.
+   * which the components and actions that name it must tolerate. The value
+   * outputDeviceIntent is mandatory and must be supplied explicitly.
    */
   struct ShellLayoutCollaborators final
   {
@@ -59,7 +60,7 @@ namespace ao::gtk
     uimodel::TrackPresentationCatalog* trackPresentationCatalog = nullptr;
     uimodel::ListPresentations* listPresentations = nullptr;
     ListNavigationController* listNavigationController = nullptr;
-    uimodel::OutputDeviceIntent outputDeviceIntent = uimodel::OutputDeviceIntent::discarded();
+    uimodel::OutputDeviceIntent outputDeviceIntent;
     std::function<void(ao::ListId, std::string)> createSmartListFromExpression{};
     Glib::RefPtr<Gio::MenuModel> menuModelPtr{};
   };

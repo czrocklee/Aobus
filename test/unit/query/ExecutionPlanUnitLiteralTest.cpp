@@ -128,7 +128,7 @@ namespace ao::query::test
       // checkedMul overflow (value * 1000 overflows)
       std::ignore = compileError(parseOk("@duration >= 1844674407370955161s"));
 
-      // checkedAdd overflow (value * 10 + fraction overflows)
+      // Combining the whole value and fraction overflows.
       std::ignore = compileError(parseOk("@duration >= 1844674407370955161.6ms"));
     }
 

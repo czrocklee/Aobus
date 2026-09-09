@@ -141,7 +141,7 @@ namespace clang::tidy::readability
           {
             for (auto const* argument : call->arguments())
             {
-              if (mentionsDecl(argument))
+              if (hasDeclReference(argument))
               {
                 found = true;
                 return false; // Stop traversing
@@ -153,7 +153,7 @@ namespace clang::tidy::readability
         return true;
       }
 
-      bool mentionsDecl(Expr const* expr) const
+      bool hasDeclReference(Expr const* expr) const
       {
         if (expr == nullptr)
         {
@@ -174,7 +174,7 @@ namespace clang::tidy::readability
 
         if (auto const* unOp = llvm::dyn_cast<UnaryOperator>(expr); unOp != nullptr)
         {
-          return mentionsDecl(unOp->getSubExpr());
+          return hasDeclReference(unOp->getSubExpr());
         }
 
         return false;

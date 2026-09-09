@@ -82,6 +82,23 @@ class TidyChecksTest(unittest.TestCase):
             tidyconfig.CONFIG_BASE,
         )
 
+    def test_constant_and_concept_naming_matches_project_policy(self):
+        for category in ("ConstexprVariable", "ClassConstant", "GlobalConstant", "StaticConstant"):
+            self.assertIn(
+                f"{{key: 'readability-identifier-naming.{category}Case', value: 'CamelCase'}}",
+                tidyconfig.CONFIG_BASE,
+            )
+            self.assertIn(
+                f"{{key: 'readability-identifier-naming.{category}Prefix', value: 'k'}}",
+                tidyconfig.CONFIG_BASE,
+            )
+            self.assertNotIn(f"readability-identifier-naming.{category}IgnoredRegexp", tidyconfig.CONFIG_BASE)
+        self.assertIn(
+            "{key: 'readability-identifier-naming.ConceptCase', value: 'CamelCase'}",
+            tidyconfig.CONFIG_BASE,
+        )
+        self.assertNotIn("readability-identifier-naming.LocalConstant", tidyconfig.CONFIG_BASE)
+
     def test_winrt_framework_shapes_are_narrowly_allowlisted(self):
         self.assertIn("|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)", tidyconfig.CONFIG_BASE)
         self.assertIn(

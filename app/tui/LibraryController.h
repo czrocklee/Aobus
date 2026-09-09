@@ -87,7 +87,7 @@ namespace ao::tui
     void clearFilterDraft();
     void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);
     void movePresentationSelection(std::int32_t delta);
-    bool setSelectedPresentation(std::int32_t index);
+    bool trySetSelectedPresentation(std::int32_t index);
     void setSelectedTrackIndex(std::int32_t index);
     void toggleFocusedMark();
     void toggleVisualSelection();
@@ -107,7 +107,7 @@ namespace ao::tui
     Result<std::string> applyFilter();
 
   private:
-    bool setSelectedTrackById(TrackId trackId);
+    bool trySetSelectedTrackById(TrackId trackId);
     TrackId focusedTrackId() const noexcept;
     bool containsTrackId(TrackId trackId) const noexcept;
     void clearMarkState();

@@ -52,7 +52,7 @@ namespace ao::rt
 
     bool isActive() const noexcept;
     bool isRunning() const noexcept;
-    bool restartAvailable() const noexcept;
+    bool isRestartAvailable() const noexcept;
     bool hasScheduledDeadline() const noexcept;
 
   private:

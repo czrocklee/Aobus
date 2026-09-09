@@ -96,9 +96,9 @@ namespace ao::rt::test
     // a directory tree the user never asked for.
     auto const missingDirectory = std::filesystem::path{temp.path()} / "missing";
     auto const belowMissing = missingDirectory / "backup.yaml";
-    auto const result = exporter.exportToYaml(belowMissing, ExportMode::Full);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::IoError);
+    auto const res = exporter.exportToYaml(belowMissing, ExportMode::Full);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
     CHECK_FALSE(std::filesystem::exists(missingDirectory));
   }
 
@@ -115,18 +115,18 @@ namespace ao::rt::test
         auto yaml = std::ofstream{yamlPath};
         yaml << yamlContent;
       }
-      auto const result = importer.importFromYamlOffline(yamlPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == expectedCode);
-      CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
+      auto const res = importer.importFromYamlOffline(yamlPath);
+      REQUIRE(!res);
+      CHECK(res.error().code == expectedCode);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
     };
 
     SECTION("IO Error: File not found")
     {
       auto const nonExistentPath = std::filesystem::path{temp.path()} / "ghost.yaml";
-      auto const result = importer.importFromYamlOffline(nonExistentPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::IoError);
+      auto const res = importer.importFromYamlOffline(nonExistentPath);
+      REQUIRE(!res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
 
     SECTION("Missing version")
@@ -414,10 +414,10 @@ library:
   lists: []
 )";
       }
-      auto const result = importer.importFromYamlOffline(yamlPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("library.tracks must be a sequence"));
+      auto const res = importer.importFromYamlOffline(yamlPath);
+      REQUIRE(!res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("library.tracks must be a sequence"));
     }
 
     SECTION("List missing mandatory ID")
@@ -434,10 +434,10 @@ library:
     - name: "No ID"
 )";
       }
-      auto const result = importer.importFromYamlOffline(yamlPath);
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("missing required 'id'"));
+      auto const res = importer.importFromYamlOffline(yamlPath);
+      REQUIRE(!res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("missing required 'id'"));
     }
 
     SECTION("List entry points to non-existent track")
@@ -458,8 +458,8 @@ library:
 )";
       }
       // Import should succeed but the list will be empty (or the ghost track ignored)
-      auto const result = importer.importFromYamlOffline(yamlPath);
-      REQUIRE(result);
+      auto const res = importer.importFromYamlOffline(yamlPath);
+      REQUIRE(res);
 
       auto transaction = ml.readTransaction();
       auto const optList = ml.lists().reader(transaction).get(ListId{1});
@@ -508,11 +508,11 @@ library:
     }
 
     auto importer = LibraryYamlImporter{library};
-    auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
-    CHECK(result.error().message.contains("cannot be represented in the library"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("cannot be represented in the library"));
     CHECK(library.dictionary().generation() == originalDictionaryGeneration);
     CHECK_FALSE(library.dictionary().findId("Transient Artist"));
 

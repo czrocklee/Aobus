@@ -185,9 +185,9 @@ namespace ao::audio
     {
       _implPtr->openDecoder();
 
-      if (auto const result = _implPtr->packetSource.open(filePath, "mp4a"); !result)
+      if (auto const res = _implPtr->packetSource.open(filePath, "mp4a"); !res)
       {
-        auto error = result.error();
+        auto error = res.error();
 
         if (error.code == Error::Code::FormatRejected)
         {
@@ -213,9 +213,9 @@ namespace ao::audio
   // fails fast if an allocation escapes this noexcept boundary.
   Result<> AacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
-    if (auto const result = _implPtr->packetSource.seek(offset); !result)
+    if (auto const res = _implPtr->packetSource.seek(offset); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     flush();

@@ -292,7 +292,7 @@ namespace
       _appPtr.reset();
     }
 
-    bool terminationRequested() const noexcept { return _terminationRequested; }
+    bool isTerminationRequested() const noexcept { return _terminationRequested; }
 
   private:
     static ::gboolean handleTermination(void* data)
@@ -799,7 +799,7 @@ namespace
     APP_LOG_INFO("Entering GTK main loop");
     auto const exitCode = appPtr->run(gtkArgc, gtkArguments.pointers.data());
 
-    if (!optDiagnosticMessage && !processSignalHandlers.terminationRequested())
+    if (!optDiagnosticMessage && !processSignalHandlers.isTerminationRequested())
     {
       optDiagnosticMessage =
         incompleteSuccessorStartupDiagnostic(startupPlan.registrationMode, startupCompleted, exitCode);

@@ -18,7 +18,7 @@ namespace ao::rt::test
                 delta::UpdateRange{.start = 3, .trackIds = {TrackId{50}}}},
     }};
 
-    CHECK(validateTrackSourceDelta(message, 3));
+    CHECK(isValidTrackSourceDelta(message, 3));
   }
 
   TEST_CASE("TrackSourceDelta - a later range is validated in the preceding delta coordinate space",
@@ -29,7 +29,7 @@ namespace ao::rt::test
                 delta::UpdateRange{.start = 2, .trackIds = {TrackId{40}}}},
     }};
 
-    CHECK_FALSE(validateTrackSourceDelta(message, 4));
+    CHECK_FALSE(isValidTrackSourceDelta(message, 4));
   }
 
   TEST_CASE("TrackSourceDelta - reset and invalidation are standalone alternatives", "[runtime][unit][source]")
@@ -37,8 +37,8 @@ namespace ao::rt::test
     auto const reset = TrackSourceDelta{SourceReset{}};
     auto const invalidated = TrackSourceDelta{SourceInvalidated{}};
 
-    CHECK(validateTrackSourceDelta(reset, 7));
-    CHECK(validateTrackSourceDelta(invalidated, 7));
+    CHECK(isValidTrackSourceDelta(reset, 7));
+    CHECK(isValidTrackSourceDelta(invalidated, 7));
   }
 
   TEST_CASE("TrackSourceDelta - empty scripts and empty ranges are invalid", "[runtime][unit][source]")
@@ -48,9 +48,9 @@ namespace ao::rt::test
     auto const emptyRemove = TrackSourceDelta{delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = 0}}}};
     auto const emptyUpdate = TrackSourceDelta{delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = 0}}}};
 
-    CHECK_FALSE(validateTrackSourceDelta(emptyScript, 0));
-    CHECK_FALSE(validateTrackSourceDelta(emptyInsert, 0));
-    CHECK_FALSE(validateTrackSourceDelta(emptyRemove, 0));
-    CHECK_FALSE(validateTrackSourceDelta(emptyUpdate, 0));
+    CHECK_FALSE(isValidTrackSourceDelta(emptyScript, 0));
+    CHECK_FALSE(isValidTrackSourceDelta(emptyInsert, 0));
+    CHECK_FALSE(isValidTrackSourceDelta(emptyRemove, 0));
+    CHECK_FALSE(isValidTrackSourceDelta(emptyUpdate, 0));
   }
 } // namespace ao::rt::test

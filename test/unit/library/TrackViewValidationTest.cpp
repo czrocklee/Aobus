@@ -196,12 +196,12 @@ namespace ao::library::test
     auto const tagIds = std::array{DictionaryId{7}, DictionaryId{7}};
     auto const data = makeHotRecord(tagIds);
     auto const view = TrackView{data, std::span<std::byte const>{}};
-    auto const result = validateSerializedHotTrack(data);
+    auto const res = validateSerializedHotTrack(data);
 
     REQUIRE(view.isHotValid());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
-    CHECK(result.error().message.contains("duplicate tag ID"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message.contains("duplicate tag ID"));
   }
 
   TEST_CASE("TrackView - rejects null hot data", "[library][unit][track][validation]")

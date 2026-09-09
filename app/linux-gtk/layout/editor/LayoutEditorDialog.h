@@ -145,7 +145,7 @@ namespace ao::gtk::layout::editor
     void handleResetDefaultClicked();
     void handlePresetChanged();
 
-    bool validateAllDirtyDocuments();
+    bool tryValidateAllDirtyDocuments();
     void presentErrorDialog(std::string const& title, std::string const& message);
 
     uimodel::LayoutNode* findParentOf(uimodel::LayoutNode* root, uimodel::LayoutNode* target);

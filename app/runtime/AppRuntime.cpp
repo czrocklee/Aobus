@@ -70,7 +70,10 @@ namespace ao::rt
                            core.notifications(),
                            core.async()}
       , playbackBootstrap{playbackTransport}
-      , playback{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(), playbackSuccession)}
+      , playback{playbackBootstrap.createPlaybackService(core.async().callbackExecutor(),
+                                                         playbackSuccession,
+                                                         core.musicLibrary(),
+                                                         core.library().changes())}
       , workspaceService{core.async().callbackExecutor(), viewService, core.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionPersistence{
@@ -234,7 +237,7 @@ namespace ao::rt
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
     auto restoredRes = Result<PlaybackSessionRestoreResult>{};
-    auto const accepted = _implPtr->playback.runSynchronousCommand(
+    auto const accepted = _implPtr->playback.tryRunSynchronousCommand(
       [this, &restoredRes]
       {
         restoredRes = _implPtr->playbackSessionPersistence.restore();

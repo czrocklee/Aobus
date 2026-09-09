@@ -40,14 +40,14 @@ namespace ao::winui::test
     LayoutSchema schemaWith(std::string id, uimodel::ActionCapabilityMask const capabilities)
     {
       auto schema = LayoutSchema{};
-      schema.addAction({.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
+      schema.tryAddAction({.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
       return schema;
     }
 
     /// Answers yes for everything, so a case can isolate the other rules.
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
 
-    bool shippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
+    bool isShippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
     {
       if (schema.action(id))
       {
@@ -60,6 +60,27 @@ namespace ao::winui::test
              id == "track.orderMoveToTop" || id == "track.orderMoveToBottom";
     }
   } // namespace
+
+  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings", "[winui][regression][input]")
+  {
+    auto const keymap = KeymapModel{KeymapBindings{
+      {"first", {chord("Ctrl+P")}},
+      {"track.orderMoveUp", {KeyChord{.key = "Hyper"}, chord("Ctrl+P"), chord("Ctrl+U"), chord("Alt+Up")}},
+      {"track.orderMoveDown", {}},
+      {"track.orderMoveToTop", {KeyChord{.key = "Hyper"}}},
+      {"track.orderMoveToBottom", {chord("Ctrl+P")}},
+    }};
+    auto const plans = planKeymapAccelerators(keymap, LayoutSchema{}, kEverythingOffered);
+    auto const up = std::ranges::find(plans, std::string{"track.orderMoveUp"}, &KeymapAcceleratorPlan::actionId);
+    REQUIRE(up != plans.end());
+    CHECK(up->displayText == "Ctrl+U");
+    CHECK(up->key.virtualKey == 0x55);
+
+    for (auto const* id : {"track.orderMoveDown", "track.orderMoveToTop", "track.orderMoveToBottom"})
+    {
+      CHECK(std::ranges::find(plans, std::string{id}, &KeymapAcceleratorPlan::actionId) == plans.end());
+    }
+  }
 
   TEST_CASE("KeymapAcceleratorPlan - a binding this shell serves becomes an accelerator", "[winui][unit][input]")
   {
@@ -175,7 +196,7 @@ namespace ao::winui::test
     // keymap when the running shell offers a handler.
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
+    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
 
     auto const plans = planKeymapAccelerators(keymap, schema, offered);
 
@@ -208,7 +229,7 @@ namespace ao::winui::test
   {
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
+    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
 
     auto const plans = planKeymapAccelerators(keymap, schema, offered);
     auto seen = std::set<std::pair<std::uint32_t, std::uint32_t>>{};

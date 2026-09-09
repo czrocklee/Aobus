@@ -319,7 +319,7 @@ namespace ao::async::test
       [&](Coalescer::FlightToken token) { optToken = std::move(token); });
 
     REQUIRE(optToken);
-    CHECK(coalescer.retainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
+    CHECK(coalescer.tryRetainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
     CHECK(releases == 0);
 
     CHECK(releases == 0);
@@ -340,11 +340,11 @@ namespace ao::async::test
     coalescer.prefetch(1, [&](Coalescer::FlightToken token) { optToken = std::move(token); });
 
     REQUIRE(optToken);
-    CHECK(coalescer.retainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
+    CHECK(coalescer.tryRetainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
     coalescer.clear();
     CHECK(releases == 1);
 
-    CHECK_FALSE(coalescer.retainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
+    CHECK_FALSE(coalescer.tryRetainDependency(*optToken, utility::ScopedRegistration{[&] { ++releases; }}));
     CHECK(releases == 2);
   }
 
@@ -364,7 +364,8 @@ namespace ao::async::test
       {
         replacement = coalescer.request(
           1, [](std::int32_t) {}, [&](Coalescer::FlightToken token) { optReplacementToken = std::move(token); });
-        CHECK_FALSE(coalescer.retainDependency(*optFirstToken, utility::ScopedRegistration{[&] { ++staleReleases; }}));
+        CHECK_FALSE(
+          coalescer.tryRetainDependency(*optFirstToken, utility::ScopedRegistration{[&] { ++staleReleases; }}));
       },
       [&](Coalescer::FlightToken token) { optFirstToken = std::move(token); });
 

@@ -130,9 +130,9 @@ namespace ao::audio
   {
     try
     {
-      if (auto const result = _implPtr->packetSource.open(filePath, "alac"); !result)
+      if (auto const res = _implPtr->packetSource.open(filePath, "alac"); !res)
       {
-        auto error = result.error();
+        auto error = res.error();
 
         if (error.code == Error::Code::FormatRejected)
         {

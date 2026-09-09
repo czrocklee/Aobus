@@ -9,8 +9,6 @@
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
-#include "portal/ImportExportCallbacks.h"
-#include "portal/LibraryImportExportWorkflow.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -26,6 +24,9 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -52,7 +53,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -127,13 +127,25 @@ namespace ao::gtk::layout::test
       REQUIRE(output.good());
     }
 
+    void importCoverAndWait(rt::AppRuntime& runtime, std::filesystem::path const& path)
+    {
+      auto pump = [] { ao::gtk::test::drainGtkEvents(); };
+      auto& jobs = runtime.library().jobs();
+      auto planRes =
+        rt::test::runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Restore), pump);
+      REQUIRE(planRes);
+      auto const importRes =
+        rt::test::runRuntimeTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes)), pump);
+      REQUIRE(importRes);
+    }
+
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
     {
       runtime.sources().reloadAllTracks();
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
-      REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
+      REQUIRE(ao::gtk::test::tryWaitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace
 
@@ -202,7 +214,6 @@ namespace ao::gtk::layout::test
     registerPlaybackImageComponent(
       fixture.components(),
       runtime.playback(),
-      runtime.library(),
       [&runtime](TrackId const trackId) { return runtime.jumpToAlbum(trackId); },
       imageLoaderPtr.get(),
       textCatalog);
@@ -224,7 +235,7 @@ namespace ao::gtk::layout::test
 
       CHECK_FALSE(picture->has_css_class("ao-nowplaying-image-thumb"));
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
 
       std::int32_t width = -1;
@@ -322,7 +333,7 @@ namespace ao::gtk::layout::test
 
       CHECK(button->get_visible());
       CHECK_FALSE(coverArt->hasImage());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
     }
 
@@ -350,7 +361,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Monogram);
       CHECK(coverArt->placeholderPresentation().monogram == "A");
 
@@ -393,7 +404,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       REQUIRE(popover->get_visible());
@@ -410,7 +421,7 @@ namespace ao::gtk::layout::test
       CHECK(button->get_visible());
       CHECK(button->get_sensitive());
       CHECK_FALSE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK_FALSE(popover->get_visible());
@@ -421,8 +432,8 @@ namespace ao::gtk::layout::test
 
       CHECK(tooltipButton->get_visible());
       CHECK_FALSE(popover->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK(popover->get_visible());
@@ -432,12 +443,12 @@ namespace ao::gtk::layout::test
       bool corruptDecodeSettled = false;
       [[maybe_unused]] auto const corruptDecodeProbe = imageLoaderPtr->requestFull(
         corruptCoverResourceId, [&corruptDecodeSettled](auto const&) { corruptDecodeSettled = true; });
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&corruptDecodeSettled] { return corruptDecodeSettled; }));
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&corruptDecodeSettled] { return corruptDecodeSettled; }));
 
       CHECK_FALSE(tooltipButton->get_visible());
       CHECK_FALSE(popover->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK_FALSE(popover->get_visible());
@@ -473,7 +484,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       REQUIRE(popover->get_visible());
@@ -483,7 +494,7 @@ namespace ao::gtk::layout::test
       auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(fixture.runtime().playback().commands().startFromView(*viewRes, mutableCoverTrackId));
-      REQUIRE(ao::gtk::test::waitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
+      REQUIRE(ao::gtk::test::tryWaitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
       ao::gtk::test::drainGtkEvents();
 
       CHECK(tooltipButton->get_visible());
@@ -526,7 +537,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE_FALSE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       CHECK(scheduledHoverCount == 0);
 
       fixture.runtime().playback().commands().stop();
@@ -539,8 +550,8 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(popover->get_visible());
       CHECK(scheduledHoverCount == 0);
 
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       REQUIRE(scheduledHoverCount == 1);
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
@@ -602,14 +613,18 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(button->get_visible());
     }
 
-    SECTION("current track cover art follows library mutations")
+    SECTION("current track cover art follows library mutations across playback snapshots")
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
 
-      imageCachePtr->put(ImageCacheKey::full(coverResourceId), ao::gtk::test::makePixbuf(80, 80));
+      auto firstImagePtr = ao::gtk::test::makePixbuf(80, 80);
+      firstImagePtr->fill(0xff0000ffU);
+      imageCachePtr->put(ImageCacheKey::full(coverResourceId), firstImagePtr);
 
-      auto const node = LayoutNode{.type = "playback.image"};
+      auto node = LayoutNode{.type = "playback.image"};
+      node.props["targetSize"] = LayoutValue{std::int64_t{128}};
+      node.props["forceSquare"] = LayoutValue{false};
       auto const compPtr = fixture.components().create(ctx, node);
 
       REQUIRE(compPtr != nullptr);
@@ -618,7 +633,7 @@ namespace ao::gtk::layout::test
       auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
       REQUIRE(coverArt != nullptr);
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
 
       startPlayback(fixture.runtime(), mutableCoverTrackId);
       ao::gtk::test::drainGtkEvents();
@@ -627,37 +642,47 @@ namespace ao::gtk::layout::test
       auto const firstPaintablePtr = coverArt->imagePaintable();
       REQUIRE(firstPaintablePtr);
 
-      auto callbacks = portal::ImportExportCallbacks{
-        .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
-        { completion(true); },
-      };
       auto& runtime = fixture.runtime();
-      auto workflow = portal::LibraryImportExportWorkflow{
-        runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog()};
       auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
-      auto const secondCover = ao::gtk::test::encodePng(ao::gtk::test::makePixbuf(96, 96));
+      auto secondImagePtr = ao::gtk::test::makePixbuf(96, 48);
+      secondImagePtr->fill(0x0000ffffU);
+      auto const secondCover = ao::gtk::test::encodePng(secondImagePtr);
       ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);
       writeCoverImport(importPath, std::span<std::byte const>{secondCover});
-      workflow.importFrom(importPath);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil(
-        [&]
-        {
-          auto const currentPaintablePtr = coverArt->imagePaintable();
-          return currentPaintablePtr && currentPaintablePtr != firstPaintablePtr;
-        },
-        kCoverMutationTimeout));
+      importCoverAndWait(runtime, importPath);
+      CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) != coverResourceId);
+      auto const showsSecondCover = [&]
+      {
+        auto const currentPaintablePtr = coverArt->imagePaintable();
+        return currentPaintablePtr && currentPaintablePtr->get_intrinsic_width() == 96 &&
+               currentPaintablePtr->get_intrinsic_height() == 48;
+      };
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil(showsSecondCover, kCoverMutationTimeout));
 
       REQUIRE(button->get_visible());
-      auto const secondPaintablePtr = coverArt->imagePaintable();
-      REQUIRE(secondPaintablePtr);
-      CHECK(secondPaintablePtr != firstPaintablePtr);
+      runtime.playback().commands().pause();
+      ao::gtk::test::drainGtkEvents();
+      CHECK(showsSecondCover());
+      runtime.playback().commands().resume();
+      ao::gtk::test::drainGtkEvents();
+      CHECK(showsSecondCover());
 
       writeCoverImport(importPath, std::nullopt);
-      workflow.importFrom(importPath);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return coverArt->showingPlaceholder(); }, kCoverMutationTimeout));
+      importCoverAndWait(runtime, importPath);
+      CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) == kInvalidResourceId);
+      REQUIRE(
+        ao::gtk::test::tryPumpGtkEventsUntil([&] { return coverArt->isShowingPlaceholder(); }, kCoverMutationTimeout));
 
+      runtime.playback().commands().pause();
+      ao::gtk::test::drainGtkEvents();
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
+      CHECK_FALSE(coverArt->imagePaintable());
+      runtime.playback().commands().resume();
+      ao::gtk::test::drainGtkEvents();
+      CHECK(button->get_visible());
+      CHECK(coverArt->isShowingPlaceholder());
+      CHECK_FALSE(coverArt->imagePaintable());
     }
   }
 

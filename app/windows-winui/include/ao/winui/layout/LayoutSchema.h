@@ -72,5 +72,5 @@ namespace ao::winui
    * semantic view state is reconciled into the candidate must be locatable by
    * id rather than by position in the tree.
    */
-  bool componentRequiresId(std::string_view type) noexcept;
+  bool needsComponentId(std::string_view type) noexcept;
 } // namespace ao::winui

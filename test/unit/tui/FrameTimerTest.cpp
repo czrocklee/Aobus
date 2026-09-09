@@ -112,7 +112,7 @@ namespace ao::tui::test
   {
     auto timer = FrameTimer{false};
 
-    CHECK_FALSE(timer.enabled());
+    CHECK_FALSE(timer.isEnabled());
 
     // Exercising the measurement path on a disabled timer must be a harmless no-op.
     {
@@ -121,6 +121,6 @@ namespace ao::tui::test
     timer.recordPresentIfDrawn();
 
     auto const enabledTimer = FrameTimer{true};
-    CHECK(enabledTimer.enabled());
+    CHECK(enabledTimer.isEnabled());
   }
 } // namespace ao::tui::test

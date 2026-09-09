@@ -29,7 +29,7 @@ namespace ao::rt::test
 
     Result<> playFromView(TrackId trackId);
 
-    bool waitForPlayback(TrackId trackId);
+    bool tryWaitForPlayback(TrackId trackId);
 
     // These fixture values are intentionally public as the tests' assertion surface.
     ao::test::TempDir tempDir;

@@ -98,14 +98,14 @@ namespace ao::library::test
 
   void requireCorruptOpen(std::filesystem::path const& path)
   {
-    auto const result = openTestMusicLibrary(path, path);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    auto const res = openTestMusicLibrary(path, path);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
 
     // Seeded rows without a metadata header fail before any record sweep runs,
     // so a record-integrity case that forgets initializeLibraryStorage would
     // otherwise pass without ever reaching the validator it means to exercise.
-    CHECK(result.error().message != kMissingMetadataMessage);
+    CHECK(res.error().message != kMissingMetadataMessage);
   }
 
   TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder)

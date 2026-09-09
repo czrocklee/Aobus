@@ -35,7 +35,7 @@ namespace ao::uimodel::detail
       }
     }
 
-    bool startsNotOperator(std::string_view text, std::size_t position)
+    bool startsWithNotOperator(std::string_view text, std::size_t position)
     {
       auto const isNot = text.size() - position >= 3 && utility::toAsciiLower(text[position]) == 'n' &&
                          utility::toAsciiLower(text[position + 1]) == 'o' &&
@@ -163,7 +163,7 @@ namespace ao::uimodel::detail
         continue;
       }
 
-      if (startsNotOperator(text, position))
+      if (startsWithNotOperator(text, position))
       {
         position += 3;
         skipSpaces(text, position);

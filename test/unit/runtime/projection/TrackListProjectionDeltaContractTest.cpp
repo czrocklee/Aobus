@@ -103,13 +103,13 @@ namespace ao::rt::test
         },
     };
 
-    CHECK(validateTrackListProjectionDeltaBatch(move, 3));
-    CHECK(validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}}, 3));
-    CHECK(validateTrackListProjectionDeltaBatch(
+    CHECK(isValidTrackListProjectionDeltaBatch(move, 3));
+    CHECK(isValidTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}}, 3));
+    CHECK(isValidTrackListProjectionDeltaBatch(
       TrackListProjectionDeltaBatch{.deltas = {ProjectionSourceInvalidated{}}}, 3));
-    CHECK_FALSE(validateTrackListProjectionDeltaBatch(invalidCoordinate, 3));
-    CHECK_FALSE(validateTrackListProjectionDeltaBatch(invalidReset, 3));
-    CHECK_FALSE(validateTrackListProjectionDeltaBatch(invalidTerminal, 3));
+    CHECK_FALSE(isValidTrackListProjectionDeltaBatch(invalidCoordinate, 3));
+    CHECK_FALSE(isValidTrackListProjectionDeltaBatch(invalidReset, 3));
+    CHECK_FALSE(isValidTrackListProjectionDeltaBatch(invalidTerminal, 3));
   }
 
   TEST_CASE("TrackListProjection - empty sort mirrors a middle source insertion exactly",
@@ -161,7 +161,7 @@ namespace ao::rt::test
                                 });
 
     REQUIRE(batches.size() == 1);
-    CHECK(validateTrackListProjectionDeltaBatch(batches.front(), 4));
+    CHECK(isValidTrackListProjectionDeltaBatch(batches.front(), 4));
     CHECK(projectionTrackIds(projection) == std::vector{third, fourth, second});
 
     batches.clear();
@@ -237,7 +237,7 @@ namespace ao::rt::test
     CHECK(removal.range.count == 1);
     CHECK(insertion.range.start == 2);
     CHECK(insertion.range.count == 1);
-    CHECK(validateTrackListProjectionDeltaBatch(batches.front(), 4));
+    CHECK(isValidTrackListProjectionDeltaBatch(batches.front(), 4));
     CHECK(projectionTrackIds(projection) == expected);
   }
 
@@ -298,7 +298,7 @@ namespace ao::rt::test
     CHECK(removal.range.count == 1);
     CHECK(insertion.range.start == 1);
     CHECK(insertion.range.count == 1);
-    CHECK(validateTrackListProjectionDeltaBatch(batches.front(), 2));
+    CHECK(isValidTrackListProjectionDeltaBatch(batches.front(), 2));
     CHECK(projectionTrackIds(projection) == expected);
   }
 

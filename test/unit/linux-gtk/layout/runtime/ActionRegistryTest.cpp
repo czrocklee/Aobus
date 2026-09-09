@@ -43,7 +43,7 @@ namespace ao::gtk::layout::test
     SECTION("Registers and retrieves actions")
     {
       bool called = false;
-      REQUIRE(registry.registerAction(actionSchema, [&](auto&) { called = true; }));
+      REQUIRE(registry.tryRegisterAction(actionSchema, [&](auto&) { called = true; }));
 
       auto const optActionSchema = registry.action("test.action1");
       REQUIRE(optActionSchema);
@@ -53,14 +53,14 @@ namespace ao::gtk::layout::test
       REQUIRE(all.size() == 1);
       CHECK(all[0].id == "test.action1");
 
-      CHECK(registry.activate("test.action1", ctx));
+      CHECK(registry.tryActivate("test.action1", ctx));
       CHECK(called);
     }
 
     SECTION("Rejects duplicate ids")
     {
-      REQUIRE(registry.registerAction(actionSchema, nullptr));
-      REQUIRE_FALSE(registry.registerAction(actionSchema, nullptr));
+      REQUIRE(registry.tryRegisterAction(actionSchema, nullptr));
+      REQUIRE_FALSE(registry.tryRegisterAction(actionSchema, nullptr));
 
       auto const all = registry.actions();
       CHECK(all.size() == 1);
@@ -69,21 +69,21 @@ namespace ao::gtk::layout::test
     SECTION("Activates handlers with context")
     {
       bool called = false;
-      registry.registerAction(actionSchema,
-                              [&](ActionActivationContext const& c)
-                              {
-                                called = true;
-                                CHECK(c.componentId == "test_component");
-                              });
+      registry.tryRegisterAction(actionSchema,
+                                 [&](ActionActivationContext const& c)
+                                 {
+                                   called = true;
+                                   CHECK(c.componentId == "test_component");
+                                 });
 
-      CHECK(registry.activate("test.action1", ctx));
+      CHECK(registry.tryActivate("test.action1", ctx));
       CHECK(called);
     }
 
     SECTION("Does not dispatch disabled actions")
     {
       bool called = false;
-      registry.registerAction(
+      registry.tryRegisterAction(
         actionSchema,
         [&](auto&) { called = true; },
         [](auto const&) { return ActionAvailability{.enabled = false, .disabledReason = "Test"}; });
@@ -92,7 +92,7 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(s.enabled);
       CHECK(s.disabledReason == "Test");
 
-      CHECK_FALSE(registry.activate("test.action1", ctx));
+      CHECK_FALSE(registry.tryActivate("test.action1", ctx));
       CHECK_FALSE(called);
     }
 
@@ -104,13 +104,13 @@ namespace ao::gtk::layout::test
 
     SECTION("Activating an unknown action id returns false")
     {
-      CHECK_FALSE(registry.activate("unknown", ctx));
+      CHECK_FALSE(registry.tryActivate("unknown", ctx));
     }
 
     SECTION("State provider is called during activate() to gate dispatch")
     {
       std::int32_t stateCalls = 0;
-      registry.registerAction(
+      registry.tryRegisterAction(
         actionSchema,
         [](auto&) {},
         [&](auto const&)
@@ -119,7 +119,7 @@ namespace ao::gtk::layout::test
           return ActionAvailability{.enabled = true, .disabledReason = ""};
         });
 
-      registry.activate("test.action1", ctx);
+      registry.tryActivate("test.action1", ctx);
       CHECK(stateCalls == 1);
     }
   }

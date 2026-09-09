@@ -227,7 +227,7 @@ namespace ao::rt
   {
     auto const lock = std::scoped_lock{_carrierIndexMutex};
 
-    if (auto const currentPtr = _carrierIndexSlot.load(); currentPtr && currentPtr->answersRevision(requestRevision))
+    if (auto const currentPtr = _carrierIndexSlot.load(); currentPtr && currentPtr->canAnswerRevision(requestRevision))
     {
       return currentPtr;
     }
@@ -260,7 +260,7 @@ namespace ao::rt
       return std::optional<std::vector<std::byte>>{};
     }
 
-    if (!indexPtr || !indexPtr->answersRevision(revision))
+    if (!indexPtr || !indexPtr->canAnswerRevision(revision))
     {
       indexPtr = rebuildCarrierIndex(revision);
     }
@@ -282,13 +282,13 @@ namespace ao::rt
   {
     if (resourceId == kInvalidResourceId)
     {
-      co_await _asyncRuntime.resumeOnCallbackExecutor(stopToken);
+      co_await _asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
       co_return std::optional<std::vector<std::byte>>{};
     }
 
-    co_await _asyncRuntime.resumeOnWorker(stopToken);
-    auto result = readOnWorker(resourceId, optMaximumBytes, stopToken);
-    co_await _asyncRuntime.resumeOnCallbackExecutor(stopToken);
-    co_return result;
+    co_await _asyncRuntime.resumeOnWorkerAsync(stopToken);
+    auto res = readOnWorker(resourceId, optMaximumBytes, stopToken);
+    co_await _asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
+    co_return res;
   }
 } // namespace ao::rt

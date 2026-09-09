@@ -88,14 +88,14 @@ namespace ao::winui::test
                             uimodel::ActionSlot::SecondaryClick})
     {
       INFO("slot " << static_cast<int>(slot));
-      CHECK(optButton->allows(slot));
+      CHECK(optButton->accepts(slot));
     }
 
-    CHECK_FALSE(optButton->allows(uimodel::ActionSlot::SecondaryLongPress));
+    CHECK_FALSE(optButton->accepts(uimodel::ActionSlot::SecondaryLongPress));
 
     auto const optLabel = schema.component("label");
     REQUIRE(optLabel);
-    CHECK_FALSE(optLabel->allows(uimodel::ActionSlot::PrimaryClick));
+    CHECK_FALSE(optLabel->accepts(uimodel::ActionSlot::PrimaryClick));
   }
 
   TEST_CASE("layoutSchema - no component offers a slot this shell cannot bind", "[winui][unit][layout]")
@@ -109,7 +109,7 @@ namespace ao::winui::test
     for (auto const& component : schema.components())
     {
       INFO(component.id);
-      CHECK_FALSE(component.allows(uimodel::ActionSlot::SecondaryLongPress));
+      CHECK_FALSE(component.accepts(uimodel::ActionSlot::SecondaryLongPress));
     }
   }
 
@@ -267,11 +267,11 @@ namespace ao::winui::test
 
   TEST_CASE("componentRequiresId - components whose state is reconciled must be locatable", "[winui][unit][layout]")
   {
-    CHECK(componentRequiresId("track.table"));
-    CHECK(componentRequiresId("track.detail"));
-    CHECK(componentRequiresId("windows.navigationPane"));
-    CHECK(componentRequiresId("windows.inspectorPane"));
-    CHECK_FALSE(componentRequiresId("label"));
-    CHECK_FALSE(componentRequiresId("box"));
+    CHECK(needsComponentId("track.table"));
+    CHECK(needsComponentId("track.detail"));
+    CHECK(needsComponentId("windows.navigationPane"));
+    CHECK(needsComponentId("windows.inspectorPane"));
+    CHECK_FALSE(needsComponentId("label"));
+    CHECK_FALSE(needsComponentId("box"));
   }
 } // namespace ao::winui::test

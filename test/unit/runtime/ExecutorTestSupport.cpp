@@ -56,7 +56,7 @@ namespace ao::rt::test
     dispatch(std::move(task));
   }
 
-  bool ManualExecutor::runOne()
+  bool ManualExecutor::tryRunOne()
   {
     if (!isCurrent())
     {
@@ -83,7 +83,7 @@ namespace ao::rt::test
 
   void ManualExecutor::runUntilIdle()
   {
-    while (runOne())
+    while (tryRunOne())
     {
     }
   }
@@ -94,13 +94,14 @@ namespace ao::rt::test
     return _implPtr->tasks.size();
   }
 
-  bool ManualExecutor::waitUntilQueued(std::chrono::milliseconds const timeout) const
+  bool ManualExecutor::tryWaitUntilQueued(std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock, timeout, [this] { return !_implPtr->tasks.empty(); });
   }
 
-  bool ManualExecutor::waitUntilQueuedCount(std::size_t const expected, std::chrono::milliseconds const timeout) const
+  bool ManualExecutor::tryWaitUntilQueuedCount(std::size_t const expected,
+                                               std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock, timeout, [this, expected] { return _implPtr->tasks.size() >= expected; });
@@ -109,7 +110,7 @@ namespace ao::rt::test
   void ManualExecutor::checkQueued(std::chrono::milliseconds const timeout) const
   {
     INFO("Timed out waiting for queued executor task");
-    REQUIRE(waitUntilQueued(timeout));
+    REQUIRE(tryWaitUntilQueued(timeout));
   }
 
   InlineExecutor::InlineExecutor() noexcept
@@ -177,14 +178,14 @@ namespace ao::rt::test
     enqueue(std::move(task));
   }
 
-  bool QueuedExecutor::runReadyTurn()
+  bool QueuedExecutor::tryRunReadyTurn()
   {
-    return _implPtr->loopExecutor.runReadyTurn();
+    return _implPtr->loopExecutor.tryRunReadyTurn();
   }
 
   void QueuedExecutor::drain()
   {
-    while (runReadyTurn())
+    while (tryRunReadyTurn())
     {
     }
   }
@@ -195,13 +196,14 @@ namespace ao::rt::test
     return _implPtr->queuedCount;
   }
 
-  bool QueuedExecutor::waitUntilQueued(std::chrono::milliseconds const timeout) const
+  bool QueuedExecutor::tryWaitUntilQueued(std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock, timeout, [this] { return _implPtr->queuedCount != 0; });
   }
 
-  bool QueuedExecutor::waitUntilQueuedCount(std::size_t const expected, std::chrono::milliseconds const timeout) const
+  bool QueuedExecutor::tryWaitUntilQueuedCount(std::size_t const expected,
+                                               std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock, timeout, [this, expected] { return _implPtr->queuedCount >= expected; });
@@ -210,7 +212,7 @@ namespace ao::rt::test
   void QueuedExecutor::checkQueued(std::chrono::milliseconds const timeout) const
   {
     INFO("Timed out waiting for queued executor task");
-    REQUIRE(waitUntilQueued(timeout));
+    REQUIRE(tryWaitUntilQueued(timeout));
   }
 
   void QueuedExecutor::enqueue(compat::MoveOnlyFunction<void()> task)
@@ -247,15 +249,15 @@ namespace ao::rt::test
     _implPtr->cv.notify_all();
   }
 
-  bool runLoopUntil(async::LoopExecutor& executor,
-                    compat::MoveOnlyFunction<bool()> predicate,
-                    std::chrono::milliseconds const timeout)
+  bool tryRunLoopUntil(async::LoopExecutor& executor,
+                       compat::MoveOnlyFunction<bool()> predicate,
+                       std::chrono::milliseconds const timeout)
   {
     auto const deadline = std::chrono::steady_clock::now() + timeout;
 
     while (!predicate() && std::chrono::steady_clock::now() < deadline)
     {
-      if (!executor.runReadyTurn())
+      if (!executor.tryRunReadyTurn())
       {
         std::this_thread::yield();
       }

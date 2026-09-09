@@ -116,7 +116,7 @@ namespace ao::gtk::test
       return titles;
     }
 
-    bool libraryHasTrackTitle(GtkRuntimeFixture& fixture, std::string_view expectedTitle)
+    bool hasLibraryTrackTitle(GtkRuntimeFixture& fixture, std::string_view expectedTitle)
     {
       auto const titles = trackTitles(fixture);
       return std::ranges::any_of(titles, [&](std::string const& title) { return title == expectedTitle; });
@@ -164,7 +164,7 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture, &progressFinishedCount]
       { return progressFinishedCount == 1 && !fixture.runtime().notifications().feed().entries.empty(); }));
 
@@ -192,7 +192,7 @@ namespace ao::gtk::test
                                                                      { progressEvents.push_back(event); });
 
     workflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture, &progressFinishedCount]
       {
         return progressFinishedCount == 2 &&
@@ -216,7 +216,7 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture, &progressFinishedCount, &progressEvents]
       {
         return progressEvents.size() == 1 && progressFinishedCount == 1 &&
@@ -242,7 +242,7 @@ namespace ao::gtk::test
 
     workflow.scan(portal::ScanRequestMode::FastBootstrap);
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture]
       { return hasNotification(fixture, rt::NotificationSeverity::Info, "Audio identity indexing complete"); }));
 
@@ -254,7 +254,7 @@ namespace ao::gtk::test
       fixture.runtime().musicRoot() / "song.flac", fixture.runtime().musicRoot() / "renamed.flac");
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
@@ -268,7 +268,7 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     auto const movedPath = fixture.runtime().musicRoot() / "renamed.flac";
@@ -276,7 +276,7 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
 
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
@@ -291,14 +291,14 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture]
       { return hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review"); }));
   }
@@ -313,7 +313,7 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
@@ -324,7 +324,7 @@ namespace ao::gtk::test
 
     workflow.scan();
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture]
       {
         return hasNotification(
@@ -353,7 +353,7 @@ namespace ao::gtk::test
 
     // The count is what makes this actionable: "scan failed" alone leaves the
     // reader no way to tell one bad file from a whole unreadable library.
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture]
       {
         return hasNotification(
@@ -375,12 +375,12 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
-    REQUIRE(libraryHasTrackTitle(fixture, "Test Title"));
+    REQUIRE(hasLibraryTrackTitle(fixture, "Test Title"));
     workflow.exportTo(target, rt::ExportMode::Full);
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture, &target]
       {
         return std::filesystem::exists(target) &&
@@ -405,12 +405,12 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(sourceFixture);
     sourceWorkflow.scan();
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&sourceFixture]
       { return hasNotification(sourceFixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     sourceWorkflow.exportTo(target, rt::ExportMode::Full);
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&sourceFixture, &target]
       {
         return std::filesystem::exists(target) &&
@@ -421,7 +421,7 @@ namespace ao::gtk::test
 
     targetWorkflow.importFrom(target);
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&targetFixture]
       { return hasNotification(targetFixture, rt::NotificationSeverity::Info, "Library imported successfully"); }));
 
@@ -462,15 +462,15 @@ library:
 
     workflow.importFrom(importPath);
 
-    REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
+    REQUIRE(tryPumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
     REQUIRE(optPreview);
     CHECK(optPreview->tracksCreated == 1);
-    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+    CHECK_FALSE(hasLibraryTrackTitle(fixture, "Restored"));
 
     confirmation(false);
     drainGtkEvents();
 
-    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+    CHECK_FALSE(hasLibraryTrackTitle(fixture, "Restored"));
   }
 
   TEST_CASE("LibraryImportExportWorkflow - confirmation becomes inert after workflow destruction",
@@ -503,13 +503,13 @@ library:
       auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(
         runtime.async(), runtime.library(), runtime.notifications(), callbacks, ao::test::englishMessageCatalog());
       workflowPtr->importFrom(importPath);
-      REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
+      REQUIRE(tryPumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
     }
 
     confirmation(true);
     drainGtkEvents();
 
-    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+    CHECK_FALSE(hasLibraryTrackTitle(fixture, "Restored"));
     CHECK(fixture.runtime().notifications().feed().entries.empty());
   }
 
@@ -557,7 +557,7 @@ library:
     while (!confirmation)
     {
       executor->checkQueued();
-      REQUIRE(executor->runOne());
+      REQUIRE(executor->tryRunOne());
     }
 
     executor->runUntilIdle();
@@ -571,7 +571,7 @@ library:
     while (!publishedReset)
     {
       executor->checkQueued();
-      REQUIRE(executor->runOne());
+      REQUIRE(executor->tryRunOne());
     }
 
     auto const trackIds = rt::test::runtimeTrackIds(*runtimePtr);
@@ -598,7 +598,7 @@ library:
 
     workflow.importFrom(fixture.tempDir().path() / "missing.yaml");
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture]
       {
         return hasNotificationContaining(fixture, rt::NotificationSeverity::Error, "Import failed: Failed to read");
@@ -634,7 +634,7 @@ library:
       workflowPtr->importFrom(importPath);
 
       executor->checkQueued();
-      REQUIRE(executor->runOne());
+      REQUIRE(executor->tryRunOne());
       executor->checkQueued(std::chrono::seconds{2});
 
       workflowPtr.reset();

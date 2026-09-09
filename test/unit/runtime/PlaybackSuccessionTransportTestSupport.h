@@ -25,6 +25,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -77,7 +78,7 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path blockedFileName = {},
     bool failBlockedPreparation = false,
     bool blockEveryLookahead = false,
-    std::filesystem::path finalOpenFailureFileName = {});
+    std::vector<std::filesystem::path> finalOpenFailureFileNames = {});
 
   struct PlaybackSuccessionTransportFixtureConfig final
   {
@@ -85,7 +86,7 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path blockedFileName{};
     bool failBlockedPreparation = false;
     bool blockEveryLookahead = false;
-    std::filesystem::path finalOpenFailureFileName{};
+    std::vector<std::filesystem::path> finalOpenFailureFileNames{};
   };
 
   struct PlaybackSuccessionTransportFixture final
@@ -107,7 +108,7 @@ namespace ao::rt::test::playback_succession
     void queueNaturalAdvance();
     Result<> playAndWait(TrackId trackId);
     std::size_t lookaheadActivationCount(TrackId trackId) const;
-    bool waitForLookaheadAfter(TrackId trackId, std::size_t previousCount);
+    bool tryWaitForLookaheadAfter(TrackId trackId, std::size_t previousCount);
 
     std::shared_ptr<DecoderActivationProbe> decoderProbePtr;
     PlaybackTransportFixture<QueuedExecutor> transport;

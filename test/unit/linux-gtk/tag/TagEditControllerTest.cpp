@@ -156,7 +156,7 @@ namespace ao::gtk::test
 
       controller.submitTagChanges(selection, {"ControllerTag"}, {});
 
-      REQUIRE(pumpGtkEventsUntil([&mutatedIds] { return mutatedIds.size() == 2; }));
+      REQUIRE(tryPumpGtkEventsUntil([&mutatedIds] { return mutatedIds.size() == 2; }));
       CHECK(std::ranges::contains(mutatedIds, firstTrackId));
       CHECK(std::ranges::contains(mutatedIds, secondTrackId));
     }
@@ -169,7 +169,7 @@ namespace ao::gtk::test
       controller.submitTagChanges(selection, {"FirstConcurrentTag"}, {});
       controller.submitTagChanges(selection, {"SecondConcurrentTag"}, {});
 
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&fixture]
         {
           auto const feed = fixture.runtime().notifications().feed();
@@ -345,10 +345,11 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto const writableId = ao::test::requireValue(runGtkTask(
-      runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Road Trip", .expression = "#roadtrip"})));
+      runtime,
+      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Road Trip", .expression = "#roadtrip"})));
     auto const computedId = ao::test::requireValue(runGtkTask(
       runtime,
-      runtime.library().commands().createList(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
+      runtime.library().commands().createListAsync(rt::ListDraft{.name = "Recent", .expression = "$year >= 2020"})));
     auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
     auto imageCache = ImageCache{200};
     auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
@@ -427,7 +428,7 @@ namespace ao::gtk::test
       { trackId = library::test::addTrackWithUniqueFixtureUri(library, {.title = "Context Target"}); }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{

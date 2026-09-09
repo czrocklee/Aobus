@@ -64,19 +64,19 @@ namespace ao::uimodel
     }
   } // namespace
 
-  async::Task<Result<TagEditResult>> applyTagEdit(TrackAuthoringSession& session,
-                                                  i18n::MessageCatalog const& textCatalog,
-                                                  std::vector<std::string> tagsToAdd,
-                                                  std::vector<std::string> tagsToRemove)
+  async::Task<Result<TagEditResult>> applyTagEditAsync(TrackAuthoringSession& session,
+                                                       i18n::MessageCatalog const& textCatalog,
+                                                       std::vector<std::string> tagsToAdd,
+                                                       std::vector<std::string> tagsToRemove)
   {
     if (tagsToAdd.empty() && tagsToRemove.empty())
     {
-      return async::makeReadyTask(Result<TagEditResult>{});
+      return async::makeReadyTaskAsync(Result<TagEditResult>{});
     }
 
     auto const addedCount = tagsToAdd.size();
     auto const removedCount = tagsToRemove.size();
-    auto submission = session.submitTags(std::move(tagsToAdd), std::move(tagsToRemove));
+    auto submission = session.submitTagsAsync(std::move(tagsToAdd), std::move(tagsToRemove));
     return finishTagEditAsync(std::move(submission), textCatalog, addedCount, removedCount);
   }
 } // namespace ao::uimodel

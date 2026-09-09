@@ -151,9 +151,9 @@ namespace ao::rt
   {
     constexpr auto kContext = std::string_view{"playback session"};
 
-    if (auto const result = yaml::requireMap(node, kContext); !result)
+    if (auto const res = yaml::requireMap(node, kContext); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto schemaVersionRes = yaml::requireScalar<std::uint32_t>(node, "schemaVersion", kContext);
@@ -208,9 +208,9 @@ namespace ao::rt
     state.shuffleMode = static_cast<ShuffleMode>(shuffleMode);
     state.repeatMode = static_cast<RepeatMode>(repeatMode);
 
-    if (auto const result = validatePlaybackSessionState(state); !result)
+    if (auto const res = validatePlaybackSessionState(state); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return state;

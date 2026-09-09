@@ -78,7 +78,7 @@ namespace ao::rt::delta
 
     // Returns false for an edit that is out of order or out of bounds without
     // changing the running validation state.
-    bool accept(RangeEditKind kind, std::size_t start, std::size_t count) noexcept;
+    bool tryAccept(RangeEditKind kind, std::size_t start, std::size_t count) noexcept;
 
   private:
     RangeEditKind _stage = RangeEditKind::Remove;
@@ -89,7 +89,7 @@ namespace ao::rt::delta
   };
 
   /** Validates a canonical id-carrying script. See RangeEditValidator. */
-  bool validate(RegularTrackEditScript const& script, std::size_t initialSize) noexcept;
+  bool isValid(RegularTrackEditScript const& script, std::size_t initialSize) noexcept;
 
   /** Applies a canonical script with identity checks in O(n + k). */
   Result<std::vector<TrackId>> apply(std::vector<TrackId> initial, RegularTrackEditScript const& script);

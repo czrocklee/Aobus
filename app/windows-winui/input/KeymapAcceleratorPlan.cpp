@@ -19,7 +19,7 @@ namespace ao::winui
   namespace
   {
     /// Whether running @p actionId from a keystroke has anywhere to present.
-    bool presentsWithoutAnchor(uimodel::LayoutSchema const& schema, std::string const& actionId)
+    bool canPresentWithoutAnchor(uimodel::LayoutSchema const& schema, std::string const& actionId)
     {
       auto const optActionSchema = schema.action(actionId);
 
@@ -48,7 +48,7 @@ namespace ao::winui
         continue;
       }
 
-      if (!presentsWithoutAnchor(schema, actionId))
+      if (!canPresentWithoutAnchor(schema, actionId))
       {
         APP_LOG_DEBUG("KeymapAccelerators: '{}' presents from an anchor, which a keystroke has none of", actionId);
         continue;
@@ -73,7 +73,7 @@ namespace ao::winui
           continue;
         }
 
-        auto candidate = KeymapAcceleratorPlan{.actionId = actionId, .key = *optKey};
+        auto candidate = KeymapAcceleratorPlan{.actionId = actionId, .key = *optKey, .displayText = chord.toString()};
         auto const claimed = std::ranges::find(plans, candidate.key, &KeymapAcceleratorPlan::key);
 
         if (claimed != plans.end())

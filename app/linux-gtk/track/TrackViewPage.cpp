@@ -670,19 +670,19 @@ namespace ao::gtk
         *this,
         "list order command",
         std::move(task),
-        [appliedMessage](TrackViewPage* owner, auto result)
+        [appliedMessage](TrackViewPage* owner, auto res)
         {
-          if (!result)
+          if (!res)
           {
-            owner->setStatusMessage(result.error().message);
+            owner->setStatusMessage(res.error().message);
             return;
           }
 
-          switch (result->status)
+          switch (res->status)
           {
             case rt::AuthoringStatus::Applied:
-              owner->setStatusMessage(i18n::requiredFormat(
-                owner->_textCatalog, appliedMessage, {{"count", affectedTrackCount(result->reply)}}));
+              owner->setStatusMessage(
+                i18n::requiredFormat(owner->_textCatalog, appliedMessage, {{"count", affectedTrackCount(res->reply)}}));
               return;
             case rt::AuthoringStatus::NoOp:
               owner->setStatusMessage(gtkText(owner->_textCatalog, i18n::MessageId::ListOrderUnchanged));
@@ -705,20 +705,20 @@ namespace ao::gtk
     switch (command)
     {
       case TrackOrderCommand::MoveUp:
-        submit(session.moveUp(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        submit(session.moveUpAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
         return;
       case TrackOrderCommand::MoveDown:
-        submit(session.moveDown(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        submit(session.moveDownAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
         return;
       case TrackOrderCommand::MoveToTop:
-        submit(session.moveToTop(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        submit(session.moveToTopAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
         return;
       case TrackOrderCommand::MoveToBottom:
-        submit(session.moveToBottom(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
+        submit(session.moveToBottomAsync(std::move(selectedIds)), i18n::MessageId::ListOrderMoved);
         return;
-      case TrackOrderCommand::Reset: submit(session.resetOrder(), i18n::MessageId::ListOrderReset); return;
+      case TrackOrderCommand::Reset: submit(session.resetOrderAsync(), i18n::MessageId::ListOrderReset); return;
       case TrackOrderCommand::ForgetHidden:
-        submit(session.forgetHiddenPositions(), i18n::MessageId::ListOrderForgotHidden);
+        submit(session.forgetHiddenPositionsAsync(), i18n::MessageId::ListOrderForgotHidden);
         return;
     }
   }
@@ -784,7 +784,7 @@ namespace ao::gtk
 
     auto patch = rt::MetadataPatch{};
 
-    if (!uimodel::writeTrackFieldPatch(patch, field, *editValueRes))
+    if (!uimodel::tryWriteTrackFieldPatch(patch, field, *editValueRes))
     {
       return;
     }
@@ -793,7 +793,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "inline metadata edit",
-                session.submitMetadata(std::move(patch)),
+                session.submitMetadataAsync(std::move(patch)),
                 [rowPtr, field, editValue = std::move(*editValueRes), uiDef](
                   TrackViewPage* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
                 {

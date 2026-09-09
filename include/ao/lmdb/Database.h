@@ -333,7 +333,7 @@ namespace ao::lmdb
 
     Result<> update(std::uint32_t id, std::span<std::byte const> data);
 
-    bool del(std::uint32_t id);
+    bool tryDelete(std::uint32_t id);
     std::optional<std::span<std::byte const>> get(std::uint32_t id) const;
     Result<> clear();
 
@@ -373,7 +373,7 @@ namespace ao::lmdb
 
     Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
     Result<> update(std::span<std::byte const> key, std::span<std::byte const> data);
-    bool del(std::span<std::byte const> key);
+    bool tryDelete(std::span<std::byte const> key);
     std::optional<std::span<std::byte const>> get(std::span<std::byte const> key) const;
     Result<> clear();
 

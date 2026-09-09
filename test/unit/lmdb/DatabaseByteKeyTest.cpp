@@ -75,7 +75,7 @@ namespace ao::lmdb::test
     {
       auto wtxn2 = beginWriteTransaction(env);
       auto writer2 = db.writer(wtxn2);
-      REQUIRE(writer2.del(key1));
+      REQUIRE(writer2.tryDelete(key1));
       REQUIRE_FALSE(writer2.get(key1).has_value());
       REQUIRE(wtxn2.commit());
     }

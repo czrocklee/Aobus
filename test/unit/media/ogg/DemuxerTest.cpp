@@ -27,7 +27,7 @@ namespace ao::media::ogg::test
     using ao::test::ogg::Page;
     using ao::test::ogg::payloadFor;
 
-    bool allBytesEqual(std::span<std::byte const> bytes, std::uint8_t const marker)
+    bool hasOnlyEqualBytes(std::span<std::byte const> bytes, std::uint8_t const marker)
     {
       return std::ranges::all_of(bytes, [marker](std::byte const byte) { return byte == std::byte{marker}; });
     }
@@ -41,26 +41,26 @@ namespace ao::media::ogg::test
   {
     SECTION("Empty input is corrupt")
     {
-      auto const result = Demuxer::parse({});
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse({});
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("A missing capture pattern is corrupt")
     {
       auto const bytes = ao::test::ogg::toBytes(std::vector<std::uint8_t>(64, 0x41));
-      auto const result = Demuxer::parse(bytes);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(bytes);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("A truncated first header is corrupt")
     {
       auto const page = std::array{Page{.headerType = kBeginOfStreamFlag, .lacingValues = lacingFor({4})}};
       auto const stream = makeStream(page);
-      auto const result = Demuxer::parse(std::span{stream}.first(20));
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(std::span{stream}.first(20));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("An unsupported bitstream version is corrupt")
@@ -68,18 +68,18 @@ namespace ao::media::ogg::test
       auto const pages = std::array{Page{
         .headerType = kBeginOfStreamFlag, .version = 1, .lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
       auto const stream = makeStream(pages);
-      auto const result = Demuxer::parse(stream);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(stream);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("A first page that does not begin a bitstream is corrupt")
     {
       auto const pages = std::array{Page{.lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
       auto const stream = makeStream(pages);
-      auto const result = Demuxer::parse(stream);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(stream);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   }
 
@@ -119,9 +119,9 @@ namespace ao::media::ogg::test
                         .lacingValues = lacingFor({4}),
                         .payload = payloadFor({4})}};
       auto const stream = makeStream(pages);
-      auto const result = Demuxer::parse(stream);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(stream);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("An open packet without a continuation flag is corrupt")
@@ -130,9 +130,9 @@ namespace ao::media::ogg::test
         Page{.headerType = kBeginOfStreamFlag, .lacingValues = {255}, .payload = std::vector<std::uint8_t>(255, 1)},
         Page{.pageSequence = 1, .lacingValues = lacingFor({4}), .payload = payloadFor({4})}};
       auto const stream = makeStream(pages);
-      auto const result = Demuxer::parse(stream);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto const res = Demuxer::parse(stream);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   }
 
@@ -147,10 +147,10 @@ namespace ao::media::ogg::test
                       .payload = payloadFor({5})}};
 
     auto const stream = makeStream(pages);
-    auto const result = Demuxer::parse(stream);
+    auto const res = Demuxer::parse(stream);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("Ogg Demuxer - recovers the packets of a single page", "[media][unit][ogg]")
@@ -169,9 +169,9 @@ namespace ao::media::ogg::test
     CHECK(demuxer.packet(0).bytes.size() == 4);
     CHECK(demuxer.packet(1).bytes.size() == 8);
     CHECK(demuxer.packet(2).bytes.size() == 2);
-    CHECK(allBytesEqual(demuxer.packet(0).bytes, 1));
-    CHECK(allBytesEqual(demuxer.packet(1).bytes, 2));
-    CHECK(allBytesEqual(demuxer.packet(2).bytes, 3));
+    CHECK(hasOnlyEqualBytes(demuxer.packet(0).bytes, 1));
+    CHECK(hasOnlyEqualBytes(demuxer.packet(1).bytes, 2));
+    CHECK(hasOnlyEqualBytes(demuxer.packet(2).bytes, 3));
 
     // Only the last packet completed on a page carries that page's granule.
     CHECK(demuxer.packet(0).granulePosition == Demuxer::kUnsetGranulePosition);
@@ -228,7 +228,7 @@ namespace ao::media::ogg::test
 
       REQUIRE(demuxerRes->packetCount() == 1);
       CHECK(demuxerRes->packet(0).bytes.size() == 265);
-      CHECK(allBytesEqual(demuxerRes->packet(0).bytes, 7));
+      CHECK(hasOnlyEqualBytes(demuxerRes->packet(0).bytes, 7));
       CHECK(demuxerRes->packet(0).granulePosition == 960);
       CHECK_FALSE(demuxerRes->hasIncompleteTail());
     }
@@ -249,7 +249,7 @@ namespace ao::media::ogg::test
 
       REQUIRE(demuxerRes->packetCount() == 1);
       CHECK(demuxerRes->packet(0).bytes.size() == 260);
-      CHECK(allBytesEqual(demuxerRes->packet(0).bytes, 7));
+      CHECK(hasOnlyEqualBytes(demuxerRes->packet(0).bytes, 7));
     }
 
     SECTION("A spanning packet keeps its page-local neighbours contiguous")
@@ -272,11 +272,11 @@ namespace ao::media::ogg::test
 
       REQUIRE(demuxerRes->packetCount() == 3);
       CHECK(demuxerRes->packet(0).bytes.size() == 4);
-      CHECK(allBytesEqual(demuxerRes->packet(0).bytes, 1));
+      CHECK(hasOnlyEqualBytes(demuxerRes->packet(0).bytes, 1));
       CHECK(demuxerRes->packet(1).bytes.size() == 261);
-      CHECK(allBytesEqual(demuxerRes->packet(1).bytes, 9));
+      CHECK(hasOnlyEqualBytes(demuxerRes->packet(1).bytes, 9));
       CHECK(demuxerRes->packet(2).bytes.size() == 3);
-      CHECK(allBytesEqual(demuxerRes->packet(2).bytes, 10));
+      CHECK(hasOnlyEqualBytes(demuxerRes->packet(2).bytes, 10));
       CHECK(demuxerRes->packet(2).granulePosition == 960);
     }
   }

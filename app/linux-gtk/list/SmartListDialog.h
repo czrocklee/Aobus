@@ -83,7 +83,7 @@ namespace ao::gtk
     void configurePlaylistTemplate(std::string_view initialName = {}, std::string_view initialTag = {});
     void setLocalExpression(std::string_view expression);
     void showError(std::string_view message);
-    bool beginSubmission();
+    bool tryBeginSubmission();
     void completeSubmission();
 
     template<typename Callback>

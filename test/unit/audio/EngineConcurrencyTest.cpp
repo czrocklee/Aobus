@@ -93,7 +93,7 @@ namespace ao::audio::test
         return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
       }
 
-      bool waitForEnteredCalls(std::size_t count, std::chrono::milliseconds timeout) const
+      bool tryWaitForEnteredCalls(std::size_t count, std::chrono::milliseconds timeout) const
       {
         auto lock = std::unique_lock{_mutex};
         return _cv.wait_for(lock, timeout, [this, count] { return _enteredCalls >= count; });
@@ -212,7 +212,7 @@ namespace ao::audio::test
     auto engine = Engine{std::move(backendPtr), device};
 
     auto first = std::async(std::launch::async, [&engine] { return engine.setVolume(0.25F); });
-    auto const firstEntered = backendRaw->waitForEnteredCalls(1, std::chrono::seconds{1});
+    auto const firstEntered = backendRaw->tryWaitForEnteredCalls(1, std::chrono::seconds{1});
 
     if (!firstEntered)
     {

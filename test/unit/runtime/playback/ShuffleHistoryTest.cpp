@@ -115,10 +115,10 @@ namespace ao::rt::test
     constexpr auto kProjection = std::array{kFirstTrack, kSecondTrack, kThirdTrack};
 
     REQUIRE(history.forwardCandidate(kProjection, kFirstTrack, true, false) == kSecondTrack);
-    CHECK(history.discardForwardCandidate(kSecondTrack));
+    CHECK(history.tryDiscardForwardCandidate(kSecondTrack));
     REQUIRE(history.forwardCandidate(kProjection, kFirstTrack, true, false) == kThirdTrack);
 
-    CHECK_FALSE(history.discardForwardCandidate(kSecondTrack));
+    CHECK_FALSE(history.tryDiscardForwardCandidate(kSecondTrack));
     CHECK(history.pendingForwardCandidate() == kThirdTrack);
   }
 

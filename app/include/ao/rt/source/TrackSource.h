@@ -61,7 +61,7 @@ namespace ao::rt
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
 
-    bool publishDelta(TrackSourceDelta message, std::size_t previousSize);
+    bool tryPublishDelta(TrackSourceDelta message, std::size_t previousSize);
 
   private:
     virtual void discardSnapshot() noexcept {}

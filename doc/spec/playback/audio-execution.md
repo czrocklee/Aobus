@@ -112,7 +112,33 @@ They must return promptly and cannot call `Engine::shutdown()` or destroy the En
 Player repeats this separation at the application boundary.
 Engine/provider callbacks queue work onto Player's executor, and Player callbacks to application runtime run from that executor.
 Queued work first checks the shared teardown gate.
-The current non-realtime Engine event deque and Player executor-task stream have no combined capacity or coalescing contract.
+Player's provider/device caches, route and merged graphs, and derived quality
+state belong exclusively to that executor. Public reads and marshalled cache
+updates assert the owner boundary. Value copies remain necessary across Engine,
+provider, and outward callback calls because those calls can re-enter Player.
+Callback replacement and teardown retain their callback mutex and shared gate;
+Engine control serialization and provider/backend synchronization remain
+independent of these owner-local caches.
+Provider graph observations are replaceable latest state. Each active graph
+subscription retains at most one pending graph and one delivery chain across the
+initial owner hop, Engine event-worker deferral, final owner application, and
+outward quality publication. Producers replace the pending payload under a small
+mutex; executor, Engine, provider, and user calls occur after releasing that mutex.
+A delivery consumes one snapshot. If another graph arrives before outward
+publication finishes, the chain schedules a later delivery turn rather than
+looping on the owner. Intermediate graphs may therefore be coalesced, but the
+latest admitted graph is eventually delivered when producers and consumers make
+progress. Retiring a subscription closes graph admission and clears its pending
+payload before unsubscribing; its queued application/publication cannot affect a
+replacement subscription, even within the same playback generation.
+
+This bounds graph-observation retention by graph size and the active subscription,
+not by burst length. Already applied graph and quality snapshots have their normal
+bounded delivery lifetimes. Terminal, failure, cancellation, and track-advance
+notifications do not use this coalescing path and retain their existing ordering
+and generation fences. The general non-realtime Engine deque and other Player
+notification paths still have no global capacity bound; graph coalescing does not
+establish one or permit dropping ordered events.
 
 ### Realtime rendering and natural end
 
@@ -185,12 +211,17 @@ Initial preroll, post-seek preroll, and the background decode loop all use this 
 
 Before reading another decoder block, the sole producer checks both that buffered bytes remain below the target and that writable capacity can hold the previous nonempty block.
 For stable or decreasing decoder block sizes this prevents a predictable partial write and its timed retry.
-The previous size is predictive rather than a decoder maximum: if a later block grows, the existing stop-token-aware partial-write loop remains the fallback.
+The previous size is predictive rather than a decoder maximum.
+If a later block grows, synchronous initial or post-seek preroll writes only the available capacity and returns without waiting for a consumer.
+The source retains the decoder-owned span for the unwritten remainder, and the background producer finishes that block before admitting another decoder read.
+Background partial writes remain stop-token-aware.
+An end-of-stream block publishes EOF only after all of its PCM has entered the ring, so pending PCM cannot appear drained or suppress worker startup.
 A decoded block larger than the entire ring fails with `DecodeFailed` instead of entering an impossible write wait.
 
 The predictive size is producer-confined.
 For an active Engine seek, backend `stop()` first establishes render quiescence and Engine control serialization excludes complete `status()` queue observation.
-`StreamingSource::seek()` then stops and joins the decode worker before resetting the byte ring and predictive size, after which synchronous preroll becomes the producer until the worker restarts.
+`StreamingSource::seek()` then stops and joins the decode worker before resetting the byte ring, predictive size, and pending block borrow.
+The borrow is retired before seeking the decoder; synchronous preroll then becomes the producer until the worker restarts.
 The byte ring reset is constant-time for its trivially destructible element type and requires that no read, write, or queue-availability observation overlap it.
 Direct `PcmSource` users must establish the same consumer and observer quiescence before calling seek.
 The realtime consumer still performs only ring reads; it does not update a separate occupancy counter, take a lock, or notify the producer.

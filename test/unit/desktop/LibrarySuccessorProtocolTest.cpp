@@ -23,11 +23,11 @@ namespace ao::desktop::test
   {
     auto const arguments = std::array<std::string_view, 3>{"--display=:7", "music.aobus", "--name=Aobus"};
 
-    auto result = parseLibrarySuccessorProtocol(arguments);
+    auto res = parseLibrarySuccessorProtocol(arguments);
 
-    REQUIRE(result);
-    CHECK_FALSE(result->optRequest);
-    CHECK(result->remainingArguments == std::vector<std::string>{"--display=:7", "music.aobus", "--name=Aobus"});
+    REQUIRE(res);
+    CHECK_FALSE(res->optRequest);
+    CHECK(res->remainingArguments == std::vector<std::string>{"--display=:7", "music.aobus", "--name=Aobus"});
   }
 
   TEST_CASE("LibrarySuccessorProtocol - valid paired request round-trips normalized root and scan intent",
@@ -72,53 +72,53 @@ namespace ao::desktop::test
     SECTION("root without marker")
     {
       auto const arguments = std::array<std::string_view, 2>{kLibraryRootOption, rootText};
-      auto result = parseLibrarySuccessorProtocol(arguments);
+      auto res = parseLibrarySuccessorProtocol(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("together"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("together"));
     }
 
     SECTION("marker without root")
     {
       auto const arguments = std::array<std::string_view, 1>{kLibrarySuccessorOption};
-      auto result = parseLibrarySuccessorProtocol(arguments);
+      auto res = parseLibrarySuccessorProtocol(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("together"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("together"));
     }
 
     SECTION("duplicate root")
     {
       auto const arguments = std::array<std::string_view, 5>{
         kLibrarySuccessorOption, kLibraryRootOption, rootText, kLibraryRootOption, rootText};
-      auto result = parseLibrarySuccessorProtocol(arguments);
+      auto res = parseLibrarySuccessorProtocol(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("once"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("once"));
     }
 
     SECTION("relative root")
     {
       auto const arguments =
         std::array<std::string_view, 3>{kLibrarySuccessorOption, kLibraryRootOption, "relative/music"};
-      auto result = parseLibrarySuccessorProtocol(arguments);
+      auto res = parseLibrarySuccessorProtocol(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("absolute"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("absolute"));
     }
 
     SECTION("scan without successor")
     {
       auto const arguments = std::array<std::string_view, 1>{kScanAfterOpenOption};
-      auto result = parseLibrarySuccessorProtocol(arguments);
+      auto res = parseLibrarySuccessorProtocol(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("requires a successor"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("requires a successor"));
     }
   }
 } // namespace ao::desktop::test

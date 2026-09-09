@@ -13,6 +13,8 @@ namespace ao::query::detail
   // Tokenizing wrapper for the completion lexer: reuses a parser production's rule but discards its
   // value, so lexy::dsl::capture can extract the matched lexeme without constructing (or requiring a
   // valid value for) the production's AST node. One source of truth for the rule; the value differs.
+  // lexy discovers production members by these exact framework names.
+  // NOLINTBEGIN(readability-identifier-naming)
   template<typename Production>
   struct AsToken : lexy::token_production
   {
@@ -47,4 +49,5 @@ namespace ao::query::detail
   {
     static constexpr auto rule = oplit::kAdd;
   };
+  // NOLINTEND(readability-identifier-naming)
 } // namespace ao::query::detail

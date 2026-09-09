@@ -57,13 +57,13 @@ namespace clang::tidy::readability
       return true;
     }
 
-    bool checkCommentGapAndLineStart(size_t tokenIndex,
-                                     std::vector<Token> const& tokens,
-                                     StringRef buffer,
-                                     SourceManager& sm,
-                                     StringRef stmtName,
-                                     ClangTidyCheck& check,
-                                     size_t& commentStartIndex)
+    bool tryReportCommentGapAndLineStart(size_t tokenIndex,
+                                         std::vector<Token> const& tokens,
+                                         StringRef buffer,
+                                         SourceManager& sm,
+                                         StringRef stmtName,
+                                         ClangTidyCheck& check,
+                                         size_t& commentStartIndex)
     {
       size_t currentIndex = tokenIndex;
       bool hasFired = false;
@@ -231,7 +231,7 @@ namespace clang::tidy::readability
                                                     StringRef stmtName)
   {
     size_t commentStartIndex = 0;
-    checkCommentGapAndLineStart(tokenIndex, tokens, buffer, sm, stmtName, *this, commentStartIndex);
+    tryReportCommentGapAndLineStart(tokenIndex, tokens, buffer, sm, stmtName, *this, commentStartIndex);
 
     if (commentStartIndex > 0)
     {

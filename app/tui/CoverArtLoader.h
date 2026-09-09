@@ -69,16 +69,16 @@ namespace ao::tui
     std::optional<std::vector<std::byte>> const& kittyPng() const noexcept { return _optKittyPng; }
 
   private:
-    static async::Task<void> waitForSelectionSettle(CoverArtLoader* loader,
-                                                    async::Runtime* runtime,
-                                                    ResourceId resourceId,
-                                                    std::stop_token stopToken);
-    static async::Task<void> load(CoverArtLoader* loader,
-                                  async::Runtime* runtime,
-                                  CoverArtDeliveryMode mode,
-                                  std::int32_t columns,
-                                  rt::ResourceBytes bytes,
-                                  std::stop_token stopToken);
+    static async::Task<void> waitForSelectionSettleAsync(CoverArtLoader* loader,
+                                                         async::Runtime* runtime,
+                                                         ResourceId resourceId,
+                                                         std::stop_token stopToken);
+    static async::Task<void> loadAsync(CoverArtLoader* loader,
+                                       async::Runtime* runtime,
+                                       CoverArtDeliveryMode mode,
+                                       std::int32_t columns,
+                                       rt::ResourceBytes bytes,
+                                       std::stop_token stopToken);
     void startByteRequest(ResourceId resourceId);
 
     rt::ResourceByteMemoryCache& _byteCache;

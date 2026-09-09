@@ -32,6 +32,7 @@ Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot
 Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../architecture/library.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
 That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../spec/storage/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
 `MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
+Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, and `.aobus-writer.lock`, excluding frontend state and unrelated descendants.
 
 Capacity is either managed or pinned, and `MusicLibrary::Options` chooses which.
 

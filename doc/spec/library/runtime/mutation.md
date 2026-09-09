@@ -182,7 +182,7 @@ An unchanged update is a successful no-op.
 The returned `BoundListOrder` is authoritative evidence for one runtime instance and committed global library revision.
 Any intervening effective library commit makes it stale, including a commit unrelated to that List.
 
-`moveListOrder` accepts selected ids and an optional `beforeTrackId`; no anchor means the complete raw-order end.
+`moveListOrderAsync` accepts selected ids and an optional `beforeTrackId`; no anchor means the complete raw-order end.
 The command deduplicates the selection and preserves its relative order from the bound effective sequence, never request or widget-selection order.
 Every selected id and anchor must belong to the bound sequence, and the anchor must be unselected.
 
@@ -191,8 +191,8 @@ An empty selection or unchanged effective sequence is `NoOp` and does not materi
 For an effective move, the writer appends every currently unranked member in bound order, retains hidden ranks, applies the move to the complete raw order, verifies that its visible projection equals the requested result, then writes one List value and revision.
 This is lazy full materialization: creating, viewing, filtering, changing metadata, or merely selecting Manual Order never writes order ids.
 
-`resetListOrder` clears every visible and hidden rank.
-`forgetHiddenListOrder` removes only raw-order ids absent from the bound effective membership and preserves the current visible order.
+`resetListOrderAsync` clears every visible and hidden rank.
+`forgetHiddenListOrderAsync` removes only raw-order ids absent from the bound effective membership and preserves the current visible order.
 Both return `NoOp` when nothing would be forgotten.
 
 Order commands return `Applied`, `NoOp`, `Busy`, `Stale`, or `Unavailable`.
@@ -217,7 +217,7 @@ Removing the same tag through the generic tag editor does not alter raw order; a
 ### List deletion
 
 Ordinary deletion rejects a List with direct dependents and reports their identities; it never reparents or silently cascades.
-`previewDeleteListAndDescendants` returns the complete subtree before the separate cascade command asks the logical List writer to rediscover that live subtree and remove every row children-first and atomically.
+`previewDeleteListAndDescendantsAsync` returns the complete subtree before the separate cascade command asks the logical List writer to rediscover that live subtree and remove every row children-first and atomically.
 
 Deletion of a directly editable single-tag List preserves ordinary track tags by default.
 The preview reports the tag, tagged-track count, and other remaining List expressions that reference it.

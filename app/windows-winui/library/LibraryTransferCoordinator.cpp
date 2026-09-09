@@ -73,18 +73,18 @@ namespace ao::winui
     }
 
     template<typename ResultType, typename Finish>
-    async::Task<void> finishOnCallbackExecutor(async::Runtime* const runtime,
-                                               CallbackAdmissionGate::Token token,
-                                               async::Task<ResultType> submission,
-                                               Finish finish,
-                                               std::stop_token const stopToken)
+    async::Task<void> finishOnCallbackExecutorAsync(async::Runtime* const runtime,
+                                                    CallbackAdmissionGate::Token token,
+                                                    async::Task<ResultType> submission,
+                                                    Finish finish,
+                                                    std::stop_token const stopToken)
     {
-      auto result = co_await std::move(submission);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      auto res = co_await std::move(submission);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
-      if (token.admits())
+      if (token.accepts())
       {
-        std::invoke(std::move(finish), std::move(result));
+        std::invoke(std::move(finish), std::move(res));
       }
     }
   } // namespace
@@ -104,7 +104,7 @@ namespace ao::winui
 
     void importLibrary()
     {
-      if (!beginWorkflow())
+      if (!tryBeginWorkflow())
       {
         return;
       }
@@ -144,7 +144,7 @@ namespace ao::winui
 
     void exportLibrary()
     {
-      if (!beginWorkflow())
+      if (!tryBeginWorkflow())
       {
         return;
       }
@@ -189,7 +189,7 @@ namespace ao::winui
       showExportModeDialog();
     }
 
-    bool beginWorkflow() noexcept
+    bool tryBeginWorkflow() noexcept
     {
       if (retired || workflowActive)
       {
@@ -211,7 +211,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (!token.admits())
+        if (!token.accepts())
         {
           co_return;
         }
@@ -237,7 +237,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (token.admits())
+        if (token.accepts())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryImportYaml), hresultMessage(error));
@@ -262,7 +262,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (!token.admits())
+        if (!token.accepts())
         {
           co_return;
         }
@@ -288,7 +288,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (token.admits())
+        if (token.accepts())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryExportYaml), hresultMessage(error));
@@ -319,7 +319,7 @@ namespace ao::winui
         pickerOperation = operation;
         auto const result = co_await operation;
 
-        if (!token.admits())
+        if (!token.accepts())
         {
           co_return;
         }
@@ -336,7 +336,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (token.admits())
+        if (token.accepts())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectBackup), hresultMessage(error));
@@ -372,7 +372,7 @@ namespace ao::winui
         pickerOperation = operation;
         auto const result = co_await operation;
 
-        if (!token.admits())
+        if (!token.accepts())
         {
           co_return;
         }
@@ -389,7 +389,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (token.admits())
+        if (token.accepts())
         {
           reportNativeFailure(i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryCouldNotSelectExportFile),
                               hresultMessage(error));
@@ -413,13 +413,13 @@ namespace ao::winui
          token,
          path = std::move(path),
          mode,
-         finish = [this](Result<> result) { finishExport(std::move(result)); }](std::stop_token const stopToken) mutable
+         finish = [this](Result<> res) { finishExport(std::move(res)); }](std::stop_token const stopToken) mutable
         {
-          return finishOnCallbackExecutor(runtime,
-                                          token,
-                                          service->exportLibraryAsync(std::move(path), mode, stopToken),
-                                          std::move(finish),
-                                          stopToken);
+          return finishOnCallbackExecutorAsync(runtime,
+                                               token,
+                                               service->exportLibraryAsync(std::move(path), mode, stopToken),
+                                               std::move(finish),
+                                               stopToken);
         },
         "Windows library export");
     }
@@ -434,34 +434,34 @@ namespace ao::winui
          token,
          path = std::move(path),
          mode,
-         finish = [this, mode](Result<rt::LibraryImportPlan> result)
-         { finishImportPreview(mode, std::move(result)); }](std::stop_token const stopToken) mutable
+         finish = [this, mode](Result<rt::LibraryImportPlan> res)
+         { finishImportPreview(mode, std::move(res)); }](std::stop_token const stopToken) mutable
         {
-          return finishOnCallbackExecutor(runtime,
-                                          token,
-                                          service->prepareLibraryImportAsync(std::move(path), mode, stopToken),
-                                          std::move(finish),
-                                          stopToken);
+          return finishOnCallbackExecutorAsync(runtime,
+                                               token,
+                                               service->prepareLibraryImportAsync(std::move(path), mode, stopToken),
+                                               std::move(finish),
+                                               stopToken);
         },
         "Windows library import preview");
     }
 
-    void finishImportPreview(rt::ImportMode const mode, Result<rt::LibraryImportPlan> result)
+    void finishImportPreview(rt::ImportMode const mode, Result<rt::LibraryImportPlan> res)
     {
-      if (!result)
+      if (!res)
       {
-        reportTransferFailure(true, result.error());
+        reportTransferFailure(true, res.error());
         return;
       }
 
-      if (!libraryImportRequiresDestructiveConfirmation(mode))
+      if (!needsLibraryImportDestructiveConfirmation(mode))
       {
-        startImportApply(std::move(*result));
+        startImportApply(std::move(*res));
         return;
       }
 
-      auto const preview = makeLibraryRestorePreviewState(textCatalog, result->report());
-      optPendingImportPlan.emplace(std::move(*result));
+      auto const preview = makeLibraryRestorePreviewState(textCatalog, res->report());
+      optPendingImportPlan.emplace(std::move(*res));
       auto const root = xamlRoot ? xamlRoot() : XamlRoot{nullptr};
 
       if (!root)
@@ -492,7 +492,7 @@ namespace ao::winui
         dialogOperation = operation;
         auto const result = co_await operation;
 
-        if (!token.admits())
+        if (!token.accepts())
         {
           co_return;
         }
@@ -511,7 +511,7 @@ namespace ao::winui
       }
       catch (winrt::hresult_error const& error)
       {
-        if (token.admits())
+        if (token.accepts())
         {
           reportNativeFailure(
             i18n::requiredText(textCatalog, i18n::MessageId::WinUiLibraryConfirmRestore), hresultMessage(error));
@@ -534,23 +534,23 @@ namespace ao::winui
          service = &jobs,
          token,
          plan = std::move(plan),
-         finish = [this](Result<rt::ImportReport> result)
-         { finishImportApply(std::move(result)); }](std::stop_token const stopToken) mutable
+         finish = [this](Result<rt::ImportReport> res)
+         { finishImportApply(std::move(res)); }](std::stop_token const stopToken) mutable
         {
-          return finishOnCallbackExecutor(runtime,
-                                          token,
-                                          service->applyLibraryImportPlanAsync(std::move(plan), stopToken),
-                                          std::move(finish),
-                                          stopToken);
+          return finishOnCallbackExecutorAsync(runtime,
+                                               token,
+                                               service->applyLibraryImportPlanAsync(std::move(plan), stopToken),
+                                               std::move(finish),
+                                               stopToken);
         },
         "Windows library import");
     }
 
-    void finishExport(Result<> result)
+    void finishExport(Result<> res)
     {
-      if (!result)
+      if (!res)
       {
-        reportTransferFailure(false, result.error());
+        reportTransferFailure(false, res.error());
         return;
       }
 
@@ -558,11 +558,11 @@ namespace ao::winui
       finishWorkflow();
     }
 
-    void finishImportApply(Result<rt::ImportReport> result)
+    void finishImportApply(Result<rt::ImportReport> res)
     {
-      if (!result)
+      if (!res)
       {
-        reportTransferFailure(true, result.error());
+        reportTransferFailure(true, res.error());
         return;
       }
 
@@ -697,7 +697,7 @@ namespace ao::winui
     _implPtr->exportLibrary();
   }
 
-  bool LibraryTransferCoordinator::active() const noexcept
+  bool LibraryTransferCoordinator::isActive() const noexcept
   {
     return _implPtr->workflowActive;
   }

@@ -71,12 +71,12 @@ namespace ao::winui
     void handleQuerySubmitted(winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBoxQuerySubmittedEventArgs const& args);
     void handlePreviewKeyDown(winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& args);
     void handleLoaded();
-    bool bindEditor();
+    bool tryBindEditor();
     void refreshSuggestions();
     void clearSuggestions();
     void forgetSuggestions() noexcept;
     std::optional<std::size_t> suggestionIndex(winrt::Windows::Foundation::IInspectable const& suggestion) const;
-    bool acceptSuggestion(std::size_t index);
+    bool tryAcceptSuggestion(std::size_t index);
     void schedulePendingText();
     void commitCurrentText();
     void commitPendingText();

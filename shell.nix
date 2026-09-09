@@ -134,6 +134,7 @@ assert toolchain.schemaVersion == 1;
 assert toolchainMatchesContract;
 pkgs.mkShell {
   name = "cpp-dev-env";
+  passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
   buildInputs =
     with pkgs;

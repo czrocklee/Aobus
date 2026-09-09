@@ -36,7 +36,7 @@ namespace ao::async
     void drainQueuedTasksUntilIdle();
 
   private:
-    bool drainQueuedTasksTurn(bool wakeRemaining);
+    bool tryContinueDraining(bool wakeRemaining);
     void enqueueAndWake(compat::MoveOnlyFunction<void()> task);
 
     // Admission is complete before wake. Subclasses own event-loop rejection

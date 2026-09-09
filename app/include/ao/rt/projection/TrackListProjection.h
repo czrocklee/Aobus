@@ -113,7 +113,7 @@ namespace ao::rt
    * Reset and source invalidation are valid only as singleton batches. Every
    * regular range is interpreted after the ranges that precede it.
    */
-  bool validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize);
+  bool isValidTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize);
 
   class TrackListProjection final
   {

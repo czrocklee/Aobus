@@ -30,9 +30,9 @@ namespace ao::uimodel::test
     LayoutSchema persistentLayoutSchema()
     {
       auto schema = LayoutSchema{};
-      REQUIRE(schema.addSharedComponent("split"));
-      REQUIRE(
-        schema.addComponent({.id = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true}));
+      REQUIRE(schema.tryAddSharedComponent("split"));
+      REQUIRE(schema.tryAddComponent(
+        {.id = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true}));
       return schema;
     }
   } // namespace
@@ -81,7 +81,7 @@ namespace ao::uimodel::test
       auto tree3 = ryml::Tree{};
       REQUIRE(writeLayoutValue(tree3.rootref(), v3));
       CHECK(yaml::scalarView(tree3.rootref()) == "true");
-      CHECK(yaml::asBool(tree3.rootref()) == true);
+      CHECK(yaml::readBoolOr(tree3.rootref()) == true);
 
       auto decodedRes = readLayoutValue(tree3.rootref(), "test value");
       REQUIRE(decodedRes);
@@ -378,6 +378,8 @@ namespace ao::uimodel::test
 
       auto const vu = LayoutValue{std::string{"unknown"}};
       CHECK(vu.asBool() == false);
+      CHECK(vu.asBool(true));
+      CHECK_FALSE(vf.asBool(true));
     }
 
     SECTION("asBool coerces int")
@@ -387,6 +389,20 @@ namespace ao::uimodel::test
 
       auto const v0 = LayoutValue{static_cast<std::int64_t>(0)};
       CHECK(v0.asBool() == false);
+    }
+
+    SECTION("as bool preserves exact alternatives rather than coercing")
+    {
+      auto const storedFalse = LayoutValue{false};
+      auto const storedTrue = LayoutValue{true};
+      auto const numeric = LayoutValue{std::int64_t{1}};
+      auto const text = LayoutValue{std::string{"false"}};
+      CHECK_FALSE(storedFalse.as<bool>(true));
+      CHECK(storedTrue.as<bool>(false));
+      CHECK_FALSE(numeric.as<bool>(false));
+      CHECK(numeric.asBool(false));
+      CHECK(text.as<bool>(true));
+      CHECK_FALSE(text.asBool(true));
     }
 
     SECTION("asDouble coerces string")
@@ -457,6 +473,7 @@ namespace ao::uimodel::test
       CHECK(node.propertyOr<std::string>("missing", "fallback") == "fallback");
       CHECK(node.propertyOr<std::int64_t>("missing", 99) == 99);
       CHECK(node.propertyOr<bool>("missing", true) == true);
+      CHECK_FALSE(node.propertyOr<bool>("missing", false));
     }
 
     SECTION("layoutOr returns value when key exists")
@@ -465,9 +482,24 @@ namespace ao::uimodel::test
       CHECK(node.layoutOr<bool>("vexpand", false) == true);
     }
 
+    SECTION("boolean lookups preserve exact alternatives and fallback values")
+    {
+      CHECK_FALSE(node.propertyOr<bool>("count", false));
+      CHECK(node.propertyOr<bool>("label", true));
+
+      node.props["enabled"] = LayoutValue{false};
+      CHECK_FALSE(node.propertyOr<bool>("enabled", true));
+
+      node.layout["hexpand"] = LayoutValue{std::string{"false"}};
+      node.layout["vexpand"] = LayoutValue{std::int64_t{1}};
+      CHECK(node.layoutOr<bool>("hexpand", true));
+      CHECK_FALSE(node.layoutOr<bool>("vexpand", false));
+    }
+
     SECTION("layoutOr returns default when key missing")
     {
-      CHECK(node.layoutOr<bool>("vexpand", true) == true);
+      CHECK(node.layoutOr<bool>("missing", true));
+      CHECK_FALSE(node.layoutOr<bool>("missing", false));
       CHECK(node.layoutOr<std::int64_t>("spacing", 10) == 10);
     }
   }

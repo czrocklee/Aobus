@@ -42,9 +42,9 @@ namespace ao::utility::detail
     auto const& normalizedTarget = *normalizedTargetRes;
     auto const parentPath = normalizedTarget.parent_path();
 
-    if (auto const result = operations.createParentDirectories(parentPath); !result)
+    if (auto const res = operations.createParentDirectories(parentPath); !res)
     {
-      return result;
+      return res;
     }
 
     auto temporaryFileRes = operations.createPrivateTemporaryFile(parentPath);
@@ -56,27 +56,27 @@ namespace ao::utility::detail
 
     auto temporaryFile = std::move(*temporaryFileRes);
 
-    if (auto const result = temporaryFile.writeAll(data); !result)
+    if (auto const res = temporaryFile.writeAll(data); !res)
     {
-      return result;
+      return res;
     }
 
     if (mode == AtomicReplacementMode::Durable)
     {
-      if (auto const result = temporaryFile.synchronizeData(); !result)
+      if (auto const res = temporaryFile.synchronizeData(); !res)
       {
-        return result;
+        return res;
       }
     }
 
-    if (auto const result = temporaryFile.closeForReplacement(); !result)
+    if (auto const res = temporaryFile.closeForReplacement(); !res)
     {
-      return result;
+      return res;
     }
 
-    if (auto const result = temporaryFile.replaceTarget(normalizedTarget, mode); !result)
+    if (auto const res = temporaryFile.replaceTarget(normalizedTarget, mode); !res)
     {
-      return result;
+      return res;
     }
 
     if (mode == AtomicReplacementMode::Durable)

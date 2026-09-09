@@ -103,14 +103,14 @@ namespace ao::audio
       requires std::constructible_from<PropertyValue, T>
     Result<T> get(TypedProperty<T, Id> /*tag*/) const
     {
-      auto const result = property(Id);
+      auto const res = property(Id);
 
-      if (!result)
+      if (!res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      return std::get<T>(*result);
+      return std::get<T>(*res);
     }
 
     virtual BackendId backendId() const = 0;

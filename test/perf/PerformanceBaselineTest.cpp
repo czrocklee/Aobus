@@ -454,7 +454,7 @@ namespace ao::rt::test
       return 0;
     }
 
-    bool lessSortCacheEntry(SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
+    bool isLessSortCacheEntry(SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
     {
       return compareSortCacheEntry(lhs, rhs) < 0;
     }
@@ -555,9 +555,9 @@ namespace ao::rt::test
       return 0;
     }
 
-    bool lessGenericSortCacheEntry(SortCacheOrderEntry const& lhs,
-                                   SortCacheOrderEntry const& rhs,
-                                   std::vector<TrackSortTerm> const& sortBy)
+    bool isLessGenericSortCacheEntry(SortCacheOrderEntry const& lhs,
+                                     SortCacheOrderEntry const& rhs,
+                                     std::vector<TrackSortTerm> const& sortBy)
     {
       for (auto const& term : sortBy)
       {
@@ -720,17 +720,17 @@ namespace ao::rt::test
 
     bool isSortedEntries(std::vector<SortCacheOrderEntry> const& entries)
     {
-      return std::ranges::is_sorted(entries, lessSortCacheEntry);
+      return std::ranges::is_sorted(entries, isLessSortCacheEntry);
     }
 
     bool isSortedIndices(std::vector<SortCacheOrderEntry> const& entries, std::vector<std::uint32_t> const& indices)
     {
       return std::ranges::is_sorted(indices,
                                     [&entries](std::uint32_t lhs, std::uint32_t rhs)
-                                    { return lessSortCacheEntry(entries[lhs], entries[rhs]); });
+                                    { return isLessSortCacheEntry(entries[lhs], entries[rhs]); });
     }
 
-    bool lessRankedSortCacheEntry(RankedSortCacheOrderEntry const& lhs, RankedSortCacheOrderEntry const& rhs)
+    bool isLessRankedSortCacheEntry(RankedSortCacheOrderEntry const& lhs, RankedSortCacheOrderEntry const& rhs)
     {
       if (lhs.keys.artistRank != rhs.keys.artistRank)
       {
@@ -760,7 +760,7 @@ namespace ao::rt::test
       return lhs.trackId < rhs.trackId;
     }
 
-    bool lessCompactSortCacheEntry(CompactSortCacheEntry const& lhs, CompactSortCacheEntry const& rhs)
+    bool isLessCompactSortCacheEntry(CompactSortCacheEntry const& lhs, CompactSortCacheEntry const& rhs)
     {
       if (auto const cmp = lhs.artistKey.compare(rhs.artistKey); cmp != 0)
       {
@@ -792,12 +792,12 @@ namespace ao::rt::test
 
     bool isSortedRankedEntries(std::vector<RankedSortCacheOrderEntry> const& entries)
     {
-      return std::ranges::is_sorted(entries, lessRankedSortCacheEntry);
+      return std::ranges::is_sorted(entries, isLessRankedSortCacheEntry);
     }
 
     bool isSortedCompactEntries(std::vector<CompactSortCacheEntry> const& entries)
     {
-      return std::ranges::is_sorted(entries, lessCompactSortCacheEntry);
+      return std::ranges::is_sorted(entries, isLessCompactSortCacheEntry);
     }
 
     SortCacheStrategyTiming measureDirectEntrySort(std::vector<SortCacheOrderEntry> const& baseline)
@@ -806,7 +806,7 @@ namespace ao::rt::test
 
       auto directEntries = baseline;
       auto const directStart = std::chrono::steady_clock::now();
-      std::ranges::sort(directEntries, lessSortCacheEntry);
+      std::ranges::sort(directEntries, isLessSortCacheEntry);
       auto const directEnd = std::chrono::steady_clock::now();
       timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(directEnd - directStart);
       timing.checksum = checksumSortCacheEntries(directEntries);
@@ -830,13 +830,13 @@ namespace ao::rt::test
       auto const start = std::chrono::steady_clock::now();
       std::ranges::sort(entries,
                         [&sortBy](SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
-                        { return lessGenericSortCacheEntry(lhs, rhs, sortBy); });
+                        { return isLessGenericSortCacheEntry(lhs, rhs, sortBy); });
       auto const end = std::chrono::steady_clock::now();
       timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
       timing.checksum = checksumSortCacheEntries(entries);
       CHECK(std::ranges::is_sorted(entries,
                                    [&sortBy](SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
-                                   { return lessGenericSortCacheEntry(lhs, rhs, sortBy); }));
+                                   { return isLessGenericSortCacheEntry(lhs, rhs, sortBy); }));
 
       return timing;
     }
@@ -850,7 +850,7 @@ namespace ao::rt::test
       std::ranges::iota(indices, 0);
       std::ranges::sort(indices,
                         [&baseline](std::uint32_t lhs, std::uint32_t rhs)
-                        { return lessSortCacheEntry(baseline[lhs], baseline[rhs]); });
+                        { return isLessSortCacheEntry(baseline[lhs], baseline[rhs]); });
       auto const indexEnd = std::chrono::steady_clock::now();
       timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(indexEnd - indexStart);
       timing.checksum = checksumSortCacheIndices(baseline, indices);
@@ -874,7 +874,7 @@ namespace ao::rt::test
       auto const buildEnd = std::chrono::steady_clock::now();
 
       auto const sortStart = std::chrono::steady_clock::now();
-      std::ranges::sort(rankedEntries, lessRankedSortCacheEntry);
+      std::ranges::sort(rankedEntries, isLessRankedSortCacheEntry);
       auto const sortEnd = std::chrono::steady_clock::now();
       auto const totalEnd = std::chrono::steady_clock::now();
 
@@ -898,7 +898,7 @@ namespace ao::rt::test
       auto const buildEnd = std::chrono::steady_clock::now();
 
       auto const sortStart = std::chrono::steady_clock::now();
-      std::ranges::sort(compactEntries, lessCompactSortCacheEntry);
+      std::ranges::sort(compactEntries, isLessCompactSortCacheEntry);
       auto const sortEnd = std::chrono::steady_clock::now();
       auto const totalEnd = std::chrono::steady_clock::now();
 
@@ -923,7 +923,7 @@ namespace ao::rt::test
       std::ranges::iota(materializedIndices, 0);
       std::ranges::sort(materializedIndices,
                         [&baseline](std::uint32_t lhs, std::uint32_t rhs)
-                        { return lessSortCacheEntry(baseline[lhs], baseline[rhs]); });
+                        { return isLessSortCacheEntry(baseline[lhs], baseline[rhs]); });
 
       for (auto const index : materializedIndices)
       {
@@ -948,7 +948,7 @@ namespace ao::rt::test
       auto const buildEnd = std::chrono::steady_clock::now();
 
       auto const sortStart = std::chrono::steady_clock::now();
-      std::ranges::sort(entries, lessSortCacheEntry);
+      std::ranges::sort(entries, isLessSortCacheEntry);
       auto const sortEnd = std::chrono::steady_clock::now();
 
       auto const positionStart = std::chrono::steady_clock::now();
@@ -1288,7 +1288,7 @@ namespace ao::rt::test
       {
         auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
-        if (optView && evaluator.evaluateFull(expandedBinding, *optView))
+        if (optView && evaluator.matchesFullPlan(expandedBinding, *optView))
         {
           ++timing.expandedMatches;
         }
@@ -1301,7 +1301,7 @@ namespace ao::rt::test
       {
         auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
-        if (optView && evaluator.evaluateFull(setBinding, *optView))
+        if (optView && evaluator.matchesFullPlan(setBinding, *optView))
         {
           ++timing.setMatches;
         }
@@ -1419,7 +1419,7 @@ namespace ao::rt::test
       {
         auto const previousSize = _trackIds.size();
         _trackIds.append_range(trackIds);
-        REQUIRE(publishDelta(
+        REQUIRE(tryPublishDelta(
           delta::RegularTrackEditScript{
             .edits = {delta::InsertRange{
               .start = previousSize,
@@ -1436,7 +1436,7 @@ namespace ao::rt::test
         auto const start = previousSize - count;
         auto removed = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end()};
         _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end());
-        REQUIRE(publishDelta(
+        REQUIRE(tryPublishDelta(
           delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = start, .trackIds = removed}}},
           previousSize));
         return removed;
@@ -1451,7 +1451,7 @@ namespace ao::rt::test
         auto const previousSize = _trackIds.size();
         auto script =
           delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = start, .trackIds = std::move(ids)}}};
-        auto const published = publishDelta(std::move(script), previousSize);
+        auto const published = tryPublishDelta(std::move(script), previousSize);
         REQUIRE(published);
       }
 
@@ -1470,7 +1470,7 @@ namespace ao::rt::test
           .edits = {delta::RemoveRange{.start = start, .trackIds = moved},
                     delta::InsertRange{.start = insertionIndex, .trackIds = std::move(moved)}},
         };
-        auto const published = publishDelta(std::move(script), previousSize);
+        auto const published = tryPublishDelta(std::move(script), previousSize);
         REQUIRE(published);
       }
 
@@ -1596,10 +1596,10 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        auto result =
+        auto res =
           transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
-        REQUIRE(result);
-        _orderedListId = *result;
+        REQUIRE(res);
+        _orderedListId = *res;
         REQUIRE(transaction.commit());
       }
 
@@ -1742,10 +1742,10 @@ namespace ao::rt::test
         auto commandsFixture = LibraryCommandsFixture{_libraryFixture.library(), changes};
         auto effectiveTrackIds = _ids;
         auto const start = std::chrono::steady_clock::now();
-        auto result = commandsFixture.library().bindListOrder(_orderedListId, std::move(effectiveTrackIds));
+        auto res = commandsFixture.library().bindListOrder(_orderedListId, std::move(effectiveTrackIds));
         auto const end = std::chrono::steady_clock::now();
-        REQUIRE(result);
-        CHECK(result->effectiveTrackIds().size() == kInitialTrackCount);
+        REQUIRE(res);
+        CHECK(res->effectiveTrackIds().size() == kInitialTrackCount);
         return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
       }
 
@@ -2385,9 +2385,9 @@ namespace ao::rt::test
               .title(std::format("Café {:06}", index))
               .artist(std::format("Dvořák {:04}", index % kArtistCount));
 
-            if (auto result = writer.create(track, library::FileManifestBuilder::makeEmpty()); !result)
+            if (auto res = writer.create(track, library::FileManifestBuilder::makeEmpty()); !res)
             {
-              return std::unexpected{result.error()};
+              return std::unexpected{res.error()};
             }
           }
 

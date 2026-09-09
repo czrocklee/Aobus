@@ -35,7 +35,7 @@ namespace ao::uimodel
       return value.substr(first, last - first + 1);
     }
 
-    bool writeStringPatch(TrackFieldEditValue const& value, std::optional<std::string>& optTarget)
+    bool tryWriteStringPatch(TrackFieldEditValue const& value, std::optional<std::string>& optTarget)
     {
       if (auto const* str = std::get_if<std::string>(&value); str != nullptr)
       {
@@ -46,7 +46,7 @@ namespace ao::uimodel
       return false;
     }
 
-    bool writeUint16Patch(TrackFieldEditValue const& value, std::optional<std::uint16_t>& optTarget)
+    bool tryWriteUint16Patch(TrackFieldEditValue const& value, std::optional<std::uint16_t>& optTarget)
     {
       if (auto const* val = std::get_if<std::uint16_t>(&value); val != nullptr)
       {
@@ -133,31 +133,31 @@ namespace ao::uimodel
     return false;
   }
 
-  bool writeTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value)
+  bool tryWriteTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value)
   {
     using F = rt::TrackField;
 
     switch (field)
     {
-      case F::Title: return writeStringPatch(value, patch.optTitle);
-      case F::Artist: return writeStringPatch(value, patch.optArtist);
-      case F::Album: return writeStringPatch(value, patch.optAlbum);
-      case F::AlbumArtist: return writeStringPatch(value, patch.optAlbumArtist);
-      case F::Genre: return writeStringPatch(value, patch.optGenre);
-      case F::Composer: return writeStringPatch(value, patch.optComposer);
-      case F::Conductor: return writeStringPatch(value, patch.optConductor);
-      case F::Ensemble: return writeStringPatch(value, patch.optEnsemble);
-      case F::Work: return writeStringPatch(value, patch.optWork);
-      case F::Movement: return writeStringPatch(value, patch.optMovement);
-      case F::Soloist: return writeStringPatch(value, patch.optSoloist);
+      case F::Title: return tryWriteStringPatch(value, patch.optTitle);
+      case F::Artist: return tryWriteStringPatch(value, patch.optArtist);
+      case F::Album: return tryWriteStringPatch(value, patch.optAlbum);
+      case F::AlbumArtist: return tryWriteStringPatch(value, patch.optAlbumArtist);
+      case F::Genre: return tryWriteStringPatch(value, patch.optGenre);
+      case F::Composer: return tryWriteStringPatch(value, patch.optComposer);
+      case F::Conductor: return tryWriteStringPatch(value, patch.optConductor);
+      case F::Ensemble: return tryWriteStringPatch(value, patch.optEnsemble);
+      case F::Work: return tryWriteStringPatch(value, patch.optWork);
+      case F::Movement: return tryWriteStringPatch(value, patch.optMovement);
+      case F::Soloist: return tryWriteStringPatch(value, patch.optSoloist);
 
-      case F::Year: return writeUint16Patch(value, patch.optYear);
-      case F::DiscNumber: return writeUint16Patch(value, patch.optDiscNumber);
-      case F::DiscTotal: return writeUint16Patch(value, patch.optDiscTotal);
-      case F::TrackNumber: return writeUint16Patch(value, patch.optTrackNumber);
-      case F::TrackTotal: return writeUint16Patch(value, patch.optTrackTotal);
-      case F::MovementNumber: return writeUint16Patch(value, patch.optMovementNumber);
-      case F::MovementTotal: return writeUint16Patch(value, patch.optMovementTotal);
+      case F::Year: return tryWriteUint16Patch(value, patch.optYear);
+      case F::DiscNumber: return tryWriteUint16Patch(value, patch.optDiscNumber);
+      case F::DiscTotal: return tryWriteUint16Patch(value, patch.optDiscTotal);
+      case F::TrackNumber: return tryWriteUint16Patch(value, patch.optTrackNumber);
+      case F::TrackTotal: return tryWriteUint16Patch(value, patch.optTrackTotal);
+      case F::MovementNumber: return tryWriteUint16Patch(value, patch.optMovementNumber);
+      case F::MovementTotal: return tryWriteUint16Patch(value, patch.optMovementTotal);
 
       case F::Duration:
       case F::Tags:

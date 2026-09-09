@@ -44,11 +44,11 @@ namespace ao::uimodel
     auto keymap = KeymapModel{std::move(defaults)};
     auto overrides = KeymapOverrides{};
 
-    if (auto const resRes = store.load(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !resRes)
+    if (auto const res = store.load(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !res)
     {
-      if (resRes.error().code != Error::Code::NotFound)
+      if (res.error().code != Error::Code::NotFound)
       {
-        APP_LOG_WARN("KeymapStore: failed to load keymap overrides: {}", resRes.error().message);
+        APP_LOG_WARN("KeymapStore: failed to load keymap overrides: {}", res.error().message);
       }
 
       return keymap; // defaults only

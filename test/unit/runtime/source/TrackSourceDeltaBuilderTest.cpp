@@ -19,7 +19,7 @@ namespace ao::rt::test
   {
     std::vector<TrackId> replay(std::vector<TrackId> ids, delta::RegularTrackEditScript const& script)
     {
-      REQUIRE(delta::validate(script, ids.size()));
+      REQUIRE(delta::isValid(script, ids.size()));
 
       for (auto const& edit : script.edits)
       {
@@ -110,6 +110,42 @@ namespace ao::rt::test
     CHECK(second.trackIds == std::vector{TrackId{60}});
     CHECK(replay({TrackId{10}, TrackId{20}, TrackId{30}}, *optScript) ==
           std::vector{TrackId{10}, TrackId{40}, TrackId{50}, TrackId{20}, TrackId{60}, TrackId{30}});
+  }
+
+  TEST_CASE("TrackSourceDeltaBuilder - updates are sorted and coalesced after structural edits",
+            "[runtime][unit][source]")
+  {
+    auto builder = TrackSourceDeltaBuilder{3};
+    builder.remove(0, TrackId{10});
+    builder.insert(0, TrackId{5});
+    builder.update(2, TrackId{30});
+    builder.update(1, TrackId{20});
+
+    auto const optScript = builder.build();
+
+    REQUIRE(optScript);
+    CHECK(*optScript == delta::RegularTrackEditScript{{delta::RemoveRange{0, {TrackId{10}}},
+                                                       delta::InsertRange{0, {TrackId{5}}},
+                                                       delta::UpdateRange{1, {TrackId{20}, TrackId{30}}}}});
+  }
+
+  TEST_CASE("TrackSourceDeltaBuilder - update-only batches preserve membership and coalesce adjacent updates",
+            "[runtime][unit][source]")
+  {
+    auto builder = TrackSourceDeltaBuilder{4};
+    builder.update(3, TrackId{40});
+    builder.update(1, TrackId{20});
+    builder.update(0, TrackId{10});
+
+    auto const optScript = builder.build();
+
+    REQUIRE(optScript);
+    CHECK(*optScript == delta::RegularTrackEditScript{
+                          {delta::UpdateRange{0, {TrackId{10}, TrackId{20}}}, delta::UpdateRange{3, {TrackId{40}}}}});
+    auto const original = std::vector{TrackId{10}, TrackId{20}, TrackId{30}, TrackId{40}};
+    auto const appliedRes = delta::apply(original, *optScript);
+    REQUIRE(appliedRes);
+    CHECK(*appliedRes == original);
   }
 
   TEST_CASE("TrackSourceDeltaBuilder - no registered identities produce no batch", "[runtime][unit][source]")

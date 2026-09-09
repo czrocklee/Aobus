@@ -39,7 +39,7 @@ namespace ao::rt
   void ListOrderSource::applyOrderEditScript(delta::RegularTrackEditScript const& script)
   {
     ensureLive();
-    AO_INVARIANT(!script.edits.empty() && delta::validate(script, _orderTrackIds.size()));
+    AO_INVARIANT(!script.edits.empty() && delta::isValid(script, _orderTrackIds.size()));
 
     auto const previousEffective = _effectiveTrackIds.vector();
     auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
@@ -125,7 +125,7 @@ namespace ao::rt
       return;
     }
 
-    std::ignore = publishDelta(std::move(script), previousEffective.size());
+    std::ignore = tryPublishDelta(std::move(script), previousEffective.size());
   }
 
   void ListOrderSource::handleFilteredParentBatch(TrackSourceDelta const& batch)
@@ -146,7 +146,7 @@ namespace ao::rt
     {
       auto const previousEffective = _effectiveTrackIds.vector();
       rebuildEffectiveTrackIds();
-      std::ignore = publishDelta(SourceReset{}, previousEffective.size());
+      std::ignore = tryPublishDelta(SourceReset{}, previousEffective.size());
       return;
     }
 
@@ -156,7 +156,7 @@ namespace ao::rt
     {
       auto const previousSize = _effectiveTrackIds.size();
       _effectiveTrackIds.applyScript(parentScript);
-      std::ignore = publishDelta(parentScript, previousSize);
+      std::ignore = tryPublishDelta(parentScript, previousSize);
       return;
     }
 

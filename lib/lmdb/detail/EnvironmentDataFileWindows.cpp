@@ -34,7 +34,7 @@ namespace ao::lmdb::detail
     }
 
     /// Whether @p errorCode means the filesystem has no sparse support at all.
-    bool sparseUnsupported(DWORD const errorCode) noexcept
+    bool isSparseUnsupported(DWORD const errorCode) noexcept
     {
       // A volume whose driver does not implement the control answers with one of
       // these; anything else is a real failure of a control it does implement.
@@ -105,7 +105,7 @@ namespace ao::lmdb::detail
       return MapAllocation::OnDemand;
     }
 
-    if (sparseUnsupported(markError))
+    if (isSparseUnsupported(markError))
     {
       // exFAT and the FAT family hold no holes. The map size becomes allocation
       // here, so the caller that owns capacity has to keep it modest rather than

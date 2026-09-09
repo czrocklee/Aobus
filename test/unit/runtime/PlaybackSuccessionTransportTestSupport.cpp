@@ -26,6 +26,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -109,14 +110,14 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path blockedFileName,
     bool const failBlockedPreparation,
     bool const blockEveryLookahead,
-    std::filesystem::path finalOpenFailureFileName)
+    std::vector<std::filesystem::path> finalOpenFailureFileNames)
   {
     return [probePtr = std::move(probePtr),
             blockingGatePtr = std::move(blockingGatePtr),
             blockedFileName = std::move(blockedFileName),
             failBlockedPreparation,
             blockEveryLookahead,
-            finalOpenFailureFileName = std::move(finalOpenFailureFileName)](
+            finalOpenFailureFileNames = std::move(finalOpenFailureFileNames)](
              std::filesystem::path const& path,
              std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
     {
@@ -158,7 +159,7 @@ namespace ao::rt::test::playback_succession
         return makeError(Error::Code::IoError, "Scripted lookahead preparation failure");
       }
 
-      if (!finalOpenFailureFileName.empty() && path.filename() == finalOpenFailureFileName && optOutputEncoding)
+      if (optOutputEncoding && std::ranges::contains(finalOpenFailureFileNames, path.filename()))
       {
         return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
       }
@@ -184,7 +185,7 @@ namespace ao::rt::test::playback_succession
                                                    std::move(config.blockedFileName),
                                                    config.failBlockedPreparation,
                                                    config.blockEveryLookahead,
-                                                   std::move(config.finalOpenFailureFileName))}
+                                                   std::move(config.finalOpenFailureFileNames))}
     , asyncRuntime{transport.executor, 1, &sleeper}
     , changes{transport.executor, 0, "test-library"}
     , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}
@@ -209,7 +210,7 @@ namespace ao::rt::test::playback_succession
     auto const fixtureUri =
       audio::test::installAudioFixture(transport.libraryFixture.root(), "basic_metadata.flac", libraryUri);
     auto const created = ao::test::requireValue(
-      commandsFixture.runTask(commands().createTrackFromFile(transport.libraryFixture.root() / fixtureUri)));
+      commandsFixture.runTask(commands().createTrackFromFileAsync(transport.libraryFixture.root() / fixtureUri)));
     transport.executor.drain();
     REQUIRE(commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
     transport.executor.drain();
@@ -225,7 +226,7 @@ namespace ao::rt::test::playback_succession
     auto const membershipTag = std::array{std::string{"transportorder"}};
     REQUIRE(commandsFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(commandsFixture.runTask(commands().createList(ListDraft{
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createListAsync(ListDraft{
       .name = "Transport order",
       .expression = "#transportorder",
     })));
@@ -271,7 +272,7 @@ namespace ao::rt::test::playback_succession
     transport.executor.drain();
     REQUIRE(transport.renderTarget != nullptr);
     auto output = std::array<std::byte, 4096>{};
-    REQUIRE(driveRenderUntilTaskQueued(*transport.renderTarget, transport.executor, output));
+    REQUIRE(tryDriveRenderUntilTaskQueued(*transport.renderTarget, transport.executor, output));
   }
 
   Result<> PlaybackSuccessionTransportFixture::playAndWait(TrackId const trackId)
@@ -289,7 +290,7 @@ namespace ao::rt::test::playback_succession
     auto const it = activationCounts.find(successorPath);
     auto const previousCount = it == activationCounts.end() ? 0 : it->second;
 
-    if (!waitForLookaheadAfter(successorId, previousCount))
+    if (!tryWaitForLookaheadAfter(successorId, previousCount))
     {
       return makeError(Error::Code::InvalidState, "Timed out waiting for playback lookahead activation");
     }
@@ -302,10 +303,11 @@ namespace ao::rt::test::playback_succession
     return decoderProbePtr->count(trackPaths.at(trackId));
   }
 
-  bool PlaybackSuccessionTransportFixture::waitForLookaheadAfter(TrackId const trackId, std::size_t const previousCount)
+  bool PlaybackSuccessionTransportFixture::tryWaitForLookaheadAfter(TrackId const trackId,
+                                                                    std::size_t const previousCount)
   {
     auto const& path = trackPaths.at(trackId);
-    return transport.executor.drainUntil(
+    return transport.executor.tryDrainUntil(
       [&] { return decoderProbePtr->count(path) > previousCount; }, std::chrono::seconds{5});
   }
 } // namespace ao::rt::test::playback_succession

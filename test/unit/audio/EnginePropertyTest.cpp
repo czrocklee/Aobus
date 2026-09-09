@@ -130,19 +130,19 @@ namespace ao::audio::test
     SECTION("setProperty returns error for unknown PropertyId")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
+      auto const res = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
 
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE(!res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("property returns error for unknown PropertyId")
     {
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const result = backendRaw->property(kUnknownId);
+      auto const res = backendRaw->property(kUnknownId);
 
-      REQUIRE(!result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE(!res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("handlePropertyChanged callback updates engine volume status")
@@ -164,7 +164,7 @@ namespace ao::audio::test
 
       backendRaw->emitPropertyChanged(PropertyId::Volume);
 
-      CHECK(stateChanged.waitForCount(1));
+      CHECK(stateChanged.tryWaitForCount(1));
       CHECK(engine.status().volume == Catch::Approx{1.0F});
       CHECK(engine.volume() == Catch::Approx{1.0F});
       CHECK(engine.status().volumeAvailable == true);
@@ -184,7 +184,7 @@ namespace ao::audio::test
       backendRaw->emitPropertyChanged(PropertyId::Volume);
       backendRaw->emitPropertyChanged(PropertyId::Muted);
 
-      CHECK(stateChanged.waitForCount(2));
+      CHECK(stateChanged.tryWaitForCount(2));
       CHECK(engine.status().volumeAvailable);
       CHECK(engine.status().volume == Catch::Approx{0.42F});
       CHECK(engine.status().muted == true);
@@ -204,7 +204,7 @@ namespace ao::audio::test
                                         .isHardwareAssisted = true,
                                       });
       backendRaw->emitPropertyChanged(PropertyId::Volume);
-      CHECK(volumeStateChanged.waitForCount(1));
+      CHECK(volumeStateChanged.tryWaitForCount(1));
       CHECK(engine.status().volumeIsHardwareAssisted == true);
 
       backendRaw->setMockPropertyInfo(PropertyId::Muted,
@@ -222,7 +222,7 @@ namespace ao::audio::test
 
       backendRaw->emitPropertyChanged(PropertyId::Muted);
 
-      CHECK(stateChanged.waitForCount(1));
+      CHECK(stateChanged.tryWaitForCount(1));
       CHECK(engine.status().volumeAvailable);
       CHECK(engine.status().volumeIsHardwareAssisted == true);
       CHECK(engine.status().muted == true);
@@ -238,7 +238,7 @@ namespace ao::audio::test
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
       backendRaw->emitPropertyChanged(kUnknownId);
 
-      CHECK_FALSE(stateChanged.waitForCount(1, std::chrono::milliseconds{100}));
+      CHECK_FALSE(stateChanged.tryWaitForCount(1, std::chrono::milliseconds{100}));
     }
 
     SECTION("Backend callbacks update engine state correctly")
@@ -248,14 +248,14 @@ namespace ao::audio::test
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       backendRaw->emitBackendError("hardware failed");
-      CHECK(stateChanged.waitForCount(1));
+      CHECK(stateChanged.tryWaitForCount(1));
       CHECK(engine.status().transport == Transport::Error);
 
       engine.play(makePlaybackItem(desc));
       auto routeChanged = CallbackLatch{};
       engine.setOnRouteChanged([&](auto const&) { routeChanged.notify(); });
       backendRaw->emitRouteReady("test-anchor");
-      CHECK(routeChanged.waitForCount(1));
+      CHECK(routeChanged.tryWaitForCount(1));
     }
 
     SECTION("setVolume round-trips through engine and backend")

@@ -148,7 +148,7 @@ namespace ao::winui::layout
     for (auto const command : uimodel::playbackCommands())
     {
       _actions.registerAction(uimodel::playbackCommandActionId(command),
-                              [&playback, command](ActionContext const&) { playback.execute(command); });
+                              [&playback, command](ActionContext const&) { playback.tryExecute(command); });
     }
 
     bindCommand("library.open", _config.commands.openLibrary);
@@ -194,7 +194,7 @@ namespace ao::winui::layout
       return session->runtime().library().changes().onChanged(
         [handler = std::move(handler)](rt::LibraryChangeSet const& changeSet) mutable
         {
-          if (listTreeChangeRequiresRebuild(changeSet))
+          if (needsListTreeRebuild(changeSet))
           {
             handler();
           }
@@ -258,16 +258,22 @@ namespace ao::winui::layout
                             _config.listCommands.createList,
                             _session.textCatalog(),
                             report);
-    registerTrackTableComponent(_registry,
-                                _config.trackList,
-                                std::move(playTrack),
-                                _config.listCommands.membershipTargets,
-                                _config.listCommands.editMembership,
-                                _config.listCommands.orderCapabilities,
-                                _config.listCommands.applyOrder,
-                                _actions,
-                                _session.textCatalog(),
-                                std::move(report));
+    registerTrackTableComponent(
+      _registry,
+      _config.trackList,
+      std::move(playTrack),
+      _config.listCommands.membershipTargets,
+      _config.listCommands.editMembership,
+      _config.listCommands.orderCapabilities,
+      _config.listCommands.applyOrder,
+      _actions,
+      [this](std::string_view const id) -> std::string
+      {
+        auto const found = std::ranges::find(_acceleratorPlans, id, &KeymapAcceleratorPlan::actionId);
+        return found == _acceleratorPlans.end() ? std::string{} : found->displayText;
+      },
+      _session.textCatalog(),
+      std::move(report));
   }
 
   PaneSettingsAccess ShellBuilder::paneSettings()
@@ -554,7 +560,7 @@ namespace ao::winui::layout
     // Asking the system where each character sits is what makes a punctuation
     // shortcut land on the key the user pressed rather than the one a US
     // keyboard would have carried.
-    auto const plans = planKeymapAccelerators(
+    _acceleratorPlans = planKeymapAccelerators(
       _session.keymap(),
       _schema,
       [this](std::string_view const id) { return _actions.contains(id); },
@@ -564,14 +570,14 @@ namespace ao::winui::layout
     // accelerators are on the host, so it proves the builder is still there
     // before reaching into it.
     applyKeymapAccelerators(_config.host,
-                            plans,
+                            _acceleratorPlans,
                             [this, token = _ownerCallbackGate.token()](std::string_view const id)
-                            { return token.admits() && invokeAction(id); });
+                            { return token.accepts() && tryInvokeAction(id); });
   }
 
-  bool ShellBuilder::invokeAction(std::string_view const actionId) const
+  bool ShellBuilder::tryInvokeAction(std::string_view const actionId) const
   {
-    return !_retired && _actions.invoke(actionId, ActionContext{});
+    return !_retired && _actions.tryInvoke(actionId, ActionContext{});
   }
 
   void ShellBuilder::retire() noexcept

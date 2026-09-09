@@ -121,7 +121,7 @@ namespace ao::audio::backend::detail
         return std::unexpected{readBackRes.error()};
       }
 
-      if (sameCoreAudioPcmFormat(*descriptionRes, *readBackRes))
+      if (isSameCoreAudioPcmFormat(*descriptionRes, *readBackRes))
       {
         return candidate;
       }
@@ -130,8 +130,8 @@ namespace ao::audio::backend::detail
     return makeError(Error::Code::FormatRejected, "Core Audio rejected every lossless client PCM format");
   }
 
-  bool sameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
-                              ::AudioStreamBasicDescription const& rhs) noexcept
+  bool isSameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
+                                ::AudioStreamBasicDescription const& rhs) noexcept
   {
     return lhs.mSampleRate == rhs.mSampleRate && lhs.mFormatID == rhs.mFormatID &&
            lhs.mFormatFlags == rhs.mFormatFlags && lhs.mBytesPerPacket == rhs.mBytesPerPacket &&

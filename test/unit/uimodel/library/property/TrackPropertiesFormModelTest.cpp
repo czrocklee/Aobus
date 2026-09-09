@@ -48,13 +48,13 @@ namespace ao::uimodel::test
     model.loadFirstTrackField(rt::TrackField::Title, textRaw("Same"));
 
     CHECK_FALSE(model.rowView(rt::TrackField::Title).mixed);
-    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Same")));
+    CHECK_FALSE(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Same")));
     CHECK_FALSE(model.rowView(rt::TrackField::Title).mixed);
 
     // Only the transition into mixed is reported; later disagreements are not.
-    CHECK(model.mergeTrackField(rt::TrackField::Title, textRaw("Different")));
+    CHECK(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Different")));
     CHECK(model.rowView(rt::TrackField::Title).mixed);
-    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Another")));
+    CHECK_FALSE(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Another")));
     CHECK(model.rowView(rt::TrackField::Title).mixed);
   }
 
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
     model.addField(rt::TrackField::Title, true);
 
     model.loadFirstTrackField(rt::TrackField::Title, textRaw("First"));
-    CHECK(model.mergeTrackField(rt::TrackField::Title, textRaw("Second")));
+    CHECK(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Second")));
 
     auto const view = model.rowView(rt::TrackField::Title);
     CHECK(view.mixed);
@@ -161,9 +161,9 @@ namespace ao::uimodel::test
     model.loadFirstTrackField(rt::TrackField::Title, textRaw("First"));
     model.loadFirstTrackField(rt::TrackField::Album, textRaw("Old"));
     model.loadFirstTrackField(rt::TrackField::Year, numberRaw(2001));
-    CHECK(model.mergeTrackField(rt::TrackField::Title, textRaw("Second")));
-    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Album, textRaw("Old")));
-    CHECK(model.mergeTrackField(rt::TrackField::Year, numberRaw(2002)));
+    CHECK(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Second")));
+    CHECK_FALSE(model.tryMergeTrackField(rt::TrackField::Album, textRaw("Old")));
+    CHECK(model.tryMergeTrackField(rt::TrackField::Year, numberRaw(2002)));
 
     model.setExplicitFieldEdit(rt::TrackField::Title, textEdit("First"));
     model.setExplicitFieldEdit(rt::TrackField::Album, textEdit("New"));
@@ -189,7 +189,7 @@ namespace ao::uimodel::test
 
     model.loadFirstTrackField(rt::TrackField::Title, textRaw("Same"));
     model.loadFirstTrackField(rt::TrackField::Artist, textRaw("Original Artist"));
-    CHECK_FALSE(model.mergeTrackField(rt::TrackField::Title, textRaw("Same")));
+    CHECK_FALSE(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Same")));
 
     model.setExplicitFieldEdit(rt::TrackField::Title, textEdit("Same"));
     model.setExplicitFieldEdit(rt::TrackField::Artist, textEdit("Changed Artist"));
@@ -226,7 +226,7 @@ namespace ao::uimodel::test
 
     SECTION("An ordinary edit resumes preservation of a mixed baseline")
     {
-      REQUIRE(model.mergeTrackField(rt::TrackField::Title, textRaw("Different")));
+      REQUIRE(model.tryMergeTrackField(rt::TrackField::Title, textRaw("Different")));
       model.setEditValue(rt::TrackField::Title, textEdit("Later"));
       CHECK_FALSE(model.canSave());
       CHECK_FALSE(model.buildPatch().optTitle);

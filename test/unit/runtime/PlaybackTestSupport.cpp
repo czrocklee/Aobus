@@ -35,10 +35,10 @@ namespace ao::rt::test
       runtime.callbackExecutor(), library, notifications, std::make_unique<audio::Player>(runtime)};
   }
 
-  bool driveRenderUntilTaskQueued(audio::RenderTarget& renderTarget,
-                                  QueuedExecutor& executor,
-                                  std::span<std::byte> output,
-                                  std::chrono::milliseconds const timeout)
+  bool tryDriveRenderUntilTaskQueued(audio::RenderTarget& renderTarget,
+                                     QueuedExecutor& executor,
+                                     std::span<std::byte> output,
+                                     std::chrono::milliseconds const timeout)
   {
     auto const deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -55,7 +55,7 @@ namespace ao::rt::test
       auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
       auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
 
-      if (executor.waitUntilQueued(pollInterval))
+      if (executor.tryWaitUntilQueued(pollInterval))
       {
         return true;
       }

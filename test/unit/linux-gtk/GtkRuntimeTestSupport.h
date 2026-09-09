@@ -40,9 +40,9 @@ namespace ao::rt
 namespace ao::gtk::test
 {
   template<typename T>
-  async::Task<T> runGtkTaskOnCallback(async::Runtime* runtime, async::Task<T> task)
+  async::Task<T> runGtkTaskOnCallbackAsync(async::Runtime* runtime, async::Task<T> task)
   {
-    co_await runtime->resumeOnCallbackExecutor();
+    co_await runtime->resumeOnCallbackExecutorAsync();
 
     if constexpr (std::is_void_v<T>)
     {
@@ -60,7 +60,7 @@ namespace ao::gtk::test
   T runGtkTask(rt::AppRuntime& runtime, async::Task<T> task)
   {
     auto pump = [] { drainGtkEvents(); };
-    return rt::test::runRuntimeTask(runtime, runGtkTaskOnCallback(&runtime.async(), std::move(task)), pump);
+    return rt::test::runRuntimeTask(runtime, runGtkTaskOnCallbackAsync(&runtime.async(), std::move(task)), pump);
   }
 
   TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec);
@@ -101,7 +101,7 @@ namespace ao::gtk::test
     compat::MoveOnlyFunction<void(library::MusicLibrary&)> initializeLibrary = {},
     rt::TextOrderingPolicy const* textOrderingPolicy = nullptr);
 
-  bool waitForPlaybackSettlement(rt::AppRuntime& runtime,
-                                 TrackId trackId,
-                                 std::chrono::milliseconds timeout = std::chrono::seconds{2});
+  bool tryWaitForPlaybackSettlement(rt::AppRuntime& runtime,
+                                    TrackId trackId,
+                                    std::chrono::milliseconds timeout = std::chrono::seconds{2});
 } // namespace ao::gtk::test

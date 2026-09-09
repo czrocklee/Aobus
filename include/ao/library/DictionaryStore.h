@@ -77,7 +77,8 @@ namespace ao::library
 
     /**
      * Return the process-local committed dictionary generation.
-     * The generation advances once for each published transaction delta.
+     * Advances once per non-empty local publication or external tail refresh.
+     * One refresh may observe several external transactions.
      */
     std::uint64_t generation() const;
 
@@ -91,6 +92,8 @@ namespace ao::library
     DictionaryStore(lmdb::IntegerKeyDatabase db,
                     lmdb::ReadTransaction const& transaction,
                     detail::LibraryIdentity const& identity);
+
+    void refresh(lmdb::IntegerKeyDatabase::Reader const& reader);
 
     struct DictHash final
     {

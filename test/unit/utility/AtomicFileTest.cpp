@@ -150,9 +150,9 @@ namespace ao::utility::test
 
       Result<> replaceTarget(std::filesystem::path const& /*targetPath*/, detail::AtomicReplacementMode /*mode*/)
       {
-        if (auto const result = scriptedResult(*_state, FailureStage::Replace); !result)
+        if (auto const res = scriptedResult(*_state, FailureStage::Replace); !res)
         {
-          return result;
+          return res;
         }
 
         _state->targetContents = _state->temporaryContents;
@@ -176,9 +176,9 @@ namespace ao::utility::test
 
       Result<std::filesystem::path> normalizeTargetPath(std::filesystem::path const& targetPath) const
       {
-        if (auto const result = scriptedResult(_state, FailureStage::Normalize); !result)
+        if (auto const res = scriptedResult(_state, FailureStage::Normalize); !res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
 
         return targetPath;
@@ -191,9 +191,9 @@ namespace ao::utility::test
 
       Result<ScriptedTemporaryFile> createPrivateTemporaryFile(std::filesystem::path const& /*parentPath*/) const
       {
-        if (auto const result = scriptedResult(_state, FailureStage::Create); !result)
+        if (auto const res = scriptedResult(_state, FailureStage::Create); !res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
 
         _state.temporaryExists = true;
@@ -235,10 +235,10 @@ namespace ao::utility::test
       auto state = ScriptedAtomicFileState{.failureStage = stage};
       auto operations = ScriptedAtomicFileOperations{state};
 
-      auto const result = detail::runAtomicReplacement(
+      auto const res = detail::runAtomicReplacement(
         operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
-      CHECK_FALSE(result);
+      CHECK_FALSE(res);
       CHECK(state.targetContents == "old");
       CHECK(state.parentSyncAttempts == 0);
 
@@ -255,11 +255,11 @@ namespace ao::utility::test
     auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Write, .cleanupFails = true};
     auto operations = ScriptedAtomicFileOperations{state};
 
-    auto const result = detail::runAtomicReplacement(
+    auto const res = detail::runAtomicReplacement(
       operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message == "Write failure");
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message == "Write failure");
     CHECK(state.targetContents == "old");
     CHECK(state.cleanupAttempts == 1);
     CHECK(state.temporaryExists);
@@ -271,10 +271,10 @@ namespace ao::utility::test
     auto state = ScriptedAtomicFileState{};
     auto operations = ScriptedAtomicFileOperations{state};
 
-    auto const result = detail::runAtomicReplacement(
+    auto const res = detail::runAtomicReplacement(
       operations, "/state/config.yaml", "new contents", detail::AtomicReplacementMode::Durable);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(state.targetContents == "new contents");
     CHECK_FALSE(state.temporaryExists);
     CHECK(state.cleanupAttempts == 0);
@@ -288,10 +288,10 @@ namespace ao::utility::test
     auto state = ScriptedAtomicFileState{.failureStage = FailureStage::Synchronize};
     auto operations = ScriptedAtomicFileOperations{state};
 
-    auto const result = detail::runAtomicReplacement(
+    auto const res = detail::runAtomicReplacement(
       operations, "/cache/cover.png", "new contents", detail::AtomicReplacementMode::VisibilityOnly);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(state.targetContents == "new contents");
     CHECK_FALSE(state.temporaryExists);
     CHECK(state.cleanupAttempts == 0);
@@ -304,8 +304,8 @@ namespace ao::utility::test
     auto const tempDir = ao::test::TempDir{};
     auto const targetPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
-    auto const result = writeAtomically(targetPath, "version: 1\n");
-    CHECK(result.has_value());
+    auto const res = writeAtomically(targetPath, "version: 1\n");
+    CHECK(res.has_value());
 
     REQUIRE(std::filesystem::exists(targetPath));
 
@@ -361,14 +361,14 @@ namespace ao::utility::test
     std::filesystem::create_directories(readonlyDir);
     auto const denied = ao::test::ScopedDirectoryAccessGuard{readonlyDir, ao::test::DeniedDirectoryAccess::Write};
 
-    if (!denied.effective())
+    if (!denied.isEffective())
     {
       SKIP("the current process bypasses directory write restrictions");
     }
 
     auto const targetPath = readonlyDir / "config.yaml";
-    auto const result = writeAtomically(targetPath, "version: 1\n");
-    CHECK_FALSE(result.has_value());
+    auto const res = writeAtomically(targetPath, "version: 1\n");
+    CHECK_FALSE(res.has_value());
   }
 
   TEST_CASE("AtomicFile - fails to overwrite a directory", "[utility][unit][atomicfile]")
@@ -377,8 +377,8 @@ namespace ao::utility::test
     auto const targetPath = std::filesystem::path{tempDir.path()} / "dir";
     std::filesystem::create_directories(targetPath);
 
-    auto const result = writeAtomically(targetPath, "content");
-    CHECK_FALSE(result.has_value());
+    auto const res = writeAtomically(targetPath, "content");
+    CHECK_FALSE(res.has_value());
 
     for (auto const& entry : std::filesystem::directory_iterator{tempDir.path()})
     {
@@ -401,10 +401,10 @@ namespace ao::utility::test
     targetPath /= "state.yaml";
     REQUIRE(targetPath.wstring().size() > 260);
 
-    auto const result = writeAtomically(targetPath, "long path content");
-    auto const errorMessage = result ? std::string{} : result.error().message;
+    auto const res = writeAtomically(targetPath, "long path content");
+    auto const errorMessage = res ? std::string{} : res.error().message;
     INFO(errorMessage);
-    REQUIRE(result);
+    REQUIRE(res);
 
     auto input = std::ifstream{extendedWindowsPath(targetPath), std::ios::binary};
     auto const content = std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};

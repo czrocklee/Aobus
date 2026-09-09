@@ -110,27 +110,27 @@ namespace ao::winui
         _streamTask = _runtime.spawnCancellable(
           [weakStatePtr, runtime = &_runtime, generation, bytes = std::move(bytes)](
             std::stop_token const stopToken) mutable
-          { return prepareAndDisplay(weakStatePtr, runtime, generation, std::move(bytes), stopToken); },
+          { return prepareAndDisplayAsync(weakStatePtr, runtime, generation, std::move(bytes), stopToken); },
           "Windows cover-art stream preparation");
       });
   }
 
-  async::Task<void> CoverArtPresenter::prepareAndDisplay(std::weak_ptr<State> statePtr,
-                                                         async::Runtime* const runtime,
-                                                         std::uint64_t const generation,
-                                                         rt::ResourceBytes bytes,
-                                                         std::stop_token const stopToken)
+  async::Task<void> CoverArtPresenter::prepareAndDisplayAsync(std::weak_ptr<State> statePtr,
+                                                              async::Runtime* const runtime,
+                                                              std::uint64_t const generation,
+                                                              rt::ResourceBytes bytes,
+                                                              std::stop_token const stopToken)
   {
     auto prepared = PreparedMemoryRandomAccessStream{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     if (!bytes.empty())
     {
       prepared = prepareMemoryRandomAccessStream(bytes.view());
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (auto lockedStatePtr = statePtr.lock();
         lockedStatePtr && lockedStatePtr->active && lockedStatePtr->generation == generation)

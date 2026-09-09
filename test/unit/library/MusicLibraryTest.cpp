@@ -247,11 +247,11 @@ namespace ao::library::test
 
     void requireCorruptLibrary(std::filesystem::path const& path)
     {
-      auto const result = openTestMusicLibrary(path, path);
-      auto const message = result ? std::string{} : result.error().message;
+      auto const res = openTestMusicLibrary(path, path);
+      auto const message = res ? std::string{} : res.error().message;
       INFO(message);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   } // namespace
 
@@ -291,6 +291,7 @@ namespace ao::library::test
     // nowhere near the map it may grow into.
     CHECK(capacity.highWaterBytes > 0);
     CHECK(capacity.highWaterBytes < capacity.mapBytes);
+    CHECK(capacity.diskBytes > 0);
   }
 
   TEST_CASE("MusicLibrary - managed capacity opens a fresh library well past the LMDB default",
@@ -384,11 +385,11 @@ namespace ao::library::test
       createRawBlobRow(
         temp.path(), "meta", utility::bytes::view(kMetadataHeaderRecordId), utility::bytes::view(header));
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
-      CHECK(result.error().message == "Named database 'meta' has flags 0x0 (expected 0x8)");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+      CHECK(res.error().message == "Named database 'meta' has flags 0x0 (expected 0x8)");
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
     }
   }
@@ -430,9 +431,9 @@ namespace ao::library::test
     {
       createLibraryMetadataHeader(temp.path(), kLibraryVersion + 1);
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("future version takes precedence over current metadata key flags")
@@ -441,10 +442,10 @@ namespace ao::library::test
       createRawBlobRow(
         temp.path(), "meta", utility::bytes::view(kMetadataHeaderRecordId), utility::bytes::view(header));
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
     }
 
@@ -453,9 +454,9 @@ namespace ao::library::test
       static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kLegacyV1LibraryVersion);
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("previous cold layout version")
@@ -463,9 +464,9 @@ namespace ao::library::test
       static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("version 4 before unified List ordering")
@@ -473,9 +474,9 @@ namespace ao::library::test
       static_assert(kPreUnifiedListOrderingLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreUnifiedListOrderingLibraryVersion);
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("version 6 before NFC text admission")
@@ -483,9 +484,9 @@ namespace ao::library::test
       static_assert(kPreNfcTextLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreNfcTextLibraryVersion);
 
-      auto const result = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
   }
 
@@ -510,9 +511,9 @@ namespace ao::library::test
       REQUIRE(transaction.commit());
     }
 
-    auto const result = openTestMusicLibrary(temp.path(), temp.path());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    auto const res = openTestMusicLibrary(temp.path(), temp.path());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("MusicLibrary - validates the staged metadata header admission rules",
@@ -621,9 +622,9 @@ namespace ao::library::test
               auto track = TrackBuilder::makeEmpty();
               track.property().uri(uri);
 
-              if (auto result = writer.create(track, FileManifestBuilder::makeEmpty()); !result)
+              if (auto res = writer.create(track, FileManifestBuilder::makeEmpty()); !res)
               {
-                return std::unexpected{result.error()};
+                return std::unexpected{res.error()};
               }
             }
 
@@ -655,11 +656,11 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     constexpr std::size_t kUnusableMapSize = std::size_t{8} * 1024;
 
-    auto const result = MusicLibrary::open(
+    auto const res = MusicLibrary::open(
       temp.path(), temp.path() / "tiny-db", MusicLibrary::Options{.pinnedMapBytes = kUnusableMapSize});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::StorageFull);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::StorageFull);
   }
 
   TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result",
@@ -668,12 +669,12 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto injection = lmdb::detail::ReadFaultInjection{MDB_PANIC};
 
-    auto const result = openTestMusicLibrary(temp.path(), temp.path());
+    auto const res = openTestMusicLibrary(temp.path(), temp.path());
 
-    REQUIRE_FALSE(result);
-    CHECK(injection.wasConsumed());
-    CHECK(result.error().code == Error::Code::IoError);
-    CHECK(result.error().message.contains("mdb_stat"));
+    REQUIRE_FALSE(res);
+    CHECK(injection.hasBeenConsumed());
+    CHECK(res.error().code == Error::Code::IoError);
+    CHECK(res.error().message.contains("mdb_stat"));
   }
 
   TEST_CASE("MusicLibrary - rejects invalid persisted dictionary state", "[library][unit][music-library][integrity]")

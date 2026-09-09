@@ -44,7 +44,7 @@ namespace ao::rt::test
 
   void ViewServiceFixture::drainCallbacks()
   {
-    while (executor.runReadyTurn())
+    while (executor.tryRunReadyTurn())
     {
     }
   }

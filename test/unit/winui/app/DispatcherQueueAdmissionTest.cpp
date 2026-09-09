@@ -29,7 +29,7 @@ namespace ao::winui::test
 
     producerEntered.acquire();
     REQUIRE(producerAccepted.load(std::memory_order_acquire));
-    REQUIRE(admission.beginClosing());
+    REQUIRE(admission.tryBeginClosing());
     CHECK(admission.state() == detail::DispatcherQueueAdmissionState::Closing);
 
     auto optClosingTicket = admission.tryAcquire(false);
@@ -42,7 +42,7 @@ namespace ao::winui::test
     auto closer = std::jthread{[&]
                                {
                                  drainStarted.release();
-                                 drainAccepted = admission.beginDraining();
+                                 drainAccepted = admission.tryBeginDraining();
                                  drainFinished.release();
                                }};
 
@@ -65,7 +65,7 @@ namespace ao::winui::test
     auto optOwnerDrainTicket = admission.tryAcquire(true);
     REQUIRE(optOwnerDrainTicket);
     optOwnerDrainTicket.reset();
-    REQUIRE(admission.finishClosing());
+    REQUIRE(admission.tryFinishClosing());
     CHECK(admission.state() == detail::DispatcherQueueAdmissionState::Closed);
     CHECK_FALSE(admission.tryAcquire(true));
   }
@@ -98,12 +98,12 @@ namespace ao::winui::test
     auto optOwnerTicket = admission.tryAcquire(true);
     REQUIRE(optOwnerTicket);
 
-    CHECK_FALSE(admission.closeForDestruction());
+    CHECK_FALSE(admission.tryCloseForDestruction());
     CHECK(admission.state() == detail::DispatcherQueueAdmissionState::Running);
 
     optOwnerTicket.reset();
-    REQUIRE(admission.closeForDestruction());
+    REQUIRE(admission.tryCloseForDestruction());
     CHECK(admission.state() == detail::DispatcherQueueAdmissionState::Closed);
-    CHECK(admission.closeForDestruction());
+    CHECK(admission.tryCloseForDestruction());
   }
 } // namespace ao::winui::test

@@ -73,8 +73,8 @@ namespace ao::gtk
 
     std::uint64_t nextDragToken() noexcept
     {
-      static auto const counter = DragTokenCounter{};
-      return counter.next();
+      static auto const kCounter = DragTokenCounter{};
+      return kCounter.next();
     }
 
     std::optional<std::string> stringFromDropValue(Glib::ValueBase const& value)
@@ -318,10 +318,10 @@ namespace ao::gtk
       adjustmentPtr->set_value(std::clamp(adjustmentPtr->get_value() + delta, adjustmentPtr->get_lower(), maximum));
     }
 
-    bool drop(Gtk::ListItem const& listItem,
-              Gtk::Widget const& cell,
-              Glib::ValueBase const& value,
-              double const yPosition)
+    bool tryDrop(Gtk::ListItem const& listItem,
+                 Gtk::Widget const& cell,
+                 Glib::ValueBase const& value,
+                 double const yPosition)
     {
       if (auto const optToken = stringFromDropValue(value);
           closing || invalidated || !optSession || !optToken || *optToken != token)
@@ -349,43 +349,43 @@ namespace ao::gtk
       }
 
       auto selectedIds = std::move(selectedTrackIds);
-      auto submission = optSession->moveBefore(std::move(selectedIds), *anchorRes);
+      auto submission = optSession->moveBeforeAsync(std::move(selectedIds), *anchorRes);
       clearActiveDrag();
-      spawnUiTask(asyncRuntime,
-                  tasks,
-                  *this,
-                  "track order drop",
-                  std::move(submission),
-                  [](State* state, auto result)
-                  {
-                    if (!result)
-                    {
-                      APP_LOG_ERROR("Track order drop failed: {}", result.error().message);
-                      state->showStatus(result.error().message);
-                      return;
-                    }
+      spawnUiTask(
+        asyncRuntime,
+        tasks,
+        *this,
+        "track order drop",
+        std::move(submission),
+        [](State* state, auto res)
+        {
+          if (!res)
+          {
+            APP_LOG_ERROR("Track order drop failed: {}", res.error().message);
+            state->showStatus(res.error().message);
+            return;
+          }
 
-                    switch (result->status)
-                    {
-                      case rt::AuthoringStatus::Applied:
-                        state->showStatus(i18n::requiredFormat(state->textCatalog,
-                                                               i18n::MessageId::ListOrderMoved,
-                                                               {{"count", result->reply.selectedTrackIds.size()}}));
-                        break;
-                      case rt::AuthoringStatus::NoOp:
-                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderUnchanged));
-                        break;
-                      case rt::AuthoringStatus::Busy:
-                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderLibraryBusy));
-                        break;
-                      case rt::AuthoringStatus::Stale:
-                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderChanged));
-                        break;
-                      case rt::AuthoringStatus::Unavailable:
-                        state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
-                        break;
-                    }
-                  });
+          switch (res->status)
+          {
+            case rt::AuthoringStatus::Applied:
+              state->showStatus(i18n::requiredFormat(
+                state->textCatalog, i18n::MessageId::ListOrderMoved, {{"count", res->reply.selectedTrackIds.size()}}));
+              break;
+            case rt::AuthoringStatus::NoOp:
+              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderUnchanged));
+              break;
+            case rt::AuthoringStatus::Busy:
+              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderLibraryBusy));
+              break;
+            case rt::AuthoringStatus::Stale:
+              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderChanged));
+              break;
+            case rt::AuthoringStatus::Unavailable:
+              state->showStatus(gtkText(state->textCatalog, i18n::MessageId::ListOrderEditingUnavailable));
+              break;
+          }
+        });
       return true;
     }
 
@@ -472,7 +472,7 @@ namespace ao::gtk
         dropTargetPtr->signal_leave().connect([statePtr] { statePtr->clearIndicator(); });
         dropTargetPtr->signal_drop().connect(
           [statePtr, listItemRaw = listItemPtr.get(), cell](Glib::ValueBase const& value, double, double yPosition)
-          { return statePtr->drop(*listItemRaw, *cell, value, yPosition); },
+          { return statePtr->tryDrop(*listItemRaw, *cell, value, yPosition); },
           false);
         cell->add_controller(dropTargetPtr);
         listItemPtr->set_child(*cell);

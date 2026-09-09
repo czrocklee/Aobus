@@ -30,9 +30,9 @@ namespace ao::gtk
                    Schema const& schema,
                    std::string_view description)
     {
-      if (auto const result = store.load(group, state, schema); !result && result.error().code != Error::Code::NotFound)
+      if (auto const res = store.load(group, state, schema); !res && res.error().code != Error::Code::NotFound)
       {
-        APP_LOG_DEBUG("AppConfigStore: Failed to load {}: {}", description, result.error().message);
+        APP_LOG_DEBUG("AppConfigStore: Failed to load {}: {}", description, res.error().message);
       }
     }
 
@@ -43,9 +43,9 @@ namespace ao::gtk
                    Schema const& schema,
                    std::string_view description)
     {
-      if (auto const result = store.save(group, state, schema); !result)
+      if (auto const res = store.save(group, state, schema); !res)
       {
-        APP_LOG_ERROR("AppConfigStore: Failed to save {}: {}", description, result.error().message);
+        APP_LOG_ERROR("AppConfigStore: Failed to save {}: {}", description, res.error().message);
       }
     }
 
@@ -105,9 +105,9 @@ namespace ao::gtk
 
   void AppConfigStore::saveAppPrefs(rt::AppPrefsState const& state)
   {
-    if (auto const result = rt::saveAppPrefs(*_storePtr, state); !result)
+    if (auto const res = rt::saveAppPrefs(*_storePtr, state); !res)
     {
-      APP_LOG_ERROR("AppConfigStore: Failed to save app prefs: {}", result.error().message);
+      APP_LOG_ERROR("AppConfigStore: Failed to save app prefs: {}", res.error().message);
     }
   }
 

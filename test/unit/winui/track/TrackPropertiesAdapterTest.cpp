@@ -112,11 +112,11 @@ namespace ao::winui::test
   TEST_CASE("TrackPropertiesAdapter - explicit empty custom value replaces a mixed original",
             "[winui][regression][track-properties]")
   {
-    CHECK(customMetadataValueNeedsUpdate(true, std::nullopt, ""));
-    CHECK(customMetadataValueNeedsUpdate(true, std::nullopt, "Ambient"));
-    CHECK_FALSE(customMetadataValueNeedsUpdate(true, std::optional<std::string>{""}, ""));
-    CHECK_FALSE(customMetadataValueNeedsUpdate(true, std::optional<std::string>{"Ambient"}, "Ambient"));
-    CHECK(customMetadataValueNeedsUpdate(true, std::optional<std::string>{"Ambient"}, ""));
-    CHECK(customMetadataValueNeedsUpdate(false, std::nullopt, ""));
+    CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, ""));
+    CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, "Ambient"));
+    CHECK_FALSE(needsCustomMetadataValueUpdate(true, std::optional<std::string>{""}, ""));
+    CHECK_FALSE(needsCustomMetadataValueUpdate(true, std::optional<std::string>{"Ambient"}, "Ambient"));
+    CHECK(needsCustomMetadataValueUpdate(true, std::optional<std::string>{"Ambient"}, ""));
+    CHECK(needsCustomMetadataValueUpdate(false, std::nullopt, ""));
   }
 } // namespace ao::winui::test

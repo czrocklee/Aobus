@@ -128,9 +128,9 @@ namespace ao::uimodel
 
   void TrackPresentationCatalog::addCustomPresentation(rt::CustomTrackPresentationPreset const& state)
   {
-    if (auto const result = _workspace.addCustomPreset(state); !result)
+    if (auto const res = _workspace.addCustomPreset(state); !res)
     {
-      APP_LOG_ERROR("Failed to add custom track presentation: {}", result.error().message);
+      APP_LOG_ERROR("Failed to add custom track presentation: {}", res.error().message);
     }
   }
 } // namespace ao::uimodel

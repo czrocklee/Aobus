@@ -27,7 +27,7 @@ of the [system architecture](../../architecture/system-overview.md), under the
 live in `app/include/ao/rt/playback/`; the private implementation in
 `app/runtime/playback/PlaybackService.cpp` owns commit state and the serial
 command queue while borrowing the runtime-internal `PlaybackTransport` and
-`PlaybackSuccession` owners.
+`PlaybackSuccession` owners, the music library and its committed change stream.
 
 ## Terminology
 
@@ -75,6 +75,36 @@ This state is confined to the runtime callback executor. The command queue adds
 no worker or mutex. Player owns the cancellable `async::Runtime` tasks used for
 view-start and gapless-lookahead decoder/source preparation; workers carry
 isolated audio values and do not own application state.
+
+## Live Now Playing metadata
+
+`PlaybackService` resolves the current track's title, artist, album and primary
+cover from one library read transaction when the playback request changes.
+Read admission refreshes the append-only dictionary through that transaction's
+visible tail before resolving artist and album ids.
+Committed insertions, mutations and deletions intersecting that track, and a
+library reset, invalidate the cached presentation. The next coherent snapshot
+publication refreshes all four fields together, including while paused.
+Unrelated track changes do not invalidate it; unchanged presentation publishes
+nothing. Volume, quality and position updates reuse the cached metadata.
+
+A prepared successor resolves current metadata when it becomes the active
+request, even if it was edited after preparation. A missing track retains the
+request's launch text and has no cover; an already-open audio source can keep
+playing, including when the record was edited before deletion. Requests without
+a library track id retain their supplied metadata and cover. A removed library
+cover stays absent across later transport snapshots. An empty title does not
+make a library track inactive in the Now Playing view model.
+
+This presentation overlay leaves the transport's launch request, decoder input,
+source provenance, position/final-seek revisions and succession recovery state
+unchanged. Metadata invalidation uses the existing deferred snapshot boundary;
+it does not emit a transport `NowPlayingChanged` position-anchor event. Commands
+submitted by metadata observers obey the same reentrancy and shutdown rules as
+other snapshot observers. An invalidation delivered reentrantly during command
+settlement schedules another publication after the outer commit closes.
+Synchronous service destruction or shutdown inside its command/publication
+boundary is rejected by contract; owners must defer teardown until it unwinds.
 
 ## Commands and transitions
 

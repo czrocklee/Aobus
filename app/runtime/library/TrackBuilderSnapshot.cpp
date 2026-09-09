@@ -85,7 +85,7 @@ namespace ao::rt
       {
         auto const bytes = std::get<std::span<std::byte const>>(entry.source);
 
-        if (!library::resourceByteLengthFits(bytes.size()))
+        if (!library::canDescribeResourceByteLength(bytes.size()))
         {
           return makeError(Error::Code::ValueTooLarge,
                            std::format("Resource content of {} bytes exceeds the stored length field", bytes.size()));

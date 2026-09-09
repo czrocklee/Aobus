@@ -15,65 +15,65 @@
 
 namespace ao::uimodel
 {
-  async::Task<Result<ListId>> saveList(rt::Library* const library, rt::ListDraft draft)
+  async::Task<Result<ListId>> saveListAsync(rt::Library* const library, rt::ListDraft draft)
   {
     auto& commands = library->commands();
 
     if (draft.listId == kInvalidListId)
     {
-      co_return co_await commands.createList(std::move(draft));
+      co_return co_await commands.createListAsync(std::move(draft));
     }
 
     auto const listId = draft.listId;
 
-    if (auto result = co_await commands.updateList(std::move(draft)); !result)
+    if (auto res = co_await commands.updateListAsync(std::move(draft)); !res)
     {
-      co_return std::unexpected{std::move(result).error()};
+      co_return std::unexpected{std::move(res).error()};
     }
 
     co_return listId;
   }
 
-  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletion(rt::Library* const library,
-                                                                      ListId const listId,
-                                                                      bool const includeDescendants)
+  async::Task<Result<rt::DeleteListSubtreeReply>> previewListDeletionAsync(rt::Library* const library,
+                                                                           ListId const listId,
+                                                                           bool const includeDescendants)
   {
     auto& commands = library->commands();
 
     if (includeDescendants)
     {
-      co_return co_await commands.previewDeleteListAndDescendants(listId);
+      co_return co_await commands.previewDeleteListAndDescendantsAsync(listId);
     }
 
-    auto result = co_await commands.previewDeleteList(listId);
+    auto res = co_await commands.previewDeleteListAsync(listId);
 
-    if (!result)
+    if (!res)
     {
-      co_return std::unexpected{std::move(result).error()};
+      co_return std::unexpected{std::move(res).error()};
     }
 
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*result)}};
+    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*res)}};
   }
 
-  async::Task<Result<rt::DeleteListSubtreeReply>> deleteList(rt::Library* const library,
-                                                             ListId const listId,
-                                                             bool const includeDescendants,
-                                                             rt::DeleteListOptions const options)
+  async::Task<Result<rt::DeleteListSubtreeReply>> deleteListAsync(rt::Library* const library,
+                                                                  ListId const listId,
+                                                                  bool const includeDescendants,
+                                                                  rt::DeleteListOptions const options)
   {
     auto& commands = library->commands();
 
     if (includeDescendants)
     {
-      co_return co_await commands.deleteListAndDescendants(listId, options);
+      co_return co_await commands.deleteListAndDescendantsAsync(listId, options);
     }
 
-    auto result = co_await commands.deleteList(listId, options);
+    auto res = co_await commands.deleteListAsync(listId, options);
 
-    if (!result)
+    if (!res)
     {
-      co_return std::unexpected{std::move(result).error()};
+      co_return std::unexpected{std::move(res).error()};
     }
 
-    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*result)}};
+    co_return rt::DeleteListSubtreeReply{.rootListId = listId, .deletedLists = {std::move(*res)}};
   }
 } // namespace ao::uimodel

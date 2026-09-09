@@ -87,7 +87,7 @@ namespace ao::gtk::layout
                                                           uimodel::ComponentSchema const& schema,
                                                           ActionBinder const& binder)
   {
-    if (!schema.allows(uimodel::ActionSlot::PrimaryClick))
+    if (!schema.accepts(uimodel::ActionSlot::PrimaryClick))
     {
       return;
     }
@@ -124,7 +124,7 @@ namespace ao::gtk::layout
                                                             uimodel::ComponentSchema const& schema,
                                                             ActionBinder const& binder)
   {
-    if (!schema.allows(uimodel::ActionSlot::SecondaryClick))
+    if (!schema.accepts(uimodel::ActionSlot::SecondaryClick))
     {
       return;
     }
@@ -161,7 +161,7 @@ namespace ao::gtk::layout
                                                               uimodel::ComponentSchema const& schema,
                                                               ActionBinder const& binder)
   {
-    if (!schema.allows(uimodel::ActionSlot::PrimaryLongPress))
+    if (!schema.accepts(uimodel::ActionSlot::PrimaryLongPress))
     {
       return;
     }
@@ -195,7 +195,7 @@ namespace ao::gtk::layout
                                                                 uimodel::ComponentSchema const& schema,
                                                                 ActionBinder const& binder)
   {
-    if (!schema.allows(uimodel::ActionSlot::SecondaryLongPress))
+    if (!schema.accepts(uimodel::ActionSlot::SecondaryLongPress))
     {
       return;
     }

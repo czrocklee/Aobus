@@ -95,7 +95,7 @@ namespace ao::media::file::opus
           continue;
         }
 
-        if (!detail::applyVorbisComment(builder, *optField) && isPictureKey(optField->key))
+        if (!detail::tryApplyVorbisComment(builder, *optField) && isPictureKey(optField->key))
         {
           appendPicture(builder, optField->value);
         }
@@ -170,14 +170,14 @@ namespace ao::media::file::opus
 
   Result<detail::Content> File::readContent() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    auto const& head = indexResult->head;
+    auto const& head = indexRes->head;
     auto builder = detail::ContentBuilder::makeEmpty();
 
     // Opus decodes at a fixed rate, so the encoder's input rate never describes
@@ -187,12 +187,12 @@ namespace ao::media::file::opus
       .channels(Channels{head.channels})
       .codec(AudioCodec::Opus);
 
-    if (auto const duration = streamDuration(indexResult->timeline); duration > std::chrono::milliseconds{0})
+    if (auto const duration = streamDuration(indexRes->timeline); duration > std::chrono::milliseconds{0})
     {
       builder.property().duration(duration).bitrate(Bitrate{bitrateFromBytes(bytes().size(), duration)});
     }
 
-    if (auto const optBody = parseTagsBody(indexResult->demuxer.packet(kTagsPacketIndex).bytes); optBody)
+    if (auto const optBody = parseTagsBody(indexRes->demuxer.packet(kTagsPacketIndex).bytes); optBody)
     {
       appendTags(builder, *optBody);
     }
@@ -202,13 +202,13 @@ namespace ao::media::file::opus
 
   Result<PayloadView> File::audioPayload() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    return indexResult->payload;
+    return indexRes->payload;
   }
 } // namespace ao::media::file::opus

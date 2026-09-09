@@ -115,7 +115,7 @@ namespace ao::tui
                             notifications,
                             catalog,
                             [&jobs](std::stop_token const stopToken)
-                            { return uimodel::runLibraryScan(&jobs, uimodel::LibraryScanMode::Eager, stopToken); }}
+                            { return uimodel::runLibraryScanAsync(&jobs, uimodel::LibraryScanMode::Eager, stopToken); }}
   {
   }
 
@@ -133,7 +133,7 @@ namespace ao::tui
       case Phase::Idle:
         _statePtr->phase = Phase::Running;
         _statePtr->stopSource = std::stop_source{};
-        _statePtr->runtime.spawnLogged(runScan(_statePtr, _statePtr->stopSource.get_token()), "TUI library scan");
+        _statePtr->runtime.spawnLogged(runScanAsync(_statePtr, _statePtr->stopSource.get_token()), "TUI library scan");
         return;
       case Phase::Running: _statePtr->postTransient(i18n::MessageId::TuiLibraryScanAlreadyRunning); return;
       case Phase::Cancelling: _statePtr->postTransient(i18n::MessageId::TuiLibraryScanCancelling); return;
@@ -167,8 +167,8 @@ namespace ao::tui
     return _statePtr->phase;
   }
 
-  async::Task<void> LibraryScanController::runScan(std::shared_ptr<State> const statePtr,
-                                                   std::stop_token const stopToken)
+  async::Task<void> LibraryScanController::runScanAsync(std::shared_ptr<State> const statePtr,
+                                                        std::stop_token const stopToken)
   {
     auto optOutcome = std::optional<uimodel::LibraryScanOutcome>{};
     auto unexpected = std::exception_ptr{};
@@ -194,7 +194,7 @@ namespace ao::tui
       unexpected = std::current_exception();
     }
 
-    co_await statePtr->runtime.resumeOnCallbackExecutor();
+    co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
     statePtr->complete(cancelled, std::move(optOutcome), unexpected);
   }
 } // namespace ao::tui

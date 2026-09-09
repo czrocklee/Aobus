@@ -153,7 +153,7 @@ namespace ao::gtk
 
   void SeekControlWidget::beginUserInteraction()
   {
-    std::ignore = _interaction.beginPointerInteraction();
+    std::ignore = _interaction.tryBeginPointerInteraction();
     updateTickState();
   }
 

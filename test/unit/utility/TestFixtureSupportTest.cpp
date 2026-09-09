@@ -84,7 +84,7 @@ namespace ao::test
     {
       auto const denied = ScopedDirectoryAccessGuard{blocked, DeniedDirectoryAccess::Read};
 
-      if (!denied.effective())
+      if (!denied.isEffective())
       {
         SKIP("the current process bypasses directory read restrictions");
       }
@@ -112,7 +112,7 @@ namespace ao::test
     {
       auto const denied = ScopedDirectoryAccessGuard{blocked, DeniedDirectoryAccess::Write};
 
-      if (!denied.effective())
+      if (!denied.isEffective())
       {
         SKIP("the current process bypasses directory write restrictions");
       }

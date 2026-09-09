@@ -170,10 +170,10 @@ namespace ao::gtk
           return false;
         }
 
-        if (auto const result = _workspace.setActivePresentation(selection.spec); !result)
+        if (auto const res = _workspace.setActivePresentation(selection.spec); !res)
         {
-          APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
-          showPresentationError(result.error().message);
+          APP_LOG_ERROR("Failed to apply track presentation: {}", res.error().message);
+          showPresentationError(res.error().message);
           return false;
         }
 

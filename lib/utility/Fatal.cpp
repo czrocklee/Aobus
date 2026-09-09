@@ -199,7 +199,7 @@ namespace ao
     return "unknown";
   }
 
-  bool registerFatalSink(FatalSink sink) noexcept
+  bool tryRegisterFatalSink(FatalSink sink) noexcept
   {
     if (sink == nullptr)
     {
@@ -210,7 +210,7 @@ namespace ao
     return fatalSink.compare_exchange_strong(expected, sink, std::memory_order_release, std::memory_order_relaxed);
   }
 
-  bool unregisterFatalSink(FatalSink sink) noexcept
+  bool tryUnregisterFatalSink(FatalSink sink) noexcept
   {
     if (sink == nullptr)
     {

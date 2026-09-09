@@ -76,9 +76,9 @@ namespace ao::lmdb
   {
     ::MDB_txn* handle = nullptr;
 
-    if (auto result = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, nullptr, flags, &handle)); !result)
+    if (auto res = resultFromCode("mdb_txn_begin", ::mdb_txn_begin(env, nullptr, flags, &handle)); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return TxnPtr{handle};

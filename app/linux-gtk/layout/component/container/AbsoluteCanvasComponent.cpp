@@ -58,7 +58,7 @@ namespace ao::gtk::layout
 
           auto const keyPtr = Gtk::EventControllerKey::create();
           keyPtr->signal_key_pressed().connect(
-            [this](guint keyval, guint, Gdk::ModifierType) -> bool { return handleKeyPressed(keyval); }, false);
+            [this](guint keyval, guint, Gdk::ModifierType) -> bool { return tryHandleKeyPressed(keyval); }, false);
           add_controller(keyPtr);
         }
       }
@@ -142,7 +142,7 @@ namespace ao::gtk::layout
         std::ranges::stable_sort(_children,
                                  [](ChildLayoutState const& childA, ChildLayoutState const& childB)
                                  {
-                                   return uimodel::ordersAbsoluteCanvasBefore(
+                                   return uimodel::isAbsoluteCanvasBefore(
                                      childA.zIndex, childA.insertOrder, childB.zIndex, childB.insertOrder);
                                  });
       }
@@ -291,7 +291,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      bool handleKeyPressed(guint keyval)
+      bool tryHandleKeyPressed(guint keyval)
       {
         if (_selectedId.empty())
         {

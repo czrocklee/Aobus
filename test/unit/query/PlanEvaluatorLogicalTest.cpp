@@ -16,15 +16,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 180000};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 50000};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -35,15 +35,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == true);
 
     auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2018};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -55,11 +55,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == false);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == true);
   }
 
@@ -71,11 +71,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 200000, 320000, 44100, 2, 16, 1, 2, 1};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }
 
@@ -106,17 +106,17 @@ namespace ao::query::test
 
     // Track with title containing "Bach"
     auto track1 = TestTrack{"Bach Greatest Hits", "Artist", "Album", "path", 2021};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true); // matches title ~ "Bach"
 
     // Track with year > 2021 but title doesn't contain "Bach"
     auto track2 = TestTrack{"Classical Music", "Artist", "Album", "path", 2022};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == true); // matches year > 2021
 
     // Track with neither matching
     auto track3 = TestTrack{"Classical Music", "Artist", "Album", "path", 2021};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -129,17 +129,17 @@ namespace ao::query::test
 
     // year 2021: 2021 > 2000 is true, so OR should be true
     auto track1 = TestTrack{"Title", "Artist", "Album", "path", 2021};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     // year 1995: 1995 > 2000 is false, but 1995 > 1990 is true, so OR should be true
     auto track2 = TestTrack{"Title", "Artist", "Album", "path", 1995};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == true);
 
     // year 1980: both are false, so OR should be false
     auto track3 = TestTrack{"Title", "Artist", "Album", "path", 1980};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 } // namespace ao::query::test

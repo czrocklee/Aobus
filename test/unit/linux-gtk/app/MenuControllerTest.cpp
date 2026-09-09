@@ -151,6 +151,7 @@ namespace ao::gtk::test
 
   TEST_CASE("MenuController - builds menu model around window and app actions", "[gtk][unit][menu]")
   {
+    auto const appPtr = ensureGtkApplication();
     auto const controller = MenuController{ao::test::englishMessageCatalog()};
 
     REQUIRE(controller.menuModel() != nullptr);

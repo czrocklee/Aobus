@@ -100,11 +100,11 @@ namespace clang::tidy::readability
         (isAoFatalBackend(*reference) &&
          isContractBackendMacroExpansion(*reference, *result.SourceManager, result.Context->getLangOpts())) ||
         !aobus::isPolicySource(*result.SourceManager, reference->getBeginLoc()) ||
-        aobus::enclosingFunctionBeginsWithPolicyMarker(*reference,
-                                                       *result.Context,
-                                                       *result.SourceManager,
-                                                       "ao::detail::acknowledgeRawFatalBackend",
-                                                       "AO_RAW_FATAL_BACKEND"))
+        aobus::hasEnclosingFunctionPolicyMarker(*reference,
+                                                *result.Context,
+                                                *result.SourceManager,
+                                                "ao::detail::acknowledgeRawFatalBackend",
+                                                "AO_RAW_FATAL_BACKEND"))
     {
       return;
     }

@@ -63,7 +63,7 @@ namespace ao::tui
    * moves between sparse and fully tagged tracks. Metadata wins the short
    * terminal.
    */
-  bool detailPaneShowsCoverArt(std::int32_t availableRows);
+  bool isDetailPaneShowingCoverArt(std::int32_t availableRows);
   /// The escape drawing @p png into @p coverBox, empty when the box reserves no cells.
   std::string kittyCoverArtPaintEscape(ftxui::Box const& coverBox, std::vector<std::byte> const& png);
 

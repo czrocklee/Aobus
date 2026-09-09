@@ -196,6 +196,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
                 **os.environ,
                 "GITHUB_EVENT_NAME": event,
                 "GITHUB_OUTPUT": output.as_posix(),
+                "GITHUB_STEP_SUMMARY": (self.root.parent / "github-summary").as_posix(),
                 "PULL_REQUEST_BASE_SHA": base if event == "pull_request" else "",
                 "PUSH_BEFORE_SHA": base if event == "push" else "",
                 "DEFAULT_BRANCH": "main",
@@ -205,6 +206,30 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             text=True,
         )
         return result, dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+
+    def test_ci_pr_scope_includes_every_commit_in_the_final_merge_tree(self):
+        (self.root / "base.cpp").write_text("base\n", encoding="utf-8")
+        self.commit("base")
+        self.git("checkout", "-b", "topic")
+        for name in ("first.cpp", "middle.cpp", "last.cpp"):
+            (self.root / name).write_text(name, encoding="utf-8")
+            self.commit(name)
+        self.git("checkout", "main")
+        (self.root / "base.cpp").write_text("advanced main\n", encoding="utf-8")
+        self.commit("advance main")
+        base = self.git("rev-parse", "HEAD")
+        self.git("merge", "--no-ff", "topic", "-m", "PR merge tree")
+
+        result, output = self.ci_scope(base)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output["sha"], base)
+        self.assertEqual(output["docs-only"], "false")
+        self.assertIn("4 commits, 3 changed paths", result.stdout)
+        with mock.patch.object(gitfiles, "PROJECT_ROOT", self.root):
+            self.assertEqual(gitfiles.changed_files(output["sha"]), ["first.cpp", "last.cpp", "middle.cpp"])
+        summary = (self.root.parent / "github-summary").read_text(encoding="utf-8")
+        self.assertIn(f"{base}..{self.git('rev-parse', 'HEAD')}", summary)
+        self.assertIn("**4 commits**", summary)
 
     def test_ci_docs_route_requires_a_verified_nonempty_documentation_change(self):
         (self.root / "README.md").write_text("base\n", encoding="utf-8")

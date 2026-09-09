@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -141,6 +142,66 @@ def _winui_build_environment(jobs: int) -> dict[str, str]:
     }
 
 
+def validate_build_tree(
+    args: argparse.Namespace, build_dir: Path, *, compiler_only: bool = False, expected_build_type: str | None = None
+) -> str:
+    """Check CMake's configured identity before reusing or reporting a native tree."""
+    profile = builddir.platform_profile()
+    compiler = "clang" if args.clang else profile.compiler
+    portal = "ao.bat" if profile.name == "windows" else "./ao"
+    expected_id = {"gcc": "GNU", "clang": "Clang", "msvc": "MSVC"}[compiler]
+    remedy = (
+        f"Select a compatible build directory or run {portal} build --clean -p {build_dir} with the intended options."
+    )
+    try:
+        cache = {}
+        for line in (build_dir / "CMakeCache.txt").read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if separator and ":" in key and not key.startswith(("//", "#")):
+                cache[key.split(":", 1)[0]] = value
+        version_parts = [cache.get(f"CMAKE_CACHE_{part}_VERSION", "") for part in ("MAJOR", "MINOR", "PATCH")]
+        if not all(part.isdecimal() for part in version_parts):
+            raise die(f"Cannot determine the CMake version recorded in {build_dir}. {remedy}")
+        version = ".".join(version_parts)
+        compiler_dirs = [
+            path
+            for path in (build_dir / "CMakeFiles").iterdir()
+            if path.is_dir() and (path.name == version or path.name.startswith(f"{version}-"))
+        ]
+        if len(compiler_dirs) != 1:
+            raise die(f"Cannot identify one CMake {version} compiler metadata directory in {build_dir}. {remedy}")
+        compiler_dir = compiler_dirs[0]
+        for language in ("C", "CXX"):
+            metadata = (compiler_dir / f"CMake{language}Compiler.cmake").read_text(encoding="utf-8")
+            identity = re.search(rf'^set\(CMAKE_{language}_COMPILER_ID "([^"\n]+)"\)$', metadata, re.MULTILINE)
+            if identity is None:
+                raise die(f"Cannot determine the configured {language} compiler in {build_dir}. {remedy}")
+            if identity[1] != expected_id:
+                raise die(
+                    f"Compiler mismatch in {build_dir}: requested {expected_id}, "
+                    f"configured {language} compiler is {identity[1]}. {remedy}"
+                )
+    except OSError as exc:
+        raise die(f"Cannot read build configuration in {build_dir}: {exc}. {remedy}") from exc
+
+    if not compiler_only:
+        for option, enabled in (("ASAN", args.asan), ("TSAN", args.tsan)):
+            expected = "ON" if enabled else "OFF"
+            actual = cache.get(f"AOBUS_ENABLE_{option}", "<missing>")
+            if actual != expected:
+                raise die(
+                    f"Sanitizer mismatch in {build_dir}: requested AOBUS_ENABLE_{option}={expected}, "
+                    f"configured {actual}. Run {portal} build -p {build_dir} with the intended options first."
+                )
+    if expected_build_type is not None and cache.get("CMAKE_BUILD_TYPE") != expected_build_type:
+        raise die(
+            f"Build mode mismatch in {build_dir}: requested {expected_build_type}, "
+            f"configured CMAKE_BUILD_TYPE={cache.get('CMAKE_BUILD_TYPE', '<missing>')}. "
+            f"Select the matching flavor or run {portal} build {args.flavor} -p {build_dir} first."
+        )
+    return compiler
+
+
 def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
     profile = validate_build_options(args)
@@ -181,23 +242,27 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         build_dir.mkdir(parents=True, exist_ok=True)
         log = build_dir / "build.log"
 
+        if (build_dir / "CMakeCache.txt").is_file():
+            validate_build_tree(args, build_dir, compiler_only=True)
+
         env = {"CC": "clang", "CXX": "clang++"} if args.clang else None
         if args.clang:
             print("clang enabled for this build.")
 
         configure = ["cmake", "-S", str(PROJECT_ROOT), "--preset", preset, "-B", str(build_dir)]
         configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
+        configure.append(f"-DAOBUS_ENABLE_ASAN={'ON' if args.asan else 'OFF'}")
+        configure.append(f"-DAOBUS_ENABLE_TSAN={'ON' if args.tsan else 'OFF'}")
         if args.asan:
             sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
             print(f"{sanitizer_name} enabled for this build.")
-            configure.append("-DAOBUS_ENABLE_ASAN=ON")
         if args.tsan:
             print("TSan enabled for this build.")
-            configure.append("-DAOBUS_ENABLE_TSAN=ON")
 
         print(f"Configuring Aobus with preset '{preset}' in '{build_dir}'...")
         if run(configure, env=env, log=log) != 0:
             raise die("configure failed.")
+        compiler = validate_build_tree(args, build_dir)
 
         build = ["cmake", "--build", str(build_dir)]
         if requested_winui:
@@ -217,7 +282,6 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         if run(build, env=build_env, log=log, append=True) != 0:
             raise die("build failed.")
 
-        compiler = "clang" if args.clang else profile.compiler
         return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)
 
 

@@ -120,6 +120,7 @@ namespace ao::rt
     struct OrderEntry final
     {
       TrackId trackId{};
+      std::size_t sourceRank = 0;
       SortKeys keys{};
       GroupIdentityKey groupIdentity{};
       GroupSection::HeadingValue primary{};
@@ -460,7 +461,7 @@ namespace ao::rt
           }
         }
 
-        return lhs.trackId < rhs.trackId;
+        return lhs.sourceRank < rhs.sourceRank;
       };
     }
 
@@ -883,7 +884,9 @@ namespace ao::rt
                          {
                            if (!entriesDependOnTrackData || hasRequiredTrackData(view, loadMode))
                            {
-                             orderIndex.push_back(buildOrderEntry(trackId, view, dictionary));
+                             auto entry = buildOrderEntry(trackId, view, dictionary);
+                             entry.sourceRank = orderIndex.size();
+                             orderIndex.push_back(std::move(entry));
                            }
                          });
 
@@ -958,7 +961,7 @@ namespace ao::rt
       }
     };
 
-    bool sourceMatches(std::span<TrackId const> expected) const
+    bool matchesSource(std::span<TrackId const> expected) const
     {
       auto const& source = sourceLease.source();
 
@@ -995,14 +998,14 @@ namespace ao::rt
 
       if (resolution.hasStructuralChanges)
       {
-        auto result = delta::apply(sourceOrder, script);
+        auto res = delta::apply(sourceOrder, script);
 
-        if (!result)
+        if (!res)
         {
           return std::nullopt;
         }
 
-        resolution.finalTrackIds = std::move(*result);
+        resolution.finalTrackIds = std::move(*res);
         finalSourceOrder = resolution.finalTrackIds;
       }
       else
@@ -1018,7 +1021,7 @@ namespace ao::rt
         }
       }
 
-      if (!sourceMatches(finalSourceOrder))
+      if (!matchesSource(finalSourceOrder))
       {
         return std::nullopt;
       }
@@ -1127,6 +1130,33 @@ namespace ao::rt
 
       if (comparator)
       {
+        auto sourceRanks = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+        sourceRanks.reserve(finalSourceOrder.size());
+
+        for (std::size_t index = 0; index < finalSourceOrder.size(); ++index)
+        {
+          sourceRanks.emplace(finalSourceOrder[index], index);
+        }
+
+        // Both ranges must belong to the final source membership. A missing
+        // rank is an invariant violation, not a fallback ordering case.
+        for (auto& entry : retainedEntries)
+        {
+          auto const rank = sourceRanks.find(entry.trackId);
+          AO_INVARIANT(rank != sourceRanks.end(), "Retained projection entry is absent from the final source");
+          entry.sourceRank = rank->second;
+        }
+
+        for (auto& entry : replacementEntries)
+        {
+          auto const rank = sourceRanks.find(entry.trackId);
+          AO_INVARIANT(rank != sourceRanks.end(), "Replacement projection entry is absent from the final source");
+          entry.sourceRank = rank->second;
+        }
+
+        // Moves are remove/insert pairs, so moved and updated entries are
+        // replacements. Retained entries keep their keys and relative source
+        // order, and remain sorted after their ranks are refreshed.
         std::ranges::sort(replacementEntries, std::ref(comparator));
         std::ranges::merge(retainedEntries, replacementEntries, std::back_inserter(updatedOrder), std::ref(comparator));
         return updatedOrder;
@@ -1200,7 +1230,7 @@ namespace ao::rt
       }
     }
 
-    bool applyIncrementalBatch(delta::RegularTrackEditScript const& script)
+    bool tryApplyIncrementalBatch(delta::RegularTrackEditScript const& script)
     {
       auto optSourceOrderResolution = resolveFinalSourceOrder(script);
 
@@ -1348,7 +1378,7 @@ namespace ao::rt
         return;
       }
 
-      AO_INVARIANT(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
+      AO_INVARIANT(!batch.deltas.empty() && isValidTrackListProjectionDeltaBatch(batch, previousSize) &&
                    !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
 
       changedSignal.emit(batch);
@@ -1381,12 +1411,12 @@ namespace ao::rt
       changedSignal.disconnectAll();
     }
 
-    static bool sourceOrderBatchMatches(std::vector<TrackId> const& previousTrackIds,
+    static bool matchesSourceOrderBatch(std::vector<TrackId> const& previousTrackIds,
                                         delta::RegularTrackEditScript const& script,
                                         std::vector<TrackId> const& finalTrackIds)
     {
-      auto const result = delta::apply(previousTrackIds, script);
-      return result && *result == finalTrackIds;
+      auto const res = delta::apply(previousTrackIds, script);
+      return res && *res == finalTrackIds;
     }
 
     static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(delta::RegularTrackEditScript const& script)
@@ -1439,7 +1469,7 @@ namespace ao::rt
         return;
       }
 
-      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
           finalSizeOf(batch, previousSize) != orderIndex.size())
       {
         publishReset(previousSize);
@@ -1475,7 +1505,7 @@ namespace ao::rt
 
       auto const& script = std::get<delta::RegularTrackEditScript>(sourceBatch);
 
-      if (!applyIncrementalBatch(script))
+      if (!tryApplyIncrementalBatch(script))
       {
         rebuildOrderIndex();
         publishReset(previousSize);
@@ -1495,7 +1525,7 @@ namespace ao::rt
       }
 
       if (auto const finalTrackIds = projectionTrackIds();
-          !sourceOrderBatchMatches(previousTrackIds, script, finalTrackIds))
+          !matchesSourceOrderBatch(previousTrackIds, script, finalTrackIds))
       {
         publishReset(previousSize);
         return;
@@ -1503,7 +1533,7 @@ namespace ao::rt
 
       auto batch = sourceOrderProjectionBatch(script);
 
-      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
           finalSizeOf(batch, previousSize) != orderIndex.size())
       {
         publishReset(previousSize);

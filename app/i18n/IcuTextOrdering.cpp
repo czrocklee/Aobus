@@ -267,16 +267,16 @@ namespace ao::i18n
       return makeIcuError("Could not construct the ICU collator", status);
     }
 
-    for (auto const& result : {
+    for (auto const& res : {
            setAttribute(*collatorPtr, UCOL_STRENGTH, UCOL_SECONDARY, "strength"),
            setAttribute(*collatorPtr, UCOL_ALTERNATE_HANDLING, UCOL_NON_IGNORABLE, "alternate-handling"),
            setAttribute(*collatorPtr, UCOL_CASE_LEVEL, UCOL_OFF, "case-level"),
            setAttribute(*collatorPtr, UCOL_NUMERIC_COLLATION, UCOL_OFF, "numeric-collation"),
          })
     {
-      if (!result)
+      if (!res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 

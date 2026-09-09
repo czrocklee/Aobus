@@ -28,7 +28,7 @@ namespace ao::uimodel
 
     virtual std::optional<LayoutComponentStateDocument> load(std::string_view presetId) const = 0;
     virtual void save(std::string_view presetId, LayoutComponentStateDocument const& doc) = 0;
-    virtual bool prune(std::string_view presetId, PreparedLayout const& layout, LayoutSchema const& schema) = 0;
-    virtual bool removePreset(std::string_view presetId) = 0;
+    virtual bool tryPrune(std::string_view presetId, PreparedLayout const& layout, LayoutSchema const& schema) = 0;
+    virtual bool tryRemovePreset(std::string_view presetId) = 0;
   };
 } // namespace ao::uimodel

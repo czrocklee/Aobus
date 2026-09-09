@@ -26,12 +26,12 @@ namespace ao::gtk
    * worker-side code. Cancellation remains control-flow: it is rethrown to LifetimeScope and handled silently.
    */
   template<typename Owner, typename Workflow>
-  async::Task<void> runUiWorkflow(async::Runtime* runtime,
-                                  Owner* owner,
-                                  Workflow workflow,
-                                  std::stop_token const stopToken)
+  async::Task<void> runUiWorkflowAsync(async::Runtime* runtime,
+                                       Owner* owner,
+                                       Workflow workflow,
+                                       std::stop_token const stopToken)
   {
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
     co_await workflow(owner, stopToken);
   }
 
@@ -46,20 +46,20 @@ namespace ao::gtk
       scope,
       [runtimeHandle = &runtime, ownerHandle = &owner, workflow = std::move(workflow)](
         std::stop_token const stopToken) mutable
-      { return runUiWorkflow(runtimeHandle, ownerHandle, std::move(workflow), stopToken); },
+      { return runUiWorkflowAsync(runtimeHandle, ownerHandle, std::move(workflow), stopToken); },
       exceptionContext);
   }
 
   template<typename Owner, typename Value, typename Completion>
     requires(!std::is_void_v<Value>)
-  async::Task<void> completeUiTask(async::Runtime* runtime,
-                                   Owner* owner,
-                                   async::Task<Value> task,
-                                   Completion completion,
-                                   std::stop_token const stopToken)
+  async::Task<void> completeUiTaskAsync(async::Runtime* runtime,
+                                        Owner* owner,
+                                        async::Task<Value> task,
+                                        Completion completion,
+                                        std::stop_token const stopToken)
   {
     auto completedRes = co_await std::move(task);
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
     std::invoke(std::move(completion), owner, std::move(completedRes));
   }
 
@@ -86,6 +86,6 @@ namespace ao::gtk
       exceptionContext,
       [runtimeHandle = &runtime, task = std::move(task), completion = std::move(completion)](
         Owner* ownerHandle, std::stop_token const stopToken) mutable
-      { return completeUiTask(runtimeHandle, ownerHandle, std::move(task), std::move(completion), stopToken); });
+      { return completeUiTaskAsync(runtimeHandle, ownerHandle, std::move(task), std::move(completion), stopToken); });
   }
 } // namespace ao::gtk

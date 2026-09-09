@@ -82,7 +82,7 @@ namespace ao::uimodel
       return it == properties.end() ? nullptr : &*it;
     }
 
-    bool appendProperties(std::vector<PropertySchema>& target, std::vector<PropertySchema> additions)
+    bool tryAppendProperties(std::vector<PropertySchema>& target, std::vector<PropertySchema> additions)
     {
       for (auto& property : additions)
       {
@@ -131,22 +131,22 @@ namespace ao::uimodel
                                      .optActionSlot = slot});
       };
 
-      if (schema.allows(ActionSlot::PrimaryClick))
+      if (schema.accepts(ActionSlot::PrimaryClick))
       {
         inject(kPrimaryActionProp, "Primary Action", ActionSlot::PrimaryClick);
       }
 
-      if (schema.allows(ActionSlot::PrimaryLongPress))
+      if (schema.accepts(ActionSlot::PrimaryLongPress))
       {
         inject(kPrimaryLongPressActionProp, "Primary Long Press", ActionSlot::PrimaryLongPress);
       }
 
-      if (schema.allows(ActionSlot::SecondaryClick))
+      if (schema.accepts(ActionSlot::SecondaryClick))
       {
         inject(kSecondaryActionProp, "Secondary Action", ActionSlot::SecondaryClick);
       }
 
-      if (schema.allows(ActionSlot::SecondaryLongPress))
+      if (schema.accepts(ActionSlot::SecondaryLongPress))
       {
         inject(kSecondaryLongPressActionProp, "Secondary Long Press", ActionSlot::SecondaryLongPress);
       }
@@ -166,7 +166,7 @@ namespace ao::uimodel
         });
     }
 
-    bool preservesSharedVocabulary(ComponentSchema const& candidate)
+    bool hasSharedVocabulary(ComponentSchema const& candidate)
     {
       auto const shared = sharedComponentSchemas();
       auto const it = std::ranges::find(shared, candidate.id, &ComponentSchema::id);
@@ -191,7 +191,7 @@ namespace ao::uimodel
 
   std::optional<std::string_view> ComponentSchema::actionId(LayoutNode const& node, ActionSlot const slot) const
   {
-    if (!allows(slot))
+    if (!accepts(slot))
     {
       return std::nullopt;
     }
@@ -232,14 +232,14 @@ namespace ao::uimodel
     return boundActionSlots(node) != 0;
   }
 
-  bool LayoutSchema::addComponent(ComponentSchema schema)
+  bool LayoutSchema::tryAddComponent(ComponentSchema schema)
   {
     if (_componentIndexById.contains(schema.id) ||
         std::ranges::any_of(
           schema.properties, [](PropertySchema const& property) { return isActionProperty(property.name); }) ||
         std::ranges::any_of(schema.defaultActions,
-                            [&schema](DefaultActionBinding const& binding) { return !schema.allows(binding.slot); }) ||
-        !preservesSharedVocabulary(schema))
+                            [&schema](DefaultActionBinding const& binding) { return !schema.accepts(binding.slot); }) ||
+        !hasSharedVocabulary(schema))
     {
       return false;
     }
@@ -250,7 +250,7 @@ namespace ao::uimodel
     return true;
   }
 
-  bool LayoutSchema::addSharedComponent(std::string_view const id, ComponentSchemaExtension extension)
+  bool LayoutSchema::tryAddSharedComponent(std::string_view const id, ComponentSchemaExtension extension)
   {
     auto const shared = sharedComponentSchemas();
     auto const it = std::ranges::find(shared, id, &ComponentSchema::id);
@@ -262,8 +262,8 @@ namespace ao::uimodel
 
     auto schema = *it;
 
-    if (!appendProperties(schema.properties, std::move(extension.properties)) ||
-        !appendProperties(schema.layoutProperties, std::move(extension.layoutProperties)))
+    if (!tryAppendProperties(schema.properties, std::move(extension.properties)) ||
+        !tryAppendProperties(schema.layoutProperties, std::move(extension.layoutProperties)))
     {
       return false;
     }
@@ -272,15 +272,15 @@ namespace ao::uimodel
     mergeDefaultActions(schema, std::move(extension.defaultActions));
 
     if (std::ranges::any_of(schema.defaultActions,
-                            [&schema](DefaultActionBinding const& binding) { return !schema.allows(binding.slot); }))
+                            [&schema](DefaultActionBinding const& binding) { return !schema.accepts(binding.slot); }))
     {
       return false;
     }
 
-    return addComponent(std::move(schema));
+    return tryAddComponent(std::move(schema));
   }
 
-  bool LayoutSchema::addAction(ActionSchema schema)
+  bool LayoutSchema::tryAddAction(ActionSchema schema)
   {
     if (_actionIndexById.contains(schema.id))
     {
@@ -314,7 +314,7 @@ namespace ao::uimodel
 
   std::span<ComponentSchema const> sharedComponentSchemas()
   {
-    static auto const schemas = std::vector<ComponentSchema>{
+    static auto const kSchemas = std::vector<ComponentSchema>{
       {.id = "box",
        .displayName = "Box",
        .category = ComponentCategory::Container,
@@ -375,6 +375,6 @@ namespace ao::uimodel
       leaf("status.message", "Status Message", ComponentCategory::Status),
     };
 
-    return schemas;
+    return kSchemas;
   }
 } // namespace ao::uimodel

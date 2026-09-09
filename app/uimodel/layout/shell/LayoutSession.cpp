@@ -157,7 +157,7 @@ namespace ao::uimodel
     auto promotion = PanelSizePromotion{.layout = _layout, .componentState = _componentState};
     promotion.componentState.preset = activeOrDefaultPresetId(presetId());
 
-    if (!promotePanelSizeDefaults(promotion.layout, promotion.componentState))
+    if (!tryPromotePanelSizeDefaults(promotion.layout, promotion.componentState))
     {
       return std::nullopt;
     }

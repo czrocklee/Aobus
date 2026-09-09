@@ -44,12 +44,12 @@ namespace ao::tui
      * refused string leaves the value and cursor untouched.
      *
      * The atomicity is per call, and FTXUI implements no bracketed paste, so a
-     * pasted string does not arrive here as one insert: the terminal replays it
+     * pasted string does not arrive here as one tryInsert: the terminal replays it
      * as ordinary key events and its newlines arrive as Return. A multi-line
      * paste is therefore not refused as a unit, and this model cannot tell one
      * from typing.
      */
-    bool insert(std::string_view text);
+    bool tryInsert(std::string_view text);
 
     /**
      * @brief Replaces the slice [begin, end) with @p text, reporting whether accepted.
@@ -59,17 +59,17 @@ namespace ao::tui
      * without control characters. If invalid, refuses atomically, preserving value and cursor.
      * On acceptance, parks the cursor at the settled boundary after the inserted text.
      */
-    bool replaceRange(std::size_t begin, std::size_t end, std::string_view text);
+    bool tryReplaceRange(std::size_t begin, std::size_t end, std::string_view text);
 
     /// Removes the cluster before the cursor; false at the start of the value.
-    bool backspace();
+    bool tryBackspace();
     /// Removes the cluster at the cursor; false at the end of the value.
-    bool deleteForward();
+    bool tryDeleteForward();
 
-    bool moveLeft();
-    bool moveRight();
-    bool moveToBegin();
-    bool moveToEnd();
+    bool tryMoveLeft();
+    bool tryMoveRight();
+    bool tryMoveToBegin();
+    bool tryMoveToEnd();
 
   private:
     /// The nearest grapheme boundary at or after @p offset in the current value.

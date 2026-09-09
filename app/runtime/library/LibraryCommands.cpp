@@ -245,9 +245,9 @@ namespace ao::rt
           continue;
         }
 
-        if (auto result = writer.updateHot(trackId, builder); !result)
+        if (auto res = writer.updateHot(trackId, builder); !res)
         {
-          return storageError("Failed to update hot track data", result.error());
+          return storageError("Failed to update hot track data", res.error());
         }
 
         changes.push_back(TrackTagsChange{
@@ -261,9 +261,9 @@ namespace ao::rt
   namespace
   {
     template<typename Value, typename Owner, typename Operation>
-    async::Task<Value> runWriterOperation(std::shared_ptr<Owner> ownerPtr,
-                                          LibraryWriteLane::Submission submission,
-                                          Operation operation)
+    async::Task<Value> runWriterOperationAsync(std::shared_ptr<Owner> ownerPtr,
+                                               LibraryWriteLane::Submission submission,
+                                               Operation operation)
     {
       auto optResult = std::optional<Value>{};
       auto deferredException = std::exception_ptr{};
@@ -277,7 +277,7 @@ namespace ao::rt
         deferredException = std::current_exception();
       }
 
-      co_await ownerPtr->asyncRuntime.resumeOnCallbackExecutor();
+      co_await ownerPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
 
       if (deferredException)
       {
@@ -291,10 +291,10 @@ namespace ao::rt
     // This ordinary function captures submission context before the returned
     // lazy coroutine can outlive its caller or cross an executor boundary.
     template<typename Value, typename Owner, typename Method, typename... Args>
-    async::Task<Value> submitWriterOperation(std::shared_ptr<Owner> ownerPtr, Method method, Args... args)
+    async::Task<Value> submitWriterOperationAsync(std::shared_ptr<Owner> ownerPtr, Method method, Args... args)
     {
       auto submission = ownerPtr->writeLane.captureSubmission();
-      return runWriterOperation<Value>(
+      return runWriterOperationAsync<Value>(
         std::move(ownerPtr),
         std::move(submission),
         [method, ... args = std::move(args)](Owner& owner, LibraryWriteLane::Submission innerSubmission) mutable
@@ -311,163 +311,170 @@ namespace ao::rt
 
   LibraryCommands::~LibraryCommands() = default;
 
-  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::updateMetadata(
+  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::updateMetadataAsync(
     BoundTrackTargets targets,
     MetadataPatch patch)
   {
-    return submitWriterOperation<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>>(
-      _implPtr, &Impl::applyUpdateMetadata, std::move(targets), std::move(patch));
+    return submitWriterOperationAsync<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>>(
+      _implPtr, &Impl::applyUpdateMetadataAsync, std::move(targets), std::move(patch));
   }
 
-  async::Task<Result<UpdateTrackMetadataReply>> LibraryCommands::previewUpdateMetadata(std::vector<TrackId> trackIds,
-                                                                                       MetadataPatch patch)
+  async::Task<Result<UpdateTrackMetadataReply>> LibraryCommands::previewUpdateMetadataAsync(
+    std::vector<TrackId> trackIds,
+    MetadataPatch patch)
   {
-    return submitWriterOperation<Result<UpdateTrackMetadataReply>>(
-      _implPtr, &Impl::previewUpdateMetadata, std::move(trackIds), std::move(patch));
+    return submitWriterOperationAsync<Result<UpdateTrackMetadataReply>>(
+      _implPtr, &Impl::previewUpdateMetadataAsync, std::move(trackIds), std::move(patch));
   }
 
-  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::editTags(
+  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::editTagsAsync(
     BoundTrackTargets targets,
     std::vector<std::string> tagsToAdd,
     std::vector<std::string> tagsToRemove)
   {
-    return submitWriterOperation<Result<TrackAuthoringResult<EditTrackTagsReply>>>(
-      _implPtr, &Impl::applyEditTags, std::move(targets), std::move(tagsToAdd), std::move(tagsToRemove));
+    return submitWriterOperationAsync<Result<TrackAuthoringResult<EditTrackTagsReply>>>(
+      _implPtr, &Impl::applyEditTagsAsync, std::move(targets), std::move(tagsToAdd), std::move(tagsToRemove));
   }
 
-  async::Task<Result<EditTrackTagsReply>> LibraryCommands::previewEditTags(std::vector<TrackId> trackIds,
-                                                                           std::vector<std::string> tagsToAdd,
-                                                                           std::vector<std::string> tagsToRemove)
+  async::Task<Result<EditTrackTagsReply>> LibraryCommands::previewEditTagsAsync(std::vector<TrackId> trackIds,
+                                                                                std::vector<std::string> tagsToAdd,
+                                                                                std::vector<std::string> tagsToRemove)
   {
-    return submitWriterOperation<Result<EditTrackTagsReply>>(
-      _implPtr, &Impl::previewEditTags, std::move(trackIds), std::move(tagsToAdd), std::move(tagsToRemove));
+    return submitWriterOperationAsync<Result<EditTrackTagsReply>>(
+      _implPtr, &Impl::previewEditTagsAsync, std::move(trackIds), std::move(tagsToAdd), std::move(tagsToRemove));
   }
 
-  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> LibraryCommands::updateProperties(
+  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> LibraryCommands::updatePropertiesAsync(
     BoundTrackTargets targets,
     TrackPropertiesPatch patch)
   {
-    return submitWriterOperation<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>>(
-      _implPtr, &Impl::applyUpdateProperties, std::move(targets), std::move(patch));
+    return submitWriterOperationAsync<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>>(
+      _implPtr, &Impl::applyUpdatePropertiesAsync, std::move(targets), std::move(patch));
   }
 
-  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryCommands::addTracksToList(
+  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryCommands::addTracksToListAsync(
     ListId const listId,
     BoundTrackTargets targets)
   {
-    return submitWriterOperation<Result<TrackAuthoringResult<AddTracksToListReply>>>(
-      _implPtr, &Impl::applyAddTracksToList, listId, std::move(targets));
+    return submitWriterOperationAsync<Result<TrackAuthoringResult<AddTracksToListReply>>>(
+      _implPtr, &Impl::applyAddTracksToListAsync, listId, std::move(targets));
   }
 
-  async::Task<Result<AddTracksToListReply>> LibraryCommands::previewAddTracksToList(ListId const listId,
-                                                                                    std::vector<TrackId> trackIds)
+  async::Task<Result<AddTracksToListReply>> LibraryCommands::previewAddTracksToListAsync(ListId const listId,
+                                                                                         std::vector<TrackId> trackIds)
   {
-    return submitWriterOperation<Result<AddTracksToListReply>>(
-      _implPtr, &Impl::previewAddTracksToList, listId, std::move(trackIds));
+    return submitWriterOperationAsync<Result<AddTracksToListReply>>(
+      _implPtr, &Impl::previewAddTracksToListAsync, listId, std::move(trackIds));
   }
 
-  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> LibraryCommands::removeTracksFromList(
+  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> LibraryCommands::removeTracksFromListAsync(
     ListId const listId,
     BoundTrackTargets targets)
   {
-    return submitWriterOperation<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>(
-      _implPtr, &Impl::applyRemoveTracksFromList, listId, std::move(targets));
+    return submitWriterOperationAsync<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>(
+      _implPtr, &Impl::applyRemoveTracksFromListAsync, listId, std::move(targets));
   }
 
-  async::Task<Result<RemoveTracksFromListReply>> LibraryCommands::previewRemoveTracksFromList(
+  async::Task<Result<RemoveTracksFromListReply>> LibraryCommands::previewRemoveTracksFromListAsync(
     ListId const listId,
     std::vector<TrackId> trackIds)
   {
-    return submitWriterOperation<Result<RemoveTracksFromListReply>>(
-      _implPtr, &Impl::previewRemoveTracksFromList, listId, std::move(trackIds));
+    return submitWriterOperationAsync<Result<RemoveTracksFromListReply>>(
+      _implPtr, &Impl::previewRemoveTracksFromListAsync, listId, std::move(trackIds));
   }
 
-  async::Task<Result<ListId>> LibraryCommands::createList(ListDraft draft)
+  async::Task<Result<ListId>> LibraryCommands::createListAsync(ListDraft draft)
   {
-    return submitWriterOperation<Result<ListId>>(_implPtr, &Impl::createList, std::move(draft));
+    return submitWriterOperationAsync<Result<ListId>>(_implPtr, &Impl::createListAsync, std::move(draft));
   }
 
-  async::Task<Result<>> LibraryCommands::previewCreateList(ListDraft draft)
+  async::Task<Result<>> LibraryCommands::previewCreateListAsync(ListDraft draft)
   {
-    return submitWriterOperation<Result<>>(_implPtr, &Impl::previewCreateList, std::move(draft));
+    return submitWriterOperationAsync<Result<>>(_implPtr, &Impl::previewCreateListAsync, std::move(draft));
   }
 
-  async::Task<Result<UpdateListReply>> LibraryCommands::updateList(ListDraft draft)
+  async::Task<Result<UpdateListReply>> LibraryCommands::updateListAsync(ListDraft draft)
   {
-    return submitWriterOperation<Result<UpdateListReply>>(_implPtr, &Impl::updateList, std::move(draft));
+    return submitWriterOperationAsync<Result<UpdateListReply>>(_implPtr, &Impl::updateListAsync, std::move(draft));
   }
 
-  async::Task<Result<UpdateListReply>> LibraryCommands::previewUpdateList(ListDraft draft)
+  async::Task<Result<UpdateListReply>> LibraryCommands::previewUpdateListAsync(ListDraft draft)
   {
-    return submitWriterOperation<Result<UpdateListReply>>(_implPtr, &Impl::previewUpdateList, std::move(draft));
+    return submitWriterOperationAsync<Result<UpdateListReply>>(
+      _implPtr, &Impl::previewUpdateListAsync, std::move(draft));
   }
 
-  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryCommands::moveListOrder(
+  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryCommands::moveListOrderAsync(
     BoundListOrder order,
     std::vector<TrackId> selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
-    return submitWriterOperation<Result<AuthoringResult<MoveListOrderReply>>>(
-      _implPtr, &Impl::applyMoveListOrder, std::move(order), std::move(selectedTrackIds), optBeforeTrackId);
+    return submitWriterOperationAsync<Result<AuthoringResult<MoveListOrderReply>>>(
+      _implPtr, &Impl::applyMoveListOrderAsync, std::move(order), std::move(selectedTrackIds), optBeforeTrackId);
   }
 
-  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryCommands::resetListOrder(BoundListOrder order)
+  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryCommands::resetListOrderAsync(BoundListOrder order)
   {
-    return submitWriterOperation<Result<AuthoringResult<ResetListOrderReply>>>(
-      _implPtr, &Impl::applyResetListOrder, std::move(order));
+    return submitWriterOperationAsync<Result<AuthoringResult<ResetListOrderReply>>>(
+      _implPtr, &Impl::applyResetListOrderAsync, std::move(order));
   }
 
-  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> LibraryCommands::forgetHiddenListOrder(
+  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> LibraryCommands::forgetHiddenListOrderAsync(
     BoundListOrder order)
   {
-    return submitWriterOperation<Result<AuthoringResult<ForgetHiddenListOrderReply>>>(
-      _implPtr, &Impl::applyForgetHiddenListOrder, std::move(order));
+    return submitWriterOperationAsync<Result<AuthoringResult<ForgetHiddenListOrderReply>>>(
+      _implPtr, &Impl::applyForgetHiddenListOrderAsync, std::move(order));
   }
 
-  async::Task<Result<DeleteListReply>> LibraryCommands::deleteList(ListId const listId, DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryCommands::deleteListAsync(ListId const listId,
+                                                                        DeleteListOptions const options)
   {
-    return submitWriterOperation<Result<DeleteListReply>>(_implPtr, &Impl::deleteList, listId, options);
+    return submitWriterOperationAsync<Result<DeleteListReply>>(_implPtr, &Impl::deleteListAsync, listId, options);
   }
 
-  async::Task<Result<DeleteListReply>> LibraryCommands::previewDeleteList(ListId const listId,
-                                                                          DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryCommands::previewDeleteListAsync(ListId const listId,
+                                                                               DeleteListOptions const options)
   {
-    return submitWriterOperation<Result<DeleteListReply>>(_implPtr, &Impl::previewDeleteList, listId, options);
+    return submitWriterOperationAsync<Result<DeleteListReply>>(
+      _implPtr, &Impl::previewDeleteListAsync, listId, options);
   }
 
-  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::deleteListAndDescendants(ListId const listId,
-                                                                                        DeleteListOptions const options)
-  {
-    return submitWriterOperation<Result<DeleteListSubtreeReply>>(
-      _implPtr, &Impl::deleteListAndDescendants, listId, options);
-  }
-
-  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::previewDeleteListAndDescendants(
+  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::deleteListAndDescendantsAsync(
     ListId const listId,
     DeleteListOptions const options)
   {
-    return submitWriterOperation<Result<DeleteListSubtreeReply>>(
-      _implPtr, &Impl::previewDeleteListAndDescendants, listId, options);
+    return submitWriterOperationAsync<Result<DeleteListSubtreeReply>>(
+      _implPtr, &Impl::deleteListAndDescendantsAsync, listId, options);
   }
 
-  async::Task<Result<DeleteTrackReply>> LibraryCommands::deleteTrack(TrackId const trackId)
+  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::previewDeleteListAndDescendantsAsync(
+    ListId const listId,
+    DeleteListOptions const options)
   {
-    return submitWriterOperation<Result<DeleteTrackReply>>(_implPtr, &Impl::deleteTrack, trackId);
+    return submitWriterOperationAsync<Result<DeleteListSubtreeReply>>(
+      _implPtr, &Impl::previewDeleteListAndDescendantsAsync, listId, options);
   }
 
-  async::Task<Result<DeleteTrackReply>> LibraryCommands::previewDeleteTrack(TrackId const trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryCommands::deleteTrackAsync(TrackId const trackId)
   {
-    return submitWriterOperation<Result<DeleteTrackReply>>(_implPtr, &Impl::previewDeleteTrack, trackId);
+    return submitWriterOperationAsync<Result<DeleteTrackReply>>(_implPtr, &Impl::deleteTrackAsync, trackId);
   }
 
-  async::Task<Result<CreateTrackReply>> LibraryCommands::createTrackFromFile(std::filesystem::path path)
+  async::Task<Result<DeleteTrackReply>> LibraryCommands::previewDeleteTrackAsync(TrackId const trackId)
   {
-    return submitWriterOperation<Result<CreateTrackReply>>(_implPtr, &Impl::createTrackFromFile, std::move(path));
+    return submitWriterOperationAsync<Result<DeleteTrackReply>>(_implPtr, &Impl::previewDeleteTrackAsync, trackId);
   }
 
-  async::Task<Result<PreviewCreateTrackReply>> LibraryCommands::previewCreateTrackFromFile(std::filesystem::path path)
+  async::Task<Result<CreateTrackReply>> LibraryCommands::createTrackFromFileAsync(std::filesystem::path path)
   {
-    return submitWriterOperation<Result<PreviewCreateTrackReply>>(
-      _implPtr, &Impl::previewCreateTrackFromFile, std::move(path));
+    return submitWriterOperationAsync<Result<CreateTrackReply>>(
+      _implPtr, &Impl::createTrackFromFileAsync, std::move(path));
+  }
+
+  async::Task<Result<PreviewCreateTrackReply>> LibraryCommands::previewCreateTrackFromFileAsync(
+    std::filesystem::path path)
+  {
+    return submitWriterOperationAsync<Result<PreviewCreateTrackReply>>(
+      _implPtr, &Impl::previewCreateTrackFromFileAsync, std::move(path));
   }
 } // namespace ao::rt

@@ -83,11 +83,12 @@ namespace ao::rt
     /// every row is revalidated against the live manifest before its identity
     /// is committed. Cancellation flushes rows already hashed in the current
     /// batch and then propagates OperationCancelled.
-    async::Task<Result<AudioIdentityIndexResult>> indexPending(CommitBatchCallback commitBatchCallback,
-                                                               Options options = {},
-                                                               AudioIdentityIndexProgressCallback progressCallback = {},
-                                                               AudioIdentityIndexFailureCallback failureCallback = {},
-                                                               std::stop_token stopToken = {});
+    async::Task<Result<AudioIdentityIndexResult>> indexPendingAsync(
+      CommitBatchCallback commitBatchCallback,
+      Options options = {},
+      AudioIdentityIndexProgressCallback progressCallback = {},
+      AudioIdentityIndexFailureCallback failureCallback = {},
+      std::stop_token stopToken = {});
 
     AudioIdentityIndexer(AudioIdentityIndexer const&) = delete;
     AudioIdentityIndexer& operator=(AudioIdentityIndexer const&) = delete;

@@ -27,30 +27,30 @@ namespace ao::rt::test
 
   namespace
   {
-    Task<std::thread::id> pingPongTask(Runtime* runtime, AsyncTestState<int> counter)
+    Task<std::thread::id> pingPongTaskAsync(Runtime* runtime, AsyncTestState<int> counter)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       // Now on worker thread — the thread switch is the behavior under test.
       counter.increment();
 
-      co_await runtime->resumeOnCallbackExecutor();
+      co_await runtime->resumeOnCallbackExecutorAsync();
       // Now back on the callback executor's owner thread.
       counter.increment();
 
       co_return std::this_thread::get_id();
     }
 
-    Task<void> callbackAfterRuntimeShutdown(Runtime* runtime,
-                                            AsyncTestState<bool> resumed,
-                                            [[maybe_unused]] std::shared_ptr<void> lifetimePtr)
+    Task<void> callbackAfterRuntimeShutdownAsync(Runtime* runtime,
+                                                 AsyncTestState<bool> resumed,
+                                                 [[maybe_unused]] std::shared_ptr<void> lifetimePtr)
     {
-      co_await runtime->resumeOnCallbackExecutor();
+      co_await runtime->resumeOnCallbackExecutorAsync();
       resumed.set(true);
     }
 
-    Task<void> failingTask(Runtime* runtime)
+    Task<void> failingTaskAsync(Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       throw std::runtime_error{"Test failure"};
     }
 
@@ -90,9 +90,9 @@ namespace ao::rt::test
       std::int32_t _value = 0;
     };
 
-    Task<NonDefaultTaskResult> nonDefaultResultTask(Runtime* runtime)
+    Task<NonDefaultTaskResult> nonDefaultResultTaskAsync(Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       co_return NonDefaultTaskResult{42};
     }
 
@@ -101,15 +101,15 @@ namespace ao::rt::test
       throw std::runtime_error{"Non-default result failure"};
     }
 
-    Task<NonDefaultTaskResult> failingNonDefaultResultTask(Runtime* runtime)
+    Task<NonDefaultTaskResult> failingNonDefaultResultTaskAsync(Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       co_return throwNonDefaultResultFailure();
     }
 
-    Task<ThrowingDefaultTaskResult> throwingDefaultResultTask(Runtime* runtime, bool fail)
+    Task<ThrowingDefaultTaskResult> throwingDefaultResultTaskAsync(Runtime* runtime, bool fail)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
 
       if (fail)
       {
@@ -119,13 +119,13 @@ namespace ao::rt::test
       co_return ThrowingDefaultTaskResult{84};
     }
 
-    Task<void> sleepAndRecord(Runtime* runtime,
-                              std::chrono::milliseconds const delay,
-                              AsyncTestState<std::uint32_t> callbackCount,
-                              AsyncTestState<bool> ranOnWorker,
-                              std::stop_token const stopToken)
+    Task<void> sleepAndRecordAsync(Runtime* runtime,
+                                   std::chrono::milliseconds const delay,
+                                   AsyncTestState<std::uint32_t> callbackCount,
+                                   AsyncTestState<bool> ranOnWorker,
+                                   std::stop_token const stopToken)
     {
-      co_await runtime->sleepFor(delay, stopToken);
+      co_await runtime->sleepForAsync(delay, stopToken);
       ranOnWorker.set(!runtime->callbackExecutor().isCurrent());
       callbackCount.increment();
     }
@@ -149,14 +149,14 @@ namespace ao::rt::test
       AsyncTestState<std::uint32_t> _exitCount;
     };
 
-    Task<void> timedCancellationRace(Runtime* runtime,
-                                     AsyncTestState<std::uint32_t> startedCount,
-                                     AsyncTestState<std::uint32_t> exitCount,
-                                     std::stop_token const stopToken)
+    Task<void> timedCancellationRaceAsync(Runtime* runtime,
+                                          AsyncTestState<std::uint32_t> startedCount,
+                                          AsyncTestState<std::uint32_t> exitCount,
+                                          std::stop_token const stopToken)
     {
       auto const exitRecorder = TaskExitRecorder{exitCount};
       startedCount.increment();
-      co_await runtime->sleepFor(std::chrono::milliseconds{1}, stopToken);
+      co_await runtime->sleepForAsync(std::chrono::milliseconds{1}, stopToken);
     }
   } // namespace
 
@@ -165,7 +165,7 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
     auto valuePtr = std::make_unique<std::int32_t>(42);
-    auto future = runtime.spawn(makeReadyTask(std::move(valuePtr)));
+    auto future = runtime.spawn(makeReadyTaskAsync(std::move(valuePtr)));
     CHECK_FALSE(valuePtr);
     CHECK(*future.get() == 42);
   }
@@ -178,7 +178,7 @@ namespace ao::rt::test
     auto counter = AsyncTestState<int>::create(0);
     auto const ownerThread = std::this_thread::get_id();
 
-    auto future = runtime.spawn(pingPongTask(&runtime, counter));
+    auto future = runtime.spawn(pingPongTaskAsync(&runtime, counter));
     executor.runOneTurn();
     auto const result = future.get();
 
@@ -201,7 +201,7 @@ namespace ao::rt::test
     {
       auto runtimePtr = std::make_unique<Runtime>(executor, 1);
       runtimePtr->spawnLogged(
-        flagCompletion(completedPtr, callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr)));
+        flagCompletionAsync(completedPtr, callbackAfterRuntimeShutdownAsync(runtimePtr.get(), resumed, lifetimePtr)));
       lifetimePtr.reset();
       executor.checkQueued();
       CHECK_FALSE(weakLifetimePtr.expired());
@@ -225,7 +225,7 @@ namespace ao::rt::test
     auto const weakLifetimePtr = std::weak_ptr<void>{lifetimePtr};
     auto runtimePtr = std::make_unique<Runtime>(executor, 1);
 
-    runtimePtr->spawnLogged(callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr));
+    runtimePtr->spawnLogged(callbackAfterRuntimeShutdownAsync(runtimePtr.get(), resumed, lifetimePtr));
     lifetimePtr.reset();
     executor.checkQueued();
 
@@ -243,7 +243,7 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
 
-    auto future = runtime.spawn(failingTask(&runtime));
+    auto future = runtime.spawn(failingTaskAsync(&runtime));
     REQUIRE_THROWS_AS(future.get(), std::runtime_error);
 
     runtime.requestStop();
@@ -259,11 +259,11 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
 
-    CHECK(runtime.spawn(nonDefaultResultTask(&runtime)).get().value() == 42);
-    CHECK_THROWS_AS(runtime.spawn(failingNonDefaultResultTask(&runtime)).get(), std::runtime_error);
-    CHECK(runtime.spawn(throwingDefaultResultTask(&runtime, false)).get().value() == 84);
+    CHECK(runtime.spawn(nonDefaultResultTaskAsync(&runtime)).get().value() == 42);
+    CHECK_THROWS_AS(runtime.spawn(failingNonDefaultResultTaskAsync(&runtime)).get(), std::runtime_error);
+    CHECK(runtime.spawn(throwingDefaultResultTaskAsync(&runtime, false)).get().value() == 84);
 
-    auto originalFailureFuture = runtime.spawn(throwingDefaultResultTask(&runtime, true));
+    auto originalFailureFuture = runtime.spawn(throwingDefaultResultTaskAsync(&runtime, true));
     auto const originalFailure = captureTaskFutureException(originalFailureFuture);
     REQUIRE(originalFailure);
 
@@ -289,9 +289,9 @@ namespace ao::rt::test
 
     auto task = runtime.spawnCancellable(
       [&runtime, callbackCount, ranOnWorker](std::stop_token const stopToken)
-      { return sleepAndRecord(&runtime, std::chrono::milliseconds{1}, callbackCount, ranOnWorker, stopToken); });
+      { return sleepAndRecordAsync(&runtime, std::chrono::milliseconds{1}, callbackCount, ranOnWorker, stopToken); });
 
-    REQUIRE(callbackCount.waitUntil(1));
+    REQUIRE(callbackCount.tryWaitUntil(1));
     CHECK(ranOnWorker.load());
     CHECK(executor.queuedCount() == 0);
   }
@@ -307,18 +307,18 @@ namespace ao::rt::test
 
     auto task = runtime.spawnCancellable(
       [&runtime, callbackCount, ranOnWorker](std::stop_token const stopToken)
-      { return sleepAndRecord(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker, stopToken); });
-    REQUIRE(sleeper.waitForCallCount(1));
+      { return sleepAndRecordAsync(&runtime, std::chrono::seconds{30}, callbackCount, ranOnWorker, stopToken); });
+    REQUIRE(sleeper.tryWaitForCallCount(1));
     auto const sleepingCall = sleeper.call(0);
     auto const cancellingThread = std::this_thread::get_id();
 
     task.reset();
-    REQUIRE(sleeper.waitForCancellation(0));
+    REQUIRE(sleeper.tryWaitForCancellation(0));
     auto const cancelledCall = sleeper.call(0);
     CHECK(cancelledCall.cancelled);
     CHECK(cancelledCall.startedOn != cancellingThread);
     CHECK(cancelledCall.cancelledOn == cancellingThread);
-    CHECK_FALSE(sleeper.fireById(sleepingCall.id));
+    CHECK_FALSE(sleeper.tryFireById(sleepingCall.id));
     runtime.requestStop();
     runtime.join();
 
@@ -338,8 +338,8 @@ namespace ao::rt::test
     {
       auto task =
         runtime.spawnCancellable([&runtime, startedCount, exitCount](std::stop_token const stopToken)
-                                 { return timedCancellationRace(&runtime, startedCount, exitCount, stopToken); });
-      REQUIRE(startedCount.waitUntil(iteration + 1));
+                                 { return timedCancellationRaceAsync(&runtime, startedCount, exitCount, stopToken); });
+      REQUIRE(startedCount.tryWaitUntil(iteration + 1));
 
       auto cancellingThread = std::jthread{[task = std::move(task)] mutable
                                            {
@@ -347,7 +347,7 @@ namespace ao::rt::test
                                              task.reset();
                                            }};
       cancellingThread.join();
-      REQUIRE(exitCount.waitUntil(iteration + 1));
+      REQUIRE(exitCount.tryWaitUntil(iteration + 1));
     }
 
     runtime.requestStop();

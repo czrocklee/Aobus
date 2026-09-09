@@ -97,7 +97,7 @@ namespace ao::library::test
       mode = UpdateMode::Both;
     }
 
-    auto const result = [&] -> Result<>
+    auto const res = [&] -> Result<>
     {
       switch (mode)
       {
@@ -110,8 +110,8 @@ namespace ao::library::test
       return makeError(Error::Code::InvalidState, "Unreachable update mode");
     }();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     REQUIRE(transaction.commit());
 
     auto readTransaction = fixture.library.readTransaction();
@@ -138,9 +138,9 @@ namespace ao::library::test
 
     // Track zero is a corrupt target, not a recoverable miss, so it must not
     // read back as NotFound just because no row occupies key zero.
-    auto const result = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *preparedRes);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    auto const res = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *preparedRes);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
     REQUIRE(transaction.commit());
   }
 } // namespace ao::library::test

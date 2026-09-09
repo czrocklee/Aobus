@@ -186,7 +186,7 @@ namespace ao::library::test
     auto const id = addCommittedTrack(fixture.library, TrackSpec{});
 
     auto wtxn = writeTransaction(fixture.library);
-    REQUIRE(physicalWriter(fixture.store, wtxn).remove(id));
+    REQUIRE(physicalWriter(fixture.store, wtxn).tryRemove(id));
     REQUIRE(wtxn.commit());
 
     auto rtxn = fixture.library.readTransaction();

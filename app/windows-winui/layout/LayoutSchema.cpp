@@ -91,13 +91,13 @@ namespace ao::winui
 
     void addComponent(LayoutSchema& schema, ComponentSchema component)
     {
-      auto const added = schema.addComponent(std::move(component));
+      auto const added = schema.tryAddComponent(std::move(component));
       AO_EXPECTS(added, "WinUI component ids must be unique and component schemas must be valid");
     }
 
     void addShared(LayoutSchema& schema, std::string_view const id, ComponentSchemaExtension extension = {})
     {
-      auto const added = schema.addSharedComponent(id, std::move(extension));
+      auto const added = schema.tryAddSharedComponent(id, std::move(extension));
       AO_EXPECTS(added, "WinUI shared components must import one canonical schema entry");
     }
 
@@ -218,10 +218,10 @@ namespace ao::winui
                    std::string_view const category,
                    uimodel::ActionCapabilityMask const capabilities = 0)
     {
-      auto const added = schema.addAction({.id = std::string{id},
-                                           .label = std::string{label},
-                                           .category = std::string{category},
-                                           .capabilities = capabilities});
+      auto const added = schema.tryAddAction({.id = std::string{id},
+                                              .label = std::string{label},
+                                              .category = std::string{category},
+                                              .capabilities = capabilities});
       AO_EXPECTS(added, "WinUI action ids must be unique");
     }
 
@@ -339,7 +339,7 @@ namespace ao::winui
     return std::nullopt;
   }
 
-  bool componentRequiresId(std::string_view const type) noexcept
+  bool needsComponentId(std::string_view const type) noexcept
   {
     return type == kNavigationPaneType || type == "windows.inspectorPane" || type == "track.table" ||
            type == "track.detail";

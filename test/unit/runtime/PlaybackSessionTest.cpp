@@ -168,7 +168,7 @@ namespace ao::rt::test
     template<typename ExecutorT>
     Result<> startFromViewAndWait(AppRuntime& runtime, ExecutorT& executor, ViewId const viewId, TrackId const trackId)
     {
-      std::ignore = executor.drainUntil([&] { return runtime.playback().snapshot().transport.ready; });
+      std::ignore = executor.tryDrainUntil([&] { return runtime.playback().snapshot().transport.ready; });
       return admitPlaybackAndWait(
         executor,
         [&] { return runtime.playback().commands().startFromView(viewId, trackId); },
@@ -205,7 +205,8 @@ namespace ao::rt::test
       INFO((targetsRes ? "initial membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
       auto membershipResultValueRes = runRuntimeTask(
-        runtime, runtime.library().commands().editTags(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
+        runtime,
+        runtime.library().commands().editTagsAsync(*targetsRes, {membershipTag.begin(), membershipTag.end()}, {}));
       INFO((membershipResultValueRes ? "initial membership updated" : membershipResultValueRes.error().message));
       REQUIRE(membershipResultValueRes);
       auto const& membershipRes = *membershipResultValueRes;
@@ -213,7 +214,7 @@ namespace ao::rt::test
       executor.drain();
       runtime.sources().reloadAllTracks();
       auto listRes = runRuntimeTask(runtime,
-                                    runtime.library().commands().createList(ListDraft{
+                                    runtime.library().commands().createListAsync(ListDraft{
                                       .name = "Playback session order",
                                       .expression = "#playbacksessionorder",
                                     }));
@@ -244,10 +245,10 @@ namespace ao::rt::test
       INFO((targetsRes ? "membership targets bound" : targetsRes.error().message));
       REQUIRE(targetsRes);
       auto resultValueRes = included ? runRuntimeTask(runtime,
-                                                      runtime.library().commands().editTags(
+                                                      runtime.library().commands().editTagsAsync(
                                                         *targetsRes, {membershipTag.begin(), membershipTag.end()}, {}))
                                      : runRuntimeTask(runtime,
-                                                      runtime.library().commands().editTags(
+                                                      runtime.library().commands().editTagsAsync(
                                                         *targetsRes, {}, {membershipTag.begin(), membershipTag.end()}));
       INFO((resultValueRes ? "membership updated" : resultValueRes.error().message));
       REQUIRE(resultValueRes);
@@ -264,7 +265,7 @@ namespace ao::rt::test
       auto binding = ao::test::requireValue(runtime.library().bindListOrder(view.listId, effectiveTrackIds));
       return ao::test::requireValue(
         runRuntimeTask(runtime,
-                       runtime.library().commands().moveListOrder(
+                       runtime.library().commands().moveListOrderAsync(
                          binding, {selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId)));
     }
 
@@ -580,22 +581,22 @@ namespace ao::rt::test
 
     SECTION("fresh launch")
     {
-      auto const result = PlaybackCursorSession::create(
+      auto const res = PlaybackCursorSession::create(
         PlaybackLaunchSpec{.sourceListId = listId}, trackId, sources, views, RepeatMode::Off, ShuffleMode::Off, {});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
     }
 
     SECTION("restored cursor")
     {
-      auto const result = PlaybackCursorSession::createForRestore(
+      auto const res = PlaybackCursorSession::createForRestore(
         PlaybackLaunchSpec{.sourceListId = listId}, trackId, 0, sources, views, RepeatMode::Off, ShuffleMode::Off, {});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("List " + std::to_string(listId.raw()) + " stored filter"));
     }
   }
 
@@ -793,16 +794,16 @@ namespace ao::rt::test
     executor->runUntilIdle();
 
     runtimePtr->playback().commands().setVolume(0.4F);
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
 
     CHECK(storedSession(playbackSessionStore).volume == 0.4F);
 
     runtimePtr->playback().commands().setVolume(0.6F);
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     CHECK(storedSession(playbackSessionStore).volume == 0.6F);
   }
 
@@ -825,16 +826,16 @@ namespace ao::rt::test
     executor->runUntilIdle();
 
     runtimePtr->playback().commands().setVolume(0.4F);
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
 
     runtimePtr->playback().commands().setVolume(0.6F);
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     CHECK(storedSession(playbackSessionStore).volume == 1.0F);
 
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     CHECK(storedSession(playbackSessionStore).volume == 0.6F);
   }
 
@@ -875,9 +876,9 @@ namespace ao::rt::test
     CHECK(beforeDebounce.positionMs == 0);
     CHECK(beforeDebounce.shuffleMode == ShuffleMode::Off);
 
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     auto const afterDebounce = storedSession(playbackSessionStore);
     CHECK(afterDebounce.positionMs > 0);
     CHECK(afterDebounce.shuffleMode == ShuffleMode::On);
@@ -908,15 +909,15 @@ namespace ao::rt::test
     REQUIRE(std::filesystem::create_directory(configPath));
     runtimePtr->playback().commands().setVolume(0.4F);
 
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
 
     REQUIRE(std::filesystem::remove(configPath));
     runtimePtr->playback().commands().setVolume(0.6F);
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
     executor->checkQueued();
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     CHECK(storedSession(playbackSessionStore).volume == 0.6F);
   }
 
@@ -1039,7 +1040,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.transport == audio::Transport::Idle);
 
     snapshotSubscription.reset();
-    REQUIRE(executor->drainUntil(
+    REQUIRE(executor->tryDrainUntil(
       [&]
       {
         return runtimePtr->playback().snapshot().succession.currentTrackId == secondTrackId &&
@@ -1454,7 +1455,7 @@ namespace ao::rt::test
       addPlayableTrack(*runtimePtr, *executor, "Second");
       runtimePtr->sources().reloadAllTracks();
       auto const listId = ao::test::requireValue(runRuntimeTask(
-        *runtimePtr, runtimePtr->library().commands().createList(ListDraft{.name = "Temporary source"})));
+        *runtimePtr, runtimePtr->library().commands().createListAsync(ListDraft{.name = "Temporary source"})));
       auto const viewRes = runtimePtr->workspace().navigate({.target = listId});
       REQUIRE(viewRes);
       REQUIRE(startFromViewAndWait(*runtimePtr, *executor, *viewRes, first));
@@ -1462,7 +1463,7 @@ namespace ao::rt::test
 
       auto const selected = runtimePtr->playback().snapshot().transport.output.selectedDevice;
       runtimePtr->playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
-      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteList(listId)));
+      REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteListAsync(listId)));
       executor->drain();
       CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
       CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == first);
@@ -1527,7 +1528,7 @@ namespace ao::rt::test
     REQUIRE(runtimePtr->savePlaybackSession());
     CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 450);
 
-    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteTrack(first)));
+    REQUIRE(runRuntimeTask(*runtimePtr, runtimePtr->library().commands().deleteTrackAsync(first)));
     executor->drain();
     REQUIRE(runtimePtr->savePlaybackSession());
     auto const moved = storedSession(runtimePtr->workspaceConfigStore());
@@ -1904,7 +1905,7 @@ namespace ao::rt::test
 
     auto const scheduledSaveIndex = sleeper.callCount();
     runtimePtr->playback().commands().setVolume(0.4F);
-    REQUIRE(sleeper.waitForCallCount(scheduledSaveIndex + 1));
+    REQUIRE(sleeper.tryWaitForCallCount(scheduledSaveIndex + 1));
     auto const beforeFinalSeekRevision = runtimePtr->playback().snapshot().transport.finalSeekRevision;
     executor->defer([runtime = runtimePtr.get()]
                     { runtime->playback().commands().seek(std::chrono::milliseconds{450}); });
@@ -1912,13 +1913,13 @@ namespace ao::rt::test
 
     runtimePtr->sealPlaybackSessionPersistenceWrites();
     REQUIRE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
-    REQUIRE(sleeper.waitForCancellation(scheduledSaveIndex));
+    REQUIRE(sleeper.tryWaitForCancellation(scheduledSaveIndex));
 
     REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
     REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
-    REQUIRE(executor->runOne());
+    REQUIRE(executor->tryRunOne());
     CHECK(runtimePtr->playback().snapshot().transport.finalSeekRevision != beforeFinalSeekRevision);
     executor->runUntilIdle();
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
@@ -1955,9 +1956,9 @@ namespace ao::rt::test
 
     auto const scheduledSaveIndex = sleeper.callCount();
     runtimePtr->playback().commands().setVolume(0.4F);
-    REQUIRE(sleeper.waitForCallCount(scheduledSaveIndex + 1));
-    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
-    REQUIRE(executor->waitUntilQueued());
+    REQUIRE(sleeper.tryWaitForCallCount(scheduledSaveIndex + 1));
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
+    REQUIRE(executor->tryWaitUntilQueued());
 
     REQUIRE(runtimePtr->retirePlaybackSessionForLibrarySwitch());
     CHECK_FALSE(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));

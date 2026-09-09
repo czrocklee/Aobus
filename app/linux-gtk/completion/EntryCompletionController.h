@@ -53,13 +53,13 @@ namespace ao::gtk
     void update();
     void hide();
     void applySelected();
-    bool moveSelection(std::int32_t delta);
+    bool tryMoveSelection(std::int32_t delta);
 
     void setTextProgrammatically(Glib::ustring const& text);
 
   private:
-    bool handleKeyPressed(std::uint32_t keyval);
-    bool movePageSelection(std::int32_t direction);
+    bool tryHandleKeyPressed(std::uint32_t keyval);
+    bool tryMovePageSelection(std::int32_t direction);
     void clearCompletionState();
 
     Gtk::Entry& _entry;

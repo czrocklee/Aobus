@@ -58,7 +58,7 @@ namespace ao::winui
                    ClosedCallback onClosed);
 
     std::filesystem::path const& musicRoot() const noexcept;
-    bool active() const noexcept;
+    bool isActive() const noexcept;
 
     /// Checkpoint the active window and terminally retire playback persistence.
     Result<> prepareLibraryRestart();

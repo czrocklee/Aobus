@@ -14,7 +14,9 @@ namespace ao::query
    * Parse a query/format expression into an AST.
    *
    * @return the parsed Expression, or an Error{Code::FormatRejected, ...} describing the
-   *         syntax failure. Never throws on malformed input.
+   *         syntax or complexity-admission failure. Never throws on malformed input.
+   * Text is limited to 65536 bytes, 512 structural tokens outside scalar lists,
+   * and 64 nested groups before recursive AST construction.
    */
   Result<Expression> parse(std::string_view expr);
 

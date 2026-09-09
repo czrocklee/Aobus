@@ -124,9 +124,9 @@ namespace ao::library::test
                              std::string_view{"//server/share/song.flac"}})
     {
       CAPTURE(input);
-      auto const result = LibraryUri::parse(input);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      auto const res = LibraryUri::parse(input);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
   }
 
@@ -137,10 +137,10 @@ namespace ao::library::test
                              std::string_view{"delete\x7f.flac"}})
     {
       CAPTURE(input);
-      auto const result = LibraryUri::parse(input);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("control characters"));
+      auto const res = LibraryUri::parse(input);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("control characters"));
     }
   }
 

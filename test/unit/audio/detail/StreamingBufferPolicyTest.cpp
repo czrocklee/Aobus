@@ -35,13 +35,13 @@ namespace ao::audio::detail::test
     constexpr std::size_t kCapacity = 2097152;
     constexpr std::size_t kBlockByteCount = 32768;
 
-    CHECK(permitsDecode(kCapacity, kCapacity - kBlockByteCount, kBlockByteCount, kBlockByteCount));
-    CHECK_FALSE(permitsDecode(kCapacity, kCapacity - kBlockByteCount + 1, kBlockByteCount - 1, kBlockByteCount));
-    CHECK_FALSE(permitsDecode(kCapacity, kCapacity, 0, kBlockByteCount));
+    CHECK(canDecode(kCapacity, kCapacity - kBlockByteCount, kBlockByteCount, kBlockByteCount));
+    CHECK_FALSE(canDecode(kCapacity, kCapacity - kBlockByteCount + 1, kBlockByteCount - 1, kBlockByteCount));
+    CHECK_FALSE(canDecode(kCapacity, kCapacity, 0, kBlockByteCount));
 
     constexpr std::size_t kNormalTarget = 576000;
-    CHECK(permitsDecode(kNormalTarget, kNormalTarget - 1, kCapacity - kNormalTarget + 1, kBlockByteCount));
-    CHECK_FALSE(permitsDecode(kNormalTarget, kNormalTarget, kCapacity - kNormalTarget, kBlockByteCount));
-    CHECK(permitsDecode(kNormalTarget, 0, kCapacity, 0));
+    CHECK(canDecode(kNormalTarget, kNormalTarget - 1, kCapacity - kNormalTarget + 1, kBlockByteCount));
+    CHECK_FALSE(canDecode(kNormalTarget, kNormalTarget, kCapacity - kNormalTarget, kBlockByteCount));
+    CHECK(canDecode(kNormalTarget, 0, kCapacity, 0));
   }
 } // namespace ao::audio::detail::test

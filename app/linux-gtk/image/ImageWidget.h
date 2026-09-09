@@ -54,7 +54,7 @@ namespace ao::gtk
     void queueRefresh();
     void beginResizeSettle();
     void cancelPendingRender();
-    bool pendingRenderMatches(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
+    bool matchesPendingRender(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
                               RenderTarget target,
                               RenderTarget renderedSize) const;
     void requestHighQualityRender(Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,

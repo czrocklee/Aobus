@@ -31,17 +31,24 @@ namespace ao::rt
     _insertions.push_back(IndexedTrack{.index = postRemovalIndex, .trackId = trackId});
   }
 
+  void TrackSourceDeltaBuilder::update(std::size_t const finalIndex, TrackId const trackId)
+  {
+    _updates.push_back(IndexedTrack{.index = finalIndex, .trackId = trackId});
+  }
+
   std::optional<delta::RegularTrackEditScript> TrackSourceDeltaBuilder::build() const
   {
-    if (_removals.empty() && _insertions.empty())
+    if (_removals.empty() && _insertions.empty() && _updates.empty())
     {
       return std::nullopt;
     }
 
     auto removals = _removals;
     auto insertions = _insertions;
+    auto updates = _updates;
     std::ranges::sort(removals, {}, &IndexedTrack::index);
     std::ranges::sort(insertions, {}, &IndexedTrack::index);
+    std::ranges::sort(updates, {}, &IndexedTrack::index);
 
     for (std::size_t index = 0; index < removals.size(); ++index)
     {
@@ -67,8 +74,13 @@ namespace ao::rt
       coalescer.appendInsert(insertion.index, std::span{&insertion.trackId, 1});
     }
 
+    for (auto const& update : updates)
+    {
+      coalescer.appendUpdate(update.index, std::span{&update.trackId, 1});
+    }
+
     auto script = coalescer.take();
-    AO_INVARIANT(delta::validate(script, _initialSize));
+    AO_INVARIANT(delta::isValid(script, _initialSize));
     return script;
   }
 } // namespace ao::rt

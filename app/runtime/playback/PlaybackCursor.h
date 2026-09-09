@@ -103,7 +103,7 @@ namespace ao::rt
     ProjectionAnchor const& anchor() const noexcept { return _anchor; }
     RepeatMode repeatMode() const noexcept { return _repeatMode; }
     ShuffleMode shuffleMode() const noexcept { return _shuffleMode; }
-    bool previousRestartAvailable() const noexcept { return _previousRestartAvailable; }
+    bool isPreviousRestartAvailable() const noexcept { return _previousRestartAvailable; }
     SemanticTuple const& semanticTuple() const noexcept { return _semanticTuple; }
 
     /** Applies one complete regular projection batch and reconciles once. */
@@ -144,7 +144,7 @@ namespace ao::rt
     std::optional<TrackId> resolveSequentialSuccessor(PlaybackCursorPolicy& policy) const;
     std::optional<TrackId> resolveSequentialPrevious(PlaybackCursorPolicy& policy) const;
     TrackId requireTrackAt(PlaybackCursorPolicy& policy, std::size_t index) const;
-    bool updateSemanticTuple(PlaybackCursorPolicy& policy);
+    bool tryUpdateSemanticTuple(PlaybackCursorPolicy& policy);
     Changes changes(bool restorableStateChanged, PlaybackCursorPolicy& policy);
 
     PlaybackLaunchSpec const _launchSpec;

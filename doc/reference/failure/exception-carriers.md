@@ -105,7 +105,7 @@ transfer an `exception_ptr` to an owning boundary, or enter AO fatal handling.
 |---|---|---|
 | `async::isOperationCancelled(std::exception_ptr const&)` in `OperationCancelled.cpp` | `ExceptionClassifier` | The function is an exception classifier. It returns whether the carried object is cancellation and neither executes nor owns the failed operation. |
 | Fatal-sink invocation in `Fatal.cpp` | `FatalSinkFallback` | The process is already terminating. A throwing application sink is replaced by an emergency `sink=exception` marker before abort. |
-| `rt::Log::submitFatal()` | `FatalSinkFallback` | This is the application adapter called by the Core fatal backend. Logger rejection is returned as `false`, allowing the already-active fatal path to use its emergency sink. |
+| `rt::Log::trySubmitFatal()` | `FatalSinkFallback` | This is the application adapter called by the Core fatal backend. Logger rejection is returned as `false`, allowing the already-active fatal path to use its emergency sink. |
 | `App::showStartupFailure()` and the WinRT-detail fallback in `App::OnLaunched()` | `DiagnosticFallback` | Startup has already failed and no live session is being preserved. Static Win32 text remains available when localized presentation itself fails. |
 | `App::~App()` | `SafeCleanup` | All owned window/session state is already released. Logger shutdown is diagnostic-only. |
 | `App::exitApplication()` | `PlatformFallback` | The process is already exiting, and `PostQuitMessage` is the no-throw ABI fallback for a failed XAML exit request. |

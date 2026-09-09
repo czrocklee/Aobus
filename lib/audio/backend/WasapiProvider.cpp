@@ -397,7 +397,7 @@ namespace ao::audio::backend
         return enumerator.Get() != nullptr ? enumerateWasapiRenderDevices(enumerator.Get()) : std::vector<Device>{};
       }
 
-      bool acquireCallbackGate(std::unique_lock<std::recursive_timed_mutex>& callbackLock) const
+      bool tryAcquireCallbackGate(std::unique_lock<std::recursive_timed_mutex>& callbackLock) const
       {
         while (!shutdownRequested.load(std::memory_order_acquire))
         {
@@ -410,7 +410,7 @@ namespace ao::audio::backend
         return false;
       }
 
-      bool deviceSubscriptionIsActive(std::uint64_t id) const
+      bool isDeviceSubscriptionActive(std::uint64_t id) const
       {
         auto const lock = std::scoped_lock{mutex};
         return !shutdownRequested.load(std::memory_order_relaxed) &&
@@ -445,16 +445,16 @@ namespace ao::audio::backend
         }
       }
 
-      bool deliverDeviceCallback(DeviceSub const& sub, std::vector<Device> const& snapshot)
+      bool tryProcessDeviceCallback(DeviceSub const& sub, std::vector<Device> const& snapshot)
       {
         auto callbackLock = std::unique_lock{callbackMutex, std::defer_lock};
 
-        if (!acquireCallbackGate(callbackLock))
+        if (!tryAcquireCallbackGate(callbackLock))
         {
           return false;
         }
 
-        if (!deviceSubscriptionIsActive(sub.id))
+        if (!isDeviceSubscriptionActive(sub.id))
         {
           return true;
         }
@@ -475,7 +475,7 @@ namespace ao::audio::backend
         return true;
       }
 
-      bool notifyRefreshComplete()
+      bool tryNotifyRefreshComplete()
       {
         if (!monitorHooksPtr || !monitorHooksPtr->onRefreshComplete)
         {
@@ -484,7 +484,7 @@ namespace ao::audio::backend
 
         auto callbackLock = std::unique_lock{callbackMutex, std::defer_lock};
 
-        if (!acquireCallbackGate(callbackLock) || shutdownRequested.load(std::memory_order_relaxed))
+        if (!tryAcquireCallbackGate(callbackLock) || shutdownRequested.load(std::memory_order_relaxed))
         {
           return false;
         }
@@ -544,13 +544,13 @@ namespace ao::audio::backend
 
           for (auto const& sub : subs)
           {
-            if (!deliverDeviceCallback(sub, snapshot))
+            if (!tryProcessDeviceCallback(sub, snapshot))
             {
               return;
             }
           }
 
-          if (!notifyRefreshComplete())
+          if (!tryNotifyRefreshComplete())
           {
             return;
           }

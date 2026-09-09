@@ -461,9 +461,9 @@ namespace ao::gtk
       return;
     }
 
-    if (auto result = _views.setSelection(viewId, page.selectionController().selectedTrackIds()); !result)
+    if (auto res = _views.setSelection(viewId, page.selectionController().selectedTrackIds()); !res)
     {
-      APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
+      APP_LOG_ERROR("Failed to publish track selection: {}", res.error().message);
     }
 
     if (auto const focusedRes = _workspace.focusView(viewId); !focusedRes)

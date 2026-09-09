@@ -54,7 +54,7 @@ namespace ao::cli
 {
   namespace
   {
-    bool assignStringOption(CLI::Option const* option, std::optional<std::string>& optTarget)
+    bool tryAssignStringOption(CLI::Option const* option, std::optional<std::string>& optTarget)
     {
       if (option->count() == 0)
       {
@@ -65,7 +65,7 @@ namespace ao::cli
       return true;
     }
 
-    bool assignUint16Option(CLI::Option const* option, std::optional<std::uint16_t>& optTarget)
+    bool tryAssignUint16Option(CLI::Option const* option, std::optional<std::uint16_t>& optTarget)
     {
       if (option->count() == 0)
       {
@@ -76,7 +76,7 @@ namespace ao::cli
       return true;
     }
 
-    bool applyCustomSet(std::string_view assignment, rt::MetadataPatch& patch)
+    bool tryApplyCustomSet(std::string_view assignment, rt::MetadataPatch& patch)
     {
       auto const separator = assignment.find('=');
 
@@ -89,7 +89,7 @@ namespace ao::cli
       return true;
     }
 
-    bool applyCustomUnset(std::string_view key, rt::MetadataPatch& patch)
+    bool tryApplyCustomUnset(std::string_view key, rt::MetadataPatch& patch)
     {
       if (key.empty())
       {
@@ -281,7 +281,7 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const replyRes = cli.runTask(cli.library().commands().previewUpdateMetadata(targetIds, patch));
+        auto const replyRes = cli.runTask(cli.library().commands().previewUpdateMetadataAsync(targetIds, patch));
 
         if (!replyRes)
         {
@@ -300,7 +300,7 @@ namespace ao::cli
         throwCommandError(bindingRes.error());
       }
 
-      auto const replyRes = cli.runTask(cli.library().commands().updateMetadata(*bindingRes, patch));
+      auto const replyRes = cli.runTask(cli.library().commands().updateMetadataAsync(*bindingRes, patch));
 
       if (!replyRes)
       {
@@ -989,7 +989,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const trackRes = cli.runTask(cli.library().commands().previewCreateTrackFromFile(trackPath));
+            auto const trackRes = cli.runTask(cli.library().commands().previewCreateTrackFromFileAsync(trackPath));
 
             if (!trackRes)
             {
@@ -1002,7 +1002,7 @@ namespace ao::cli
             return;
           }
 
-          auto const trackRes = cli.runTask(cli.library().commands().createTrackFromFile(trackPath));
+          auto const trackRes = cli.runTask(cli.library().commands().createTrackFromFileAsync(trackPath));
 
           if (trackRes)
           {
@@ -1051,31 +1051,31 @@ namespace ao::cli
       std::shared_ptr<std::vector<std::string>> unsetsPtr;
     };
 
-    bool applyTrackUpdateFieldOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
+    bool tryApplyTrackUpdateFieldOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
     {
       bool hasPatch = false;
-      hasPatch = assignStringOption(options.title, patch.optTitle) || hasPatch;
-      hasPatch = assignStringOption(options.artist, patch.optArtist) || hasPatch;
-      hasPatch = assignStringOption(options.album, patch.optAlbum) || hasPatch;
-      hasPatch = assignStringOption(options.albumArtist, patch.optAlbumArtist) || hasPatch;
-      hasPatch = assignStringOption(options.genre, patch.optGenre) || hasPatch;
-      hasPatch = assignStringOption(options.composer, patch.optComposer) || hasPatch;
-      hasPatch = assignStringOption(options.conductor, patch.optConductor) || hasPatch;
-      hasPatch = assignStringOption(options.ensemble, patch.optEnsemble) || hasPatch;
-      hasPatch = assignStringOption(options.work, patch.optWork) || hasPatch;
-      hasPatch = assignStringOption(options.movement, patch.optMovement) || hasPatch;
-      hasPatch = assignStringOption(options.soloist, patch.optSoloist) || hasPatch;
-      hasPatch = assignUint16Option(options.year, patch.optYear) || hasPatch;
-      hasPatch = assignUint16Option(options.trackNumber, patch.optTrackNumber) || hasPatch;
-      hasPatch = assignUint16Option(options.trackTotal, patch.optTrackTotal) || hasPatch;
-      hasPatch = assignUint16Option(options.discNumber, patch.optDiscNumber) || hasPatch;
-      hasPatch = assignUint16Option(options.discTotal, patch.optDiscTotal) || hasPatch;
-      hasPatch = assignUint16Option(options.movementNumber, patch.optMovementNumber) || hasPatch;
-      hasPatch = assignUint16Option(options.movementTotal, patch.optMovementTotal) || hasPatch;
+      hasPatch = tryAssignStringOption(options.title, patch.optTitle) || hasPatch;
+      hasPatch = tryAssignStringOption(options.artist, patch.optArtist) || hasPatch;
+      hasPatch = tryAssignStringOption(options.album, patch.optAlbum) || hasPatch;
+      hasPatch = tryAssignStringOption(options.albumArtist, patch.optAlbumArtist) || hasPatch;
+      hasPatch = tryAssignStringOption(options.genre, patch.optGenre) || hasPatch;
+      hasPatch = tryAssignStringOption(options.composer, patch.optComposer) || hasPatch;
+      hasPatch = tryAssignStringOption(options.conductor, patch.optConductor) || hasPatch;
+      hasPatch = tryAssignStringOption(options.ensemble, patch.optEnsemble) || hasPatch;
+      hasPatch = tryAssignStringOption(options.work, patch.optWork) || hasPatch;
+      hasPatch = tryAssignStringOption(options.movement, patch.optMovement) || hasPatch;
+      hasPatch = tryAssignStringOption(options.soloist, patch.optSoloist) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.year, patch.optYear) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.trackNumber, patch.optTrackNumber) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.trackTotal, patch.optTrackTotal) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.discNumber, patch.optDiscNumber) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.discTotal, patch.optDiscTotal) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.movementNumber, patch.optMovementNumber) || hasPatch;
+      hasPatch = tryAssignUint16Option(options.movementTotal, patch.optMovementTotal) || hasPatch;
       return hasPatch;
     }
 
-    bool applyTrackUpdateCustomOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
+    bool tryApplyTrackUpdateCustomOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
     {
       bool hasPatch = false;
 
@@ -1083,7 +1083,7 @@ namespace ao::cli
       {
         for (auto const& assignment : *options.setsPtr)
         {
-          hasPatch = applyCustomSet(assignment, patch) || hasPatch;
+          hasPatch = tryApplyCustomSet(assignment, patch) || hasPatch;
         }
       }
 
@@ -1091,7 +1091,7 @@ namespace ao::cli
       {
         for (auto const& key : *options.unsetsPtr)
         {
-          hasPatch = applyCustomUnset(key, patch) || hasPatch;
+          hasPatch = tryApplyCustomUnset(key, patch) || hasPatch;
         }
       }
 
@@ -1101,8 +1101,8 @@ namespace ao::cli
     void runTrackUpdateCommand(CliRuntime& cli, TrackUpdateCliOptions const& options)
     {
       auto patch = rt::MetadataPatch{};
-      bool hasPatch = applyTrackUpdateFieldOptions(options, patch);
-      hasPatch = applyTrackUpdateCustomOptions(options, patch) || hasPatch;
+      bool hasPatch = tryApplyTrackUpdateFieldOptions(options, patch);
+      hasPatch = tryApplyTrackUpdateCustomOptions(options, patch) || hasPatch;
 
       if (!hasPatch)
       {
@@ -1164,7 +1164,7 @@ namespace ao::cli
 
           if (isDryRun(dryRun))
           {
-            auto const deleteRes = cli.runTask(cli.library().commands().previewDeleteTrack(trackId));
+            auto const deleteRes = cli.runTask(cli.library().commands().previewDeleteTrackAsync(trackId));
 
             if (!deleteRes)
             {
@@ -1175,7 +1175,7 @@ namespace ao::cli
             return;
           }
 
-          auto const deleteRes = cli.runTask(cli.library().commands().deleteTrack(trackId));
+          auto const deleteRes = cli.runTask(cli.library().commands().deleteTrackAsync(trackId));
 
           if (deleteRes)
           {

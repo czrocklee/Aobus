@@ -108,7 +108,7 @@ namespace ao::gtk
 
     void applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
                                           std::span<std::string const> tagsToRemove);
-    bool beginTagEditSession(std::span<TrackId const> trackIds);
+    bool tryBeginTagEditSession(std::span<TrackId const> trackIds);
 
     Callbacks _callbacks;
     async::Runtime& _asyncRuntime;

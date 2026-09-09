@@ -51,7 +51,7 @@ namespace ao::media::file::wav
              (static_cast<std::uint32_t>(std::to_integer<std::uint32_t>(bytes[offset + 3])) << 24U);
     }
 
-    bool equalsId(std::span<std::byte const> bytes, std::string_view id) noexcept
+    bool isEqualId(std::span<std::byte const> bytes, std::string_view id) noexcept
     {
       if (bytes.size() != id.size())
       {
@@ -127,7 +127,7 @@ namespace ao::media::file::wav
 
     void readInfoList(detail::ContentBuilder& builder, media::wav::ChunkView const& chunk)
     {
-      if (chunk.bytes.size() < 4 || !equalsId(chunk.bytes.first(4), "INFO"))
+      if (chunk.bytes.size() < 4 || !isEqualId(chunk.bytes.first(4), "INFO"))
       {
         return;
       }
@@ -276,14 +276,14 @@ namespace ao::media::file::wav
 
   Result<detail::Content> File::readContent() const
   {
-    auto const& parsedResult = parsed();
+    auto const& parsedRes = parsed();
 
-    if (!parsedResult)
+    if (!parsedRes)
     {
-      return std::unexpected{parsedResult.error()};
+      return std::unexpected{parsedRes.error()};
     }
 
-    auto const& wave = *parsedResult;
+    auto const& wave = *parsedRes;
     auto builder = detail::ContentBuilder::makeEmpty();
     auto const totalFrames = wave.data.size() / wave.format.blockAlign;
     auto const duration = std::chrono::milliseconds{
@@ -317,13 +317,13 @@ namespace ao::media::file::wav
 
   Result<PayloadView> File::audioPayload() const
   {
-    auto const& parsedResult = parsed();
+    auto const& parsedRes = parsed();
 
-    if (!parsedResult)
+    if (!parsedRes)
     {
-      return std::unexpected{parsedResult.error()};
+      return std::unexpected{parsedRes.error()};
     }
 
-    return payloadRange(parsedResult->dataOffset, parsedResult->data.size());
+    return payloadRange(parsedRes->dataOffset, parsedRes->data.size());
   }
 } // namespace ao::media::file::wav

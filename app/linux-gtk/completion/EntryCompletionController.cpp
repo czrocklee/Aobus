@@ -212,13 +212,13 @@ namespace ao::gtk
     _keyControllerPtr = Gtk::EventControllerKey::create();
     _keyControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     _keyControllerPtr->signal_key_pressed().connect(
-      [this](guint keyval, guint, Gdk::ModifierType) { return handleKeyPressed(keyval); }, false);
+      [this](guint keyval, guint, Gdk::ModifierType) { return tryHandleKeyPressed(keyval); }, false);
     _entry.add_controller(_keyControllerPtr);
 
     _popoverKeyControllerPtr = Gtk::EventControllerKey::create();
     _popoverKeyControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     _popoverKeyControllerPtr->signal_key_pressed().connect(
-      [this](guint keyval, guint, Gdk::ModifierType) { return handleKeyPressed(keyval); }, false);
+      [this](guint keyval, guint, Gdk::ModifierType) { return tryHandleKeyPressed(keyval); }, false);
     _popover.add_controller(_popoverKeyControllerPtr);
 
     _clickControllerPtr = Gtk::GestureClick::create();
@@ -257,7 +257,7 @@ namespace ao::gtk
     _popover.unparent();
   }
 
-  bool EntryCompletionController::handleKeyPressed(std::uint32_t keyval)
+  bool EntryCompletionController::tryHandleKeyPressed(std::uint32_t keyval)
   {
     if (!_popover.get_visible())
     {
@@ -271,10 +271,10 @@ namespace ao::gtk
 
     switch (keyval)
     {
-      case GDK_KEY_Up: return moveSelection(-1);
-      case GDK_KEY_Down: return moveSelection(1);
-      case GDK_KEY_Page_Up: return movePageSelection(-1);
-      case GDK_KEY_Page_Down: return movePageSelection(1);
+      case GDK_KEY_Up: return tryMoveSelection(-1);
+      case GDK_KEY_Down: return tryMoveSelection(1);
+      case GDK_KEY_Page_Up: return tryMovePageSelection(-1);
+      case GDK_KEY_Page_Down: return tryMovePageSelection(1);
       case GDK_KEY_Tab:
       case GDK_KEY_KP_Tab: applySelected(); return true;
       case GDK_KEY_Return:
@@ -403,7 +403,7 @@ namespace ao::gtk
     hide();
   }
 
-  bool EntryCompletionController::moveSelection(std::int32_t delta)
+  bool EntryCompletionController::tryMoveSelection(std::int32_t delta)
   {
     if (!_selectionPtr || !_itemsPtr || _itemsPtr->get_n_items() == 0)
     {
@@ -420,7 +420,7 @@ namespace ao::gtk
     return true;
   }
 
-  bool EntryCompletionController::movePageSelection(std::int32_t const direction)
+  bool EntryCompletionController::tryMovePageSelection(std::int32_t const direction)
   {
     if (!_selectionPtr || !_itemsPtr || _itemsPtr->get_n_items() == 0)
     {

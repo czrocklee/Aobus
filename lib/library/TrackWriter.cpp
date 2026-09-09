@@ -400,7 +400,7 @@ namespace ao::library
       return updateRes;
     }
 
-    auto const removedOldManifest = manifestWriter.remove(*oldUriRes);
+    auto const removedOldManifest = manifestWriter.tryRemove(*oldUriRes);
     AO_INVARIANT(removedOldManifest, "Validated old manifest binding disappeared during relink");
 
     if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(id)); !putRes)
@@ -427,9 +427,9 @@ namespace ao::library
     auto& manifestWriter = detail::WriteTransactionAccess::manifestStoreWriter(*_transaction);
     requireManifestBinding(manifestWriter, uri, id);
 
-    auto const removedManifest = manifestWriter.remove(uri);
+    auto const removedManifest = manifestWriter.tryRemove(uri);
     AO_INVARIANT(removedManifest, "Validated Track manifest binding disappeared during deletion");
-    auto const removedTrack = writer.remove(id);
+    auto const removedTrack = writer.tryRemove(id);
     AO_INVARIANT(removedTrack, "Validated Track disappeared during deletion");
     return true;
   }

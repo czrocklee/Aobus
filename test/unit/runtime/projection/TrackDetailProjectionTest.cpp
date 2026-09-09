@@ -259,19 +259,19 @@ namespace ao::rt::test
 
     auto const reply1 = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
 
-    while (env.executor.runReadyTurn())
+    while (env.executor.tryRunReadyTurn())
     {
     }
 
     REQUIRE(env.views.setSelection(reply1, {id1}));
 
-    while (env.executor.runReadyTurn())
+    while (env.executor.tryRunReadyTurn())
     {
     }
 
     REQUIRE(env.workspace.navigate({.target = GlobalViewKind::AllTracks}));
 
-    while (env.executor.runReadyTurn())
+    while (env.executor.tryRunReadyTurn())
     {
     }
 
@@ -281,7 +281,7 @@ namespace ao::rt::test
     // Change selection in the focused view
     REQUIRE(env.views.setSelection(reply1, {id2}));
 
-    while (env.executor.runReadyTurn())
+    while (env.executor.tryRunReadyTurn())
     {
     }
 
@@ -290,7 +290,7 @@ namespace ao::rt::test
     // Change focus away
     REQUIRE(env.workspace.closeView(reply1));
 
-    while (env.executor.runReadyTurn())
+    while (env.executor.tryRunReadyTurn())
     {
     }
 

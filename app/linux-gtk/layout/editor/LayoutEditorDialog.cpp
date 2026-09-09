@@ -135,7 +135,7 @@ namespace ao::gtk::layout::editor
         {
           stashCurrentDocument();
 
-          if (validateAllDirtyDocuments())
+          if (tryValidateAllDirtyDocuments())
           {
             auto result = LayoutSaveResult{};
 
@@ -697,7 +697,7 @@ namespace ao::gtk::layout::editor
     }
   }
 
-  bool LayoutEditorDialog::validateAllDirtyDocuments()
+  bool LayoutEditorDialog::tryValidateAllDirtyDocuments()
   {
     for (auto& [presetId, entry] : _session)
     {

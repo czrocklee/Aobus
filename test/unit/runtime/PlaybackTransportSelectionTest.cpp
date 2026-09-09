@@ -52,7 +52,7 @@ namespace ao::rt::test
       });
 
     fixturePtr->renderTarget->handleRouteReady("teardown-anchor");
-    REQUIRE(fixturePtr->executor.drainUntil([&] { return callbackEntered; }));
+    REQUIRE(fixturePtr->executor.tryDrainUntil([&] { return callbackEntered; }));
     REQUIRE(fixturePtr);
 
     // Teardown happens on the owner thread only after callback publication has

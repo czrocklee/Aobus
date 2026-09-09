@@ -28,7 +28,7 @@ namespace ao::query::test
 
     auto evaluator = PlanEvaluator{};
     auto track = TestTrack{"Title"};
-    auto result = evaluator.evaluateFull(plan, track.view());
+    auto result = evaluator.matchesFullPlan(plan, track.view());
     CHECK(result == false);
   }
 
@@ -40,7 +40,7 @@ namespace ao::query::test
 
     auto emptyView = library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(plan.accessProfile == AccessProfile::NoTrackData);
-    CHECK(evaluator.evaluateFull(plan, emptyView));
+    CHECK(evaluator.matchesFullPlan(plan, emptyView));
   }
 
   TEST_CASE("PlanEvaluator - executes cold-only plans with cold-only track views", "[query][unit][plan-evaluator]")
@@ -52,7 +52,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 
     auto track = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
-    CHECK(evaluator.evaluateFull(plan, track.coldOnlyView()) == true);
+    CHECK(evaluator.matchesFullPlan(plan, track.coldOnlyView()) == true);
   }
 
   TEST_CASE("PlanEvaluator - executes mixed-access plans with both storage tiers", "[query][unit][plan-evaluator]")
@@ -64,6 +64,6 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
 
     auto track = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
-    CHECK(evaluator.evaluateFull(plan, track.view()));
+    CHECK(evaluator.matchesFullPlan(plan, track.view()));
   }
 } // namespace ao::query::test

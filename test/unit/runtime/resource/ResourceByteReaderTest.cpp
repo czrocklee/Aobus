@@ -42,10 +42,10 @@ namespace ao::rt::test
     ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto result = library::test::physicalWriter(library.resources(), transaction).create(bytes);
-      REQUIRE(result);
+      auto res = library::test::physicalWriter(library.resources(), transaction).create(bytes);
+      REQUIRE(res);
       REQUIRE(transaction.commit());
-      return *result;
+      return *res;
     }
 
     /** Installs bytes through the same derived-cache tier a real session fills. */
@@ -63,7 +63,7 @@ namespace ao::rt::test
                      async::Task<T> task,
                      std::shared_ptr<std::atomic_bool> const& completedPtr)
     {
-      return runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+      return runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));
     }
 
     bool isReady(std::shared_ptr<std::atomic_bool> const& completedPtr)
@@ -73,20 +73,20 @@ namespace ao::rt::test
 
     struct ReadObservation final
     {
-      Result<std::optional<std::vector<std::byte>>> result;
+      Result<std::optional<std::vector<std::byte>>> res;
       bool completedOnExecutor = false;
     };
 
-    async::Task<ReadObservation> readResourceAndObserveExecutor(ResourceByteReader* reader,
-                                                                async::Executor* executor,
-                                                                ResourceId const resourceId)
+    async::Task<ReadObservation> readResourceAndObserveExecutorAsync(ResourceByteReader* reader,
+                                                                     async::Executor* executor,
+                                                                     ResourceId const resourceId)
     {
-      auto result = co_await reader->readInteractiveAsync(resourceId);
-      co_return ReadObservation{.result = std::move(result), .completedOnExecutor = executor->isCurrent()};
+      auto res = co_await reader->readInteractiveAsync(resourceId);
+      co_return ReadObservation{.res = std::move(res), .completedOnExecutor = executor->isCurrent()};
     }
 
     template<typename T>
-    async::Task<T> countCompletion(std::shared_ptr<std::atomic<std::size_t>> counterPtr, async::Task<T> task)
+    async::Task<T> countCompletionAsync(std::shared_ptr<std::atomic<std::size_t>> counterPtr, async::Task<T> task)
     {
       auto valueRes = co_await std::move(task);
       counterPtr->fetch_add(1);
@@ -106,24 +106,25 @@ namespace ao::rt::test
     auto runtime = async::Runtime{executor};
     auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = spawnFuture(runtime, readResourceAndObserveExecutor(&reader, &executor, resourceId), completedPtr);
+    auto future =
+      spawnFuture(runtime, readResourceAndObserveExecutorAsync(&reader, &executor, resourceId), completedPtr);
 
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
     auto observation = future.get();
-    REQUIRE(observation.result);
-    REQUIRE(*observation.result);
+    REQUIRE(observation.res);
+    REQUIRE(*observation.res);
     CHECK(observation.completedOnExecutor);
 
     auto missingCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto missingFuture = spawnFuture(runtime, reader.readInteractiveAsync(ResourceId{987654}), missingCompletedPtr);
-    REQUIRE(executor.drainUntil([&missingCompletedPtr] { return isReady(missingCompletedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&missingCompletedPtr] { return isReady(missingCompletedPtr); }));
     auto missingRes = missingFuture.get();
     REQUIRE(missingRes);
     CHECK_FALSE(*missingRes);
 
     auto invalidCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto invalidFuture = spawnFuture(runtime, reader.readInteractiveAsync(kInvalidResourceId), invalidCompletedPtr);
-    REQUIRE(executor.drainUntil([&invalidCompletedPtr] { return isReady(invalidCompletedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&invalidCompletedPtr] { return isReady(invalidCompletedPtr); }));
     auto invalidRes = invalidFuture.get();
     REQUIRE(invalidRes);
     CHECK_FALSE(*invalidRes);
@@ -145,14 +146,14 @@ namespace ao::rt::test
       auto const resourceId = writeResource(libraryFixture.library(), bytes);
       installCacheEntry(cacheRoot, bytes);
       auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
-      auto result =
+      auto res =
         runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
 
-      REQUIRE(result);
-      REQUIRE(*result);
-      CHECK((*result)->size() == kMaximumInteractiveResourceBytes);
-      CHECK((*result)->front() == std::byte{0x4A});
-      CHECK((*result)->back() == std::byte{0x4A});
+      REQUIRE(res);
+      REQUIRE(*res);
+      CHECK((*res)->size() == kMaximumInteractiveResourceBytes);
+      CHECK((*res)->front() == std::byte{0x4A});
+      CHECK((*res)->back() == std::byte{0x4A});
     }
 
     SECTION("bytes above the limit are rejected before publication")
@@ -169,11 +170,11 @@ namespace ao::rt::test
       }};
       oversizedCache.store(utility::computeSha256(bytes), bytes);
       auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
-      auto result =
+      auto res =
         runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
 
       auto exportRes =
         runQueuedTask(runtime, executor, reader.readForExportAsync(resourceId), kLargeResourceCompletionTimeout);
@@ -187,10 +188,10 @@ namespace ao::rt::test
       auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
       auto const resourceId = writeResource(libraryFixture.library(), bytes);
       auto reader = ResourceByteReader{runtime, libraryFixture.library(), cacheRoot};
-      auto result = runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId));
+      auto res = runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId));
 
-      REQUIRE(result);
-      CHECK_FALSE(*result);
+      REQUIRE(res);
+      CHECK_FALSE(*res);
     }
 
     runtime.requestStop();
@@ -248,10 +249,11 @@ namespace ao::rt::test
 
     for (std::size_t request = 0; request < kRequestCount; ++request)
     {
-      futures.push_back(runtime.spawn(countCompletion(completedCountPtr, reader.readInteractiveAsync(resourceId))));
+      futures.push_back(
+        runtime.spawn(countCompletionAsync(completedCountPtr, reader.readInteractiveAsync(resourceId))));
     }
 
-    REQUIRE(executor.drainUntil(
+    REQUIRE(executor.tryDrainUntil(
       [&completedCountPtr] { return completedCountPtr->load() == kRequestCount; }, kLargeResourceCompletionTimeout));
 
     for (auto& future : futures)
@@ -280,7 +282,7 @@ namespace ao::rt::test
     executor.checkQueued();
 
     REQUIRE(stopSource.request_stop());
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
     CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
 
     runtime.requestStop();

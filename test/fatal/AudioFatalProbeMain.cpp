@@ -16,8 +16,8 @@ namespace
 {
   constexpr auto kProbeTimeout = std::chrono::seconds{15};
 
-  bool verifyProbe(ao::audio::test::AudioFatalProbeExpectation const& expectation,
-                   ao::test::ProbeProcessResult const& result)
+  bool tryVerifyProbe(ao::audio::test::AudioFatalProbeExpectation const& expectation,
+                      ao::test::ProbeProcessResult const& result)
   {
     return result.hasPlatformAbort() && result.standardError.contains("AOBUS_FATAL") &&
            result.standardError.contains(expectation.category) && result.standardError.contains(expectation.context) &&
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
   {
     auto const result = ao::test::runProbeProcess(executablePath, expectation.scenario, kProbeTimeout);
 
-    if (!verifyProbe(expectation, result))
+    if (!tryVerifyProbe(expectation, result))
     {
       std::println(stderr,
                    "ao_audio_fatal_probe scenario '{}' failed: started={} timed-out={} exited={} "

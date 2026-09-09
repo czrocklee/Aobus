@@ -139,7 +139,7 @@ namespace ao::uimodel
     std::vector<DefaultActionBinding> defaultActions = {};
     bool persistentState = false;
 
-    constexpr bool allows(ActionSlot const slot) const noexcept { return (actionSlots & actionSlotBit(slot)) != 0; }
+    constexpr bool accepts(ActionSlot const slot) const noexcept { return (actionSlots & actionSlotBit(slot)) != 0; }
 
     std::string_view defaultAction(ActionSlot slot) const noexcept;
 
@@ -202,9 +202,9 @@ namespace ao::uimodel
   class LayoutSchema final
   {
   public:
-    bool addComponent(ComponentSchema schema);
-    bool addSharedComponent(std::string_view id, ComponentSchemaExtension extension = {});
-    bool addAction(ActionSchema schema);
+    bool tryAddComponent(ComponentSchema schema);
+    bool tryAddSharedComponent(std::string_view id, ComponentSchemaExtension extension = {});
+    bool tryAddAction(ActionSchema schema);
 
     std::span<ComponentSchema const> components() const noexcept { return _components; }
     std::span<ActionSchema const> actions() const noexcept { return _actions; }

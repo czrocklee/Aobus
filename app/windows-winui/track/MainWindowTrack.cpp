@@ -87,12 +87,12 @@ namespace winrt::Aobus::implementation
   void MainWindow::OnTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
                                             Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
   {
-    args.Handled(_shellBuilderPtr && _shellBuilderPtr->invokeAction("track.presentProperties"));
+    args.Handled(_shellBuilderPtr && _shellBuilderPtr->tryInvokeAction("track.presentProperties"));
   }
 
   void MainWindow::presentTrackProperties()
   {
-    if (_session == nullptr || _trackListPtr == nullptr || modalWorkflowActive())
+    if (_session == nullptr || _trackListPtr == nullptr || isModalWorkflowActive())
     {
       return;
     }

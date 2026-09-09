@@ -45,10 +45,13 @@ namespace ao::uimodel
 
     ~TrackFilterViewModel() = default;
 
+    /// Retain an unsubmitted edit without replacing the installed filter.
+    void editFilter(std::string const& rawText);
     void updateFilter(std::string const& rawText);
 
   private:
     void handleFocusedViewChanged(rt::ViewId viewId);
+    void syncCommittedFilter();
     void refresh();
 
     rt::ViewService& _viewService;
@@ -60,7 +63,9 @@ namespace ao::uimodel
     std::string _entryText;
     std::string _resolvedExpression;
     std::optional<Error> _optFilterError;
+    bool _draftPending = false;
 
+    async::Subscription _projectionSub;
     async::Subscription _filterErrorSub;
     async::Subscription _focusSub;
   };

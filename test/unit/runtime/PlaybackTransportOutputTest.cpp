@@ -107,7 +107,7 @@ namespace ao::rt::test
     REQUIRE(qualityFixture.renderTarget != nullptr);
 
     qualityFixture.renderTarget->handleRouteReady("mock_anchor");
-    REQUIRE(qualityFixture.executor.drainUntil(
+    REQUIRE(qualityFixture.executor.tryDrainUntil(
       [&] { return !routedQualityEvents.empty() && routedQualityEvents.back().ready; }));
 
     // Backends may publish intermediate graph updates while a route settles.
@@ -155,10 +155,10 @@ namespace ao::rt::test
     REQUIRE(fixture.renderTarget != nullptr);
 
     fixture.renderTarget->handleRouteReady("mock_anchor");
-    REQUIRE(fixture.executor.drainUntil([&] { return static_cast<bool>(fixture.onGraphChangedCb); }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return static_cast<bool>(fixture.onGraphChangedCb); }));
 
     fixture.onGraphChangedCb(verifiedSystemGraph());
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&]
       {
         return !qualityEvents.empty() &&
@@ -173,7 +173,7 @@ namespace ao::rt::test
     interventionGraph.nodes.front().softwareVolumeNotUnity = true;
     interventionGraph.nodes.front().maxSoftwareGain = 0.5F;
     fixture.onGraphChangedCb(interventionGraph);
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&] { return qualityEvents.back().quality.pipelineQuality == audio::Quality::LinearIntervention; }));
 
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);

@@ -146,12 +146,12 @@ namespace ao::rt
 
     constexpr auto kNoFixedGroups = std::array<std::string_view, 0>{};
 
-    if (auto const result =
+    if (auto const res =
           yaml::validateMapKeys(root.rootref(), kNoFixedGroups, "config document", yaml::UnknownKeyPolicy::Allow);
-        !result)
+        !res)
     {
       return makeError(Error::Code::FormatRejected,
-                       std::format("Config file '{}': {}", utility::pathToUtf8(_filePath), result.error().message));
+                       std::format("Config file '{}': {}", utility::pathToUtf8(_filePath), res.error().message));
     }
 
     _inputBuffer = std::move(inputBuffer);

@@ -44,9 +44,9 @@ namespace ao::audio::test
     ParsedWaveFixture requireParsedWave(std::filesystem::path const& path)
     {
       auto fixture = ParsedWaveFixture{.bytes = readFileBytes(path)};
-      auto result = media::wav::parseWave(asBytes(fixture.bytes));
-      REQUIRE(result);
-      fixture.wave = *result;
+      auto res = media::wav::parseWave(asBytes(fixture.bytes));
+      REQUIRE(res);
+      fixture.wave = *res;
       return fixture;
     }
 
@@ -165,9 +165,9 @@ namespace ao::audio::test
     };
     auto data = ao::test::wav::makeWav({.bitsPerSample = 24, .audioData = audioData});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto const result = WavDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    auto const res = WavDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("WavDecoderSession - preserves a partial final passthrough block", "[audio][unit][wav]")
@@ -226,9 +226,9 @@ namespace ao::audio::test
                                         .validBitsPerSample = 32,
                                         .audioData = floatSamples(std::span{samples})});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto const result = WavDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    auto const res = WavDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("WavDecoderSession - converts real unsigned 8-bit PCM to signed 16-bit output", "[audio][unit][wav]")

@@ -37,9 +37,9 @@ namespace ao::cli
       bool completed = false;
     };
 
-    async::Task<void> publishTaskCompletion(async::Executor* executor,
-                                            async::Task<void> task,
-                                            std::shared_ptr<TaskCompletionState> completionStatePtr)
+    async::Task<void> publishTaskCompletionAsync(async::Executor* executor,
+                                                 async::Task<void> task,
+                                                 std::shared_ptr<TaskCompletionState> completionStatePtr)
     {
       auto notifyCompletion =
         gsl_lite::finally([executor, completionStatePtr = std::move(completionStatePtr)]
@@ -68,7 +68,7 @@ namespace ao::cli
 
     _storagePtr->optRuntime->shutdown();
 
-    while (_storagePtr->loopExecutor->runReadyTurn())
+    while (_storagePtr->loopExecutor->tryRunReadyTurn())
     {
     }
 
@@ -130,8 +130,8 @@ namespace ao::cli
   {
     auto& asyncRuntime = core().async();
     auto completionStatePtr = std::make_shared<TaskCompletionState>();
-    auto completionFuture =
-      asyncRuntime.spawn(publishTaskCompletion(&asyncRuntime.callbackExecutor(), std::move(task), completionStatePtr));
+    auto completionFuture = asyncRuntime.spawn(
+      publishTaskCompletionAsync(&asyncRuntime.callbackExecutor(), std::move(task), completionStatePtr));
 
     while (!completionStatePtr->completed)
     {

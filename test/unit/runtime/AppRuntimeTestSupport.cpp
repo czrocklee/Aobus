@@ -186,6 +186,6 @@ namespace ao::rt::test
 
   void settleRuntimeCallbacks(AppRuntime& runtime)
   {
-    runRuntimeTask(runtime, runtime.async().resumeOnCallbackExecutor());
+    runRuntimeTask(runtime, runtime.async().resumeOnCallbackExecutorAsync());
   }
 } // namespace ao::rt::test

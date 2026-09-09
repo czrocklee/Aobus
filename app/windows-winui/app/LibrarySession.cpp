@@ -91,13 +91,13 @@ namespace ao::winui
       }
     }
 
-    async::Task<void> runActiveScan(async::Runtime* const runtime,
-                                    rt::LibraryJobs* const jobs,
-                                    PresentLibraryScan present,
-                                    std::stop_token const stopToken)
+    async::Task<void> runActiveScanAsync(async::Runtime* const runtime,
+                                         rt::LibraryJobs* const jobs,
+                                         PresentLibraryScan present,
+                                         std::stop_token const stopToken)
     {
-      auto outcome = co_await uimodel::runLibraryScan(jobs, uimodel::LibraryScanMode::Eager, stopToken);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      auto outcome = co_await uimodel::runLibraryScanAsync(jobs, uimodel::LibraryScanMode::Eager, stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       present(std::move(outcome));
     }
   } // namespace
@@ -421,7 +421,7 @@ namespace ao::winui
     return runtime().musicRoot();
   }
 
-  bool LibrarySession::scanAfterOpen() const noexcept
+  bool LibrarySession::shouldScanAfterOpen() const noexcept
   {
     return _storagePtr->scanAfterOpen;
   }
@@ -510,7 +510,7 @@ namespace ao::winui
 
   void LibrarySession::setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept
   {
-    std::ignore = rememberDesktopOutputSelection(_storagePtr->settings, selection);
+    std::ignore = tryRememberDesktopOutputSelection(_storagePtr->settings, selection);
   }
 
   Result<> LibrarySession::saveSettingsCandidate(DesktopSettings const& settings)
@@ -736,7 +736,7 @@ namespace ao::winui
     auto const token = storage.ownerCallbackGate.token();
     auto present = PresentLibraryScan{[owner = this, token](uimodel::LibraryScanOutcome outcome)
                                       {
-                                        if (token.admits())
+                                        if (token.accepts())
                                         {
                                           owner->finishActiveScan(std::move(outcome));
                                         }
@@ -746,7 +746,7 @@ namespace ao::winui
     auto* const jobs = &appRuntime.library().jobs();
     storage.libraryTask = appRuntime.async().spawnCancellable(
       [runtime, jobs, present = std::move(present)](std::stop_token const stopToken) mutable
-      { return runActiveScan(runtime, jobs, std::move(present), stopToken); });
+      { return runActiveScanAsync(runtime, jobs, std::move(present), stopToken); });
   }
 
   void LibrarySession::finishActiveScan(uimodel::LibraryScanOutcome outcome)

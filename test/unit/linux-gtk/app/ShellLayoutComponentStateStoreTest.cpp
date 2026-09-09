@@ -50,7 +50,7 @@ namespace ao::gtk::test
     uimodel::LayoutSchema persistentStateSchema()
     {
       auto schema = uimodel::LayoutSchema{};
-      REQUIRE(schema.addSharedComponent("split"));
+      REQUIRE(schema.tryAddSharedComponent("split"));
       return schema;
     }
   } // namespace
@@ -131,7 +131,7 @@ namespace ao::gtk::test
       REQUIRE(preparedRes);
       auto const schema = persistentStateSchema();
 
-      store.prune("classic", *preparedRes, schema);
+      store.tryPrune("classic", *preparedRes, schema);
 
       auto const optLoaded = store.load("classic");
       REQUIRE(optLoaded);
@@ -146,9 +146,9 @@ namespace ao::gtk::test
 
       CHECK(std::filesystem::exists(stateDir / "classic.yaml"));
 
-      CHECK(store.removePreset("classic"));
+      CHECK(store.tryRemovePreset("classic"));
       CHECK_FALSE(std::filesystem::exists(stateDir / "classic.yaml"));
-      CHECK(store.removePreset("classic"));
+      CHECK(store.tryRemovePreset("classic"));
     }
 
     SECTION("prune returns whether anything changed")
@@ -165,12 +165,12 @@ namespace ao::gtk::test
       REQUIRE(preparedRes);
       auto const schema = persistentStateSchema();
 
-      CHECK_FALSE(store.prune("classic", *preparedRes, schema));
+      CHECK_FALSE(store.tryPrune("classic", *preparedRes, schema));
 
       layoutDoc.root.children.clear();
       preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
-      CHECK(store.prune("classic", *preparedRes, schema));
+      CHECK(store.tryPrune("classic", *preparedRes, schema));
     }
 
     SECTION("saved state file is readable only by owner")

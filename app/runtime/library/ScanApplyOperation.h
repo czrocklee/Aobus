@@ -67,9 +67,9 @@ namespace ao::rt
     Result<ScanApplyResult> prepare(std::stop_token stopToken = {});
     Result<ScanApplyResult> revalidatePreparedFiles(std::stop_token stopToken = {});
     Result<ScanApplyResult> apply(library::LibraryWrite& write, std::stop_token stopToken = {});
-    bool cancelled() const noexcept;
-    bool readyForMutation() const noexcept;
-    bool transactionShouldCommit() const noexcept;
+    bool isCancelled() const noexcept;
+    bool isReadyForMutation() const noexcept;
+    bool shouldCommitTransaction() const noexcept;
 
   private:
     struct PreparedScanItem;
@@ -95,7 +95,7 @@ namespace ao::rt
                            library::TrackWriter& trackWriter,
                            library::DictionaryStore const& dictionary);
 
-    bool skipNonActionableItem(ScanItem const& item);
+    bool trySkipNonActionableItem(ScanItem const& item);
 
     /// Embedded covers are a scan fact: a refreshed item takes the cover set its
     /// file now carries, in place of the references it held.
@@ -114,11 +114,11 @@ namespace ao::rt
                               library::TrackBuilder& builder,
                               library::AudioIdentity const& identity);
 
-    bool applyMovedItem(ScanItem const& item,
-                        library::TrackWriter& trackWriter,
-                        library::DictionaryStore const& dictionary,
-                        library::TrackBuilder& builder,
-                        library::AudioIdentity const& identity);
+    bool tryApplyMovedItem(ScanItem const& item,
+                           library::TrackWriter& trackWriter,
+                           library::DictionaryStore const& dictionary,
+                           library::TrackBuilder& builder,
+                           library::AudioIdentity const& identity);
 
     Result<> applyNewItem(ScanItem const& item,
                           library::TrackWriter& trackWriter,
@@ -139,9 +139,9 @@ namespace ao::rt
                                                                   bool publishProgress,
                                                                   std::stop_token stopToken);
 
-    bool validateTrack(library::TrackBuilder const& builder,
-                       library::TrackWriter const& trackWriter,
-                       std::string const& uri);
+    bool tryValidateTrack(library::TrackBuilder const& builder,
+                          library::TrackWriter const& trackWriter,
+                          std::string const& uri);
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,
                                                               std::optional<library::AudioIdentity> const& optIdentity);
@@ -149,10 +149,10 @@ namespace ao::rt
     // Reports a rejection as an item failure and returns false. Use it only
     // where a false return is item-neutral, or where the caller has already
     // armed _abortTransaction for the complete item, as the Moved path does.
-    bool writeManifest(library::TrackWriter& writer,
-                       TrackId trackId,
-                       std::string const& uri,
-                       library::FileManifestBuilder& builder);
+    bool tryWriteManifest(library::TrackWriter& writer,
+                          TrackId trackId,
+                          std::string const& uri,
+                          library::FileManifestBuilder& builder);
 
     library::MusicLibrary& _ml;
     ScanPlan _plan;

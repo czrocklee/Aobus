@@ -113,7 +113,7 @@ namespace ao::uimodel
     return result;
   }
 
-  bool KeymapModel::bind(std::string actionId, KeyChord chord)
+  bool KeymapModel::tryBind(std::string actionId, KeyChord chord)
   {
     if (!chord.isValid())
     {
@@ -131,7 +131,7 @@ namespace ao::uimodel
     return true;
   }
 
-  bool KeymapModel::unbind(std::string_view actionId, KeyChord const& chord)
+  bool KeymapModel::tryUnbind(std::string_view actionId, KeyChord const& chord)
   {
     auto const it = _effective.find(actionId);
 

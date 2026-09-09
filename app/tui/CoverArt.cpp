@@ -94,7 +94,9 @@ namespace ao::tui
       return utility::bytes::unsignedCharData(encodedBytes);
     }
 
-    bool dimensionsWithinLimits(std::int32_t const width, std::int32_t const height, CoverArtDecodeLimits const& limits)
+    bool isWithinDimensionLimits(std::int32_t const width,
+                                 std::int32_t const height,
+                                 CoverArtDecodeLimits const& limits)
     {
       if (width <= 0 || height <= 0 || limits.maximumDimension <= 0 || width > limits.maximumDimension ||
           height > limits.maximumDimension)
@@ -119,7 +121,7 @@ namespace ao::tui
 
       if (::stbi_info_from_memory(
             asStbiBytes(bytes), static_cast<std::int32_t>(bytes.size()), &width, &height, &sourceChannels) == 0 ||
-          !dimensionsWithinLimits(width, height, limits))
+          !isWithinDimensionLimits(width, height, limits))
       {
         return std::nullopt;
       }
@@ -131,7 +133,7 @@ namespace ao::tui
                                                              &sourceChannels,
                                                              kDecodedChannels)};
 
-      if (pixelsPtr == nullptr || !dimensionsWithinLimits(width, height, limits))
+      if (pixelsPtr == nullptr || !isWithinDimensionLimits(width, height, limits))
       {
         return std::nullopt;
       }

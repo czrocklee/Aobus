@@ -34,16 +34,16 @@ namespace ao::rt::test
                                                            { publications.push_back(changeSet); });
     auto targets = commandsFixture.bind(std::array{trackId});
 
-    auto const result = commandsFixture.runTask(commandsFixture.commands().updateProperties(
+    auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(
       std::move(targets),
       TrackPropertiesPatch{.metadata = MetadataPatch{.optTitle = "After"}, .tagsToAdd = {"Favorite"}}));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    REQUIRE(result->reply.metadata.changes.size() == 1);
-    CHECK(result->reply.metadata.changes[0].trackId == trackId);
-    REQUIRE(result->reply.tags.changes.size() == 1);
-    CHECK(result->reply.tags.changes[0].trackId == trackId);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    REQUIRE(res->reply.metadata.changes.size() == 1);
+    CHECK(res->reply.metadata.changes[0].trackId == trackId);
+    REQUIRE(res->reply.tags.changes.size() == 1);
+    CHECK(res->reply.tags.changes[0].trackId == trackId);
     REQUIRE(publications.size() == 1);
     CHECK(publications[0].tracksMutated == std::vector<TrackId>{trackId});
 
@@ -69,15 +69,15 @@ namespace ao::rt::test
     auto targets = commandsFixture.bind(std::array{trackId});
     auto invalidTag = std::string(1, static_cast<char>(0xff));
 
-    auto const result = commandsFixture.runTask(
-      commandsFixture.commands().updateProperties(std::move(targets),
-                                                  TrackPropertiesPatch{
-                                                    .metadata = MetadataPatch{.optTitle = "Must roll back"},
-                                                    .tagsToAdd = {std::move(invalidTag)},
-                                                  }));
+    auto const res = commandsFixture.runTask(
+      commandsFixture.commands().updatePropertiesAsync(std::move(targets),
+                                                       TrackPropertiesPatch{
+                                                         .metadata = MetadataPatch{.optTitle = "Must roll back"},
+                                                         .tagsToAdd = {std::move(invalidTag)},
+                                                       }));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(publicationCount == 0);
 
     auto transaction = storage.library().readTransaction();
@@ -101,16 +101,16 @@ namespace ao::rt::test
     auto targets = commandsFixture.bind(std::array{trackId});
 
     auto const revision = targets.revision();
-    auto const result = commandsFixture.runTask(
-      commandsFixture.commands().updateProperties(std::move(targets),
-                                                  TrackPropertiesPatch{
-                                                    .metadata = MetadataPatch{.optTitle = "Must not commit"},
-                                                    .tagsToAdd = {"résumé"},
-                                                    .tagsToRemove = {"re\u0301sume\u0301"},
-                                                  }));
+    auto const res = commandsFixture.runTask(
+      commandsFixture.commands().updatePropertiesAsync(std::move(targets),
+                                                       TrackPropertiesPatch{
+                                                         .metadata = MetadataPatch{.optTitle = "Must not commit"},
+                                                         .tagsToAdd = {"résumé"},
+                                                         .tagsToRemove = {"re\u0301sume\u0301"},
+                                                       }));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(publicationCount == 0);
     CHECK(commandsFixture.bind(std::array{trackId}).revision() == revision);
     auto transaction = storage.library().readTransaction();

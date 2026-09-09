@@ -399,18 +399,19 @@ namespace ao::tui
 
   std::string_view overlayToggleShortcut(TuiKeymapPlan const& keymapPlan, Overlay const overlay)
   {
-    static auto const selectionEvents = std::to_array({ftxui::Event::Return});
-    static auto const notificationEvents = std::to_array({ftxui::Event::Character("x")});
+    static auto const kSelectionEvents = std::to_array({ftxui::Event::Return});
+    static auto const kNotificationEvents = std::to_array({ftxui::Event::Character("x")});
 
     switch (overlay)
     {
-      case Overlay::ListChooser: return keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser, selectionEvents);
+      case Overlay::ListChooser: return keymapPlan.shortcutFor(TuiKeyAction::ToggleListChooser, kSelectionEvents);
       case Overlay::DetailPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleDetails);
       case Overlay::QualityPanel: return keymapPlan.shortcutFor(TuiKeyAction::ToggleAudioPipeline);
-      case Overlay::OutputDevices: return keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices, selectionEvents);
+      case Overlay::OutputDevices: return keymapPlan.shortcutFor(TuiKeyAction::ToggleOutputDevices, kSelectionEvents);
       case Overlay::PresentationPanel:
-        return keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations, selectionEvents);
-      case Overlay::Notifications: return keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications, notificationEvents);
+        return keymapPlan.shortcutFor(TuiKeyAction::TogglePresentations, kSelectionEvents);
+      case Overlay::Notifications:
+        return keymapPlan.shortcutFor(TuiKeyAction::ToggleNotifications, kNotificationEvents);
       case Overlay::None:
       case Overlay::Help: return {};
     }
@@ -550,19 +551,19 @@ namespace ao::tui
     _completion.set(std::move(optCompletion));
   }
 
-  bool ShellInteractionModel::moveCommandCompletion(std::int32_t const delta)
+  bool ShellInteractionModel::tryMoveCommandCompletion(std::int32_t const delta)
   {
-    return _completion.moveSelection(delta);
+    return _completion.tryMoveSelection(delta);
   }
 
-  bool ShellInteractionModel::moveCommandCompletionByPage(std::int32_t const delta)
+  bool ShellInteractionModel::tryMoveCommandCompletionByPage(std::int32_t const delta)
   {
-    return _completion.moveSelectionByPage(delta);
+    return _completion.tryMoveSelectionByPage(delta);
   }
 
-  bool ShellInteractionModel::applyCommandCompletion()
+  bool ShellInteractionModel::tryApplyCommandCompletion()
   {
-    if (!_completion.applyTo(_inputDraft))
+    if (!_completion.tryApplyTo(_inputDraft))
     {
       return false;
     }

@@ -31,9 +31,9 @@ namespace ao::media::file::wav::test
 
     ao::media::file::test::RecordedContent readContent(File const& file)
     {
-      auto result = file.readContent();
-      REQUIRE(result);
-      return *result;
+      auto res = file.readContent();
+      REQUIRE(res);
+      return *res;
     }
 
     void addPictureFrame(std::vector<std::uint8_t>& data, std::array<std::uint8_t, 3> const imageData)
@@ -167,10 +167,10 @@ namespace ao::media::file::wav::test
       auto data = ao::test::wav::makeWav({.audioData = {}});
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("malformed embedded ID3 tag")
@@ -183,11 +183,11 @@ namespace ao::media::file::wav::test
       });
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Wav);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Wav);
     }
 
     SECTION("malformed LIST chunk discards fields parsed before the error")
@@ -201,11 +201,11 @@ namespace ao::media::file::wav::test
       });
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Wav);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Wav);
     }
   }
 } // namespace ao::media::file::wav::test

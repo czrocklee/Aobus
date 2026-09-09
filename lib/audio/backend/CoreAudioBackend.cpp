@@ -646,7 +646,7 @@ namespace ao::audio::backend
           *actionFlags |= ::kAudioUnitRenderAction_OutputIsSilence;
         }
 
-        if (state.drainTail.consume(frameCount))
+        if (state.drainTail.consume(frameCount) == detail::DrainTailEvent::Completed)
         {
           state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
         }
@@ -698,7 +698,8 @@ namespace ao::audio::backend
         state.renderAllowed.store(false, std::memory_order_release);
         auto const silentSuffixFrames = prepared.framesProvided - prepared.renderedFrames;
 
-        if (state.drainTail.start(state.presentationTailFrameCount.load(std::memory_order_acquire), silentSuffixFrames))
+        if (state.drainTail.start(state.presentationTailFrameCount.load(std::memory_order_acquire),
+                                  silentSuffixFrames) == detail::DrainTailEvent::Completed)
         {
           state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
         }

@@ -114,38 +114,38 @@ namespace ao::gtk::layout
 
         auto const sessionGeneration = _tagEditSessionGeneration;
         auto submission =
-          uimodel::applyTagEdit(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
+          uimodel::applyTagEditAsync(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove));
         spawnUiTask(_async,
                     _tasks,
                     *this,
                     "tag edit",
                     std::move(submission),
-                    [sessionGeneration](TrackTagEditorComponent* owner, Result<uimodel::TagEditResult> result)
-                    { owner->handleTagEditResult(std::move(result), sessionGeneration); });
+                    [sessionGeneration](TrackTagEditorComponent* owner, Result<uimodel::TagEditResult> res)
+                    { owner->handleTagEditResult(std::move(res), sessionGeneration); });
       }
 
-      void handleTagEditResult(Result<uimodel::TagEditResult> result, std::uint64_t const sessionGeneration)
+      void handleTagEditResult(Result<uimodel::TagEditResult> res, std::uint64_t const sessionGeneration)
       {
-        if (!result)
+        if (!res)
         {
-          APP_LOG_ERROR("Tag edit failed: {}", result.error().message);
+          APP_LOG_ERROR("Tag edit failed: {}", res.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        if (result->status == rt::AuthoringStatus::Busy)
+        if (res->status == rt::AuthoringStatus::Busy)
         {
           _notifications.post(
-            rt::NotificationSeverity::Warning, result->notificationText, rt::NotificationLifetime::transient());
+            rt::NotificationSeverity::Warning, res->notificationText, rt::NotificationLifetime::transient());
           return;
         }
 
-        if (result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable)
+        if (res->status == rt::AuthoringStatus::Stale || res->status == rt::AuthoringStatus::Unavailable)
         {
-          APP_LOG_ERROR("Tag edit failed: {}", result->notificationText);
+          APP_LOG_ERROR("Tag edit failed: {}", res->notificationText);
           _notifications.post(
-            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, res->notificationText, rt::NotificationLifetime::history());
 
           if (_tagEditSessionGeneration == sessionGeneration)
           {
@@ -155,10 +155,10 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (result->status == rt::AuthoringStatus::Applied)
+        if (res->status == rt::AuthoringStatus::Applied)
         {
           _notifications.post(
-            rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
+            rt::NotificationSeverity::Info, res->notificationText, rt::NotificationLifetime::transient());
         }
       }
 

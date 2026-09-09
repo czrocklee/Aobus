@@ -28,9 +28,9 @@ namespace ao::gtk::layout::test
     LayoutSchema persistentLayoutSchema()
     {
       auto schema = LayoutSchema{};
-      REQUIRE(schema.addSharedComponent("split"));
-      REQUIRE(
-        schema.addComponent({.id = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true}));
+      REQUIRE(schema.tryAddSharedComponent("split"));
+      REQUIRE(schema.tryAddComponent(
+        {.id = "collapsibleSplit", .displayName = "Collapsible Split", .persistentState = true}));
       return schema;
     }
   } // namespace

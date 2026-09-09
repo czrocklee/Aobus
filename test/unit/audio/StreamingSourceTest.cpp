@@ -123,10 +123,10 @@ namespace ao::audio::test
 
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
-    auto const result = sourcePtr->prepare();
+    auto const res = sourcePtr->prepare();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message == "fail");
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message == "fail");
   }
 
   TEST_CASE("StreamingSource - preparation rejects a decoded block larger than the ring buffer synchronously",
@@ -139,10 +139,10 @@ namespace ao::audio::test
 
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
-    auto const result = sourcePtr->prepare();
+    auto const res = sourcePtr->prepare();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::DecodeFailed);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::DecodeFailed);
   }
 
   TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
@@ -190,8 +190,8 @@ namespace ao::audio::test
     REQUIRE(sourcePtr->prepare());
     sourcePtr->activate(onError);
 
-    auto result = sourcePtr->seek(std::chrono::milliseconds{50});
-    CHECK_FALSE(result);
+    auto res = sourcePtr->seek(std::chrono::milliseconds{50});
+    CHECK_FALSE(res);
     CHECK(errorCount.load() == 1);
   }
 

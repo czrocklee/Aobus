@@ -56,16 +56,23 @@ Naming rules have four enforcement levels.
   rules below.
 - `OptionalNamingAndUsageCheck`: optional values use the `opt` rules below.
 - `ChronoNamingConventionCheck`: chrono values use unit-free time nouns.
+- `ResultNamingConventionCheck`: `ao::Result` variables, parameters, and fields
+  use `res` or a descriptive `*Res` name.
+- `AsyncFunctionNamingCheck`: named `ao::async::Task`-returning functions end
+  in `Async`.
+- `BoolFunctionNamingCheck`: named source-fixed direct-`bool` functions use
+  predicate, `try*` action, or the exact bool conversion vocabulary below.
 
 **3. Built-in `readability-identifier-naming`** enforces the ordinary cases:
 
 - `PascalCase` for types, enums, scoped enum values, aliases, and concepts;
-- `kCamelCase` for constexpr values;
+- `kCamelCase` for constexpr variables and namespace, static, or class constants;
 - `camelBack` for functions, methods, parameters, and locals; and
 - an underscore prefix for private and protected data members.
 
-GTK binding spellings such as `property_*`, `signal_*`, `vfunc_*`, and
-`on_*` remain framework exceptions.
+The built-in casing check permits GTK binding spellings such as `property_*`,
+`signal_*`, `vfunc_*`, and `on_*`; that spelling allowance does not create a
+semantic bool/Task exception without the framework proof described below.
 
 **4. Review** owns semantic role choice and vocabulary. Do not turn semantic
 inference into a regex with exception churn.
@@ -75,10 +82,14 @@ inference into a regex with exception churn.
 Use full project vocabulary by default: `rowIndex`, `byteOffset`,
 `dictionaryId`, `transaction`, `argument`, and `metadata`.
 Stable short forms are limited to `id`, `ids`, `min`, `max`, `lhs`,
-`rhs`, `config`, tiny-loop `i` and `j`, iterator `it`, conversion
-`src` and `dst`, argument-list `args`, storage handle `db`, temporary
-file `temp`, coordinate fields `x` and `y`, and chrono samples `tp` or
-`t0` through `tN`.
+`rhs`, `config`, one-call context `ctx`, genuinely generic value `val`,
+genuinely generic string `str`, generic `ao::Result` value `res`, tiny-loop
+`i` and `j`, iterator `it`, conversion `src` and `dst`, argument-list `args`,
+storage handle `db`, temporary file `temp`, coordinate fields `x` and `y`, and
+chrono samples `tp` or `t0` through `tN`.
+Prefer a concrete domain name whenever the value has a more specific role.
+There is no general abbreviation checker; review keeps short forms within this
+stable vocabulary and preserves external abbreviations only at their boundary.
 
 Use normal acronym casing inside project names: `ResourceId`, not
 `ResourceID`. Concepts use a capability name such as `Arithmetic` or
@@ -90,11 +101,14 @@ Classes use underscored members; structs are passive aggregates with plain
 fields. This distinction is API-visible, so a struct that starts acquiring
 encapsulation should be reconsidered rather than casually promoted.
 
-Constants use `kCamelCase`, including class-scoped non-constexpr constants.
+Every `constexpr` variable and every namespace, static, or class constant uses
+`kCamelCase`, including a class-scoped non-constexpr constant.
+An ordinary non-static local `const` variable remains `camelCase` without a `k`
+prefix.
 Use `cancelled` in Aobus vocabulary and `canceled` only when matching an
 external spelling.
 
-### Pointer, optional, and time names
+### Pointer, optional, result, and time names
 
 A `std::unique_ptr`, `std::shared_ptr`, `std::weak_ptr`, or `Glib::RefPtr`
 variable ends in `Ptr`: `_storePtr`, `providerPtr`. A raw pointer does not,
@@ -107,6 +121,16 @@ what it creates: `makeRuntime()`, not `makeRuntimePtr()`.
 An `std::optional` variable begins with `opt`: `optTrackId`.
 A function or type name describes the semantic result and does not acquire that
 prefix. Pointer nullability and expected error channels are not optionals.
+
+An `ao::Result<T>` variable, parameter, or field is named `res` when it has no
+more specific role, or has a descriptive name ending in `Res`, such as
+`openRes`.
+Class data members retain their underscore: `_res` or `_openRes`; passive struct
+fields use `res` or `openRes`.
+`result` and `_result` are not generic-name exceptions.
+A function returning `ao::Result<T>` follows the function vocabulary for its
+operation and does not acquire a `Result` or `Res` suffix merely because of its
+return type.
 
 Chrono durations name the phenomenon, not the storage unit:
 `timeout`, `elapsed`, `retryDelay`. Numeric representations include the
@@ -194,9 +218,70 @@ same change. A compatibility or generated-file constraint must be explicit.
 
 Accessors name the value: `library()`, `rootPath()`, `trackCount()`.
 Use `get*` only when the operation retrieves externally, performs meaningful
-work, or matches an external API. Boolean queries use `is*`, `has*`,
-`can*`, `should*`, `supports*`, or `needs*`; avoid bare adjective
-predicates.
+work, or matches an external API.
+
+A project-owned named function whose source contract fixes a direct `bool`
+result uses `is*`, `has*`, `can*`, `should*`, `supports*`, `needs*`, `matches*`,
+`accepts*`, or `covers*` for a predicate.
+An action that reports true on success uses `try*`; `handle*` and other generic
+action verbs are not blanket exceptions.
+Bool conversions are value APIs, not necessarily predicates: exact `asBool`
+names a conversion in an `asString`/`asInt`/`asDouble` family, and exact
+`readBoolOr` names strict true/false scalar reading with a supplied fallback.
+These are not broad `as*` or `read*` exceptions.
+Predicate and `try` prefixes accept an initial capital (`IsReady`, `HasItems`)
+with the same word boundary, not arbitrary case-insensitive spelling (`Isready`).
+The built-in check still requires camelCase for project-owned names; accepting
+predicate vocabulary does not prove a framework-required spelling.
+Standard interface predicate vocabulary remains valid: exact `empty`,
+`contains*`, `startsWith*`, and `endsWith*`, plus the standard atomic
+`compare_exchange_strong` and `compare_exchange_weak` spellings.
+The checker preserves names required by an actual foreign virtual override,
+exact C++/WinRT `IIterator`/`IVectorView` bool members proved from the
+`winrt::implements` interface list, and exact Clang `RecursiveASTVisitor`
+customization members whose name and signature exist on the visitor base. Those
+customizations include `Visit*`, `Traverse*`, `WalkUpFrom*`,
+`dataTraverseStmtPre`, and `dataTraverseStmtPost`.
+A prefix, capitalized spelling, generated-header ancestor, or framework-derived
+owner does not exempt an unrelated helper. A project-owned override chain is
+not a framework exception; rename the whole chain.
+When a non-virtual generated API such as a C++/WinRT IDL property cannot be
+proved reliably from the AST, retain its generated spelling with a narrow
+`NOLINTNEXTLINE` for the applicable naming check and an adjacent explanation of
+the actual generated boundary.
+This rule does not unwrap `Task<bool>` or `Result<bool>`, does not govern lambda
+call operators, and does not impose a reverse type rule on functions whose
+predicate-shaped name returns another type. Bool references are not direct values.
+Source-fixed contracts include aliases, trailing bool returns, explicit bool
+function/class templates, and non-template deduced bool. Deduced `auto` templates
+are checked when every source value return is proved bool: a bool-typed source
+expression or a qualified source function lookup whose complete candidate set
+promises bool. The bounded proof excludes nested lambda/local-class bodies,
+examines both `if constexpr` branches, and does not infer dependent operators,
+arbitrary callable results, or unresolved `decltype(auto)` returns.
+Generic `T`, dependent payload aliases, and `auto` copies/forwarders do not
+acquire a predicate obligation merely because an instantiation returns bool,
+even if that is their only observed use. Unknown dependent return shapes stay
+outside automatic proof, not outside semantic review. Source templates and
+redeclarations receive one diagnostic; independently written explicit bool
+specializations retain their own contract and diagnostic.
+Avoid bare adjective predicates.
+
+Every project-owned named function whose direct return type is
+`ao::async::Task<T>` ends in `Async`.
+The rule follows the declared type through aliases, deduced `auto`, and template
+specializations, so it covers coroutine bodies, ordinary forwarders, and
+infrastructure operations such as `sleepForAsync`, `whenAllAsync`, and
+`makeReadyTaskAsync`. A resolved template instantiation is reported once at its
+source template declaration. If one shared deduced template produces both Task
+and non-Task specializations, the diagnostic remains intentional: review must
+choose a truthful shared name or split the contracts rather than silently
+exempting all deduced templates.
+It does not apply merely because a function takes a task, nor to lambda call
+operators or launchers returning `void`, `TaskHandle`, or `Future`.
+Names fixed by the explicit framework exception classes above remain unchanged.
+`Async` means callers receive awaitable completion; it does not promise an
+immediate start, a new thread, or an executor switch.
 
 Use verbs consistently:
 

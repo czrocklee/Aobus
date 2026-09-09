@@ -109,7 +109,7 @@ namespace ao::media::file::mpeg
              lhsLayout.samplingRateIndex() == rhsLayout.samplingRateIndex();
     }
 
-    bool confirmsKnownRateFrame(FrameView const& frame, std::uint8_t const* frameStart, std::uint8_t const* end)
+    bool isConfirmedKnownRateFrame(FrameView const& frame, std::uint8_t const* frameStart, std::uint8_t const* end)
     {
       auto const frameLength = frame.length();
       auto const remaining = static_cast<std::size_t>(end - frameStart);
@@ -302,7 +302,7 @@ namespace ao::media::file::mpeg
         continue;
       }
 
-      if (confirmsKnownRateFrame(view, frameCandidate, end))
+      if (isConfirmedKnownRateFrame(view, frameCandidate, end))
       {
         return view;
       }

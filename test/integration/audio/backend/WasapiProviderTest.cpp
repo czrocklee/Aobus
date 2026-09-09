@@ -111,7 +111,7 @@ namespace ao::audio::backend::test
         _cv.notify_all();
       }
 
-      bool waitForDrainComplete(std::chrono::milliseconds timeout)
+      bool tryWaitForDrainComplete(std::chrono::milliseconds timeout)
       {
         auto lock = std::unique_lock{_mutex};
         return _cv.wait_for(lock, timeout, [this] { return _drainComplete; });
@@ -199,7 +199,7 @@ namespace ao::audio::backend::test
 
       backendPtr->start();
 
-      auto const drained = target.waitForDrainComplete(std::chrono::seconds{10});
+      auto const drained = target.tryWaitForDrainComplete(std::chrono::seconds{10});
 
       INFO("Backend error: " << target.errorMessage());
       CHECK(target.errorMessage().empty());

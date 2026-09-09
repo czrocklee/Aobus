@@ -18,7 +18,8 @@ namespace ao::winui
     return uimodel::resolveOutputDeviceSelectionToRestore(settings.preferredOutputSelection, {}, output);
   }
 
-  bool rememberDesktopOutputSelection(DesktopSettings& settings, audio::OutputDeviceSelection const& selection) noexcept
+  bool tryRememberDesktopOutputSelection(DesktopSettings& settings,
+                                         audio::OutputDeviceSelection const& selection) noexcept
   {
     if (settings.preferredOutputSelection == selection)
     {

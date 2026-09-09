@@ -68,6 +68,8 @@ namespace ao::library
     {
       std::uint64_t mapBytes = 0;
       std::uint64_t highWaterBytes = 0;
+      /// Allocated bytes of database-owned files, excluding frontend state.
+      std::uint64_t diskBytes = 0;
     };
 
     ~MusicLibrary();

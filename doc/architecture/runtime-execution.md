@@ -144,7 +144,7 @@ After logging initialization, the application registers one Core fatal sink back
 - The Core fatal backend exposes only a function-pointer registration seam; application logging depends on Core, never the reverse.
 - `ao_async` invokes that Core facility directly and has no application logging callback or second terminal-reporting seam.
 - Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, and transaction ordering remain with those owners.
-- Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
+- Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutorAsync`.
 - Runtime library code cannot bypass `LibraryWriteLane` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A live library transaction runs only in the sequencer's worker-side synchronous kernel and never spans `co_await`.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.

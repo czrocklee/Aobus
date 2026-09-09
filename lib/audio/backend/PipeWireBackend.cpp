@@ -168,7 +168,7 @@ namespace ao::audio::backend
                                               std::size_t size,
                                               void* userData) noexcept;
 
-    static ::pw_stream_events const streamEvents;
+    static ::pw_stream_events const kStreamEvents;
 
     // Members
     PipeWireEnvironmentGuard envGuard;
@@ -241,7 +241,7 @@ namespace ao::audio::backend
     void handlePropsParam(::spa_pod const* param);
   };
 
-  ::pw_stream_events const PipeWireBackend::Impl::streamEvents = []
+  ::pw_stream_events const PipeWireBackend::Impl::kStreamEvents = []
   {
     auto ev = ::pw_stream_events{};
     ev.version = PW_VERSION_STREAM_EVENTS;
@@ -386,7 +386,7 @@ namespace ao::audio::backend
         optOpenError = Error{
           .code = Error::Code::FormatRejected, .message = "PipeWire negotiated a PCM mode outside the lossless offer"};
       }
-      else if (format.encoding != SampleEncoding::Unknown && !samePcmMode(format, *optNegotiated))
+      else if (format.encoding != SampleEncoding::Unknown && !isSamePcmMode(format, *optNegotiated))
       {
         optOpenError =
           Error{.code = Error::Code::FormatRejected, .message = "PipeWire changed PCM mode after stream activation"};
@@ -683,7 +683,7 @@ namespace ao::audio::backend
       {
         _implPtr->streamListener.reset();
         ::pw_stream_add_listener(
-          _implPtr->streamPtr.get(), _implPtr->streamListener.get(), &Impl::streamEvents, _implPtr.get());
+          _implPtr->streamPtr.get(), _implPtr->streamListener.get(), &Impl::kStreamEvents, _implPtr.get());
 
         auto buffer = std::array<std::byte, kPodBufferSize>{};
         auto const* param = detail::buildRawStreamFormatOffer(buffer, sourceFormat, offeredEncodings);

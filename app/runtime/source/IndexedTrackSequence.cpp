@@ -36,7 +36,7 @@ namespace ao::rt
 
   void IndexedTrackSequence::applyScript(delta::RegularTrackEditScript const& script)
   {
-    AO_INVARIANT(delta::validate(script, _trackIds.size()));
+    AO_INVARIANT(delta::isValid(script, _trackIds.size()));
 
     if (script.edits.empty())
     {

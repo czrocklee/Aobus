@@ -28,7 +28,7 @@ namespace ao::uimodel
       return std::chrono::steady_clock::now();
     }
 
-    bool sameCompactPresentation(ActivityCompactState const& lhs, ActivityCompactState const& rhs)
+    bool isSameCompactPresentation(ActivityCompactState const& lhs, ActivityCompactState const& rhs)
     {
       return lhs.kind == rhs.kind && lhs.text == rhs.text && lhs.optProgressFraction == rhs.optProgressFraction &&
              lhs.dismissible == rhs.dismissible && lhs.hasDetails == rhs.hasDetails &&
@@ -112,7 +112,7 @@ namespace ao::uimodel
         return;
       }
 
-      if (optAutoDismissDeadline && optScheduledCompact && sameCompactPresentation(*optScheduledCompact, compact))
+      if (optAutoDismissDeadline && optScheduledCompact && isSameCompactPresentation(*optScheduledCompact, compact))
       {
         return;
       }
@@ -170,7 +170,7 @@ namespace ao::uimodel
     return _implPtr->feedProjection.viewState();
   }
 
-  bool ActivityStatusViewModel::autoDismissCompactIfDue()
+  bool ActivityStatusViewModel::tryAutoDismissCompactIfDue()
   {
     if (!_implPtr->optAutoDismissDeadline || _implPtr->now() < *_implPtr->optAutoDismissDeadline)
     {

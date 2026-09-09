@@ -63,17 +63,17 @@ namespace ao::gtk::test
                       std::string expression = {})
     {
       return ao::test::requireValue(runGtkTask(runtime,
-                                               uimodel::saveList(&runtime.library(),
-                                                                 rt::ListDraft{
-                                                                   .parentId = parentId,
-                                                                   .name = name,
-                                                                   .expression = std::move(expression),
-                                                                 })));
+                                               uimodel::saveListAsync(&runtime.library(),
+                                                                      rt::ListDraft{
+                                                                        .parentId = parentId,
+                                                                        .name = name,
+                                                                        .expression = std::move(expression),
+                                                                      })));
     }
 
     void deleteList(rt::AppRuntime& runtime, ListId const listId)
     {
-      REQUIRE(runGtkTask(runtime, uimodel::deleteList(&runtime.library(), listId, false)));
+      REQUIRE(runGtkTask(runtime, uimodel::deleteListAsync(&runtime.library(), listId, false)));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -128,7 +128,7 @@ namespace ao::gtk::test
       return dynamic_cast<SmartListDialog*>(findAppDialog("New List"));
     }
 
-    bool trackHasTag(rt::AppRuntime& runtime, TrackId const trackId, std::string_view const tag)
+    bool hasTrackTag(rt::AppRuntime& runtime, TrackId const trackId, std::string_view const tag)
     {
       auto const tags = runtime.library().snapshot().selectionTags(std::span{&trackId, std::size_t{1}});
       return std::ranges::contains(tags, tag);
@@ -328,7 +328,7 @@ namespace ao::gtk::test
       CHECK_FALSE(okButton->get_sensitive());
       dialog->response(Gtk::ResponseType::OK);
 
-      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      REQUIRE(tryPumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
       CHECK(countListsNamed(fixture.runtime(), "Single submission") == 1);
     }
 
@@ -370,7 +370,7 @@ namespace ao::gtk::test
           controller.rebuildTree(cache);
         });
       dialog->response(Gtk::ResponseType::OK);
-      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      REQUIRE(tryPumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
       auto const listId = savedPresentationListId;
       REQUIRE(listId != kInvalidListId);
       CHECK(rebuildCount == 1);
@@ -389,7 +389,7 @@ namespace ao::gtk::test
       rejectSelection = true;
       auto const attemptsBeforeSubmission = selectionAttemptCount;
       dialog->response(Gtk::ResponseType::OK);
-      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
+      REQUIRE(tryPumpGtkEventsUntil([] { return findAppDialog("New List") == nullptr; }));
       auto const listId = savedPresentationListId;
       REQUIRE(listId != kInvalidListId);
 
@@ -505,7 +505,7 @@ namespace ao::gtk::test
       nameEntry->set_text("High Energy");
       auto const presentationId = dialog->presentationId();
       dialog->response(Gtk::ResponseType::OK);
-      REQUIRE(pumpGtkEventsUntil([] { return findAppDialog("Edit List") == nullptr; }));
+      REQUIRE(tryPumpGtkEventsUntil([] { return findAppDialog("Edit List") == nullptr; }));
 
       auto const optList = findList(fixture.runtime(), listId);
       REQUIRE(optList);
@@ -545,7 +545,7 @@ namespace ao::gtk::test
       CHECK(dialog->draft().name == "Draft to Preserve");
       bool visibleError = false;
 
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&]
         {
           for (auto* const label : collectAll<Gtk::Label>(*dialog))
@@ -586,7 +586,7 @@ namespace ao::gtk::test
 
       CHECK(findList(runtime, listId));
       AppDialog* confirmation = nullptr;
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&confirmation]
         {
           confirmation = findAppDialog("Delete List?");
@@ -594,11 +594,11 @@ namespace ao::gtk::test
         }));
       REQUIRE(confirmation != nullptr);
       confirmation->response(Gtk::ResponseType::YES);
-      REQUIRE(pumpGtkEventsUntil([&runtime, listId] { return !findList(runtime, listId); }));
+      REQUIRE(tryPumpGtkEventsUntil([&runtime, listId] { return !findList(runtime, listId); }));
 
       CHECK(!findList(runtime, listId));
 
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&]
         {
           controller.rebuildTree(cache);
@@ -631,7 +631,7 @@ namespace ao::gtk::test
       deleteSubtreeActionPtr->activate();
 
       AppDialog* confirmation = nullptr;
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&confirmation]
         {
           confirmation = findAppDialog("Delete List and Descendants?");
@@ -650,7 +650,7 @@ namespace ao::gtk::test
       CHECK(previewText.contains("Delete Child"));
       CHECK(previewText.contains("Delete Grandchild"));
       confirmation->response(Gtk::ResponseType::YES);
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&runtime, parentId, childId, grandchildId]
         { return !findList(runtime, parentId) && !findList(runtime, childId) && !findList(runtime, grandchildId); }));
 
@@ -676,7 +676,7 @@ namespace ao::gtk::test
       deleteActionPtr->activate();
 
       AppDialog* dialog = nullptr;
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&dialog]
         {
           dialog = findAppDialog("Unable to Delete List");
@@ -787,7 +787,7 @@ namespace ao::gtk::test
     deleteActionPtr->activate();
 
     AppDialog* confirmation = nullptr;
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&confirmation]
       {
         confirmation = findAppDialog("Delete List?");
@@ -800,12 +800,12 @@ namespace ao::gtk::test
     CHECK(checkButtons.front()->get_label().find("#") != Glib::ustring::npos);
     checkButtons.front()->set_active(true);
     confirmation->response(Gtk::ResponseType::YES);
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&fixture, listId, trackId]
-      { return !findList(fixture.runtime(), listId) && !trackHasTag(fixture.runtime(), trackId, "road-trip"); }));
+      { return !findList(fixture.runtime(), listId) && !hasTrackTag(fixture.runtime(), trackId, "road-trip"); }));
 
     CHECK_FALSE(findList(fixture.runtime(), listId));
-    CHECK_FALSE(trackHasTag(fixture.runtime(), trackId, "road-trip"));
+    CHECK_FALSE(hasTrackTag(fixture.runtime(), trackId, "road-trip"));
   }
 
   TEST_CASE("ListNavigationPanel - retired selection model no longer drives callbacks", "[gtk][regression][list]")

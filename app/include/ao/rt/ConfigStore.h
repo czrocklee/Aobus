@@ -105,9 +105,9 @@ namespace ao::rt
       requires std::is_move_assignable_v<T>
     Result<bool> load(std::string_view group, T& value, Schema const& schema)
     {
-      if (auto const result = ensureLoaded(); !result)
+      if (auto const res = ensureLoaded(); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto const child = _root.rootref()[yaml::toCsubstr(group)];
@@ -143,9 +143,9 @@ namespace ao::rt
 
       auto output = yaml::appendChild(root, group);
 
-      if (auto const result = schema.serialize(output, value); !result)
+      if (auto const res = schema.serialize(output, value); !res)
       {
-        return std::unexpected{withGroupContext(result.error(), "serialize", group)};
+        return std::unexpected{withGroupContext(res.error(), "serialize", group)};
       }
 
       return {};

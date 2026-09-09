@@ -24,7 +24,7 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 - Presentation affects grouping, ordering, visible fields, and redundant-field suppression, never list membership.
 - A quick filter changes the source supplied to a presentation but does not select a new presentation.
 - A flat presentation with an empty sort preserves source order exactly.
-- Sorts are stable for equal keys.
+- Sorts are stable for equal keys relative to the current source order.
 - Every group identity occupies one contiguous row range, including when a
   custom sort omits its grouping field.
 - A redundant field is suppressed only when the group header presents the same fact.

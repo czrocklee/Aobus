@@ -158,7 +158,7 @@ namespace winrt::Aobus::implementation
 
   ao::Result<> App::requestLibraryRestart(std::filesystem::path root)
   {
-    if (_processPhase != ProcessPhase::Running || !_windowSessionPtr || !_windowSessionPtr->active())
+    if (_processPhase != ProcessPhase::Running || !_windowSessionPtr || !_windowSessionPtr->isActive())
     {
       return ao::makeError(ao::Error::Code::ResourceBusy, "A WinUI process transition is already in progress");
     }

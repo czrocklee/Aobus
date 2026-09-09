@@ -105,6 +105,12 @@ namespace ao::uimodel
     static constexpr std::string_view kDefaultPresetId = "classic";
 
     explicit LayoutSession(LayoutComponentStateStore* componentStateStore = nullptr);
+    ~LayoutSession() = default;
+
+    LayoutSession(LayoutSession const&) = delete;
+    LayoutSession& operator=(LayoutSession const&) = delete;
+    LayoutSession(LayoutSession&&) = delete;
+    LayoutSession& operator=(LayoutSession&&) = delete;
 
     static LayoutPresetSelection selectPreset(std::string_view requestedPresetId,
                                               std::span<std::string_view const> supportedPresetIds,

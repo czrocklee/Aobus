@@ -32,17 +32,17 @@ namespace ao::gtk
 
     std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
     void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
-    bool prune(std::string_view presetId,
-               uimodel::PreparedLayout const& layout,
-               uimodel::LayoutSchema const& schema) override;
-    bool removePreset(std::string_view presetId) override;
+    bool tryPrune(std::string_view presetId,
+                  uimodel::PreparedLayout const& layout,
+                  uimodel::LayoutSchema const& schema) override;
+    bool tryRemovePreset(std::string_view presetId) override;
 
   private:
     std::filesystem::path filePath(std::string_view presetId) const;
 
     std::optional<uimodel::LayoutComponentStateDocument> loadUnlocked(std::string_view presetId) const;
-    bool saveUnlocked(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc);
-    bool removePresetUnlocked(std::string_view presetId);
+    bool trySaveUnlocked(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc);
+    bool tryRemovePresetUnlocked(std::string_view presetId);
 
     mutable std::mutex _mutex;
     std::filesystem::path _stateDir;

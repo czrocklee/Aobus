@@ -55,7 +55,7 @@ namespace ao::audio
     return static_cast<std::uint64_t>(format.sampleRate) * frameBytes(format);
   }
 
-  constexpr bool samePcmMode(PcmFormat const& lhs, PcmFormat const& rhs) noexcept
+  constexpr bool isSamePcmMode(PcmFormat const& lhs, PcmFormat const& rhs) noexcept
   {
     return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.encoding == rhs.encoding;
   }

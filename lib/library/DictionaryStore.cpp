@@ -79,6 +79,57 @@ namespace ao::library
     }
   }
 
+  void DictionaryStore::refresh(lmdb::IntegerKeyDatabase::Reader const& reader)
+  {
+    auto const count = reader.entryCount();
+    {
+      auto const lock = std::shared_lock{_mutex};
+
+      if (count <= _idToStringStorage.size())
+      {
+        return;
+      }
+    }
+
+    auto const lock = std::scoped_lock{_mutex};
+    auto const previousSize = _idToStringStorage.size();
+
+    if (count <= previousSize)
+    {
+      return;
+    }
+
+    _stringToId.reserve(count);
+
+    try
+    {
+      for (auto index = previousSize; index < count; ++index)
+      {
+        auto const id = DictionaryId{static_cast<std::uint32_t>(index + 1U)};
+        auto const optBytes = reader.get(id.raw());
+        AO_INVARIANT(optBytes, "Committed dictionary tail is not dense");
+        auto const text = utility::bytes::stringView(*optBytes);
+        auto const validRes = detail::validatePersistedLibraryText(text, "Dictionary entry");
+        AO_INVARIANT(validRes, "Committed dictionary tail contains invalid text");
+        _idToStringStorage.emplace_back(text);
+        auto const inserted = _stringToId.insert(id).second;
+        AO_INVARIANT(inserted, "Committed dictionary tail rebinds existing text");
+      }
+    }
+    catch (...)
+    {
+      while (_idToStringStorage.size() > previousSize)
+      {
+        _stringToId.erase(DictionaryId{static_cast<std::uint32_t>(_idToStringStorage.size())});
+        _idToStringStorage.pop_back();
+      }
+
+      throw;
+    }
+
+    ++_generation;
+  }
+
   std::string_view DictionaryStore::get(DictionaryId id) const
   {
     auto const lock = std::shared_lock{_mutex};
@@ -236,11 +287,11 @@ namespace ao::library
         throw;
       }
 
-      if (auto result = optWriter->create(id.raw(), utility::bytes::view(delta.back().text)); !result)
+      if (auto res = optWriter->create(id.raw(), utility::bytes::view(delta.back().text)); !res)
       {
         delta.pop_back();
         overlay.erase(overlayIt);
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       nextId = nextId == std::numeric_limits<std::uint32_t>::max() ? 0 : nextId + 1;

@@ -117,16 +117,16 @@ namespace ao::lmdb
 
   Result<Environment> Environment::open(std::filesystem::path const& path, Environment::Options const& options)
   {
-    if (auto result = admitFlags(options.flags); !result)
+    if (auto res = admitFlags(options.flags); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     ::MDB_env* handle = nullptr;
 
-    if (auto result = resultFromCode("mdb_env_create", ::mdb_env_create(&handle)); !result)
+    if (auto res = resultFromCode("mdb_env_create", ::mdb_env_create(&handle)); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto envPtr = EnvPtr{handle};
@@ -136,31 +136,31 @@ namespace ao::lmdb
     // which the capacity policy below may then raise but never lowers.
     if (options.pinnedMapBytes > 0)
     {
-      if (auto result =
+      if (auto res =
             resultFromCode("mdb_env_set_mapsize",
                            ::mdb_env_set_mapsize(envPtr.get(), static_cast<std::size_t>(options.pinnedMapBytes)));
-          !result)
+          !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
     if (options.maxDatabases > 0)
     {
-      if (auto result = resultFromCode("mdb_env_set_maxdbs", ::mdb_env_set_maxdbs(envPtr.get(), options.maxDatabases));
-          !result)
+      if (auto res = resultFromCode("mdb_env_set_maxdbs", ::mdb_env_set_maxdbs(envPtr.get(), options.maxDatabases));
+          !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
     if (options.maxReaders > 0)
     {
-      if (auto result =
+      if (auto res =
             resultFromCode("mdb_env_set_maxreaders", ::mdb_env_set_maxreaders(envPtr.get(), options.maxReaders));
-          !result)
+          !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
@@ -180,20 +180,20 @@ namespace ao::lmdb
     // rather than trust the narrow default a platform applies to a native path.
     auto const nativeUtf8 = utility::pathToUtf8(path);
 
-    if (auto result =
+    if (auto res =
           resultFromCode("mdb_env_open", ::mdb_env_open(envPtr.get(), nativeUtf8.c_str(), options.flags, options.mode));
-        !result)
+        !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     // A read-only environment maps whatever already exists and could not commit
     // a larger size anyway, so capacity management has nothing to offer it.
     if ((options.flags & kEnvReadOnly) == 0)
     {
-      if (auto result = applyCapacityPolicy(envPtr.get(), *allocationRes, options.capacity); !result)
+      if (auto res = applyCapacityPolicy(envPtr.get(), *allocationRes, options.capacity); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 

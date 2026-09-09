@@ -35,7 +35,7 @@ namespace ao::lmdb
     public:
       static MDB_txn* handle(ReadTransaction const& transaction) noexcept { return transaction._txnPtr.get(); }
 
-      static bool transactionOwned(ReadTransaction const& transaction) noexcept
+      static bool isTransactionOwned(ReadTransaction const& transaction) noexcept
       {
         return transaction._failureMode == ReadTransaction::ReadFailureMode::Transaction;
       }
@@ -177,10 +177,10 @@ namespace ao::lmdb
       std::span<std::byte const> value;
     };
 
-    bool positionCursor(MDB_cursor* cursor,
-                        MDB_cursor_op const operation,
-                        bool const transactionOwned,
-                        RawRecord& record)
+    bool tryPositionCursor(MDB_cursor* cursor,
+                           MDB_cursor_op const operation,
+                           bool const transactionOwned,
+                           RawRecord& record)
     {
       auto key = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
       auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
@@ -198,10 +198,10 @@ namespace ao::lmdb
       return true;
     }
 
-    bool positionCursorAtOrAfter(MDB_cursor* cursor,
-                                 std::span<std::byte const> const keyView,
-                                 bool const transactionOwned,
-                                 RawRecord& record)
+    bool tryPositionCursorAtOrAfter(MDB_cursor* cursor,
+                                    std::span<std::byte const> const keyView,
+                                    bool const transactionOwned,
+                                    RawRecord& record)
     {
       auto key = makeVal(keyView.data(), keyView.size());
       auto value = ::MDB_val{.mv_size = 0, .mv_data = nullptr};
@@ -250,7 +250,7 @@ namespace ao::lmdb
       return {.code = code, .value = value};
     }
 
-    bool deleteKey(MDB_cursor* cursor, std::span<std::byte const> const keyView)
+    bool tryDeleteKey(MDB_cursor* cursor, std::span<std::byte const> const keyView)
     {
       auto key = makeVal(keyView.data(), keyView.size());
       auto const code = ::mdb_cursor_get(cursor, &key, nullptr, MDB_SET);
@@ -448,13 +448,13 @@ namespace ao::lmdb
   std::optional<std::span<std::byte const>> IntegerKeyDatabase::Reader::get(std::uint32_t const id) const
   {
     ensureActive();
-    return readPoint(_txn, _dbi, utility::bytes::view(id), detail::DatabaseAccess::transactionOwned(*_owner));
+    return readPoint(_txn, _dbi, utility::bytes::view(id), detail::DatabaseAccess::isTransactionOwned(*_owner));
   }
 
   std::size_t IntegerKeyDatabase::Reader::entryCount() const
   {
     ensureActive();
-    return readEntryCount(_txn, _dbi, detail::DatabaseAccess::transactionOwned(*_owner));
+    return readEntryCount(_txn, _dbi, detail::DatabaseAccess::isTransactionOwned(*_owner));
   }
 
   std::uint32_t IntegerKeyDatabase::Reader::maxKey() const
@@ -463,7 +463,7 @@ namespace ao::lmdb
     auto cursorPtr = create(_txn, *_owner, _dbi);
     auto record = RawRecord{};
 
-    if (!positionCursor(cursorPtr.get(), MDB_LAST, detail::DatabaseAccess::transactionOwned(*_owner), record))
+    if (!tryPositionCursor(cursorPtr.get(), MDB_LAST, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
     {
       return 0;
     }
@@ -483,9 +483,9 @@ namespace ao::lmdb
                                                                            ReadTransaction const& owner,
                                                                            DbiHandle const dbi)
   {
-    auto const transactionOwned = detail::DatabaseAccess::transactionOwned(owner);
-    auto const cleanup = transactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
-    return CursorPtr{openCursor(transaction, dbi, transactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
+    auto const isTransactionOwned = detail::DatabaseAccess::isTransactionOwned(owner);
+    auto const cleanup = isTransactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
+    return CursorPtr{openCursor(transaction, dbi, isTransactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
   }
 
   void IntegerKeyDatabase::Reader::ensureActive() const
@@ -510,7 +510,7 @@ namespace ao::lmdb
   {
     auto record = RawRecord{};
 
-    if (!positionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::transactionOwned(owner), record))
+    if (!tryPositionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner), record))
     {
       _cursorPtr.reset();
       return;
@@ -578,7 +578,7 @@ namespace ao::lmdb
   {
     auto record = RawRecord{};
 
-    if (!positionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::transactionOwned(*_owner), record))
+    if (!tryPositionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
     {
       _value = Reader::Value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
       _cursorPtr.reset();
@@ -609,13 +609,13 @@ namespace ao::lmdb
   std::optional<std::span<std::byte const>> ByteKeyDatabase::Reader::get(std::span<std::byte const> const key) const
   {
     ensureActive();
-    return readPoint(_txn, _dbi, key, detail::DatabaseAccess::transactionOwned(*_owner));
+    return readPoint(_txn, _dbi, key, detail::DatabaseAccess::isTransactionOwned(*_owner));
   }
 
   std::size_t ByteKeyDatabase::Reader::entryCount() const
   {
     ensureActive();
-    return readEntryCount(_txn, _dbi, detail::DatabaseAccess::transactionOwned(*_owner));
+    return readEntryCount(_txn, _dbi, detail::DatabaseAccess::isTransactionOwned(*_owner));
   }
 
   void ByteKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
@@ -630,9 +630,9 @@ namespace ao::lmdb
                                                                      ReadTransaction const& owner,
                                                                      DbiHandle const dbi)
   {
-    auto const transactionOwned = detail::DatabaseAccess::transactionOwned(owner);
-    auto const cleanup = transactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
-    return CursorPtr{openCursor(transaction, dbi, transactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
+    auto const isTransactionOwned = detail::DatabaseAccess::isTransactionOwned(owner);
+    auto const cleanup = isTransactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
+    return CursorPtr{openCursor(transaction, dbi, isTransactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
   }
 
   void ByteKeyDatabase::Reader::ensureActive() const
@@ -645,7 +645,7 @@ namespace ao::lmdb
   {
     auto record = RawRecord{};
 
-    if (!positionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::transactionOwned(owner), record))
+    if (!tryPositionCursor(_cursorPtr.get(), MDB_FIRST, detail::DatabaseAccess::isTransactionOwned(owner), record))
     {
       _cursorPtr.reset();
       return;
@@ -662,8 +662,8 @@ namespace ao::lmdb
   {
     auto record = RawRecord{};
 
-    if (!positionCursorAtOrAfter(
-          _cursorPtr.get(), lowerBoundKey, detail::DatabaseAccess::transactionOwned(owner), record))
+    if (!tryPositionCursorAtOrAfter(
+          _cursorPtr.get(), lowerBoundKey, detail::DatabaseAccess::isTransactionOwned(owner), record))
     {
       _cursorPtr.reset();
       return;
@@ -731,7 +731,7 @@ namespace ao::lmdb
   {
     auto record = RawRecord{};
 
-    if (!positionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::transactionOwned(*_owner), record))
+    if (!tryPositionCursor(_cursorPtr.get(), MDB_NEXT, detail::DatabaseAccess::isTransactionOwned(*_owner), record))
     {
       _value = {};
       _cursorPtr.reset();
@@ -747,7 +747,7 @@ namespace ao::lmdb
     ensureActive();
     _cursorPtr = Reader::create(detail::DatabaseAccess::handle(transaction), transaction, _dbi);
 
-    if (auto record = RawRecord{}; positionCursor(_cursorPtr.get(), MDB_LAST, true, record))
+    if (auto record = RawRecord{}; tryPositionCursor(_cursorPtr.get(), MDB_LAST, true, record))
     {
       _lastId = read<std::uint32_t>(makeVal(record.key.data(), record.key.size()));
     }
@@ -824,10 +824,10 @@ namespace ao::lmdb
 
     auto const id = ++_lastId;
 
-    if (auto result = create(id, data); !result)
+    if (auto res = create(id, data); !res)
     {
       --_lastId;
-      return std::unexpected{std::move(result.error())};
+      return std::unexpected{std::move(res.error())};
     }
 
     return id;
@@ -881,10 +881,10 @@ namespace ao::lmdb
     throwOnMutationError("mdb_cursor_put", result.code);
   }
 
-  bool IntegerKeyDatabase::Writer::del(std::uint32_t const id)
+  bool IntegerKeyDatabase::Writer::tryDelete(std::uint32_t const id)
   {
     ensureActive();
-    return deleteKey(_cursorPtr.get(), utility::bytes::view(id));
+    return tryDeleteKey(_cursorPtr.get(), utility::bytes::view(id));
   }
 
   std::optional<std::span<std::byte const>> IntegerKeyDatabase::Writer::get(std::uint32_t const id) const
@@ -896,9 +896,9 @@ namespace ao::lmdb
   Result<> IntegerKeyDatabase::Writer::clear()
   {
     ensureActive();
-    auto result = clearDatabase(detail::DatabaseAccess::handle(*_txn), _dbi);
+    auto res = clearDatabase(detail::DatabaseAccess::handle(*_txn), _dbi);
     _lastId = 0;
-    return result;
+    return res;
   }
 
   ByteKeyDatabase::Writer::Writer(DbiHandle const dbi, WriteTransaction& transaction)
@@ -959,10 +959,10 @@ namespace ao::lmdb
     return resultFromCode("mdb_cursor_put", code);
   }
 
-  bool ByteKeyDatabase::Writer::del(std::span<std::byte const> const key)
+  bool ByteKeyDatabase::Writer::tryDelete(std::span<std::byte const> const key)
   {
     ensureActive();
-    return deleteKey(_cursorPtr.get(), key);
+    return tryDeleteKey(_cursorPtr.get(), key);
   }
 
   std::optional<std::span<std::byte const>> ByteKeyDatabase::Writer::get(std::span<std::byte const> const key) const
@@ -1015,7 +1015,7 @@ namespace ao::lmdb
   {
     AO_EXPECTS(_dbi != kInvalidDbi, "UnvalidatedDatabase used after classification or move");
     AO_EXPECTS(transaction.isActive(), "UnvalidatedDatabase used with an inactive transaction");
-    return readPoint(DatabaseAccess::handle(transaction), _dbi, key, DatabaseAccess::transactionOwned(transaction));
+    return readPoint(DatabaseAccess::handle(transaction), _dbi, key, DatabaseAccess::isTransactionOwned(transaction));
   }
 
   Result<IntegerKeyDatabase> detail::UnvalidatedDatabase::intoIntegerKey(std::string_view const databaseName) &&

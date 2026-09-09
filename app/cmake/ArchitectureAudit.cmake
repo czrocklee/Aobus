@@ -1,6 +1,7 @@
 # Application architecture rules are source policy, not target implementation.
-# Keep them in one table and scan each governed source once so a completion gate
-# reports the complete set of violations instead of stopping at the first rule.
+# The rule table below shares one scan and reports all of its violations.
+# The specialized audits retain their own inventories and diagnostics; the
+# complete target does not promise a single scan across those independent rules.
 
 function(aobus_add_architecture_audit)
   add_custom_target(ao_application_architecture_audit

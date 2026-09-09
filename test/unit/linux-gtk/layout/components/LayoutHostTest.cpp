@@ -187,7 +187,10 @@ namespace ao::gtk::layout::test
       auto const tempDir2 = ao::test::TempDir{};
       std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
       LayoutRuntime::registerStandardComponents(
-        registry2, *runtime2Ptr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
+        registry2,
+        *runtime2Ptr,
+        ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                                 .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
       auto const actionRegistry2 = ActionRegistry{registry2.schema()};
       auto session2 = uimodel::LayoutSession{};

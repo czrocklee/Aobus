@@ -78,6 +78,12 @@ build. `--path`, compiler, and sanitizer options select the same tree for C++
 and lint integration suites. On every native platform, build and test commands reuse
 the same flavor tree. Tests are configured by default, while `cmake --build
 --target ...` limits an incremental build to the selected suite targets.
+Native test invocations, including `--no-build`, require the tree's recorded C/C++
+compiler family and sanitizer configuration to match the requested options.
+Configure the intended sanitizer mode with `ao build -p <dir>` before testing a
+reused explicit tree. Every configure writes both sanitizer switches explicitly.
+Changing compiler family requires a separate tree or an explicit clean build;
+the portal rejects incompatible reuse before configuring or building it.
 
 Tooling tests are exposed as `./ao test --tooling` on Linux and
 `ao.bat test --tooling` on Windows, not as a separate top-level command. Their

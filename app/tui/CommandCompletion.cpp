@@ -34,11 +34,11 @@ namespace ao::tui
       return prefix;
     }
 
-    bool appendItem(std::vector<rt::CompletionItem>& items,
-                    std::size_t const limit,
-                    std::string displayText,
-                    std::string insertText,
-                    std::string detail)
+    bool tryAppendItem(std::vector<rt::CompletionItem>& items,
+                       std::size_t const limit,
+                       std::string displayText,
+                       std::string insertText,
+                       std::string detail)
     {
       if (items.size() >= limit)
       {
@@ -68,11 +68,11 @@ namespace ao::tui
 
         if (auto const text = commandDisplayText(spec.prefix); rt::startsWithCompletionPrefixInsensitive(text, prefix))
         {
-          if (!appendItem(items,
-                          limit,
-                          ":" + std::string{text},
-                          std::string{spec.prefix},
-                          tuiChromeText(textCatalog, spec.detail)))
+          if (!tryAppendItem(items,
+                             limit,
+                             ":" + std::string{text},
+                             std::string{spec.prefix},
+                             tuiChromeText(textCatalog, spec.detail)))
           {
             return;
           }
@@ -88,11 +88,11 @@ namespace ao::tui
 
         if (rt::startsWithCompletionPrefixInsensitive(spec.alias, prefix))
         {
-          if (!appendItem(items,
-                          limit,
-                          ":" + std::string{spec.alias},
-                          std::string{spec.alias},
-                          tuiChromeText(textCatalog, spec.detail)))
+          if (!tryAppendItem(items,
+                             limit,
+                             ":" + std::string{spec.alias},
+                             std::string{spec.alias},
+                             tuiChromeText(textCatalog, spec.detail)))
           {
             return;
           }
@@ -117,7 +117,7 @@ namespace ao::tui
         {
           auto const optText = uimodel::builtinTrackPresentation(textCatalog, preset.spec.id);
 
-          if (!appendItem(
+          if (!tryAppendItem(
                 items, limit, preset.spec.id, preset.spec.id, optText ? std::string{optText->label} : preset.spec.id))
           {
             return;
@@ -134,7 +134,7 @@ namespace ao::tui
 
         if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
         {
-          if (!appendItem(items, limit, preset.spec.id, preset.spec.id, preset.label))
+          if (!tryAppendItem(items, limit, preset.spec.id, preset.spec.id, preset.label))
           {
             return;
           }

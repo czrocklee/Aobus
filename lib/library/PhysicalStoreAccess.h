@@ -72,14 +72,16 @@ namespace ao::library::detail
       return writer(store, transaction(write));
     }
 
-    static bool removeHotTrackRecordForTest(TrackStore const& store, WriteTransaction& transaction, TrackId const id)
+    static bool tryRemoveHotTrackRecordForTest(TrackStore const& store, WriteTransaction& transaction, TrackId const id)
     {
-      return store._hotDb.writer(transaction.native(*store._identity)).del(id.raw());
+      return store._hotDb.writer(transaction.native(*store._identity)).tryDelete(id.raw());
     }
 
-    static bool removeColdTrackRecordForTest(TrackStore const& store, WriteTransaction& transaction, TrackId const id)
+    static bool tryRemoveColdTrackRecordForTest(TrackStore const& store,
+                                                WriteTransaction& transaction,
+                                                TrackId const id)
     {
-      return store._coldDb.writer(transaction.native(*store._identity)).del(id.raw());
+      return store._coldDb.writer(transaction.native(*store._identity)).tryDelete(id.raw());
     }
 
     static ListStore::Writer writer(ListStore const& store, WriteTransaction& transaction)

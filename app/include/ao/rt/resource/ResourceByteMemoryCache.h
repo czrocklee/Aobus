@@ -76,12 +76,12 @@ namespace ao::rt
 
     void startRead(ResourceId resourceId, Requests::FlightToken token);
     void complete(ResourceId resourceId, Requests::FlightToken const& token, std::vector<std::byte> bytes);
-    static async::Task<void> runRead(ResourceByteMemoryCache* cache,
-                                     async::Runtime* asyncRuntime,
-                                     std::shared_ptr<ReadBytes const> readBytesPtr,
-                                     ResourceId resourceId,
-                                     Requests::FlightToken token,
-                                     std::stop_token stopToken);
+    static async::Task<void> runReadAsync(ResourceByteMemoryCache* cache,
+                                          async::Runtime* asyncRuntime,
+                                          std::shared_ptr<ReadBytes const> readBytesPtr,
+                                          ResourceId resourceId,
+                                          Requests::FlightToken token,
+                                          std::stop_token stopToken);
 
     ResourceBytes cached(ResourceId resourceId);
     void store(ResourceId resourceId, ResourceBytes bytes);

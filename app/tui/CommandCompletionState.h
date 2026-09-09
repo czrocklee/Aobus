@@ -18,9 +18,9 @@ namespace ao::tui
     std::int32_t selection() const noexcept { return _selection; }
 
     void set(std::optional<rt::CompletionResult> optResult);
-    bool moveSelection(std::int32_t delta);
-    bool moveSelectionByPage(std::int32_t delta);
-    bool applyTo(std::string& draft);
+    bool tryMoveSelection(std::int32_t delta);
+    bool tryMoveSelectionByPage(std::int32_t delta);
+    bool tryApplyTo(std::string& draft);
     void clear();
 
   private:

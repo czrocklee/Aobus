@@ -229,8 +229,8 @@ namespace ao::tui
 
   std::span<TuiActionDescriptor const> tuiActionDescriptors()
   {
-    static auto const descriptors = makeDescriptors();
-    return descriptors;
+    static auto const kDescriptors = makeDescriptors();
+    return kDescriptors;
   }
 
   uimodel::KeymapBindings tuiDefaultKeymap()

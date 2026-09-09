@@ -66,7 +66,7 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    CHECK(h.commit(point));
+    CHECK(h.tryCommit(point));
 
     CHECK(h.size() == 1);
     CHECK(h.current() == point);
@@ -78,8 +78,8 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
 
     CHECK(h.size() == 2);
     CHECK(h.current()->listId == ListId{20});
@@ -91,9 +91,9 @@ namespace ao::rt::test
             "[runtime][unit][navigation][commit]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
-    h.commit(makePoint(ListId{30}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{30}));
 
     CHECK(h.size() == 3);
     CHECK(h.current()->listId == ListId{30});
@@ -105,8 +105,8 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    CHECK(h.commit(point));
-    CHECK_FALSE(h.commit(point));
+    CHECK(h.tryCommit(point));
+    CHECK_FALSE(h.tryCommit(point));
 
     CHECK(h.size() == 1);
   }
@@ -116,8 +116,8 @@ namespace ao::rt::test
     auto h = NavigationHistory{};
     auto const pointA = makePoint(ListId{10}, {}, makeSpec("songs"));
     auto const pointB = makePoint(ListId{10}, {}, makeSpec("albums", TrackGroupKey::Album));
-    h.commit(pointA);
-    h.commit(pointB);
+    h.tryCommit(pointA);
+    h.tryCommit(pointB);
 
     CHECK(h.size() == 2);
   }
@@ -125,8 +125,8 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - filter changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{10}, "genre == \"Rock\""));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{10}, "genre == \"Rock\""));
 
     CHECK(h.size() == 2);
   }
@@ -134,8 +134,8 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - list changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
 
     CHECK(h.size() == 2);
   }
@@ -146,8 +146,8 @@ namespace ao::rt::test
     auto h = NavigationHistory{};
     auto const a = makePoint(ListId{10});
     auto const b = makePoint(ListId{20});
-    h.commit(a);
-    h.commit(b);
+    h.tryCommit(a);
+    h.tryCommit(b);
 
     auto const optResult = h.back();
     REQUIRE(optResult);
@@ -160,9 +160,9 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
-    h.commit(makePoint(ListId{30}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{30}));
 
     auto const optResult = h.back();
     REQUIRE(optResult);
@@ -175,7 +175,7 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{10}));
 
     auto const optResult = h.back();
     CHECK_FALSE(optResult);
@@ -190,9 +190,9 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - forward after back restores the newer point", "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
-    h.commit(makePoint(ListId{30}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{30}));
     h.back();
 
     auto const optResult = h.forward();
@@ -205,7 +205,7 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{10}));
 
     CHECK_FALSE(h.forward().has_value());
   }
@@ -220,10 +220,10 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
-    h.commit(makePoint(ListId{30})); // C
-    h.commit(makePoint(ListId{40})); // D
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{30})); // C
+    h.tryCommit(makePoint(ListId{40})); // D
 
     h.back();                        // to C
     h.back();                        // to B
@@ -236,9 +236,9 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
-    h.commit(makePoint(ListId{30})); // C
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{30})); // C
 
     h.back();                        // to B
     h.back();                        // to A
@@ -252,12 +252,12 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
-    h.commit(makePoint(ListId{30})); // C
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{30})); // C
 
-    h.back();                        // to B
-    h.commit(makePoint(ListId{40})); // D
+    h.back();                           // to B
+    h.tryCommit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 3);
     CHECK(h.current()->listId == ListId{40});
@@ -269,13 +269,13 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
-    h.commit(makePoint(ListId{30})); // C
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{30})); // C
 
-    h.back();                        // to B
-    h.back();                        // to A
-    h.commit(makePoint(ListId{40})); // D
+    h.back();                           // to B
+    h.back();                           // to A
+    h.tryCommit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 2); // A, D (B and C truncated)
     CHECK(h.current()->listId == ListId{40});
@@ -284,10 +284,10 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - capacity eviction removes the oldest point", "[runtime][unit][navigation][eviction]")
   {
     auto h = NavigationHistory{3};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
-    h.commit(makePoint(ListId{30})); // C
-    h.commit(makePoint(ListId{40})); // D
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{30})); // C
+    h.tryCommit(makePoint(ListId{40})); // D
 
     CHECK(h.size() == 3);
     CHECK(h.current()->listId == ListId{40});
@@ -300,8 +300,8 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - capacity one keeps only the newest point", "[runtime][unit][navigation][eviction]")
   {
     auto h = NavigationHistory{1};
-    h.commit(makePoint(ListId{10}));
-    h.commit(makePoint(ListId{20}));
+    h.tryCommit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{20}));
 
     CHECK(h.size() == 1);
     CHECK(h.current()->listId == ListId{20});
@@ -312,7 +312,7 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{1};
-    h.commit(makePoint(ListId{10}));
+    h.tryCommit(makePoint(ListId{10}));
 
     CHECK_FALSE(h.back().has_value());
   }
@@ -327,7 +327,7 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    h.commit(point);
+    h.tryCommit(point);
     CHECK(h.current() == point);
   }
 
@@ -335,8 +335,8 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const a = makePoint(ListId{10});
-    h.commit(a);
-    h.commit(makePoint(ListId{20}));
+    h.tryCommit(a);
+    h.tryCommit(makePoint(ListId{20}));
     h.back();
     CHECK(h.current() == a);
   }
@@ -345,7 +345,7 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    h.commit(point);
+    h.tryCommit(point);
 
     auto copy = *h.current();
     copy.listId = ListId{99};
@@ -357,15 +357,15 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.commit(makePoint(ListId{10})); // A
-    h.commit(makePoint(ListId{20})); // B
+    h.tryCommit(makePoint(ListId{10})); // A
+    h.tryCommit(makePoint(ListId{20})); // B
 
     h.back(); // to A
     CHECK_FALSE(h.canGoBack());
     CHECK(h.canGoForward());
 
-    h.commit(makePoint(ListId{30})); // new commit truncates B
-    CHECK(h.size() == 2);            // A, C
+    h.tryCommit(makePoint(ListId{30})); // new tryCommit truncates B
+    CHECK(h.size() == 2);               // A, C
     CHECK_FALSE(h.canGoForward());
   }
 } // namespace ao::rt::test

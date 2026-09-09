@@ -115,11 +115,11 @@ namespace ao::query::detail
     }
 
     template<typename Scanner, typename Rule>
-    bool branchToken(Scanner& scanner,
-                     Rule rule,
-                     std::string_view text,
-                     CompletionTokenKind kind,
-                     std::vector<CompletionToken>& tokens)
+    bool tryBranchToken(Scanner& scanner,
+                        Rule rule,
+                        std::string_view text,
+                        CompletionTokenKind kind,
+                        std::vector<CompletionToken>& tokens)
     {
       using Reader = std::remove_cvref_t<decltype(scanner.remaining_input().reader())>;
       auto result = lexy::scan_result<lexy::lexeme<Reader>>{};
@@ -143,7 +143,7 @@ namespace ao::query::detail
     }
 
     template<typename Scanner>
-    bool branchWhitespace(Scanner& scanner, std::string_view text, std::vector<CompletionToken>& tokens)
+    bool tryBranchWhitespace(Scanner& scanner, std::string_view text, std::vector<CompletionToken>& tokens)
     {
       auto const begin = scanner.position();
 
@@ -165,35 +165,38 @@ namespace ao::query::detail
     }
 
     template<typename Scanner>
-    bool branchKnownToken(Scanner& scanner, std::string_view text, std::vector<CompletionToken>& tokens)
+    bool tryBranchKnownToken(Scanner& scanner, std::string_view text, std::vector<CompletionToken>& tokens)
     {
       namespace dsl = lexy::dsl;
 
-      return branchWhitespace(scanner, text, tokens) ||
-             branchToken(scanner, dsl::p<AsToken<SystemVariable>>, text, CompletionTokenKind::Variable, tokens) ||
-             branchToken(scanner, dsl::p<AsToken<UserVariable>>, text, CompletionTokenKind::Variable, tokens) ||
-             branchToken(
+      return tryBranchWhitespace(scanner, text, tokens) ||
+             tryBranchToken(scanner, dsl::p<AsToken<SystemVariable>>, text, CompletionTokenKind::Variable, tokens) ||
+             tryBranchToken(scanner, dsl::p<AsToken<UserVariable>>, text, CompletionTokenKind::Variable, tokens) ||
+             tryBranchToken(
                scanner, dsl::p<AsToken<QuotedStringConstant>>, text, CompletionTokenKind::StringLiteral, tokens) ||
-             branchToken(scanner, dsl::p<AsToken<UnitConstant>>, text, CompletionTokenKind::UnitLiteral, tokens) ||
-             branchToken(
+             tryBranchToken(scanner, dsl::p<AsToken<UnitConstant>>, text, CompletionTokenKind::UnitLiteral, tokens) ||
+             tryBranchToken(
                scanner, dsl::p<AsToken<BooleanConstant>>, text, CompletionTokenKind::BooleanLiteral, tokens) ||
-             branchToken(
+             tryBranchToken(
                scanner, dsl::p<AsToken<NegativeInteger>>, text, CompletionTokenKind::IntegerLiteral, tokens) ||
-             branchToken(
+             tryBranchToken(
                scanner, dsl::p<AsToken<PositiveInteger>>, text, CompletionTokenKind::IntegerLiteral, tokens) ||
-             branchToken(scanner, dsl::p<LogicalOperatorToken>, text, CompletionTokenKind::LogicalOperator, tokens) ||
-             branchToken(
+             tryBranchToken(
+               scanner, dsl::p<LogicalOperatorToken>, text, CompletionTokenKind::LogicalOperator, tokens) ||
+             tryBranchToken(
                scanner, dsl::p<RelationalOperatorToken>, text, CompletionTokenKind::RelationalOperator, tokens) ||
-             branchToken(scanner, dsl::p<PrefixOperatorToken>, text, CompletionTokenKind::PrefixOperator, tokens) ||
-             branchToken(scanner, dsl::p<PostfixOperatorToken>, text, CompletionTokenKind::PostfixOperator, tokens) ||
-             branchToken(scanner, dsl::p<AddOperatorToken>, text, CompletionTokenKind::AddOperator, tokens) ||
-             branchToken(scanner, LEXY_LIT(".."), text, CompletionTokenKind::RangeDelimiter, tokens) ||
-             branchToken(scanner, dsl::lit_c<'['>, text, CompletionTokenKind::OpenList, tokens) ||
-             branchToken(scanner, dsl::lit_c<']'>, text, CompletionTokenKind::CloseList, tokens) ||
-             branchToken(scanner, dsl::lit_c<'('>, text, CompletionTokenKind::OpenGroup, tokens) ||
-             branchToken(scanner, dsl::lit_c<')'>, text, CompletionTokenKind::CloseGroup, tokens) ||
-             branchToken(scanner, dsl::lit_c<','>, text, CompletionTokenKind::Comma, tokens) ||
-             branchToken(scanner, dsl::p<AsToken<BarewordStringConstant>>, text, CompletionTokenKind::Bareword, tokens);
+             tryBranchToken(scanner, dsl::p<PrefixOperatorToken>, text, CompletionTokenKind::PrefixOperator, tokens) ||
+             tryBranchToken(
+               scanner, dsl::p<PostfixOperatorToken>, text, CompletionTokenKind::PostfixOperator, tokens) ||
+             tryBranchToken(scanner, dsl::p<AddOperatorToken>, text, CompletionTokenKind::AddOperator, tokens) ||
+             tryBranchToken(scanner, LEXY_LIT(".."), text, CompletionTokenKind::RangeDelimiter, tokens) ||
+             tryBranchToken(scanner, dsl::lit_c<'['>, text, CompletionTokenKind::OpenList, tokens) ||
+             tryBranchToken(scanner, dsl::lit_c<']'>, text, CompletionTokenKind::CloseList, tokens) ||
+             tryBranchToken(scanner, dsl::lit_c<'('>, text, CompletionTokenKind::OpenGroup, tokens) ||
+             tryBranchToken(scanner, dsl::lit_c<')'>, text, CompletionTokenKind::CloseGroup, tokens) ||
+             tryBranchToken(scanner, dsl::lit_c<','>, text, CompletionTokenKind::Comma, tokens) ||
+             tryBranchToken(
+               scanner, dsl::p<AsToken<BarewordStringConstant>>, text, CompletionTokenKind::Bareword, tokens);
     }
   } // namespace
 
@@ -212,7 +215,7 @@ namespace ao::query::detail
         break;
       }
 
-      if (branchKnownToken(scanner, text, tokens))
+      if (tryBranchKnownToken(scanner, text, tokens))
       {
         continue;
       }

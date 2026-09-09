@@ -368,7 +368,7 @@ namespace ao::gtk
       entry.add_controller(focusControllerPtr);
     }
 
-    bool editSessionTargetsRow(uimodel::TrackAuthoringSession const& editSession, TrackRowObject const& row)
+    bool isEditSessionTargetRow(uimodel::TrackAuthoringSession const& editSession, TrackRowObject const& row)
     {
       return editSession.targetIds().size() == 1 && editSession.targetIds().front() == row.trackId();
     }
@@ -384,7 +384,7 @@ namespace ao::gtk
       auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(item.get_item());
 
       if (rowPtr == nullptr || !bindingState.optEditSession ||
-          !editSessionTargetsRow(*bindingState.optEditSession, *rowPtr))
+          !isEditSessionTargetRow(*bindingState.optEditSession, *rowPtr))
       {
         closeInlineEditor(stack, bindingState);
         return;

@@ -323,13 +323,13 @@ namespace ao::winui::layout
       {
       }
 
-      bool available() const noexcept { return _settings.navigationWidth && _settings.setNavigationWidth; }
+      bool isAvailable() const noexcept { return _settings.navigationWidth && _settings.setNavigationWidth; }
 
-      double value() const { return available() ? _settings.navigationWidth() : kDefaultNavigationPaneWidth; }
+      double value() const { return isAvailable() ? _settings.navigationWidth() : kDefaultNavigationPaneWidth; }
 
       void resizeBy(double const change)
       {
-        if (!available() || !uimodel::isGenerationActive(_gatePtr))
+        if (!isAvailable() || !uimodel::isGenerationActive(_gatePtr))
         {
           return;
         }

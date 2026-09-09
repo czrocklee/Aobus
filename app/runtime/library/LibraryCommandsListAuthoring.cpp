@@ -173,19 +173,19 @@ namespace ao::rt
       auto listWriter = transaction.lists();
       auto list = listForDraft(normalizedDraft);
 
-      if (auto result = validateListDraft(normalizedDraft); !result)
+      if (auto res = validateListDraft(normalizedDraft); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      auto result = listWriter.create(list);
+      auto res = listWriter.create(list);
 
-      if (!result)
+      if (!res)
       {
-        return detail::storageError("Failed to create list", result.error());
+        return detail::storageError("Failed to create list", res.error());
       }
 
-      return *result;
+      return *res;
     }
 
     Result<UpdateListReply> updateListInTransaction(library::LibraryWrite& transaction, ListDraft const& draft)
@@ -208,9 +208,9 @@ namespace ao::rt
 
       auto list = listForDraft(normalizedDraft, optExisting);
 
-      if (auto result = validateListDraft(normalizedDraft); !result)
+      if (auto res = validateListDraft(normalizedDraft); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto reply = diffListUpdate(*optExisting, normalizedDraft);
@@ -222,9 +222,9 @@ namespace ao::rt
 
       reply.changed = true;
 
-      if (auto result = listWriter.update(normalizedDraft.listId, list); !result)
+      if (auto res = listWriter.update(normalizedDraft.listId, list); !res)
       {
-        return detail::storageError("Failed to update list", result.error());
+        return detail::storageError("Failed to update list", res.error());
       }
 
       return reply;
@@ -255,7 +255,7 @@ namespace ao::rt
 
       for (auto const& [listId, view] : library.lists().reader(transaction))
       {
-        if (!deleted.contains(listId) && listExpressionReferencesTag(view.filter(), *optTag))
+        if (!deleted.contains(listId) && hasListExpressionTagReference(view.filter(), *optTag))
         {
           work.impact.otherListReferences.push_back(
             DeleteListReply::TagReference{.listId = listId, .name = std::string{view.name()}});
@@ -339,9 +339,9 @@ namespace ao::rt
         {
           for (auto const childId : children->second)
           {
-            if (auto result = visit(childId); !result)
+            if (auto res = visit(childId); !res)
             {
-              return result;
+              return res;
             }
           }
         }
@@ -351,9 +351,9 @@ namespace ao::rt
         return {};
       };
 
-      if (auto result = visit(rootListId); !result)
+      if (auto res = visit(rootListId); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       return deletedLists;
@@ -602,8 +602,8 @@ namespace ao::rt
     }
   } // namespace
 
-  async::Task<Result<ListId>> LibraryCommands::Impl::createList(LibraryWriteLane::Submission submission,
-                                                                ListDraft draft)
+  async::Task<Result<ListId>> LibraryCommands::Impl::createListAsync(LibraryWriteLane::Submission submission,
+                                                                     ListDraft draft)
   {
     auto executionRes = co_await detail::executeInteractiveMutationAsync(
       std::move(submission),
@@ -633,8 +633,8 @@ namespace ao::rt
     co_return executionRes->value;
   }
 
-  async::Task<Result<>> LibraryCommands::Impl::previewCreateList(LibraryWriteLane::Submission submission,
-                                                                 ListDraft draft)
+  async::Task<Result<>> LibraryCommands::Impl::previewCreateListAsync(LibraryWriteLane::Submission submission,
+                                                                      ListDraft draft)
   {
     auto listIdRes =
       co_await detail::applyInteractivePreviewAsync(std::move(submission),
@@ -649,8 +649,8 @@ namespace ao::rt
     co_return Result<>{};
   }
 
-  async::Task<Result<UpdateListReply>> LibraryCommands::Impl::updateList(LibraryWriteLane::Submission submission,
-                                                                         ListDraft draft)
+  async::Task<Result<UpdateListReply>> LibraryCommands::Impl::updateListAsync(LibraryWriteLane::Submission submission,
+                                                                              ListDraft draft)
   {
     auto executionRes = co_await detail::executeInteractiveMutationAsync(
       std::move(submission),
@@ -685,15 +685,16 @@ namespace ao::rt
     co_return std::move(executionRes->value);
   }
 
-  async::Task<Result<UpdateListReply>> LibraryCommands::Impl::previewUpdateList(LibraryWriteLane::Submission submission,
-                                                                                ListDraft draft)
+  async::Task<Result<UpdateListReply>> LibraryCommands::Impl::previewUpdateListAsync(
+    LibraryWriteLane::Submission submission,
+    ListDraft draft)
   {
     return detail::applyInteractivePreviewAsync(std::move(submission),
                                                 [draft = std::move(draft)](library::LibraryWrite& transaction)
                                                 { return updateListInTransaction(transaction, draft); });
   }
 
-  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryCommands::Impl::applyMoveListOrder(
+  async::Task<Result<AuthoringResult<MoveListOrderReply>>> LibraryCommands::Impl::applyMoveListOrderAsync(
     LibraryWriteLane::Submission submission,
     BoundListOrder order,
     std::vector<TrackId> selectedTrackIds,
@@ -804,7 +805,7 @@ namespace ao::rt
     co_return result;
   }
 
-  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryCommands::Impl::applyResetListOrder(
+  async::Task<Result<AuthoringResult<ResetListOrderReply>>> LibraryCommands::Impl::applyResetListOrderAsync(
     LibraryWriteLane::Submission submission,
     BoundListOrder order)
   {
@@ -849,9 +850,8 @@ namespace ao::rt
       });
   }
 
-  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> LibraryCommands::Impl::applyForgetHiddenListOrder(
-    LibraryWriteLane::Submission submission,
-    BoundListOrder order)
+  async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>>
+  LibraryCommands::Impl::applyForgetHiddenListOrderAsync(LibraryWriteLane::Submission submission, BoundListOrder order)
   {
     return executeBoundListOrderAuthoringAsync<ForgetHiddenListOrderReply>(
       std::move(submission),
@@ -910,9 +910,9 @@ namespace ao::rt
       });
   }
 
-  async::Task<Result<DeleteListReply>> LibraryCommands::Impl::deleteList(LibraryWriteLane::Submission submission,
-                                                                         ListId const listId,
-                                                                         DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryCommands::Impl::deleteListAsync(LibraryWriteLane::Submission submission,
+                                                                              ListId const listId,
+                                                                              DeleteListOptions const options)
   {
     return detail::executeChangedWorkAsync<DeleteListReply>(
       std::move(submission),
@@ -921,9 +921,10 @@ namespace ao::rt
       { return applyDeleteListInTransaction(library, transaction, listId, options); });
   }
 
-  async::Task<Result<DeleteListReply>> LibraryCommands::Impl::previewDeleteList(LibraryWriteLane::Submission submission,
-                                                                                ListId const listId,
-                                                                                DeleteListOptions const options)
+  async::Task<Result<DeleteListReply>> LibraryCommands::Impl::previewDeleteListAsync(
+    LibraryWriteLane::Submission submission,
+    ListId const listId,
+    DeleteListOptions const options)
   {
     return detail::previewChangedWorkAsync<DeleteListReply>(
       std::move(submission),
@@ -931,7 +932,7 @@ namespace ao::rt
       { return applyDeleteListInTransaction(library, transaction, listId, options); });
   }
 
-  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::Impl::deleteListAndDescendants(
+  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::Impl::deleteListAndDescendantsAsync(
     LibraryWriteLane::Submission submission,
     ListId const listId,
     DeleteListOptions const options)
@@ -943,7 +944,7 @@ namespace ao::rt
       { return applyDeleteListSubtreeInTransaction(library, transaction, listId, options); });
   }
 
-  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::Impl::previewDeleteListAndDescendants(
+  async::Task<Result<DeleteListSubtreeReply>> LibraryCommands::Impl::previewDeleteListAndDescendantsAsync(
     LibraryWriteLane::Submission submission,
     ListId const listId,
     DeleteListOptions const options)

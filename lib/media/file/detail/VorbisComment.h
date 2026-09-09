@@ -52,5 +52,5 @@ namespace ao::media::file::detail
    * @return False when the key has no mapping, leaving the caller free to
    *         interpret it.
    */
-  bool applyVorbisComment(ContentBuilder& builder, VorbisCommentField field);
+  bool tryApplyVorbisComment(ContentBuilder& builder, VorbisCommentField field);
 } // namespace ao::media::file::detail

@@ -37,7 +37,7 @@ namespace ao::async::test
     executor.dispatch({});
 
     CHECK(order == std::vector<int>{1});
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - foreign dispatch runs on the owner thread", "[runtime][unit][async][concurrency]")
@@ -54,7 +54,7 @@ namespace ao::async::test
     executor.runOneTurn();
 
     CHECK(callbackThread == ownerThread);
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - concurrent producers share one ready turn", "[runtime][unit][async][concurrency]")
@@ -86,7 +86,7 @@ namespace ao::async::test
     executor.runOneTurn();
 
     CHECK(executions == std::vector<int>(kProducerCount, 1));
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - a pending burst preserves FIFO order in one ready turn", "[runtime][unit][async]")
@@ -102,7 +102,7 @@ namespace ao::async::test
     executor.runOneTurn();
 
     CHECK(order == std::vector<std::int32_t>{1, 2, 3, 4});
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - work queued during a turn runs in a later turn", "[runtime][unit][async][concurrency]")
@@ -133,9 +133,9 @@ namespace ao::async::test
     producer.join();
 
     CHECK(order == std::vector<int>{1, 2});
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3, 4});
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - deferred work admitted during a turn runs later", "[runtime][unit][async]")
@@ -154,9 +154,9 @@ namespace ao::async::test
     executor.runOneTurn();
 
     CHECK(order == std::vector<int>{1, 2});
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3});
-    CHECK_FALSE(executor.runReadyTurn());
+    CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
   TEST_CASE("LoopExecutor - nested pumping does not reenter a draining turn", "[runtime][unit][async]")
@@ -169,14 +169,14 @@ namespace ao::async::test
       {
         order.push_back(1);
         executor.defer([&] { order.push_back(3); });
-        CHECK_FALSE(executor.runReadyTurn());
+        CHECK_FALSE(executor.tryRunReadyTurn());
         order.push_back(2);
       });
 
     executor.runOneTurn();
 
     CHECK(order == std::vector<int>{1, 2});
-    REQUIRE(executor.runReadyTurn());
+    REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3});
   }
 

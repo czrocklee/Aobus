@@ -111,7 +111,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  bool pumpGtkEventsUntil(std::function<bool()> const& predicate, std::chrono::milliseconds const timeout)
+  bool tryPumpGtkEventsUntil(std::function<bool()> const& predicate, std::chrono::milliseconds const timeout)
   {
     auto const deadline = std::chrono::steady_clock::now() + timeout;
     auto contextPtr = Glib::MainContext::get_default();

@@ -22,26 +22,26 @@ namespace ao::gtk::test
     auto const arguments = std::array<std::string_view, 7>{
       "aobus-gtk", "--display=:7", "-vv", "--log-level", "debug", "music.aobus", "--name=Aobus"};
 
-    auto result = planGtkStartup(arguments);
+    auto res = planGtkStartup(arguments);
 
-    REQUIRE(result);
-    CHECK(result->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
-    CHECK_FALSE(result->optSuccessorRequest);
-    CHECK(result->logLevel == rt::LogLevel::Trace);
-    CHECK_FALSE(result->shouldExit);
-    CHECK(result->gtkArguments == std::vector<std::string>{"aobus-gtk", "--display=:7", "music.aobus", "--name=Aobus"});
+    REQUIRE(res);
+    CHECK(res->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
+    CHECK_FALSE(res->optSuccessorRequest);
+    CHECK(res->logLevel == rt::LogLevel::Trace);
+    CHECK_FALSE(res->shouldExit);
+    CHECK(res->gtkArguments == std::vector<std::string>{"aobus-gtk", "--display=:7", "music.aobus", "--name=Aobus"});
   }
 
   TEST_CASE("GtkStartupPlan - GLib replacement option remains GTK passthrough", "[gtk][unit][app]")
   {
     auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", "--gapplication-replace", "--display=:7"};
 
-    auto result = planGtkStartup(arguments);
+    auto res = planGtkStartup(arguments);
 
-    REQUIRE(result);
-    CHECK(result->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
-    CHECK_FALSE(result->optSuccessorRequest);
-    CHECK(result->gtkArguments == std::vector<std::string>{"aobus-gtk", "--gapplication-replace", "--display=:7"});
+    REQUIRE(res);
+    CHECK(res->registrationMode == GtkApplicationRegistrationMode::AllowReplacement);
+    CHECK_FALSE(res->optSuccessorRequest);
+    CHECK(res->gtkArguments == std::vector<std::string>{"aobus-gtk", "--gapplication-replace", "--display=:7"});
   }
 
   TEST_CASE("GtkStartupPlan - Aobus help and version are owned by the single CLI parser", "[gtk][unit][app]")
@@ -50,24 +50,24 @@ namespace ao::gtk::test
     {
       auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", "--help"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE(result);
-      CHECK(result->shouldExit);
-      CHECK(result->exitCode == 0);
-      CHECK_FALSE(result->showVersion);
+      REQUIRE(res);
+      CHECK(res->shouldExit);
+      CHECK(res->exitCode == 0);
+      CHECK_FALSE(res->showVersion);
     }
 
     SECTION("version")
     {
       auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", "--version"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE(result);
-      CHECK(result->shouldExit);
-      CHECK(result->exitCode == 0);
-      CHECK(result->showVersion);
+      REQUIRE(res);
+      CHECK(res->shouldExit);
+      CHECK(res->exitCode == 0);
+      CHECK(res->showVersion);
     }
   }
 
@@ -82,14 +82,14 @@ namespace ao::gtk::test
                                                            "--gtk-debug=actions",
                                                            "--name=Aobus"};
 
-    auto result = planGtkStartup(arguments);
+    auto res = planGtkStartup(arguments);
 
-    REQUIRE(result);
-    CHECK(result->registrationMode == GtkApplicationRegistrationMode::ReplaceExisting);
-    REQUIRE(result->optSuccessorRequest);
-    CHECK(result->optSuccessorRequest->libraryRoot == std::filesystem::path{"/library"});
-    CHECK(result->optSuccessorRequest->scanAfterOpen);
-    CHECK(result->gtkArguments ==
+    REQUIRE(res);
+    CHECK(res->registrationMode == GtkApplicationRegistrationMode::ReplaceExisting);
+    REQUIRE(res->optSuccessorRequest);
+    CHECK(res->optSuccessorRequest->libraryRoot == std::filesystem::path{"/library"});
+    CHECK(res->optSuccessorRequest->scanAfterOpen);
+    CHECK(res->gtkArguments ==
           std::vector<std::string>{"aobus-gtk", "--display=:7", "--gtk-debug=actions", "--name=Aobus"});
   }
 
@@ -99,22 +99,22 @@ namespace ao::gtk::test
     {
       auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", desktop::kLibraryRootOption, "/music"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("must be specified together"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("must be specified together"));
     }
 
     SECTION("replacement without library root")
     {
       auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", desktop::kLibrarySuccessorOption};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("must be specified together"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("must be specified together"));
     }
 
     SECTION("duplicate replacement")
@@ -125,11 +125,11 @@ namespace ao::gtk::test
                                                              desktop::kLibraryRootOption,
                                                              "/music"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("once"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("once"));
     }
 
     SECTION("duplicate library root")
@@ -141,11 +141,11 @@ namespace ao::gtk::test
                                                              "--library-root=/other",
                                                              "--debug"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("once"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("once"));
     }
 
     SECTION("missing library root value")
@@ -153,11 +153,11 @@ namespace ao::gtk::test
       auto const arguments =
         std::array<std::string_view, 3>{"aobus-gtk", desktop::kLibrarySuccessorOption, desktop::kLibraryRootOption};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("requires a path"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("requires a path"));
     }
 
     SECTION("relative library root")
@@ -165,22 +165,22 @@ namespace ao::gtk::test
       auto const arguments = std::array<std::string_view, 4>{
         "aobus-gtk", desktop::kLibrarySuccessorOption, desktop::kLibraryRootOption, "music"};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("absolute"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("absolute"));
     }
 
     SECTION("scan intent without successor")
     {
       auto const arguments = std::array<std::string_view, 2>{"aobus-gtk", desktop::kScanAfterOpenOption};
 
-      auto result = planGtkStartup(arguments);
+      auto res = planGtkStartup(arguments);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("requires a successor"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("requires a successor"));
     }
   }
 

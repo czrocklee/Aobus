@@ -19,7 +19,7 @@ namespace ao::library
 {
   namespace
   {
-    bool checkedAdd(std::size_t& value, std::size_t const amount) noexcept
+    bool tryAdd(std::size_t& value, std::size_t const amount) noexcept
     {
       if (amount > std::numeric_limits<std::size_t>::max() - value)
       {
@@ -59,28 +59,28 @@ namespace ao::library
     std::size_t variableSize = orderTrackIdBytes;
     auto const nameOffset = variableSize;
 
-    if (!checkedAdd(variableSize, header->nameLength))
+    if (!tryAdd(variableSize, header->nameLength))
     {
       return;
     }
 
     auto const descOffset = variableSize;
 
-    if (!checkedAdd(variableSize, header->descLength))
+    if (!tryAdd(variableSize, header->descLength))
     {
       return;
     }
 
     auto const filterOffset = variableSize;
 
-    if (!checkedAdd(variableSize, header->filterLength))
+    if (!tryAdd(variableSize, header->filterLength))
     {
       return;
     }
 
     std::size_t logicalSize = kListHeaderSize;
 
-    if (!checkedAdd(logicalSize, variableSize) ||
+    if (!tryAdd(logicalSize, variableSize) ||
         logicalSize > std::numeric_limits<std::size_t>::max() - (kListHeaderAlignment - 1))
     {
       return;

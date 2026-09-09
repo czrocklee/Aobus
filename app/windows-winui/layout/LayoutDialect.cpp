@@ -48,7 +48,7 @@ namespace ao::winui
 
       // A slot the element cannot paint would read as authored intent and do
       // nothing, so it is rejected rather than dropped.
-      if (auto const optKind = componentElementKind(node); optKind && !elementKindAcceptsSurface(*optKind))
+      if (auto const optKind = componentElementKind(node); optKind && !acceptsSurfaceForElementKind(*optKind))
       {
         return uimodel::LayoutFieldVerdict::rejected(
           uimodel::LayoutRejectionReason::UnsupportedLayoutField,
@@ -89,7 +89,7 @@ namespace ao::winui
       .name = "Windows",
       .layoutField = &layoutField,
       .presentationChildCount = &presentationChildCount,
-      .requiresStableId = &componentRequiresId,
+      .requiresStableId = &needsComponentId,
       .authorsTooltips = false,
     };
 

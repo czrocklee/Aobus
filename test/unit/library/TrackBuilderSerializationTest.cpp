@@ -92,9 +92,9 @@ namespace ao::library::test
     SECTION("empty URI")
     {
       auto builder = TrackBuilder::makeEmpty();
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("non-empty URI")
@@ -189,11 +189,11 @@ namespace ao::library::test
     {
       auto builder = TrackBuilder::makeEmpty();
       builder.metadata().title(malformed);
-      auto const result = context.trySerializeHot(builder);
+      auto const res = context.trySerializeHot(builder);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("Track title"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("Track title"));
     }
 
     SECTION("custom metadata value")
@@ -201,11 +201,11 @@ namespace ao::library::test
       auto builder = TrackBuilder::makeEmpty();
       builder.customMetadata().add("key", malformed);
       builder.property().uri("track.flac");
-      auto const result = context.trySerializeCold(builder);
+      auto const res = context.trySerializeCold(builder);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("Custom metadata value"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("Custom metadata value"));
     }
   }
 
@@ -217,11 +217,11 @@ namespace ao::library::test
     builder.customMetadata().add("résumé", "first").add("re\u0301sume\u0301", "second");
     builder.property().uri("track.flac");
 
-    auto const result = context.trySerializeCold(builder);
+    auto const res = context.trySerializeCold(builder);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("unique after NFC normalization"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("unique after NFC normalization"));
     CHECK(context.dictionary().size() == 0);
   }
 

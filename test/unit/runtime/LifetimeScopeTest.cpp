@@ -33,12 +33,12 @@ namespace ao::rt::test
       MemberTaskOwner(Runtime& runtime, LifetimeScope& scope, AsyncTestState<int> completed)
         : runtime{runtime}, completed{std::move(completed)}
       {
-        runtime.spawnWithLifetime(scope, [this](std::stop_token const stopToken) { return run(stopToken); });
+        runtime.spawnWithLifetime(scope, [this](std::stop_token const stopToken) { return runAsync(stopToken); });
       }
 
-      Task<void> run(std::stop_token const stopToken)
+      Task<void> runAsync(std::stop_token const stopToken)
       {
-        co_await runtime.resumeOnWorker(stopToken);
+        co_await runtime.resumeOnWorkerAsync(stopToken);
         completed.increment();
       }
 
@@ -63,39 +63,39 @@ namespace ao::rt::test
       TaskExitObserver& operator=(TaskExitObserver&&) = delete;
     };
 
-    Task<void> longRunningTask(Runtime* runtime,
-                               AsyncBarrier* barrier,
-                               AsyncTestState<bool> reachedBarrierWait,
-                               AsyncTestState<bool> reachedCallbackHop,
-                               AsyncTestState<bool> completed,
-                               AsyncTestState<bool> taskExited,
-                               std::stop_token const stopToken)
+    Task<void> longRunningTaskAsync(Runtime* runtime,
+                                    AsyncBarrier* barrier,
+                                    AsyncTestState<bool> reachedBarrierWait,
+                                    AsyncTestState<bool> reachedCallbackHop,
+                                    AsyncTestState<bool> completed,
+                                    AsyncTestState<bool> taskExited,
+                                    std::stop_token const stopToken)
     {
       auto exitObserver = TaskExitObserver{taskExited};
 
-      co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorkerAsync(stopToken);
       reachedBarrierWait.set(true);
       barrier->wait(); // deterministic wait point (blocks worker thread)
 
       reachedCallbackHop.set(true);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       // If cancelled, this line should never be reached.
       completed.set(true);
     }
 
-    Task<void> pendingControlResumeTask(Runtime* runtime,
-                                        AsyncTestState<bool> completed,
-                                        std::stop_token const stopToken = {})
+    Task<void> pendingControlResumeTaskAsync(Runtime* runtime,
+                                             AsyncTestState<bool> completed,
+                                             std::stop_token const stopToken = {})
     {
-      co_await runtime->resumeOnWorker(stopToken);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->resumeOnWorkerAsync(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       completed.set(true);
     }
 
-    Task<void> racingSleep(Runtime* runtime, AsyncTestState<bool> taskExited, std::stop_token const stopToken)
+    Task<void> racingSleepAsync(Runtime* runtime, AsyncTestState<bool> taskExited, std::stop_token const stopToken)
     {
       auto exitObserver = TaskExitObserver{taskExited};
-      co_await runtime->sleepFor(std::chrono::hours{1}, stopToken);
+      co_await runtime->sleepForAsync(std::chrono::hours{1}, stopToken);
     }
   } // namespace
 
@@ -115,11 +115,11 @@ namespace ao::rt::test
         scope,
         [&](std::stop_token const stopToken)
         {
-          return longRunningTask(
+          return longRunningTaskAsync(
             &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
         });
 
-      REQUIRE(reachedBarrierWait.waitUntil(true));
+      REQUIRE(reachedBarrierWait.tryWaitUntil(true));
       barrier.release();
       executor.checkQueued();
       CHECK(reachedCallbackHop.load());
@@ -153,17 +153,17 @@ namespace ao::rt::test
         scope,
         [&](std::stop_token const stopToken)
         {
-          return longRunningTask(
+          return longRunningTaskAsync(
             &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
         });
 
-      REQUIRE(reachedBarrierWait.waitUntil(true));
+      REQUIRE(reachedBarrierWait.tryWaitUntil(true));
       // Destroy scope while task is blocked at the barrier.
     }
 
     barrier.release();
-    REQUIRE(reachedCallbackHop.waitUntil(true));
-    REQUIRE(taskExited.waitUntil(true));
+    REQUIRE(reachedCallbackHop.tryWaitUntil(true));
+    REQUIRE(taskExited.tryWaitUntil(true));
 
     CHECK_FALSE(completed.load());
     runtime.requestStop();
@@ -181,7 +181,7 @@ namespace ao::rt::test
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(scope,
                                 [&runtime, completed](std::stop_token const stopToken)
-                                { return pendingControlResumeTask(&runtime, completed, stopToken); });
+                                { return pendingControlResumeTaskAsync(&runtime, completed, stopToken); });
       executor.checkQueued();
     }
 
@@ -290,7 +290,7 @@ namespace ao::rt::test
       auto owner = MemberTaskOwner{runtime, scope, completed};
 
       // Coroutine finishes while owner and scope are alive
-      REQUIRE(completed.waitUntil(1));
+      REQUIRE(completed.tryWaitUntil(1));
     }
 
     CHECK(completed.load() == 1);
@@ -312,8 +312,8 @@ namespace ao::rt::test
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(scope,
                                 [&runtime, taskExited](std::stop_token const stopToken)
-                                { return racingSleep(&runtime, taskExited, stopToken); });
-      REQUIRE(sleeper.waitForCallCount(iteration + 1));
+                                { return racingSleepAsync(&runtime, taskExited, stopToken); });
+      REQUIRE(sleeper.tryWaitForCallCount(iteration + 1));
       auto const sleepId = sleeper.call(iteration).id;
       auto start = std::barrier{2};
       bool completionDispatched = false;
@@ -322,14 +322,14 @@ namespace ao::rt::test
         auto completionThread = std::jthread{[&]
                                              {
                                                start.arrive_and_wait();
-                                               completionDispatched = sleeper.fireById(sleepId);
+                                               completionDispatched = sleeper.tryFireById(sleepId);
                                              }};
         start.arrive_and_wait();
         scope.cancelAll();
       }
 
       CHECK((completionDispatched || sleeper.call(iteration).cancelled));
-      REQUIRE(taskExited.waitUntil(true));
+      REQUIRE(taskExited.tryWaitUntil(true));
     }
 
     runtime.requestStop();

@@ -343,9 +343,9 @@ namespace ao::query
       reg(registers, instr.operand - 1) = fieldKey.contains(constantText) ? 1 : 0;
     }
 
-    bool executeExists(library::TrackView const& track,
-                       std::span<DictionaryId const> dictionaryIds,
-                       Instruction const& instr)
+    bool matchesExistsInstruction(library::TrackView const& track,
+                                  std::span<DictionaryId const> dictionaryIds,
+                                  Instruction const& instr)
     {
       switch (auto const field = static_cast<Field>(instr.field); field)
       {
@@ -553,7 +553,7 @@ namespace ao::query
       return false;
     }
 
-    return evaluateFull(binding, track);
+    return matchesFullPlan(binding, track);
   }
 
   bool PlanEvaluator::matches(ExecutionPlan const& plan, library::TrackView const& track) const
@@ -563,7 +563,7 @@ namespace ao::query
     return matches(binding, track);
   }
 
-  bool PlanEvaluator::evaluateFull(PlanBinding const& binding, library::TrackView const& track) const
+  bool PlanEvaluator::matchesFullPlan(PlanBinding const& binding, library::TrackView const& track) const
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
@@ -666,7 +666,7 @@ namespace ao::query
           break;
 
         case OpCode::Exists:
-          reg(_registers, instr.operand) = executeExists(track, state.dictionaryIds, instr) ? 1 : 0;
+          reg(_registers, instr.operand) = matchesExistsInstruction(track, state.dictionaryIds, instr) ? 1 : 0;
           break;
 
         case OpCode::InSet:
@@ -681,10 +681,10 @@ namespace ao::query
     return _registers.empty() || _registers[0] != 0;
   }
 
-  bool PlanEvaluator::evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const
+  bool PlanEvaluator::matchesFullPlan(ExecutionPlan const& plan, library::TrackView const& track) const
   {
     AO_EXPECTS(!plan.requiresDictionary);
     auto const binding = PlanBinding{plan};
-    return evaluateFull(binding, track);
+    return matchesFullPlan(binding, track);
   }
 } // namespace ao::query

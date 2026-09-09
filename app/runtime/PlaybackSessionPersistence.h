@@ -71,10 +71,10 @@ namespace ao::rt
     void scheduleSave(Delay delay);
     void handleScheduledSave();
     void cancelScheduledSave() noexcept;
-    static async::Task<void> waitForScheduledSave(async::Runtime* asyncRuntime,
-                                                  PlaybackSessionPersistence* owner,
-                                                  Delay delay,
-                                                  std::stop_token stopToken);
+    static async::Task<void> waitForScheduledSaveAsync(async::Runtime* asyncRuntime,
+                                                       PlaybackSessionPersistence* owner,
+                                                       Delay delay,
+                                                       std::stop_token stopToken);
 
     ConfigStore& _config;
     Library& _library;

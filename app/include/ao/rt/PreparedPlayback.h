@@ -18,7 +18,7 @@ namespace ao::rt
 
   /**
    * Runtime wrapper for audio's callback-generation cancellation proof.
-   * It covers only commitments issued in strictly older generations.
+   * It contains only commitments issued in strictly older generations.
    */
   struct PreparedCancellationBarrier final
   {

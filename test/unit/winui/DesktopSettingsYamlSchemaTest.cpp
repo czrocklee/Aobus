@@ -69,16 +69,16 @@ inspectorPaneWidth: 371
     auto tree = ryml::Tree{yaml::callbacks()};
     ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-    auto const result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+    auto const res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-    REQUIRE(result);
-    CHECK(result->version == kDesktopSettingsVersion);
-    CHECK(result->window == WindowPlacement{.x = 17, .y = 29, .width = 1500, .height = 950, .maximized = true});
-    CHECK(result->shellMode == ShellMode::Classic);
-    CHECK(result->lastLibraryPath == "C:/Legacy Music");
-    CHECK(result->navigationPaneWidth == 271.0);
-    CHECK(result->inspectorPaneWidth == 371.0);
-    CHECK(result->preferredOutputSelection == audio::OutputDeviceSelection{});
+    REQUIRE(res);
+    CHECK(res->version == kDesktopSettingsVersion);
+    CHECK(res->window == WindowPlacement{.x = 17, .y = 29, .width = 1500, .height = 950, .maximized = true});
+    CHECK(res->shellMode == ShellMode::Classic);
+    CHECK(res->lastLibraryPath == "C:/Legacy Music");
+    CHECK(res->navigationPaneWidth == 271.0);
+    CHECK(res->inspectorPaneWidth == 371.0);
+    CHECK(res->preferredOutputSelection == audio::OutputDeviceSelection{});
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - refuses a newer document rather than truncating it", "[winui][unit][layout]")
@@ -91,10 +91,10 @@ shellMode: modern
     auto tree = ryml::Tree{yaml::callbacks()};
     ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-    auto const result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+    auto const res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - accepts exactly the versions that were written", "[winui][unit][layout]")
@@ -114,17 +114,17 @@ shellMode: modern
     for (auto const rejected : {std::uint32_t{0}, std::uint32_t{1}, kDesktopSettingsVersion + 1})
     {
       INFO("version " << rejected);
-      auto const result = deserialized(rejected);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      auto const res = deserialized(rejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     for (auto const accepted : {std::uint32_t{2}, kDesktopSettingsVersion})
     {
       INFO("version " << accepted);
-      auto const result = deserialized(accepted);
-      REQUIRE(result);
-      CHECK(result->version == kDesktopSettingsVersion);
+      auto const res = deserialized(accepted);
+      REQUIRE(res);
+      CHECK(res->version == kDesktopSettingsVersion);
     }
   }
 
@@ -150,15 +150,15 @@ shellMode: classic
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-      auto const result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), seed);
+      auto const res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), seed);
 
-      REQUIRE(result);
-      CHECK(result->shellMode == ShellMode::Classic);
-      CHECK(result->window == seed.window);
-      CHECK(result->lastLibraryPath == "C:/Seeded");
-      CHECK(result->preferredOutputSelection == seed.preferredOutputSelection);
-      CHECK(result->navigationPaneWidth == 250.0);
-      CHECK(result->inspectorPaneWidth == 330.0);
+      REQUIRE(res);
+      CHECK(res->shellMode == ShellMode::Classic);
+      CHECK(res->window == seed.window);
+      CHECK(res->lastLibraryPath == "C:/Seeded");
+      CHECK(res->preferredOutputSelection == seed.preferredOutputSelection);
+      CHECK(res->navigationPaneWidth == 250.0);
+      CHECK(res->inspectorPaneWidth == 330.0);
     }
 
     SECTION("partial window placement")
@@ -170,11 +170,11 @@ window: {maximized: true}
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
 
-      auto const result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), seed);
+      auto const res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), seed);
 
-      REQUIRE(result);
-      CHECK(result->window == WindowPlacement{.x = 5, .y = 6, .width = 1300, .height = 810, .maximized = true});
-      CHECK(result->shellMode == seed.shellMode);
+      REQUIRE(res);
+      CHECK(res->window == WindowPlacement{.x = 5, .y = 6, .width = 1300, .height = 810, .maximized = true});
+      CHECK(res->shellMode == seed.shellMode);
     }
   }
 
@@ -195,11 +195,11 @@ inspectorPaneWidth: 320
 )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+      auto res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("shell mode"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("shell mode"));
     }
 
     SECTION("unknown token")
@@ -218,11 +218,11 @@ future: true
 )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+      auto res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("future"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("future"));
     }
 
     SECTION("noncurrent version cannot be serialized")
@@ -231,10 +231,10 @@ future: true
       state.version = kDesktopSettingsVersion - 1;
       auto tree = ryml::Tree{yaml::callbacks()};
 
-      auto result = DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state);
+      auto res = DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("oversized navigation pane")
@@ -243,11 +243,11 @@ future: true
       state.navigationPaneWidth = kMaximumNavigationPaneWidth + 1.0;
       auto tree = ryml::Tree{yaml::callbacks()};
 
-      auto result = DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state);
+      auto res = DesktopSettingsYamlSchema{}.serialize(tree.rootref(), state);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("pane widths"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("pane widths"));
     }
 
     SECTION("oversized inspector pane")
@@ -265,11 +265,11 @@ inspectorPaneWidth: 481
 )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto result = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
+      auto res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("pane widths"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("pane widths"));
     }
   }
 } // namespace ao::winui::test

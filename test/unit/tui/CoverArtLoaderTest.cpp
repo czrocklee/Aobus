@@ -35,10 +35,11 @@ namespace ao::tui::test
     /// The bytes a cover request resolves to, standing in for the runtime walk.
     using ResourceByteMap = std::unordered_map<ResourceId, std::vector<std::byte>>;
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readStoredResource(ResourceByteMap const* const source,
-                                                                                  std::size_t* const readCount,
-                                                                                  ResourceId const resourceId,
-                                                                                  std::stop_token const stopToken)
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readStoredResourceAsync(
+      ResourceByteMap const* const source,
+      std::size_t* const readCount,
+      ResourceId const resourceId,
+      std::stop_token const stopToken)
     {
       async::throwIfStopRequested(stopToken);
       ++*readCount;
@@ -57,7 +58,7 @@ namespace ao::tui::test
       CoverArtLoaderFixture()
       {
         _byteCachePtr = std::make_unique<rt::ResourceByteMemoryCache>(
-          _runtime, std::bind_front(readStoredResource, &_bytesById, &_readCount));
+          _runtime, std::bind_front(readStoredResourceAsync, &_bytesById, &_readCount));
       }
 
       ~CoverArtLoaderFixture()
@@ -95,7 +96,7 @@ namespace ao::tui::test
        * A replaced request has its window cancelled, so the only window still
        * open belongs to whatever is selected now.
        */
-      bool settleSelection() { return _sleeper.fireNext(); }
+      bool trySettleSelection() { return _sleeper.tryFireNext(); }
 
     private:
       ResourceByteMap _bytesById{};
@@ -136,8 +137,8 @@ namespace ao::tui::test
     loader.request(resourceId);
     CHECK(refreshCount == 1);
 
-    REQUIRE(fixture.settleSelection());
-    REQUIRE(fixture.executor().drainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     CHECK(refreshCount == 2);
     CHECK(completionOnExecutor);
     CHECK(loader.resourceId() == resourceId);
@@ -161,8 +162,8 @@ namespace ao::tui::test
 
     loader.request(resourceId);
 
-    REQUIRE(fixture.settleSelection());
-    REQUIRE(fixture.executor().drainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     REQUIRE(loader.preview()->size() == static_cast<std::size_t>(kCoverArtRows));
     CHECK(loader.preview()->front().size() == static_cast<std::size_t>(kRequestedColumns));
   }
@@ -188,8 +189,8 @@ namespace ao::tui::test
 
     loader.request(resourceId);
 
-    REQUIRE(fixture.settleSelection());
-    REQUIRE(fixture.executor().drainUntil([&] { return loader.kittyPng().has_value(); }));
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.kittyPng().has_value(); }));
     CHECK(refreshCount == 2);
     REQUIRE(loader.kittyPng()->size() >= 24);
     CHECK(loader.kittyPng()->front() == std::byte{0x89});
@@ -236,8 +237,8 @@ namespace ao::tui::test
     loader.request(missingResourceId);
     REQUIRE(refreshCount == 2);
 
-    REQUIRE(fixture.settleSelection());
-    REQUIRE(fixture.executor().drainUntil([&] { return refreshCount == 3; }));
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return refreshCount == 3; }));
     CHECK(loader.resourceId() == missingResourceId);
     CHECK_FALSE(loader.preview());
     CHECK_FALSE(loader.kittyPng());
@@ -275,8 +276,8 @@ namespace ao::tui::test
     CHECK(refreshCount == kBurstLength);
     CHECK_FALSE(loader.preview());
 
-    REQUIRE(fixture.settleSelection());
-    REQUIRE(fixture.executor().drainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     CHECK(loader.resourceId() == resourceIds.back());
     // One transform survives the burst; the rest were cancelled before they
     // could publish over the current selection.
@@ -308,11 +309,11 @@ namespace ao::tui::test
     loader.request(firstResourceId);
     // The window expires, but its resumption is still queued when the selection
     // moves on, so expiry and replacement race for the same loader.
-    REQUIRE(fixture.settleSelection());
+    REQUIRE(fixture.trySettleSelection());
     loader.request(secondResourceId);
-    REQUIRE(fixture.settleSelection());
+    REQUIRE(fixture.trySettleSelection());
 
-    REQUIRE(fixture.executor().drainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     CHECK(loader.resourceId() == secondResourceId);
     CHECK(fixture.readCount() == 1);
   }
@@ -357,13 +358,13 @@ namespace ao::tui::test
 
     loaderPtr->request(resourceId);
     REQUIRE(refreshCount == 1);
-    REQUIRE(fixture.sleeper().waitForCallCount(1));
+    REQUIRE(fixture.sleeper().tryWaitForCallCount(1));
 
     loaderPtr.reset();
     fixture.executor().drain();
     CHECK(refreshCount == 1);
     CHECK(fixture.readCount() == 0);
-    CHECK(fixture.sleeper().waitForCancellation(0));
+    CHECK(fixture.sleeper().tryWaitForCancellation(0));
   }
 
   TEST_CASE("CoverArtLoader - destruction after the settle window suppresses decode completion",
@@ -381,7 +382,7 @@ namespace ao::tui::test
 
     loaderPtr->request(resourceId);
     REQUIRE(refreshCount == 1);
-    REQUIRE(fixture.settleSelection());
+    REQUIRE(fixture.trySettleSelection());
     fixture.executor().checkQueued();
 
     loaderPtr.reset();

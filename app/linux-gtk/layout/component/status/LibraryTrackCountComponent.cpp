@@ -24,11 +24,11 @@ namespace ao::gtk::layout
   {
     rt::TrackSourceLease acquireAllTracks(rt::TrackSourceCache& sources)
     {
-      auto result = sources.acquire(rt::kAllTracksListId);
+      auto res = sources.acquire(rt::kAllTracksListId);
 
-      AO_INVARIANT(result, "Failed to acquire All Tracks list");
+      AO_INVARIANT(res, "Failed to acquire All Tracks list");
 
-      return std::move(*result);
+      return std::move(*res);
     }
 
     class LibraryTrackCountComponent final : public LayoutComponent

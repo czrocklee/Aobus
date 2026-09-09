@@ -356,6 +356,7 @@ add_executable(ao_core_test
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
+    unit/audio/StreamingPrerollTest.cpp
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
@@ -365,6 +366,7 @@ add_executable(ao_core_test
     unit/audio/backend/detail/CallbackFenceTest.cpp
     unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
+    unit/audio/PlayerGraphObservationTest.cpp
     unit/audio/EngineDrainTest.cpp
     unit/audio/EngineErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp
@@ -502,6 +504,7 @@ add_executable(ao_core_test
     unit/runtime/playback/ProjectionAnchorTest.cpp
     unit/runtime/playback/ShuffleHistoryTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
+    unit/runtime/PlaybackMetadataTest.cpp
     unit/runtime/PlaybackTransportControlTest.cpp
     unit/runtime/PlaybackTransportOutputTest.cpp
     unit/runtime/PlaybackTransportSelectionTest.cpp
@@ -513,6 +516,7 @@ add_executable(ao_core_test
     unit/runtime/PlaybackSuccessionFailureTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
+    unit/runtime/source/TrackSourcePublicationTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
     unit/runtime/source/VirtualListIdsTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp
@@ -975,6 +979,7 @@ endif()
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
     perf/CompletionVocabularyBaselineTest.cpp
+    perf/PerformanceReport.cpp
     perf/PerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp
 )

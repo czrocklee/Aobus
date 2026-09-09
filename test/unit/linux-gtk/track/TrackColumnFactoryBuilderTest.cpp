@@ -62,7 +62,7 @@ namespace ao::gtk::test
       drainGtkEvents();
     }
 
-    bool queryTooltip(Gtk::Widget& widget)
+    bool tryQueryTooltip(Gtk::Widget& widget)
     {
       gboolean handled = FALSE;
       ::g_signal_emit_by_name(
@@ -122,7 +122,7 @@ namespace ao::gtk::test
         CHECK(label->get_lines() == 1);
         CHECK(label->get_has_tooltip());
         CHECK(label->get_tooltip_text().empty());
-        CHECK_FALSE(queryTooltip(*label));
+        CHECK_FALSE(tryQueryTooltip(*label));
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();
@@ -160,7 +160,7 @@ namespace ao::gtk::test
         CHECK(label->get_layout()->is_ellipsized());
         CHECK(label->get_has_tooltip());
         CHECK(label->get_tooltip_text().empty());
-        CHECK(queryTooltip(*label));
+        CHECK(tryQueryTooltip(*label));
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();
@@ -203,7 +203,7 @@ namespace ao::gtk::test
         REQUIRE(stack != nullptr);
 
         stack->set_visible_child("edit");
-        REQUIRE(emitFocusEnter(*entry));
+        REQUIRE(tryEmitFocusEnter(*entry));
         auto const initialRevision = fixture.runtime().library().authoringAvailability().libraryRevision;
         bool replacementRequested = false;
         auto replacementSubscription = fixture.runtime().library().onAuthoringAvailabilityChanged(
@@ -211,18 +211,18 @@ namespace ao::gtk::test
           {
             if (availability.libraryRevision != initialRevision)
             {
-              replacementRequested = emitFocusEnter(*entry);
+              replacementRequested = tryEmitFocusEnter(*entry);
             }
           });
-        REQUIRE(runGtkTask(
-          fixture.runtime(), fixture.runtime().library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
+        REQUIRE(runGtkTask(fixture.runtime(),
+                           fixture.runtime().library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
 
         // Replace the invalidated session before its deferred teardown runs.
         // Clearing the old session must disconnect that exact idle callback.
         REQUIRE(replacementRequested);
 
         CHECK(stack->get_visible_child_name() == "edit");
-        REQUIRE(emitFocusLeave(*entry));
+        REQUIRE(tryEmitFocusLeave(*entry));
         CHECK(stack->get_visible_child_name() == "display");
 
         // A terminal authoring session is detached before the editor can submit

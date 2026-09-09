@@ -37,7 +37,7 @@ namespace ao::uimodel
       handleAvailability(library.authoringAvailability());
     }
 
-    bool bindingIsCurrent() const { return targets.matches(library.authoringAvailability()); }
+    bool isBindingCurrent() const { return targets.matches(library.authoringAvailability()); }
 
     void invalidate(rt::AuthoringStatus const nextStatus)
     {
@@ -71,10 +71,10 @@ namespace ao::uimodel
       }
     }
 
-    bool bindingInvalidAfterSubmission()
+    bool tryConsumeBindingInvalidationAfterSubmission()
     {
       auto const maintenanceObserved = std::exchange(maintenanceObservedDuringSubmission, false);
-      return maintenanceObserved || !bindingIsCurrent();
+      return maintenanceObserved || !isBindingCurrent();
     }
 
     template<typename RuntimeResult, typename SubmitResult>
@@ -82,7 +82,8 @@ namespace ao::uimodel
     {
       if (!runtimeRes)
       {
-        invalidate(bindingInvalidAfterSubmission() ? rt::AuthoringStatus::Stale : rt::AuthoringStatus::Unavailable);
+        invalidate(tryConsumeBindingInvalidationAfterSubmission() ? rt::AuthoringStatus::Stale
+                                                                  : rt::AuthoringStatus::Unavailable);
         return std::unexpected{runtimeRes.error()};
       }
 
@@ -102,7 +103,7 @@ namespace ao::uimodel
         case rt::AuthoringStatus::Unavailable: invalidate(rt::AuthoringStatus::Stale); break;
       }
 
-      if (current && bindingInvalidAfterSubmission())
+      if (current && tryConsumeBindingInvalidationAfterSubmission())
       {
         invalidate(rt::AuthoringStatus::Stale);
       }
@@ -114,7 +115,8 @@ namespace ao::uimodel
     {
       try
       {
-        invalidate(bindingInvalidAfterSubmission() ? rt::AuthoringStatus::Stale : rt::AuthoringStatus::Unavailable);
+        invalidate(tryConsumeBindingInvalidationAfterSubmission() ? rt::AuthoringStatus::Stale
+                                                                  : rt::AuthoringStatus::Unavailable);
       }
       catch (...)
       {
@@ -206,30 +208,31 @@ namespace ao::uimodel
     return _statePtr->invalidated.connect(std::move(handler));
   }
 
-  async::Task<Result<TrackMetadataSubmitResult>> TrackAuthoringSession::submitMetadata(rt::MetadataPatch patch)
+  async::Task<Result<TrackMetadataSubmitResult>> TrackAuthoringSession::submitMetadataAsync(rt::MetadataPatch patch)
   {
     return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackMetadataReply>, TrackMetadataSubmitResult>(
       _statePtr,
       [patch = std::move(patch)](State& state) mutable
-      { return state.library.commands().updateMetadata(state.targets, std::move(patch)); });
+      { return state.library.commands().updateMetadataAsync(state.targets, std::move(patch)); });
   }
 
-  async::Task<Result<TrackTagSubmitResult>> TrackAuthoringSession::submitTags(std::vector<std::string> tagsToAdd,
-                                                                              std::vector<std::string> tagsToRemove)
+  async::Task<Result<TrackTagSubmitResult>> TrackAuthoringSession::submitTagsAsync(
+    std::vector<std::string> tagsToAdd,
+    std::vector<std::string> tagsToRemove)
   {
     return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::EditTrackTagsReply>, TrackTagSubmitResult>(
       _statePtr,
       [tagsToAdd = std::move(tagsToAdd), tagsToRemove = std::move(tagsToRemove)](State& state) mutable
-      { return state.library.commands().editTags(state.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
+      { return state.library.commands().editTagsAsync(state.targets, std::move(tagsToAdd), std::move(tagsToRemove)); });
   }
 
-  async::Task<Result<TrackPropertiesSubmitResult>> TrackAuthoringSession::submitProperties(
+  async::Task<Result<TrackPropertiesSubmitResult>> TrackAuthoringSession::submitPropertiesAsync(
     rt::TrackPropertiesPatch patch)
   {
     return State::runSubmissionAsync<rt::TrackAuthoringResult<rt::UpdateTrackPropertiesReply>,
                                      TrackPropertiesSubmitResult>(
       _statePtr,
       [patch = std::move(patch)](State& state) mutable
-      { return state.library.commands().updateProperties(state.targets, std::move(patch)); });
+      { return state.library.commands().updatePropertiesAsync(state.targets, std::move(patch)); });
   }
 } // namespace ao::uimodel

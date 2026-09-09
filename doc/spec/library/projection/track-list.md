@@ -34,7 +34,7 @@ Its public boundary is `app/include/ao/rt/projection/`, its implementation is `a
 - Row-range coordinates are interpreted after preceding ranges in the same batch.
 - Reset and source invalidation are valid only as singleton batches.
 - Empty presentation sort preserves source order exactly.
-- Equal sort keys retain stable relative order.
+- Equal sort keys retain their relative order in the current source, including after source moves and incremental merges.
 - Incremental and complete rebuilds use the same group-identity and ordering-key
   derivation and therefore publish the same final row and section order.
 

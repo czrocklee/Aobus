@@ -33,8 +33,8 @@ namespace ao::utility::test
       CHECK(mappedFile.isMapped() == false);
       CHECK(mappedFile.bytes().empty() == true);
 
-      auto const result = mappedFile.map(testFilePath);
-      CHECK(result.has_value());
+      auto const res = mappedFile.map(testFilePath);
+      CHECK(res.has_value());
       CHECK(mappedFile.isMapped() == true);
 
       auto const bytes = mappedFile.bytes();
@@ -52,9 +52,9 @@ namespace ao::utility::test
     SECTION("Mapping failure for non-existent file")
     {
       auto mappedFile = MappedFile{};
-      auto const result = mappedFile.map(tempDir / "non_existent.bin");
+      auto const res = mappedFile.map(tempDir / "non_existent.bin");
 
-      CHECK(!result.has_value());
+      CHECK(!res.has_value());
       CHECK(mappedFile.isMapped() == false);
       CHECK(mappedFile.bytes().empty() == true);
     }

@@ -71,7 +71,7 @@ After acquiring that writer, the transaction reads the durable revision in its n
 - Track-to-manifest closure uses count comparison plus one manifest point read per Track and requires only constant Track-sized auxiliary memory.
 - List parent validation uses memory proportional to the List count.
 - Future versions with the stable metadata prefix return `NotSupported` before current-version catalog and exact-header checks, leaving migration as a separate future design.
-- External mutation or physical damage after open ends the process instead of producing partial output or a recoverable application error.
+- Incompatible external mutation or physical damage after open ends the process instead of producing partial output or a recoverable application error. Supported Aobus commits observed by a read-only process retain admitted storage invariants; the library architecture owns append-only dictionary-tail freshness before exposing their snapshots.
 - Native write faults still unwind only to the transaction owner, which aborts before exposing a typed error.
 - A successfully committed revision is never zero or `UINT64_MAX`, and a failed transaction never consumes a revision.
 - The public library surface no longer exposes a physical Metadata Store.

@@ -403,7 +403,7 @@ namespace ao::tui
     return hbox({filler(), std::move(artworkPtr), filler()});
   }
 
-  bool detailPaneShowsCoverArt(std::int32_t const availableRows)
+  bool isDetailPaneShowingCoverArt(std::int32_t const availableRows)
   {
     auto const worstCaseMetadataRows = static_cast<std::int32_t>(trackDetailFields().size());
 

@@ -42,8 +42,8 @@ namespace ao::tui::test
 
     SECTION("Enter adds a tag only some targets carry")
     {
-      editor.handleEvent(ftxui::Event::ArrowDown); // focus "Modal" (row 1)
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown); // focus "Modal" (row 1)
+      editor.tryHandleEvent(ftxui::Event::Return);
 
       CHECK(editor.isDirty());
       CHECK(editor.canApply());
@@ -60,13 +60,13 @@ namespace ao::tui::test
 
     SECTION("Enter cycles a mixed tag through both directions and back")
     {
-      editor.handleEvent(ftxui::Event::ArrowDown); // focus "Modal" (1 of 2)
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown); // focus "Modal" (1 of 2)
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(frame(editor).contains("[x] Modal"));
 
       // Only a mixed tag has a real choice between the two directions, so only
       // a mixed tag gets a third stop on the cycle.
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(frame(editor).contains("[ ] Modal"));
       // The box now shows the destination, so the fraction is the only place
       // the tag's starting point survives.
@@ -74,13 +74,13 @@ namespace ao::tui::test
       CHECK(editor.patchSummary().tagRemoveCount == 1);
       CHECK(editor.patchSummary().tagAddCount == 0);
 
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK_FALSE(editor.isDirty());
     }
 
     SECTION("Enter removes a tag every target carries, skipping a no-op add")
     {
-      editor.handleEvent(ftxui::Event::Return); // focus is on "Jazz" (2 of 2)
+      editor.tryHandleEvent(ftxui::Event::Return); // focus is on "Jazz" (2 of 2)
 
       CHECK(editor.isDirty());
       auto const text = frame(editor);
@@ -93,20 +93,20 @@ namespace ao::tui::test
       CHECK(patch.tagsToRemove[0] == "Jazz");
       CHECK(patch.tagsToAdd.empty());
 
-      editor.handleEvent(restoreEvent());
+      editor.tryHandleEvent(restoreEvent());
       CHECK_FALSE(editor.isDirty());
       CHECK(editor.patchSummary().tagRemoveCount == 0);
     }
 
     SECTION("Enter adds a suggested tag no target carries, skipping a no-op remove")
     {
-      editor.handleEvent(ftxui::Event::ArrowDown);
-      editor.handleEvent(ftxui::Event::ArrowDown); // focus "Acoustic" (0 of 2)
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown); // focus "Acoustic" (0 of 2)
+      editor.tryHandleEvent(ftxui::Event::Return);
 
       CHECK(frame(editor).contains("[x] Acoustic"));
 
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK_FALSE(editor.isDirty());
     }
 
@@ -120,7 +120,7 @@ namespace ao::tui::test
       CHECK_FALSE(text.contains("Acoustic"));
 
       // The first match is selected, so Enter needs no navigation to reach it.
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       auto const patch = editor.buildPatch();
       REQUIRE(patch.tagsToAdd.size() == 1);
       CHECK(patch.tagsToAdd[0] == "Modal");
@@ -129,7 +129,7 @@ namespace ao::tui::test
     SECTION("A committed edit drops the query and keeps the tag selected")
     {
       typeText(editor, "mod");
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
 
       // The list returns to its full form so the change is read in context.
       auto const text = frame(editor);
@@ -139,7 +139,7 @@ namespace ao::tui::test
 
       // Selection followed the tag, so a second Enter continues its cycle
       // rather than acting on whichever row happens to be first.
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(frame(editor).contains("[ ] Modal"));
     }
 
@@ -150,7 +150,7 @@ namespace ao::tui::test
       auto const text = frame(editor);
       CHECK(text.contains("Add new tag \"Bebop\""));
 
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
 
       CHECK(editor.isDirty());
       auto const patch = editor.buildPatch();
@@ -171,7 +171,7 @@ namespace ao::tui::test
       REQUIRE(text.contains("Modal"));
       REQUIRE(text.contains("Add new tag \"Mod\""));
 
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       auto const patch = editor.buildPatch();
       REQUIRE(patch.tagsToAdd.size() == 1);
       CHECK(patch.tagsToAdd[0] == "Modal");
@@ -181,14 +181,14 @@ namespace ao::tui::test
     {
       typeText(editor, "Unfinished");
 
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK_FALSE(editor.isDirty());
       CHECK(editor.buildPatch().tagsToAdd.empty());
       CHECK(frame(editor).contains("Jazz"));
 
       // With the query gone, the next Escape is about the editor again.
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK(editor.takeRequest() == TrackEditorRequest::Close);
     }
 
@@ -216,7 +216,7 @@ namespace ao::tui::test
     // some input methods. Tag names reach storage in NFC, so matching the typed
     // bytes would read the tag as one nobody carries.
     typeText(editor, "Cafe");
-    editor.handleEvent(ftxui::Event::Character(std::string{"\u0301"}));
+    editor.tryHandleEvent(ftxui::Event::Character(std::string{"\u0301"}));
 
     auto const text = frame(editor);
     CHECK(text.contains("Caf\u00e9"));
@@ -224,7 +224,7 @@ namespace ao::tui::test
     // intents, so an add and a remove could be submitted for the same tag.
     CHECK_FALSE(text.contains("Add new tag"));
 
-    editor.handleEvent(ftxui::Event::Return);
+    editor.tryHandleEvent(ftxui::Event::Return);
 
     auto const patch = editor.buildPatch();
     CHECK(patch.tagsToAdd.empty());
@@ -318,7 +318,7 @@ namespace ao::tui::test
       // the viewport alone could not show.
       for (std::size_t i = 0; i < 10; ++i)
       {
-        editor.handleEvent(ftxui::Event::PageDown);
+        editor.tryHandleEvent(ftxui::Event::PageDown);
       }
 
       auto const text = frame(editor);
@@ -336,7 +336,7 @@ namespace ao::tui::test
       // for creation.
       CHECK_FALSE(text.contains("Add new tag"));
 
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
       auto const patch = editor.buildPatch();
       REQUIRE(patch.tagsToAdd.size() == 1);
       CHECK(patch.tagsToAdd[0] == "Sugg57");
@@ -345,7 +345,7 @@ namespace ao::tui::test
     SECTION("A marked tag survives the cap once the query is gone")
     {
       typeText(editor, "Sugg57");
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Return);
 
       // Dropping the query returns the full list, where this tag ranks past
       // the cap; the draft it now carries is what keeps it on screen.
@@ -355,7 +355,7 @@ namespace ao::tui::test
 
       // Restoring takes that exemption away, so the row goes back under the cap
       // rather than lingering until the next keystroke edits the query.
-      editor.handleEvent(restoreEvent());
+      editor.tryHandleEvent(restoreEvent());
       CHECK_FALSE(editor.isDirty());
       CHECK_FALSE(frame(editor).contains("Sugg57"));
     }
@@ -375,7 +375,7 @@ namespace ao::tui::test
         CHECK(frame(editor).contains(name));
         CHECK_FALSE(editor.isDirty());
 
-        editor.handleEvent(ftxui::Event::Return);
+        editor.tryHandleEvent(ftxui::Event::Return);
         CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{name});
       }
     }
@@ -398,11 +398,11 @@ namespace ao::tui::test
 
     for (std::size_t page = 0; page < 7; ++page)
     {
-      editor.handleEvent(ftxui::Event::PageDown);
+      editor.tryHandleEvent(ftxui::Event::PageDown);
     }
 
     CHECK(frame(editor).contains("> [ ] Jazz "));
-    editor.handleEvent(ftxui::Event::Return);
+    editor.tryHandleEvent(ftxui::Event::Return);
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"Jazz"});
   }
 
@@ -411,7 +411,7 @@ namespace ao::tui::test
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}});
     selectTab(editor, TrackEditorTab::Tags);
     typeText(editor, "   ");
-    editor.handleEvent(ftxui::Event::Return);
+    editor.tryHandleEvent(ftxui::Event::Return);
 
     CHECK_FALSE(editor.isDirty());
     CHECK(editor.buildPatch().tagsToAdd.empty());

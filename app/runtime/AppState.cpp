@@ -81,9 +81,9 @@ namespace ao::rt
                    Schema const& schema,
                    std::string_view description)
     {
-      if (auto const result = store.load(group, state, schema); !result && result.error().code != Error::Code::NotFound)
+      if (auto const res = store.load(group, state, schema); !res && res.error().code != Error::Code::NotFound)
       {
-        APP_LOG_DEBUG("AppState: Failed to load {}: {}", description, result.error().message);
+        APP_LOG_DEBUG("AppState: Failed to load {}: {}", description, res.error().message);
       }
     }
   } // namespace

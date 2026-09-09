@@ -72,10 +72,10 @@ namespace ao::query
     bool matches(ExecutionPlan const& plan, library::TrackView const& track) const;
 
     /// @pre @p track provides every storage tier required by the bound plan's access profile.
-    bool evaluateFull(PlanBinding const& binding, library::TrackView const& track) const;
+    bool matchesFullPlan(PlanBinding const& binding, library::TrackView const& track) const;
 
     /// @pre `plan.requiresDictionary == false` and @p track satisfies `plan.accessProfile`.
-    bool evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const;
+    bool matchesFullPlan(ExecutionPlan const& plan, library::TrackView const& track) const;
 
   private:
     // Register stack for evaluation

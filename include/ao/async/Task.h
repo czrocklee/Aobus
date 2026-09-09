@@ -18,7 +18,7 @@ namespace ao::async
   using Task = boost::asio::awaitable<T>;
 
   template<typename T>
-  Task<T> makeReadyTask(T value)
+  Task<T> makeReadyTaskAsync(T value)
   {
     co_return std::move(value);
   }

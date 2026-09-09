@@ -19,7 +19,7 @@ namespace ao::tui
   {
     constexpr std::uint64_t kFrameTimingReportInterval = 120;
 
-    bool frameTimingEnabledFromEnv() noexcept
+    bool isFrameTimingEnabledFromEnv() noexcept
     {
       auto const* const value = std::getenv("AOBUS_TUI_FRAME_TIMING");
 
@@ -109,7 +109,7 @@ namespace ao::tui
   }
 
   FrameTimer::FrameTimer()
-    : FrameTimer{frameTimingEnabledFromEnv()}
+    : FrameTimer{isFrameTimingEnabledFromEnv()}
   {
   }
 

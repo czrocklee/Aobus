@@ -25,7 +25,7 @@ namespace ao::test
 
   i18n::MessageCatalog const& englishMessageCatalog()
   {
-    static auto const catalog = messageCatalog("en");
-    return catalog;
+    static auto const kCatalog = messageCatalog("en");
+    return kCatalog;
   }
 } // namespace ao::test

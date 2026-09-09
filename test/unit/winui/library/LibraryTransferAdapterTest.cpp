@@ -28,8 +28,8 @@ namespace ao::winui::test
   TEST_CASE("Library import confirmation - only restore requires destructive confirmation",
             "[winui][unit][library-transfer]")
   {
-    CHECK_FALSE(libraryImportRequiresDestructiveConfirmation(rt::ImportMode::Merge));
-    CHECK(libraryImportRequiresDestructiveConfirmation(rt::ImportMode::Restore));
+    CHECK_FALSE(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Merge));
+    CHECK(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Restore));
   }
 
   TEST_CASE("Library restore preview - preserves every shared dry-run field", "[winui][unit][library-transfer]")

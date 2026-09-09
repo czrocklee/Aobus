@@ -36,7 +36,7 @@ namespace ao::gtk
 
     /// Level-triggered availability. The change callback only reports transitions, so observers
     /// that must stay in sync after every load have to read this instead of latching the callback.
-    bool imageAvailable() const noexcept { return _imageAvailable; }
+    bool isImageAvailable() const noexcept { return _imageAvailable; }
 
   private:
     void loadFullSize(ResourceId resourceId);

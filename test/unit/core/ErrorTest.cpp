@@ -17,21 +17,21 @@ namespace ao::test
   {
     SECTION("makeError produces correct Error payload")
     {
-      auto const result = Result<>{makeError(Error::Code::NotFound, "Item not in database")};
+      auto const res = Result<>{makeError(Error::Code::NotFound, "Item not in database")};
 
-      REQUIRE_FALSE(result.has_value());
-      CHECK(result.error().code == Error::Code::NotFound);
-      CHECK(result.error().message == "Item not in database");
+      REQUIRE_FALSE(res.has_value());
+      CHECK(res.error().code == Error::Code::NotFound);
+      CHECK(res.error().message == "Item not in database");
     }
 
     SECTION("Result<T> integration with makeError")
     {
       auto fn = [] -> Result<int> { return makeError(Error::Code::InvalidState, "Bad state"); };
 
-      auto const resRes = fn();
-      REQUIRE_FALSE(resRes);
-      CHECK(resRes.error().code == Error::Code::InvalidState);
-      CHECK(resRes.error().message == "Bad state");
+      auto const res = fn();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidState);
+      CHECK(res.error().message == "Bad state");
     }
 
     SECTION("Result<T> remains expected-compatible")
@@ -85,9 +85,9 @@ namespace ao::test
     SECTION("makeError captures the caller's source location, not makeError's body")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const result = Result<>{makeError(Error::Code::IoError, "disk gone")};
+      auto const res = Result<>{makeError(Error::Code::IoError, "disk gone")};
 
-      auto const& loc = result.error().location;
+      auto const& loc = res.error().location;
       CHECK(loc.line() == expectedLine);
       CHECK(std::string_view{loc.file_name()}.ends_with("ErrorTest.cpp"));
       CHECK_FALSE(std::string_view{loc.function_name()}.contains("makeError"));

@@ -34,7 +34,7 @@ namespace ao::async
   class Runtime final
   {
   public:
-    // A non-null sleeper replaces the default steady-timer sleepFor with an
+    // A non-null sleeper replaces the default steady-timer sleepForAsync with an
     // injected delay strategy; the Sleeper must outlive this Runtime.
     explicit Runtime(Executor& callbackExecutor, Sleeper* sleeper = nullptr);
     Runtime(Executor& callbackExecutor, std::size_t workerCount, Sleeper* sleeper = nullptr);
@@ -52,22 +52,22 @@ namespace ao::async
     void requestStop() noexcept;
     void join();
 
-    Task<void> resumeOnCallbackExecutor(std::stop_token stopToken = {});
-    Task<void> resumeOnWorker(std::stop_token stopToken = {});
-    Task<void> sleepFor(std::chrono::milliseconds delay, std::stop_token stopToken = {});
+    Task<void> resumeOnCallbackExecutorAsync(std::stop_token stopToken = {});
+    Task<void> resumeOnWorkerAsync(std::stop_token stopToken = {});
+    Task<void> sleepForAsync(std::chrono::milliseconds delay, std::stop_token stopToken = {});
 
     /**
      * Run @p tasks concurrently on this Runtime's worker pool and complete
      * once every task has finished.
      *
      * The awaiting coroutine is suspended while the tasks run and holds no
-     * worker thread, so `whenAll` cannot starve the pool: with a pool of one
+     * worker thread, so `whenAllAsync` cannot starve the pool: with a pool of one
      * thread the tasks simply run sequentially. If any task exits with an
      * exception, the first one in task order is rethrown after all tasks have
      * completed. Cancellation of the awaiting coroutine is forwarded to the
      * spawned tasks.
      */
-    Task<> whenAll(std::vector<Task<>> tasks);
+    Task<> whenAllAsync(std::vector<Task<>> tasks);
 
     void spawnLogged(Task<void> task, std::string_view fatalContext = "root coroutine");
     TaskHandle spawnCancellable(CancellableTask task, std::string_view fatalContext = "cancellable coroutine");

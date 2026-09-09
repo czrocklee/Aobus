@@ -251,8 +251,8 @@ namespace ao::audio::backend
     }
 
     void renderLoop(std::stop_token const& stopToken);
-    bool syncPauseState(bool& devicePaused, bool started) const;
-    bool renderOnce(std::stop_token const& stopToken, bool& started) const;
+    bool trySyncPauseState(bool& devicePaused, bool started) const;
+    bool tryRenderOnce(std::stop_token const& stopToken, bool& started) const;
     void drainAndComplete(std::stop_token const& stopToken, bool& started) const;
     void failStream(std::string message) const;
 
@@ -278,7 +278,7 @@ namespace ao::audio::backend
 
     while (!stopToken.stop_requested() && !fatalStreamError.load(std::memory_order_relaxed))
     {
-      if (!syncPauseState(devicePaused, started))
+      if (!trySyncPauseState(devicePaused, started))
       {
         break;
       }
@@ -312,7 +312,7 @@ namespace ao::audio::backend
         break;
       }
 
-      if (!renderOnce(stopToken, started))
+      if (!tryRenderOnce(stopToken, started))
       {
         break;
       }
@@ -324,7 +324,7 @@ namespace ao::audio::backend
     }
   }
 
-  bool WasapiSharedBackend::Impl::syncPauseState(bool& devicePaused, bool const started) const
+  bool WasapiSharedBackend::Impl::trySyncPauseState(bool& devicePaused, bool const started) const
   {
     // IAudioClient::Stop keeps the buffered data, so Stop/Start is an exact
     // pause/resume. Applied on this thread only to keep run-state transitions
@@ -353,7 +353,7 @@ namespace ao::audio::backend
     return true;
   }
 
-  bool WasapiSharedBackend::Impl::renderOnce(std::stop_token const& stopToken, bool& started) const
+  bool WasapiSharedBackend::Impl::tryRenderOnce(std::stop_token const& stopToken, bool& started) const
   {
     UINT32 padding = 0; // NOLINT(misc-const-correctness) -- COM writes this output value
 

@@ -123,7 +123,7 @@ namespace ao::gtk::test
       auto* const context = host.currentVisible();
       REQUIRE(context != nullptr);
       context->pagePtr->signalTrackActivated().emit(trackId);
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
 
       auto const snapshot = runtime.playback().snapshot();
       CHECK(snapshot.succession.currentTrackId == trackId);
@@ -138,9 +138,9 @@ namespace ao::gtk::test
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);
 
-      auto const result = runtime.jumpToAlbum(trackId);
+      auto const res = runtime.jumpToAlbum(trackId);
 
-      REQUIRE(result);
+      REQUIRE(res);
       drainGtkEvents();
       auto const activeViewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(host.find(activeViewId) != nullptr);

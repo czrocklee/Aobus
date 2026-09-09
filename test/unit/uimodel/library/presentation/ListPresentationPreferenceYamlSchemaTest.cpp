@@ -46,37 +46,37 @@ namespace ao::uimodel::test
     SECTION("Unsupported version")
     {
       document.version = 2;
-      auto const result = listPresentationPreferenceStateFromDocument(document);
+      auto const res = listPresentationPreferenceStateFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Invalid list id")
     {
       document.preferences[0].listId = kInvalidListId.raw();
-      auto const result = listPresentationPreferenceStateFromDocument(document);
+      auto const res = listPresentationPreferenceStateFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Empty presentation id")
     {
       document.preferences[0].presentationId.clear();
-      auto const result = listPresentationPreferenceStateFromDocument(document);
+      auto const res = listPresentationPreferenceStateFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Duplicate list id")
     {
       document.preferences.push_back(document.preferences[0]);
-      auto const result = listPresentationPreferenceStateFromDocument(document);
+      auto const res = listPresentationPreferenceStateFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
   }
 

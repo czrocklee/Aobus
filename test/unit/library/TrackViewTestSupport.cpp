@@ -90,10 +90,10 @@ namespace ao::library::test
     auto temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
-    auto result = physicalSerializeColdTrack(builder, transaction, library.resources());
-    REQUIRE(result);
+    auto res = physicalSerializeColdTrack(builder, transaction, library.resources());
+    REQUIRE(res);
 
-    auto data = std::move(*result);
+    auto data = std::move(*res);
 
     // TrackView is also responsible for safely inspecting legacy or corrupt
     // bytes. Build those parser fixtures through a valid writer record, then

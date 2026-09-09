@@ -98,7 +98,7 @@ namespace ao::rt
                                 compat::MoveOnlyFunction<void(detail::LibraryPublicationTerminal terminal,
                                                               std::string libraryIdentity,
                                                               std::string replicaName)> completion) noexcept;
-    bool publicationDeliveryInProgressFromCoordinator() const noexcept;
+    bool isPublicationDeliveryInProgressFromCoordinator() const noexcept;
     void sealAndRetireFromCoordinator() noexcept;
 
     struct Impl;

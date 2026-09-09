@@ -12,21 +12,21 @@ namespace ao::uimodel::test
   {
     auto guard = KeyRepeatGuard{};
 
-    CHECK(guard.acceptPress(38));
-    CHECK_FALSE(guard.acceptPress(38));
-    CHECK(guard.acceptPress(40));
+    CHECK(guard.tryAcceptPress(38));
+    CHECK_FALSE(guard.tryAcceptPress(38));
+    CHECK(guard.tryAcceptPress(40));
 
     guard.release(38);
-    CHECK(guard.acceptPress(38));
-    CHECK_FALSE(guard.acceptPress(40));
+    CHECK(guard.tryAcceptPress(38));
+    CHECK_FALSE(guard.tryAcceptPress(40));
   }
 
   TEST_CASE("KeyRepeatGuard - reset starts a new key cycle", "[uimodel][unit][input][key-repeat]")
   {
     auto guard = KeyRepeatGuard{};
 
-    REQUIRE(guard.acceptPress(38));
+    REQUIRE(guard.tryAcceptPress(38));
     guard.reset();
-    CHECK(guard.acceptPress(38));
+    CHECK(guard.tryAcceptPress(38));
   }
 } // namespace ao::uimodel::test

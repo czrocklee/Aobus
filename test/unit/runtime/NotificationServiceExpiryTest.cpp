@@ -46,11 +46,11 @@ namespace ao::rt::test
     REQUIRE(fixture.service.feed().entries.size() == 1);
     auto const id = fixture.service.feed().entries.front().id;
 
-    REQUIRE(fixture.sleeper.waitForCallCount(1));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(1));
     CHECK(fixture.sleeper.call(0).delay == kDuration);
     REQUIRE(fixture.service.feed().entries.size() == 1);
 
-    REQUIRE(fixture.sleeper.fire(0));
+    REQUIRE(fixture.sleeper.tryFire(0));
     fixture.executor.checkQueued();
 
     CHECK(fixture.service.feed().entries.size() == 1);
@@ -85,13 +85,13 @@ namespace ao::rt::test
     };
     fixture.service.createOrUpdate(key, request);
     REQUIRE(fixture.service.feed().entries.size() == 1);
-    REQUIRE(fixture.sleeper.waitForCallCount(1));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(1));
 
-    REQUIRE(fixture.sleeper.fire(0));
+    REQUIRE(fixture.sleeper.tryFire(0));
     fixture.executor.checkQueued();
     request.message = "Updated";
     fixture.service.createOrUpdate(key, request);
-    REQUIRE(fixture.sleeper.waitForCallCount(2));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(2));
 
     auto feed = fixture.service.feed();
     REQUIRE(feed.entries.size() == 1);
@@ -103,7 +103,7 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(std::get<std::string>(feed.entries.front().message) == "Updated");
 
-    REQUIRE(fixture.sleeper.fire(1));
+    REQUIRE(fixture.sleeper.tryFire(1));
     fixture.executor.checkQueued();
     fixture.executor.drain();
 
@@ -126,14 +126,14 @@ namespace ao::rt::test
     fixture.service.createOrUpdate(key, request);
     REQUIRE(fixture.service.feed().entries.size() == 1);
     auto const createdId = fixture.service.feed().entries.front().id;
-    REQUIRE(fixture.sleeper.waitForCallCount(1));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(1));
 
     fixture.service.createOrUpdate(key, request);
     CHECK(fixture.sleeper.callCount() == 1);
     CHECK(fixture.updates.size() == 1);
     CHECK(fixture.service.feed().entries.front().id == createdId);
 
-    REQUIRE(fixture.sleeper.fire(0));
+    REQUIRE(fixture.sleeper.tryFire(0));
     fixture.executor.checkQueued();
 
     request.lifetime = NotificationLifetime::history();
@@ -143,7 +143,7 @@ namespace ao::rt::test
     request.lifetime = NotificationLifetime::transient(std::chrono::seconds{45});
     fixture.service.createOrUpdate(key, request);
     CHECK(fixture.service.feed().entries.front().id == createdId);
-    REQUIRE(fixture.sleeper.waitForCallCount(2));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(2));
     CHECK(fixture.sleeper.call(1).delay == std::chrono::seconds{45});
     CHECK(fixture.updates.size() == 3);
 
@@ -153,7 +153,7 @@ namespace ao::rt::test
     CHECK(fixture.service.feed().entries.front().id == createdId);
     CHECK(fixture.updates.size() == 3);
 
-    REQUIRE(fixture.sleeper.fire(1));
+    REQUIRE(fixture.sleeper.tryFire(1));
     fixture.executor.checkQueued();
     fixture.executor.drain();
 
@@ -171,8 +171,8 @@ namespace ao::rt::test
     {
       auto service = NotificationService{runtime};
       service.post(NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(std::chrono::seconds{30}));
-      REQUIRE(sleeper.waitForCallCount(1));
-      REQUIRE(sleeper.fire(0));
+      REQUIRE(sleeper.tryWaitForCallCount(1));
+      REQUIRE(sleeper.tryFire(0));
       executor.checkQueued();
     }
 

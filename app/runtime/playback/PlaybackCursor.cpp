@@ -346,7 +346,7 @@ namespace ao::rt
     return trackId;
   }
 
-  bool PlaybackCursor::updateSemanticTuple(PlaybackCursorPolicy& policy)
+  bool PlaybackCursor::tryUpdateSemanticTuple(PlaybackCursorPolicy& policy)
   {
     auto const nextTuple = computeSemanticTuple(policy);
 
@@ -362,7 +362,7 @@ namespace ao::rt
   PlaybackCursor::Changes PlaybackCursor::changes(bool const restorableStateChanged, PlaybackCursorPolicy& policy)
   {
     return Changes{
-      .semanticChanged = updateSemanticTuple(policy),
+      .semanticChanged = tryUpdateSemanticTuple(policy),
       .restorableStateChanged = restorableStateChanged,
     };
   }

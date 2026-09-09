@@ -82,13 +82,12 @@ namespace ao::library
     AO_INVARIANT(candidateRevision == previousRevision + 1U, "Candidate library revision is not the exact successor");
 
     auto writer = _database.writer(transaction);
-    auto result = previousRevision == 0
-                    ? writer.create(kLibraryRevisionRecordId, utility::bytes::view(candidateRevision))
-                    : writer.update(kLibraryRevisionRecordId, utility::bytes::view(candidateRevision));
+    auto res = previousRevision == 0 ? writer.create(kLibraryRevisionRecordId, utility::bytes::view(candidateRevision))
+                                     : writer.update(kLibraryRevisionRecordId, utility::bytes::view(candidateRevision));
 
-    if (!result)
+    if (!res)
     {
-      lmdb::detail::throwTransactionFailure(std::move(result.error()));
+      lmdb::detail::throwTransactionFailure(std::move(res.error()));
     }
   }
 } // namespace ao::library

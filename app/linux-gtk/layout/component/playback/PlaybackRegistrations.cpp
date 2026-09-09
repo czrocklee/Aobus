@@ -19,7 +19,6 @@ namespace ao::gtk::layout
     registerPlaybackImageComponent(
       registry,
       runtime.playback(),
-      runtime.library(),
       [&runtime](TrackId const trackId) { return runtime.jumpToAlbum(trackId); },
       imageLoader,
       textCatalog);

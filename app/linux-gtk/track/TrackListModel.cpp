@@ -171,7 +171,7 @@ namespace ao::gtk
     auto const timer = rt::ScopedTimer{"TrackListModel::applyDeltas"};
 
     AO_INVARIANT(_projectionPtr != nullptr);
-    AO_INVARIANT(rt::validateTrackListProjectionDeltaBatch(batch, _modelSize));
+    AO_INVARIANT(rt::isValidTrackListProjectionDeltaBatch(batch, _modelSize));
 
     if (std::holds_alternative<rt::ProjectionSourceInvalidated>(batch.deltas.front()))
     {

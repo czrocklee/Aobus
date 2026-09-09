@@ -209,12 +209,11 @@ namespace ao::rt
     }
 
     auto transaction = writableRes->writeTransaction();
-    auto result =
-      transaction.apply([this, stopToken](library::LibraryWrite& write) { return apply(write, stopToken); });
+    auto res = transaction.apply([this, stopToken](library::LibraryWrite& write) { return apply(write, stopToken); });
 
-    if (!result)
+    if (!res)
     {
-      return result;
+      return res;
     }
 
     if (_cancelled)
@@ -222,24 +221,24 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    if (!transactionShouldCommit())
+    if (!shouldCommitTransaction())
     {
-      return result;
+      return res;
     }
 
-    result->libraryRevision = _ml.libraryRevision(transaction);
+    res->libraryRevision = _ml.libraryRevision(transaction);
 
     if (auto commitRes = transaction.commit(); !commitRes)
     {
-      result->libraryRevision = 0;
-      result->insertedIds.clear();
-      result->mutatedIds.clear();
-      result->relinkedIds.clear();
-      result->missingCount = 0;
+      res->libraryRevision = 0;
+      res->insertedIds.clear();
+      res->mutatedIds.clear();
+      res->relinkedIds.clear();
+      res->missingCount = 0;
       return std::unexpected{commitRes.error()};
     }
 
-    return result;
+    return res;
   }
 
   Result<ScanApplyResult> ScanApplyOperation::prepare(std::stop_token stopToken)
@@ -679,17 +678,17 @@ namespace ao::rt
     }
   }
 
-  bool ScanApplyOperation::cancelled() const noexcept
+  bool ScanApplyOperation::isCancelled() const noexcept
   {
     return _cancelled;
   }
 
-  bool ScanApplyOperation::readyForMutation() const noexcept
+  bool ScanApplyOperation::isReadyForMutation() const noexcept
   {
     return _state == State::Revalidated && !_abortTransaction && !_cancelled;
   }
 
-  bool ScanApplyOperation::transactionShouldCommit() const noexcept
+  bool ScanApplyOperation::shouldCommitTransaction() const noexcept
   {
     return _state == State::Applied && !_abortTransaction && !_cancelled &&
            (!_result.insertedIds.empty() || !_result.mutatedIds.empty() || !_result.relinkedIds.empty() ||
@@ -708,7 +707,7 @@ namespace ao::rt
       return {};
     }
 
-    if (skipNonActionableItem(item))
+    if (trySkipNonActionableItem(item))
     {
       return {};
     }
@@ -742,7 +741,7 @@ namespace ao::rt
     {
       _abortTransaction = true;
 
-      if (optIdentity && applyMovedItem(item, trackWriter, dictionary, builder, *optIdentity))
+      if (optIdentity && tryApplyMovedItem(item, trackWriter, dictionary, builder, *optIdentity))
       {
         _abortTransaction = false;
       }
@@ -778,7 +777,7 @@ namespace ao::rt
     }
   }
 
-  bool ScanApplyOperation::skipNonActionableItem(ScanItem const& item)
+  bool ScanApplyOperation::trySkipNonActionableItem(ScanItem const& item)
   {
     if (item.classification == ScanClassification::Unchanged)
     {
@@ -827,7 +826,7 @@ namespace ao::rt
     auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
-    if (writeManifest(trackWriter, optManifest->trackId(), item.uri, builder))
+    if (tryWriteManifest(trackWriter, optManifest->trackId(), item.uri, builder))
     {
       _manifestMutated = true;
     }
@@ -951,7 +950,7 @@ namespace ao::rt
       .bitDepth(builder.property().bitDepth());
     applyFileCoverArt(merged, builder);
 
-    if (!validateTrack(merged, trackWriter, item.uri))
+    if (!tryValidateTrack(merged, trackWriter, item.uri))
     {
       return {};
     }
@@ -967,11 +966,11 @@ namespace ao::rt
     return {};
   }
 
-  bool ScanApplyOperation::applyMovedItem(ScanItem const& item,
-                                          library::TrackWriter& trackWriter,
-                                          library::DictionaryStore const& dictionary,
-                                          library::TrackBuilder& builder,
-                                          library::AudioIdentity const& identity)
+  bool ScanApplyOperation::tryApplyMovedItem(ScanItem const& item,
+                                             library::TrackWriter& trackWriter,
+                                             library::DictionaryStore const& dictionary,
+                                             library::TrackBuilder& builder,
+                                             library::AudioIdentity const& identity)
   {
     if (item.trackId == kInvalidTrackId || item.oldUri.empty())
     {
@@ -1016,7 +1015,7 @@ namespace ao::rt
       .bitDepth(builder.property().bitDepth());
     applyFileCoverArt(merged, builder);
 
-    if (!validateTrack(merged, trackWriter, item.uri))
+    if (!tryValidateTrack(merged, trackWriter, item.uri))
     {
       return false;
     }
@@ -1038,7 +1037,7 @@ namespace ao::rt
                                             library::TrackBuilder& builder,
                                             std::optional<library::AudioIdentity> const& optIdentity)
   {
-    if (!validateTrack(builder, trackWriter, item.uri))
+    if (!tryValidateTrack(builder, trackWriter, item.uri))
     {
       return {};
     }
@@ -1055,9 +1054,9 @@ namespace ao::rt
     return {};
   }
 
-  bool ScanApplyOperation::validateTrack(library::TrackBuilder const& builder,
-                                         library::TrackWriter const& trackWriter,
-                                         std::string const& uri)
+  bool ScanApplyOperation::tryValidateTrack(library::TrackBuilder const& builder,
+                                            library::TrackWriter const& trackWriter,
+                                            std::string const& uri)
   {
     if (auto validationRes = trackWriter.validate(builder); !validationRes)
     {
@@ -1083,10 +1082,10 @@ namespace ao::rt
     return builder;
   }
 
-  bool ScanApplyOperation::writeManifest(library::TrackWriter& writer,
-                                         TrackId const trackId,
-                                         std::string const& uri,
-                                         library::FileManifestBuilder& builder)
+  bool ScanApplyOperation::tryWriteManifest(library::TrackWriter& writer,
+                                            TrackId const trackId,
+                                            std::string const& uri,
+                                            library::FileManifestBuilder& builder)
   {
     if (auto putRes = writer.updateManifest(trackId, builder); !putRes)
     {

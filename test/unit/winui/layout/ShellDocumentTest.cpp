@@ -87,7 +87,7 @@ namespace ao::winui::test
     }
 
     /// Whether @p node is a pane that sizes itself from the persisted Windows settings.
-    bool ownsPersistedWidth(LayoutNode const& node)
+    bool hasPersistedWidth(LayoutNode const& node)
     {
       if (node.type == "windows.inspectorPane")
       {
@@ -103,7 +103,7 @@ namespace ao::winui::test
                                std::string_view const parentType,
                                std::vector<std::pair<LayoutNode const*, std::string>>& panes)
     {
-      if (ownsPersistedWidth(node))
+      if (hasPersistedWidth(node))
       {
         panes.emplace_back(&node, std::string{parentType});
       }

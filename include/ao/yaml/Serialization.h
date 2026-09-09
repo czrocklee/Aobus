@@ -70,7 +70,7 @@ namespace ao::yaml
     template<typename T, typename Tag>
     MapWriter& scalar(std::string_view key, utility::StrongType<T, Tag> const& value)
     {
-      if (_result)
+      if (_res)
       {
         writeScalar(appendChild(_node, key), value.raw());
       }
@@ -81,7 +81,7 @@ namespace ao::yaml
     template<typename T>
     MapWriter& scalar(std::string_view key, T const& value)
     {
-      if (_result)
+      if (_res)
       {
         writeScalar(appendChild(_node, key), value);
       }
@@ -92,9 +92,9 @@ namespace ao::yaml
     template<typename T, typename Writer>
     MapWriter& value(std::string_view key, T const& value, Writer const& writer)
     {
-      if (_result)
+      if (_res)
       {
-        _result = writer(appendChild(_node, key), value);
+        _res = writer(appendChild(_node, key), value);
       }
 
       return *this;
@@ -122,7 +122,7 @@ namespace ao::yaml
 
   private:
     ryml::NodeRef _node;
-    Result<> _result;
+    Result<> _res;
   };
 
   template<typename T>
@@ -176,11 +176,11 @@ namespace ao::yaml
     template<typename T, typename Reader>
     MapReader& requiredValue(std::string_view key, T& destination, Reader const& reader)
     {
-      if (_result)
+      if (_res)
       {
         if (auto childRes = requireChild(_node, key, _context); !childRes)
         {
-          _result = std::unexpected{std::move(childRes.error())};
+          _res = std::unexpected{std::move(childRes.error())};
         }
         else
         {
@@ -239,7 +239,7 @@ namespace ao::yaml
     template<typename T, typename Reader>
     MapReader& optionalValue(std::string_view key, T& destination, Reader const& reader)
     {
-      if (_result)
+      if (_res)
       {
         if (auto const child = findChild(_node, key); child.readable())
         {
@@ -259,14 +259,14 @@ namespace ao::yaml
                            { return readSequence<T>(child, context, elementReader); });
     }
 
-    Result<> const& result() const noexcept { return _result; }
+    Result<> const& result() const noexcept { return _res; }
 
     template<typename T>
     Result<T> finish(T value) &&
     {
-      if (!_result)
+      if (!_res)
       {
-        return std::unexpected{std::move(_result.error())};
+        return std::unexpected{std::move(_res.error())};
       }
 
       return value;
@@ -278,7 +278,7 @@ namespace ao::yaml
     {
       if (!valueRes)
       {
-        _result = std::unexpected{std::move(valueRes.error())};
+        _res = std::unexpected{std::move(valueRes.error())};
         return;
       }
 
@@ -287,7 +287,7 @@ namespace ao::yaml
 
     ryml::ConstNodeRef _node;
     std::string _context;
-    Result<> _result;
+    Result<> _res;
   };
 
   template<typename T, typename ElementReader>
@@ -295,9 +295,9 @@ namespace ao::yaml
                                              std::string_view context,
                                              ElementReader const& elementReader)
   {
-    if (auto const result = requireSequence(node, context); !result)
+    if (auto const res = requireSequence(node, context); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto values = std::vector<T>{};
@@ -327,9 +327,9 @@ namespace ao::yaml
 
     for (auto const& value : values)
     {
-      if (auto const result = elementWriter(node.append_child(), value); !result)
+      if (auto const res = elementWriter(node.append_child(), value); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -374,9 +374,9 @@ namespace ao::yaml
         return makeError(Error::Code::InvalidState, boundedErrorContext(context) + " contains an empty key");
       }
 
-      if (auto const result = valueWriter(appendChild(node, key), value); !result)
+      if (auto const res = valueWriter(appendChild(node, key), value); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -386,11 +386,10 @@ namespace ao::yaml
   template<typename Map, typename ValueReader>
   inline Result<Map> readStringMap(ryml::ConstNodeRef node, std::string_view context, ValueReader const& valueReader)
   {
-    if (auto const result =
-          validateMapKeys(node, std::span<std::string_view const>{}, context, UnknownKeyPolicy::Allow);
-        !result)
+    if (auto const res = validateMapKeys(node, std::span<std::string_view const>{}, context, UnknownKeyPolicy::Allow);
+        !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto values = Map{};

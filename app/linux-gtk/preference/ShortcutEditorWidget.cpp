@@ -169,7 +169,7 @@ namespace ao::gtk
     _unmapConn.disconnect();
   }
 
-  bool ShortcutEditorWidget::bindChord(std::string const& actionId, uimodel::KeyChord const& chord)
+  bool ShortcutEditorWidget::tryBindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
     if (!chord.isValid())
     {
@@ -189,11 +189,11 @@ namespace ao::gtk
         break;
       }
 
-      _keymap.unbind(*optOwner, chord);
+      _keymap.tryUnbind(*optOwner, chord);
       changed = true;
     }
 
-    if (_keymap.bind(actionId, chord))
+    if (_keymap.tryBind(actionId, chord))
     {
       changed = true;
     }
@@ -223,7 +223,7 @@ namespace ao::gtk
 
     if (!optOwner)
     {
-      bindChord(actionId, chord);
+      tryBindChord(actionId, chord);
       return;
     }
 
@@ -234,7 +234,7 @@ namespace ao::gtk
                          {
                            if (accepted)
                            {
-                             bindChord(actionId, chord);
+                             tryBindChord(actionId, chord);
                            }
                          }));
   }
@@ -252,9 +252,9 @@ namespace ao::gtk
     return actionId;
   }
 
-  bool ShortcutEditorWidget::unbindChord(std::string const& actionId, uimodel::KeyChord const& chord)
+  bool ShortcutEditorWidget::tryUnbindChord(std::string const& actionId, uimodel::KeyChord const& chord)
   {
-    if (!_keymap.unbind(actionId, chord))
+    if (!_keymap.tryUnbind(actionId, chord))
     {
       return false;
     }
@@ -453,7 +453,7 @@ namespace ao::gtk
         auto const chordText = chord.toString();
         setTooltipAndAccessibleLabel(
           *removeButton, i18n::requiredFormat(_textCatalog, MessageId::GtkShortcutRemove, {{"chord", chordText}}));
-        removeButton->signal_clicked().connect([this, id = action.id, chord] { unbindChord(id, chord); });
+        removeButton->signal_clicked().connect([this, id = action.id, chord] { tryUnbindChord(id, chord); });
         chip->append(*removeButton);
 
         row->append(*chip);

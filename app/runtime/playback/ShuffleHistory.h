@@ -54,7 +54,7 @@ namespace ao::rt
      * Forgets an exact candidate after preparation or playback failure. A
      * stale failure for a different candidate leaves the current one intact.
      */
-    bool discardForwardCandidate(TrackId candidate) noexcept;
+    bool tryDiscardForwardCandidate(TrackId candidate) noexcept;
 
     /**
      * Records a successful current-track transition. Forward and sequential

@@ -125,7 +125,7 @@ library:
     coordinator.importLibraryFrom(importPath);
 
     AppDialog* confirmationDialog = nullptr;
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&confirmationDialog]
       {
         for (auto* const window : Gtk::Window::list_toplevels())

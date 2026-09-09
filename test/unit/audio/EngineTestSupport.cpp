@@ -148,7 +148,7 @@ namespace ao::audio::test
     release.acquire();
   }
 
-  bool BlockingPreparationGate::waitForEntry(std::chrono::milliseconds timeout)
+  bool BlockingPreparationGate::tryWaitForEntry(std::chrono::milliseconds timeout)
   {
     return entered.try_acquire_for(timeout);
   }
@@ -251,7 +251,7 @@ namespace ao::audio::test
     _readEntered.release();
   }
 
-  bool StagedFailureGate::waitForRead(std::chrono::milliseconds timeout)
+  bool StagedFailureGate::tryWaitForRead(std::chrono::milliseconds timeout)
   {
     return _readEntered.try_acquire_for(timeout);
   }
@@ -355,7 +355,7 @@ namespace ao::audio::test
     _cv.notify_all();
   }
 
-  bool CallbackLatch::waitForCount(std::size_t expected, std::chrono::milliseconds timeout)
+  bool CallbackLatch::tryWaitForCount(std::size_t expected, std::chrono::milliseconds timeout)
   {
     auto lock = std::unique_lock{_mutex};
     return _cv.wait_for(lock, timeout, [this, expected] { return _count >= expected; });

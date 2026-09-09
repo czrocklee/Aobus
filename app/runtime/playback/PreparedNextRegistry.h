@@ -22,7 +22,7 @@ namespace ao::rt
     using ProjectionIndexResolver = std::function<std::optional<std::size_t>(TrackId)>;
 
     void activate(PreparedNextToken token, ProjectionAnchor anchor);
-    bool acknowledgeDisarm(PreparedNextToken token);
+    bool tryAcknowledgeDisarm(PreparedNextToken token);
 
     /**
      * Retires an unacknowledged active token while forgetting an exact token

@@ -72,15 +72,15 @@ namespace ao::gtk::layout
                 _tasks,
                 *this,
                 "metadata undo",
-                _undoController->undo(),
-                [](TrackDetailUndoBarComponent* owner, Result<> result)
+                _undoController->undoAsync(),
+                [](TrackDetailUndoBarComponent* owner, Result<> res)
                 {
-                  if (result)
+                  if (res)
                   {
                     return;
                   }
 
-                  if (result.error().code == Error::Code::ResourceBusy)
+                  if (res.error().code == Error::Code::ResourceBusy)
                   {
                     owner->_notifications.post(rt::NotificationSeverity::Warning,
                                                gtkText(owner->_textCatalog, i18n::MessageId::LibraryBusyTryAgain),
@@ -89,7 +89,7 @@ namespace ao::gtk::layout
                   else
                   {
                     owner->_notifications.post(
-                      rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+                      rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
                   }
                 });
             }

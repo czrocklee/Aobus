@@ -69,7 +69,7 @@ namespace ao::test
      * Returns false when the current process can bypass the applied restriction
      * (for example, a root process bypassing POSIX mode bits).
      */
-    bool effective() const noexcept;
+    bool isEffective() const noexcept;
 
   private:
     struct Impl;

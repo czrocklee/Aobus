@@ -50,7 +50,7 @@ namespace ao::rt::test::playback_succession
       return startedRes;
     }
 
-    if (!executor.drainUntil([&] { return settled; }, std::chrono::seconds{5}))
+    if (!executor.tryDrainUntil([&] { return settled; }, std::chrono::seconds{5}))
     {
       return makeError(Error::Code::InvalidState, "Timed out waiting for explicit playback start settlement");
     }
@@ -107,7 +107,7 @@ namespace ao::rt::test::playback_succession
     auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
     audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
     auto const created = ao::test::requireValue(
-      commandsFixture.runTask(commands().createTrackFromFile(libraryFixture.root() / playableUri)));
+      commandsFixture.runTask(commands().createTrackFromFileAsync(libraryFixture.root() / playableUri)));
     executor.drain();
     REQUIRE(
       commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title, .optYear = year}));
@@ -129,7 +129,7 @@ namespace ao::rt::test::playback_succession
     auto const membershipTag = std::array{std::string{"playbackorder"}};
     REQUIRE(commandsFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
-    listId = ao::test::requireValue(commandsFixture.runTask(commands().createList(ListDraft{
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createListAsync(ListDraft{
       .name = "Playback order",
       .expression = "#playbackorder",
     })));
@@ -158,7 +158,7 @@ namespace ao::rt::test::playback_succession
     auto lease = ao::test::requireValue(sources.acquire(listId));
     auto const effectiveTrackIds = sourceTrackIds(lease.source());
     auto binding = ao::test::requireValue(commandsFixture.library().bindListOrder(listId, effectiveTrackIds));
-    return commandsFixture.runTask(commands().moveListOrder(
+    return commandsFixture.runTask(commands().moveListOrderAsync(
       binding, std::vector<TrackId>{selectedTrackIds.begin(), selectedTrackIds.end()}, optBeforeTrackId));
   }
 

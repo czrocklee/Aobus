@@ -24,9 +24,9 @@ namespace ao::audio::detail
   {
     close();
 
-    if (auto const result = _mappedFile.map(filePath); !result)
+    if (auto const res = _mappedFile.map(filePath); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto demuxerRes = media::mp4::Demuxer::parse(_mappedFile.bytes(), sampleEntry);

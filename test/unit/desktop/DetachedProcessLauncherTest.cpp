@@ -11,12 +11,12 @@
 #include "test/unit/TestFixtureSupport.h"
 
 #include <fcntl.h>
-#include <poll.h>
 #include <unistd.h>
 
 #include <array>
 #include <cerrno>
 #include <filesystem>
+#include <sys/poll.h>
 #include <sys/stat.h>
 #include <system_error>
 #include <tuple>
@@ -27,11 +27,11 @@ namespace ao::desktop::test
   TEST_CASE("DetachedProcessLauncher - invalid executable reports process creation failure",
             "[runtime][integration][desktop-process]")
   {
-    auto result = launchDetachedProcess({.executable = "/aobus-test/nonexistent-successor", .arguments = {}});
+    auto res = launchDetachedProcess({.executable = "/aobus-test/nonexistent-successor", .arguments = {}});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InitFailed);
-    CHECK(result.error().message.contains("Failed to launch detached process"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InitFailed);
+    CHECK(res.error().message.contains("Failed to launch detached process"));
   }
 
 #ifndef _WIN32

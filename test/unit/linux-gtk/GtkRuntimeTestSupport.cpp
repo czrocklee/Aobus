@@ -125,11 +125,11 @@ namespace ao::gtk::test
     })));
   }
 
-  bool waitForPlaybackSettlement(rt::AppRuntime& runtime,
-                                 TrackId const trackId,
-                                 std::chrono::milliseconds const timeout)
+  bool tryWaitForPlaybackSettlement(rt::AppRuntime& runtime,
+                                    TrackId const trackId,
+                                    std::chrono::milliseconds const timeout)
   {
-    return pumpGtkEventsUntil(
+    return tryPumpGtkEventsUntil(
       [&] { return runtime.playback().snapshot().transport.nowPlaying.trackId == trackId; }, timeout);
   }
 } // namespace ao::gtk::test

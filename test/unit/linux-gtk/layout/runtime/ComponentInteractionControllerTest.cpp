@@ -41,14 +41,14 @@ namespace ao::gtk::layout::test
     bool primaryLongPressed = false;
     bool secondaryLongPressed = false;
 
-    registry.registerAction(
+    registry.tryRegisterAction(
       {.id = "primary", .label = "Primary", .category = "Test"}, [&](auto&) { primaryClicked = true; });
-    registry.registerAction(
+    registry.tryRegisterAction(
       {.id = "secondary", .label = "Secondary", .category = "Test"}, [&](auto&) { secondaryClicked = true; });
-    registry.registerAction(
+    registry.tryRegisterAction(
       {.id = "primaryLong", .label = "Primary Long", .category = "Test"}, [&](auto&) { primaryLongPressed = true; });
-    registry.registerAction({.id = "secondaryLong", .label = "Secondary Long", .category = "Test"},
-                            [&](auto&) { secondaryLongPressed = true; });
+    registry.tryRegisterAction({.id = "secondaryLong", .label = "Secondary Long", .category = "Test"},
+                               [&](auto&) { secondaryLongPressed = true; });
 
     auto session = uimodel::LayoutSession{};
     auto buildSnapshot = activateBuildSnapshot(session);
@@ -105,7 +105,7 @@ namespace ao::gtk::layout::test
       auto controller = ComponentInteractionController{};
       controller.attach(ctx, node, box, allActions);
 
-      REQUIRE(emitGestureReleased(box));
+      REQUIRE(tryEmitGestureReleased(box));
       CHECK(secondaryClicked);
       CHECK_FALSE(primaryLongPressed);
 
@@ -159,12 +159,12 @@ namespace ao::gtk::layout::test
       auto button = Gtk::Button{};
       auto controllerPtr = std::make_unique<ComponentInteractionController>();
       bool actionCompleted = false;
-      registry.registerAction({.id = "destroying", .label = "Destroying", .category = "Test"},
-                              [&](auto&)
-                              {
-                                controllerPtr.reset();
-                                actionCompleted = true;
-                              });
+      registry.tryRegisterAction({.id = "destroying", .label = "Destroying", .category = "Test"},
+                                 [&](auto&)
+                                 {
+                                   controllerPtr.reset();
+                                   actionCompleted = true;
+                                 });
       auto node = uimodel::LayoutNode{.type = "btn"};
       node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"destroying"}};
       controllerPtr->attach(ctx, node, button, allActions);

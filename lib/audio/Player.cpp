@@ -73,7 +73,7 @@ namespace ao::audio
 
     // Teardown gate shared by executor-marshalled callbacks. Foreign threads
     // may enqueue work after teardown begins, but queued work checks this gate
-    // before touching Impl and becomes a no-op once shutdown() has run.
+    // before touching Impl and becomes a no-op once tryShutdown() has run.
     struct CallbackGate final : std::enable_shared_from_this<CallbackGate>
     {
       CallbackGate(async::Executor& executor, Impl& owner)
@@ -104,12 +104,13 @@ namespace ao::audio
               return;
             }
 
+            AO_EXPECTS(selfPtr->executor.isCurrent());
             AO_INVARIANT(selfPtr->owner != nullptr);
             task(*selfPtr->owner);
           });
       }
 
-      bool shutdown() noexcept
+      bool tryShutdown() noexcept
       {
         AO_EXPECTS(executor.isCurrent());
 
@@ -121,6 +122,17 @@ namespace ao::audio
         owner = nullptr;
         return true;
       }
+    };
+
+    // One subscription owns one replaceable graph across every deferred hop.
+    // The mutex protects producer admission and payload replacement only; no
+    // executor, Engine, provider, or user callback runs while it is held.
+    struct GraphObservation final
+    {
+      std::mutex mutex;
+      std::optional<flow::Graph> optGraph;
+      bool deliveryPending = false;
+      bool retired = false;
     };
 
     struct OutwardPublicationState final
@@ -170,7 +182,7 @@ namespace ao::audio
       AO_EXPECTS(executor.isCurrent());
       AO_EXPECTS(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
 
-      if (!gatePtr->shutdown())
+      if (!gatePtr->tryShutdown())
       {
         return;
       }
@@ -186,7 +198,7 @@ namespace ao::audio
       //      provider-owned state (e.g. AlsaGraphRegistry) is still alive.
       //   4. Release the unique Engine and providers only after their producers
       //      have stopped and all subscription callbacks have quiesced.
-      graphSubscription.reset();
+      retireGraphSubscription();
 
       for (auto& recordPtr : providers)
       {
@@ -218,14 +230,15 @@ namespace ao::audio
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
     BackendProvider* activeBackendProvider = nullptr;
     utility::ScopedRegistration graphSubscription;
+    std::shared_ptr<GraphObservation> graphObservationPtr;
     std::unique_ptr<Engine> enginePtr;
     std::shared_ptr<CallbackGate> gatePtr;
 
-    mutable std::mutex backendsMutex;
-    mutable std::vector<BackendProvider::Status> cachedBackends;
-    mutable std::vector<Device> allDevices;
+    // These caches are executor-owned. Value copies passed across Engine or
+    // outward callbacks remain necessary because those boundaries can re-enter.
+    std::vector<BackendProvider::Status> cachedBackends;
+    std::vector<Device> allDevices;
 
-    mutable std::mutex graphMutex;
     Engine::RouteStatus cachedRouteStatus;
     flow::Graph cachedSystemGraph;
     flow::Graph mergedGraph;
@@ -246,7 +259,8 @@ namespace ao::audio
     void connectStateChangedCallback() const;
     void connectRouteChangedCallback() const;
     void handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices);
-    void handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation);
+    void handleSystemGraphChanged(std::shared_ptr<GraphObservation> observationPtr, std::uint64_t generation);
+    void finishGraphObservation(std::shared_ptr<GraphObservation> observationPtr, std::uint64_t generation);
     void handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation);
     Result<> setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile);
     Player::Status snapshot() const;
@@ -318,20 +332,20 @@ namespace ao::audio
     }
 
     template<typename Acceptance, typename Completion, typename Adopter>
-    static async::Task<void> runPreparation(async::Runtime* runtime,
-                                            std::shared_ptr<CallbackGate> callbackGatePtr,
-                                            async::TaskHandle Impl::* taskSlot,
-                                            detail::TrackPreparation preparation,
-                                            Acceptance acceptance,
-                                            Completion completion,
-                                            Adopter adopter,
-                                            std::stop_token stopToken)
+    static async::Task<void> runPreparationAsync(async::Runtime* runtime,
+                                                 std::shared_ptr<CallbackGate> callbackGatePtr,
+                                                 async::TaskHandle Impl::* taskSlot,
+                                                 detail::TrackPreparation preparation,
+                                                 Acceptance acceptance,
+                                                 Completion completion,
+                                                 Adopter adopter,
+                                                 std::stop_token stopToken)
     {
       auto preparedRes = preparation.inspect();
 
       if (preparedRes)
       {
-        co_await runtime->resumeOnCallbackExecutor(stopToken);
+        co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
         if (!callbackGatePtr->canAcceptCallbacks())
         {
@@ -344,12 +358,12 @@ namespace ao::audio
 
         if (preparedRes)
         {
-          co_await runtime->resumeOnWorker(stopToken);
+          co_await runtime->resumeOnWorkerAsync(stopToken);
           preparedRes = preparation.prepare();
         }
       }
 
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       settlePreparation(callbackGatePtr,
                         taskSlot,
                         std::move(preparation),
@@ -409,12 +423,27 @@ namespace ao::audio
       }
     }
 
+    void retireGraphSubscription()
+    {
+      ensureOnExecutor();
+
+      if (graphObservationPtr)
+      {
+        auto const lock = std::scoped_lock{graphObservationPtr->mutex};
+        graphObservationPtr->retired = true;
+        graphObservationPtr->optGraph.reset();
+      }
+
+      graphObservationPtr.reset();
+      graphSubscription.reset();
+    }
+
     std::uint64_t resetPlaybackGraph()
     {
+      ensureOnExecutor();
       auto const generation = playbackGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
-      graphSubscription.reset();
+      retireGraphSubscription();
 
-      auto const lock = std::scoped_lock{graphMutex};
       cachedRouteStatus = {};
       cachedSystemGraph = {};
       mergedGraph = {};
@@ -560,6 +589,7 @@ namespace ao::audio
 
   void Player::Impl::handleOutputDevicesChanged(BackendProvider* provider, std::vector<Device> const& devices)
   {
+    ensureOnExecutor();
     // Update individual provider cache
     auto const it =
       std::ranges::find_if(providers, [&](auto const& recordPtr) { return recordPtr->providerPtr.get() == provider; });
@@ -583,19 +613,12 @@ namespace ao::audio
       allProviderDevices.insert(allProviderDevices.end(), recordPtr->devices.begin(), recordPtr->devices.end());
     }
 
-    {
-      auto const lock = std::scoped_lock{backendsMutex};
-      cachedBackends = std::move(snapshots);
-      allDevices = std::move(allProviderDevices);
-    }
+    cachedBackends = std::move(snapshots);
+    allDevices = std::move(allProviderDevices);
 
     // Keep the engine's current device identity and metadata up-to-date.
     auto const currentSnap = enginePtr->status();
-    auto allDevicesCopy = std::vector<Device>{};
-    {
-      auto const lock = std::scoped_lock{backendsMutex};
-      allDevicesCopy = allDevices;
-    }
+    auto const allDevicesCopy = allDevices;
 
     auto const activeIt =
       std::ranges::find_if(allDevicesCopy,
@@ -614,34 +637,75 @@ namespace ao::audio
       std::ignore = setOutputDevice(pending.backend, pending.deviceId, pending.profile);
     }
 
-    auto snapshot = std::vector<BackendProvider::Status>{};
-    {
-      auto const lock = std::scoped_lock{backendsMutex};
-      snapshot = cachedBackends;
-    }
+    auto snapshot = cachedBackends;
 
     dispatchOutward(&Impl::onOutputDevicesChanged, std::move(snapshot));
   }
 
-  void Player::Impl::handleSystemGraphChanged(flow::Graph const& graph, std::uint64_t generation)
+  void Player::Impl::handleSystemGraphChanged(std::shared_ptr<GraphObservation> observationPtr,
+                                              std::uint64_t generation)
   {
-    if (generation != playbackGeneration.load(std::memory_order_acquire))
+    ensureOnExecutor();
+
+    if (observationPtr != graphObservationPtr || generation != playbackGeneration.load(std::memory_order_acquire))
     {
       return;
     }
 
+    auto optGraph = std::optional<flow::Graph>{};
     {
-      auto const lock = std::scoped_lock{graphMutex};
-      cachedSystemGraph = graph;
-      updateMergedGraph();
+      auto const lock = std::scoped_lock{observationPtr->mutex};
+      optGraph = std::exchange(observationPtr->optGraph, std::nullopt);
     }
+    AO_INVARIANT(optGraph);
+    cachedSystemGraph = std::move(*optGraph);
+    updateMergedGraph();
 
     auto const playerStatus = snapshot();
-    dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
+    gatePtr->dispatch(
+      [observationPtr = std::move(observationPtr),
+       generation,
+       quality = qualityResultFromStatus(playerStatus),
+       ready = playerStatus.isReady](Impl& self) mutable
+      {
+        if (observationPtr == self.graphObservationPtr &&
+            generation == self.playbackGeneration.load(std::memory_order_acquire))
+        {
+          self.invokeOutward(&Impl::onQualityChanged, quality, ready);
+        }
+
+        self.finishGraphObservation(std::move(observationPtr), generation);
+      });
+  }
+
+  void Player::Impl::finishGraphObservation(std::shared_ptr<GraphObservation> observationPtr, std::uint64_t generation)
+  {
+    ensureOnExecutor();
+    {
+      auto const lock = std::scoped_lock{observationPtr->mutex};
+
+      if (observationPtr->retired)
+      {
+        return;
+      }
+
+      if (!observationPtr->optGraph)
+      {
+        observationPtr->deliveryPending = false;
+        return;
+      }
+    }
+
+    // Keep the admission bit through outward publication. A fresh graph gets a
+    // later turn instead of a producer-driven loop monopolizing this executor.
+    deferInternal([observationPtr = std::move(observationPtr), generation](Impl& self) mutable
+                  { self.handleSystemGraphChanged(std::move(observationPtr), generation); });
   }
 
   Result<> Player::Impl::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
+    ensureOnExecutor();
+
     if (auto const currentSnap = enginePtr->status();
         backend == currentSnap.backendId && profile == currentSnap.profileId && deviceId == currentSnap.currentDeviceId)
     {
@@ -658,11 +722,7 @@ namespace ao::audio
       return makeError(Error::Code::NotFound, "No provider registered for backend " + backend.raw());
     }
 
-    auto allDevicesCopy = std::vector<Device>{};
-    {
-      auto const lock = std::scoped_lock{backendsMutex};
-      allDevicesCopy = allDevices;
-    }
+    auto const allDevicesCopy = allDevices;
 
     auto const it = std::ranges::find_if(
       allDevicesCopy, [&](Device const& dev) { return dev.backendId == backend && dev.id == deviceId; });
@@ -689,6 +749,7 @@ namespace ao::audio
 
   Player::Status Player::Impl::snapshot() const
   {
+    ensureOnExecutor();
     auto playerStatus = Player::Status{};
 
     if (enginePtr)
@@ -696,20 +757,14 @@ namespace ao::audio
       playerStatus.engine = enginePtr->status();
     }
 
-    {
-      auto const lock = std::scoped_lock{backendsMutex};
-      playerStatus.availableBackends = cachedBackends;
-    }
+    playerStatus.availableBackends = cachedBackends;
 
-    {
-      auto const lock = std::scoped_lock{graphMutex};
-      playerStatus.flow = mergedGraph;
-      playerStatus.sourceQuality = qualityRes.sourceQuality;
-      playerStatus.pipelineQuality = qualityRes.pipelineQuality;
-      playerStatus.quality = qualityRes.overall;
-      playerStatus.qualityFullyVerified = qualityRes.fullyVerified;
-      playerStatus.qualityAssessments = qualityRes.assessments;
-    }
+    playerStatus.flow = mergedGraph;
+    playerStatus.sourceQuality = qualityRes.sourceQuality;
+    playerStatus.pipelineQuality = qualityRes.pipelineQuality;
+    playerStatus.quality = qualityRes.overall;
+    playerStatus.qualityFullyVerified = qualityRes.fullyVerified;
+    playerStatus.qualityAssessments = qualityRes.assessments;
 
     playerStatus.isReady = isReady();
     return playerStatus;
@@ -717,19 +772,20 @@ namespace ao::audio
 
   bool Player::Impl::isReady() const
   {
+    ensureOnExecutor();
     return enginePtr && enginePtr->backendId() != kBackendNone && !optPendingOutputDeviceSelection;
   }
 
   void Player::Impl::handleRouteChanged(Engine::RouteStatus const& status, std::uint64_t generation)
   {
+    ensureOnExecutor();
+
     if (generation != playbackGeneration.load(std::memory_order_acquire))
     {
       return;
     }
 
-    auto lock = std::unique_lock{graphMutex};
     cachedRouteStatus = status;
-    lock.unlock();
 
     auto const hasRoute = status.optAnchor && activeBackendProvider != nullptr;
 
@@ -737,20 +793,46 @@ namespace ao::audio
     {
       if (!graphSubscription)
       {
+        retireGraphSubscription();
         auto const callbackGatePtr = gatePtr;
+        auto observationPtr = std::make_shared<GraphObservation>();
+        graphObservationPtr = observationPtr;
         auto subscription = activeBackendProvider->subscribeGraph(
           status.optAnchor->id,
-          [callbackGatePtr, generation](flow::Graph const& graph)
+          [callbackGatePtr, observationPtr, generation](flow::Graph const& graph)
           {
-            callbackGatePtr->dispatch(
-              [graph = flow::Graph{graph}, generation](Impl& self) mutable
+            if (!callbackGatePtr->canAcceptCallbacks())
+            {
+              return;
+            }
+
+            {
+              auto const lock = std::scoped_lock{observationPtr->mutex};
+
+              if (observationPtr->retired)
               {
-                self.deferInternal([graph = std::move(graph), generation](Impl& owner)
-                                   { owner.handleSystemGraphChanged(graph, generation); });
+                return;
+              }
+
+              observationPtr->optGraph = graph;
+
+              if (observationPtr->deliveryPending)
+              {
+                return;
+              }
+
+              observationPtr->deliveryPending = true;
+            }
+
+            callbackGatePtr->dispatch(
+              [observationPtr, generation](Impl& self)
+              {
+                self.deferInternal([observationPtr, generation](Impl& owner)
+                                   { owner.handleSystemGraphChanged(observationPtr, generation); });
               });
           });
 
-        if (!gatePtr->canAcceptCallbacks())
+        if (!gatePtr->canAcceptCallbacks() || observationPtr != graphObservationPtr)
         {
           return;
         }
@@ -760,10 +842,8 @@ namespace ao::audio
     }
     else
     {
-      graphSubscription.reset();
+      retireGraphSubscription();
     }
-
-    lock.lock();
 
     if (!hasRoute)
     {
@@ -771,7 +851,6 @@ namespace ao::audio
     }
 
     updateMergedGraph();
-    lock.unlock();
 
     auto const playerStatus = snapshot();
     dispatchOutward(&Impl::onQualityChanged, qualityResultFromStatus(playerStatus), playerStatus.isReady);
@@ -779,6 +858,7 @@ namespace ao::audio
 
   void Player::Impl::updateMergedGraph()
   {
+    ensureOnExecutor();
     auto const& rs = cachedRouteStatus.state;
 
     // Label the source node with the detected codec (e.g. "FLAC"); fall back to a
@@ -1023,7 +1103,7 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runPreparation(
+        return Impl::runPreparationAsync(
           runtime,
           std::move(callbackGatePtr),
           &Impl::startPreparationTask,
@@ -1103,7 +1183,7 @@ namespace ao::audio
       return std::unexpected{preparationRes.error()};
     }
 
-    if (!preparationRes->requiresWorker())
+    if (!preparationRes->needsWorker())
     {
       auto preparedRes = preparationRes->inspect();
 
@@ -1139,7 +1219,7 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runPreparation(
+        return Impl::runPreparationAsync(
           runtime,
           std::move(callbackGatePtr),
           &Impl::lookaheadPreparationTask,

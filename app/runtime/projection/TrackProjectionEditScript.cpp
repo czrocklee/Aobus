@@ -63,7 +63,7 @@ namespace ao::rt
     }
   } // namespace
 
-  bool validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize)
+  bool isValidTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize)
   {
     if (batch.deltas.empty())
     {
@@ -93,7 +93,7 @@ namespace ao::rt
           }
           else
           {
-            return validator.accept(rangeEditKindOf(range), range.range.start, range.range.count);
+            return validator.tryAccept(rangeEditKindOf(range), range.range.start, range.range.count);
           }
         },
         edit);

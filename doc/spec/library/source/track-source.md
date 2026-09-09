@@ -47,6 +47,9 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 
 The all-tracks source contains every stored track id in its canonical source order.
 It consumes committed track insertions, deletions, and metadata updates and publishes one sequential batch per changeset.
+Mixed changesets combine collection edits and surviving metadata updates in that batch; update ranges address the final sequence after removals and insertions.
+Synchronous consumers therefore evaluate changed and inserted tracks together without an intermediate collection-only notification.
+Changesets with no effective track edits publish no batch.
 Runtime factories construct it only after `MusicLibrary::open()` has validated every persisted Track pair and required dictionary reference.
 They complete one initial full reload before exposing `CoreRuntime` or `AppRuntime`, so consumers never observe an empty or partial bootstrap followed by repair.
 
@@ -151,6 +154,7 @@ Subscriptions release before their source or changes owner; source destruction d
 
 ## Test map
 
+- [`TrackSourcePublicationTest.cpp`](../../../../test/unit/runtime/source/TrackSourcePublicationTest.cpp) proves one mixed commit publishes one final all-tracks batch and smart membership transition before phase-two observers and command completion.
 - [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
 - Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 

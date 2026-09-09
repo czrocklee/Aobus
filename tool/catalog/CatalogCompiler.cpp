@@ -414,9 +414,9 @@ int main(int const argc, char const* const argv[])
       return 2;
     }
 
-    if (auto result = run(*optionsRes); !result)
+    if (auto res = run(*optionsRes); !res)
     {
-      std::cerr << result.error().message << '\n';
+      std::cerr << res.error().message << '\n';
       return 1;
     }
 

@@ -68,9 +68,9 @@ namespace ao::uimodel
       stateDoc.components[node.id] = std::move(residual);
     }
 
-    bool promoteSplitState(LayoutNode& node,
-                           LayoutComponentStateEntry const& entry,
-                           LayoutComponentStateDocument& stateDoc)
+    bool tryPromoteSplitState(LayoutNode& node,
+                              LayoutComponentStateEntry const& entry,
+                              LayoutComponentStateDocument& stateDoc)
     {
       auto const percentIt = entry.state.find(kPositionPercentStateKey);
 
@@ -86,9 +86,9 @@ namespace ao::uimodel
       return true;
     }
 
-    bool promoteCollapsibleSplitState(LayoutNode& node,
-                                      LayoutComponentStateEntry const& entry,
-                                      LayoutComponentStateDocument& stateDoc)
+    bool tryPromoteCollapsibleSplitState(LayoutNode& node,
+                                         LayoutComponentStateEntry const& entry,
+                                         LayoutComponentStateDocument& stateDoc)
     {
       auto const sizeIt = entry.state.find(kSizeStateKey);
 
@@ -105,7 +105,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  bool promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc)
+  bool tryPromotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc)
   {
     bool changed = false;
 
@@ -118,11 +118,11 @@ namespace ao::uimodel
 
                                    if (node.type == kSplitComponentType)
                                    {
-                                     promoted = promoteSplitState(node, *optEntry, stateDoc);
+                                     promoted = tryPromoteSplitState(node, *optEntry, stateDoc);
                                    }
                                    else if (node.type == kCollapsibleSplitComponentType)
                                    {
-                                     promoted = promoteCollapsibleSplitState(node, *optEntry, stateDoc);
+                                     promoted = tryPromoteCollapsibleSplitState(node, *optEntry, stateDoc);
                                    }
 
                                    if (promoted)

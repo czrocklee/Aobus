@@ -40,9 +40,10 @@ namespace ao::uimodel::test
         : first{runtime.addTrack(library::test::TrackSpec{.title = "First"})}
         , second{runtime.addTrack(library::test::TrackSpec{.title = "Second"})}
         , third{runtime.addTrack(library::test::TrackSpec{.title = "Third"})}
-        , listId{ao::test::requireValue(runtime.commandsFixture.runTask(runtime.commands().createList(rt::ListDraft{
-            .name = "Ordered",
-          })))}
+        , listId{
+            ao::test::requireValue(runtime.commandsFixture.runTask(runtime.commands().createListAsync(rt::ListDraft{
+              .name = "Ordered",
+            })))}
       {
       }
 
@@ -84,7 +85,7 @@ namespace ao::uimodel::test
         first = commandsFixture.addTrack(library::test::TrackSpec{.title = "First"});
         second = commandsFixture.addTrack(library::test::TrackSpec{.title = "Second"});
         listId = ao::test::requireValue(
-          commandsFixture.runTask(commandsFixture.commands().createList(rt::ListDraft{.name = "Ordered"})));
+          commandsFixture.runTask(commandsFixture.commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
       }
 
       rt::ViewId open()
@@ -124,10 +125,10 @@ namespace ao::uimodel::test
 
     CHECK(std::vector<TrackId>{session.effectiveTrackIds().begin(), session.effectiveTrackIds().end()} ==
           std::vector{fixture.first, fixture.second, fixture.third});
-    auto const result = fixture.runtime.commandsFixture.runTask(session.moveDown({fixture.first}));
+    auto const res = fixture.runtime.commandsFixture.runTask(session.moveDownAsync({fixture.first}));
 
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::Applied);
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::Applied);
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
     CHECK_FALSE(session.isCurrent());
   }
@@ -146,11 +147,11 @@ namespace ao::uimodel::test
     CHECK_FALSE(session.capabilities().canGapMove);
     CHECK_FALSE(session.capabilities().canRelativeMove);
 
-    auto const relativeRes = fixture.runtime.commandsFixture.runTask(session.moveUp({fixture.second}));
+    auto const relativeRes = fixture.runtime.commandsFixture.runTask(session.moveUpAsync({fixture.second}));
     REQUIRE_FALSE(relativeRes);
     CHECK(relativeRes.error().code == Error::Code::InvalidState);
 
-    auto const absoluteRes = fixture.runtime.commandsFixture.runTask(session.moveToTop({fixture.third}));
+    auto const absoluteRes = fixture.runtime.commandsFixture.runTask(session.moveToTopAsync({fixture.third}));
     REQUIRE(absoluteRes);
     CHECK(absoluteRes->status == rt::AuthoringStatus::Applied);
     CHECK(fixture.storedOrder() == std::vector{fixture.third, fixture.first, fixture.second});
@@ -204,16 +205,17 @@ namespace ao::uimodel::test
     std::size_t invalidatedCount = 0;
     auto subscription = session.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = fixture.commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, session.resetOrder()));
-    REQUIRE(fixture.executor.waitUntilQueued());
+    auto future =
+      fixture.commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(completedPtr, session.resetOrderAsync()));
+    REQUIRE(fixture.executor.tryWaitUntilQueued());
 
     REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
     CHECK(session.isCurrent());
-    REQUIRE(fixture.executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
 
-    auto result = future.get();
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::NoOp);
+    auto res = future.get();
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::NoOp);
     CHECK_FALSE(session.isCurrent());
     CHECK(invalidatedCount == 1);
   }
@@ -237,20 +239,20 @@ namespace ao::uimodel::test
       auto moved = std::move(source);
       invalidatedSubscription = moved.onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
       auto pending =
-        fixture.commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, moved.resetOrder()));
-      REQUIRE(fixture.executor.waitUntilQueued());
+        fixture.commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(completedPtr, moved.resetOrderAsync()));
+      REQUIRE(fixture.executor.tryWaitUntilQueued());
       return pending;
     }();
 
     REQUIRE(fixture.service.setPresentation(viewId, rt::defaultTrackPresentationSpec()));
-    REQUIRE(fixture.executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
-    auto const result = future.get();
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::NoOp);
+    REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
+    auto const res = future.get();
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::NoOp);
     CHECK(invalidatedCount == 1);
 
     REQUIRE(fixture.commandsFixture.runTask(
-      fixture.commandsFixture.commands().createList(rt::ListDraft{.name = "After cleanup"})));
+      fixture.commandsFixture.commands().createListAsync(rt::ListDraft{.name = "After cleanup"})));
     CHECK(invalidatedCount == 1);
   }
 } // namespace ao::uimodel::test

@@ -114,7 +114,7 @@ namespace ao::rt
     spdlog::set_default_logger(appLoggerPtr);
     _initialized = true;
 
-    auto const fatalSinkRegistered = registerFatalSink(&Log::submitFatal);
+    auto const fatalSinkRegistered = tryRegisterFatalSink(&Log::trySubmitFatal);
     AO_INVARIANT(fatalSinkRegistered, "Application fatal sink is already registered");
 
     APP_LOG_INFO("========================================================");
@@ -132,7 +132,7 @@ namespace ao::rt
 
     APP_LOG_INFO("Shutting down logging...");
 
-    auto const fatalSinkUnregistered = unregisterFatalSink(&Log::submitFatal);
+    auto const fatalSinkUnregistered = tryUnregisterFatalSink(&Log::trySubmitFatal);
     AO_INVARIANT(fatalSinkUnregistered, "Application fatal sink registration is not owned by Log");
 
     auto const appLoggerPtr = _appLoggerPtr;
@@ -161,7 +161,7 @@ namespace ao::rt
     spdlog::shutdown();
   }
 
-  bool Log::submitFatal(FatalDiagnostic const& diagnostic) noexcept
+  bool Log::trySubmitFatal(FatalDiagnostic const& diagnostic) noexcept
   {
     try
     {

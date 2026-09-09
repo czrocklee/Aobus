@@ -178,7 +178,7 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const liveId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Live"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Live"})));
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
     auto const staleId = ListId{liveId.raw() + 1};
 
@@ -204,13 +204,13 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const parentId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Parent"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Parent"})));
     auto const childId = ao::test::requireValue(
-      commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
+      commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto const grandchildId = ao::test::requireValue(
-      commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = childId, .name = "Grandchild"})));
+      commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = childId, .name = "Grandchild"})));
     auto const unrelatedId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Unrelated"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Unrelated"})));
     auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
     listPresentations.restore(
       {
@@ -230,7 +230,7 @@ namespace ao::uimodel::test
         removed.push_back(listId);
       });
 
-    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
+    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendantsAsync(parentId)));
 
     CHECK(removed == std::vector{parentId, childId, grandchildId});
     REQUIRE(listPresentations.snapshot().size() == 1);
@@ -273,9 +273,9 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const parentId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Parent"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Parent"})));
     auto const childId = ao::test::requireValue(
-      commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
+      commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto presentationsPtr = std::make_unique<ListPresentations>(presentationFixture.catalog, changes);
     presentationsPtr->restore({{parentId, "songs"}, {childId, "albums"}}, std::vector{parentId, childId});
     auto removed = std::vector<ListId>{};
@@ -290,7 +290,7 @@ namespace ao::uimodel::test
         }
       });
 
-    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
+    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendantsAsync(parentId)));
 
     CHECK(removed == std::vector{parentId, childId});
     CHECK(presentationsPtr == nullptr);

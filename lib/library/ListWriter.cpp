@@ -146,7 +146,7 @@ namespace ao::library
       }
     }
 
-    auto const removed = writer.remove(id);
+    auto const removed = writer.tryRemove(id);
     AO_INVARIANT(removed, "Validated List disappeared during deletion");
     return {};
   }
@@ -216,7 +216,7 @@ namespace ao::library
 
     for (auto const id : rootFirst | std::views::reverse)
     {
-      auto const removed = writer.remove(id);
+      auto const removed = writer.tryRemove(id);
       AO_INVARIANT(removed, "Validated List subtree changed during deletion");
     }
 

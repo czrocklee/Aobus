@@ -17,6 +17,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -42,7 +43,10 @@ namespace ao::gtk::layout::editor::test
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
-      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{registry.schema()};
@@ -106,7 +110,10 @@ namespace ao::gtk::layout::editor::test
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(
-      registry, *runtimePtr, ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog()});
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{registry.schema()};

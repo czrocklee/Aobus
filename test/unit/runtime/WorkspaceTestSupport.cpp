@@ -37,15 +37,15 @@ namespace ao::rt::test
   ListId WorkspaceRuntimeFixture::createList(std::string name) const
   {
     return ao::test::requireValue(
-      runRuntimeTask(runtime(), runtime().library().commands().createList(ListDraft{.name = std::move(name)})));
+      runRuntimeTask(runtime(), runtime().library().commands().createListAsync(ListDraft{.name = std::move(name)})));
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)
   {
-    auto result = runtime.workspace().navigate(request);
-    REQUIRE(result);
+    auto res = runtime.workspace().navigate(request);
+    REQUIRE(res);
     settleRuntimeCallbacks(runtime);
-    return *result;
+    return *res;
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationTarget const& target)
@@ -55,16 +55,16 @@ namespace ao::rt::test
 
   ViewId requireBackNavigation(AppRuntime& runtime)
   {
-    auto result = runtime.workspace().goBack();
-    REQUIRE(result);
+    auto res = runtime.workspace().goBack();
+    REQUIRE(res);
     settleRuntimeCallbacks(runtime);
     return runtime.workspace().snapshot().activeViewId;
   }
 
   ViewId requireForwardNavigation(AppRuntime& runtime)
   {
-    auto result = runtime.workspace().goForward();
-    REQUIRE(result);
+    auto res = runtime.workspace().goForward();
+    REQUIRE(res);
     settleRuntimeCallbacks(runtime);
     return runtime.workspace().snapshot().activeViewId;
   }

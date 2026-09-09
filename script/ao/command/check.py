@@ -3,7 +3,7 @@
 import argparse
 import copy
 
-from ..core import builddir, dependency_policy
+from ..core import builddir, dependency_policy, testregistry
 from ..core.proc import die
 from . import build, perf, test
 
@@ -33,6 +33,13 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def run_command(args: argparse.Namespace) -> int:
+    try:
+        missing = testregistry.unregistered_test_sources()
+    except OSError as exc:
+        raise die(f"Cannot read the C++ test registry: {exc}") from exc
+    if missing:
+        raise die("C++ test files must be registered in test/CMakeLists.txt:\n" + "\n".join(missing))
+
     if args.flavor not in ("debug", "release"):
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
         profile_args = copy.copy(args)

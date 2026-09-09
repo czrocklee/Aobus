@@ -112,10 +112,19 @@ namespace clang::tidy::readability
           }
         }
 
-        return checkCallArgs(call);
+        return true;
       }
 
-      bool VisitCallExpr(CallExpr* call) { return checkCallArgs(call); }
+      bool VisitCallExpr(CallExpr* call)
+      {
+        if (hasRequiredLockArgument(call))
+        {
+          found = true;
+          return false;
+        }
+
+        return true;
+      }
 
     private:
       bool isConditionVariableWait(CallExpr const* call)
@@ -173,7 +182,7 @@ namespace clang::tidy::readability
         return false;
       }
 
-      bool checkCallArgs(CallExpr* call)
+      bool hasRequiredLockArgument(CallExpr const* call)
       {
         for (std::uint32_t i = 0; i < call->getNumArgs(); ++i)
         {
@@ -189,13 +198,12 @@ namespace clang::tidy::readability
           {
             if (isConditionVariableWait(call) || isUniqueLockParameter(call, i))
             {
-              found = true;
-              return false;
+              return true;
             }
           }
         }
 
-        return true;
+        return false;
       }
     };
 

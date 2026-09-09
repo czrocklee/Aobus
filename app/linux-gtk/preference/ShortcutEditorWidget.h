@@ -92,10 +92,10 @@ namespace ao::gtk
     void commit();
     Result<> persistCandidate();
     Gtk::Widget& buildActionRow(EditableAction const& action);
-    bool bindChord(std::string const& actionId, uimodel::KeyChord const& chord);
+    bool tryBindChord(std::string const& actionId, uimodel::KeyChord const& chord);
     void requestBind(std::string const& actionId, uimodel::KeyChord const& chord);
     std::optional<std::string> conflictingOwner(std::string const& actionId, uimodel::KeyChord const& chord) const;
-    bool unbindChord(std::string const& actionId, uimodel::KeyChord const& chord);
+    bool tryUnbindChord(std::string const& actionId, uimodel::KeyChord const& chord);
     void resetAction(std::string const& actionId);
     void resetAll();
     void beginCapture(std::string actionId);

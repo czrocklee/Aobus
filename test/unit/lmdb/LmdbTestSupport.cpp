@@ -39,36 +39,36 @@ namespace ao::lmdb::test
 
   Environment openEnvironment(std::filesystem::path const& path, Environment::Options const& options)
   {
-    auto result = Environment::open(path, options);
-    REQUIRE(result);
-    return std::move(*result);
+    auto res = Environment::open(path, options);
+    REQUIRE(res);
+    return std::move(*res);
   }
 
   ReadTransaction beginReadTransaction(Environment const& env)
   {
-    auto result = ReadTransaction::begin(env);
-    REQUIRE(result);
-    return std::move(*result);
+    auto res = ReadTransaction::begin(env);
+    REQUIRE(res);
+    return std::move(*res);
   }
 
   WriteTransaction beginWriteTransaction(Environment& env)
   {
-    auto result = WriteTransaction::begin(env);
-    REQUIRE(result);
-    return std::move(*result);
+    auto res = WriteTransaction::begin(env);
+    REQUIRE(res);
+    return std::move(*res);
   }
 
   IntegerKeyDatabase openIntegerKeyDatabase(WriteTransaction& txn, std::string const& name)
   {
-    auto result = IntegerKeyDatabase::open(txn, name);
-    REQUIRE(result);
-    return std::move(*result);
+    auto res = IntegerKeyDatabase::open(txn, name);
+    REQUIRE(res);
+    return std::move(*res);
   }
 
   ByteKeyDatabase openByteKeyDatabase(WriteTransaction& txn, std::string const& name)
   {
-    auto result = ByteKeyDatabase::open(txn, name);
-    REQUIRE(result);
-    return std::move(*result);
+    auto res = ByteKeyDatabase::open(txn, name);
+    REQUIRE(res);
+    return std::move(*res);
   }
 } // namespace ao::lmdb::test

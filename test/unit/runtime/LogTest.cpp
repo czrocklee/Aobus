@@ -17,7 +17,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    bool testFatalSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptTestFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       return true;
     }
@@ -42,16 +42,16 @@ namespace ao::rt::test
 
       CHECK(appLoggerPtr != nullptr);
       CHECK(audioLoggerPtr != nullptr);
-      CHECK_FALSE(registerFatalSink(&testFatalSink));
+      CHECK_FALSE(tryRegisterFatalSink(&tryAcceptTestFatal));
 
       // Write a test log
       APP_LOG_DEBUG("Test app debug log");
       AUDIO_LOG_INFO("Test audio info log");
 
       Log::shutdown();
-      auto const registeredAfterShutdown = registerFatalSink(&testFatalSink);
+      auto const registeredAfterShutdown = tryRegisterFatalSink(&tryAcceptTestFatal);
       REQUIRE(registeredAfterShutdown);
-      CHECK(unregisterFatalSink(&testFatalSink));
+      CHECK(tryUnregisterFatalSink(&tryAcceptTestFatal));
 
       // Verify log file was created
       auto const logFile = tempDir / "app.log";
@@ -84,7 +84,7 @@ namespace ao::rt::test
 
       CHECK(std::filesystem::exists(defaultDir));
       CHECK(std::filesystem::exists(defaultDir / "app.log"));
-      CHECK_FALSE(registerFatalSink(&testFatalSink));
+      CHECK_FALSE(tryRegisterFatalSink(&tryAcceptTestFatal));
 
       // Use toSpdlog directly to cover it
       auto const loc = std::source_location::current();
@@ -92,9 +92,9 @@ namespace ao::rt::test
       CHECK(spdLoc.filename != nullptr);
 
       Log::shutdown();
-      auto const registeredAfterShutdown = registerFatalSink(&testFatalSink);
+      auto const registeredAfterShutdown = tryRegisterFatalSink(&tryAcceptTestFatal);
       REQUIRE(registeredAfterShutdown);
-      CHECK(unregisterFatalSink(&testFatalSink));
+      CHECK(tryUnregisterFatalSink(&tryAcceptTestFatal));
     }
 
     std::filesystem::remove_all(tempDir);

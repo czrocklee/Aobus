@@ -141,10 +141,10 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK(**result == fixture.pictureBytes);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK(**res == fixture.pictureBytes);
   }
 
   TEST_CASE("readResourceBytes - a track whose own file is gone is served from another carrier",
@@ -166,10 +166,10 @@ namespace ao::rt::test
 
     // A failed source is never a failed request: a missing file costs a failed
     // open and the walk advances.
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK(**result == fixture.pictureBytes);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK(**res == fixture.pictureBytes);
   }
 
   TEST_CASE("readResourceBytes - a carrier that carries no matching picture advances to the next",
@@ -193,10 +193,10 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK(**result == fixture.pictureBytes);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK(**res == fixture.pictureBytes);
   }
 
   TEST_CASE("readResourceBytes - no carrier and no cache entry is no image", "[runtime][unit][resource-walk]")
@@ -214,9 +214,9 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    CHECK_FALSE(*result);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    CHECK_FALSE(*res);
   }
 
   TEST_CASE("readResourceBytes - a carrier hit is cached, and the next request opens no file",
@@ -239,10 +239,10 @@ namespace ao::rt::test
     // Every carrier is gone, so a hit now proves the cache answered alone: a valid
     // entry keeps a cover displayable until it is evicted.
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK(**result == fixture.pictureBytes);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK(**res == fixture.pictureBytes);
   }
 
   TEST_CASE("readResourceBytes - a stale reference no file can satisfy is not rewritten",
@@ -263,9 +263,9 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    CHECK_FALSE(*result);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    CHECK_FALSE(*res);
 
     // A degradation state never removes or rewrites a track's cover reference.
     auto const transaction = fixture.library.readTransaction();
@@ -299,9 +299,9 @@ namespace ao::rt::test
         .optMaximumBytes = fixture.pictureBytes.size() - 1,
       };
 
-      auto result = readResourceBytes(context, {});
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto res = readResourceBytes(context, {});
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("an export request has none")
@@ -314,10 +314,10 @@ namespace ao::rt::test
         .optMaximumBytes = std::nullopt,
       };
 
-      auto result = readResourceBytes(context, {});
-      REQUIRE(result);
-      REQUIRE(*result);
-      CHECK((*result)->size() == fixture.pictureBytes.size());
+      auto res = readResourceBytes(context, {});
+      REQUIRE(res);
+      REQUIRE(*res);
+      CHECK((*res)->size() == fixture.pictureBytes.size());
     }
   }
 
@@ -339,10 +339,10 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK((*result)->size() == fixture.pictureBytes.size());
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK((*res)->size() == fixture.pictureBytes.size());
   }
 
   TEST_CASE("readResourceBytes - cancellation stops the walk between candidates",
@@ -377,14 +377,14 @@ namespace ao::rt::test
     // digest, so a dropped one ends in a miss rather than in wrong bytes. Asking
     // for equality instead would send a request that already holds a usable
     // snapshot to wait on the rebuild mutex behind an unrelated build.
-    CHECK(snapshot.answersRevision(6));
-    CHECK(snapshot.answersRevision(7));
-    CHECK_FALSE(snapshot.answersRevision(8));
+    CHECK(snapshot.canAnswerRevision(6));
+    CHECK(snapshot.canAnswerRevision(7));
+    CHECK_FALSE(snapshot.canAnswerRevision(8));
 
     // The rebuild re-checks the slot under its lock with this same question, so
     // the two sites cannot drift into accepting different snapshots.
-    CHECK(ResourceCarrierIndex{}.answersRevision(0));
-    CHECK_FALSE(ResourceCarrierIndex{}.answersRevision(1));
+    CHECK(ResourceCarrierIndex{}.canAnswerRevision(0));
+    CHECK_FALSE(ResourceCarrierIndex{}.canAnswerRevision(1));
   }
 
   TEST_CASE("buildResourceCarrierIndex - names every referencing file and nothing else",
@@ -461,10 +461,10 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK(**result == source.pictureBytes);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK(**res == source.pictureBytes);
   }
 
   TEST_CASE("readResourceBytes - a resource with no candidate at all is no image", "[runtime][unit][resource-walk]")
@@ -480,8 +480,8 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    auto result = readResourceBytes(context, {});
-    REQUIRE(result);
-    CHECK_FALSE(*result);
+    auto res = readResourceBytes(context, {});
+    REQUIRE(res);
+    CHECK_FALSE(*res);
   }
 } // namespace ao::rt::test

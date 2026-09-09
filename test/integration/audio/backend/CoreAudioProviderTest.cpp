@@ -94,7 +94,7 @@ namespace ao::audio::backend::test
         _condition.notify_all();
       }
 
-      bool waitForDrain(std::chrono::seconds const timeout)
+      bool tryWaitForDrain(std::chrono::seconds const timeout)
       {
         auto lock = std::unique_lock{_mutex};
         return _condition.wait_for(lock, timeout, [this] { return _drained; });
@@ -165,7 +165,7 @@ namespace ao::audio::backend::test
     CHECK(target.routeAnchor() == status.devices.front().id.raw());
 
     backendPtr->start();
-    auto const drained = target.waitForDrain(std::chrono::seconds{10});
+    auto const drained = target.tryWaitForDrain(std::chrono::seconds{10});
 
     INFO("Core Audio backend error: " << target.error());
     CHECK(target.error().empty());

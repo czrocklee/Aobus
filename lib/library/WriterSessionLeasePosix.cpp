@@ -14,15 +14,17 @@
 #include <filesystem>
 #include <format>
 #include <memory>
-#include <sys/file.h>
-#include <sys/stat.h>
+#include <sys/file.h>  // NOLINT(misc-include-cleaner) -- public flock header; Darwin forwards the declaration.
+#include <sys/stat.h>  // NOLINT(misc-include-cleaner) -- public permission constants; Darwin uses private SDK headers.
+#include <sys/types.h> // NOLINT(misc-include-cleaner) -- public mode_t header; Darwin uses a private SDK header.
 #include <utility>
 
 namespace ao::library::detail
 {
   namespace
   {
-    constexpr auto kWriterLeaseFileName = ".aobus-writer.lock";
+    // Darwin's public headers forward this type and these macros from SDK-private headers.
+    // NOLINTNEXTLINE(misc-include-cleaner)
     constexpr mode_t kWriterLeasePermissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
     std::int32_t openLeaseFile(std::filesystem::path const& path)
@@ -79,7 +81,7 @@ namespace ao::library::detail
 
   Result<WriterSessionLease> WriterSessionLease::acquire(std::filesystem::path const& databasePath)
   {
-    auto const leasePath = databasePath / utility::pathFromUtf8(kWriterLeaseFileName);
+    auto const leasePath = databasePath / utility::pathFromUtf8(kFileName);
     auto const descriptor = openLeaseFile(leasePath);
 
     if (descriptor < 0)

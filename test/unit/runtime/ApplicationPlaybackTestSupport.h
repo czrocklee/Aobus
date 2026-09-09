@@ -38,8 +38,12 @@ namespace ao::rt::test
   {
     struct PlaybackStorage final
     {
-      PlaybackStorage(PlaybackBootstrap& bootstrap, async::Executor& executor, PlaybackSuccession& succession)
-        : playback{bootstrap.createPlaybackService(executor, succession)}
+      PlaybackStorage(PlaybackBootstrap& bootstrap,
+                      async::Executor& executor,
+                      PlaybackSuccession& succession,
+                      library::MusicLibrary const& library,
+                      LibraryChanges const& changes)
+        : playback{bootstrap.createPlaybackService(executor, succession, library, changes)}
       {
       }
 
@@ -76,7 +80,7 @@ namespace ao::rt::test
     // The storage box is a test-only destruction seam: production composition
     // stores the nonmovable service directly in its final owner.
     std::unique_ptr<PlaybackStorage> playbackStoragePtr{
-      std::make_unique<PlaybackStorage>(playbackBootstrap, executor, succession)};
+      std::make_unique<PlaybackStorage>(playbackBootstrap, executor, succession, libraryFixture.library(), changes)};
     PlaybackService& playback{playbackStoragePtr->playback};
   };
 

@@ -55,7 +55,8 @@ The `CoreRuntime` and `AppRuntime` wrappers remain move-only PImpl values; movin
 An omitted playback-session store uses that workspace store; an explicit playback-session store remains a separate override that must outlive the runtime.
 
 `CoreRuntime` remains the smaller composition used by CLI workflows and owns no interactive session lifecycle.
-Its public construction is also a `Result<CoreRuntime>` value factory rather than a throwing constructor; `CoreRuntime` allocates and finalizes its `Impl` and direct `MusicLibrary` first, uses the short-lived `Library::Prepared` token to acquire write authority against that final object, then emplaces the nonmovable `Library` directly in phase-local optional storage.
+Its public construction is also a `Result<CoreRuntime>` value factory rather than a throwing constructor; `CoreRuntime` allocates and finalizes its `Impl` and direct `MusicLibrary` first, then emplaces the nonmovable `Library` directly in phase-local optional storage.
+The [library architecture](library.md#runtime-library-facade) owns the prepared write-authority transfer used at this boundary.
 
 ### GTK composition root
 

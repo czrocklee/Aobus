@@ -19,8 +19,8 @@ namespace ao::i18n::test
     std::vector<std::string> aliasesFor(rt::CompletionAliasPolicy const& policy, std::string_view const text)
     {
       auto aliases = std::vector<std::string>{};
-      auto const result = policy.makeAliasesInto(aliases, text);
-      REQUIRE(result);
+      auto const res = policy.makeAliasesInto(aliases, text);
+      REQUIRE(res);
       return aliases;
     }
   } // namespace

@@ -53,7 +53,7 @@ namespace clang::tidy::readability
     }
 
     template<typename Predicate>
-    bool callNames(CallExpr const& call, Predicate const& predicate)
+    bool hasCallName(CallExpr const& call, Predicate const& predicate)
     {
       if (auto const* callee = call.getDirectCallee(); callee != nullptr)
       {
@@ -74,19 +74,19 @@ namespace clang::tidy::readability
 
     bool isTerminalCatchCall(CallExpr const& call)
     {
-      return callNames(call, [](std::string_view const name) { return containsName(kTerminalCatchCalls, name); });
+      return hasCallName(call, [](std::string_view const name) { return containsName(kTerminalCatchCalls, name); });
     }
 
     bool isCurrentExceptionCall(CallExpr const& call)
     {
-      return callNames(call, [](std::string_view const name) { return name == "std::current_exception"; });
+      return hasCallName(call, [](std::string_view const name) { return name == "std::current_exception"; });
     }
 
     bool isApprovedExceptionCarrier(ASTContext& context,
                                     SourceManager const& sourceManager,
                                     CXXThrowExpr const& throwExpr)
     {
-      return aobus::enclosingFunctionBeginsWithPolicyMarker(
+      return aobus::hasEnclosingFunctionPolicyMarker(
         throwExpr, context, sourceManager, "ao::detail::acknowledgeExceptionCarrier", "AO_EXCEPTION_CARRIER");
     }
 
@@ -111,15 +111,15 @@ namespace clang::tidy::readability
       return identifier != nullptr && (identifier->getName() == "exception" || identifier->getName() == "bad_alloc");
     }
 
-    bool beginsWithAuditedCatchMarker(CXXCatchStmt const& catchStmt,
-                                      ASTContext const& context,
-                                      SourceManager const& sourceManager)
+    bool hasAuditedCatchMarker(CXXCatchStmt const& catchStmt,
+                               ASTContext const& context,
+                               SourceManager const& sourceManager)
     {
-      return aobus::blockBeginsWithPolicyMarker(*catchStmt.getHandlerBlock(),
-                                                context,
-                                                sourceManager,
-                                                "ao::detail::acknowledgeAuditedCatch",
-                                                "AO_AUDITED_CATCH");
+      return aobus::hasBlockPolicyMarker(*catchStmt.getHandlerBlock(),
+                                         context,
+                                         sourceManager,
+                                         "ao::detail::acknowledgeAuditedCatch",
+                                         "AO_AUDITED_CATCH");
     }
 
     class CatchOwnershipInspection final : public RecursiveASTVisitor<CatchOwnershipInspection>
@@ -145,7 +145,7 @@ namespace clang::tidy::readability
         return true;
       }
 
-      bool capturesCurrentException() const noexcept { return _capturesCurrentException; }
+      bool hasCurrentExceptionCapture() const noexcept { return _capturesCurrentException; }
 
     private:
       bool _capturesCurrentException = false;
@@ -157,7 +157,10 @@ namespace clang::tidy::readability
       bool approvedTerminal = false;
       bool unapprovedTransfer = false;
 
-      bool transfersOrTerminates() const noexcept { return !fallsThrough && approvedTerminal && !unapprovedTransfer; }
+      bool hasApprovedTransferOrTermination() const noexcept
+      {
+        return !fallsThrough && approvedTerminal && !unapprovedTransfer;
+      }
     };
 
     CatchFlow alternativeFlow(CatchFlow const& first, CatchFlow const& second) noexcept
@@ -298,12 +301,12 @@ namespace clang::tidy::readability
       return {};
     }
 
-    bool transfersOrTerminates(CXXCatchStmt const& catchStmt)
+    bool hasApprovedTransferOrTermination(CXXCatchStmt const& catchStmt)
     {
       auto inspection = CatchOwnershipInspection{};
       inspection.TraverseStmt(const_cast<Stmt*>(catchStmt.getHandlerBlock()));
-      return inspection.capturesCurrentException() ||
-             statementFlow(*catchStmt.getHandlerBlock()).transfersOrTerminates();
+      return inspection.hasCurrentExceptionCapture() ||
+             statementFlow(*catchStmt.getHandlerBlock()).hasApprovedTransferOrTermination();
     }
   } // namespace
 
@@ -337,8 +340,8 @@ namespace clang::tidy::readability
 
     auto const* catchStmt = result.Nodes.getNodeAs<CXXCatchStmt>("catch");
 
-    if (catchStmt == nullptr || !isStdBroadCatch(*catchStmt) || transfersOrTerminates(*catchStmt) ||
-        beginsWithAuditedCatchMarker(*catchStmt, *result.Context, sourceManager))
+    if (catchStmt == nullptr || !isStdBroadCatch(*catchStmt) || hasApprovedTransferOrTermination(*catchStmt) ||
+        hasAuditedCatchMarker(*catchStmt, *result.Context, sourceManager))
     {
       return;
     }

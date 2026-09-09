@@ -28,7 +28,7 @@ namespace ao::async
     void runOneTurn();
 
     // Execute one ready turn without waiting. Returns false when none is ready.
-    bool runReadyTurn();
+    bool tryRunReadyTurn();
 
   private:
     void wake() noexcept override;

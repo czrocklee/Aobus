@@ -63,7 +63,7 @@ namespace ao::audio::test
   struct BlockingPreparationGate final
   {
     void enterAndWait();
-    bool waitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{5});
+    bool tryWaitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{5});
 
     std::binary_semaphore entered{0};
     std::binary_semaphore release{0};
@@ -103,7 +103,7 @@ namespace ao::audio::test
   {
   public:
     void notifyReadEntered();
-    bool waitForRead(std::chrono::milliseconds timeout = std::chrono::seconds{5});
+    bool tryWaitForRead(std::chrono::milliseconds timeout = std::chrono::seconds{5});
     void waitForRelease();
     void release();
 
@@ -163,7 +163,7 @@ namespace ao::audio::test
   {
   public:
     void notify();
-    bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1});
+    bool tryWaitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1});
     std::size_t count() const;
 
   private:

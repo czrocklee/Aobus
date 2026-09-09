@@ -116,7 +116,6 @@ namespace ao::gtk::layout
                                              uimodel::OutputDeviceIntent const& outputDeviceIntent);
   void registerPlaybackImageComponent(ComponentRegistry& registry,
                                       rt::PlaybackService& playback,
-                                      rt::Library& library,
                                       std::function<Result<>(TrackId)> jumpToAlbum,
                                       ResourceImageLoader* imageLoader,
                                       i18n::MessageCatalog const& textCatalog);

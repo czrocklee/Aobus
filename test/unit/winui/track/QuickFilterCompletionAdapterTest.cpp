@@ -71,15 +71,15 @@ namespace ao::winui::test
   TEST_CASE("quickFilterSuggestionContinuesEditing distinguishes incomplete expression tokens",
             "[winui][unit][quick-filter][regression]")
   {
-    CHECK(
-      quickFilterSuggestionContinuesEditing({.insertText = "$artist", .detailKind = rt::CompletionDetailKind::Field}));
-    CHECK(quickFilterSuggestionContinuesEditing(
+    CHECK(shouldContinueEditingQuickFilterSuggestion(
+      {.insertText = "$artist", .detailKind = rt::CompletionDetailKind::Field}));
+    CHECK(shouldContinueEditingQuickFilterSuggestion(
       {.insertText = " and ", .detailKind = rt::CompletionDetailKind::LogicalOperator}));
-    CHECK(
-      quickFilterSuggestionContinuesEditing({.insertText = " = ", .detailKind = rt::CompletionDetailKind::Operator}));
-    CHECK_FALSE(
-      quickFilterSuggestionContinuesEditing({.insertText = "?", .detailKind = rt::CompletionDetailKind::Operator}));
-    CHECK_FALSE(quickFilterSuggestionContinuesEditing(
+    CHECK(shouldContinueEditingQuickFilterSuggestion(
+      {.insertText = " = ", .detailKind = rt::CompletionDetailKind::Operator}));
+    CHECK_FALSE(shouldContinueEditingQuickFilterSuggestion(
+      {.insertText = "?", .detailKind = rt::CompletionDetailKind::Operator}));
+    CHECK_FALSE(shouldContinueEditingQuickFilterSuggestion(
       {.insertText = "\"Aimer\"", .detailKind = rt::CompletionDetailKind::Frequency}));
   }
 } // namespace ao::winui::test

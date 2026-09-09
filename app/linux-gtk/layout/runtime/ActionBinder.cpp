@@ -39,7 +39,7 @@ namespace ao::gtk::layout
     {
       auto actionCtx =
         ActionActivationContext{.parentWindow = *parentWindow, .anchorWidget = *anchor, .componentId = nodeId};
-      registry->activate(actionId, actionCtx);
+      registry->tryActivate(actionId, actionCtx);
     };
   }
 } // namespace ao::gtk::layout

@@ -19,11 +19,16 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
 {
+  static_assert(!std::is_copy_constructible_v<LayoutSession>);
+  static_assert(!std::is_copy_assignable_v<LayoutSession>);
+  static_assert(!std::is_move_constructible_v<LayoutSession>);
+  static_assert(!std::is_move_assignable_v<LayoutSession>);
   namespace
   {
     class RecordingStateStore final : public LayoutComponentStateStore
@@ -36,14 +41,14 @@ namespace ao::uimodel::test
         _saved.emplace_back(std::string{presetId}, document);
       }
 
-      bool prune(std::string_view /*presetId*/,
-                 PreparedLayout const& /*layout*/,
-                 LayoutSchema const& /*schema*/) override
+      bool tryPrune(std::string_view /*presetId*/,
+                    PreparedLayout const& /*layout*/,
+                    LayoutSchema const& /*schema*/) override
       {
         return false;
       }
 
-      bool removePreset(std::string_view /*presetId*/) override { return false; }
+      bool tryRemovePreset(std::string_view /*presetId*/) override { return false; }
 
       std::vector<std::pair<std::string, LayoutComponentStateDocument>> const& saved() const { return _saved; }
 

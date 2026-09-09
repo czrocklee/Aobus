@@ -142,7 +142,7 @@ namespace ao::uimodel::test
 
       for (auto const slot : kSlots)
       {
-        if (schema.allows(slot))
+        if (schema.accepts(slot))
         {
           result += result.empty() ? actionSlotName(slot) : std::format(", {}", actionSlotName(slot));
         }
@@ -234,10 +234,10 @@ namespace ao::uimodel::test
   {
     auto schema = LayoutSchema{};
 
-    REQUIRE(schema.addComponent(buttonSchema()));
-    REQUIRE(schema.addComponent({.id = "test.label", .displayName = "Label", .optMaxChildren = 0}));
-    REQUIRE(schema.addAction({.id = "valid.action", .label = "Valid", .category = "Test"}));
-    REQUIRE(schema.addAction({.id = "other.action", .label = "Other", .category = "Test"}));
+    REQUIRE(schema.tryAddComponent(buttonSchema()));
+    REQUIRE(schema.tryAddComponent({.id = "test.label", .displayName = "Label", .optMaxChildren = 0}));
+    REQUIRE(schema.tryAddAction({.id = "valid.action", .label = "Valid", .category = "Test"}));
+    REQUIRE(schema.tryAddAction({.id = "other.action", .label = "Other", .category = "Test"}));
 
     REQUIRE(schema.components().size() == 2);
     CHECK(schema.components()[0].id == "test.button");
@@ -257,11 +257,11 @@ namespace ao::uimodel::test
   TEST_CASE("LayoutSchema - duplicate ids preserve the first entry", "[uimodel][unit][layout][schema]")
   {
     auto schema = LayoutSchema{};
-    REQUIRE(schema.addComponent(buttonSchema()));
-    REQUIRE(schema.addAction({.id = "valid.action", .label = "First", .category = "Test"}));
+    REQUIRE(schema.tryAddComponent(buttonSchema()));
+    REQUIRE(schema.tryAddAction({.id = "valid.action", .label = "First", .category = "Test"}));
 
-    CHECK_FALSE(schema.addComponent({.id = "test.button", .displayName = "Replacement"}));
-    CHECK_FALSE(schema.addAction({.id = "valid.action", .label = "Replacement", .category = "Other"}));
+    CHECK_FALSE(schema.tryAddComponent({.id = "test.button", .displayName = "Replacement"}));
+    CHECK_FALSE(schema.tryAddAction({.id = "valid.action", .label = "Replacement", .category = "Other"}));
 
     REQUIRE(schema.component("test.button"));
     CHECK(schema.component("test.button")->displayName == "Test Button");
@@ -273,7 +273,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][layout][schema]")
   {
     auto schema = LayoutSchema{};
-    REQUIRE(schema.addComponent(buttonSchema()));
+    REQUIRE(schema.tryAddComponent(buttonSchema()));
     auto const component = *schema.component("test.button");
 
     auto const* primary = property(component, kPrimaryActionProp);
@@ -343,7 +343,7 @@ namespace ao::uimodel::test
     candidate.properties.push_back(
       {.name = std::string{kPrimaryActionProp}, .kind = PropertyKind::String, .label = "Conflicting action"});
 
-    CHECK_FALSE(schema.addComponent(candidate));
+    CHECK_FALSE(schema.tryAddComponent(candidate));
     CHECK(schema.components().empty());
   }
 
@@ -354,7 +354,7 @@ namespace ao::uimodel::test
     auto candidate = buttonSchema();
     candidate.defaultActions.push_back({ActionSlot::PrimaryLongPress, "valid.action"});
 
-    CHECK_FALSE(schema.addComponent(candidate));
+    CHECK_FALSE(schema.tryAddComponent(candidate));
     CHECK(schema.components().empty());
   }
 
@@ -386,23 +386,23 @@ namespace ao::uimodel::test
   {
     auto schema = LayoutSchema{};
     REQUIRE(
-      schema.addSharedComponent("actionButton",
-                                {.properties = {{.name = "glyph", .kind = PropertyKind::String, .label = "Glyph"}},
-                                 .actionSlots = actionSlotBit(ActionSlot::SecondaryClick),
-                                 .defaultActions = {{ActionSlot::SecondaryClick, "shell.menu"}}}));
+      schema.tryAddSharedComponent("actionButton",
+                                   {.properties = {{.name = "glyph", .kind = PropertyKind::String, .label = "Glyph"}},
+                                    .actionSlots = actionSlotBit(ActionSlot::SecondaryClick),
+                                    .defaultActions = {{ActionSlot::SecondaryClick, "shell.menu"}}}));
 
     auto const extended = *schema.component("actionButton");
     CHECK(property(extended, kTextProp) != nullptr);
     CHECK(property(extended, "glyph") != nullptr);
-    CHECK(extended.allows(ActionSlot::PrimaryClick));
-    CHECK(extended.allows(ActionSlot::SecondaryClick));
+    CHECK(extended.accepts(ActionSlot::PrimaryClick));
+    CHECK(extended.accepts(ActionSlot::SecondaryClick));
     CHECK(extended.defaultAction(ActionSlot::SecondaryClick) == "shell.menu");
 
     auto const canonical =
       std::ranges::find(sharedComponentSchemas(), std::string_view{"actionButton"}, &ComponentSchema::id);
     REQUIRE(canonical != sharedComponentSchemas().end());
     CHECK(property(*canonical, "glyph") == nullptr);
-    CHECK_FALSE(canonical->allows(ActionSlot::SecondaryClick));
+    CHECK_FALSE(canonical->accepts(ActionSlot::SecondaryClick));
   }
 
   TEST_CASE("LayoutSchema - a shared id cannot bypass the canonical vocabulary through addComponent",
@@ -445,7 +445,7 @@ namespace ao::uimodel::test
     }
 
     auto schema = LayoutSchema{};
-    CHECK_FALSE(schema.addComponent(candidate));
+    CHECK_FALSE(schema.tryAddComponent(candidate));
     CHECK(schema.components().empty());
   }
 
@@ -470,22 +470,23 @@ namespace ao::uimodel::test
     SECTION("unknown shared id")
     {
       auto schema = LayoutSchema{};
-      CHECK_FALSE(schema.addSharedComponent("frontend.only"));
+      CHECK_FALSE(schema.tryAddSharedComponent("frontend.only"));
       CHECK(schema.components().empty());
     }
 
     SECTION("a frontend cannot redeclare a canonical property")
     {
       auto schema = LayoutSchema{};
-      CHECK_FALSE(
-        schema.addSharedComponent("box", {.properties = {{.name = std::string{kOrientationProp}, .label = "Other"}}}));
+      CHECK_FALSE(schema.tryAddSharedComponent(
+        "box", {.properties = {{.name = std::string{kOrientationProp}, .label = "Other"}}}));
       CHECK(schema.components().empty());
     }
 
     SECTION("a default cannot target a slot the resulting component does not support")
     {
       auto schema = LayoutSchema{};
-      CHECK_FALSE(schema.addSharedComponent("label", {.defaultActions = {{ActionSlot::PrimaryClick, "shell.menu"}}}));
+      CHECK_FALSE(
+        schema.tryAddSharedComponent("label", {.defaultActions = {{ActionSlot::PrimaryClick, "shell.menu"}}}));
       CHECK(schema.components().empty());
     }
   }

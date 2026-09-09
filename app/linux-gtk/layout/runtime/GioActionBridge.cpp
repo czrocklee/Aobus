@@ -43,7 +43,7 @@ namespace ao::gtk::layout
                         Glib::VariantBase const& /*parameter*/)
                       {
                         auto ctx = contextProvider.actionContext(id);
-                        registry.activate(id, ctx);
+                        registry.tryActivate(id, ctx);
                       });
   }
 

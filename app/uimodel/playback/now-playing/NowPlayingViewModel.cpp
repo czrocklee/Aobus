@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
+#include <ao/CoreIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
@@ -141,7 +142,7 @@ namespace ao::uimodel
     };
     view.coverArtPlaceholderIdentity = makeCoverArtPlaceholderIdentity(placeholderCandidates);
 
-    if (state.nowPlaying.title.empty())
+    if (state.nowPlaying.trackId == kInvalidTrackId && state.nowPlaying.title.empty())
     {
       view.title = i18n::requiredText(_textCatalog, i18n::MessageId::PlaybackNotPlaying);
       view.streamInfo =

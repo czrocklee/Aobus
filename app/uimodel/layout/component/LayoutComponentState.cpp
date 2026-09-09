@@ -53,9 +53,9 @@ namespace ao::uimodel
 
     Result<LayoutComponentStateEntry> readEntry(ryml::ConstNodeRef node, std::string_view context)
     {
-      if (auto const result = yaml::requireMap(node, context); !result)
+      if (auto const res = yaml::requireMap(node, context); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto stateVersionRes = yaml::requireScalar<std::uint32_t>(node, "stateVersion", context);
@@ -166,7 +166,7 @@ namespace ao::uimodel
       return value == nullptr ? defaultValue : value->asDouble(defaultValue);
     }
 
-    bool booleanPropertyOr(LayoutNode const& node, std::string_view key, bool defaultValue)
+    bool isBooleanPropertyTruthy(LayoutNode const& node, std::string_view key, bool defaultValue)
     {
       auto const* const value = findProp(node, key);
       return value == nullptr ? defaultValue : value->asBool(defaultValue);
@@ -182,10 +182,10 @@ namespace ao::uimodel
         appendField(canonical, "orientation", stringPropertyOr(node, "orientation", "vertical"));
         appendDoubleField(canonical, "initialPositionPercent", doublePropertyOr(node, "initialPositionPercent", 0.0));
         appendIntField(canonical, "position", integerPropertyOr(node, "position", -1));
-        appendBoolField(canonical, "resizeStart", booleanPropertyOr(node, "resizeStart", true));
-        appendBoolField(canonical, "resizeEnd", booleanPropertyOr(node, "resizeEnd", true));
-        appendBoolField(canonical, "shrinkStart", booleanPropertyOr(node, "shrinkStart", false));
-        appendBoolField(canonical, "shrinkEnd", booleanPropertyOr(node, "shrinkEnd", false));
+        appendBoolField(canonical, "resizeStart", isBooleanPropertyTruthy(node, "resizeStart", true));
+        appendBoolField(canonical, "resizeEnd", isBooleanPropertyTruthy(node, "resizeEnd", true));
+        appendBoolField(canonical, "shrinkStart", isBooleanPropertyTruthy(node, "shrinkStart", false));
+        appendBoolField(canonical, "shrinkEnd", isBooleanPropertyTruthy(node, "shrinkEnd", false));
         return canonical;
       }
 
@@ -195,7 +195,7 @@ namespace ao::uimodel
         appendField(canonical, "collapseSide", stringPropertyOr(node, "collapseSide", "end"));
         appendDoubleField(canonical, "initialPositionPercent", doublePropertyOr(node, "initialPositionPercent", 0.0));
         appendIntField(canonical, "position", integerPropertyOr(node, "position", -1));
-        appendBoolField(canonical, "revealed", booleanPropertyOr(node, "revealed", true));
+        appendBoolField(canonical, "revealed", isBooleanPropertyTruthy(node, "revealed", true));
       }
 
       return canonical;
@@ -311,9 +311,9 @@ namespace ao::uimodel
   {
     constexpr auto kContext = std::string_view{"layout component state"};
 
-    if (auto const result = yaml::requireMap(node, kContext); !result)
+    if (auto const res = yaml::requireMap(node, kContext); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);

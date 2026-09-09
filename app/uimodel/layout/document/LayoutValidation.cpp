@@ -280,7 +280,7 @@ namespace ao::uimodel
           continue;
         }
 
-        if (!componentSchema.allows(slot))
+        if (!componentSchema.accepts(slot))
         {
           return reject(LayoutRejectionReason::UnsupportedActionSlot,
                         node,

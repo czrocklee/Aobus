@@ -224,7 +224,7 @@ If that already-started transition wins the race, its track becomes current and 
 ### Clear and mode changes
 
 `clear()` removes succession authority without stopping present transport.
-`next()`, `previous()`, and `clear()` are no-ops when no session is active.
+`tryMoveNext()`, `tryMovePrevious()`, and `clear()` are no-ops when no session is active.
 Public observer reentrancy is serialized by the owning `PlaybackService` commit boundary rather than rejected by succession.
 
 Shuffle and repeat preferences exist even while Inactive and are inherited by the next launch.
@@ -248,6 +248,9 @@ Acceptance and completion carry a weak reference to the pending lookahead object
 
 Three consecutive unplayable candidates terminate transport and succession.
 A successful start resets the failure streak.
+During automatic recovery, an accepted candidate whose final decoder setup fails retains its current-track identity and cancellation proof, but does not reset that streak before the correlated failure arrives.
+An accepted explicit user start begins a fresh streak once for that action; a correlated final-setup failure then counts toward the new streak.
+Successful automatic starts reset it even when transport announcements are suppressed; an accepted natural end without starting playback is not itself a failure.
 A failure after source invalidation, or any non-recoverable device or route failure, stops without a recovery walk.
 Prepared-successor failure is accepted only for a token owned by the current session, removes that commitment, and re-prepares from current live policy when possible.
 

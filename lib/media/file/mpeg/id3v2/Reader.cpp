@@ -207,7 +207,7 @@ namespace ao::media::file::mpeg::id3v2
       builder.coverArt().add(pictureType, content.subspan(*optDescriptionEnd));
     }
 
-    bool equalsAsciiCaseInsensitive(std::string_view lhs, std::string_view rhs) noexcept
+    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
     {
       if (lhs.size() != rhs.size())
       {
@@ -246,29 +246,29 @@ namespace ao::media::file::mpeg::id3v2
       auto const value = optText->value.substr(nullOffset + 1);
       auto setter = TextSetter{};
 
-      if (equalsAsciiCaseInsensitive(key, "work") || equalsAsciiCaseInsensitive(key, "grouping"))
+      if (isEqualIgnoringAsciiCase(key, "work") || isEqualIgnoringAsciiCase(key, "grouping"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::work;
       }
-      else if (equalsAsciiCaseInsensitive(key, "conductor"))
+      else if (isEqualIgnoringAsciiCase(key, "conductor"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::conductor;
       }
-      else if (equalsAsciiCaseInsensitive(key, "ensemble") ||
-               (equalsAsciiCaseInsensitive(key, "orchestra") && builder.metadata().ensemble().empty()))
+      else if (isEqualIgnoringAsciiCase(key, "ensemble") ||
+               (isEqualIgnoringAsciiCase(key, "orchestra") && builder.metadata().ensemble().empty()))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::ensemble;
       }
-      else if (equalsAsciiCaseInsensitive(key, "soloist"))
+      else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::soloist;
       }
-      else if (equalsAsciiCaseInsensitive(key, "movementname") || equalsAsciiCaseInsensitive(key, "movement_name") ||
-               equalsAsciiCaseInsensitive(key, "mvnm"))
+      else if (isEqualIgnoringAsciiCase(key, "movementname") || isEqualIgnoringAsciiCase(key, "movement_name") ||
+               isEqualIgnoringAsciiCase(key, "mvnm"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::movement;
       }
-      else if (equalsAsciiCaseInsensitive(key, "movement") || equalsAsciiCaseInsensitive(key, "mvin"))
+      else if (isEqualIgnoringAsciiCase(key, "movement") || isEqualIgnoringAsciiCase(key, "mvin"))
       {
         auto const pair = parseSlashPair(value);
 

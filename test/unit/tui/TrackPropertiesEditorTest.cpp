@@ -64,16 +64,16 @@ namespace ao::tui::test
     REQUIRE_FALSE(stripLine.empty());
     CHECK_FALSE(stripLine.contains("Tracks"));
 
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Tags);
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Properties);
 
-    editor.handleEvent(ftxui::Event::TabReverse);
+    editor.tryHandleEvent(ftxui::Event::TabReverse);
     CHECK(editor.tab() == TrackEditorTab::Tags);
-    editor.handleEvent(ftxui::Event::TabReverse);
+    editor.tryHandleEvent(ftxui::Event::TabReverse);
     CHECK(editor.tab() == TrackEditorTab::Metadata);
-    editor.handleEvent(ftxui::Event::TabReverse);
+    editor.tryHandleEvent(ftxui::Event::TabReverse);
     CHECK(editor.tab() == TrackEditorTab::Properties);
   }
 
@@ -108,14 +108,14 @@ namespace ao::tui::test
     {
       for (std::int32_t step = 0; step < 40; ++step)
       {
-        editor.handleEvent(ftxui::Event::ArrowDown);
+        editor.tryHandleEvent(ftxui::Event::ArrowDown);
       }
 
       for (std::int32_t step = 0; step < 10; ++step)
       {
-        editor.handleEvent(ftxui::Event::ArrowUp);
-        editor.handleEvent(ftxui::Event::ArrowLeft);
-        editor.handleEvent(ftxui::Event::ArrowRight);
+        editor.tryHandleEvent(ftxui::Event::ArrowUp);
+        editor.tryHandleEvent(ftxui::Event::ArrowLeft);
+        editor.tryHandleEvent(ftxui::Event::ArrowRight);
       }
 
       CHECK_FALSE(editor.isDirty());
@@ -134,7 +134,7 @@ namespace ao::tui::test
     SECTION("A rejected paste is not an edit")
     {
       focusRow(editor, "Album");
-      editor.handleEvent(ftxui::Event::Character("\n"));
+      editor.tryHandleEvent(ftxui::Event::Character("\n"));
 
       CHECK_FALSE(editor.isDirty());
       CHECK_FALSE(frame(editor).contains("* Album"));
@@ -143,7 +143,7 @@ namespace ao::tui::test
     SECTION("Backspace with nothing behind the cursor is not an edit")
     {
       focusRow(editor, "Title");
-      editor.handleEvent(ftxui::Event::Backspace);
+      editor.tryHandleEvent(ftxui::Event::Backspace);
 
       // Title is mixed, so its input starts empty and Backspace has no text to
       // remove. Treating that as an edit would arm a clear the user never asked
@@ -160,7 +160,7 @@ namespace ao::tui::test
     });
 
     focusRow(editor, "Title");
-    editor.handleEvent(clearEvent());
+    editor.tryHandleEvent(clearEvent());
 
     auto const text = frame(editor);
 
@@ -182,7 +182,7 @@ namespace ao::tui::test
     SECTION("Restoring returns the row to the aggregate baseline")
     {
       typeText(editor, "New");
-      editor.handleEvent(restoreEvent());
+      editor.tryHandleEvent(restoreEvent());
 
       auto const reset = frame(editor);
       CHECK_FALSE(editor.isDirty());
@@ -200,7 +200,7 @@ namespace ao::tui::test
     });
 
     focusRow(editor, "Album");
-    editor.handleEvent(clearEvent());
+    editor.tryHandleEvent(clearEvent());
 
     auto const text = frame(editor);
 
@@ -208,7 +208,7 @@ namespace ao::tui::test
     CHECK(text.contains("* Album"));
     CHECK(text.contains("Clear for all 2 tracks"));
 
-    editor.handleEvent(restoreEvent());
+    editor.tryHandleEvent(restoreEvent());
     auto const restored = frame(editor);
     CHECK_FALSE(editor.isDirty());
     CHECK_FALSE(restored.contains("* Album"));
@@ -220,8 +220,8 @@ namespace ao::tui::test
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
     focusRow(editor, "Year");
-    editor.handleEvent(ftxui::Event::End);
-    editor.handleEvent(ftxui::Event::Backspace);
+    editor.tryHandleEvent(ftxui::Event::End);
+    editor.tryHandleEvent(ftxui::Event::Backspace);
     typeText(editor, "0x");
 
     CHECK(editor.isDirty());
@@ -229,7 +229,7 @@ namespace ao::tui::test
 
     SECTION("Removing the bad character clears the error and keeps the intent")
     {
-      editor.handleEvent(ftxui::Event::Backspace);
+      editor.tryHandleEvent(ftxui::Event::Backspace);
 
       CHECK(editor.isDirty());
       CHECK_FALSE(frame(editor).contains("Whole number required"));
@@ -245,13 +245,13 @@ namespace ao::tui::test
 
     REQUIRE(editor.tab() == TrackEditorTab::Metadata);
 
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Tags);
 
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Properties);
 
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Tracks);
 
     auto const text = frame(editor);
@@ -261,13 +261,13 @@ namespace ao::tui::test
     CHECK(text.contains("Blue in Green"));
     CHECK(text.contains("/music/So What.flac"));
 
-    editor.handleEvent(ftxui::Event::Tab);
+    editor.tryHandleEvent(ftxui::Event::Tab);
     CHECK(editor.tab() == TrackEditorTab::Metadata);
 
     for (auto const tab :
          {TrackEditorTab::Tracks, TrackEditorTab::Properties, TrackEditorTab::Tags, TrackEditorTab::Metadata})
     {
-      editor.handleEvent(ftxui::Event::TabReverse);
+      editor.tryHandleEvent(ftxui::Event::TabReverse);
       CHECK(editor.tab() == tab);
     }
   }
@@ -290,7 +290,7 @@ namespace ao::tui::test
     CHECK(text.contains("<Multiple Values>"));
     CHECK_FALSE(text.contains("FLAC"));
 
-    editor.handleEvent(ftxui::Event::Character(' '));
+    editor.tryHandleEvent(ftxui::Event::Character(' '));
     CHECK_FALSE(editor.isDirty());
   }
 
@@ -300,7 +300,7 @@ namespace ao::tui::test
 
     SECTION("A clean editor closes at once")
     {
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
 
       CHECK(editor.takeRequest() == TrackEditorRequest::Close);
       CHECK_FALSE(editor.isConfirmingDiscard());
@@ -312,18 +312,18 @@ namespace ao::tui::test
       typeText(editor, "!");
       REQUIRE(editor.isDirty());
 
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK(editor.isConfirmingDiscard());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(frame(editor).contains("Discard changes?"));
 
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK_FALSE(editor.isConfirmingDiscard());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(editor.isDirty());
 
-      editor.handleEvent(ftxui::Event::Escape);
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(editor.takeRequest() == TrackEditorRequest::Close);
     }
   }
@@ -335,9 +335,9 @@ namespace ao::tui::test
 
     // Nothing may fall through to workspace dispatch: the workspace is not on
     // screen, so a command run against it would be invisible.
-    CHECK(editor.handleEvent(ftxui::Event::Character('q')));
-    CHECK(editor.handleEvent(ftxui::Event::F5));
-    CHECK(editor.handleEvent(ftxui::Event::Custom));
+    CHECK(editor.tryHandleEvent(ftxui::Event::Character('q')));
+    CHECK(editor.tryHandleEvent(ftxui::Event::F5));
+    CHECK(editor.tryHandleEvent(ftxui::Event::Custom));
     CHECK(editor.takeRequest() == TrackEditorRequest::None);
   }
 
@@ -372,7 +372,7 @@ namespace ao::tui::test
     {
       CHECK_FALSE(editor.canApply());
 
-      editor.handleEvent(applyEvent());
+      editor.tryHandleEvent(applyEvent());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
     }
 
@@ -384,7 +384,7 @@ namespace ao::tui::test
       REQUIRE(editor.canApply());
       CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .clearCount = 0});
 
-      editor.handleEvent(applyEvent());
+      editor.tryHandleEvent(applyEvent());
       CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
       // The request is taken once; a second read must not resubmit it.
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
@@ -393,20 +393,20 @@ namespace ao::tui::test
     SECTION("An invalid number blocks the whole draft")
     {
       focusRow(editor, "Year");
-      editor.handleEvent(ftxui::Event::End);
+      editor.tryHandleEvent(ftxui::Event::End);
       typeText(editor, "x");
 
       REQUIRE(editor.isDirty());
       CHECK_FALSE(editor.canApply());
 
-      editor.handleEvent(applyEvent());
+      editor.tryHandleEvent(applyEvent());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
     }
 
     SECTION("An explicit clear counts as a pending clear")
     {
       focusRow(editor, "Title");
-      editor.handleEvent(clearEvent());
+      editor.tryHandleEvent(clearEvent());
 
       CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .clearCount = 1});
       CHECK(frame(editor).contains("1 clear"));
@@ -432,7 +432,7 @@ namespace ao::tui::test
     SECTION("A replaced common field is written and its neighbours are left alone")
     {
       focusRow(editor, "Album");
-      editor.handleEvent(ftxui::Event::End);
+      editor.tryHandleEvent(ftxui::Event::End);
       typeText(editor, " (Legacy)");
 
       auto const patch = editor.buildPatch();
@@ -458,7 +458,7 @@ namespace ao::tui::test
     SECTION("A cleared mixed number writes the codec's clear value")
     {
       focusRow(editor, "Year");
-      editor.handleEvent(clearEvent());
+      editor.tryHandleEvent(clearEvent());
 
       auto const patch = editor.buildPatch();
 
@@ -473,7 +473,7 @@ namespace ao::tui::test
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
 
     focusRow(editor, "Album");
-    editor.handleEvent(ftxui::Event::End);
+    editor.tryHandleEvent(ftxui::Event::End);
     typeText(editor, "!");
     REQUIRE(editor.canApply());
 
@@ -481,9 +481,9 @@ namespace ao::tui::test
     {
       editor.setStatus(TrackEditorStatus::Submitting);
 
-      CHECK(editor.handleEvent(applyEvent()));
-      CHECK(editor.handleEvent(ftxui::Event::Escape));
-      CHECK(editor.handleEvent(reloadEvent()));
+      CHECK(editor.tryHandleEvent(applyEvent()));
+      CHECK(editor.tryHandleEvent(ftxui::Event::Escape));
+      CHECK(editor.tryHandleEvent(reloadEvent()));
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(frame(editor).contains("Applying"));
     }
@@ -501,7 +501,7 @@ namespace ao::tui::test
       CHECK(text.contains("reload"));
       CHECK_FALSE(text.contains("Apply to"));
 
-      editor.handleEvent(applyEvent());
+      editor.tryHandleEvent(applyEvent());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
     }
 
@@ -518,7 +518,7 @@ namespace ao::tui::test
       editor.setStatus(TrackEditorStatus::Ready, "Library is busy");
       REQUIRE(frame(editor).contains("Library is busy"));
 
-      editor.handleEvent(ftxui::Event::ArrowLeft);
+      editor.tryHandleEvent(ftxui::Event::ArrowLeft);
 
       CHECK_FALSE(frame(editor).contains("Library is busy"));
       CHECK(frame(editor).contains("Ctrl-U"));
@@ -547,7 +547,7 @@ namespace ao::tui::test
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}}, {}, {}, {}, "de");
     typeText(editor, "!");
-    editor.handleEvent(reloadEvent());
+    editor.tryHandleEvent(reloadEvent());
     REQUIRE(editor.isConfirmingReload());
 
     auto const rendered = renderElement(editor.renderModal(80, 16), 80, 16);
@@ -562,7 +562,7 @@ namespace ao::tui::test
 
     SECTION("A clean editor reloads without a question")
     {
-      editor.handleEvent(reloadEvent());
+      editor.tryHandleEvent(reloadEvent());
 
       CHECK_FALSE(editor.isConfirmingReload());
       CHECK(editor.takeRequest() == TrackEditorRequest::Reload);
@@ -574,27 +574,27 @@ namespace ao::tui::test
       typeText(editor, "!");
       REQUIRE(editor.isDirty());
 
-      editor.handleEvent(reloadEvent());
+      editor.tryHandleEvent(reloadEvent());
       CHECK(editor.isConfirmingReload());
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(frame(editor).contains("Reload and lose changes?"));
 
       auto const optBeforePrompt = editor.buildPatch().metadata.optAlbum;
       typeText(editor, "ignored");
-      editor.handleEvent(ftxui::Event::Tab);
-      editor.handleEvent(clearEvent());
-      editor.handleEvent(applyEvent());
+      editor.tryHandleEvent(ftxui::Event::Tab);
+      editor.tryHandleEvent(clearEvent());
+      editor.tryHandleEvent(applyEvent());
       CHECK(editor.isConfirmingReload());
       CHECK(editor.tab() == TrackEditorTab::Metadata);
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(editor.buildPatch().metadata.optAlbum == optBeforePrompt);
 
-      editor.handleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK_FALSE(editor.isConfirmingReload());
       CHECK(editor.isDirty());
 
-      editor.handleEvent(reloadEvent());
-      editor.handleEvent(ftxui::Event::Return);
+      editor.tryHandleEvent(reloadEvent());
+      editor.tryHandleEvent(ftxui::Event::Return);
       CHECK(editor.takeRequest() == TrackEditorRequest::Reload);
     }
   }
@@ -638,7 +638,7 @@ namespace ao::tui::test
     SECTION("An armed clear keeps its count and takes a caret")
     {
       focusRow(editor, "Title");
-      editor.handleEvent(clearEvent());
+      editor.tryHandleEvent(clearEvent());
 
       auto const rendered = renderElement(editor.render(), kTerminalColumns, kTerminalRows);
       auto const titleLine = lineIndexContaining(rendered.text, "* Title");
@@ -665,7 +665,7 @@ namespace ao::tui::test
 
     for (std::size_t step = 0; step < 40; ++step)
     {
-      editor.handleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
     }
 
     // Each target draws two lines, so a page that scrolled by target index

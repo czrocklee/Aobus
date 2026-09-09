@@ -94,8 +94,8 @@ namespace ao::rt
     Result<> playFromView(ViewId viewId, TrackId startTrackId);
     // Returns whether navigation accepted a restart, subject transition, or
     // terminal stop that establishes a new playback-clock anchor.
-    bool next();
-    bool previous();
+    bool tryMoveNext();
+    bool tryMovePrevious();
     void clear();
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
@@ -113,9 +113,9 @@ namespace ao::rt
     friend class PlaybackSessionPersistence;
 
     bool hasActivePlaybackSession() const;
-    bool capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
-                                        TrackId& currentTrackId,
-                                        std::size_t& anchorIndex) const;
+    bool tryCapturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
+                                           TrackId& currentTrackId,
+                                           std::size_t& anchorIndex) const;
     Result<std::unique_ptr<PlaybackCursorSession>> preparePlaybackSessionRestore(PlaybackLaunchSpec launchSpec,
                                                                                  TrackId currentTrackId,
                                                                                  std::size_t anchorIndex,

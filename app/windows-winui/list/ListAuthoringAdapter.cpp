@@ -15,7 +15,7 @@
 
 namespace ao::winui
 {
-  bool listTreeChangeRequiresRebuild(rt::LibraryChangeSet const& changeSet) noexcept
+  bool needsListTreeRebuild(rt::LibraryChangeSet const& changeSet) noexcept
   {
     return changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty();
   }

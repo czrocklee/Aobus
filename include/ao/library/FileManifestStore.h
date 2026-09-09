@@ -129,7 +129,7 @@ namespace ao::library
     Result<> put(FileManifestBuilder::Prepared const& prepared);
     // Returns true if a row was removed, false if the URI was absent.
     // Invalid URI is a caller contract fault; storage faults abort the write root.
-    bool remove(std::string_view uri);
+    bool tryRemove(std::string_view uri);
     // Storage faults use Result.
     Result<> clear();
 

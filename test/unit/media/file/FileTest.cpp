@@ -77,10 +77,10 @@ namespace ao::media::file::test
     auto content = RecordedContent{};
     auto visitor = VisitorSpy{content};
 
-    auto result = file.visit(visitor);
+    auto res = file.visit(visitor);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
     CHECK(content.callCount() == 0);
   }
 

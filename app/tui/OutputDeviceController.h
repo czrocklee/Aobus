@@ -30,9 +30,9 @@ namespace ao::tui
     std::int32_t selectedRow() const noexcept { return _selectedRow; }
 
     void refresh();
-    bool moveSelection(std::int32_t delta);
-    bool selectSelected();
-    bool selectRow(std::int32_t rowIndex);
+    bool tryMoveSelection(std::int32_t delta);
+    bool trySelectSelected();
+    bool trySelectRow(std::int32_t rowIndex);
 
   private:
     bool isSelectableRow(std::int32_t rowIndex) const;

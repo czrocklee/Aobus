@@ -151,7 +151,7 @@ namespace ao::gtk
       {
         if (auto const selected = _groupDropdown.get_selected(); selected < _model.groupOptions().size())
         {
-          _model.setGroupKeyByOptionIndex(selected);
+          _model.trySetGroupKeyByOptionIndex(selected);
         }
       });
     detailsList->addRow(gtkText(_textCatalog, MessageId::GtkCustomViewGroupBy), _groupDropdown);
@@ -224,7 +224,7 @@ namespace ao::gtk
         {
           if (auto const selected = dropdown->get_selected(); selected < _model.sortFieldOptions().size())
           {
-            _model.setSortFieldByOptionIndex(i, selected);
+            _model.trySetSortFieldByOptionIndex(i, selected);
           }
         });
       box->append(*dropdown);
@@ -238,7 +238,7 @@ namespace ao::gtk
         {
           auto const ascending = ascBtn->get_active();
           updateSortDirectionButton(*ascBtn, _textCatalog, ascending);
-          _model.setSortAscending(i, ascending);
+          _model.trySetSortAscending(i, ascending);
         });
       box->append(*ascBtn);
 
@@ -252,7 +252,7 @@ namespace ao::gtk
       upBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.moveSortTermUp(i);
+          _model.tryMoveSortTermUp(i);
           rebuildSortList();
         });
       box->append(*upBtn);
@@ -263,7 +263,7 @@ namespace ao::gtk
       downBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.moveSortTermDown(i);
+          _model.tryMoveSortTermDown(i);
           rebuildSortList();
         });
       box->append(*downBtn);
@@ -272,7 +272,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.removeSortTerm(i);
+          _model.tryRemoveSortTerm(i);
           rebuildSortList();
         });
       box->append(*removeBtn);
@@ -306,7 +306,7 @@ namespace ao::gtk
         {
           if (auto const selected = dropdown->get_selected(); selected < _model.visibleFieldOptions().size())
           {
-            _model.setVisibleFieldByOptionIndex(i, selected);
+            _model.trySetVisibleFieldByOptionIndex(i, selected);
           }
         });
       box->append(*dropdown);
@@ -321,7 +321,7 @@ namespace ao::gtk
       upBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.moveVisibleFieldUp(i);
+          _model.tryMoveVisibleFieldUp(i);
           rebuildVisibleFieldsList();
         });
       box->append(*upBtn);
@@ -332,7 +332,7 @@ namespace ao::gtk
       downBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.moveVisibleFieldDown(i);
+          _model.tryMoveVisibleFieldDown(i);
           rebuildVisibleFieldsList();
         });
       box->append(*downBtn);
@@ -342,7 +342,7 @@ namespace ao::gtk
       removeBtn->signal_clicked().connect(
         [this, i]
         {
-          _model.removeVisibleField(i);
+          _model.tryRemoveVisibleField(i);
           rebuildVisibleFieldsList();
         });
       box->append(*removeBtn);

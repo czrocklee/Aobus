@@ -462,7 +462,7 @@ namespace ao::rt
     _implPtr->publish(std::move(changeSet), std::move(completion));
   }
 
-  bool LibraryChanges::publicationDeliveryInProgressFromCoordinator() const noexcept
+  bool LibraryChanges::isPublicationDeliveryInProgressFromCoordinator() const noexcept
   {
     return _implPtr->isDeliveryInProgress();
   }

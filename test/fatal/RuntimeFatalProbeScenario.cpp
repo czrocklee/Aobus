@@ -99,7 +99,7 @@ namespace ao::rt::test
       return state;
     }
 
-    bool probeFatalSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptProbeFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       auto const& state = fatalProbeState();
 
@@ -214,7 +214,7 @@ namespace ao::rt::test
 
       void defer(compat::MoveOnlyFunction<void()> task) override { task(); }
 
-      bool waitUntilDispatchStarted()
+      bool tryWaitUntilDispatchStarted()
       {
         auto lock = std::unique_lock{_mutex};
         return _cv.wait_for(lock, std::chrono::seconds{5}, [this] { return _dispatchStarted; });
@@ -238,7 +238,7 @@ namespace ao::rt::test
     {
     public:
       void arm() noexcept { _armed = true; }
-      bool consume() noexcept { return std::exchange(_armed, false); }
+      bool tryConsume() noexcept { return std::exchange(_armed, false); }
 
     private:
       bool _armed = false;
@@ -257,7 +257,7 @@ namespace ao::rt::test
 
       Result<> setProperty(audio::PropertyId const id, audio::PropertyValue const& value) override
       {
-        if (id == audio::PropertyId::Volume && _arm->consume())
+        if (id == audio::PropertyId::Volume && _arm->tryConsume())
         {
           throw std::runtime_error{"probe playback command exception"};
         }
@@ -315,7 +315,7 @@ namespace ao::rt::test
 
     struct BlockingTaskState final
     {
-      bool waitUntilStarted()
+      bool tryWaitUntilStarted()
       {
         auto lock = std::unique_lock{mutex};
         return cv.wait_for(lock, std::chrono::seconds{5}, [this] { return started; });
@@ -342,26 +342,27 @@ namespace ao::rt::test
       bool released = false;
     };
 
-    async::Task<void> failingTask(async::Runtime* const runtime)
+    async::Task<void> failingTaskAsync(async::Runtime* const runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       throw std::runtime_error{"probe exception"};
     }
 
-    async::Task<void> failingCancellableTask(async::Runtime* const runtime, std::stop_token const stopToken)
+    async::Task<void> failingCancellableTaskAsync(async::Runtime* const runtime, std::stop_token const stopToken)
     {
-      co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorkerAsync(stopToken);
       throw std::runtime_error{"probe exception"};
     }
 
-    async::Task<void> failAfterRelease(std::shared_ptr<BlockingTaskState> statePtr, std::stop_token /*stopToken*/)
+    async::Task<void> failAfterReleaseAsync(std::shared_ptr<BlockingTaskState> statePtr, std::stop_token /*stopToken*/)
     {
       statePtr->markStartedAndWait();
       throw std::runtime_error{"probe exception"};
       co_return;
     }
 
-    async::Task<void> cancelAfterRelease(std::shared_ptr<BlockingTaskState> statePtr, std::stop_token const stopToken)
+    async::Task<void> cancelAfterReleaseAsync(std::shared_ptr<BlockingTaskState> statePtr,
+                                              std::stop_token const stopToken)
     {
       auto stopCallback = std::stop_callback{stopToken, [statePtr] { statePtr->release(); }};
       statePtr->markStartedAndWait();
@@ -458,7 +459,8 @@ namespace ao::rt::test
                           { return write.tracks().create(track, library::FileManifestBuilder::makeEmpty()); });
 
       if (!createRes ||
-          !library::detail::PhysicalStoreAccess::writer(musicLibrary.resources(), transaction).remove(*resourceIdRes) ||
+          !library::detail::PhysicalStoreAccess::writer(musicLibrary.resources(), transaction)
+             .tryRemove(*resourceIdRes) ||
           !transaction.commit())
       {
         return 3;
@@ -703,7 +705,7 @@ namespace ao::rt::test
       }(lane->captureSubmission());
       auto future = asyncRuntime.spawn(std::move(task));
 
-      if (!executor.waitUntilDispatchStarted())
+      if (!executor.tryWaitUntilDispatchStarted())
       {
         executor.releaseRejection();
         return 3;
@@ -756,7 +758,7 @@ namespace ao::rt::test
     {
       auto executor = async::LoopExecutor{};
       auto runtime = async::Runtime{executor, 1};
-      runtime.spawnLogged(failingTask(&runtime), "runtime spawnLogged probe");
+      runtime.spawnLogged(failingTaskAsync(&runtime), "runtime spawnLogged probe");
       runtime.join();
       return 3;
     }
@@ -765,9 +767,9 @@ namespace ao::rt::test
     {
       auto executor = async::LoopExecutor{};
       auto runtime = async::Runtime{executor, 1};
-      [[maybe_unused]] auto task = runtime.spawnCancellable([&runtime](std::stop_token const stopToken)
-                                                            { return failingCancellableTask(&runtime, stopToken); },
-                                                            "runtime cancellable probe");
+      [[maybe_unused]] auto task = runtime.spawnCancellable(
+        [&runtime](std::stop_token const stopToken) { return failingCancellableTaskAsync(&runtime, stopToken); },
+        "runtime cancellable probe");
       runtime.join();
       return 3;
     }
@@ -779,14 +781,14 @@ namespace ao::rt::test
       auto scope = async::LifetimeScope{};
       fatalProbeState().scope = &scope;
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
 
       runtime.spawnWithLifetime(
         scope,
-        [&runtime](std::stop_token const stopToken) { return failingCancellableTask(&runtime, stopToken); },
+        [&runtime](std::stop_token const stopToken) { return failingCancellableTaskAsync(&runtime, stopToken); },
         "runtime lifetime probe");
       runtime.join();
       return 3;
@@ -802,17 +804,17 @@ namespace ao::rt::test
       fatalProbeState().scope = &scope;
       fatalProbeState().shutdownStarted = &shutdown;
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
 
       runtime.spawnWithLifetime(
         scope,
-        [statePtr](std::stop_token const stopToken) { return failAfterRelease(statePtr, stopToken); },
+        [statePtr](std::stop_token const stopToken) { return failAfterReleaseAsync(statePtr, stopToken); },
         "runtime shutdown probe");
 
-      if (!statePtr->waitUntilStarted())
+      if (!statePtr->tryWaitUntilStarted())
       {
         return 3;
       }
@@ -832,10 +834,10 @@ namespace ao::rt::test
       auto statePtr = std::make_shared<BlockingTaskState>();
       runtime.spawnWithLifetime(
         scope,
-        [statePtr](std::stop_token const stopToken) { return cancelAfterRelease(statePtr, stopToken); },
+        [statePtr](std::stop_token const stopToken) { return cancelAfterReleaseAsync(statePtr, stopToken); },
         "runtime shutdown cancellation probe");
 
-      if (!statePtr->waitUntilStarted())
+      if (!statePtr->tryWaitUntilStarted())
       {
         return 3;
       }
@@ -851,7 +853,7 @@ namespace ao::rt::test
       auto executor = ProbeQueuedExecutor{};
       fatalProbeState().queueWakeCount = &executor.wakeCount();
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
@@ -866,7 +868,7 @@ namespace ao::rt::test
     {
       auto executor = ProbeQueuedExecutor{};
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
@@ -946,7 +948,7 @@ namespace ao::rt::test
 
       fatalProbeState().playbackCommands = &playback.commands();
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
@@ -982,6 +984,32 @@ namespace ao::rt::test
       auto transport = PlaybackTransport{executor, library, notifications, std::make_unique<audio::Player>(runtime)};
       auto worker = std::jthread{[&transport] { transport.revealPlayingTrack(); }};
       worker.join();
+      return 3;
+    }
+
+    std::int32_t runPlaybackServiceTeardownFromSnapshot(std::string_view const scratchName, bool const destroy)
+    {
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::make_unique<ProbeQueuedExecutor>());
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto const subscription = runtimePtr->playback().events().onSnapshot(
+        [&](PlaybackSnapshot const&)
+        {
+          if (destroy)
+          {
+            runtimePtr.reset();
+          }
+          else
+          {
+            runtimePtr->shutdown();
+          }
+        });
+      runtimePtr->playback().commands().setMuted(true);
       return 3;
     }
 
@@ -1033,6 +1061,22 @@ namespace ao::rt::test
       auto* const events = &runtimePtr->playback().events();
       auto worker = std::jthread{
         [events] { [[maybe_unused]] auto subscription = events->onSnapshot([](PlaybackSnapshot const&) noexcept {}); }};
+      worker.join();
+      return 3;
+    }
+
+    std::int32_t runViewServiceReadOffExecutor(std::string_view const scratchName)
+    {
+      auto runtimeRes = makePlaybackProbeRuntime(scratchName, std::make_unique<ProbeQueuedExecutor>());
+
+      if (!runtimeRes)
+      {
+        return 3;
+      }
+
+      auto runtimePtr = std::move(*runtimeRes);
+      auto* const views = &runtimePtr->views();
+      auto worker = std::jthread{[views] { std::ignore = views->findTrackListState(kInvalidViewId); }};
       worker.join();
       return 3;
     }
@@ -1168,7 +1212,7 @@ namespace ao::rt::test
       auto launched = std::atomic_bool{false};
       fatalProbeState().successorLaunched = &launched;
 
-      if (!registerFatalSink(probeFatalSink))
+      if (!tryRegisterFatalSink(tryAcceptProbeFatal))
       {
         return 3;
       }
@@ -1317,6 +1361,11 @@ namespace ao::rt::test
       return runPlaybackRevealOffExecutor(scratchName);
     }
 
+    if (name == "playback-service-destroy-from-snapshot" || name == "playback-service-shutdown-from-snapshot")
+    {
+      return runPlaybackServiceTeardownFromSnapshot(scratchName, name == "playback-service-destroy-from-snapshot");
+    }
+
     if (name == "playback-service-snapshot-off-executor")
     {
       return runPlaybackServiceSnapshotOffExecutor(scratchName);
@@ -1330,6 +1379,11 @@ namespace ao::rt::test
     if (name == "playback-service-event-off-executor")
     {
       return runPlaybackServiceEventOffExecutor(scratchName);
+    }
+
+    if (name == "view-service-read-off-executor")
+    {
+      return runViewServiceReadOffExecutor(scratchName);
     }
 
     if (name == "workspace-observation-admission-exception")

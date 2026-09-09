@@ -199,15 +199,15 @@ namespace ao::uimodel
 
       try
       {
-        auto result = co_await submit(*statePtr, listId);
+        auto res = co_await submit(*statePtr, listId);
 
-        if (!result)
+        if (!res)
         {
           statePtr->submitting = false;
-          co_return std::unexpected{result.error()};
+          co_return std::unexpected{res.error()};
         }
 
-        auto completed = std::move(*result);
+        auto completed = std::move(*res);
         auto uiResult = ListMembershipEditResult{
           .status = completed.status,
           .listId = completed.reply.listId,
@@ -245,14 +245,15 @@ namespace ao::uimodel
                                listId,
                                operation,
                                [](State& state, ListId const targetListId)
-                               { return state.library.commands().addTracksToList(targetListId, state.targets); });
+                               { return state.library.commands().addTracksToListAsync(targetListId, state.targets); });
       }
 
-      return finishEditAsync(std::move(statePtr),
-                             listId,
-                             operation,
-                             [](State& state, ListId const targetListId)
-                             { return state.library.commands().removeTracksFromList(targetListId, state.targets); });
+      return finishEditAsync(
+        std::move(statePtr),
+        listId,
+        operation,
+        [](State& state, ListId const targetListId)
+        { return state.library.commands().removeTracksFromListAsync(targetListId, state.targets); });
     }
 
     rt::Library& library;
@@ -300,12 +301,12 @@ namespace ao::uimodel
     return _statePtr->targets.trackIds();
   }
 
-  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::addToList(ListId const listId)
+  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::addToListAsync(ListId const listId)
   {
     return State::editAsync(_statePtr, listId, ListMembershipOperation::Add);
   }
 
-  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::removeFromList(ListId const listId)
+  async::Task<Result<ListMembershipEditResult>> ListMembershipAuthoringSession::removeFromListAsync(ListId const listId)
   {
     return State::editAsync(_statePtr, listId, ListMembershipOperation::Remove);
   }

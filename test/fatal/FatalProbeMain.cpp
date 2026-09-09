@@ -16,7 +16,7 @@ namespace
 {
   constexpr auto kProbeTimeout = std::chrono::seconds{15};
 
-  bool verifyProbe(ao::test::FatalProbeExpectation const& expectation, ao::test::ProbeProcessResult const& result)
+  bool tryVerifyProbe(ao::test::FatalProbeExpectation const& expectation, ao::test::ProbeProcessResult const& result)
   {
     auto passed = result.hasPlatformAbort() && result.standardError.contains("AOBUS_FATAL") &&
                   result.standardError.contains(expectation.requiredMarker) &&
@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
   {
     auto const result = ao::test::runProbeProcess(executablePath, expectation.scenario, kProbeTimeout);
 
-    if (!verifyProbe(expectation, result))
+    if (!tryVerifyProbe(expectation, result))
     {
       std::println(stderr,
                    "ao_fatal_probe scenario '{}' failed: started={} timed-out={} exited={} "

@@ -253,6 +253,44 @@ Ordinary tests remain outside this policy. Shared, POSIX, and Windows-only
 production translation units are all covered; host-specific tidy runs provide
 the compile commands for their respective sources.
 
+## Semantic function and value naming
+
+The [naming conventions](naming-convention.md) own the vocabulary enforced by
+`aobus-readability-async-function-naming`,
+`aobus-readability-bool-function-naming`, and
+`aobus-readability-result-naming-convention`.
+The task and result checks use declaration and canonical type identity through
+aliases, deduced types, and supported templates; they never classify a type by
+a source-text substring. Resolved Task function-template instantiations map
+back to one diagnostic on their shared source declaration; a mixed-return
+deduced Task template remains a semantic naming decision rather than a blanket
+checker exemption. Bool eligibility instead requires the source-fixed direct
+bool contract described in the naming conventions: incidental bool payload
+instantiations of generic APIs are not evidence. Explicit dependent `ao::Result<T>` declarations,
+including references, are checked at template definition time.
+Deduced Result locals in templates and generic lambdas require source evidence:
+a Result-typed initializer, or a resolved function named in the source lookup
+whose source return type promises Result. Instantiations map to one source diagnostic.
+An unconstrained `T`, its `auto` copies, and calls through arbitrary callable
+parameters do not acquire a Result naming requirement merely because a caller
+instantiates them with Result. Other unresolved dependent initializer shapes
+remain outside this bounded proof; they are not blanket template exemptions.
+The bool check inspects explicit/aliased direct bool returns and bounded
+source-proved deduced returns, not nested lambda or local-class bodies. It
+checks all source return branches, maps redeclarations/instantiations to one
+source diagnostic, and preserves independently written explicit specializations.
+It does not treat bool references, `Task<bool>`, or `Result<bool>` as direct-bool
+functions. Initial-capital predicate vocabulary does not relax built-in casing;
+only exact `asBool` and `readBoolOr` conversion names are value API exceptions. Framework exceptions
+require a proved foreign override or exact supported customization
+identity/signature; owner, filename, capitalization, and broad prefixes are not
+proof. A generated non-virtual boundary that the AST cannot prove uses only an
+explained, check-specific source-local suppression.
+All three checks are diagnostic-only because a correct rename must update the
+whole declaration and consumer set and may require semantic judgment.
+Keep the repository at zero findings after the corresponding migration; do not
+add a legacy baseline or per-file exception list.
+
 ## Header function definitions
 
 `aobus-readability-header-function-definition` keeps concrete implementation out of headers so ordinary builds, tests, and lint runs do not repeatedly parse and instantiate the same implementation.

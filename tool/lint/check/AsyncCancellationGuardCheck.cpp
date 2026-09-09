@@ -118,7 +118,7 @@ namespace clang::tidy::readability
       return llvm::dyn_cast<DeclRefExpr>(expr->IgnoreParenImpCasts());
     }
 
-    bool referencesCatchVariable(Expr const* expr, VarDecl const* exceptionDecl)
+    bool hasCatchVariableReference(Expr const* expr, VarDecl const* exceptionDecl)
     {
       auto const* ref = asDeclRef(expr);
       return ref != nullptr && ref->getDecl()->getCanonicalDecl() == exceptionDecl->getCanonicalDecl();
@@ -133,7 +133,7 @@ namespace clang::tidy::readability
         return call->getNumArgs() == 0;
       }
 
-      return call->getNumArgs() == 1 && referencesCatchVariable(call->getArg(0), exceptionDecl);
+      return call->getNumArgs() == 1 && hasCatchVariableReference(call->getArg(0), exceptionDecl);
     }
 
     bool isCancellationGuardCall(Stmt const* stmt, CXXCatchStmt const* catchStmt)
@@ -221,7 +221,7 @@ namespace clang::tidy::readability
       auto const* exceptionDecl = catchStmt->getExceptionDecl();
       return callee != nullptr && exceptionDecl != nullptr &&
              callee->getQualifiedNameAsString() == "ao::async::isOperationCancelled" && call->getNumArgs() == 1 &&
-             referencesCatchVariable(call->getArg(0), exceptionDecl);
+             hasCatchVariableReference(call->getArg(0), exceptionDecl);
     }
 
     bool startsWithCancellationHandling(CXXCatchStmt const* catchStmt, SourceManager const& sourceManager)

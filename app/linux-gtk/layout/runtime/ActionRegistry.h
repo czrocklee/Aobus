@@ -50,13 +50,13 @@ namespace ao::gtk::layout
     ActionRegistry(ActionRegistry&&) = delete;
     ActionRegistry& operator=(ActionRegistry&&) = delete;
 
-    bool registerAction(uimodel::ActionSchema schema, ActionHandler handler, ActionStateProvider stateProvider = {});
+    bool tryRegisterAction(uimodel::ActionSchema schema, ActionHandler handler, ActionStateProvider stateProvider = {});
 
     std::optional<uimodel::ActionSchema> action(std::string_view id) const;
     std::span<uimodel::ActionSchema const> actions() const;
 
     ActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
-    bool activate(std::string_view id, ActionActivationContext& ctx) const;
+    bool tryActivate(std::string_view id, ActionActivationContext& ctx) const;
 
   private:
     struct Entry final

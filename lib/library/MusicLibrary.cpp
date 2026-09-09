@@ -10,6 +10,7 @@
 #include "MetadataStore.h"
 #include "OpenValidationMetrics.h"
 #include "TrackRecordValidation.h"
+#include "WriterSessionLease.h"
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include "lmdb/detail/UnvalidatedDatabase.h"
@@ -31,6 +32,8 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/FileAllocation.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
 
 #include <algorithm>
@@ -216,12 +219,12 @@ namespace ao::library
       return header;
     }
 
-    bool catalogKeyEquals(std::span<std::byte const> const key, std::string_view const expected) noexcept
+    bool matchesCatalogKey(std::span<std::byte const> const key, std::string_view const expected) noexcept
     {
       return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span{expected}));
     }
 
-    bool catalogIsEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    bool isCatalogEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)
     {
       return mainDatabase.reader(transaction).entryCount() == 0;
     }
@@ -233,7 +236,7 @@ namespace ao::library
       {
         std::ignore = value;
 
-        if (catalogKeyEquals(key, "meta"))
+        if (matchesCatalogKey(key, "meta"))
         {
           return {};
         }
@@ -256,7 +259,7 @@ namespace ao::library
 
         for (std::size_t index = 0; index < kCurrentDatabaseNames.size(); ++index)
         {
-          if (catalogKeyEquals(key, kCurrentDatabaseNames[index]))
+          if (matchesCatalogKey(key, kCurrentDatabaseNames[index]))
           {
             seen[index] = true;
             matched = true;
@@ -986,7 +989,7 @@ namespace ao::library
       }
 
       auto const mainDatabase = std::move(*mainDatabaseRes);
-      auto const catalogEmpty = catalogIsEmpty(mainDatabase, *initializationTransactionRes);
+      auto const catalogEmpty = isCatalogEmpty(mainDatabase, *initializationTransactionRes);
       auto admittedSchemaRes = catalogEmpty ? createFreshSchema(*initializationTransactionRes)
                                             : admitCurrentSchema(mainDatabase, *initializationTransactionRes);
 
@@ -1059,9 +1062,9 @@ namespace ao::library
   {
     auto library = MusicLibrary{};
 
-    if (auto result = library.initialize(std::move(musicRoot), std::move(databasePath), options); !result)
+    if (auto res = library.initialize(std::move(musicRoot), std::move(databasePath), options); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return library;
@@ -1083,9 +1086,9 @@ namespace ao::library
 
       auto implPtr = std::move(*implRes);
 
-      if (auto result = implPtr->initializationTransaction.commit(); !result)
+      if (auto res = implPtr->initializationTransaction.commit(); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       _implPtr = std::move(implPtr);
@@ -1117,6 +1120,9 @@ namespace ao::library
       AO_FATAL("Failed to begin library read transaction: {}", transactionRes.error().message);
     }
 
+    // A supported writer in another process may have appended dictionary ids
+    // since open. Admit that snapshot's tail before exposing any Track views.
+    _implPtr->dictionary.refresh(_implPtr->dictionary._database.reader(*transactionRes));
     auto headerRes = _implPtr->metadataStore.load(*transactionRes);
     AO_INVARIANT(headerRes, "Library metadata header failed after open validation: {}", headerRes.error().message);
     auto const revision = _implPtr->metadataStore.revision(*transactionRes);
@@ -1223,6 +1229,12 @@ namespace ao::library
   MusicLibrary::StorageCapacity MusicLibrary::storageCapacity() const
   {
     auto const capacity = _implPtr->env.capacity();
-    return StorageCapacity{.mapBytes = capacity.mapBytes, .highWaterBytes = capacity.highWaterBytes};
+    auto const& path = _implPtr->databasePath;
+    return StorageCapacity{
+      .mapBytes = capacity.mapBytes,
+      .highWaterBytes = capacity.highWaterBytes,
+      .diskBytes = utility::allocatedFileBytes(path / "data.mdb") + utility::allocatedFileBytes(path / "lock.mdb") +
+                   utility::allocatedFileBytes(path / utility::pathFromUtf8(detail::WriterSessionLease::kFileName)),
+    };
   }
 } // namespace ao::library

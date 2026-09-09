@@ -138,7 +138,7 @@ namespace ao::winui
     return !selection.empty();
   }
 
-  bool customMetadataValueNeedsUpdate(bool const existed,
+  bool needsCustomMetadataValueUpdate(bool const existed,
                                       std::optional<std::string> const& optOriginalValue,
                                       std::string_view const value) noexcept
   {

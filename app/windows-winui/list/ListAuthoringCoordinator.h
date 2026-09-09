@@ -88,7 +88,7 @@ namespace ao::winui
     uimodel::ListOrderCapabilityState orderCapabilities() const;
     void applyOrder(ListOrderCommand command);
 
-    bool dialogActive() const noexcept { return _dialogActive; }
+    bool isDialogActive() const noexcept { return _dialogActive; }
     void retire() noexcept;
 
   private:
@@ -101,16 +101,16 @@ namespace ao::winui
     void scheduleEditorPreview();
     void updateEditorPreview();
     void handleEditorSave(winrt::Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& args);
-    void finishEditorSave(Result<ListId> result);
+    void finishEditorSave(Result<ListId> res);
 
-    void finishDeletePreview(ListId listId, bool includeDescendants, Result<rt::DeleteListSubtreeReply> result);
+    void finishDeletePreview(ListId listId, bool includeDescendants, Result<rt::DeleteListSubtreeReply> res);
     void buildDeleteDialog(ListId listId, bool includeDescendants, rt::DeleteListSubtreeReply const& preview);
     void handleDeleteCommit(winrt::Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& args);
-    void finishDeleteCommit(Result<rt::DeleteListSubtreeReply> result);
+    void finishDeleteCommit(Result<rt::DeleteListSubtreeReply> res);
 
-    void finishMembership(Result<uimodel::ListMembershipEditResult> result);
-    void finishOrder(ListOrderCommand command, Result<rt::AuthoringResult<rt::MoveListOrderReply>> result);
-    void finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> result);
+    void finishMembership(Result<uimodel::ListMembershipEditResult> res);
+    void finishOrder(ListOrderCommand command, Result<rt::AuthoringResult<rt::MoveListOrderReply>> res);
+    void finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> res);
 
     void beginDialogWorkflow();
     void showDialog();
@@ -118,19 +118,19 @@ namespace ao::winui
     void handleDialogClosed();
 
     template<typename ResultType, typename Finish>
-    static async::Task<void> finishOnCallbackExecutor(async::Runtime* runtime,
-                                                      ListAuthoringCoordinator* owner,
-                                                      CallbackAdmissionGate::Token token,
-                                                      async::Task<ResultType> submission,
-                                                      Finish finish,
-                                                      std::stop_token stopToken)
+    static async::Task<void> finishOnCallbackExecutorAsync(async::Runtime* runtime,
+                                                           ListAuthoringCoordinator* owner,
+                                                           CallbackAdmissionGate::Token token,
+                                                           async::Task<ResultType> submission,
+                                                           Finish finish,
+                                                           std::stop_token stopToken)
     {
-      auto result = co_await std::move(submission);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      auto res = co_await std::move(submission);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
-      if (token.admits())
+      if (token.accepts())
       {
-        std::invoke(std::move(finish), owner, std::move(result));
+        std::invoke(std::move(finish), owner, std::move(res));
       }
     }
 

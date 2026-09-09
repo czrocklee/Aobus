@@ -96,7 +96,7 @@ namespace ao::i18n::detail
       return MessageArgumentKind::Value;
     }
 
-    bool requiresOtherSelector(UMessagePatternArgType const type) noexcept
+    bool needsOtherSelector(UMessagePatternArgType const type) noexcept
     {
       return type == UMSGPAT_ARG_TYPE_PLURAL || type == UMSGPAT_ARG_TYPE_SELECT ||
              type == UMSGPAT_ARG_TYPE_SELECTORDINAL;
@@ -289,7 +289,7 @@ namespace ao::i18n::detail
         return makeError(Error::Code::FormatRejected, "Message patterns must use named arguments");
       }
 
-      if (requiresOtherSelector(part.getArgType()) && !hasOtherSelector(parsed, index))
+      if (needsOtherSelector(part.getArgType()) && !hasOtherSelector(parsed, index))
       {
         return makeError(Error::Code::FormatRejected,
                          std::format("Message argument '{}' requires an 'other' branch",

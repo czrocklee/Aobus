@@ -152,7 +152,7 @@ namespace ao::gtk
 
     _optActiveSelection = selection;
 
-    if (!beginTagEditSession(selection.selectedIds))
+    if (!tryBeginTagEditSession(selection.selectedIds))
     {
       return;
     }
@@ -175,7 +175,7 @@ namespace ao::gtk
   {
     if (!_optTagEditSession || !std::ranges::equal(_optTagEditSession->targetIds(), selection.selectedIds))
     {
-      if (!beginTagEditSession(selection.selectedIds))
+      if (!tryBeginTagEditSession(selection.selectedIds))
       {
         return;
       }
@@ -192,27 +192,27 @@ namespace ao::gtk
       _tasks,
       *this,
       "tag edit",
-      ao::uimodel::applyTagEdit(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove)),
-      [sessionGeneration](TagEditController* owner, Result<uimodel::TagEditResult> result)
+      ao::uimodel::applyTagEditAsync(*_optTagEditSession, _textCatalog, std::move(tagsToAdd), std::move(tagsToRemove)),
+      [sessionGeneration](TagEditController* owner, Result<uimodel::TagEditResult> res)
       {
-        if (!result)
+        if (!res)
         {
           owner->_notifications.post(
-            rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        if (result->status == rt::AuthoringStatus::Busy)
+        if (res->status == rt::AuthoringStatus::Busy)
         {
           owner->_notifications.post(
-            rt::NotificationSeverity::Warning, result->notificationText, rt::NotificationLifetime::transient());
+            rt::NotificationSeverity::Warning, res->notificationText, rt::NotificationLifetime::transient());
           return;
         }
 
-        if (result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable)
+        if (res->status == rt::AuthoringStatus::Stale || res->status == rt::AuthoringStatus::Unavailable)
         {
           owner->_notifications.post(
-            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, res->notificationText, rt::NotificationLifetime::history());
 
           if (owner->_tagEditSessionGeneration == sessionGeneration)
           {
@@ -222,13 +222,13 @@ namespace ao::gtk
           return;
         }
 
-        if (result->status != rt::AuthoringStatus::Applied)
+        if (res->status != rt::AuthoringStatus::Applied)
         {
           return;
         }
 
         owner->_notifications.post(
-          rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
+          rt::NotificationSeverity::Info, res->notificationText, rt::NotificationLifetime::transient());
       });
   }
 
@@ -454,25 +454,25 @@ namespace ao::gtk
     }
 
     auto session = std::move(*sessionRes);
-    auto submission = add ? session.addToList(listId) : session.removeFromList(listId);
+    auto submission = add ? session.addToListAsync(listId) : session.removeFromListAsync(listId);
     spawnUiTask(_asyncRuntime,
                 _tasks,
                 *this,
                 "list membership edit",
                 std::move(submission),
-                [](TagEditController* owner, Result<uimodel::ListMembershipEditResult> result)
+                [](TagEditController* owner, Result<uimodel::ListMembershipEditResult> res)
                 {
-                  if (!result)
+                  if (!res)
                   {
                     owner->_notifications.post(
-                      rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+                      rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
                     return;
                   }
 
                   auto const notificationText =
-                    uimodel::formatListMembershipEditNotification(owner->_textCatalog, *result);
+                    uimodel::formatListMembershipEditNotification(owner->_textCatalog, *res);
 
-                  if (result->status == rt::AuthoringStatus::Busy)
+                  if (res->status == rt::AuthoringStatus::Busy)
                   {
                     owner->_notifications.post(
                       rt::NotificationSeverity::Warning, notificationText, rt::NotificationLifetime::transient());
@@ -480,7 +480,7 @@ namespace ao::gtk
                   }
 
                   auto const failed =
-                    result->status == rt::AuthoringStatus::Stale || result->status == rt::AuthoringStatus::Unavailable;
+                    res->status == rt::AuthoringStatus::Stale || res->status == rt::AuthoringStatus::Unavailable;
                   owner->_notifications.post(
                     failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
                     notificationText,
@@ -509,7 +509,7 @@ namespace ao::gtk
 
     auto const selectedIds = _optActiveSelection->selectedIds;
 
-    if (!beginTagEditSession(selectedIds))
+    if (!tryBeginTagEditSession(selectedIds))
     {
       return;
     }
@@ -629,7 +629,7 @@ namespace ao::gtk
                      std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()});
   }
 
-  bool TagEditController::beginTagEditSession(std::span<TrackId const> trackIds)
+  bool TagEditController::tryBeginTagEditSession(std::span<TrackId const> trackIds)
   {
     auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, trackIds);
 

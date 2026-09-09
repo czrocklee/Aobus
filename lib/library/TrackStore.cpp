@@ -336,23 +336,23 @@ namespace ao::library
     return view;
   }
 
-  bool TrackStore::Writer::remove(TrackId id)
+  bool TrackStore::Writer::tryRemove(TrackId id)
   {
-    auto const hotRemoved = _hotWriter.del(id.raw());
-    auto const coldRemoved = _coldWriter.del(id.raw());
+    auto const hotRemoved = _hotWriter.tryDelete(id.raw());
+    auto const coldRemoved = _coldWriter.tryDelete(id.raw());
     return hotRemoved || coldRemoved;
   }
 
   Result<> TrackStore::Writer::clear()
   {
-    if (auto result = _hotWriter.clear(); !result)
+    if (auto res = _hotWriter.clear(); !res)
     {
-      lmdb::detail::throwTransactionFailure(std::move(result.error()));
+      lmdb::detail::throwTransactionFailure(std::move(res.error()));
     }
 
-    if (auto result = _coldWriter.clear(); !result)
+    if (auto res = _coldWriter.clear(); !res)
     {
-      lmdb::detail::throwTransactionFailure(std::move(result.error()));
+      lmdb::detail::throwTransactionFailure(std::move(res.error()));
     }
 
     return {};

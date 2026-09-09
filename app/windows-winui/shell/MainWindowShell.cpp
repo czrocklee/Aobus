@@ -107,16 +107,17 @@ namespace winrt::Aobus::implementation
     applyShellState(args.NewSize().Width);
   }
 
-  void MainWindow::applyShellState(double const width)
+  bool MainWindow::applyShellState(double const width, std::optional<ao::winui::ShellMode> const optCandidateMode)
   {
     // The window is sized before it has a session to build a shell from, so the
     // first resolved policy is the one `initialize` asks for.
     if (!_shellBuilderPtr)
     {
-      return;
+      return false;
     }
 
-    auto const mode = _session != nullptr ? _session->settings().shellMode : ao::winui::ShellMode::Modern;
+    auto const mode =
+      optCandidateMode.value_or(_session != nullptr ? _session->settings().shellMode : ao::winui::ShellMode::Modern);
     auto appliedRes = _shellBuilderPtr->applyShellState(mode, width, _optInspectorRequest);
 
     if (!appliedRes)
@@ -124,10 +125,16 @@ namespace winrt::Aobus::implementation
       // The generation that was already live stays live, which is the whole
       // point of building the candidate before publishing it.
       updateStatus(ao::winui::formatResource("winui_shell_layout_failed", appliedRes.error().message));
-      return;
+      return false;
     }
 
     auto const& state = *appliedRes;
+
+    if (state.mode != mode)
+    {
+      return false;
+    }
+
     ao::winui::runOptionalWinRt(
       "applying the WinUI title bar",
       [this, &state]
@@ -135,6 +142,7 @@ namespace winrt::Aobus::implementation
         ExtendsContentIntoTitleBar(state.integratedTitleBar);
         SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
       });
+    return true;
   }
 
   void MainWindow::restoreWindowPlacement()
@@ -254,7 +262,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::importLibrary()
   {
-    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
     {
       _libraryTransferCoordinatorPtr->importLibrary();
     }
@@ -262,7 +270,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::exportLibrary()
   {
-    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
     {
       _libraryTransferCoordinatorPtr->exportLibrary();
     }
@@ -276,10 +284,14 @@ namespace winrt::Aobus::implementation
     }
 
     auto& settings = _session->settings();
-    settings.shellMode =
+    auto const candidateMode =
       settings.shellMode == ao::winui::ShellMode::Modern ? ao::winui::ShellMode::Classic : ao::winui::ShellMode::Modern;
-    applyShellState(RootGrid().ActualWidth());
-    saveWindowState();
+
+    if (applyShellState(RootGrid().ActualWidth(), candidateMode))
+    {
+      settings.shellMode = candidateMode;
+      saveWindowState();
+    }
   }
 
   void MainWindow::reloadTheme()

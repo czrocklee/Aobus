@@ -122,6 +122,9 @@ another execution boundary is involved.
 
 `hygiene` is check-only, resolves its source scope once, skips empty stage
 subsets, and stops after a formatting failure before running audits or tidy.
+Explicit file and directory scopes for `format`, `hygiene`, `test-audit`, and
+`name-audit` must exist; a missing path fails even when an audit is advisory.
+Existing empty directories and scopes with no applicable files remain valid.
 Use an explicit scope or `--commit <base>` when validating a subset of a larger
 branch. `--all` requests whole-source hygiene; the full `check` independently
 owns repository-wide guardrails.
@@ -192,3 +195,5 @@ Before finishing, confirm:
 - New files are listed in `test/CMakeLists.txt`.
 - Focused validation has been run when practical, or skipped with an honest reason.
 - The applicable completion route above passes, with its scope and any missing host evidence reported.
+
+`ao check` rejects unregistered C++ test sources before building on every native profile, including macOS. This lightweight invariant does not depend on running the Python tooling suite.
