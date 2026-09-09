@@ -152,7 +152,7 @@ namespace ao::tui::test
     void clearField(TrackEditController& controller, std::string_view const label)
     {
       focusRowInput(controller, label);
-      controller.tryHandleEvent(ftxui::Event::Character(static_cast<char>(0x15)));
+      controller.tryHandleEvent(ftxui::Event::CtrlD);
     }
   } // namespace
 

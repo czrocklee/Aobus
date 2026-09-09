@@ -137,7 +137,7 @@ namespace ao::tui::test
 
   ftxui::Event clearEvent()
   {
-    return ftxui::Event::Character(static_cast<char>(0x15));
+    return ftxui::Event::CtrlD;
   }
 
   ftxui::Event restoreEvent()

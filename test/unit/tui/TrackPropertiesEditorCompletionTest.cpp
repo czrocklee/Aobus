@@ -212,6 +212,40 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("TrackPropertiesEditor - word and line caret moves dismiss stale candidates", "[tui][regression][editor]")
+  {
+    for (auto const& event : {ftxui::Event::CtrlA, ftxui::Event::Special("\033b"), ftxui::Event::ArrowLeftCtrl})
+    {
+      auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}}, numberedCandidates());
+      focusRow(editor, "Album");
+      editor.tryHandleEvent(completeEvent());
+      REQUIRE(frame(editor).contains("Cand00"));
+      editor.tryHandleEvent(event);
+      CHECK_FALSE(frame(editor).contains("Cand00"));
+      CHECK_FALSE(editor.isDirty());
+    }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - caret commands dismiss completion even at a boundary", "[tui][regression][editor]")
+  {
+    for (auto const& event : {ftxui::Event::CtrlA,
+                              ftxui::Event::CtrlE,
+                              ftxui::Event::Special("\033b"),
+                              ftxui::Event::Special("\033f"),
+                              ftxui::Event::ArrowLeftCtrl,
+                              ftxui::Event::ArrowRightCtrl})
+    {
+      auto editor = makeEditor({{"Track", "Blue"}}, numberedCandidates());
+      focusRow(editor, "Album");
+      REQUIRE(editor.tryHandleEvent(event));
+      REQUIRE(editor.tryHandleEvent(completeEvent()));
+      REQUIRE(frame(editor).contains("Cand00"));
+      REQUIRE(editor.tryHandleEvent(event));
+      CHECK_FALSE(frame(editor).contains("Cand00"));
+      CHECK_FALSE(editor.isDirty());
+    }
+  }
+
   TEST_CASE("TrackPropertiesEditor - scrolls short terminals to the selected completion", "[tui][regression][editor]")
   {
     for (auto const height : {24, 20, 16})

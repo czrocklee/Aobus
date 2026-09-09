@@ -20,7 +20,7 @@ Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translati
 The replaceable plan value built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
-`TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns the editor's own keys and rendering.
+`TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns modal keys and confirmations; `TrackMetadataEditor.cpp` and `TrackTagEditor.cpp` own their page input and draft state.
 
 ## Surface
 
@@ -166,18 +166,26 @@ It provides pages for `Metadata`, `Tags`, read-only `Properties`, and (for multi
 | --- | --- |
 | `Tab`, `Shift-Tab` | switch to the next or previous page (`Metadata`, `Tags`, `Properties`, `Tracks`) |
 | `Up`, `Down` | move focused row; navigate completion candidates or tag rows; scroll read-only pages |
-| `PageUp`, `PageDown` | scroll read-only pages; navigate completion candidates or tag rows by page |
+| `j`, `k` | scroll down/up on the read-only Properties and Tracks pages |
+| `PageUp`, `PageDown` | move metadata/tag rows or scroll read-only pages by the visible viewport; move completion candidates by six rows |
 | `Left`, `Right` | move the caret by one extended grapheme cluster (dismisses completion popup) |
-| `Home`, `End` | move the caret to the start or end of the text field (dismisses completion popup) |
+| `Home`, `End`, `Ctrl-A`, `Ctrl-E` | move the caret to the start or end of the text field (dismisses completion popup); Home/End moves to the first/last row on read-only pages |
+| `Alt-B`, `Alt-F`, `Ctrl-Left`, `Ctrl-Right` | move across space-delimited words in text inputs (dismisses completion popup) |
+| `Ctrl-W` | delete the preceding space-delimited word |
 | printable UTF-8, `Backspace` | edit focused metadata field (refreshes completion candidates); edit the always-live tag query |
 | `Ctrl-N` | explicitly open metadata value completion popup for supported fields |
 | `Return` | accept selected completion candidate; cycle the selected tag's intent or create the tag the query names; confirm discard or reload prompt |
-| `Ctrl-U` | explicitly clear the focused metadata field across all targets |
+| `Ctrl-U`, `Ctrl-K` | delete text before/after the caret; an unchanged mixed field keeps its values |
+| `Ctrl-D` | explicitly clear the focused metadata field across all targets |
 | `Ctrl-G` | restore focused metadata field or tag to its baseline value |
 | `Delete` | delete forward in text inputs, including the tag query |
 | `Ctrl-S` | submit unified properties patch (metadata and tags) for every captured target |
 | `Ctrl-R` | re-read every captured target and replace the draft baselines |
 | `Esc` | close completion popup; clear a non-empty tag query; close editor (prompts confirmation if dirty) |
+
+With Mouse control enabled, click tabs, fields, tag rows, or completion candidates; click within a text value to place the caret.
+Wheel input navigates the active page or completion.
+Footer controls and `×` follow the same validation, submission, and confirmation rules as their keys.
 
 `Ctrl-R` and `Esc` ask for confirmation while the draft is dirty; `Return` confirms, `Esc` keeps editing, and every other key leaves the question open.
 `Ctrl-R` is accepted in every state but advertised only in Stale, Unavailable, and error states, where it is the way forward.
@@ -255,7 +263,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) applies the prepared root plan after fixed scoped protocol and maps mouse events.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single scan flight.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate.
-- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns editor preparation, the retained authoring session, and submission; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns the editor's fixed keys and rendering.
+- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns editor preparation, the retained authoring session, and submission; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns fixed modal keys and submission prompts. [`TrackMetadataEditor.cpp`](../../../app/tui/TrackMetadataEditor.cpp) owns metadata input and completion; [`TrackTagEditor.cpp`](../../../app/tui/TrackTagEditor.cpp) owns tag intents and search.
 
 ## Test authority
 
@@ -267,6 +275,8 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase transitions.
 - [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, batch submission, staleness, reload, and a submission outliving its editor.
+- [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects modal commands, validation, and page drafts; [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorCompletionTest.cpp) protects completion navigation and dismissal.
+- [`EditorMouseTest.cpp`](../../../test/unit/tui/EditorMouseTest.cpp) protects editor mouse routing; [`MouseBindingsTest.cpp`](../../../test/unit/tui/MouseBindingsTest.cpp) protects painted shortcut bindings and clipped hit regions.
 
 ## Related documents
 

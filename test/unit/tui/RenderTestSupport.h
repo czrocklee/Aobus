@@ -33,7 +33,7 @@ namespace ao::tui::test
 
   std::int32_t lineIndexContaining(std::string_view text, std::string_view needle);
 
-  // ASCII-only cell search: each byte in needle is compared to one terminal cell.
+  // Finds whole UTF-8 glyphs in terminal cells, including wide-glyph continuation cells.
   std::optional<ftxui::Box> findTextCells(ftxui::Screen const& screen, std::string_view needle);
 
   void checkInteractiveSurface(ftxui::Pixel const& pixel);

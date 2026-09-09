@@ -3,24 +3,22 @@
 
 #pragma once
 
-#include "TextFieldModel.h"
+#include "MouseBindings.h"
+#include "TrackMetadataEditor.h"
+#include "TrackTagEditor.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
-#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
+#include <ftxui/screen/box.hpp>
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -105,8 +103,7 @@ namespace ao::tui
   class TrackPropertiesEditor final
   {
   public:
-    using CompletionProvider =
-      std::function<std::optional<rt::CompletionResult>(rt::TrackField, std::string_view, std::size_t)>;
+    using CompletionProvider = TrackMetadataEditor::CompletionProvider;
 
     TrackPropertiesEditor(i18n::MessageCatalog textCatalog,
                           TrackEditorPreparation preparation,
@@ -143,127 +140,35 @@ namespace ao::tui
     ftxui::Element renderModal(std::int32_t terminalColumns, std::int32_t terminalRows) const;
 
   private:
-    enum class FieldIntent : std::uint8_t
-    {
-      Unchanged,
-      Replacement,
-      ExplicitClear,
-    };
-
-    struct MetadataRow final
-    {
-      uimodel::TrackPropertiesFormRow spec{};
-      TextFieldModel input{};
-      /// The aggregate value this row falls back to; empty for a mixed field.
-      std::string baselineText{};
-      bool mixed = false;
-      FieldIntent intent = FieldIntent::Unchanged;
-      bool invalid = false;
-
-      bool isIncluded() const noexcept { return intent != FieldIntent::Unchanged; }
-    };
-
-    enum class TagIntent : std::uint8_t
-    {
-      Preserve,
-      AddToAll,
-      RemoveFromAll,
-    };
-
-    struct TagRow final
-    {
-      std::string name{};
-      std::string searchKey{};
-      std::size_t originalCount = 0;
-      TagIntent intent = TagIntent::Preserve;
-      bool suggested = false;
-    };
-
-    void handleMetadataEvent(ftxui::Event const& event);
-    void handleTagsEvent(ftxui::Event const& event);
-    void handleReadonlyEvent(ftxui::Event const& event);
-
+    void handleMouse(ftxui::Mouse const& mouse);
+    void handleTargetEvent(ftxui::Event const& event);
+    void scrollTargets(std::int32_t delta);
+    void selectTab(TrackEditorTab tab);
     void cycleTab(std::int32_t delta);
     std::vector<TrackEditorTab> availableTabs() const;
-
-    void moveMetadataRow(std::int32_t delta);
-    void moveTagRow(std::int32_t delta);
-    void scrollReadonly(std::int32_t delta);
-
-    void noteRowEdited(MetadataRow& row);
-    void clearField(MetadataRow& row);
-    void restoreField(MetadataRow& row);
-    void revalidate(MetadataRow& row);
-
-    void maybeTriggerCompletion(MetadataRow const& row, bool explicitRequest);
-    void closeCompletion();
-    bool tryHandleCompletionEvent(ftxui::Event const& event);
-    bool tryHandleCompletionNavigation(ftxui::Event const& event, std::size_t itemCount);
-
-    /// The query in the form a tag name is stored in, or nothing when it will not normalize.
-    std::optional<std::string> normalizedTagQuery() const;
-    /// Rebuilds the rows the query admits and parks the selection on the first of them.
-    void refreshVisibleTags();
-    /// Acts on the selected row: cycles a tag's intent, or creates the tag the query names.
-    void commitFocusedTag();
-    /// Advances @p tag through the intents that would actually write something.
-    void cycleTagIntent(TagRow& tag) noexcept;
-    /// Whether the selected tag row is the offer to create the tag the query names.
-    bool isCreatingTag() const noexcept { return _offersNewTag && _focusedTagRow >= _visibleTags.size(); }
-    /// Selects the row showing @p tagIndex, falling back to the first when the query hides it.
-    void focusTag(std::size_t tagIndex);
-    /// Whether @p tag's intent would actually change any captured track.
-    bool isEffectiveTagEdit(TagRow const& tag) const noexcept;
-
-    /// Answers a pending confirmation prompt; reports whether one consumed @p event.
     bool tryHandleConfirmationEvent(ftxui::Event const& event);
-
     bool hasTracksTab() const noexcept { return _targets.size() > 1; }
-
     ftxui::Element renderTabStrip() const;
-    ftxui::Element renderMetadataBody(std::int32_t labelColumns) const;
-    ftxui::Element renderTagsBody() const;
-    ftxui::Element renderTagsList() const;
-    ftxui::Element renderTagCheckbox(TagRow const& tag) const;
-    ftxui::Element renderTagStatus(TagRow const& tag, std::size_t total) const;
-    ftxui::Element renderReadonlyBody() const;
     ftxui::Element renderTargetBody() const;
     ftxui::Element renderFooter() const;
-    ftxui::Element renderFieldValue(MetadataRow const& row, bool focused) const;
     ftxui::Element renderSaveSummary() const;
 
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackEditorTarget> _targets{};
-    uimodel::TrackPropertiesFormModel _baseline;
-    uimodel::TrackPropertiesFormSpec _spec{};
-    std::vector<MetadataRow> _metadataRows{};
-    std::vector<TagRow> _tags{};
-    CompletionProvider _completionProvider{};
-
+    TrackMetadataEditor _metadataEditor;
+    TrackTagEditor _tagEditor;
     TrackEditorTab _tab = TrackEditorTab::Metadata;
-    std::size_t _focusedMetadataRow = 0;
-    /// Selection within the visible tag rows; _visibleTags.size() addresses the new-tag row.
-    std::size_t _focusedTagRow = 0;
-    std::size_t _readonlyRow = 0;
     std::size_t _tracksRow = 0;
-
-    /// Filters the tag list and names the tag a submission would create; never part of the draft.
-    TextFieldModel _tagQuery{};
-    /// Rows the query admits, as indices into _tags; the new-tag row trails them.
-    std::vector<std::size_t> _visibleTags{};
-    /// Suggested rows the display cap left out, so the list can own up to them.
-    std::size_t _hiddenSuggestionCount = 0;
-    /// Whether the query names a tag no row carries, offering creation on the trailing row.
-    bool _offersNewTag = false;
-
-    std::optional<rt::CompletionResult> _optActiveCompletion{};
-    std::size_t _selectedCandidate = 0;
-    std::size_t _completionWindowStart = 0;
-
+    mutable ftxui::Box _targetViewport = kEmptyMouseBox;
     TrackEditorStatus _status = TrackEditorStatus::Ready;
     TrackEditorRequest _request = TrackEditorRequest::None;
     std::string _diagnostic{};
     bool _confirmingDiscard = false;
     bool _confirmingReload = false;
+    mutable bool _mouseReady = false;
+    mutable MouseBindings _mouseBindings;
+    mutable std::vector<ftxui::Box> _tabBoxes;
+    mutable ftxui::Box _bodyBox = kEmptyMouseBox;
+    mutable TrackEditorTab _renderedTab = TrackEditorTab::Metadata;
   };
 } // namespace ao::tui

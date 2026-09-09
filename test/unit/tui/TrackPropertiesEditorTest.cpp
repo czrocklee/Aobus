@@ -152,7 +152,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - Ctrl-U on a mixed field arms an explicit clear", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a mixed field arms an explicit clear", "[tui][unit][editor]")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -192,7 +192,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - Ctrl-U on a common field clears it, and Ctrl-G restores it", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - Ctrl-D on a common field clears it, and Ctrl-G restores it", "[tui][unit][editor]")
   {
     auto editor = makeEditor({
       TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959},
@@ -521,7 +521,7 @@ namespace ao::tui::test
       editor.tryHandleEvent(ftxui::Event::ArrowLeft);
 
       CHECK_FALSE(frame(editor).contains("Library is busy"));
-      CHECK(frame(editor).contains("Ctrl-U"));
+      CHECK(frame(editor).contains("Ctrl-D"));
       CHECK(frame(editor).contains("Ctrl-G"));
       CHECK(editor.canApply());
       CHECK(editor.buildPatch().metadata.optAlbum == "Kind of Blue!");
@@ -716,5 +716,81 @@ namespace ao::tui::test
       CHECK(optPropertiesCells->x_min == optMetadataCells->x_min);
       CHECK(lineIndexContaining(properties.text, "Track Properties") == metadataLine);
     }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - preserves both page drafts while retiring transient input",
+            "[tui][regression][editor]")
+  {
+    auto editor = makeEditor(
+      {TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}}, {"Acoustic"});
+
+    focusRow(editor, "Album");
+    typeText(editor, " Remastered");
+    selectTab(editor, TrackEditorTab::Tags);
+    typeText(editor, "Acoustic");
+    editor.tryHandleEvent(ftxui::Event::Return);
+    typeText(editor, "Unfinished query");
+    editor.tryHandleEvent(ftxui::Event::Escape);
+
+    CHECK_FALSE(editor.isConfirmingDiscard());
+    CHECK(editor.takeRequest() == TrackEditorRequest::None);
+    CHECK_FALSE(frame(editor).contains("Unfinished query"));
+
+    selectTab(editor, TrackEditorTab::Metadata);
+    CHECK(frame(editor).contains("Kind of Blue Remastered"));
+    CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .tagAddCount = 1});
+
+    auto movedEditor = std::move(editor);
+    auto const patch = movedEditor.buildPatch();
+    CHECK(patch.metadata.optAlbum == "Kind of Blue Remastered");
+    CHECK(patch.tagsToAdd == std::vector<std::string>{"Acoustic"});
+    CHECK(patch.tagsToRemove.empty());
+    movedEditor.tryHandleEvent(applyEvent());
+    CHECK(movedEditor.takeRequest() == TrackEditorRequest::Apply);
+  }
+
+  TEST_CASE("TrackPropertiesEditor - invalid metadata blocks tag submission until the field is restored",
+            "[tui][regression][editor]")
+  {
+    auto editor =
+      makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}});
+    focusRow(editor, "Year");
+    typeText(editor, "x");
+    selectTab(editor, TrackEditorTab::Tags);
+    editor.tryHandleEvent(ftxui::Event::Return);
+    CHECK(editor.patchSummary().tagRemoveCount == 1);
+    CHECK_FALSE(editor.canApply());
+    editor.tryHandleEvent(applyEvent());
+    CHECK(editor.takeRequest() == TrackEditorRequest::None);
+
+    selectTab(editor, TrackEditorTab::Metadata);
+    editor.tryHandleEvent(restoreEvent());
+    REQUIRE(editor.canApply());
+    CHECK(editor.patchSummary() == TrackEditorPatchSummary{.tagRemoveCount = 1});
+    auto const patch = editor.buildPatch();
+    CHECK_FALSE(patch.metadata.optYear);
+    CHECK(patch.tagsToRemove == std::vector<std::string>{"Jazz"});
+    editor.tryHandleEvent(applyEvent());
+    CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
+  }
+
+  TEST_CASE("TrackPropertiesEditor - line deletion preserves untouched mixed values",
+            "[tui][regression][keyboard][editor]")
+  {
+    auto editor = makeEditor(
+      {TrackFixture{.title = "First", .album = "Common"}, TrackFixture{.title = "Second", .album = "Common"}});
+    focusRow(editor, "Title");
+    REQUIRE(editor.tryHandleEvent(ftxui::Event::CtrlU));
+    REQUIRE(editor.tryHandleEvent(ftxui::Event::CtrlK));
+    CHECK_FALSE(editor.isDirty());
+    CHECK(frame(editor).contains("<Multiple Values>"));
+    focusRow(editor, "Album");
+    REQUIRE(editor.tryHandleEvent(ftxui::Event::ArrowLeft));
+    REQUIRE(editor.tryHandleEvent(ftxui::Event::CtrlU));
+    CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .clearCount = 0});
+    CHECK_FALSE(frame(editor).contains("Common"));
+    REQUIRE(editor.tryHandleEvent(ftxui::Event::CtrlG));
+    CHECK_FALSE(editor.isDirty());
+    CHECK(frame(editor).contains("Common"));
   }
 } // namespace ao::tui::test

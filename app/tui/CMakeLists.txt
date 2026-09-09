@@ -23,6 +23,10 @@ add_library(aobus-tui-lib STATIC
     TerminalTrackColumnLayout.cpp
     TrackEditController.cpp
     TrackPropertiesEditor.cpp
+    TrackMetadataEditor.cpp
+    TrackTagEditor.cpp
+    TextField.cpp
+    MouseBindings.cpp
     TrackTable.cpp
     HitRegions.cpp
     LibraryNavigation.cpp

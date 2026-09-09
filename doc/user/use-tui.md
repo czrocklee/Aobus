@@ -49,11 +49,14 @@ Initialize the root with the GTK application or CLI first, then scan from any sh
 6. Press `e`, `:edit`, or `:properties` to open the Track Properties editor over the current selection: every marked track, or the focused track when nothing is marked.
    The editor appears as a centered modal dialog floating over the dimmed workspace. Its target list is frozen when it opens, so editing a different set of tracks means closing it and opening a new one.
    Press Tab or Shift+Tab to switch between the editor's pages: `Metadata`, `Tags`, `Properties` (read-only audio/technical details), and (for multi-track selections) `Tracks` (to review captured titles and paths).
+   On Properties and Tracks, j/k or Up/Down scrolls rows; PageUp/PageDown moves by a viewport and Home/End goes to the beginning/end.
    On the `Metadata` page, editing is direct without checkboxes: Up and Down move between rows, and typing immediately edits the focused field.
    An edited field displays a passive changed marker (`*`), while an active indicator (`>`) marks the focused row.
    Only changed fields are written to every target; untouched fields preserve each track's existing value.
    A field shared across all targets shows its value, while differing fields display a multiple-values placeholder; typing there replaces that field for all targets.
-   To clear a field across all targets, press Ctrl+U; pressing Ctrl+G restores the field to its baseline value or mixed preservation state.
+   To clear a field across all targets, press Ctrl+D; pressing Ctrl+G restores the field to its baseline value or mixed preservation state.
+   Ctrl+U and Ctrl+K delete text before or after the caret; Ctrl+W deletes the preceding word. Home/End or Ctrl+A/E moves to the beginning/end, and Alt+B/F or Ctrl+Left/Right moves by space-delimited word.
+   With Mouse control enabled in Settings, click tabs, fields, tags, and completion candidates. Clicking inside a field places the caret; wheel input navigates the active page. Footer controls and the close button follow the same apply, reload, and discard confirmations as the keyboard.
    For supported fields (such as Artist, Album, Genre, Composer), typing suggests matching library values in a popup; press Ctrl+N to open completion explicitly. Use Up/Down to navigate suggestions, Enter to accept, and Escape to dismiss the popup.
    On the `Tags` page, the box in front of each tag shows what the selected tracks would carry after you apply: `[x]` all of them, `[ ]` none of them, and `[~]` only some of them.
    A `[~]` row also shows the fraction, such as `1/2`, because the box alone cannot say how many. Below your own tags come library tags none of the selection carries yet, which is what their empty boxes say.

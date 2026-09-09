@@ -85,32 +85,37 @@ namespace ao::tui::test
 
   std::optional<ftxui::Box> findTextCells(ftxui::Screen const& screen, std::string_view const needle)
   {
-    if (needle.empty() || std::cmp_greater(needle.size(), screen.dimx()))
+    if (needle.empty())
     {
       return std::nullopt;
     }
 
     for (std::int32_t row = 0; row < screen.dimy(); ++row)
     {
-      for (std::int32_t column = 0; column <= screen.dimx() - static_cast<std::int32_t>(needle.size()); ++column)
+      for (std::int32_t column = 0; column < screen.dimx(); ++column)
       {
-        bool matches = true;
-
-        for (std::size_t index = 0; index < needle.size(); ++index)
+        if (screen.PixelAt(column, row).character.empty())
         {
-          if (screen.PixelAt(column + static_cast<std::int32_t>(index), row).character != std::string{needle[index]})
-          {
-            matches = false;
-            break;
-          }
+          continue;
         }
 
-        if (matches)
+        std::size_t matched = 0;
+
+        for (auto endColumn = column; endColumn < screen.dimx(); ++endColumn)
         {
-          return ftxui::Box{.x_min = column,
-                            .x_max = column + static_cast<std::int32_t>(needle.size()) - 1,
-                            .y_min = row,
-                            .y_max = row};
+          auto const& glyph = screen.PixelAt(endColumn, row).character;
+
+          if (!needle.substr(matched).starts_with(glyph))
+          {
+            break;
+          }
+
+          matched += glyph.size();
+
+          if (matched == needle.size())
+          {
+            return ftxui::Box{.x_min = column, .x_max = endColumn, .y_min = row, .y_max = row};
+          }
         }
       }
     }

@@ -3,7 +3,9 @@
 
 #include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "tui/TrackPropertiesEditor.h"
+#include "tui/TrackTagEditor.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -16,6 +18,17 @@
 
 namespace ao::tui::test
 {
+  TEST_CASE("TrackTagEditor - pending changes retain the full large-selection fraction", "[tui][regression][editor]")
+  {
+    auto editor = TrackTagEditor{ao::test::englishMessageCatalog(), 2000, {{"Jazz", 1500}}, {}};
+    editor.handleEvent(ftxui::Event::Return);
+    auto rendered = renderElement(editor.render(), 80, 24);
+    CHECK(rendered.text.contains("1500/2000 Add"));
+    editor.handleEvent(ftxui::Event::Return);
+    rendered = renderElement(editor.render(), 80, 24);
+    CHECK(rendered.text.contains("1500/2000 Remove"));
+  }
+
   TEST_CASE("TrackPropertiesEditor - edits tags through one always-live query", "[tui][unit][editor]")
   {
     auto editor = makeEditor(

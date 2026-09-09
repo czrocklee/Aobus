@@ -15,7 +15,7 @@ Exact startup options, keys, commands, and aliases belong to the [TUI command re
 
 ## Settings and live publication
 
-The mouse preference updates terminal tracking by reinstalling FTXUI terminal hooks through `WithRestoredIO`; the component graph and playback runtime remain alive. The App-owned signal watcher retires before that reinstall and is recreated afterward, preserving its precedence over FTXUI signal handlers and the normal exit checkpoint path. Root mouse events are also gated by the applied preference.
+The mouse preference updates terminal tracking by reinstalling FTXUI terminal hooks through `WithRestoredIO`; the component graph and playback runtime remain alive. The App-owned signal watcher retires before that reinstall and is recreated afterward, preserving its precedence over FTXUI signal handlers and the normal exit checkpoint path. The applied preference gates mouse events before dispatch to Settings, Track Properties, or workspace controls.
 
 Settings consumes input before root shortcuts, cannot coexist with the track editor, and cancels unfinished pointer/input interactions when opened. Its General, Appearance, Interaction, and Keyboard pages edit only global preferences. Per-list presentation and column-layout state stay outside Settings.
 
@@ -237,13 +237,21 @@ The workspace remains visible but inert behind the modal: all keyboard events an
 Cover art is neither requested nor painted while the editor is active.
 The Kitty image in particular is written to the terminal outside FTXUI's cell buffer after the frame is flushed, so it would paint over the modal rather than under it; the Kitty owner therefore removes its image while an editor is active or an exit is in progress.
 
+Editor tabs, metadata fields, tag rows, completion candidates, and footer actions have rendered mouse targets.
+Clicking inside an editable value places the caret at a grapheme boundary.
+Wheel input navigates the active page or its completion list.
+Mouse footer actions use the same confirmation, validation, and submission protocol as their keys; stale or submitting drafts cannot bypass those gates.
+The header × control follows the same `Esc` protocol: it dismisses active completion or a nonempty tag query before requesting editor closure.
+A dimmed Apply control consumes a click without requesting submission.
+The read-only Properties and Tracks bodies support wheel scrolling, without row click actions; their tabs and footer controls remain clickable.
+
 The editor organizes authoring into pages: `Metadata`, `Tags`, read-only `Properties`, and (for multi-track selections) `Tracks`.
 `Tab` and `Shift-Tab` cycle forward and backward through available pages from any control, search input, or completion popup.
 Inside the Metadata page, editing uses direct keyboard input without checkboxes.
 A passive changed indicator (`*`) marks edited rows, while an active indicator (`>`) highlights the focused row.
 Typing text into a field marks it for replacement; typing back the baseline value removes the pending change.
 Deleting an edited field to empty marks it for explicit clear.
-For mixed-value fields across multiple tracks, `Ctrl-U` triggers an explicit clear across all targets, while `Ctrl-G` restores the field to baseline or mixed preservation.
+For mixed-value fields across multiple tracks, `Ctrl-D` triggers an explicit clear across all targets, while `Ctrl-G` restores the field to baseline or mixed preservation.
 Inline numeric validation flags parsing errors and disables save while preserving the draft input.
 
 Metadata fields supporting vocabulary completion (Artist, Album, Album Artist, Genre, Composer, Conductor, Ensemble, Work, Movement, Soloist) query the runtime `CompletionService` synchronously on the event thread.
@@ -251,9 +259,12 @@ Non-empty typing or `Ctrl-N` triggers completion candidates in an anchored popup
 `Up`/`Down` and `PageUp`/`PageDown` navigate candidates, `Enter` replaces the targeted field text via checked range replacement (`tryReplaceRange`), and `Esc` closes the completion popup without dismissing the editor.
 The six-row candidate window moves only when arrow navigation leaves it; page navigation advances both selection and window by six rows, clamped at either end.
 The metadata viewport follows the selected candidate while completion is open, including in a terminal too short to show the entire popup.
-Every chord the popup declines -- `Ctrl-S`, `Ctrl-R`, `Ctrl-U`, `Ctrl-G`, and page switching -- closes it before the editor acts on it, so no confirmation prompt is drawn under candidates it cannot take input for.
+Every chord the popup declines -- `Ctrl-S`, `Ctrl-R`, `Ctrl-D`, `Ctrl-G`, and page switching -- closes it before the editor acts on it, so no confirmation prompt is drawn under candidates it cannot take input for.
 Single-line values refuse control characters, U+2028, and U+2029 rather than sanitizing them, one `insert` call at a time; FTXUI implements no bracketed paste, so a pasted string arrives as ordinary key events with its newlines as `Return` and cannot be refused as a unit.
-Caret navigation (`Left`, `Right`, `Home`, `End`) closes completion.
+Caret navigation (`Left`, `Right`, `Home`, `End`, `Ctrl-A`, `Ctrl-E`, `Alt-B`, `Alt-F`, `Ctrl-Left`, `Ctrl-Right`) closes completion.
+`Ctrl-U` and `Ctrl-K` delete text before or after the caret; `Ctrl-W` deletes the preceding ASCII-space-delimited word.
+These text edits preserve an untouched mixed field when its input is already empty.
+Explicit clearing remains `Ctrl-D`.
 
 The `Tags` page leads every row with a three-state box showing what all captured targets would carry after a submission: `[x]` for every target, `[ ]` for none, and `[~]` for a tag only some of them carry.
 A pending intent moves the box now and colours it, and names the change beside the tag as `Add` or `Remove`.
@@ -334,7 +345,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation, and forwards graceful exit without owning `ScreenInteractive`.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single restartable scan task.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate; [`SignalExitWatcherPosix.cpp`](../../../app/tui/SignalExitWatcherPosix.cpp) and [`SignalExitWatcherWindows.cpp`](../../../app/tui/SignalExitWatcherWindows.cpp) post those requests from platform signals.
-- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns coherent preparation, the retained authoring session and its invalidation observer, submission, and retirement; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns the editor's own focus, keys, draft state, and rendering.
+- [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns coherent preparation, the retained authoring session and its invalidation observer, submission, and retirement; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns modal focus, submission state, confirmations, and the combined patch. [`TrackMetadataEditor.cpp`](../../../app/tui/TrackMetadataEditor.cpp) owns metadata rows, validation, completion, and read-only properties; [`TrackTagEditor.cpp`](../../../app/tui/TrackTagEditor.cpp) owns tag intents, query, and selection. Page editors retain their own values and do not borrow the modal's members.
 - [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
@@ -350,7 +361,9 @@ The notification center can be opened explicitly even when compact status is not
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.
 - [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, single-editor exclusivity, one patch across every captured target, invalidation staleness, reload rebinding, and a submission settling after its editor and controller retired.
-- [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects focus order, Apply intent, mixed-value placeholders, patch construction, confirmations, and submission-state rendering.
+- [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects focus order, Apply intent, mixed-value placeholders, patch construction, confirmations, submission-state rendering, and cross-page draft preservation and validation.
+- [`MouseBindingsTest.cpp`](../../../test/unit/tui/MouseBindingsTest.cpp) protects painted shortcut bindings and clipped row hit regions.
+- [`EditorMouseTest.cpp`](../../../test/unit/tui/EditorMouseTest.cpp) protects pointer selection, completion acceptance, confirmation routing, and grapheme positioning.
 - [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorCompletionTest.cpp) protects candidate acceptance, stable paging, popup dismissal, and selected-candidate visibility in short terminals.
 - [`TrackPropertiesEditorTagsTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTagsTest.cpp) protects tag intent, Unicode matching, suggestion caps, and query editing.
 - [`TuiSignalProbeTest.cpp`](../../../test/unit/tui/TuiSignalProbeTest.cpp) drives [`ao_tui_signal_probe`](../../../test/fatal/TuiSignalProbeScenario.cpp) to protect watcher signal routing and previous-handler restoration outside the ordinary unit-test process.

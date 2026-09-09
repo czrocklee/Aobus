@@ -159,6 +159,15 @@ TUI begins with the shared application defaults, adds terminal-only defaults in 
 That plan considers only actions with a TUI handler, resolves collisions after FTXUI projection, and supplies both root dispatch and every configurable shortcut hint.
 Terminal input protocol remains a narrower scope above the plan: Ctrl-C, text editing and completion, list and modal-overlay navigation/activation, notification `x`, mouse sequences, and escape routes cannot be disabled by a root binding.
 
+The TUI track-properties modal composes value-owned metadata and tag editors.
+`TrackMetadataEditor` owns field drafts, validation, completion, and read-only form properties; `TrackTagEditor` owns tag intents and transient search.
+`TrackPropertiesEditor` coordinates page switching, confirmations, and the combined patch without gaining access to page row storage.
+The shared TUI `TextFieldModel` interprets standard editing keys and reports value changes separately from cursor movement.
+`textFieldValue` renders the shared grapheme caret and keeps its unclipped origin for pointer placement.
+`MouseBindings` binds painted footer controls to existing editor key protocols; it owns neither mutations nor validation.
+FTXUI reflection clips hit regions to painted cells, while `reflectLayout` retains the raw origin needed for scrolled text.
+Editor commands and completion remain with the owning page.
+
 Command parsing and discovery live in `Command`, independently of the shell input and overlay state.
 
 ## Boundaries and dependency direction

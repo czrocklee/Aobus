@@ -750,6 +750,8 @@ add_executable(ao_tui_test
     unit/tui/TrackEditControllerTest.cpp
     unit/tui/TrackPresentationNavigationTest.cpp
     unit/tui/TrackPropertiesEditorTest.cpp
+    unit/tui/EditorMouseTest.cpp
+    unit/tui/MouseBindingsTest.cpp
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
     unit/tui/TrackPropertiesEditorTagsTest.cpp
     unit/tui/TrackPropertiesEditorTestSupport.cpp

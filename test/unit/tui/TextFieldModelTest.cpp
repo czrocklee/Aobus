@@ -3,7 +3,10 @@
 
 #include "tui/TextFieldModel.h"
 
+#include "tui/TextCell.h"
+
 #include <catch2/catch_test_macros.hpp>
+#include <ftxui/component/event.hpp>
 
 #include <string>
 #include <string_view>
@@ -252,5 +255,115 @@ namespace ao::tui::test
       CHECK(field.value() == kJapanFlag);
       CHECK(field.cursor() == kJapanFlag.size());
     }
+  }
+
+  TEST_CASE("TextFieldModel - text events report edits separately from cursor navigation", "[tui][unit][editor]")
+  {
+    auto field = TextFieldModel{std::string{"a"} + std::string{kFamily}};
+
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowLeft));
+    CHECK(field.cursor() == 1);
+    REQUIRE(field.tryApplyEvent(ftxui::Event::Delete));
+    CHECK(field.value() == "a");
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Delete));
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Home));
+    CHECK(field.cursor() == 0);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Backspace));
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowRight));
+    CHECK(field.cursor() == 1);
+    REQUIRE(field.tryApplyEvent(ftxui::Event::Character(std::string{kCombiningAcute})));
+    CHECK(field.value() == std::string{"a"} + std::string{kCombiningAcute});
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::End));
+    CHECK(field.cursor() == field.value().size());
+    REQUIRE(field.tryApplyEvent(ftxui::Event::Backspace));
+    CHECK(field.empty());
+  }
+
+  TEST_CASE("TextFieldModel - text events leave commands and rejected input to the editor", "[tui][unit][editor]")
+  {
+    auto field = TextFieldModel{"Blue"};
+    REQUIRE(field.tryMoveToBegin());
+
+    SECTION("An editor command does not become text")
+    {
+      CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Return));
+      CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Tab));
+      CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Escape));
+    }
+
+    SECTION("Rejected text leaves the draft intact")
+    {
+      CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Character("red\nwhite")));
+      CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Character(std::string{"\x80"})));
+    }
+
+    CHECK(field.value() == "Blue");
+    CHECK(field.cursor() == 0);
+  }
+
+  TEST_CASE("TextFieldModel - word navigation skips spaces and keeps grapheme boundaries",
+            "[tui][unit][keyboard][editor]")
+  {
+    auto const value = std::string{"A  界"} + std::string{kFamily} + " B";
+    auto field = TextFieldModel{value};
+    REQUIRE(field.tryMoveToBegin());
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowRightCtrl));
+    CHECK(field.cursor() == 3);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Special("\033f")));
+    CHECK(field.cursor() == value.size() - 1);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowRightCtrl));
+    CHECK(field.cursor() == value.size());
+    CHECK_FALSE(field.tryMoveWordRight());
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowLeftCtrl));
+    CHECK(field.cursor() == value.size() - 1);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Special("\033b")));
+    CHECK(field.cursor() == 3);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowLeftCtrl));
+    CHECK(field.cursor() == 0);
+    CHECK_FALSE(field.tryMoveWordLeft());
+    CHECK(field.value() == value);
+  }
+
+  TEST_CASE("TextFieldModel - word deletion removes trailing spaces and a complete Unicode word",
+            "[tui][unit][keyboard][editor]")
+  {
+    auto field = TextFieldModel{std::string{"A  界"} + std::string{kFamily} + "  "};
+    REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlW));
+    CHECK(field.value() == "A  ");
+    CHECK(field.cursor() == 3);
+    REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlW));
+    CHECK(field.empty());
+    CHECK(field.cursor() == 0);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlW));
+  }
+
+  TEST_CASE("TextFieldModel - line deletion respects the caret and grapheme boundaries",
+            "[tui][unit][keyboard][editor]")
+  {
+    auto field = TextFieldModel{std::string{"a"} + std::string{kFamily} + "尾"};
+    REQUIRE(field.tryMoveLeft());
+    REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlU));
+    CHECK(field.value() == "尾");
+    CHECK(field.cursor() == 0);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlU));
+    REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlK));
+    CHECK(field.empty());
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlK));
+  }
+
+  TEST_CASE("TextFieldModel - pointer placement respects wide and joined graphemes", "[tui][unit][mouse][editor]")
+  {
+    auto field = TextFieldModel{"a界👨‍👩‍👧‍👦b"};
+    REQUIRE(field.tryMoveToCell(0));
+    CHECK(field.cursor() == 0);
+    REQUIRE(field.tryMoveToCell(1));
+    CHECK(field.cursor() == 1);
+    REQUIRE(field.tryMoveToCell(3));
+    CHECK(field.cursor() == std::string{"a界"}.size());
+    REQUIRE(field.tryMoveToCell(cellWidth("a界👨‍👩‍👧‍👦")));
+    CHECK(field.cursor() == std::string{"a界👨‍👩‍👧‍👦"}.size());
+    REQUIRE(field.tryMoveToCell(100));
+    CHECK(field.cursor() == field.value().size());
+    CHECK(field.value() == "a界👨‍👩‍👧‍👦b");
   }
 } // namespace ao::tui::test

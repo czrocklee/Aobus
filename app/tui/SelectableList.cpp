@@ -42,7 +42,7 @@ namespace ao::tui
         listPtr = std::move(listPtr) | ftxui::flex;
       }
 
-      return listPtr;
+      return (options.viewportBox != nullptr) ? std::move(listPtr) | ftxui::reflect(*options.viewportBox) : listPtr;
     }
   } // namespace
 
@@ -71,7 +71,7 @@ namespace ao::tui
 
       if (row.box != nullptr)
       {
-        rowPtr = std::move(rowPtr) | reflect(*row.box);
+        rowPtr = std::move(rowPtr) | ftxui::reflect(*row.box);
       }
 
       elements.push_back(std::move(rowPtr));

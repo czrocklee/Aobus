@@ -13,6 +13,7 @@
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/tui/KeymapTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 #include "tui/HitRegions.h"
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
@@ -539,6 +540,31 @@ namespace ao::tui::test
 
     REQUIRE(fixture.trackEditPtr->isActive());
     CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == 1);
+  }
+
+  TEST_CASE("EventController - disabled mouse input protects an open track editor", "[tui][regression][mouse][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.trackEditPtr->isActive());
+    auto const* editor = fixture.trackEditPtr->activeEditor();
+    auto const rendered = renderElement(editor->renderModal(80, 24), 80, 24);
+    auto const optBox = findTextCells(rendered.screen, "Tags");
+    REQUIRE(optBox);
+    auto const click = ftxui::Event::Mouse(
+      "",
+      ftxui::Mouse{
+        .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min});
+    fixture.preferences.mouseEnabled = false;
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(editor->tab() == TrackEditorTab::Metadata);
+    CHECK_FALSE(editor->isDirty());
+    fixture.preferences.mouseEnabled = true;
+    REQUIRE(controller.tryHandleEvent(click));
+    CHECK(editor->tab() == TrackEditorTab::Tags);
+    CHECK_FALSE(editor->isDirty());
   }
 
   TEST_CASE("EventController - an open editor answers for every remaining key", "[tui][unit][event][editor]")

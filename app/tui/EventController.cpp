@@ -1373,6 +1373,11 @@ namespace ao::tui
       return true;
     }
 
+    if (event.is_mouse() && !_preferences.mouseEnabled)
+    {
+      return true;
+    }
+
     // An open editor owns the whole surface, including keys and mouse events
     // it has no use for, so nothing behind it can act on stale geometry.
     if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
@@ -1382,11 +1387,6 @@ namespace ao::tui
 
     if (event.is_mouse())
     {
-      if (!_preferences.mouseEnabled)
-      {
-        return true;
-      }
-
       auto mouseEvent = event;
       return tryHandleMouse(mouseEvent.mouse());
     }

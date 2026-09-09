@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <ftxui/component/event.hpp>
+
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -12,7 +15,7 @@ namespace ao::tui
   /**
    * @brief One single-line editable value with a grapheme-cluster cursor.
    *
-   * FTXUI supplies key events, not an editable buffer, so the metadata editor
+   * FTXUI supplies key events, not an editable buffer, so each text field
    * owns its own text state. Every position this model exposes is a UTF-8 byte
    * offset that sits on an extended grapheme boundary, which is what keeps a
    * combining mark, a flag, or a joined emoji from being cut in half by a
@@ -61,6 +64,15 @@ namespace ao::tui
      */
     bool tryReplaceRange(std::size_t begin, std::size_t end, std::string_view text);
 
+    /**
+     * @brief Applies a standard text key and reports whether the value changed.
+     *
+     * Cursor navigation still applies when false is returned. Boundary no-ops,
+     * rejected input, and unrelated keys also return false. The owning editor
+     * handles commands, completion, and modal key consumption before calling this.
+     */
+    bool tryApplyEvent(ftxui::Event const& event);
+
     /// Removes the cluster before the cursor; false at the start of the value.
     bool tryBackspace();
     /// Removes the cluster at the cursor; false at the end of the value.
@@ -68,8 +80,13 @@ namespace ao::tui
 
     bool tryMoveLeft();
     bool tryMoveRight();
+    bool tryMoveWordLeft();
+    bool tryMoveWordRight();
+    bool tryDeleteWordBackward();
     bool tryMoveToBegin();
     bool tryMoveToEnd();
+    /// Places the cursor at the nearest grapheme boundary to a terminal-cell column.
+    bool tryMoveToCell(std::int32_t column);
 
   private:
     /// The nearest grapheme boundary at or after @p offset in the current value.

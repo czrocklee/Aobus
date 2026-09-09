@@ -3,9 +3,13 @@
 
 #include "TextFieldModel.h"
 
+#include "TextCell.h"
 #include <ao/utility/UnicodeText.h>
 
+#include <ftxui/component/event.hpp>
+
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -134,6 +138,64 @@ namespace ao::tui
     return true;
   }
 
+  bool TextFieldModel::tryApplyEvent(ftxui::Event const& event)
+  {
+    if (event == ftxui::Event::Backspace)
+    {
+      return tryBackspace();
+    }
+
+    if (event == ftxui::Event::Delete)
+    {
+      return tryDeleteForward();
+    }
+
+    if (event == ftxui::Event::CtrlU)
+    {
+      return _cursor > 0 && tryReplaceRange(0, _cursor, {});
+    }
+
+    if (event == ftxui::Event::CtrlK)
+    {
+      return _cursor < _value.size() && tryReplaceRange(_cursor, _value.size(), {});
+    }
+
+    if (event == ftxui::Event::ArrowLeft)
+    {
+      tryMoveLeft();
+    }
+    else if (event == ftxui::Event::ArrowRight)
+    {
+      tryMoveRight();
+    }
+    else if (event == ftxui::Event::Home || event == ftxui::Event::CtrlA)
+    {
+      tryMoveToBegin();
+    }
+    else if (event == ftxui::Event::End || event == ftxui::Event::CtrlE)
+    {
+      tryMoveToEnd();
+    }
+    else if (event == ftxui::Event::Special("\033b") || event == ftxui::Event::ArrowLeftCtrl)
+    {
+      tryMoveWordLeft();
+    }
+    else if (event == ftxui::Event::Special("\033f") || event == ftxui::Event::ArrowRightCtrl)
+    {
+      tryMoveWordRight();
+    }
+    else if (event == ftxui::Event::CtrlW)
+    {
+      return tryDeleteWordBackward();
+    }
+    else if (event.is_character())
+    {
+      return tryInsert(event.character());
+    }
+
+    return false;
+  }
+
   bool TextFieldModel::tryBackspace()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_value, _cursor);
@@ -188,6 +250,70 @@ namespace ao::tui
     return true;
   }
 
+  bool TextFieldModel::tryMoveWordLeft()
+  {
+    auto const before = _cursor;
+
+    while (_cursor > 0 && _value[_cursor - 1] == ' ')
+    {
+      if (!tryMoveLeft())
+      {
+        _cursor = before;
+        return false;
+      }
+    }
+
+    while (_cursor > 0 && _value[_cursor - 1] != ' ')
+    {
+      if (!tryMoveLeft())
+      {
+        _cursor = before;
+        return false;
+      }
+    }
+
+    return _cursor != before;
+  }
+
+  bool TextFieldModel::tryMoveWordRight()
+  {
+    auto const before = _cursor;
+
+    while (_cursor < _value.size() && _value[_cursor] != ' ')
+    {
+      if (!tryMoveRight())
+      {
+        _cursor = before;
+        return false;
+      }
+    }
+
+    while (_cursor < _value.size() && _value[_cursor] == ' ')
+    {
+      if (!tryMoveRight())
+      {
+        _cursor = before;
+        return false;
+      }
+    }
+
+    return _cursor != before;
+  }
+
+  bool TextFieldModel::tryDeleteWordBackward()
+  {
+    auto const end = _cursor;
+
+    if (!tryMoveWordLeft())
+    {
+      return false;
+    }
+
+    _value.erase(_cursor, end - _cursor);
+    _cursor = settledCursor(_cursor);
+    return true;
+  }
+
   bool TextFieldModel::tryMoveToBegin()
   {
     if (_cursor == 0)
@@ -208,6 +334,34 @@ namespace ao::tui
 
     _cursor = _value.size();
     return true;
+  }
+
+  bool TextFieldModel::tryMoveToCell(std::int32_t const column)
+  {
+    std::size_t offset = 0;
+    std::int32_t cells = 0;
+
+    while (offset < _value.size() && column > cells)
+    {
+      auto const nextRes = utility::nextUtf8GraphemeBoundary(_value, offset);
+
+      if (!nextRes || *nextRes <= offset)
+      {
+        break;
+      }
+
+      auto const width = cellWidth(std::string_view{_value}.substr(offset, *nextRes - offset));
+
+      if (column - cells < (width + 1) / 2)
+      {
+        break;
+      }
+
+      cells += width;
+      offset = *nextRes;
+    }
+
+    return std::exchange(_cursor, offset) != offset;
   }
 
   std::size_t TextFieldModel::settledCursor(std::size_t const offset) const
