@@ -21,14 +21,24 @@ printf 'sha=%s\n' "$base_sha" >> "$GITHUB_OUTPUT"
 changed_files="$(mktemp)"
 trap 'rm -f "$changed_files"' EXIT
 git diff --name-only --no-renames -z "$base_sha" HEAD > "$changed_files"
+head_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+commit_count="$(git rev-list --count "$base_sha..$head_sha")"
+file_count=0
 docs_only=true
 if [[ ! -s "$changed_files" || "${GITHUB_EVENT_NAME:-}" == workflow_dispatch ]]; then
   docs_only=false
 fi
 while IFS= read -r -d '' path; do
+  file_count=$((file_count + 1))
   case "$path" in
     AGENTS.md|CLAUDE.md|GEMINI.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md) ;;
     *) docs_only=false ;;
   esac
 done < "$changed_files"
+printf 'Validation range: %s..%s (%s commits, %s changed paths)\n' \
+  "$base_sha" "$head_sha" "$commit_count" "$file_count"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  printf 'Hygiene checks the final tree across `%s..%s`: **%s commits**, **%s changed paths**. Platform-incompatible files are covered by their native job.\n' \
+    "$base_sha" "$head_sha" "$commit_count" "$file_count" >> "$GITHUB_STEP_SUMMARY"
+fi
 printf 'docs-only=%s\n' "$docs_only" >> "$GITHUB_OUTPUT"

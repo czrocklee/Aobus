@@ -27,6 +27,35 @@ from ao.core import builddir, buildenv
 
 
 class NativePortalTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux Nix portal boundary")
+    def test_nix_reentry_selects_bash_without_a_nix_search_path(self):
+        portal = Path(__file__).resolve().parents[2] / "ao"
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash)
+        with tempfile.TemporaryDirectory() as temporary:
+            shell_package = Path(temporary) / "pinned-bash"
+            builder = Path(temporary) / "nix-build"
+            builder.write_text(f'#!/bin/sh\nprintf "%s\\n" "{shell_package}"\n', encoding="utf-8")
+            builder.chmod(0o755)
+            stub = Path(temporary) / "nix-shell"
+            stub.write_text('#!/bin/sh\nprintf "%s\\n" "$NIX_BUILD_SHELL" "$@"\n', encoding="utf-8")
+            stub.chmod(0o755)
+            for selected_shell in (None, "/explicit/bash"):
+                with self.subTest(selected_shell=selected_shell):
+                    env = {**os.environ, "PATH": f"{temporary}{os.pathsep}{os.environ['PATH']}", "NIX_PATH": ""}
+                    env.pop("AO_IN_NIX_PORTAL", None)
+                    env.pop("NIX_BUILD_SHELL", None)
+                    if selected_shell is not None:
+                        env["NIX_BUILD_SHELL"] = selected_shell
+                    result = subprocess.run(
+                        [bash, str(portal), "help"], env=env, capture_output=True, text=True, timeout=30
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    lines = result.stdout.splitlines()
+                    self.assertEqual(lines[0], selected_shell or str(shell_package / "bin/bash"))
+                    self.assertEqual(lines[1:3], [str(portal.parent / "shell.nix"), "--run"])
+                    self.assertIn("AO_IN_NIX_PORTAL=1", lines[3])
+
     def test_nix_reentry_discards_python_paths_from_a_stale_shell(self):
         portal = Path(__file__).resolve().parents[2] / "ao"
         content = portal.read_text(encoding="utf-8")
