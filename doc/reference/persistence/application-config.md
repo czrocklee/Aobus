@@ -11,7 +11,7 @@ summary: Enumerates Aobus managed YAML documents, registered groups, payload aut
 
 This reference owns the exact registry of application-managed YAML documents and `ConfigStore` groups.
 For each entry it identifies the logical document, literal top-level group, C++ payload type, explicit schema, writer, and current version marker.
-It also owns the complete field surface for the small global `window`, `runtime`, `session`, and `shortcuts` groups used by the interactive frontends.
+It also owns the complete field surface for the small global `window`, `runtime`, `session`, `preferences`, and `shortcuts` groups used by the interactive frontends.
 
 It does not own platform paths, store state transitions, restore/save behavior, the nested [workspace](../workspace/session-state.md) or playback schemas, presentation semantics, shell-layout node grammar, or component-state lifecycle.
 Those facts belong to the linked location reference, store specification, and domain owners.
@@ -40,7 +40,7 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Logical document | Composition | Container | Registered top-level surface |
 |---|---|---|---|
 | Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
-| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`. |
+| Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`, `preferences`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | TUI library presentation | One per-library TUI file. | `TuiLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
@@ -63,7 +63,8 @@ It does not denote nested mappings.
 | Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
-| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | No TUI writer; `ao::uimodel::loadKeymap` reads it over TUI defaults. |
+| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
+| Global TUI config | `preferences` | `ao::tui::TuiPreferences` | TUI-local `PreferencesSchema`. | Required `version`; current value `1`. | TUI Settings through the App-owned `ConfigStore`. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
@@ -132,6 +133,26 @@ It uses the same seeded-missing, unknown-field, duplicate-field, and malformed-k
 When the preferred runtime-group tuple is not restorable, the session tuple is the GTK fallback.
 An incomplete session tuple is ignored; restore never synthesizes missing identity fields.
 
+### Global TUI preferences
+
+The `preferences` mapping in `<config>/tui.yaml` is owned by `TuiPreferences` and its local `PreferencesSchema`. `version` is required and must be `1`; missing preference fields use the defaults below. Malformed present values reject the group.
+
+| Field | Default | Accepted values |
+|---|---|---|
+| `language` | empty string | System (empty), `en`, `de`, `es`, `fr`, `ja`, `zh-Hans`, `zh-Hant` |
+| `coverArtMode` | `auto` | `auto`, `kitty`, `blocks`, `off` |
+| `dimBackdrop` | `true` | Boolean |
+| `reducedMotion` | `false` | Boolean |
+| `mouseEnabled` | `true` | Boolean |
+| `qualityHover` | `true` | Boolean |
+| `wheelStep` | `3` | Integer 1–10 tracks |
+| `seekSeconds` | `5` | Integer 1–60 seconds |
+| `volumePercent` | `5` | Integer 1–10 percentage points |
+
+If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document.
+
+Settings persists the complete candidate before publishing live behavior. A missing persistent location is a save failure. The one global store preserves `runtime`, `shortcuts`, and unknown sibling groups.
+
 ### Global shortcut group
 
 The `shortcuts` group is itself the dynamic mapping; its complete serialized shape is:
@@ -147,7 +168,7 @@ Saving writes only bindings whose effective chord sequence differs from the defa
 GTK exposes a mutation surface and persists those deltas in its global document.
 WinUI loads hand-authored overrides over the desktop defaults; it has no shortcut editor or shortcut writer.
 GTK persists a shortcut candidate before publishing live accelerators, and the Keyboard page reports a failed `saveKeymap` result once.
-TUI loads the same group from `<config>/tui.yaml` over its shared-plus-terminal defaults, but exposes no editor and does not save the keymap during ordinary shutdown.
+TUI loads the same group from `<config>/tui.yaml` over its shared-plus-terminal defaults and saves acknowledged Settings Keyboard candidates before replacing live bindings. Ordinary shutdown does not rewrite untouched shortcuts.
 Its normal output-preference checkpoint writes the `runtime` sibling through the same live `ConfigStore`, preserving the shortcut group already present in the store snapshot.
 
 Action ids are plain strings in this payload.

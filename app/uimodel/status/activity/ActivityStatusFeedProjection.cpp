@@ -493,4 +493,32 @@ namespace ao::uimodel
     prune(_hiddenCompactIds);
     prune(_hiddenDetailIds);
   }
+
+  void ActivityStatusFeedProjection::setTextCatalog(i18n::MessageCatalog textCatalog,
+                                                    rt::NotificationFeedState const& feed)
+  {
+    _textCatalog = std::move(textCatalog);
+
+    if (isLibraryTaskActive())
+    {
+      projectDetail(feed);
+      projectLibraryProgress(_libraryProgressStates.back());
+      return;
+    }
+
+    if (_compactSourceNotificationIds.size() == 1 && _state.compact.kind == ActivityStatusKind::Info)
+    {
+      auto const it =
+        std::ranges::find(feed.entries, _compactSourceNotificationIds.front(), &rt::NotificationEntry::id);
+
+      if (it != feed.entries.end())
+      {
+        projectDetail(feed);
+        projectNotificationCompact(*it);
+        return;
+      }
+    }
+
+    handleFeedChanged(feed);
+  }
 } // namespace ao::uimodel

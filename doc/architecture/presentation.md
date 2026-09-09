@@ -59,7 +59,7 @@ Authored labels are not part of the runtime definitions.
 UIModel owns deterministic platform-neutral presentation behavior.
 Its feature capsules contain view models, editor/form models, interaction models, policies, projections, formatters, catalogs, resolvers, and UI-local stores.
 
-Shared authored copy is owned by the startup-selected `MessageCatalog`.
+Shared authored copy is owned by an immutable `MessageCatalog` value selected by the composition root. TUI Settings may replace that value on the callback executor and refresh catalog copies and cached display projections without recreating the runtime.
 Interactive call sites resolve required messages with `requiredText` and `requiredFormat`.
 Fixed and caller-parameterized copy uses the canonical typed `MessageId` directly; named functions remain where UIModel maps a domain value, derives selectors, or owns an open-id fallback.
 Closed inputs such as track fields, missing-value kinds, completion roles, progress kinds, and report templates resolve exhaustively.
@@ -67,9 +67,9 @@ Open backend/profile ids use their stable id as the documented fallback.
 Catalog output is never persisted or parsed for recovery, ordering, grouping, aggregation, or navigation.
 Borrowed catalog views point into shared immutable storage retained by `MessageCatalog` copies; state crossing that lifetime owns its text.
 
-Interactive process roots own one leaf `MessageCatalog` selected from the operating-system locale before frontend construction.
+Interactive process roots own a leaf `MessageCatalog` selected before frontend construction. TUI honors its global language override; the desktop roots use the operating-system locale.
 That facade is the governed ICU localization and formatting boundary; it backs the shared UIModel semantic surface and each frontend-local slice.
-GTK, TUI, and WinUI retain the catalog for their process lifetime; there is no mutable process-global locale service.
+GTK and WinUI retain the startup catalog. TUI may replace its injected value and refresh cached display projections on the callback executor; there is no mutable process-global locale service.
 Frontend-specific vocabulary stays at the leaves and uses canonical typed ids; WinUI also uses generated MRT resources selected by the same canonical locale.
 Stable action names, command syntax, and shortcut tokens remain untranslated identities and enter localized patterns only as arguments.
 
@@ -80,8 +80,12 @@ leaf `ao_app_i18n_ordering` target beside, but independent of, the message
 catalog capability. Display text, locale-independent group identity, and
 locale-dependent ordering keys remain separate values. Ordering keys are
 transient binary data owned by the consuming projection or vocabulary
-operation and never become library or session state. GTK, TUI, and WinUI retain
-the policy for the lifetime of every runtime that borrows it.
+operation and never become library or session state. Initially borrowed policies
+remain owned by their composition roots. The live replacement API transfers
+shared ownership to runtime consumers: completion invalidates materialized
+vectors and browsing projections rebuild keys. Captured transient playback
+projections retain their previous policy and order until released. This lets
+TUI replace language without restarting playback or the runtime.
 
 Locale ordering and completion aliases remain separate ICU leaf targets.
 Their public seams are independent and a future frontend may consume a

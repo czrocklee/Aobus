@@ -71,10 +71,10 @@ The TUI keeps its own file rather than sharing GTK's. `ConfigStore` writes a who
 
 | Location | Class | Writer or reader |
 |---|---|---|
-| `<config>/tui.yaml` | Global managed state for TUI application preferences and load-only shortcut overrides | One `ConfigStore` owned by the TUI composition root |
+| `<config>/tui.yaml` | Global managed state for TUI application preferences and editable shortcut overrides | One `ConfigStore` owned by the TUI composition root |
 
 The TUI loads the `shortcuts` group from this global file, independently of the selected library and `--config` workspace override.
-It has no shortcut editor and performs no ordinary keymap save; saving the sibling `runtime` preference group through the same live store preserves the loaded shortcut content.
+Settings writes accepted shortcut and UI-preference candidates through that same store, preserving sibling groups. Ordinary exit does not rewrite untouched shortcuts.
 
 ### Per-library locations
 

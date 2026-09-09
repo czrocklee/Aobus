@@ -97,6 +97,8 @@ namespace ao::tui
     /// Closes any open editor without waiting for a submitted write to settle.
     void retire();
 
+    void setTextOrderingPolicy(rt::TextOrderingPolicy const* policy);
+
   private:
     struct State;
 

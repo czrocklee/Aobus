@@ -3,6 +3,54 @@
 
 es:table {
   messages:table {
+    tui_settings_save_failed { "No se pudo guardar la configuración. {detail}" }
+    tui_settings_load_failed { "No se pudieron cargar las preferencias guardadas; se usan los valores predeterminados. {detail}" }
+    tui_settings_title { "Ajustes" }
+    tui_settings_general { "General" }
+    tui_settings_appearance { "Apariencia" }
+    tui_settings_interaction { "Interacción" }
+    tui_settings_keyboard { "Teclado" }
+    tui_settings_language { "Idioma" }
+    tui_settings_system { "Idioma del sistema" }
+    tui_settings_global { "Preferencias globales de TUI" }
+    tui_settings_dim { "Atenuar el fondo del diálogo" }
+    tui_settings_motion { "Reducir animaciones" }
+    tui_settings_cover { "Modo de carátula" }
+    tui_settings_mouse { "Control con ratón" }
+    tui_settings_wheel { "Paso de la rueda" }
+    tui_settings_seek { "Paso de búsqueda con teclado" }
+    tui_settings_volume { "Paso de volumen con teclado" }
+    tui_settings_hover { "Detalles de audio al pasar el ratón" }
+    tui_settings_on { "Activado" }
+    tui_settings_off { "Desactivado" }
+    tui_settings_unbound { "Sin asignar" }
+    tui_settings_immediate { "Los cambios aceptados se guardan de inmediato." }
+    tui_settings_language_hint { "El idioma y la ordenación cambian al instante. La reproducción continúa." }
+    tui_settings_invalid_chord { "Introduce una combinación válida, por ejemplo {example}." }
+    tui_settings_close_prompt { "¿Cerrar y descartar los cambios sin guardar?" }
+    tui_settings_palette { "Paleta de comandos" }
+    tui_settings_previous_row { "Fila anterior" }
+    tui_settings_next_row { "Fila siguiente" }
+    tui_settings_previous_group { "Grupo anterior" }
+    tui_settings_next_group { "Grupo siguiente" }
+    tui_settings_seek_back { "Retroceder" }
+    tui_settings_seek_forward { "Avanzar" }
+    tui_settings_volume_down { "Bajar volumen" }
+    tui_settings_volume_up { "Subir volumen" }
+    tui_settings_tracks { "{count, plural, one {# pista} other {# pistas}}" }
+    tui_settings_seconds { "{count, plural, one {# segundo} other {# segundos}}" }
+    tui_settings_effective_cover { "Modo actual: {mode}" }
+    tui_settings_conflict { "Ya asignado a {detail}; elimina esa asignación primero." }
+    tui_settings_unsupported { "Tecla no disponible o reservada: {detail}" }
+    tui_settings_stored_issue { "Revisa la asignación guardada: {detail}" }
+    tui_settings_page_keys { "{pages} Páginas · {close} Cerrar" }
+    tui_settings_preference_keys { "{change} Cambiar valor" }
+    tui_settings_language_keys { "{move} Elegir · {apply} Aplicar · {close} Cancelar" }
+    tui_settings_chord_keys { "{apply} Guardar tecla · {close} Cancelar" }
+    tui_settings_confirm_keys { "{apply} Confirmar · {retry} Reintentar · {close} Seguir editando" }
+    tui_settings_retry_keys { "{retry} Reintentar · {discard} Descartar · {close} Cerrar" }
+    tui_settings_keyboard_keys { "{choose} Asignación · {edit} Cambiar · {add} Añadir · {remove} Quitar · {reset} Restablecer" }
+
     pilot_library_title { "Biblioteca de música" }
     pilot_greeting { "Bienvenido/a, {name}" }
     pilot_copy_summary { "Se copiaron {count} pistas a {destination}" }

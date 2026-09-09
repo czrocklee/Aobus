@@ -31,6 +31,8 @@ add_library(aobus-tui-lib STATIC
     TrackListEntry.cpp
     TrackPresentationNavigation.cpp
     TrackSection.cpp
+    TuiPreferences.cpp
+    SettingsEditor.cpp
     TuiLayoutStateStore.cpp
     TuiKeymap.cpp
     TuiText.cpp

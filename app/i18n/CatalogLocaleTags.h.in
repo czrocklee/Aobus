@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#pragma once
+
+#include <array>
+#include <string_view>
+
+namespace ao::i18n::detail
+{
+  // Generated from catalog/package.lst; do not edit the generated header.
+  inline constexpr auto kCatalogLocaleTags = std::to_array<std::string_view>({
+@AOBUS_CATALOG_LOCALE_TAG_LITERALS@  });
+} // namespace ao::i18n::detail

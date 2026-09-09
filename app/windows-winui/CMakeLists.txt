@@ -263,38 +263,14 @@ set_source_files_properties(MainWindow.xaml PROPERTIES
 set_source_files_properties(Project.idl PROPERTIES
   VS_TOOL_OVERRIDE Midl
   VS_SETTINGS "SubType=Code;OutputDirectory=$(ProjectDir)")
-set_source_files_properties(${AOBUS_CATALOG_EN_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\en\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_DE_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\de\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_ZH_HANS_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\zh-Hans\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_ZH_HANT_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\zh-Hant\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_JA_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\ja\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_ES_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\es\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_FR_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\fr\\Resources.resw")
-set_source_files_properties(${AOBUS_CATALOG_PSEUDO_RESW} PROPERTIES
-  GENERATED TRUE
-  VS_TOOL_OVERRIDE PRIResource
-  VS_SETTINGS "Link=Resources\\qps-ploc\\Resources.resw")
+foreach(_catalog_resw IN LISTS AOBUS_CATALOG_WINUI_RESW_FILES)
+  get_filename_component(_catalog_directory "${_catalog_resw}" DIRECTORY)
+  get_filename_component(_catalog_tag "${_catalog_directory}" NAME)
+  set_source_files_properties("${_catalog_resw}" PROPERTIES
+    GENERATED TRUE
+    VS_TOOL_OVERRIDE PRIResource
+    VS_SETTINGS "Link=Resources\\${_catalog_tag}\\Resources.resw")
+endforeach()
 set_source_files_properties(app.manifest PROPERTIES
   VS_TOOL_OVERRIDE Manifest)
 set_source_files_properties(${AOBUS_NO_COVER_NOTE_ASSET} PROPERTIES

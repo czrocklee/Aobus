@@ -10,7 +10,9 @@
 #include <ftxui/dom/elements.hpp>
 
 #include <atomic>
+#include <cstdint>
 #include <thread>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -75,5 +77,54 @@ namespace ao::tui::test
     executor.drainPendingTasks();
 
     CHECK(ran.load());
+  }
+
+  TEST_CASE("Executor - loop checkpoint recovers callbacks queued while terminal hooks are absent",
+            "[tui][regression][executor][concurrency]")
+  {
+    auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
+    auto executor = Executor{screen};
+    auto rendererPtr = ftxui::Renderer([] { return ftxui::text(""); });
+    auto loop = ftxui::Loop{&screen, rendererPtr};
+    auto completed = std::vector<std::int32_t>{};
+    bool handlingInput = false;
+    auto enqueueFromWorker = [&](std::int32_t const value)
+    {
+      auto worker = std::jthread{[&, value]
+                                 {
+                                   executor.dispatch(
+                                     [&, value]
+                                     {
+                                       CHECK(executor.isCurrent());
+                                       CHECK_FALSE(handlingInput);
+                                       completed.push_back(value);
+                                     });
+                                 }};
+      worker.join();
+    };
+
+    screen.Post(
+      [&]
+      {
+        handlingInput = true;
+        screen.WithRestoredIO(
+          [&]
+          {
+            screen.TrackMouse(false);
+            enqueueFromWorker(1);
+          })();
+        // The queue is already nonempty, so a later callback cannot replace the lost wake.
+        enqueueFromWorker(2);
+        handlingInput = false;
+      });
+    loop.RunOnce();
+    REQUIRE(completed.empty());
+
+    // App drains here, after the FTXUI turn has unwound its input handlers.
+    executor.drainPendingTasks();
+    CHECK(completed == std::vector<std::int32_t>{1, 2});
+    enqueueFromWorker(3);
+    loop.RunOnce();
+    CHECK(completed == std::vector<std::int32_t>{1, 2, 3});
   }
 } // namespace ao::tui::test

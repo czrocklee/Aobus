@@ -74,6 +74,8 @@ namespace ao::uimodel
 
     void refresh();
 
+    void setTextCatalog(i18n::MessageCatalog textCatalog);
+
   private:
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void render(rt::OutputState const& output);

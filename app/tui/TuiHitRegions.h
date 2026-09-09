@@ -23,6 +23,7 @@ namespace ao::tui
     Soul,
     Presentation,
     ActivityStatus,
+    Settings,
   };
 
   struct HitTestContext final
@@ -48,6 +49,7 @@ namespace ao::tui
     ftxui::Box outputDeviceButtonBox{};
     ftxui::Box presentationButtonBox{};
     ftxui::Box activityStatusBox{};
+    ftxui::Box settingsButtonBox{};
     ftxui::Box seekRailBox{};
     ftxui::Box trackTableBox{};
 

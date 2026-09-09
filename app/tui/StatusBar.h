@@ -30,6 +30,8 @@ namespace ao::tui
     ShellInteractionModel const* shell = nullptr;
     ftxui::Box* activityStatusBox = nullptr;
     bool activityStatusHovered = false;
+    ftxui::Box* settingsButtonBox = nullptr;
+    bool settingsHovered = false;
   };
 
   std::string_view activityKindLabel(uimodel::ActivityStatusKind kind);

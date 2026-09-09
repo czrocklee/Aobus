@@ -11,6 +11,7 @@
 #include "tui/LibraryNavigation.h"
 #include "tui/TrackPresentationNavigation.h"
 #include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -81,6 +82,31 @@ namespace ao::tui::test
       return std::move(*res);
     }
   } // namespace
+
+  TEST_CASE("LibraryController - live locale change retains focused and marked track identities",
+            "[tui][unit][library][localization]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const umlaut = fixture.addTrack("ä");
+    auto const zed = fixture.addTrack("z");
+    fixture.runtimePtr->setTextOrderingPolicy(
+      std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("de"))});
+    auto controller = fixture.makeController();
+    controller.setPresentation("songs");
+    controller.setSelectedTrackIndex(0);
+    REQUIRE(controller.selectedTrackView().track->id == umlaut);
+    controller.toggleFocusedMark();
+    auto const viewId = controller.activeViewId();
+    fixture.runtimePtr->setTextOrderingPolicy(
+      std::shared_ptr<rt::TextOrderingPolicy const>{ao::test::requireValue(i18n::createIcuTextOrderingPolicy("sv"))});
+    controller.setTextCatalog(ao::test::messageCatalog("zh-Hans"));
+    CHECK(controller.activeViewId() == viewId);
+    CHECK(controller.selectedTrackView().track->id == umlaut);
+    CHECK(controller.markedIds() == std::unordered_set<TrackId>{umlaut});
+    REQUIRE(controller.tracks().size() == 2);
+    CHECK(controller.tracks().front().id == zed);
+    CHECK(controller.currentListTitle() != "All Tracks");
+  }
 
   TEST_CASE("LibraryController - startup publishes an active all-tracks view", "[tui][regression][library]")
   {

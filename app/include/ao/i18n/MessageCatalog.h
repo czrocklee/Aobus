@@ -73,8 +73,19 @@ namespace ao::i18n
     bool operator==(ResolvedMessage const&) const = default;
   };
 
+  struct CatalogLocale final
+  {
+    std::string_view tag;
+    std::string selfName;
+  };
+
+  // Packaged maintained locales with ICU native display names. English comes
+  // first, followed by tag order; generated pseudo-localization is excluded.
+  // The returned metadata has process lifetime.
+  std::span<CatalogLocale const> availableCatalogLocales();
+
   /**
-   * Immutable interactive message catalog selected at process startup.
+   * Immutable interactive message catalog for one selected locale.
    *
    * Construction admits one explicit locale and eagerly loads and parses every
    * pattern. Published instances share logically immutable patterns and

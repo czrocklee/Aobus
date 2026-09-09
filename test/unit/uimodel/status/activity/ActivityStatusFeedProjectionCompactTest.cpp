@@ -12,6 +12,40 @@
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("ActivityStatusFeedProjection - language replacement refreshes grouped warnings and keeps detail sources",
+            "[uimodel][unit][status][localization]")
+  {
+    auto const notifications =
+      feed({entry(rt::NotificationId{1}, rt::NotificationSeverity::Warning, "First warning"),
+            entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Second warning")});
+    auto projection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), notifications};
+    auto const previous = projection.viewState().compact.text;
+    projection.setTextCatalog(ao::test::messageCatalog("de"), notifications);
+    CHECK(projection.viewState().compact.text != previous);
+    CHECK(projection.viewState().compact.kind == ActivityStatusKind::Warning);
+    auto const& items = projection.viewState().detail.items;
+    REQUIRE(items.size() == 2);
+    CHECK(items[0].id == rt::NotificationId{2});
+    CHECK(items[0].message == "Second warning");
+    CHECK(items[1].id == rt::NotificationId{1});
+    CHECK(items[1].message == "First warning");
+  }
+
+  TEST_CASE("ActivityStatusFeedProjection - live language change refreshes active progress without losing fraction",
+            "[uimodel][unit][status][localization]")
+  {
+    auto projection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
+    projection.handleLibraryTaskProgress(
+      libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "track.flac", 0.625));
+    auto const previous = projection.viewState().compact.text;
+    projection.setTextCatalog(ao::test::messageCatalog("de"), feed({}));
+    CHECK(projection.viewState().compact.text != previous);
+    CHECK(projection.viewState().compact.kind == ActivityStatusKind::Processing);
+    CHECK(projection.viewState().compact.optProgressFraction == 0.625);
+    REQUIRE(projection.viewState().detail.optLibraryTask);
+    CHECK(projection.viewState().detail.optLibraryTask->progressFraction == 0.625);
+  }
+
   TEST_CASE("ActivityStatusFeedProjection - projects compact state from runtime priority",
             "[uimodel][unit][status][activity]")
   {

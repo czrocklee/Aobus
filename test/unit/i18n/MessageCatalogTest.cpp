@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #ifndef _WIN32
@@ -13,6 +14,7 @@
 #include <unicode/utypes.h>
 #endif
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <barrier>
@@ -32,6 +34,54 @@ namespace ao::i18n::test
   static_assert(std::constructible_from<MessageArgument, std::string_view, double>);
   static_assert(!std::constructible_from<MessageArgument, std::string_view, bool>);
   static_assert(!std::constructible_from<MessageArgument, std::string_view, MessageId>);
+
+  TEST_CASE("MessageCatalog - Settings steps use singular and plural forms", "[core][regression][catalog]")
+  {
+    struct Forms final
+    {
+      std::string_view locale;
+      std::string_view oneTrack;
+      std::string_view twoTracks;
+      std::string_view oneSecond;
+      std::string_view twoSeconds;
+    };
+
+    for (auto const& forms : std::array{Forms{"en", "1 track", "2 tracks", "1 second", "2 seconds"},
+                                        Forms{"de", "1 Titel", "2 Titel", "1 Sekunde", "2 Sekunden"},
+                                        Forms{"es", "1 pista", "2 pistas", "1 segundo", "2 segundos"},
+                                        Forms{"fr", "1 piste", "2 pistes", "1 seconde", "2 secondes"}})
+    {
+      INFO(forms.locale);
+      auto catalogRes = MessageCatalog::create(forms.locale);
+      REQUIRE(catalogRes);
+      CHECK(requiredFormat(*catalogRes, MessageId::TuiSettingsTracks, {{"count", 1}}) == forms.oneTrack);
+      CHECK(requiredFormat(*catalogRes, MessageId::TuiSettingsTracks, {{"count", 2}}) == forms.twoTracks);
+      CHECK(requiredFormat(*catalogRes, MessageId::TuiSettingsSeconds, {{"count", 1}}) == forms.oneSecond);
+      CHECK(requiredFormat(*catalogRes, MessageId::TuiSettingsSeconds, {{"count", 2}}) == forms.twoSeconds);
+    }
+  }
+
+  TEST_CASE("MessageCatalog - selectable locales resolve packaged translations without fallback",
+            "[core][regression][catalog]")
+  {
+    auto const locales = availableCatalogLocales();
+    REQUIRE_FALSE(locales.empty());
+    CHECK(locales.front().tag == "en");
+
+    for (auto const& locale : locales)
+    {
+      INFO(locale.tag);
+      CHECK_FALSE(locale.tag.empty());
+      CHECK(locale.tag != "qps-ploc");
+      CHECK_FALSE(locale.selfName.empty());
+      CHECK(std::ranges::count(locales, locale.tag, &CatalogLocale::tag) == 1);
+      auto catalogRes = MessageCatalog::create(locale.tag);
+      REQUIRE(catalogRes);
+      auto titleRes = catalogRes->format(MessageId::PilotLibraryTitle);
+      REQUIRE(titleRes);
+      CHECK(titleRes->locale == locale.tag);
+    }
+  }
 
   TEST_CASE("MessageCatalog - admits canonical locale tags and applies explicit fallback", "[core][unit][catalog]")
   {

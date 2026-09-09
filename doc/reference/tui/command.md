@@ -17,7 +17,7 @@ The surface is unversioned; modal and rendering behavior belongs to the [TUI int
 Startup option authority is `app/tui/Main.cpp`.
 Command-prefix and alias authority is `ShellInteractionModel.cpp`.
 Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translation, projected collision selection, and effective display chords belong to `TuiKeymap.cpp`.
-The immutable plan built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
+The replaceable plan value built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
 `TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns the editor's own keys and rendering.
@@ -31,7 +31,7 @@ The immutable plan built there is read by `EventController.cpp` for root dispatc
 | `-l, --library <root>` | music library root; normalized absolute path |
 | `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
 | `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
-| `--cover-art-mode <auto|kitty|blocks|off>` | cover renderer |
+| `--cover-art-mode <auto|kitty|blocks|off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
 | `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
 | `--version` | prints `Aobus TUI <version>` and exits |
 
@@ -42,7 +42,12 @@ Startup also exits with a diagnostic when it cannot prepare the selected workspa
 
 At startup the TUI loads the `shortcuts` group from the application-global `<config>/tui.yaml`, using the shared application defaults plus the TUI-local defaults in the [keyboard map reference](../shell/keymap.md).
 This source is independent of the selected library and `--config`.
-There is no TUI shortcut editor and ordinary shutdown does not rewrite the keymap; the same global store may save the unrelated output preference while preserving the loaded shortcut group.
+The Settings Keyboard page saves accepted candidates before replacing the effective dispatch/hint plan. Ordinary shutdown does not rewrite untouched shortcuts. All global preferences share one store that preserves sibling groups.
+
+### Settings
+
+Press `,`, click Settings in the workspace status bar, or use `:settings` / `:config` to open Settings. The shortcut is configurable through `tui.shell.openSettings`; the mouse entry remains available when it is unbound. Help lists the effective shortcut and command aliases.
+Tab/Shift+Tab selects a page; Escape closes, asking for confirmation if a failed save is pending. In the language chooser or shortcut capture, Escape cancels only the unconfirmed choice. Preference rows use Left/Right or Enter. Language uses a chooser and Enter confirmation. Keyboard uses Left/Right to select a chord, Insert to add, Enter to replace, Delete to remove, and `r` to restore defaults. Failed preference and shortcut saves offer Ctrl+R retry and Ctrl+G discard.
 
 ### Command prefixes
 
@@ -83,6 +88,7 @@ Text that is not a known prefix or exact alias is an unknown command and does no
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop`, `s` | stop playback |
+| `settings`, `config` | open global TUI Settings |
 | `quit`, `q` | request normal checkpoint-and-stop exit |
 
 ### Workspace keys
@@ -103,6 +109,7 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `{` / `}` | previous/next presentation group | configurable |
 | `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
 | `l`, `d`, `a`, `o`, `p`, `n` | toggle corresponding overlay | configurable |
+| `,` | open Settings | configurable at root |
 | `?` | open help | configurable |
 | `Ctrl+L` | reveal current track | configurable |
 | `c` | clear filter | configurable |

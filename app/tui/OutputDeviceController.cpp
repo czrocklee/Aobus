@@ -170,4 +170,8 @@ namespace ao::tui
     _viewModel.selectOutputDevice(row.backendId, row.deviceId, row.profileId);
     return true;
   }
+  void OutputDeviceController::setTextCatalog(i18n::MessageCatalog textCatalog)
+  {
+    _viewModel.setTextCatalog(std::move(textCatalog));
+  }
 } // namespace ao::tui

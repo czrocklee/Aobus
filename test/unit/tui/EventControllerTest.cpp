@@ -21,7 +21,9 @@
 #include "tui/OutputDevicePanel.h"
 #include "tui/PlaybackPanel.h"
 #include "tui/PresentationPanel.h"
+#include "tui/SettingsEditor.h"
 #include "tui/ShellInteractionModel.h"
+#include "tui/StatusBar.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackEditController.h"
 #include "tui/TrackListEntry.h"
@@ -31,7 +33,9 @@
 #include "tui/TrackTable.h"
 #include "tui/TuiHitRegions.h"
 #include "tui/TuiKeymap.h"
+#include "tui/TuiPreferences.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
@@ -109,6 +113,9 @@ namespace ao::tui::test
                                                                [](uimodel::ActivityStatusViewState const&) {}};
       std::unique_ptr<LibraryScanController> libraryScanPtr{};
       std::unique_ptr<TrackEditController> trackEditPtr{};
+      TuiPreferences preferences{};
+      uimodel::KeymapModel settingsKeymap{tuiDefaultKeymap()};
+      std::unique_ptr<SettingsEditor> settingsPtr;
       std::size_t exitRequestCount = 0;
       bool exitWaiting = false;
 
@@ -158,6 +165,21 @@ namespace ao::tui::test
                                                                runtimePtr->textOrderingPolicy());
         }
 
+        settingsPtr = std::make_unique<SettingsEditor>(
+          ao::test::englishMessageCatalog(),
+          preferences,
+          settingsKeymap,
+          SettingsEditor::Outputs{.applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+                                  {
+                                    preferences = candidate;
+                                    return {};
+                                  },
+                                  .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
+                                  {
+                                    settingsKeymap = candidate;
+                                    return {};
+                                  },
+                                  .coverMode = [] { return std::string{"off"}; }});
         return EventController{shell,
                                library,
                                runtimePtr->async(),
@@ -172,6 +194,8 @@ namespace ao::tui::test
                                  .notifications = runtimePtr->notifications(),
                                  .libraryScan = *libraryScanPtr,
                                  .trackEdit = *trackEditPtr,
+                                 .settings = *settingsPtr,
+                                 .preferences = preferences,
                                  .requestExit = [this] { ++exitRequestCount; },
                                  .isExitWaiting = [this] { return exitWaiting; },
                                  .commandCompletionCallback = std::move(commandCompletion),
@@ -1547,6 +1571,73 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isQualityHoverVisible());
   }
 
+  TEST_CASE("EventController - comma opens Settings only at workspace scope", "[tui][unit][event][settings]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK(fixture.settingsPtr->isActive());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(":")));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK(fixture.shell.inputDraft() == ",");
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.trackEditPtr->isActive());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+  }
+
+  TEST_CASE("EventController - Settings remains clickable with no keyboard binding", "[tui][unit][event][settings]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto keymap = uimodel::KeymapModel{tuiDefaultKeymap()};
+    keymap.applyOverrides({{"tui.shell.openSettings", {}}});
+    auto const plan = TuiKeymapPlan{keymap};
+    auto controller = fixture.makeEvents(library, plan);
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(36), ftxui::Dimension::Fixed(1));
+    auto& box = fixture.hitRegions.settingsButtonBox;
+    ftxui::Render(
+      screen,
+      statusBar(
+        ao::test::englishMessageCatalog(), StatusBarViewState{.terminalColumns = 36, .settingsButtonBox = &box}, plan));
+    REQUIRE(hasHitArea(box));
+    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    auto mouse =
+      ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = box.x_min, .y = box.y_min};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(controller.hoveredButton() == HoveredButton::Settings);
+    mouse.motion = ftxui::Mouse::Pressed;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.settingsPtr->isActive());
+  }
+
+  TEST_CASE("EventController - closing Settings does not restore stale hover", "[tui][regression][event][settings]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    fixture.hitRegions.soulButtonBox = ftxui::Box{.x_min = 0, .x_max = 2, .y_min = 0, .y_max = 0};
+    auto controller = fixture.makeEvents(library);
+    auto const hover = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 1, .y = 0};
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", hover)));
+    REQUIRE(controller.isQualityHoverVisible());
+
+    enterCommand(controller, "settings");
+
+    REQUIRE(fixture.settingsPtr->isActive());
+    CHECK_FALSE(controller.isQualityHoverVisible());
+    CHECK(controller.hoveredButton() == HoveredButton::None);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    CHECK_FALSE(controller.isQualityHoverVisible());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", hover)));
+    CHECK(controller.isQualityHoverVisible());
+  }
+
   TEST_CASE("EventController - hovering clickable buttons updates hover target", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
@@ -1983,6 +2074,29 @@ namespace ao::tui::test
 
     CHECK(resizePreview.layout.empty());
     CHECK(columnLayouts.snapshot().empty());
+  }
+
+  TEST_CASE("EventController - mouse preference changes apply to the running controller",
+            "[tui][unit][event][settings]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "Third"});
+    fixture.addTrack(library::test::TrackSpec{.title = "Fourth"});
+    auto library = fixture.makeLibrary();
+    fixture.hitRegions.trackTableBox = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 1, .y_max = 22};
+    auto controller = fixture.makeEvents(library);
+    auto const wheel =
+      ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 5};
+    fixture.preferences.wheelStep = 2;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", wheel)));
+    CHECK(library.selectedTrack() == 2);
+    fixture.preferences.mouseEnabled = false;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", wheel)));
+    CHECK(library.selectedTrack() == 2);
+    fixture.preferences.mouseEnabled = true;
+    fixture.preferences.wheelStep = 1;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", wheel)));
+    CHECK(library.selectedTrack() == 3);
   }
 
   TEST_CASE("EventController - mouse wheel scrolls the track table", "[tui][unit][event]")

@@ -13,6 +13,16 @@ This specification owns the terminal frontend's shell and interaction behavior.
 It defines workspace structure, modal text-input and overlay state, keyboard and mouse routing, panel mechanics, playback dock and seek rail, completion, notifications, selection, and terminal styling.
 Exact startup options, keys, commands, and aliases belong to the [TUI command reference](../../reference/tui/command.md).
 
+## Settings and live publication
+
+The mouse preference updates terminal tracking by reinstalling FTXUI terminal hooks through `WithRestoredIO`; the component graph and playback runtime remain alive. The App-owned signal watcher retires before that reinstall and is recreated afterward, preserving its precedence over FTXUI signal handlers and the normal exit checkpoint path. Root mouse events are also gated by the applied preference.
+
+Settings consumes input before root shortcuts, cannot coexist with the track editor, and cancels unfinished pointer/input interactions when opened. Its General, Appearance, Interaction, and Keyboard pages edit only global preferences. Per-list presentation and column-layout state stay outside Settings.
+
+Preference and keymap candidates save before live publication. A failed candidate remains visible for retry or discard, while effective behavior retains its previous value.
+
+A language change constructs the new catalog and ICU ordering policy, saves the preference, then publishes on the callback executor. Cached navigation, row labels, output labels, and activity projections refresh before the next frame. Browsing projections rebuild sort keys and completion materializations invalidate. Existing transient playback projections retain shared ownership of their previous policy and order; new projections use the new policy. Playback, workspace identity, focus, marks, and tasks remain alive.
+
 ## Code boundary
 
 TUI code under `app/tui/` owns FTXUI elements, terminal geometry, hit regions, input dispatch, frame timing, terminal cover rendering, and TUI-local shell state.
@@ -20,7 +30,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 
 `LibraryController` adapts runtime workspace/views into terminal rows but does not become library storage or playback authority.
 Its list chooser consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
-`TuiKeymapPlan` is the immutable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
+`TuiKeymapPlan` is a replaceable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
 `EventController` translates terminal events from that plan or from fixed scoped protocol into runtime/UIModel commands.
 `CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
@@ -67,7 +77,7 @@ Its list chooser consumes the shared [list-navigation tree](../presentation/list
 `EventController` retains pointer drags for seek, scrollbar, and column resize plus hover state.
 It also retains one cancellable generation-checked Quick Filter debounce task; all shell and library access occurs after resumption on the callback executor.
 `LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, applied filter draft and error, and presentation adaptation.
-The composition root retains one shared presentation catalog, one per-list presentation-preference model, one per-list column-layout model, one frontend-local store writer for the selected library, and one immutable TUI keymap plan loaded from the global application store.
+The composition root retains one shared presentation catalog, one per-list presentation-preference model, one per-list column-layout model, one frontend-local store writer for the selected library, and one replaceable TUI keymap plan loaded from the global application store.
 
 Each input mode's completion result carries a replacement range, ranked items, display text, insertion text, and detail.
 Quick Filter drafts delegate directly to the shared UIModel track-filter completer, which selects live values or structured expression candidates according to the same boundary as GTK.
@@ -302,14 +312,14 @@ Restored TUI presentation state includes each list's column order, visibility, f
 Active overlay, input draft/mode, the original Quick Filter editing draft, hover, and pointer gestures are session-local and unversioned.
 The preferred output route is stored separately in the global TUI application-preference file.
 The same global `<config>/tui.yaml` document supplies the `shortcuts` group over shared-plus-TUI defaults.
-TUI loads that group before constructing dispatch and render owners, but has no shortcut editor and performs no ordinary keymap save; the unrelated `runtime` preference checkpoint preserves the loaded sibling group.
+TUI loads that group before constructing dispatch and render owners. Settings persists an accepted candidate before replacing the stable-address keymap and dispatch/hint plan values. Preference and output writes share the same store and preserve sibling groups.
 Exact startup paths/options and managed locations belong to the TUI and persistence references.
 
 ## Frontend observations
 
 The detail pane remains beside the track workspace and shows a terminal cover-art representation plus selected-track fields.
 Title, artist, album, display track number, and duration always appear, keeping a placeholder when the track lacks them; every other field appears only when it carries a value.
-Kitty, block, automatic, and disabled cover modes are selected at startup.
+Kitty, block, automatic, and disabled cover modes come from the saved preference, with an explicit command-line option taking precedence for the session. Without that override, Settings changes the effective renderer live, canceling the previous cover request and hiding stale Kitty placement. With an override, Settings still saves the preference for subsequent launches while the session renderer stays unchanged.
 On a cover change, the pane renders one compact unavailable line until asynchronous delivery completes; an older selection cannot replace the current cover.
 A frame that reserves no artwork cells leaves an invalid cover box behind, which is how out-of-band Kitty paint state learns to delete a stale image.
 The notification center can be opened explicitly even when compact status is not the only visible affordance.

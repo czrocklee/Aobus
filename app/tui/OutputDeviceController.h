@@ -34,6 +34,8 @@ namespace ao::tui
     bool trySelectSelected();
     bool trySelectRow(std::int32_t rowIndex);
 
+    void setTextCatalog(i18n::MessageCatalog textCatalog);
+
   private:
     bool isSelectableRow(std::int32_t rowIndex) const;
     void normalizeSelection();

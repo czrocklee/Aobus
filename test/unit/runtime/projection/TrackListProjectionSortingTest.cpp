@@ -19,6 +19,7 @@
 #include <format>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -52,6 +53,40 @@ namespace ao::rt::test
     CHECK(german.trackIdAt(1) == zed);
     CHECK(swedish.trackIdAt(0) == zed);
     CHECK(swedish.trackIdAt(1) == umlaut);
+  }
+
+  TEST_CASE("TrackListProjection - live locale change rebuilds order and retains policy ownership",
+            "[runtime][unit][projection][collation]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
+    auto const zed = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "z"});
+    env.setupFiltered({{zed, umlaut}});
+
+    auto germanRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanRes);
+    REQUIRE(swedishRes);
+
+    auto const presentation = TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    };
+    auto projection = env.createProjection(ViewId{1});
+    auto subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(presentation);
+    auto germanPtr = std::shared_ptr<TextOrderingPolicy const>{std::move(*germanRes)};
+    auto swedishPtr = std::shared_ptr<TextOrderingPolicy const>{std::move(*swedishRes)};
+    projection.setTextOrderingPolicy(germanPtr);
+    CHECK(projection.trackIdAt(0) == umlaut);
+    projection.setTextOrderingPolicy(swedishPtr);
+    swedishPtr.reset();
+    CHECK(projection.trackIdAt(0) == zed);
+    CHECK(projection.trackIdAt(1) == umlaut);
+    projection.setTextOrderingPolicy(germanPtr);
+    germanPtr.reset();
+    CHECK(projection.trackIdAt(0) == umlaut);
+    CHECK(projection.trackIdAt(1) == zed);
   }
 
   TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations",

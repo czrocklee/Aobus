@@ -65,6 +65,12 @@ namespace ao::tui
       return result;
     }
 
+    if (contains(settingsButtonBox, column, row))
+    {
+      result.hoveredButton = HoveredButton::Settings;
+      return result;
+    }
+
     if (contains(activityStatusBox, column, row))
     {
       result.hoveredButton = HoveredButton::ActivityStatus;

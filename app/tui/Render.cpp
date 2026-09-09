@@ -61,6 +61,7 @@ namespace ao::tui
     };
 
     constexpr auto kHelpPaneRowSpecs = std::to_array<HelpPaneRowSpec>({
+      {.descriptionId = i18n::MessageId::TuiSettingsTitle, .command = ":settings / :config"},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuickFilter, .command = ":filter <text>"},
       {.descriptionId = i18n::MessageId::TuiShellHelpChooseList, .command = ":lists / :l"},
       {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail / :d"},
@@ -136,6 +137,7 @@ namespace ao::tui
 
       switch (id)
       {
+        case i18n::MessageId::TuiSettingsTitle: return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenSettings)};
         case i18n::MessageId::TuiShellHelpQuickFilter:
           return std::string{keymapPlan.shortcutFor(TuiKeyAction::OpenQuickFilter)};
         case i18n::MessageId::TuiShellHelpChooseList:

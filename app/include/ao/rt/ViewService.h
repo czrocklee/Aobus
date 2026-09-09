@@ -125,6 +125,9 @@ namespace ao::rt
     Result<TrackSourceState> listSourceState(ViewId viewId) const;
     Result<std::vector<TrackId>> listSourceTrackIds(ViewId viewId) const;
 
+    /// Updates ordering on the callback executor. Captured playback projections retain their prior order.
+    void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
+
   private:
     friend class WorkspaceService;
 

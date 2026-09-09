@@ -83,6 +83,7 @@ namespace ao::tui
     rt::TrackPresentationSpec const& activePresentation() const;
     SelectedTrackView selectedTrackView() const;
 
+    void setTextCatalog(i18n::MessageCatalog textCatalog);
     void setFilterDraft(std::string value);
     void clearFilterDraft();
     void moveFocusedSelection(bool listChooserFocused, std::int32_t delta);

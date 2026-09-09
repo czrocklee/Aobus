@@ -3,6 +3,7 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
+#include "CatalogLocaleTags.h"
 #include "CatalogPattern.h"
 #include "EmbeddedCatalogData.h"
 #include "MessageIds.h"
@@ -646,6 +647,35 @@ namespace ao::i18n
                                                  std::initializer_list<MessageArgument> const arguments) const
   {
     return format(id, std::span{arguments.begin(), arguments.size()});
+  }
+
+  std::span<CatalogLocale const> availableCatalogLocales()
+  {
+    static auto const kLocales = []
+    {
+      auto result = std::array<CatalogLocale, detail::kCatalogLocaleTags.size()>{};
+
+      for (std::size_t index = 0; index < result.size(); ++index)
+      {
+        auto const tag = detail::kCatalogLocaleTags[index];
+        UErrorCode status = U_ZERO_ERROR;
+        auto const locale =
+          icu::Locale::forLanguageTag(icu::StringPiece{tag.data(), static_cast<std::int32_t>(tag.size())}, status);
+
+        if (U_FAILURE(status))
+        {
+          AO_FATAL("Invalid packaged locale {}: {}", tag, ::u_errorName(status));
+        }
+
+        auto name = icu::UnicodeString{};
+        locale.getDisplayName(locale, name);
+        result[index].tag = tag;
+        name.toUTF8String(result[index].selfName);
+      }
+
+      return result;
+    }();
+    return kLocales;
   }
 
   std::string_view requiredText(MessageCatalog const& catalog, MessageId const id)

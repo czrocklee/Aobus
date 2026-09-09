@@ -23,6 +23,7 @@
 #include "QualityPanel.h"
 #include "Render.h"
 #include "SelectionNavigation.h"
+#include "SettingsEditor.h"
 #include "ShellInteractionModel.h"
 #include "SignalExitWatcher.h"
 #include "StatusBar.h"
@@ -34,11 +35,15 @@
 #include "TuiHitRegions.h"
 #include "TuiKeymap.h"
 #include "TuiLayoutStateStore.h"
+#include "TuiPreferences.h"
 #include "TuiText.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/AppState.h>
@@ -55,6 +60,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -86,12 +92,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <print>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -249,34 +257,6 @@ namespace ao::tui
       return terminalColumns <= 0 ? terminalColumns : std::max(1, terminalColumns / 2);
     }
 
-    enum class CoverArtMode : std::uint8_t
-    {
-      Auto,
-      Kitty,
-      Blocks,
-      Off,
-    };
-
-    CoverArtMode parseCoverArtMode(std::string const& value)
-    {
-      if (value == "kitty")
-      {
-        return CoverArtMode::Kitty;
-      }
-
-      if (value == "blocks")
-      {
-        return CoverArtMode::Blocks;
-      }
-
-      if (value == "off")
-      {
-        return CoverArtMode::Off;
-      }
-
-      return CoverArtMode::Auto;
-    }
-
     bool supportsKittyGraphics()
     {
       auto const* term = std::getenv("TERM");
@@ -285,21 +265,6 @@ namespace ao::tui
       return std::getenv("KITTY_WINDOW_ID") != nullptr || std::getenv("WEZTERM_EXECUTABLE") != nullptr ||
              (term != nullptr && std::string_view{term}.contains("xterm-kitty")) ||
              (termProgram != nullptr && std::string_view{termProgram} == "WezTerm");
-    }
-
-    bool shouldUseKittyCoverArt(CoverArtMode const mode)
-    {
-      if (mode == CoverArtMode::Kitty)
-      {
-        return true;
-      }
-
-      return mode == CoverArtMode::Auto && supportsKittyGraphics();
-    }
-
-    bool shouldUseBlockCoverArt(CoverArtMode const mode)
-    {
-      return mode == CoverArtMode::Blocks || (mode == CoverArtMode::Auto && !supportsKittyGraphics());
     }
 
     class PeriodicRefresh final
@@ -369,6 +334,164 @@ namespace ao::tui
       return uimodel::FrameClock::fromMicros(micros);
     }
 
+    struct TuiLocale final
+    {
+      i18n::MessageCatalog catalog;
+      std::shared_ptr<rt::TextOrderingPolicy const> orderingPtr;
+    };
+
+    Result<TuiLocale> createTuiLocale(std::string_view language)
+    {
+      auto catalogRes =
+        language.empty() ? i18n::MessageCatalog::createForSystemLocale() : i18n::MessageCatalog::create(language);
+
+      if (!catalogRes)
+      {
+        return std::unexpected{catalogRes.error()};
+      }
+
+      auto orderingRes = i18n::createIcuTextOrderingPolicy(catalogRes->requestedLocale());
+
+      if (!orderingRes)
+      {
+        return std::unexpected{orderingRes.error()};
+      }
+
+      return TuiLocale{.catalog = std::move(*catalogRes), .orderingPtr = std::move(*orderingRes)};
+    }
+
+    Result<std::optional<TuiLocale>> savePreferences(rt::ConfigStore& store,
+                                                     TuiPreferences const& candidate,
+                                                     TuiPreferences const& current)
+    {
+      auto optLocale = std::optional<TuiLocale>{};
+
+      if (candidate.language != current.language)
+      {
+        auto localeRes = createTuiLocale(candidate.language);
+
+        if (!localeRes)
+        {
+          return std::unexpected{localeRes.error()};
+        }
+
+        optLocale = std::move(*localeRes);
+      }
+
+      if (auto const res = saveTuiPreferences(store, candidate); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      return optLocale;
+    }
+
+    void applyMousePreference(ftxui::ScreenInteractive& screen,
+                              bool enabled,
+                              bool previous,
+                              std::unique_ptr<SignalExitWatcher>& signalExitPtr,
+                              std::function<void()> const& onSignalExit)
+    {
+      if (enabled == previous)
+      {
+        return;
+      }
+
+      // TrackMouse is read when terminal hooks are installed. Reinstall those
+      // hooks through FTXUI while preserving the component graph and runtime.
+      // SignalExitWatcher is installed after FTXUI and must be retired first,
+      // then reinstalled last, so each owner restores the handlers it captured.
+      signalExitPtr.reset();
+      screen.WithRestoredIO([&screen, enabled] { screen.TrackMouse(enabled); })();
+      signalExitPtr = std::make_unique<SignalExitWatcher>(onSignalExit);
+    }
+
+    void scheduleLayoutCheckpoint(ftxui::ScreenInteractive& screen, bool& dirty, bool& requested)
+    {
+      dirty = true;
+
+      if (!std::exchange(requested, true))
+      {
+        screen.PostEvent(ftxui::Event::Custom);
+      }
+    }
+
+    void checkpointLayout(TuiLayoutStateStore& store,
+                          uimodel::TrackColumnLayouts const& columns,
+                          uimodel::ListPresentations const& presentations,
+                          bool& dirty)
+    {
+      if (!dirty)
+      {
+        return;
+      }
+
+      if (auto const res = store.save(columns.snapshot(), presentations.snapshot()); !res)
+      {
+        APP_LOG_WARN("TUI: failed to persist layout state: {}", res.error().message);
+        return;
+      }
+
+      dirty = false;
+    }
+
+    void reportPreferenceLoadFailure(rt::NotificationService& notifications,
+                                     i18n::MessageCatalog const& catalog,
+                                     Result<TuiPreferences> const& preferencesRes)
+    {
+      if (preferencesRes)
+      {
+        return;
+      }
+
+      APP_LOG_WARN("TUI: failed to load preferences; using defaults: {}", preferencesRes.error().message);
+      notifications.post(
+        rt::NotificationSeverity::Warning,
+        i18n::requiredFormat(
+          catalog, i18n::MessageId::TuiSettingsLoadFailed, {{"detail", preferencesRes.error().message}}),
+        rt::NotificationLifetime::history());
+    }
+
+    Result<TuiKeymapPlan> saveKeymapPlan(rt::ConfigStore& store, uimodel::KeymapModel const& candidate)
+    {
+      if (!store.hasLocation())
+      {
+        return makeError(Error::Code::NotFound, "No persistent TUI configuration location");
+      }
+
+      auto plan = TuiKeymapPlan{candidate};
+
+      if (auto const res = uimodel::saveKeymap(store, candidate); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      return plan;
+    }
+
+    CoverArtDeliveryMode coverDeliveryModeFor(AppOptions const& options, TuiPreferences const& preferences)
+    {
+      auto const& name = options.coverArtMode.empty() ? preferences.coverArtMode : options.coverArtMode;
+      auto const modes = std::span{kCoverArtModes};
+      auto const mode = std::ranges::find(modes, name, &CoverArtModeDescriptor::name);
+      AO_EXPECTS(mode != modes.end(), "Cover art mode must be validated before delivery selection");
+
+      if (mode->optDeliveryMode)
+      {
+        return *mode->optDeliveryMode;
+      }
+
+      return supportsKittyGraphics() ? CoverArtDeliveryMode::Kitty : CoverArtDeliveryMode::Blocks;
+    }
+
+    std::string coverModeDescription(CoverArtDeliveryMode mode, bool overridden)
+    {
+      auto const modes = std::span{kCoverArtModes};
+      auto const descriptor = std::ranges::find(modes, std::optional{mode}, &CoverArtModeDescriptor::optDeliveryMode);
+      AO_EXPECTS(descriptor != modes.end(), "Effective cover renderer must have a mode descriptor");
+      return std::string{descriptor->name} + (overridden ? " (--cover-art-mode)" : "");
+    }
+
     struct AppFrameRenderer final
     {
       FrameTimer& frameTimer;
@@ -381,6 +504,8 @@ namespace ao::tui
       uimodel::ActivityStatusViewModel& activityStatusViewModel;
       EventController& events;
       TrackEditController& trackEdit;
+      SettingsEditor& settings;
+      TuiPreferences const& preferences;
       ExitController& exitController;
       TuiHitRegions& hitRegions;
       uimodel::TrackColumnLayouts& trackColumnLayouts;
@@ -388,10 +513,25 @@ namespace ao::tui
       uimodel::PlaybackPositionInterpolator& playbackClock;
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
       CoverArtLoader& coverArt;
-      CoverArtDeliveryMode coverArtMode = CoverArtDeliveryMode::Off;
+      CoverArtDeliveryMode const& coverArtMode;
       std::int32_t coverColumns = kCoverArtDefaultColumns;
       uimodel::AobusSoulAnimationState soulAnimation{};
       std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
+
+      ftxui::Element activeModal(std::int32_t columns, std::int32_t rows) const
+      {
+        if (settings.isActive())
+        {
+          return settings.renderModal(columns, rows);
+        }
+
+        if (auto const* editor = trackEdit.activeEditor(); editor != nullptr)
+        {
+          return editor->renderModal(columns, rows);
+        }
+
+        return nullptr;
+      }
 
       ftxui::Element operator()()
       {
@@ -411,7 +551,7 @@ namespace ao::tui
 
         // Artwork nobody can see is still a resource read and a transform, so
         // the request follows what the frame will actually show.
-        if (coverArtVisible && !trackEdit.isActive())
+        if (coverArtVisible && !trackEdit.isActive() && !settings.isActive())
         {
           coverArt.request(selectedTrackView.coverArtId);
         }
@@ -433,7 +573,7 @@ namespace ao::tui
         auto const soulMotionMode = uimodel::aobusSoulMotionMode(state.transport);
         soulAnimation.setMotionMode(soulMotionMode);
 
-        if (soulMotionMode == uimodel::AobusSoulMotionMode::Animating)
+        if (!preferences.reducedMotion && soulMotionMode == uimodel::AobusSoulMotionMode::Animating)
         {
           if (optPreviousSoulFrameTime)
           {
@@ -449,7 +589,9 @@ namespace ao::tui
 
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
         auto const animationElapsed =
-          std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
+          preferences.reducedMotion
+            ? std::chrono::milliseconds{0}
+            : std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
         auto const& presentation = library.activePresentation();
         auto const sidePanelLimit = sidePanelColumnsLimit(terminalColumns);
         auto const detailPanelColumns =
@@ -617,7 +759,9 @@ namespace ao::tui
                                            .filterDraft = library.filterDraft(),
                                            .shell = &shell,
                                            .activityStatusBox = &hitRegions.activityStatusBox,
-                                           .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus},
+                                           .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus,
+                                           .settingsButtonBox = &hitRegions.settingsButtonBox,
+                                           .settingsHovered = hoveredButton == HoveredButton::Settings},
                         keymapPlan),
         });
 
@@ -626,15 +770,16 @@ namespace ao::tui
         // candidate below may cover one that still owns input. Each is built
         // only once those above it decline, which also keeps a surface nobody
         // sees from publishing hit regions for rows nobody can click.
-        if (auto const* const editor = trackEdit.activeEditor(); editor != nullptr)
+        if (auto modalPtr = activeModal(terminalColumns, terminalRows); modalPtr != nullptr)
         {
-          return composeOverlay(rootPtr, editor->renderModal(terminalColumns, terminalRows), OverlayBackdrop::Dimmed);
+          return composeOverlay(
+            rootPtr, std::move(modalPtr), preferences.dimBackdrop ? OverlayBackdrop::Dimmed : OverlayBackdrop::Live);
         }
 
         if (auto composedPtr =
               composeOverlay(rootPtr,
                              commandPalettePopover(textCatalog, shell, keymapPlan, terminalColumns, terminalRows),
-                             OverlayBackdrop::Dimmed);
+                             preferences.dimBackdrop ? OverlayBackdrop::Dimmed : OverlayBackdrop::Live);
             composedPtr != nullptr)
         {
           return composedPtr;
@@ -811,25 +956,8 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t run(AppOptions const& options,
-                   i18n::MessageCatalog const& textCatalog,
-                   rt::TextOrderingPolicy const& textOrderingPolicy,
-                   rt::CompletionAliasPolicy const& completionAliasPolicy)
+  std::int32_t run(AppOptions const& options)
   {
-    auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
-    auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
-    auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
-    auto coverArtDeliveryMode = CoverArtDeliveryMode::Off;
-
-    if (kittyCoverArt)
-    {
-      coverArtDeliveryMode = CoverArtDeliveryMode::Kitty;
-    }
-    else if (blockCoverArt)
-    {
-      coverArtDeliveryMode = CoverArtDeliveryMode::Blocks;
-    }
-
     auto workspaceConfigDirectoryEc = std::error_code{};
     std::filesystem::create_directories(options.configPath.parent_path(), workspaceConfigDirectoryEc);
 
@@ -858,12 +986,27 @@ namespace ao::tui
     }
 
     auto const appConfigStorePtr = openAppConfigStore(optAppConfigPath);
-    auto const keymap = uimodel::loadKeymap(*appConfigStorePtr, tuiDefaultKeymap());
-    auto const keymapPlan = TuiKeymapPlan{keymap};
+    auto preferencesRes = loadTuiPreferences(*appConfigStorePtr);
+
+    auto preferences = preferencesRes.value_or(TuiPreferences{});
+    auto localeRes = createTuiLocale(preferences.language);
+
+    if (!localeRes)
+    {
+      std::println(stderr, "Failed to load TUI language: {}", localeRes.error().message);
+      return 1;
+    }
+
+    auto textCatalog = std::move(localeRes->catalog);
+    auto textOrderingPolicyPtr = std::move(localeRes->orderingPtr);
+    auto completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto coverDeliveryMode = coverDeliveryModeFor(options, preferences);
+    auto keymap = uimodel::loadKeymap(*appConfigStorePtr, tuiDefaultKeymap());
+    auto keymapPlan = TuiKeymapPlan{keymap};
     // Declared before AppRuntime so the executor's borrowed screen reference
     // remains valid through runtime shutdown and destruction.
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
-    screen.TrackMouse(true);
+    screen.TrackMouse(preferences.mouseEnabled);
     // Keyboard Ctrl-C is Event::CtrlC while ISIG is off. Keep FTXUI from
     // exiting after the shell consumes that event so the App exit gate can
     // retire scan presentation and leave the loop.
@@ -876,8 +1019,8 @@ namespace ao::tui
       .databasePath = options.databasePath,
       .cacheDirectory = resolveCacheDirectory(),
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
-      .textOrderingPolicy = &textOrderingPolicy,
-      .completionAliasPolicy = &completionAliasPolicy,
+      .textOrderingPolicy = textOrderingPolicyPtr.get(),
+      .completionAliasPolicy = completionAliasPolicyPtr.get(),
     });
 
     if (!runtimeRes)
@@ -887,6 +1030,8 @@ namespace ao::tui
     }
 
     auto runtime = std::move(*runtimeRes);
+    runtime.setTextOrderingPolicy(textOrderingPolicyPtr);
+    reportPreferenceLoadFailure(runtime.notifications(), textCatalog, preferencesRes);
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {
@@ -923,25 +1068,9 @@ namespace ao::tui
     bool layoutStateDirty = false;
     bool layoutCheckpointRequested = false;
     auto saveLayoutState = [&]
-    {
-      if (auto const savedRes = layoutStateStore.save(trackColumnLayouts.snapshot(), listPresentations.snapshot());
-          !savedRes)
-      {
-        APP_LOG_WARN("TUI: failed to persist layout state: {}", savedRes.error().message);
-        return;
-      }
-
-      layoutStateDirty = false;
-    };
+    { checkpointLayout(layoutStateStore, trackColumnLayouts, listPresentations, layoutStateDirty); };
     auto requestLayoutCheckpoint = [&]
-    {
-      layoutStateDirty = true;
-
-      if (!std::exchange(layoutCheckpointRequested, true))
-      {
-        requestRefresh();
-      }
-    };
+    { scheduleLayoutCheckpoint(screen, layoutStateDirty, layoutCheckpointRequested); };
     auto columnLayoutsSub =
       trackColumnLayouts.signalChanged().connect([&](ListId const) { requestLayoutCheckpoint(); });
     auto listPresentationsSub =
@@ -964,7 +1093,7 @@ namespace ao::tui
 
     auto& playback = runtime.playback();
     auto coverArt =
-      CoverArtLoader{runtime.resourceBytes(), runtime.async(), coverArtDeliveryMode, requestRefresh, coverColumns};
+      CoverArtLoader{runtime.resourceBytes(), runtime.async(), coverDeliveryMode, requestRefresh, coverColumns};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
@@ -1046,12 +1175,70 @@ namespace ao::tui
                                          },
                                          runtime.completion(),
                                          runtime.textOrderingPolicy()};
+    auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
+    auto onSignalExit = std::function<void()>{};
+    auto settings = SettingsEditor{
+      textCatalog,
+      preferences,
+      keymap,
+      SettingsEditor::Outputs{
+        .applyPreferences = [&](TuiPreferences const& candidate) -> Result<>
+        {
+          auto localeRes = savePreferences(*appConfigStorePtr, candidate, preferences);
+
+          if (!localeRes)
+          {
+            return std::unexpected{localeRes.error()};
+          }
+
+          applyMousePreference(screen, candidate.mouseEnabled, preferences.mouseEnabled, signalExitPtr, onSignalExit);
+          preferences = candidate;
+
+          if (auto& optLocale = *localeRes; optLocale)
+          {
+            textCatalog = std::move(optLocale->catalog);
+            runtime.setTextOrderingPolicy(optLocale->orderingPtr);
+            textOrderingPolicyPtr = std::move(optLocale->orderingPtr);
+            trackEdit.setTextOrderingPolicy(textOrderingPolicyPtr.get());
+            presentationCatalog.setTextCatalog(textCatalog);
+            library.setTextCatalog(textCatalog);
+            outputDevices.setTextCatalog(textCatalog);
+            activityStatusViewModel.setTextCatalog(textCatalog);
+          }
+
+          coverDeliveryMode = coverDeliveryModeFor(options, preferences);
+          coverArt.setMode(coverDeliveryMode);
+          requestRefresh();
+          return {};
+        },
+        .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
+        {
+          auto planRes = saveKeymapPlan(*appConfigStorePtr, candidate);
+
+          if (!planRes)
+          {
+            return std::unexpected{planRes.error()};
+          }
+
+          keymap = candidate;
+          keymapPlan = std::move(*planRes);
+          requestRefresh();
+          return {};
+        },
+        .coverMode =
+          [&]
+        {
+          auto const mode = coverDeliveryMode;
+          return coverModeDescription(mode, !options.coverArtMode.empty());
+        },
+      }};
     auto exitController = ExitController{{
       .retire =
         [&]
       {
         libraryScan.retire();
         trackEdit.retire();
+        settings.retire();
         activeEvents->cancelTransientInteractions();
         shell.closeInput();
       },
@@ -1075,6 +1262,8 @@ namespace ao::tui
                         .notifications = runtime.notifications(),
                         .libraryScan = libraryScan,
                         .trackEdit = trackEdit,
+                        .settings = settings,
+                        .preferences = preferences,
                         .requestExit = requestGracefulExit,
                         .isExitWaiting = [&exitController] { return exitController.isWaitingForSubmittedWrite(); },
                         .commandCompletionCallback = completeCommand,
@@ -1095,6 +1284,8 @@ namespace ao::tui
       .activityStatusViewModel = activityStatusViewModel,
       .events = events,
       .trackEdit = trackEdit,
+      .settings = settings,
+      .preferences = preferences,
       .exitController = exitController,
       .hitRegions = hitRegions,
       .trackColumnLayouts = trackColumnLayouts,
@@ -1102,7 +1293,7 @@ namespace ao::tui
       .playbackClock = playbackClock,
       .optPreviewElapsed = optPreviewElapsed,
       .coverArt = coverArt,
-      .coverArtMode = coverArtDeliveryMode,
+      .coverArtMode = coverDeliveryMode,
       .coverColumns = coverColumns,
       .soulAnimation = {},
       .optPreviousSoulFrameTime = std::nullopt,
@@ -1124,13 +1315,19 @@ namespace ao::tui
                                        kPlaybackTickInterval,
                                        [&clockTickActive, &activityAutoDismissActive]
                                        { return clockTickActive.load() || activityAutoDismissActive.load(); }};
-    auto signalExit = SignalExitWatcher{[&screen, requestGracefulExit] { screen.Post(requestGracefulExit); }};
+    onSignalExit = [&screen, requestGracefulExit] { screen.Post(requestGracefulExit); };
+    signalExitPtr = std::make_unique<SignalExitWatcher>(onSignalExit);
+    auto const signalExitRetirement = gsl_lite::finally([&signalExitPtr] { signalExitPtr.reset(); });
 
     executor->drainPendingTasks();
 
     while (!loop.HasQuitted())
     {
       loop.RunOnceBlocking();
+      // FTXUI drops Posts while WithRestoredIO reinstalls terminal hooks. Drain
+      // after input dispatch unwinds so a lost wake cannot strand worker results
+      // or reenter a Settings save that is still publishing its candidate.
+      executor->drainPendingTasks();
       frameTimer.recordPresentIfDrawn();
 
       if (std::exchange(layoutCheckpointRequested, false))
@@ -1140,16 +1337,17 @@ namespace ao::tui
 
       activityStatusViewModel.tryAutoDismissCompactIfDue();
 
-      if (kittyCoverArt)
+      if (coverDeliveryMode == CoverArtDeliveryMode::Kitty || kittyPaintState.visible)
       {
-        syncKittyCoverArt(kittyPaintState,
-                          coverArt,
-                          hitRegions.coverBox,
-                          trackEdit.isActive() || exitController.phase() != ExitController::Phase::Running);
+        syncKittyCoverArt(
+          kittyPaintState,
+          coverArt,
+          hitRegions.coverBox,
+          settings.isActive() || trackEdit.isActive() || exitController.phase() != ExitController::Phase::Running);
       }
     }
 
-    if (kittyCoverArt && kittyPaintState.visible)
+    if (kittyPaintState.visible)
     {
       std::print("{}", kittyDeleteImageEscape(kKittyCoverArtImageId));
       std::fflush(stdout);
@@ -1158,13 +1356,11 @@ namespace ao::tui
     coverArt.cancel();
     libraryScan.retire();
     trackEdit.retire();
+    settings.retire();
     events.cancelTransientInteractions();
     shell.closeInput();
 
-    if (layoutStateDirty)
-    {
-      saveLayoutState();
-    }
+    saveLayoutState();
 
     runtime.workspace().saveSession(runtime.workspaceConfigStore());
 

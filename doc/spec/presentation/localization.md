@@ -9,7 +9,7 @@ summary: Defines locale selection, fallback, localization boundaries, and cross-
 
 ## Scope
 
-This specification defines startup locale admission, embedded message resolution, formatting, and the WinUI native-resource adapter for interactive Aobus processes.
+This specification defines locale admission, embedded message resolution, formatting, and the WinUI native-resource adapter for interactive Aobus processes.
 It covers the catalog foundation, shared semantic copy resolved through feature presentation functions, and frontend-local shell/navigation, playback/output, library/list/filter, preferences/shortcut/presentation-editor, metadata/property, Layout Editor, accessibility, tooltip, empty-state, and recoverable-error copy.
 
 Locale-aware ordering is independent and is not part of this contract.
@@ -29,9 +29,16 @@ Core, application runtime, UIModel, and CLI do not depend on the concrete catalo
 - **English root** is the complete ICU `root` catalog, exposed publicly as locale `en` and generated for MRT as neutral `en`.
 - **Pseudo locale** is the generated `qps-ploc` catalog used to expose clipping, concatenation, and untranslated literals without adding a maintained translation.
 
+The authored [`package.lst`](../../../app/i18n/catalog/package.lst) owns the packaged
+locale inventory. Adding a maintained locale requires its ICU source and one entry
+in that inventory; compilation, WinUI projection paths, and selectable-language
+metadata are derived from it. Add independent translation/fallback and native MRT
+parity cases for the new locale. Generated pseudo-localization remains available
+for diagnostics and is excluded from the user-facing language choices.
+
 ## Invariants
 
-- Each interactive composition root resolves one locale at startup and keeps the resulting catalog alive until frontend teardown.
+- Each interactive composition root resolves one locale at startup. TUI may replace its catalog value from Settings on the callback executor; GTK and WinUI retain their startup selection. Copies retain immutable catalog storage, and state crossing replacement owns its display strings.
 - Each interactive composition root injects that `MessageCatalog` through the UI graph; production code has no hidden English/default construction path.
 - Interactive call sites look up required copy with `requiredText` and `requiredFormat`. GTK, TUI, and WinUI use canonical typed `MessageId` values directly; WinUI also consumes generated MRT resources where native lookup is required.
 - Explicit locale input must be a complete strict BCP 47 tag; invalid input is never repaired or interpreted through the ambient C locale.
@@ -107,23 +114,23 @@ Formatting returns `NotFound` for an unknown typed id and `InvalidInput` for mis
 No partially constructed catalog is published.
 
 Localization has no asynchronous operation or cancellation state.
-An interactive process treats catalog construction or WinUI context initialization failure as startup-fatal because it cannot provide its governed presentation surface.
+At startup, catalog construction or WinUI context initialization failure is fatal because the process cannot provide its governed presentation surface. A TUI Settings language-change failure preserves the published catalog and reports a recoverable error; no partial catalog is published.
 
 ## Persistence and versioning
 
-Locale selection and resolved messages are not persisted in this tranche.
+TUI persists its explicit language override in the global `preferences` group described by the [application-config reference](../../reference/persistence/application-config.md). An empty override follows the system locale. Resolved messages are not persisted as locale configuration; GTK and WinUI continue to select the system locale at startup.
 Catalog changes have no library, workspace, session, or interchange schema version.
 The exact ICU family and capabilities are governed by `dependency-contract.json`; changing the message runtime or fallback model requires an architectural decision.
 
 ## Frontend observations
 
-GTK, TUI, and WinUI construct the same `MessageCatalog` from their system locale and inject that single cheap handle through their process-owned UI graph.
+GTK, TUI, and WinUI construct the same `MessageCatalog` facade and inject its cheap handle through their UI graphs. TUI selects its saved override or system locale and can replace that handle live through Settings; GTK and WinUI select the system locale at startup.
 Shared track-field labels, group and missing-value labels, built-in presentation copy, audio descriptions and profiles, completion roles, structured notifications, library progress and scan results, filter errors, track and selection counts, smart-List state, manual-order and Playlist-membership results, import/export results, language-bearing track-field formatting, now-playing states, transport and volume presentation, and audio-quality semantics resolve through that catalog.
 GTK menu copy plus GTK-specific shell and playback accessibility copy, library pickers, import/export and saved-List dialogs, smart-List fields, and List membership/order controls use canonical ids through `gtkText` or GTK-local formatting functions.
 Preferences, shortcut-editor chrome and action descriptors, custom-presentation editing, metadata/property controls, Layout Editor vocabulary and validation, accessibility/tooltips, startup wrappers, and recoverable errors use direct canonical ids through the injected `MessageCatalog` because each call maps one message without additional semantic selection.
 Layout component types, property names, enum values, action ids, and node ids remain stable document identities; the GTK editor maps known built-in values to localized display text and preserves unknown extension values verbatim.
 TUI navigation labels, overlay titles and hints, command-palette metadata, help copy, playback/output empty states, library navigation/filter status, recoverable errors, and remaining accessibility-oriented status copy resolve through `tuiChromeText`, TUI-local formatting functions, or direct canonical ids; presentation-navigation qualifiers use direct ids through `MessageCatalog`.
-The frontend helpers and shared semantic functions are stateless over the immutable startup-selected process catalog; render and widget construction perform no resource loading or pattern parsing.
+The frontend helpers and shared semantic functions are stateless over the currently published immutable catalog; render and widget construction perform no resource loading or pattern parsing.
 Operating-system device names, track metadata, audio node names, and external application names remain raw arguments.
 The audio-quality formatter keeps established technical numbers and symbols locale-neutral while the catalog owns complete lexical and grammatical messages.
 Neutral German proves substitutions and plural behavior, and the generated pseudo locale exercises every migrated shared message while preserving runtime arguments.

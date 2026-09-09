@@ -150,6 +150,9 @@ namespace ao::rt
 
     async::Subscription subscribe(compat::MoveOnlyFunction<void(TrackListProjectionDeltaBatch const&)> handler) const;
 
+    /// Rebuilds this projection with the retained ordering policy on its executor.
+    void setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr);
+
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

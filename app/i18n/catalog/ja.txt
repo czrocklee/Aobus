@@ -3,6 +3,54 @@
 
 ja:table {
   messages:table {
+    tui_settings_save_failed { "設定を保存できませんでした。{detail}" }
+    tui_settings_load_failed { "保存済みの設定を読み込めないため、既定値を使用します。{detail}" }
+    tui_settings_title { "設定" }
+    tui_settings_general { "一般" }
+    tui_settings_appearance { "表示" }
+    tui_settings_interaction { "操作" }
+    tui_settings_keyboard { "キー設定" }
+    tui_settings_language { "言語" }
+    tui_settings_system { "システムに従う" }
+    tui_settings_global { "TUI 全体の設定" }
+    tui_settings_dim { "ダイアログの背景を暗くする" }
+    tui_settings_motion { "動きを減らす" }
+    tui_settings_cover { "カバーの表示方式" }
+    tui_settings_mouse { "マウス操作" }
+    tui_settings_wheel { "ホイールの移動量" }
+    tui_settings_seek { "キー操作のシーク幅" }
+    tui_settings_volume { "キー操作の音量幅" }
+    tui_settings_hover { "ホバーで音声情報を表示" }
+    tui_settings_on { "オン" }
+    tui_settings_off { "オフ" }
+    tui_settings_unbound { "未割り当て" }
+    tui_settings_immediate { "確定した変更はすぐに保存されます。" }
+    tui_settings_language_hint { "言語と文字の並び順はすぐに変わります。再生は続きます。" }
+    tui_settings_invalid_chord { "有効なキーの組み合わせを入力してください（例：{example}）。" }
+    tui_settings_close_prompt { "未保存の変更を破棄して閉じますか？" }
+    tui_settings_palette { "コマンドパレット" }
+    tui_settings_previous_row { "前の行" }
+    tui_settings_next_row { "次の行" }
+    tui_settings_previous_group { "前のグループ" }
+    tui_settings_next_group { "次のグループ" }
+    tui_settings_seek_back { "後方にシーク" }
+    tui_settings_seek_forward { "前方にシーク" }
+    tui_settings_volume_down { "音量を下げる" }
+    tui_settings_volume_up { "音量を上げる" }
+    tui_settings_tracks { "{count, plural, other {# 曲}}" }
+    tui_settings_seconds { "{count, plural, other {# 秒}}" }
+    tui_settings_effective_cover { "現在の表示方式：{mode}" }
+    tui_settings_conflict { "{detail} に割り当て済みです。先にその割り当てを解除してください。" }
+    tui_settings_unsupported { "使用できない、または予約済みのキー：{detail}" }
+    tui_settings_stored_issue { "保存済みの割り当てを確認してください：{detail}" }
+    tui_settings_page_keys { "{pages} ページ · {close} 閉じる" }
+    tui_settings_preference_keys { "{change} 値を変更" }
+    tui_settings_language_keys { "{move} 選択 · {apply} 適用 · {close} キャンセル" }
+    tui_settings_chord_keys { "{apply} キーを保存 · {close} キャンセル" }
+    tui_settings_confirm_keys { "{apply} 確認 · {retry} 再保存 · {close} 編集を続ける" }
+    tui_settings_retry_keys { "{retry} 再試行 · {discard} 変更を破棄 · {close} 閉じる" }
+    tui_settings_keyboard_keys { "{choose} キー選択 · {edit} 置換 · {add} 追加 · {remove} 削除 · {reset} 動作をリセット" }
+
     pilot_library_title { "音楽ライブラリ" }
     pilot_greeting { "ようこそ、{name}" }
     pilot_copy_summary { "{destination} に {count} 曲をコピーしました" }

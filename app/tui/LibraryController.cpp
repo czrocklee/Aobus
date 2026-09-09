@@ -159,6 +159,20 @@ namespace ao::tui
     return ids;
   }
 
+  void LibraryController::setTextCatalog(i18n::MessageCatalog textCatalog)
+  {
+    auto const focused = focusedTrackId();
+    _textCatalog = std::move(textCatalog);
+    _libraryEntries = loadLibraryNavigation();
+    _libraryLabels = libraryNavigationLabels(_libraryEntries);
+    refreshPresentationNavigation();
+    auto const res = refreshActiveView();
+    AO_INVARIANT(res.has_value(), "Could not refresh localized TUI rows");
+    std::ignore = trySetSelectedTrackById(focused);
+    reconcileMarks();
+    publishSelection();
+  }
+
   void LibraryController::setFilterDraft(std::string value)
   {
     _filterDraft = std::move(value);

@@ -13,7 +13,7 @@ This reference enumerates the locale-selected `ao::i18n::MessageCatalog`, the fa
 They are in-process presentation surfaces with no persisted format version.
 Stable ids remain owned by their runtime or Core domains; catalog output is display text and is never persisted, parsed for control flow, or used as an aggregation key.
 
-`MessageCatalog` is the immutable startup-selected ICU catalog.
+`MessageCatalog` is an immutable ICU catalog value. TUI Settings may replace its injected value live; GTK and WinUI retain the startup selection.
 `requiredText` and `requiredFormat` are the required-message resolvers over that catalog: fixed messages use typed `MessageId` values, while named functions remain only where UIModel must map a domain value or derive message selectors.
 The canonical id/key inventory is [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def).
 
@@ -92,6 +92,7 @@ The production shared-id families are:
 | `gtk_track_*`, `gtk_tag_*`, `gtk_custom_metadata_*`, `gtk_activity_*`, `gtk_manual_order_*` | GTK metadata/property editing, activity, and authoring accessibility copy |
 | `gtk_layout_*`, `gtk_edit_value`, `gtk_*_panel`, `gtk_*_details`, `gtk_startup_*` | GTK Layout Editor vocabulary, structural accessibility, and recoverable startup copy |
 | `tui_shell_*`, `tui_playback_*`, `tui_library_*` | TUI navigation, help, playback, and library copy through canonical `MessageId` values |
+| `tui_settings_*` | TUI Settings pages, preference values, validation, persistence feedback, and contextual key arguments |
 | `tui_editor_*` | TUI track Properties pages, edit intents, confirmation prompts, submission status, and contextual shortcuts |
 | `tui_presentation_*`, `tui_*_opened`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
@@ -102,6 +103,14 @@ The complete English patterns and maintained localized overrides live in [`root.
 Bare `value` and simple-format arguments accept any `MessageArgumentValue` alternative.
 Plural, select-ordinal, and choice arguments accept integer or double values; select arguments accept text.
 Arguments are order-independent but must contain every expected name exactly once and no unknown name.
+
+[`catalog/package.lst`](../../../app/i18n/catalog/package.lst) is the single locale inventory.
+CMake derives authored compilation inputs, WinUI resource paths/qualifiers, and
+`availableCatalogLocales()` tags from it. The public metadata maps `root` to `en`,
+excludes generated `qps-ploc`, and exposes ICU native display names with process
+lifetime. English appears first, followed by stable tag order. TUI preference
+validation and its language chooser consume this metadata; only the follow-system
+choice belongs to the frontend.
 
 The authored asset set is complete English ICU `root` and maintained locale catalogs (`de`, `zh_Hans`, `zh_Hant`, `ja`, `es`, `fr`).
 Build tooling derives `qps_Ploc` by transforming literal spans and maps those assets to WinUI PRI qualifiers `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc`.

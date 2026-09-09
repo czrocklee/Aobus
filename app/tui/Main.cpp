@@ -2,11 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "App.h"
+#include "CoverArt.h"
 #include <ao/AppVersion.h>
 #include <ao/Contract.h>
-#include <ao/i18n/IcuCompletionAliases.h>
-#include <ao/i18n/IcuTextOrdering.h>
-#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 
@@ -26,9 +24,11 @@
 #include <filesystem>
 #include <map>
 #include <print>
+#include <ranges>
 #include <span>
 #include <string>
-#include <utility>
+#include <string_view>
+#include <vector>
 
 namespace
 {
@@ -40,9 +40,11 @@ namespace
     app.add_option("-l,--library", options.libraryRoot, "Music library root")->capture_default_str();
     app.add_option("--database", options.databasePath, "Aobus library database path");
     app.add_option("--config", options.configPath, "TUI workspace config path");
-    app.add_option("--cover-art-mode", options.coverArtMode, "Cover art renderer: auto, kitty, blocks, off")
-      ->check(CLI::IsMember({"auto", "kitty", "blocks", "off"}))
-      ->capture_default_str();
+    app
+      .add_option(
+        "--cover-art-mode", options.coverArtMode, "Cover art renderer (default: saved preference, otherwise auto)")
+      ->check(CLI::IsMember{ao::tui::kCoverArtModes | std::views::transform(&ao::tui::CoverArtModeDescriptor::name) |
+                            std::ranges::to<std::vector<std::string_view>>()});
     app.add_flag_callback(
       "--version",
       []
@@ -97,28 +99,7 @@ int main(int argc, char* argv[])
 {
   try
   {
-    auto catalogRes = ao::i18n::MessageCatalog::createForSystemLocale();
-
-    if (!catalogRes)
-    {
-      AO_FATAL("Could not initialize TUI localization: {}", catalogRes.error().message);
-    }
-
-    auto catalog = std::move(*catalogRes);
-    auto textOrderingPolicyRes = ao::i18n::createIcuTextOrderingPolicy(catalog.requestedLocale());
-
-    if (!textOrderingPolicyRes)
-    {
-      AO_FATAL("Could not initialize TUI text ordering: {}", textOrderingPolicyRes.error().message);
-    }
-
-    auto textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
-    auto completionAliasPolicyPtr = ao::i18n::createIcuCompletionAliasPolicy();
-    auto const textCatalog = ao::i18n::MessageCatalog{catalog};
-    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}),
-                        textCatalog,
-                        *textOrderingPolicyPtr,
-                        *completionAliasPolicyPtr);
+    return ao::tui::run(parseOptions({argv, static_cast<std::size_t>(argc)}));
   }
   catch (...)
   {
