@@ -310,9 +310,9 @@ namespace ao::rt::detail
     {
       constexpr auto kContext = std::string_view{"workspace"};
 
-      if (auto const result = yaml::requireMap(node, kContext); !result)
+      if (auto const res = yaml::requireMap(node, kContext); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto presentationVersionRes = yaml::requireScalar<std::uint32_t>(node, "presentationVersion", kContext);
@@ -403,11 +403,11 @@ namespace ao::rt::detail
                        std::format("Unsupported workspace presentation version {}", document.presentationVersion));
     }
 
-    if (auto const result =
+    if (auto const res =
           validateActiveViewIndex(document.activeViewIndex, document.openViews.size(), Error::Code::FormatRejected);
-        !result)
+        !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto state = WorkspaceSessionState{.activeViewIndex = document.activeViewIndex};

@@ -46,13 +46,14 @@ namespace ao::gtk::test
     uimodel::LayoutSchema makeSchema()
     {
       auto schema = uimodel::LayoutSchema{};
-      schema.addAction({.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
-      schema.addAction({.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = 0});
+      schema.tryAddAction(
+        {.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
+      schema.tryAddAction({.id = "playback.next", .label = "Next", .category = "Playback", .capabilities = 0});
       // Requires a widget anchor and presents a menu: not drivable by a global accelerator.
-      schema.addAction({.id = "track.editTags",
-                        .label = "Edit Tags",
-                        .category = "Tracks",
-                        .capabilities = ActionCapability::RequiresAnchor | ActionCapability::PresentsMenu});
+      schema.tryAddAction({.id = "track.editTags",
+                           .label = "Edit Tags",
+                           .category = "Tracks",
+                           .capabilities = ActionCapability::RequiresAnchor | ActionCapability::PresentsMenu});
       return schema;
     }
 
@@ -162,7 +163,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const longActionLabel = std::string{"Activar/desactivar reproducción aleatoria excepcionalmente larga"};
     auto schema = uimodel::LayoutSchema{};
-    schema.addAction(
+    schema.tryAddAction(
       {.id = "playback.toggleShuffle", .label = longActionLabel, .category = "Playback", .capabilities = 0});
     auto hostWindow = Gtk::Window{};
     auto editor = ShortcutEditorWidget{

@@ -54,7 +54,7 @@ namespace ao::winui::layout
           return;
         }
 
-        registry->invoke(actionId, {.anchor = anchor, .slot = slot});
+        registry->tryInvoke(actionId, {.anchor = anchor, .slot = slot});
       }
     };
 

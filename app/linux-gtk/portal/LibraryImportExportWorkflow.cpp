@@ -78,19 +78,20 @@ namespace ao::gtk::portal
                     *this,
                     kScanExceptionContext,
                     [mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
-                    { return self->scanWorkflow(mode, stopToken); });
+                    { return self->scanWorkflowAsync(mode, stopToken); });
   }
 
   void LibraryImportExportWorkflow::importFrom(std::filesystem::path path)
   {
     auto callbacks = _callbacks;
-    spawnUiWorkflow(_asyncRuntime,
-                    _tasks,
-                    *this,
-                    kImportExceptionContext,
-                    [callbacks = std::move(callbacks), importPath = std::move(path)](
-                      LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-                    { return self->prepareImportWorkflow(std::move(callbacks), std::move(importPath), stopToken); });
+    spawnUiWorkflow(
+      _asyncRuntime,
+      _tasks,
+      *this,
+      kImportExceptionContext,
+      [callbacks = std::move(callbacks), importPath = std::move(path)](
+        LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+      { return self->prepareImportWorkflowAsync(std::move(callbacks), std::move(importPath), stopToken); });
   }
 
   void LibraryImportExportWorkflow::exportTo(std::filesystem::path path, rt::ExportMode mode)
@@ -101,19 +102,20 @@ namespace ao::gtk::portal
       *this,
       kExportExceptionContext,
       [exportPath = std::move(path), mode](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->exportWorkflow(std::move(exportPath), mode, stopToken); });
+      { return self->exportWorkflowAsync(std::move(exportPath), mode, stopToken); });
   }
 
-  async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::scanWorkflowAsync(ScanRequestMode mode,
+                                                                   std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard([this](uimodel::LibraryScanOutcome outcome) mutable
                                                       { presentScanOutcome(outcome); });
     auto* const jobs = &_library.jobs();
-    auto outcome = co_await uimodel::runLibraryScan(jobs, mode, stopToken);
+    auto outcome = co_await uimodel::runLibraryScanAsync(jobs, mode, stopToken);
     presentResult(std::move(outcome));
   }
 
-  async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflowAsync(std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard(
       [this](std::optional<Error> optError, std::int32_t completedCount, std::int32_t failureCount)
@@ -141,30 +143,30 @@ namespace ao::gtk::portal
         }
       });
     auto* const jobs = &_library.jobs();
-    auto result = co_await jobs->backfillAudioIdentityAsync(stopToken);
+    auto res = co_await jobs->backfillAudioIdentityAsync(stopToken);
 
-    if (!result)
+    if (!res)
     {
-      presentResult(std::optional{result.error()}, 0, 0);
+      presentResult(std::optional{res.error()}, 0, 0);
       co_return;
     }
 
-    presentResult(std::nullopt, result->completedCount, result->failureCount);
+    presentResult(std::nullopt, res->completedCount, res->failureCount);
   }
 
-  async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath,
-                                                                rt::ExportMode mode,
-                                                                std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::exportWorkflowAsync(std::filesystem::path exportPath,
+                                                                     rt::ExportMode mode,
+                                                                     std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard(
-      [this](Result<> result)
+      [this](Result<> res)
       {
-        if (!result)
+        if (!res)
         {
-          presentFailure("Export failed",
-                         i18n::requiredFormat(
-                           _textCatalog, i18n::MessageId::LibraryExportFailed, {{"error", result.error().message}}),
-                         result.error());
+          presentFailure(
+            "Export failed",
+            i18n::requiredFormat(_textCatalog, i18n::MessageId::LibraryExportFailed, {{"error", res.error().message}}),
+            res.error());
           return;
         }
 
@@ -173,23 +175,23 @@ namespace ao::gtk::portal
                             rt::NotificationLifetime::transient());
       });
     auto* const jobs = &_library.jobs();
-    auto result = co_await jobs->exportLibraryAsync(std::move(exportPath), mode, stopToken);
-    presentResult(std::move(result));
+    auto res = co_await jobs->exportLibraryAsync(std::move(exportPath), mode, stopToken);
+    presentResult(std::move(res));
   }
 
-  async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflow(ImportExportCallbacks callbacks,
-                                                                       std::filesystem::path importPath,
-                                                                       std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflowAsync(ImportExportCallbacks callbacks,
+                                                                            std::filesystem::path importPath,
+                                                                            std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard(
-      [this, callbacks = std::move(callbacks)](Result<rt::LibraryImportPlan> result) mutable
+      [this, callbacks = std::move(callbacks)](Result<rt::LibraryImportPlan> res) mutable
       {
-        if (!result)
+        if (!res)
         {
-          presentFailure("Import failed",
-                         i18n::requiredFormat(
-                           _textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
-                         result.error());
+          presentFailure(
+            "Import failed",
+            i18n::requiredFormat(_textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", res.error().message}}),
+            res.error());
           return;
         }
 
@@ -203,8 +205,8 @@ namespace ao::gtk::portal
         }
 
         auto requestConfirmation = std::move(callbacks.requestLibraryRestoreConfirmation);
-        auto const report = result->report();
-        auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*result));
+        auto const report = res->report();
+        auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*res));
         requestConfirmation(report,
                             _presentationCallbacks.guard(
                               [this, pendingPlanPtr](bool const confirmed) mutable
@@ -226,8 +228,8 @@ namespace ao::gtk::portal
                               }));
       });
     auto* const jobs = &_library.jobs();
-    auto result = co_await jobs->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
-    presentResult(std::move(result));
+    auto res = co_await jobs->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
+    presentResult(std::move(res));
   }
 
   void LibraryImportExportWorkflow::applyPreparedImport(rt::LibraryImportPlan plan)
@@ -237,21 +239,21 @@ namespace ao::gtk::portal
                     *this,
                     kImportExceptionContext,
                     [plan = std::move(plan)](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-                    { return self->applyImportWorkflow(std::move(plan), stopToken); });
+                    { return self->applyImportWorkflowAsync(std::move(plan), stopToken); });
   }
 
-  async::Task<void> LibraryImportExportWorkflow::applyImportWorkflow(rt::LibraryImportPlan plan,
-                                                                     std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::applyImportWorkflowAsync(rt::LibraryImportPlan plan,
+                                                                          std::stop_token const stopToken)
   {
     auto presentResult = _presentationCallbacks.guard(
-      [this](Result<rt::ImportReport> result)
+      [this](Result<rt::ImportReport> res)
       {
-        if (!result)
+        if (!res)
         {
-          presentFailure("Import failed",
-                         i18n::requiredFormat(
-                           _textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", result.error().message}}),
-                         result.error());
+          presentFailure(
+            "Import failed",
+            i18n::requiredFormat(_textCatalog, i18n::MessageId::LibraryImportFailed, {{"error", res.error().message}}),
+            res.error());
           return;
         }
 
@@ -260,8 +262,8 @@ namespace ao::gtk::portal
                             rt::NotificationLifetime::transient());
       });
     auto* const jobs = &_library.jobs();
-    auto result = co_await jobs->applyLibraryImportPlanAsync(std::move(plan), stopToken);
-    presentResult(std::move(result));
+    auto res = co_await jobs->applyLibraryImportPlanAsync(std::move(plan), stopToken);
+    presentResult(std::move(res));
   }
 
   void LibraryImportExportWorkflow::presentScanOutcome(uimodel::LibraryScanOutcome const& outcome)
@@ -290,7 +292,7 @@ namespace ao::gtk::portal
                     *this,
                     kAudioIdentityExceptionContext,
                     [](LibraryImportExportWorkflow* self, std::stop_token const stopToken)
-                    { return self->backfillAudioIdentityWorkflow(stopToken); });
+                    { return self->backfillAudioIdentityWorkflowAsync(stopToken); });
   }
 
   void LibraryImportExportWorkflow::presentFailure(std::string_view action,

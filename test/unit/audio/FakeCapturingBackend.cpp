@@ -177,10 +177,10 @@ namespace ao::audio::test
     _mockPropertyInfos[id] = info;
   }
 
-  void FakeCapturingBackend::setOpenResult(Result<> resRes)
+  void FakeCapturingBackend::setOpenResult(Result<> res)
   {
     auto const lock = std::scoped_lock{_mutex};
-    _openRes = resRes;
+    _openRes = res;
   }
 
   void FakeCapturingBackend::setPrewarmEncoding(std::optional<SampleEncoding> optEncoding)

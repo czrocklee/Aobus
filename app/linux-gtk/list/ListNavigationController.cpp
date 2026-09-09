@@ -188,7 +188,7 @@ namespace ao::gtk
     {
       // A newer successful selection supersedes any earlier failed one, which
       // would otherwise be replayed by the next rebuildTree().
-      _pendingSelectId = notifyListSelected(listId) ? kInvalidListId : listId;
+      _pendingSelectId = tryNotifyListSelected(listId) ? kInvalidListId : listId;
     }
   }
 
@@ -227,7 +227,7 @@ namespace ao::gtk
     _editListActionPtr->set_enabled(state.canEdit);
   }
 
-  bool ListNavigationController::notifyListSelected(ListId const listId) const
+  bool ListNavigationController::tryNotifyListSelected(ListId const listId) const
   {
     return !_callbacks.onListSelected || _callbacks.onListSelected(listId);
   }
@@ -249,7 +249,7 @@ namespace ao::gtk
       updateListActions(pendingSelectId);
     }
 
-    if (notifyListSelected(pendingSelectId))
+    if (tryNotifyListSelected(pendingSelectId))
     {
       _pendingSelectId = kInvalidListId;
     }
@@ -416,7 +416,7 @@ namespace ao::gtk
                                                            rt::ListDraft draft,
                                                            std::string presentationId)
   {
-    if (!dialog.beginSubmission())
+    if (!dialog.tryBeginSubmission())
     {
       return;
     }
@@ -438,7 +438,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "save list",
-                uimodel::saveList(&_runtime.library(), std::move(draft)),
+                uimodel::saveListAsync(&_runtime.library(), std::move(draft)),
                 [presentationId = std::move(presentationId), presentResult = std::move(presentResult)](
                   ListNavigationController* owner, Result<ListId> submittedRes) mutable
                 {
@@ -493,7 +493,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list deletion",
-                uimodel::previewListDeletion(&_runtime.library(), listId, false),
+                uimodel::previewListDeletionAsync(&_runtime.library(), listId, false),
                 [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
@@ -529,7 +529,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 "preview list subtree deletion",
-                uimodel::previewListDeletion(&_runtime.library(), listId, true),
+                uimodel::previewListDeletionAsync(&_runtime.library(), listId, true),
                 [listId](ListNavigationController* owner, Result<rt::DeleteListSubtreeReply> previewRes)
                 {
                   if (!previewRes)
@@ -637,11 +637,11 @@ namespace ao::gtk
                                                   bool const removeWritableTag)
   {
     auto const options = rt::DeleteListOptions{.removeWritableTagFromTracks = removeWritableTag};
-    auto complete = [listId](ListNavigationController* owner, auto result)
+    auto complete = [listId](ListNavigationController* owner, auto res)
     {
-      if (!result)
+      if (!res)
       {
-        owner->showDeleteError(listId, result.error().message);
+        owner->showDeleteError(listId, res.error().message);
         return;
       }
 
@@ -653,7 +653,7 @@ namespace ao::gtk
                 _tasks,
                 *this,
                 deleteDescendants ? "delete list subtree" : "delete list",
-                uimodel::deleteList(&_runtime.library(), listId, deleteDescendants, options),
+                uimodel::deleteListAsync(&_runtime.library(), listId, deleteDescendants, options),
                 std::move(complete));
   }
 

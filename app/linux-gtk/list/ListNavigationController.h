@@ -74,7 +74,7 @@ namespace ao::gtk
     void createActions();
     void handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
     void handleSelectionChanged(ListId listId);
-    bool notifyListSelected(ListId listId) const;
+    bool tryNotifyListSelected(ListId listId) const;
     void reconcilePendingSelection();
     void syncSelectionFromWorkspace(rt::ViewId viewId);
     void updateListActions(ListId listId);

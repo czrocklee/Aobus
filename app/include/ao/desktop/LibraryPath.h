@@ -16,5 +16,5 @@ namespace ao::desktop
   Result<std::filesystem::path> normalizeExistingLibraryRoot(std::filesystem::path root);
 
   /** Compare normalized roots by filesystem identity with a lexical fallback. */
-  bool sameLibraryRoot(std::filesystem::path const& left, std::filesystem::path const& right);
+  bool isSameLibraryRoot(std::filesystem::path const& left, std::filesystem::path const& right);
 } // namespace ao::desktop

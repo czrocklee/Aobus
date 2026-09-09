@@ -57,16 +57,18 @@ namespace ao::uimodel
     std::span<TrackId const> effectiveTrackIds() const noexcept;
     async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
-    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveBefore(
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveBeforeAsync(
       std::vector<TrackId> selectedTrackIds,
       std::optional<TrackId> optBeforeTrackId);
-    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveUp(std::vector<TrackId> selectedTrackIds);
-    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveDown(std::vector<TrackId> selectedTrackIds);
-    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToTop(std::vector<TrackId> selectedTrackIds);
-    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToBottom(
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveUpAsync(std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveDownAsync(
       std::vector<TrackId> selectedTrackIds);
-    async::Task<Result<rt::AuthoringResult<rt::ResetListOrderReply>>> resetOrder();
-    async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>> forgetHiddenPositions();
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToTopAsync(
+      std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::MoveListOrderReply>>> moveToBottomAsync(
+      std::vector<TrackId> selectedTrackIds);
+    async::Task<Result<rt::AuthoringResult<rt::ResetListOrderReply>>> resetOrderAsync();
+    async::Task<Result<rt::AuthoringResult<rt::ForgetHiddenListOrderReply>>> forgetHiddenPositionsAsync();
 
   private:
     struct State;

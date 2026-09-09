@@ -311,7 +311,7 @@ namespace ao::rt
      * baseline just read from the file with references to content that may exist
      * nowhere.
      */
-    bool recordsCovers(ExportMode const mode)
+    bool shouldRecordCovers(ExportMode const mode)
     {
       return mode == ExportMode::Full;
     }
@@ -389,7 +389,7 @@ namespace ao::rt
                         ExportMode const mode,
                         CoverDigestTextMap const& digestText)
     {
-      if (!recordsCovers(mode))
+      if (!shouldRecordCovers(mode))
       {
         return;
       }
@@ -563,15 +563,15 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      if (auto result = exportTracks(library, transaction, mode, stopToken); !result)
+      if (auto res = exportTracks(library, transaction, mode, stopToken); !res)
       {
-        return result;
+        return res;
       }
     }
 
-    if (auto result = exportLists(library, transaction, mode, stopToken); !result)
+    if (auto res = exportLists(library, transaction, mode, stopToken); !res)
     {
-      return result;
+      return res;
     }
 
     // The destination directory is the user's to name, not this exporter's to
@@ -610,7 +610,7 @@ namespace ao::rt
     // as the handle the track record stores.
     auto reachable = ReachableResources{};
 
-    if (recordsCovers(mode))
+    if (shouldRecordCovers(mode))
     {
       reachable = collectReachableResources(trackReader, ml.resources().reader(transaction), stopToken);
       emitResourceTable(node, reachable.descriptors);
@@ -626,10 +626,10 @@ namespace ao::rt
       // transaction and an emitted tree, and both are dropped whole.
       async::throwIfStopRequested(stopToken);
 
-      if (auto result = exportTrack(tracksNode, trackId, view, mode, reachable.digestText, dictionary, manifestReader);
-          !result)
+      if (auto res = exportTrack(tracksNode, trackId, view, mode, reachable.digestText, dictionary, manifestReader);
+          !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -694,9 +694,9 @@ namespace ao::rt
 
     if (mode == ExportMode::Full)
     {
-      if (auto result = emitTrackProperties(trackNode, property, manifestReader); !result)
+      if (auto res = emitTrackProperties(trackNode, property, manifestReader); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -721,9 +721,9 @@ namespace ao::rt
     {
       async::throwIfStopRequested(stopToken);
 
-      if (auto result = emitList(listsNode, listId, listView, mode, trackReader); !result)
+      if (auto res = emitList(listsNode, listId, listView, mode, trackReader); !res)
       {
-        return result;
+        return res;
       }
     }
 

@@ -32,19 +32,19 @@ namespace clang::tidy::aobus
   // system headers are outside production policy checks.
   bool isPolicySource(SourceManager const& sourceManager, SourceLocation location);
 
-  bool blockBeginsWithPolicyMarker(Stmt const& block,
-                                   ASTContext const& context,
-                                   SourceManager const& sourceManager,
-                                   std::string_view markerHelperName,
-                                   std::string_view macroName);
+  bool hasBlockPolicyMarker(Stmt const& block,
+                            ASTContext const& context,
+                            SourceManager const& sourceManager,
+                            std::string_view markerHelperName,
+                            std::string_view macroName);
 
   // True when the function enclosing statement begins with the exact policy
   // marker macro expansion backed by markerHelperName.
-  bool enclosingFunctionBeginsWithPolicyMarker(Stmt const& statement,
-                                               ASTContext& context,
-                                               SourceManager const& sourceManager,
-                                               std::string_view markerHelperName,
-                                               std::string_view macroName);
+  bool hasEnclosingFunctionPolicyMarker(Stmt const& statement,
+                                        ASTContext& context,
+                                        SourceManager const& sourceManager,
+                                        std::string_view markerHelperName,
+                                        std::string_view macroName);
 
   // Unwraps the implicit wrapper chains the AST inserts around expressions
   // (ImplicitCastExpr / single-argument CXXConstructExpr /
@@ -54,7 +54,7 @@ namespace clang::tidy::aobus
   // True when expr (modulo parens and implicit casts) is a reference to var.
   // Comparing declarations beats comparing source text: it is immune to
   // spelling differences and to same-named variables from other scopes.
-  bool refersToVarDecl(Expr const* expr, VarDecl const& var);
+  bool isVarDeclReference(Expr const* expr, VarDecl const& var);
 
   // A C++20 rewritten comparison (a != b lowered to !(a == b)) contains a
   // synthesized operator== call whose source-level operator is actually !=.
@@ -77,8 +77,8 @@ namespace clang::tidy::aobus
   // Verifies that the object endCall is invoked on spells the same source text
   // as the range argument of the algorithm, rejecting cross-container
   // comparisons like find(v, x) != w.end().
-  bool verifyEndObject(CallExpr const& endCall,
-                       std::string const& rangeStr,
-                       SourceManager const& sm,
-                       LangOptions const& langOpts);
+  bool isMatchingEndObject(CallExpr const& endCall,
+                           std::string const& rangeStr,
+                           SourceManager const& sm,
+                           LangOptions const& langOpts);
 } // namespace clang::tidy::aobus

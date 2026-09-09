@@ -28,9 +28,9 @@ namespace ao::audio::test
       auto data = source;
       data.resize(16);
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto const result = FlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::DecodeFailed);
+      auto const res = FlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::DecodeFailed);
     }
 
     SECTION("Truncated audio reaches a stable terminal state")

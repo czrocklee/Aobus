@@ -83,9 +83,9 @@ namespace ao::yaml
                            std::string_view context,
                            UnknownKeyPolicy unknownKeyPolicy)
   {
-    if (auto const result = requireMap(node, context); !result)
+    if (auto const res = requireMap(node, context); !res)
     {
-      return result;
+      return res;
     }
 
     auto seenKeys = std::vector<std::string_view>{};
@@ -160,7 +160,7 @@ namespace ao::yaml
 
   Result<> MapWriter::finish() &&
   {
-    return std::move(_result);
+    return std::move(_res);
   }
 
   MapReader::MapReader(ryml::ConstNodeRef node,
@@ -169,7 +169,7 @@ namespace ao::yaml
                        UnknownKeyPolicy unknownKeyPolicy)
     : _node{node}
     , _context{boundedErrorContext(context)}
-    , _result{validateMapKeys(node, allowedKeys, _context, unknownKeyPolicy)}
+    , _res{validateMapKeys(node, allowedKeys, _context, unknownKeyPolicy)}
   {
   }
 } // namespace ao::yaml

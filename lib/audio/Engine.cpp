@@ -268,9 +268,9 @@ namespace ao::audio
         _eventSignal.release();
       }
 
-      // Consumer-side only. Runtime consumers serialize pop+processing outside
+      // Consumer-side only. Runtime consumers serialize tryPop+processing outside
       // this class because control commands also settle this ring.
-      bool tryPopRtSignal(RtSignal& signal) noexcept { return _rtSignalRing.pop(signal); }
+      bool tryPopRtSignal(RtSignal& signal) noexcept { return _rtSignalRing.tryPop(signal); }
 
       template<typename RtSignalConsumer>
       void drainRtSignals(RtSignalConsumer consume)
@@ -329,7 +329,7 @@ namespace ao::audio
         EngineEventQueue* _previous;
       };
 
-      static bool runNotifications(std::stop_token const& stopToken, Notifications& notifications)
+      static bool tryRunNotifications(std::stop_token const& stopToken, Notifications& notifications)
       {
         for (auto& notification : notifications)
         {
@@ -379,7 +379,7 @@ namespace ao::audio
               break;
             }
 
-            if (!runNotifications(stopToken, *optNotifications))
+            if (!tryRunNotifications(stopToken, *optNotifications))
             {
               return;
             }
@@ -405,7 +405,7 @@ namespace ao::audio
               _playbackEvents.pop_front();
             }
 
-            if (auto notifications = processPlaybackEvent(*optEvent); !runNotifications(stopToken, notifications))
+            if (auto notifications = processPlaybackEvent(*optEvent); !tryRunNotifications(stopToken, notifications))
             {
               return;
             }
@@ -644,7 +644,7 @@ namespace ao::audio
                           TrackNode const& preparedNext) noexcept
     {
       return isGaplessCapable(currentInfo) && isGaplessCapable(preparedNext.info) &&
-             samePcmMode(currentBackendFormat, preparedNext.backendFormat);
+             isSamePcmMode(currentBackendFormat, preparedNext.backendFormat);
     }
 
     void waitForSpliceHandoff() const noexcept
@@ -662,7 +662,7 @@ namespace ao::audio
 
     void discardSpliceSignalNode(TrackNode* node) noexcept { timeline.dropDisarmedLookahead(node); }
 
-    bool currentTransitionMatches(std::optional<PcmFormat> const& optBackendFormat,
+    bool matchesCurrentTransition(std::optional<PcmFormat> const& optBackendFormat,
                                   std::optional<DecodedStreamInfo> const& optStreamInfo) const
     {
       auto const lock = std::scoped_lock{transitionMutex};
@@ -673,13 +673,13 @@ namespace ao::audio
     // it closes a concurrent RT handoff, settles every signal currently
     // visible to the control side, refreshes transition evidence, and only then
     // publishes a new owner/cursor pair.
-    bool replacePreparedNext(std::unique_ptr<TrackNode> nodePtr,
-                             std::optional<PcmFormat> const& optExpectedBackendFormat,
-                             std::optional<DecodedStreamInfo> const& optExpectedStreamInfo)
+    bool tryReplacePreparedNext(std::unique_ptr<TrackNode> nodePtr,
+                                std::optional<PcmFormat> const& optExpectedBackendFormat,
+                                std::optional<DecodedStreamInfo> const& optExpectedStreamInfo)
     {
       clearPreparedNext();
 
-      if (!currentTransitionMatches(optExpectedBackendFormat, optExpectedStreamInfo))
+      if (!matchesCurrentTransition(optExpectedBackendFormat, optExpectedStreamInfo))
       {
         return false;
       }
@@ -1714,7 +1714,7 @@ namespace ao::audio
   detail::TrackPreparation::TrackPreparation(TrackPreparation&&) noexcept = default;
   detail::TrackPreparation& detail::TrackPreparation::operator=(TrackPreparation&&) noexcept = default;
 
-  bool detail::TrackPreparation::requiresWorker() const noexcept
+  bool detail::TrackPreparation::needsWorker() const noexcept
   {
     return _implPtr != nullptr && !_implPtr->logicalDrainFallback;
   }
@@ -2058,7 +2058,7 @@ namespace ao::audio
 
     auto openedTrackRes = [&] -> Result<TrackNode>
     {
-      if (optPreparedTrack && samePcmMode(optPreparedTrack->backendFormat, clientFormat))
+      if (optPreparedTrack && isSamePcmMode(optPreparedTrack->backendFormat, clientFormat))
       {
         auto session = detail::TrackSession::activate(
           std::move(*optPreparedTrack), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
@@ -2313,20 +2313,20 @@ namespace ao::audio
     // The requested value is the engine's intent regardless of whether the
     // backend accepted it, so cache it either way and hand the backend failure
     // back to the caller to report.
-    auto result = backendPtr->set(props::kVolume, volume);
+    auto res = backendPtr->set(props::kVolume, volume);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.volume = volume;
-    return result;
+    return res;
   }
 
   Result<> Engine::Impl::setMutedUnlocked(bool muted)
   {
-    auto result = backendPtr->set(props::kMuted, muted);
+    auto res = backendPtr->set(props::kMuted, muted);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.muted = muted;
-    return result;
+    return res;
   }
 
   // ── Engine ──────────────────────────────────────────────────────
@@ -2553,7 +2553,7 @@ namespace ao::audio
     AO_INVARIANT(preparationImpl->optCurrentBackendFormat, "Lookahead preparation has no current backend format");
 
     auto const& currentBackendFormat = *preparationImpl->optCurrentBackendFormat;
-    auto const currentMatches = engine._implPtr->currentTransitionMatches(
+    auto const currentMatches = engine._implPtr->matchesCurrentTransition(
       preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo);
 
     if (!consumedPreparation.matchesControlContext(engine, currentGeneration) || !currentMatches)
@@ -2571,7 +2571,7 @@ namespace ao::audio
     {
       auto const& preparedTrack = *preparationImpl->optPreparedTrack;
       capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
-                samePcmMode(currentBackendFormat, preparedTrack.backendFormat);
+                isSamePcmMode(currentBackendFormat, preparedTrack.backendFormat);
 
       if (capable)
       {
@@ -2587,7 +2587,7 @@ namespace ao::audio
       }
     }
 
-    if (!engine._implPtr->replacePreparedNext(
+    if (!engine._implPtr->tryReplacePreparedNext(
           std::move(nodePtr), preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo))
     {
       return makeError(Error::Code::Conflict, "Playback changed while adopting lookahead preparation");

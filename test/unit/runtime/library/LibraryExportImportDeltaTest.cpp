@@ -83,10 +83,10 @@ namespace ao::rt::test
     auto coverResourceId = kInvalidResourceId;
     {
       auto transaction = library::test::writeTransaction(ml);
-      auto result = library::test::physicalWriter(ml.resources(), transaction)
-                      .create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
-      REQUIRE(result);
-      coverResourceId = *result;
+      auto res = library::test::physicalWriter(ml.resources(), transaction)
+                   .create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
+      REQUIRE(res);
+      coverResourceId = *res;
       REQUIRE(transaction.commit());
     }
     library::test::addTrackWithUniqueFixtureUri(ml,
@@ -205,16 +205,16 @@ namespace ao::rt::test
 
     auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
 
-    if (!denied.effective())
+    if (!denied.isEffective())
     {
       SKIP("the current process bypasses directory read restrictions");
     }
 
     auto exporter = LibraryYamlExporter{ml};
-    auto const result = exporter.exportToYaml(std::filesystem::path{temp.path()} / "delta.yaml", ExportMode::Delta);
+    auto const res = exporter.exportToYaml(std::filesystem::path{temp.path()} / "delta.yaml", ExportMode::Delta);
 
-    REQUIRE(!result);
-    CHECK(result.error().code == Error::Code::IoError);
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::IoError);
   }
 
   TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors",
@@ -242,15 +242,15 @@ namespace ao::rt::test
 
     auto const denied = ao::test::ScopedDirectoryAccessGuard{blockedDir, ao::test::DeniedDirectoryAccess::Read};
 
-    if (!denied.effective())
+    if (!denied.isEffective())
     {
       SKIP("the current process bypasses directory read restrictions");
     }
 
-    auto const result = importer.importFromYamlOffline(yamlPath);
+    auto const res = importer.importFromYamlOffline(yamlPath);
 
-    REQUIRE(!result);
-    CHECK(result.error().code == Error::Code::IoError);
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::IoError);
   }
 
   TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids",

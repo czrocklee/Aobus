@@ -70,13 +70,13 @@ namespace ao::rt::test
 
     auto service = LibraryScan{libraryFixture.library()};
     auto progressPaths = std::vector<std::filesystem::path>{};
-    auto result =
+    auto res =
       service.buildPlan([&progressPaths](std::filesystem::path const& path) { progressPaths.push_back(path); });
 
-    REQUIRE(result);
-    REQUIRE(result->size() == 1);
-    CHECK(result->items()[0].uri == "song.flac");
-    CHECK(result->items()[0].classification == ScanClassification::New);
+    REQUIRE(res);
+    REQUIRE(res->size() == 1);
+    CHECK(res->items()[0].uri == "song.flac");
+    CHECK(res->items()[0].classification == ScanClassification::New);
     CHECK(std::ranges::any_of(
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
   }
@@ -127,22 +127,22 @@ namespace ao::rt::test
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
     auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}};
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    REQUIRE(result->insertedIds.size() == 1);
-    CHECK(result->failureCount == 0);
-    CHECK_FALSE(operation.cancelled());
+    REQUIRE(res);
+    REQUIRE(res->insertedIds.size() == 1);
+    CHECK(res->failureCount == 0);
+    CHECK_FALSE(operation.isCancelled());
 
     auto transaction = libraryFixture.library().readTransaction();
     auto trackReader = libraryFixture.library().tracks().reader(transaction);
-    auto optTrack = trackReader.get(result->insertedIds[0]);
+    auto optTrack = trackReader.get(res->insertedIds[0]);
     REQUIRE(optTrack);
     CHECK(optTrack->metadata().title() == "Test Title");
 
     auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(optManifest);
-    CHECK(optManifest->trackId() == result->insertedIds[0]);
+    CHECK(optManifest->trackId() == res->insertedIds[0]);
     CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
@@ -155,16 +155,16 @@ namespace ao::rt::test
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto result = ScanApplyOperation{libraryFixture.library(),
-                                     std::move(plan),
-                                     {},
-                                     {},
-                                     ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
-                    .run();
+    auto res = ScanApplyOperation{libraryFixture.library(),
+                                  std::move(plan),
+                                  {},
+                                  {},
+                                  ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                 .run();
 
-    REQUIRE(result);
-    REQUIRE(result->insertedIds.size() == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    REQUIRE(res->insertedIds.size() == 1);
+    CHECK(res->failureCount == 0);
 
     auto transaction = libraryFixture.library().readTransaction();
     auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
@@ -185,7 +185,7 @@ namespace ao::rt::test
     stopSource.request_stop();
     auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}, {}};
     REQUIRE_THROWS_AS(operation.run(stopSource.get_token()), async::OperationCancelled);
-    CHECK(operation.cancelled());
+    CHECK(operation.isCancelled());
 
     auto transaction = libraryFixture.library().readTransaction();
     auto trackReader = libraryFixture.library().tracks().reader(transaction);

@@ -104,16 +104,16 @@ namespace ao::uimodel::test
   {
     auto model = KeymapModel{sampleDefaults()};
 
-    CHECK(model.bind("playback.next", chord("Ctrl+N")));
+    CHECK(model.tryBind("playback.next", chord("Ctrl+N")));
     CHECK(model.bindings() == KeymapBindings{{"playback.next", {chord("Ctrl+Right"), chord("Ctrl+N")}},
                                              {"playback.playPause", {chord("Ctrl+P"), chord("Media:Play")}}});
-    CHECK(model.bind("playback.next", chord("Ctrl+N")) == false); // duplicate rejected
+    CHECK(model.tryBind("playback.next", chord("Ctrl+N")) == false); // duplicate rejected
     CHECK(model.bindings() == KeymapBindings{{"playback.next", {chord("Ctrl+Right"), chord("Ctrl+N")}},
                                              {"playback.playPause", {chord("Ctrl+P"), chord("Media:Play")}}});
 
-    CHECK(model.unbind("playback.next", chord("Ctrl+N")));
+    CHECK(model.tryUnbind("playback.next", chord("Ctrl+N")));
     CHECK(model.bindings() == sampleDefaults());
-    CHECK(model.unbind("playback.next", chord("Ctrl+N")) == false); // already gone
+    CHECK(model.tryUnbind("playback.next", chord("Ctrl+N")) == false); // already gone
     CHECK(model.bindings() == sampleDefaults());
   }
 

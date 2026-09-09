@@ -64,12 +64,14 @@ namespace clang::tidy::aobus
         }
       }
 
-      auto const hasRaiiMember = std::ranges::any_of(
-        node.fields(),
-        [&node](FieldDecl const* field) { return ownsScopedOrRaiiType(field->getType(), node.getASTContext()); });
-      auto const hasRaiiBase = std::ranges::any_of(
-        node.bases(),
-        [&node](CXXBaseSpecifier const& base) { return ownsScopedOrRaiiType(base.getType(), node.getASTContext()); });
+      auto const hasRaiiMember =
+        std::ranges::any_of(node.fields(),
+                            [&node](FieldDecl const* field)
+                            { return hasScopedOrRaiiTypeOwnership(field->getType(), node.getASTContext()); });
+      auto const hasRaiiBase =
+        std::ranges::any_of(node.bases(),
+                            [&node](CXXBaseSpecifier const& base)
+                            { return hasScopedOrRaiiTypeOwnership(base.getType(), node.getASTContext()); });
       return (hasUserProvidedDtor || hasRaiiMember || hasRaiiBase) && hasDeletedCopyCtor;
     }
 
@@ -136,7 +138,7 @@ namespace clang::tidy::aobus
       return isRaiiName(recordDecl->getQualifiedNameAsString());
     }
 
-    bool ownsScopedOrRaiiType(QualType type, ASTContext& context)
+    bool hasScopedOrRaiiTypeOwnership(QualType type, ASTContext& context)
     {
       if (type.isNull() || type->isPointerType() || type->isReferenceType())
       {

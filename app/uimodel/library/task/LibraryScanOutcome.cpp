@@ -160,11 +160,11 @@ namespace ao::uimodel
     return outcome;
   }
 
-  async::Task<LibraryScanOutcome> runLibraryScan(rt::LibraryJobs* const jobs,
-                                                 LibraryScanMode const mode,
-                                                 std::stop_token const stopToken)
+  async::Task<LibraryScanOutcome> runLibraryScanAsync(rt::LibraryJobs* const jobs,
+                                                      LibraryScanMode const mode,
+                                                      std::stop_token const stopToken)
   {
-    auto result = co_await runLibraryScanWorkflow(jobs, mode, stopToken);
+    auto result = co_await runLibraryScanWorkflowAsync(jobs, mode, stopToken);
     co_return decideLibraryScanOutcome(result);
   }
 } // namespace ao::uimodel

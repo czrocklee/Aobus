@@ -70,7 +70,7 @@ namespace ao::cli
     T runTask(async::Task<T> task)
     {
       auto optResultPtr = std::make_shared<std::optional<T>>();
-      runTask(storeTaskResult(std::move(task), optResultPtr));
+      runTask(storeTaskResultAsync(std::move(task), optResultPtr));
       auto optResult = std::move(*optResultPtr);
 
       AO_INVARIANT(optResult, "CLI task completed without publishing its result");
@@ -85,7 +85,7 @@ namespace ao::cli
 
   private:
     template<typename T>
-    static async::Task<void> storeTaskResult(async::Task<T> task, std::shared_ptr<std::optional<T>> optResultPtr)
+    static async::Task<void> storeTaskResultAsync(async::Task<T> task, std::shared_ptr<std::optional<T>> optResultPtr)
     {
       optResultPtr->emplace(co_await std::move(task));
     }

@@ -32,11 +32,11 @@ namespace ao::gtk
       return TrackFieldEditValue{};
     }
 
-    bool applyStringEditValue(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField field)
+    bool tryApplyStringEditValue(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField field)
     {
       if (auto const* str = std::get_if<std::string>(&value); str != nullptr)
       {
-        return row.setStringField(field, *str);
+        return row.trySetStringField(field, *str);
       }
 
       return false;
@@ -49,7 +49,7 @@ namespace ao::gtk
     }
 
     template<auto Setter>
-    bool applyUint16Field(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField /*field*/)
+    bool tryApplyUint16Field(TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField /*field*/)
     {
       if (auto const* val = std::get_if<std::uint16_t>(&value); val != nullptr)
       {
@@ -91,7 +91,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Title)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Artist,
@@ -99,7 +99,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Artist)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Album,
@@ -107,7 +107,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Album)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::AlbumArtist,
@@ -115,7 +115,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::AlbumArtist)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Genre,
@@ -123,7 +123,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Genre)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Composer,
@@ -131,7 +131,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Composer)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Conductor,
@@ -139,7 +139,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Conductor)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Ensemble,
@@ -147,7 +147,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Ensemble)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Soloist,
@@ -155,7 +155,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Soloist)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Work,
@@ -163,7 +163,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Work)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Movement,
@@ -171,7 +171,7 @@ namespace ao::gtk
           { return std::string{row.stringField(rt::TrackField::Movement)->raw()}; },
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = applyStringEditValue,
+          .applyRowEditValue = tryApplyStringEditValue,
         },
         // ---- Metadata: number ----
         {
@@ -179,7 +179,7 @@ namespace ao::gtk
           .readRowText = +[](TrackRowObject const& row) -> std::string { return uimodel::formatUint16(row.year()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::year>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setYear>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setYear>,
         },
         {
           .field = F::DiscNumber,
@@ -187,7 +187,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.discNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discNumber>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscNumber>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setDiscNumber>,
         },
         {
           .field = F::DiscTotal,
@@ -195,7 +195,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.discTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::discTotal>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setDiscTotal>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setDiscTotal>,
         },
         {
           .field = F::TrackNumber,
@@ -203,7 +203,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.trackNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackNumber>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackNumber>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setTrackNumber>,
         },
         {
           .field = F::TrackTotal,
@@ -211,7 +211,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.trackTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::trackTotal>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setTrackTotal>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setTrackTotal>,
         },
         {
           .field = F::MovementNumber,
@@ -219,7 +219,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.movementNumber()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementNumber>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementNumber>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setMovementNumber>,
         },
         {
           .field = F::MovementTotal,
@@ -227,7 +227,7 @@ namespace ao::gtk
           { return uimodel::formatUint16(row.movementTotal()); },
           .parseInlineEdit = uimodel::parseUint16EditValue,
           .readRowEditValue = readUint16Field<&TrackRowObject::movementTotal>,
-          .applyRowEditValue = applyUint16Field<&TrackRowObject::setMovementTotal>,
+          .applyRowEditValue = tryApplyUint16Field<&TrackRowObject::setMovementTotal>,
         },
         // ---- Duration ----
         {
@@ -300,8 +300,8 @@ namespace ao::gtk
 
     auto const& uiDefinitions()
     {
-      static auto const defs = buildUiDefs();
-      return defs;
+      static auto const kDefs = buildUiDefs();
+      return kDefs;
     }
   } // namespace
 

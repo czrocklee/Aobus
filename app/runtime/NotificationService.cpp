@@ -38,38 +38,39 @@ namespace ao::rt
 {
   namespace
   {
-    bool textFits(std::string_view const text, NotificationFeedLimits const& limits) noexcept
+    bool isTextWithinLimits(std::string_view const text, NotificationFeedLimits const& limits) noexcept
     {
       return text.size() <= limits.maxTextBytes;
     }
 
-    bool messageFits(NotificationMessage const& message, NotificationFeedLimits const& limits) noexcept
+    bool isMessageWithinLimits(NotificationMessage const& message, NotificationFeedLimits const& limits) noexcept
     {
       return std::visit(
         [&limits]<typename Message>(Message const& value)
         {
           if constexpr (std::same_as<Message, std::string>)
           {
-            return textFits(value, limits);
+            return isTextWithinLimits(value, limits);
           }
           else
           {
-            return textFits(value.subject, limits) && textFits(value.detail, limits);
+            return isTextWithinLimits(value.subject, limits) && isTextWithinLimits(value.detail, limits);
           }
         },
         message);
     }
 
-    bool lifetimeFits(NotificationLifetime const lifetime) noexcept
+    bool isLifetimeWithinLimits(NotificationLifetime const lifetime) noexcept
     {
       auto const optDuration = lifetime.optTransientDuration();
       return !optDuration || *optDuration > std::chrono::milliseconds::zero();
     }
 
-    bool entryFits(NotificationEntry const& entry, NotificationFeedLimits const& limits) noexcept
+    bool isEntryWithinLimits(NotificationEntry const& entry, NotificationFeedLimits const& limits) noexcept
     {
-      return (!entry.optReportKey || (!entry.optReportKey->empty() && textFits(entry.optReportKey->raw(), limits))) &&
-             messageFits(entry.message, limits) && lifetimeFits(entry.lifetime);
+      return (!entry.optReportKey ||
+              (!entry.optReportKey->empty() && isTextWithinLimits(entry.optReportKey->raw(), limits))) &&
+             isMessageWithinLimits(entry.message, limits) && isLifetimeWithinLimits(entry.lifetime);
     }
 
     NotificationEntry entryFromRequest(NotificationId const id,
@@ -188,15 +189,15 @@ namespace ao::rt
       publishing = false;
     }
 
-    static async::Task<void> waitForExpiry(async::Runtime* runtime,
-                                           std::weak_ptr<ExpiryControl> expiryControlWeakPtr,
-                                           std::weak_ptr<ExpiryRegistration> expiryRegistrationWeakPtr,
-                                           NotificationId const id,
-                                           std::chrono::milliseconds const duration,
-                                           std::stop_token const stopToken)
+    static async::Task<void> waitForExpiryAsync(async::Runtime* runtime,
+                                                std::weak_ptr<ExpiryControl> expiryControlWeakPtr,
+                                                std::weak_ptr<ExpiryRegistration> expiryRegistrationWeakPtr,
+                                                NotificationId const id,
+                                                std::chrono::milliseconds const duration,
+                                                std::stop_token const stopToken)
     {
-      co_await runtime->sleepFor(duration, stopToken);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->sleepForAsync(duration, stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
       auto const controlPtr = expiryControlWeakPtr.lock();
       auto const registrationPtr = expiryRegistrationWeakPtr.lock();
@@ -218,7 +219,9 @@ namespace ao::rt
          expiryRegistrationWeakPtr = std::move(expiryRegistrationWeakPtr),
          id,
          duration](std::stop_token const stopToken)
-        { return waitForExpiry(runtime, expiryControlWeakPtr, expiryRegistrationWeakPtr, id, duration, stopToken); });
+        {
+          return waitForExpiryAsync(runtime, expiryControlWeakPtr, expiryRegistrationWeakPtr, id, duration, stopToken);
+        });
     }
 
     std::shared_ptr<ExpiryRegistration> prepareExpiry(NotificationEntry const& entry)
@@ -234,7 +237,7 @@ namespace ao::rt
       return registrationPtr;
     }
 
-    bool feedFitsCapacity(NotificationFeedState const& candidate) const noexcept
+    bool isFeedWithinCapacity(NotificationFeedState const& candidate) const noexcept
     {
       return candidate.entries.size() <= limits.maxEntries;
     }
@@ -244,7 +247,7 @@ namespace ao::rt
     {
       auto evictedIds = std::vector<NotificationId>{};
 
-      while (!feedFitsCapacity(candidate))
+      while (!isFeedWithinCapacity(candidate))
       {
         auto const entryIter = std::ranges::find_if(
           candidate.entries,
@@ -309,7 +312,7 @@ namespace ao::rt
       auto candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
       AO_INVARIANT(candidateEntryIter != candidatePtr->entries.end());
 
-      if (!entryFits(*candidateEntryIter, limits))
+      if (!isEntryWithinLimits(*candidateEntryIter, limits))
       {
         rejectMutation(mutationKind, id, "candidate violates request limits");
         return;
@@ -353,7 +356,7 @@ namespace ao::rt
       auto const id = NotificationId{committedNextId};
       auto entry = entryFromRequest(id, std::move(optReportKey), std::move(request));
 
-      if (!entryFits(entry, limits))
+      if (!isEntryWithinLimits(entry, limits))
       {
         rejectMutation(NotificationFeedMutationKind::Posted, kInvalidNotificationId, "request violates limits");
         return;
@@ -446,7 +449,7 @@ namespace ao::rt
     auto const id = entryIter->id;
     auto replacement = entryFromRequest(id, std::optional{std::move(reportKey)}, std::move(request));
 
-    if (!entryFits(replacement, _implPtr->limits))
+    if (!isEntryWithinLimits(replacement, _implPtr->limits))
     {
       _implPtr->rejectMutation(NotificationFeedMutationKind::ReportUpdated, id, "request violates limits");
       return;

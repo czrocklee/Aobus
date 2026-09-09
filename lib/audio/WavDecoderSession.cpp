@@ -217,9 +217,9 @@ namespace ao::audio
   {
     try
     {
-      if (auto const result = _implPtr->file.map(filePath); !result)
+      if (auto const res = _implPtr->file.map(filePath); !res)
       {
-        detail::throwDecoderError(result.error());
+        detail::throwDecoderError(res.error());
       }
 
       auto parsedRes = media::wav::parseWave(_implPtr->file.bytes(), media::wav::WaveParseExtent::RequiredAudio);

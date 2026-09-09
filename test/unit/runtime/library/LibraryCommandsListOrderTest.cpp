@@ -51,11 +51,11 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        auto result =
+        auto res =
           transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
-        REQUIRE(result);
+        REQUIRE(res);
         REQUIRE(transaction.commit());
-        return *result;
+        return *res;
       }
 
       Library& library()
@@ -139,12 +139,12 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second, third});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{third}, first));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{third}, first));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.selectedTrackIds == std::vector{third});
-    CHECK(result->reply.optBeforeTrackId == std::optional{first});
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.selectedTrackIds == std::vector{third});
+    CHECK(res->reply.optBeforeTrackId == std::optional{first});
     CHECK(fixture.storedOrder(listId) == std::vector{third, first, hidden, second});
     auto const& script = onlyOrderScript(fixture);
     CHECK_FALSE(script.edits.empty());
@@ -160,10 +160,10 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{first}, second));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{first}, second));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::NoOp);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::NoOp);
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
   }
@@ -179,11 +179,11 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second, third});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{second}, std::nullopt));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{second}, std::nullopt));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.optBeforeTrackId == std::nullopt);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.optBeforeTrackId == std::nullopt);
     CHECK(fixture.storedOrder(listId) == std::vector{first, third, second});
     std::ignore = onlyOrderScript(fixture);
   }
@@ -198,11 +198,11 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{first, second});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, {}, std::nullopt));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, {}, std::nullopt));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::NoOp);
-    CHECK(result->reply.selectedTrackIds.empty());
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::NoOp);
+    CHECK(res->reply.selectedTrackIds.empty());
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
   }
@@ -220,11 +220,11 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, effective);
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{fourth, second}, first));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{fourth, second}, first));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.selectedTrackIds == std::vector{second, fourth});
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.selectedTrackIds == std::vector{second, fourth});
     CHECK(fixture.storedOrder(listId) == std::vector{second, fourth, first, third});
   }
 
@@ -238,11 +238,11 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{visible});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().resetListOrder(binding));
+    auto const res = fixture.run(fixture.commands().resetListOrderAsync(binding));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.forgottenPositionCount == 2);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.forgottenPositionCount == 2);
     CHECK(fixture.storedOrder(listId).empty());
     REQUIRE(fixture.events.size() == 1);
     REQUIRE(fixture.events.front().listOrderChanges.size() == 1);
@@ -260,11 +260,11 @@ namespace ao::rt::test
     auto binding = fixture.bind(listId, std::array{second, first});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().forgetHiddenListOrder(binding));
+    auto const res = fixture.run(fixture.commands().forgetHiddenListOrderAsync(binding));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.forgottenPositionCount == 1);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.forgottenPositionCount == 1);
     CHECK(fixture.storedOrder(listId) == std::vector{second, first});
     std::ignore = onlyOrderScript(fixture);
   }
@@ -277,13 +277,13 @@ namespace ao::rt::test
     auto const second = fixture.addTrack("Second");
     auto const listId = fixture.seedList();
     auto binding = fixture.bind(listId, std::array{first, second});
-    REQUIRE(fixture.run(fixture.commands().createList(ListDraft{.name = "Unrelated"})));
+    REQUIRE(fixture.run(fixture.commands().createListAsync(ListDraft{.name = "Unrelated"})));
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{second}, first));
+    auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{second}, first));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Stale);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Stale);
     CHECK(fixture.storedOrder(listId).empty());
     CHECK(fixture.events.empty());
   }
@@ -299,19 +299,19 @@ namespace ao::rt::test
     SECTION("selection outside the bound source")
     {
       auto binding = fixture.bind(listId, std::array{first, second});
-      auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{TrackId{9999}}, first));
+      auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{TrackId{9999}}, first));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("selected anchor")
     {
       auto binding = fixture.bind(listId, std::array{first, second});
-      auto const result = fixture.run(fixture.commands().moveListOrder(binding, std::vector{first}, first));
+      auto const res = fixture.run(fixture.commands().moveListOrderAsync(binding, std::vector{first}, first));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     CHECK(fixture.storedOrder(listId).empty());
@@ -327,42 +327,42 @@ namespace ao::rt::test
 
     SECTION("virtual List")
     {
-      auto const result = fixture.library().bindListOrder(kInvalidListId, std::array{first});
+      auto const res = fixture.library().bindListOrder(kInvalidListId, std::array{first});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("missing saved List")
     {
-      auto const result = fixture.library().bindListOrder(ListId{9999}, std::array{first});
+      auto const res = fixture.library().bindListOrder(ListId{9999}, std::array{first});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotFound);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotFound);
     }
 
     SECTION("invalid track identity")
     {
-      auto const result = fixture.library().bindListOrder(listId, std::array{kInvalidTrackId});
+      auto const res = fixture.library().bindListOrder(listId, std::array{kInvalidTrackId});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("duplicate track identity")
     {
-      auto const result = fixture.library().bindListOrder(listId, std::array{first, first});
+      auto const res = fixture.library().bindListOrder(listId, std::array{first, first});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("missing track")
     {
-      auto const result = fixture.library().bindListOrder(listId, std::array{TrackId{9999}});
+      auto const res = fixture.library().bindListOrder(listId, std::array{TrackId{9999}});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     CHECK(fixture.storedOrder(listId).empty());

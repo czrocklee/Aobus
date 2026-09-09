@@ -218,22 +218,24 @@ namespace ao::gtk
       return;
     }
 
-    _queuedColumnLayoutUpdateConnection =
-      Glib::signal_idle().connect(sigc::mem_fun(*this, &TrackColumnController::flushSharedColumnLayoutUpdate));
+    _queuedColumnLayoutUpdateConnection = Glib::signal_idle().connect(
+      [this]
+      {
+        flushSharedColumnLayoutUpdate();
+        return false;
+      });
   }
 
-  bool TrackColumnController::flushSharedColumnLayoutUpdate()
+  void TrackColumnController::flushSharedColumnLayoutUpdate()
   {
     _queuedColumnLayoutUpdateConnection.disconnect();
 
     if (_syncingColumnLayout)
     {
-      return false;
+      return;
     }
 
     updateSharedColumnLayout();
-
-    return false;
   }
 
   void TrackColumnController::queueColumnResolve()
@@ -243,25 +245,27 @@ namespace ao::gtk
       return;
     }
 
-    _queuedColumnResolveConnection =
-      Glib::signal_idle().connect(sigc::mem_fun(*this, &TrackColumnController::flushColumnResolve));
+    _queuedColumnResolveConnection = Glib::signal_idle().connect(
+      [this]
+      {
+        flushColumnResolve();
+        return false;
+      });
   }
 
-  bool TrackColumnController::flushColumnResolve()
+  void TrackColumnController::flushColumnResolve()
   {
     _queuedColumnResolveConnection.disconnect();
 
     if (_syncingColumnLayout)
     {
-      return false;
+      return;
     }
 
     auto const visibleFields = visibleFieldsInColumnOrder();
     auto const specs = uimodel::pixelTrackColumnSpecs(visibleFields, _columnLayouts.layoutForList(_listId));
     applySolvedColumnWidths(specs);
     updateTitlePositionVariable();
-
-    return false;
   }
 
   void TrackColumnController::queueTitlePositionVariableUpdate()
@@ -271,15 +275,18 @@ namespace ao::gtk
       return;
     }
 
-    _queuedTitlePositionUpdateConnection =
-      Glib::signal_idle().connect(sigc::mem_fun(*this, &TrackColumnController::flushTitlePositionVariableUpdate));
+    _queuedTitlePositionUpdateConnection = Glib::signal_idle().connect(
+      [this]
+      {
+        flushTitlePositionVariableUpdate();
+        return false;
+      });
   }
 
-  bool TrackColumnController::flushTitlePositionVariableUpdate()
+  void TrackColumnController::flushTitlePositionVariableUpdate()
   {
     _queuedTitlePositionUpdateConnection.disconnect();
     updateTitlePositionVariable();
-    return false;
   }
 
   void TrackColumnController::connectHorizontalAdjustmentSignals()

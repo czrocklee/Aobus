@@ -70,15 +70,15 @@ namespace ao::tui::test
       ListId addList(std::string name) const
       {
         return ao::test::requireValue(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().createList(rt::ListDraft{.name = std::move(name)})));
+          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = std::move(name)})));
       }
     };
 
     std::string requireAppliedFilter(LibraryController& controller)
     {
-      auto result = controller.applyFilter();
-      REQUIRE(result);
-      return std::move(*result);
+      auto res = controller.applyFilter();
+      REQUIRE(res);
+      return std::move(*res);
     }
   } // namespace
 
@@ -374,7 +374,7 @@ namespace ao::tui::test
     REQUIRE(controller.presentationEntries().size() > 1);
     auto const activePresentationId = controller.activePresentationId();
     auto const selectedPresentation = controller.selectedPresentation() == 0 ? 1 : 0;
-    REQUIRE(controller.setSelectedPresentation(selectedPresentation));
+    REQUIRE(controller.trySetSelectedPresentation(selectedPresentation));
 
     fixture.addTrack("Added");
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
@@ -433,7 +433,7 @@ namespace ao::tui::test
     REQUIRE(controller.currentListId() == temporaryListId);
 
     REQUIRE(rt::test::runRuntimeTask(
-      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteList(temporaryListId)));
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(temporaryListId)));
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
 
     CHECK(controller.activeViewId() == allTracksViewId);
@@ -517,10 +517,10 @@ namespace ao::tui::test
     controller.setFilterDraft("Needle");
     REQUIRE(fixture.runtimePtr->workspace().closeView(activeViewId));
 
-    auto result = controller.applyFilter();
+    auto res = controller.applyFilter();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     CHECK(controller.filterError().contains("Filter error:"));
     CHECK(controller.filterDraft() == "Needle");
     CHECK(controller.activeViewId() == activeViewId);
@@ -691,9 +691,11 @@ namespace ao::tui::test
     CHECK(controller.presentationEntries()[static_cast<std::size_t>(controller.selectedPresentation())].id ==
           controller.activePresentationId());
 
-    CHECK_FALSE(controller.setSelectedPresentation(-1));
-    CHECK_FALSE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size())));
-    REQUIRE(controller.setSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
+    CHECK_FALSE(controller.trySetSelectedPresentation(-1));
+    CHECK_FALSE(
+      controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size())));
+    REQUIRE(
+      controller.trySetSelectedPresentation(static_cast<std::int32_t>(controller.presentationEntries().size()) - 1));
 
     CHECK(controller.selectSelectedPresentation() == "View: custom-songs");
     CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).presentation.id == "custom-songs");
@@ -1099,8 +1101,8 @@ namespace ao::tui::test
     controller.moveFocusedSelection(false, 2);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{alphaId, bravoId, charlieId});
 
-    REQUIRE(
-      rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(bravoId)));
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(bravoId)));
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
 
     // The library observer already reloaded the view, so this is the state a
@@ -1129,8 +1131,8 @@ namespace ao::tui::test
     controller.moveFocusedSelection(false, 1);
     REQUIRE(controller.selectedTrackIds() == std::vector<TrackId>{firstId, secondId});
 
-    REQUIRE(
-      rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(firstId)));
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
     rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
     CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
 
@@ -1219,8 +1221,8 @@ namespace ao::tui::test
 
     SECTION("deleting a marked track drops that mark")
     {
-      REQUIRE(
-        rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(secondId)));
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(secondId)));
       rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
       CHECK(controller.reloadActiveList() == "Reloaded 1 track");
       CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstId});
@@ -1231,8 +1233,8 @@ namespace ao::tui::test
 
     SECTION("deleting another marked track keeps the remaining mark")
     {
-      REQUIRE(
-        rt::test::runRuntimeTask(*fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrack(firstId)));
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteTrackAsync(firstId)));
       rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
       CHECK(controller.reloadActiveList() == "Reloaded 1 track");
       CHECK(controller.markedIds() == std::unordered_set<TrackId>{secondId});

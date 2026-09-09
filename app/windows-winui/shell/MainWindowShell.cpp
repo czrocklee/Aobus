@@ -262,7 +262,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::importLibrary()
   {
-    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
     {
       _libraryTransferCoordinatorPtr->importLibrary();
     }
@@ -270,7 +270,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::exportLibrary()
   {
-    if (_libraryTransferCoordinatorPtr && !modalWorkflowActive())
+    if (_libraryTransferCoordinatorPtr && !isModalWorkflowActive())
     {
       _libraryTransferCoordinatorPtr->exportLibrary();
     }

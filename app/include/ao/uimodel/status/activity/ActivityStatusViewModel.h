@@ -48,7 +48,7 @@ namespace ao::uimodel
     ~ActivityStatusViewModel();
 
     ActivityStatusViewState const& viewState() const noexcept;
-    bool autoDismissCompactIfDue();
+    bool tryAutoDismissCompactIfDue();
     void autoDismissCompact();
     void dismissCompact();
     void hideDetailNotification(rt::NotificationId id);

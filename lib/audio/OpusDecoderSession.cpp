@@ -232,9 +232,9 @@ namespace ao::audio
   {
     try
     {
-      if (auto const result = _implPtr->packetSource.open(filePath); !result)
+      if (auto const res = _implPtr->packetSource.open(filePath); !res)
       {
-        detail::throwDecoderError(result.error());
+        detail::throwDecoderError(res.error());
       }
 
       if (_implPtr->packetSource.packetCount() <= media::opus::kFirstAudioPacketIndex)

@@ -31,7 +31,7 @@ namespace ao::uimodel::test
       auto const value = TrackFieldEditValue{std::in_place_type<std::string>, "Edited"};
 
       CHECK(canWriteTrackFieldPatch(field));
-      CHECK(writeTrackFieldPatch(patch, field, value));
+      CHECK(tryWriteTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == "Edited");
     }
@@ -43,7 +43,7 @@ namespace ao::uimodel::test
       auto const value = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(42)};
 
       CHECK(canWriteTrackFieldPatch(field));
-      CHECK(writeTrackFieldPatch(patch, field, value));
+      CHECK(tryWriteTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == 42);
     }
@@ -67,29 +67,29 @@ namespace ao::uimodel::test
   {
     SECTION("valid number")
     {
-      auto const result = parseUint16EditValue("  42  ");
-      REQUIRE(result.has_value());
-      auto const* value = std::get_if<std::uint16_t>(&*result);
+      auto const res = parseUint16EditValue("  42  ");
+      REQUIRE(res.has_value());
+      auto const* value = std::get_if<std::uint16_t>(&*res);
       REQUIRE(value != nullptr);
       CHECK(*value == 42);
     }
 
     SECTION("empty input clears to zero")
     {
-      auto const result = parseUint16EditValue("    ");
-      REQUIRE(result.has_value());
-      auto const* value = std::get_if<std::uint16_t>(&*result);
+      auto const res = parseUint16EditValue("    ");
+      REQUIRE(res.has_value());
+      auto const* value = std::get_if<std::uint16_t>(&*res);
       REQUIRE(value != nullptr);
       CHECK(*value == 0);
     }
 
     SECTION("invalid number returns a rejected format error")
     {
-      auto const result = parseUint16EditValue("abc");
+      auto const res = parseUint16EditValue("abc");
 
-      REQUIRE_FALSE(result.has_value());
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message == "Enter a whole number from 0 to 65535.");
+      REQUIRE_FALSE(res.has_value());
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message == "Enter a whole number from 0 to 65535.");
     }
 
     SECTION("negative input is rejected")
@@ -133,7 +133,7 @@ namespace ao::uimodel::test
     textPatch.optTitle = "Before";
     auto const numericValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
 
-    CHECK_FALSE(writeTrackFieldPatch(textPatch, rt::TrackField::Title, numericValue));
+    CHECK_FALSE(tryWriteTrackFieldPatch(textPatch, rt::TrackField::Title, numericValue));
     REQUIRE(textPatch.optTitle);
     CHECK(*textPatch.optTitle == "Before");
 
@@ -141,7 +141,7 @@ namespace ao::uimodel::test
     numberPatch.optYear = static_cast<std::uint16_t>(1999);
     auto const stringValue = TrackFieldEditValue{std::in_place_type<std::string>, "Not a number"};
 
-    CHECK_FALSE(writeTrackFieldPatch(numberPatch, rt::TrackField::Year, stringValue));
+    CHECK_FALSE(tryWriteTrackFieldPatch(numberPatch, rt::TrackField::Year, stringValue));
     REQUIRE(numberPatch.optYear);
     CHECK(*numberPatch.optYear == 1999);
   }
@@ -157,9 +157,9 @@ namespace ao::uimodel::test
     CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Duration));
     CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Quality));
 
-    CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Tags, value));
-    CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Duration, value));
-    CHECK_FALSE(writeTrackFieldPatch(patch, rt::TrackField::Quality, value));
+    CHECK_FALSE(tryWriteTrackFieldPatch(patch, rt::TrackField::Tags, value));
+    CHECK_FALSE(tryWriteTrackFieldPatch(patch, rt::TrackField::Duration, value));
+    CHECK_FALSE(tryWriteTrackFieldPatch(patch, rt::TrackField::Quality, value));
 
     REQUIRE(patch.optTitle);
     CHECK(*patch.optTitle == "Before");

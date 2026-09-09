@@ -59,32 +59,32 @@ namespace ao::rt::test
 
     CHECK(fixture.deadline.isActive());
     CHECK(fixture.deadline.isRunning());
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(1));
     CHECK(fixture.scheduler.call(0).delay == Elapsed{2});
 
     fixture.liveElapsed = Elapsed{3000};
-    REQUIRE(fixture.scheduler.fire(0));
+    REQUIRE(fixture.scheduler.tryFire(0));
 
     fixture.executor.checkQueued();
     CHECK(fixture.executor.queuedCount() == 1);
     CHECK(fixture.liveElapsedReadCount == 0);
     CHECK(fixture.availabilityEvents.empty());
-    REQUIRE(fixture.executor.runOne());
+    REQUIRE(fixture.executor.tryRunOne());
     CHECK(fixture.liveElapsedReadCount == 1);
-    CHECK_FALSE(fixture.deadline.restartAvailable());
-    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(2));
     CHECK(fixture.scheduler.call(1).delay == Elapsed{1});
 
     fixture.liveElapsed = Elapsed{3001};
-    REQUIRE(fixture.scheduler.fire(1));
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    REQUIRE(fixture.scheduler.tryFire(1));
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     fixture.executor.checkQueued();
     CHECK(fixture.executor.queuedCount() == 1);
 
-    REQUIRE(fixture.executor.runOne());
-    CHECK(fixture.deadline.restartAvailable());
+    REQUIRE(fixture.executor.tryRunOne());
+    CHECK(fixture.deadline.isRestartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
     CHECK(fixture.availabilityEvents == std::vector{true});
   }
@@ -94,26 +94,26 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.waitForCallCount(1));
-    REQUIRE(fixture.scheduler.fire(0));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(1));
+    REQUIRE(fixture.scheduler.tryFire(0));
     fixture.executor.checkQueued();
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.seek(Elapsed{1000});
-    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(2));
     fixture.liveElapsed = Elapsed{3001};
 
-    REQUIRE(fixture.executor.runOne());
+    REQUIRE(fixture.executor.tryRunOne());
     CHECK(fixture.liveElapsedReadCount == 0);
     CHECK(fixture.availabilityEvents.empty());
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
 
-    REQUIRE(fixture.scheduler.fire(1));
+    REQUIRE(fixture.scheduler.tryFire(1));
     fixture.executor.checkQueued();
-    REQUIRE(fixture.executor.runOne());
+    REQUIRE(fixture.executor.tryRunOne());
     CHECK(fixture.liveElapsedReadCount == 1);
-    CHECK(fixture.deadline.restartAvailable());
+    CHECK(fixture.deadline.isRestartAvailable());
     CHECK(fixture.availabilityEvents == std::vector{true});
   }
 
@@ -135,12 +135,12 @@ namespace ao::rt::test
       [&availabilityEvents](bool const available) { availabilityEvents.push_back(available); });
 
     deadlinePtr->start(Elapsed{0});
-    REQUIRE(scheduler.waitForCallCount(1));
-    REQUIRE(scheduler.fire(0));
+    REQUIRE(scheduler.tryWaitForCallCount(1));
+    REQUIRE(scheduler.tryFire(0));
     executor.checkQueued();
     deadlinePtr.reset();
 
-    REQUIRE(executor.runOne());
+    REQUIRE(executor.tryRunOne());
     CHECK(liveElapsedReadCount == 0);
     CHECK(availabilityEvents.empty());
   }
@@ -168,9 +168,9 @@ namespace ao::rt::test
     deadlinePtr->start(Elapsed{3001});
 
     CHECK(availabilityEvents == std::vector{true, false});
-    CHECK_FALSE(deadlinePtr->restartAvailable());
+    CHECK_FALSE(deadlinePtr->isRestartAvailable());
     CHECK(deadlinePtr->hasScheduledDeadline());
-    REQUIRE(scheduler.waitForCallCount(1));
+    REQUIRE(scheduler.tryWaitForCallCount(1));
     CHECK(scheduler.callCount() == 1);
     CHECK(scheduler.call(0).delay == Elapsed{3001});
   }
@@ -180,32 +180,32 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{500});
-    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(1));
     CHECK(fixture.scheduler.call(0).delay == Elapsed{2501});
 
     fixture.deadline.pause(Elapsed{750});
     CHECK_FALSE(fixture.deadline.isRunning());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.waitForCancellation(0));
+    REQUIRE(fixture.scheduler.tryWaitForCancellation(0));
     CHECK(fixture.scheduler.call(0).cancelled);
 
     fixture.deadline.resume(Elapsed{1000});
     CHECK(fixture.deadline.isRunning());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(2));
     CHECK(fixture.scheduler.call(1).delay == Elapsed{2001});
 
     fixture.deadline.seek(Elapsed{3001});
-    REQUIRE(fixture.scheduler.waitForCancellation(1));
+    REQUIRE(fixture.scheduler.tryWaitForCancellation(1));
     CHECK(fixture.scheduler.call(1).cancelled);
-    CHECK(fixture.deadline.restartAvailable());
+    CHECK(fixture.deadline.isRestartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
     CHECK(fixture.availabilityEvents == std::vector{true});
 
     fixture.deadline.seek(Elapsed{3000});
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
-    REQUIRE(fixture.scheduler.waitForCallCount(3));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(3));
     CHECK(fixture.scheduler.call(2).delay == Elapsed{1});
     CHECK(fixture.availabilityEvents == std::vector{true, false});
   }
@@ -215,22 +215,22 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(1));
 
     fixture.deadline.replaceSession(Elapsed{100}, true);
-    REQUIRE(fixture.scheduler.waitForCancellation(0));
+    REQUIRE(fixture.scheduler.tryWaitForCancellation(0));
     CHECK(fixture.scheduler.call(0).cancelled);
-    REQUIRE(fixture.scheduler.waitForCallCount(2));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(2));
     CHECK(fixture.scheduler.call(1).delay == Elapsed{2901});
 
     fixture.deadline.replaceSession(Elapsed{1500}, true);
-    REQUIRE(fixture.scheduler.waitForCancellation(1));
+    REQUIRE(fixture.scheduler.tryWaitForCancellation(1));
     CHECK(fixture.scheduler.call(1).cancelled);
-    REQUIRE(fixture.scheduler.waitForCallCount(3));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(3));
     CHECK(fixture.scheduler.call(2).delay == Elapsed{1501});
 
     fixture.deadline.replaceSession(Elapsed{500}, false);
-    REQUIRE(fixture.scheduler.waitForCancellation(2));
+    REQUIRE(fixture.scheduler.tryWaitForCancellation(2));
     CHECK(fixture.scheduler.call(2).cancelled);
     CHECK(fixture.deadline.isActive());
     CHECK_FALSE(fixture.deadline.isRunning());
@@ -238,7 +238,7 @@ namespace ao::rt::test
 
     fixture.deadline.clearSession();
     CHECK_FALSE(fixture.deadline.isActive());
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK(fixture.scheduler.callCount() == 3);
   }
 
@@ -247,20 +247,20 @@ namespace ao::rt::test
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
-    REQUIRE(fixture.scheduler.waitForCallCount(1));
+    REQUIRE(fixture.scheduler.tryWaitForCallCount(1));
     fixture.liveElapsed = Elapsed{3001};
-    REQUIRE(fixture.scheduler.fire(0));
+    REQUIRE(fixture.scheduler.tryFire(0));
     fixture.executor.checkQueued();
     REQUIRE(fixture.executor.queuedCount() == 1);
 
     fixture.deadline.shutdown();
-    REQUIRE(fixture.executor.runOne());
+    REQUIRE(fixture.executor.tryRunOne());
 
     CHECK(fixture.liveElapsedReadCount == 0);
     CHECK(fixture.availabilityEvents.empty());
     CHECK_FALSE(fixture.deadline.isActive());
     CHECK_FALSE(fixture.deadline.isRunning());
-    CHECK_FALSE(fixture.deadline.restartAvailable());
+    CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
 
     fixture.deadline.start(Elapsed{3001});

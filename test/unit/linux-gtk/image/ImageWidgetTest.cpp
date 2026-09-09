@@ -156,7 +156,7 @@ namespace ao::gtk::test
 
       // ...then, once the settle window elapses, it is replaced by a fresh
       // full-quality re-render: a different texture object at the same size.
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }, std::chrono::seconds{5}));
 
       auto const settledPaintablePtr = widget.get_paintable();
@@ -183,7 +183,7 @@ namespace ao::gtk::test
       REQUIRE(interimPaintablePtr);
       CHECK(interimPaintablePtr->get_intrinsic_width() == 64 * scaleFactor);
 
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }, std::chrono::seconds{5}));
 
       auto const settledPaintablePtr = widget.get_paintable();
@@ -328,7 +328,7 @@ namespace ao::gtk::test
     CHECK(interimPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
     CHECK(completions.size() == 1);
 
-    REQUIRE(pumpGtkEventsUntil([&] { return completions.size() == 2; }, std::chrono::seconds{5}));
+    REQUIRE(tryPumpGtkEventsUntil([&] { return completions.size() == 2; }, std::chrono::seconds{5}));
     CHECK(widget.get_paintable().get() == interimPaintablePtr.get());
     CHECK(requestedSizes[1].width == 96 * scaleFactor);
     CHECK(requestedSizes[1].height == 96 * scaleFactor);
@@ -384,7 +384,7 @@ namespace ao::gtk::test
                              uimodel::CoverArtPlaceholderStyle::Soul})
     {
       widget.showPlaceholder(uimodel::makeCoverArtPlaceholderPresentation(style, identity));
-      CHECK(widget.showingPlaceholder());
+      CHECK(widget.isShowingPlaceholder());
       CHECK(widget.placeholderPresentation().style == style);
       CHECK_FALSE(widget.hasImage());
     }
@@ -393,11 +393,11 @@ namespace ao::gtk::test
     widget.setImagePixbuf(makePixbuf(80, 80));
     drainGtkEvents();
 
-    CHECK_FALSE(widget.showingPlaceholder());
+    CHECK_FALSE(widget.isShowingPlaceholder());
     CHECK(widget.hasImage());
 
     widget.clearImage();
-    CHECK_FALSE(widget.showingPlaceholder());
+    CHECK_FALSE(widget.isShowingPlaceholder());
     CHECK_FALSE(widget.hasImage());
   }
 
@@ -502,25 +502,25 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(widget.hasImage());
-      CHECK(controller.imageAvailable());
+      CHECK(controller.isImageAvailable());
       CHECK(availability == std::vector{true});
 
       controller.load(kInvalidResourceId);
 
-      CHECK(widget.showingPlaceholder());
-      CHECK_FALSE(controller.imageAvailable());
+      CHECK(widget.isShowingPlaceholder());
+      CHECK_FALSE(controller.isImageAvailable());
       CHECK(availability == std::vector{true, false});
 
       controller.load(resourceId);
 
-      CHECK(controller.imageAvailable());
+      CHECK(controller.isImageAvailable());
       CHECK(availability == std::vector{true, false, true});
 
       // Reloading an already available resource reports no transition, so observers that
       // need the current state after every load must read it rather than latch the callback.
       controller.load(resourceId);
 
-      CHECK(controller.imageAvailable());
+      CHECK(controller.isImageAvailable());
       CHECK(availability == std::vector{true, false, true});
     }
 
@@ -532,13 +532,13 @@ namespace ao::gtk::test
 
       controller.load(kInvalidResourceId);
       drainGtkEvents();
-      REQUIRE(widget.showingPlaceholder());
+      REQUIRE(widget.isShowingPlaceholder());
 
       controller.load(fullResourceId);
 
-      CHECK_FALSE(widget.showingPlaceholder());
+      CHECK_FALSE(widget.isShowingPlaceholder());
       CHECK_FALSE(widget.hasImage());
-      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(loader.getFull(fullResourceId));
     }
 
@@ -551,7 +551,7 @@ namespace ao::gtk::test
 
       controller.load(kInvalidResourceId);
       drainGtkEvents();
-      REQUIRE(widget.showingPlaceholder());
+      REQUIRE(widget.isShowingPlaceholder());
 
       controller.load(missingId);
       bool missingSettled = false;
@@ -559,7 +559,7 @@ namespace ao::gtk::test
         loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
 
       CHECK_FALSE(widget.hasImage());
-      REQUIRE(pumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
       CHECK_FALSE(widget.hasImage());
     }
 
@@ -578,8 +578,8 @@ namespace ao::gtk::test
         loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
       controller.load(cachedId);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
-      REQUIRE(pumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
       drainGtkEvents();
       CHECK(widget.hasImage());
     }
@@ -615,7 +615,7 @@ namespace ao::gtk::test
 
       auto const physicalSize =
         std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&] { return static_cast<bool>(loader.getThumbnail(resourceId, physicalSize)); }, std::chrono::seconds{5}));
 
       auto const cachedPtr = loader.getThumbnail(resourceId, physicalSize);
@@ -626,7 +626,7 @@ namespace ao::gtk::test
       CHECK(cachedPtr->get_height() <= expectedSide);
       CHECK(cachedPtr->get_width() < 256);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(widget.hasImage());
     }
 
@@ -655,7 +655,7 @@ namespace ao::gtk::test
       controller.load(kInvalidResourceId);
       drainGtkEvents();
 
-      CHECK(widget.showingPlaceholder());
+      CHECK(widget.isShowingPlaceholder());
       CHECK(widget.placeholderPresentation().style == uimodel::CoverArtPlaceholderStyle::Note);
     }
 
@@ -676,7 +676,7 @@ namespace ao::gtk::test
 
       // The shared loader still salvages the decode into the cache, while the
       // controller's destroyed request handle prevents the callback from touching it.
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }, std::chrono::seconds{5}));
 
       // The runtime remains usable afterwards.
@@ -684,7 +684,7 @@ namespace ao::gtk::test
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
-      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(widget.hasImage());
     }
   }

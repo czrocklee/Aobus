@@ -250,16 +250,16 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  bool MainWindow::modalWorkflowActive() const noexcept
+  bool MainWindow::isModalWorkflowActive() const noexcept
   {
-    return (_listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->dialogActive()) ||
-           (_libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->active()) ||
-           (_trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->active());
+    return (_listAuthoringCoordinatorPtr && _listAuthoringCoordinatorPtr->isDialogActive()) ||
+           (_libraryTransferCoordinatorPtr && _libraryTransferCoordinatorPtr->isActive()) ||
+           (_trackPropertiesCoordinatorPtr && _trackPropertiesCoordinatorPtr->isActive());
   }
 
   void MainWindow::navigateHistory(bool const forward)
   {
-    if (_session == nullptr || modalWorkflowActive())
+    if (_session == nullptr || isModalWorkflowActive())
     {
       return;
     }
@@ -390,7 +390,7 @@ namespace winrt::Aobus::implementation
             [weak](ao::ListId const parentListId, std::string expression)
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               self->_listAuthoringCoordinatorPtr->createList(parentListId, std::move(expression));
             }
@@ -399,7 +399,7 @@ namespace winrt::Aobus::implementation
             [weak](ao::ListId const listId)
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               self->_listAuthoringCoordinatorPtr->editList(listId);
             }
@@ -408,7 +408,7 @@ namespace winrt::Aobus::implementation
             [weak](ao::ListId const listId, bool const includeDescendants)
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               self->_listAuthoringCoordinatorPtr->deleteList(listId, includeDescendants);
             }
@@ -427,7 +427,7 @@ namespace winrt::Aobus::implementation
             [weak](ao::ListId const listId, bool const add)
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               self->_listAuthoringCoordinatorPtr->editMembership(listId, add);
             }
@@ -436,7 +436,7 @@ namespace winrt::Aobus::implementation
             [weak]
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               return self->_listAuthoringCoordinatorPtr->orderCapabilities();
             }
@@ -447,7 +447,7 @@ namespace winrt::Aobus::implementation
             [weak](ao::winui::ListOrderCommand const commandValue)
           {
             if (auto self = weak.get();
-                self && self->_listAuthoringCoordinatorPtr && !self->modalWorkflowActive())
+                self && self->_listAuthoringCoordinatorPtr && !self->isModalWorkflowActive())
             {
               self->_listAuthoringCoordinatorPtr->applyOrder(commandValue);
             }

@@ -61,11 +61,11 @@ namespace ao::gtk::layout::test
       std::int32_t primaryFired = 0;
       std::int32_t longPressFired = 0;
 
-      actionRegistry.registerAction(
+      actionRegistry.tryRegisterAction(
         ActionSchema{.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell", .capabilities = 0},
         [&](ActionActivationContext&) { primaryFired++; });
 
-      actionRegistry.registerAction(
+      actionRegistry.tryRegisterAction(
         ActionSchema{.id = "shell.showSoul", .label = "Show Soul", .category = "Shell", .capabilities = 0},
         [&](ActionActivationContext&) { longPressFired++; });
 

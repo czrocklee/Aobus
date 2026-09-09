@@ -323,14 +323,14 @@ namespace ao::audio::test
 
       Result<> setProperty(PropertyId id, PropertyValue const& value) override
       {
-        auto result = NullBackend::setProperty(id, value);
+        auto res = NullBackend::setProperty(id, value);
 
-        if (result && (id == PropertyId::Volume || id == PropertyId::Muted))
+        if (res && (id == PropertyId::Volume || id == PropertyId::Muted))
         {
           _probePtr->publish(_route);
         }
 
-        return result;
+        return res;
       }
 
       BackendId backendId() const override { return kSynchronousGraphBackend; }
@@ -493,7 +493,7 @@ namespace ao::audio::test
                                  { qualityEvents.emplace_back(quality, ready); });
 
       onGraphChanged(flow::Graph{});
-      REQUIRE(executor.drainUntil([&] { return !qualityEvents.empty(); }));
+      REQUIRE(executor.tryDrainUntil([&] { return !qualityEvents.empty(); }));
 
       auto const snap = player.status();
       CHECK(snap.quality == Quality::BitwisePerfect);
@@ -513,7 +513,7 @@ namespace ao::audio::test
 
       // Fire a system graph that has NO Stream node
       onGraphChanged(flow::Graph{.nodes = {flow::Node{.id = "sys-sink", .type = flow::NodeType::Sink}}});
-      REQUIRE(executor.drainUntil(
+      REQUIRE(executor.tryDrainUntil(
         [&]
         {
           auto const snap = player.status();
@@ -547,7 +547,7 @@ namespace ao::audio::test
                     .connections = {
                       flow::Connection{.sourceId = "sys-stream", .destinationId = "sys-sink", .isActive = true},
                     }});
-      REQUIRE(executor.drainUntil(
+      REQUIRE(executor.tryDrainUntil(
         [&]
         {
           auto const snap = player.status();
@@ -673,10 +673,10 @@ namespace ao::audio::test
     auto player = Player{executor};
     player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
 
-    auto const result = player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
+    auto const res = player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     CHECK(player.status().engine.currentDeviceId == "null");
   }
 
@@ -903,7 +903,7 @@ namespace ao::audio::test
       .info = {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = true},
     });
 
-    REQUIRE(executor.drainUntil([&] { return teardownRequested.load(std::memory_order_acquire); }));
+    REQUIRE(executor.tryDrainUntil([&] { return teardownRequested.load(std::memory_order_acquire); }));
     REQUIRE(playerPtr);
     playerPtr.reset();
     REQUIRE(probePtr->backendDestroyed.try_acquire_for(std::chrono::seconds{1}));
@@ -931,7 +931,7 @@ namespace ao::audio::test
     executor.drain();
     REQUIRE(playerPtr->setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(playerPtr->play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
-    REQUIRE(executor.drainUntil(
+    REQUIRE(executor.tryDrainUntil(
       [&] { return probePtr->subscriptionCount() >= 1 && routeSettledSignaled.load(std::memory_order_acquire); },
       std::chrono::seconds{5}));
 
@@ -939,11 +939,11 @@ namespace ao::audio::test
     playerPtr->setOnQualityChanged([&](QualityResult const&, bool)
                                    { teardownRequested.store(true, std::memory_order_release); });
 
-    auto const result = playerPtr->setVolume(0.5F);
+    auto const res = playerPtr->setVolume(0.5F);
 
-    REQUIRE(result);
-    REQUIRE(
-      executor.drainUntil([&] { return teardownRequested.load(std::memory_order_acquire); }, std::chrono::seconds{5}));
+    REQUIRE(res);
+    REQUIRE(executor.tryDrainUntil(
+      [&] { return teardownRequested.load(std::memory_order_acquire); }, std::chrono::seconds{5}));
     REQUIRE(playerPtr);
     playerPtr.reset();
     CHECK_FALSE(playerPtr);
@@ -976,7 +976,8 @@ namespace ao::audio::test
     player.addProvider(std::make_unique<SynchronousGraphProvider>(probePtr));
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(player.play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
-    REQUIRE(rt::test::runLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 1 && firstRouteSettled; }));
+    REQUIRE(
+      rt::test::tryRunLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 1 && firstRouteSettled; }));
 
     auto staleRouteCallback = BackendProvider::OnGraphChangedCallback{};
     {
@@ -986,7 +987,8 @@ namespace ao::audio::test
     REQUIRE(staleRouteCallback);
 
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-b"}, kProfileShared));
-    REQUIRE(rt::test::runLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 2 && secondRouteSettled; }));
+    REQUIRE(
+      rt::test::tryRunLoopUntil(executor, [&] { return probePtr->subscriptionCount() >= 2 && secondRouteSettled; }));
 
     {
       auto const lock = std::scoped_lock{probePtr->mutex};
@@ -1012,7 +1014,7 @@ namespace ao::audio::test
       });
     staleRouteCallback(flow::Graph{.nodes = {flow::Node{.id = "route-a-stale", .type = flow::NodeType::Sink}}});
     probePtr->publish("route-b");
-    REQUIRE(rt::test::runLoopUntil(executor, [&] { return currentRouteUpdated; }));
+    REQUIRE(rt::test::tryRunLoopUntil(executor, [&] { return currentRouteUpdated; }));
     CHECK(graphUpdateCount == 1);
 
     auto const status = player.status();
@@ -1035,7 +1037,7 @@ namespace ao::audio::test
     executor.drain();
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(player.play(Engine::PlaybackItem{.input = PlaybackInput{.filePath = fixturePath}}));
-    REQUIRE(executor.drainUntil([&] { return routeSettled; }));
+    REQUIRE(executor.tryDrainUntil([&] { return routeSettled; }));
     auto callback = BackendProvider::OnGraphChangedCallback{};
     {
       auto const lock = std::scoped_lock{probePtr->mutex};
@@ -1059,7 +1061,7 @@ namespace ao::audio::test
       callback(flow::Graph{});
     }
 
-    REQUIRE(executor.drainUntil([&] { return failures == 1; }));
+    REQUIRE(executor.tryDrainUntil([&] { return failures == 1; }));
     executor.drain();
     CHECK(failures == 1);
   }
@@ -1119,7 +1121,7 @@ namespace ao::audio::test
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) == snap.flow.nodes.end());
     CHECK(qualityEvents.empty());
 
-    REQUIRE(executor.drainUntil([&] { return !qualityEvents.empty(); }));
+    REQUIRE(executor.tryDrainUntil([&] { return !qualityEvents.empty(); }));
 
     snap = player.status();
     CHECK(std::ranges::find(snap.flow.nodes, std::string_view{"sys-sink"}, &flow::Node::id) != snap.flow.nodes.end());
@@ -1185,8 +1187,8 @@ namespace ao::audio::test
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(
-      executor.drainUntil([&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil(
+      [&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
 
     bool heartbeat = false;
     executor.defer([&] { heartbeat = true; });
@@ -1270,8 +1272,8 @@ namespace ao::audio::test
         return true;
       },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(
-      executor.drainUntil([&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil(
+      [&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
 
     bool heartbeat = false;
     executor.defer([&] { heartbeat = true; });
@@ -1316,7 +1318,7 @@ namespace ao::audio::test
         return true;
       },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     player.cancelStartPreparation();
     gatePtr->release.release();
@@ -1355,7 +1357,7 @@ namespace ao::audio::test
         return true;
       },
       [&](Result<Engine::PreparedNextResult>) { completionCalled = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     player.cancelLookaheadPreparation();
     gatePtr->release.release();
@@ -1396,7 +1398,7 @@ namespace ao::audio::test
         return true;
       },
       [&](Result<Engine::PreparedNextResult>) { firstCompleted = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     bool secondAccepted = false;
     bool secondCompleted = false;
@@ -1414,7 +1416,7 @@ namespace ao::audio::test
       }));
 
     gatePtr->release.release();
-    REQUIRE(executor.drainUntil([&] { return secondCompleted; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return secondCompleted; }, std::chrono::seconds{5}));
 
     CHECK_FALSE(firstAccepted);
     CHECK_FALSE(firstCompleted);
@@ -1449,9 +1451,9 @@ namespace ao::audio::test
         return false;
       },
       [&](Result<Engine::PreparedPlaybackStart> prepared) { completions.push_back(std::move(prepared)); }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
     gatePtr->release.release();
-    REQUIRE(executor.drainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
 
     CHECK(acceptanceCount == 1);
     REQUIRE(completions.size() == 1);
@@ -1484,9 +1486,9 @@ namespace ao::audio::test
         return false;
       },
       [&](Result<Engine::PreparedNextResult> prepared) { completions.push_back(std::move(prepared)); }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
     gatePtr->release.release();
-    REQUIRE(executor.drainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
 
     CHECK(acceptanceCount == 1);
     REQUIRE(completions.size() == 1);
@@ -1555,7 +1557,7 @@ namespace ao::audio::test
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart> prepared) { optCompletion.emplace(std::move(prepared)); }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
     auto device = Device{.id = DeviceId{"barrier-device"},
                          .displayName = "Barrier Device",
                          .description = "Controlled test output",
@@ -1567,7 +1569,7 @@ namespace ao::audio::test
       probePtr->emitDevices({device});
       executor.drain();
       gatePtr->release.release();
-      REQUIRE(executor.drainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+      REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
       REQUIRE(*optCompletion);
       CHECK(player.commitPlayback(std::move(**optCompletion)));
     }
@@ -1578,7 +1580,7 @@ namespace ao::audio::test
       probePtr->emitDevices({device});
       executor.drain();
       gatePtr->release.release();
-      REQUIRE(executor.drainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+      REQUIRE(executor.tryDrainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
       REQUIRE_FALSE(*optCompletion);
       CHECK(optCompletion->error().code == Error::Code::Conflict);
     }
@@ -1624,14 +1626,14 @@ namespace ao::audio::test
         REQUIRE(player.commitPlayback(std::move(*preparedStart)));
         committed = true;
       }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     CHECK(player.transport() == Transport::Playing);
     CHECK(player.audioPlaybackGeneration() == oldGeneration);
     CHECK(probePtr->target() == oldTarget);
     gatePtr->release.release();
 
-    REQUIRE(executor.drainUntil([&] { return committed; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return committed; }, std::chrono::seconds{5}));
     CHECK(accepted);
     CHECK(player.audioPlaybackGeneration() > oldGeneration);
   }
@@ -1655,7 +1657,7 @@ namespace ao::audio::test
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     player.shutdown();
     gatePtr->release.release();
@@ -1694,10 +1696,10 @@ namespace ao::audio::test
         return true;
       },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
 
     gatePtr->release.release();
-    REQUIRE(executor.waitUntilQueuedCount(1, std::chrono::seconds{5}));
+    REQUIRE(executor.tryWaitUntilQueuedCount(1, std::chrono::seconds{5}));
     playerPtr.reset();
     executor.drain();
     runtime.requestStop();
@@ -1738,7 +1740,7 @@ namespace ao::audio::test
       .input = PlaybackInput{.filePath = "candidate-failure.flac"},
     });
     REQUIRE(candidateRes);
-    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{0}));
+    CHECK_FALSE(failureGate.tryWaitForRead(std::chrono::milliseconds{0}));
 
     std::size_t stateChangedCount = 0;
     std::size_t failureCount = 0;
@@ -1835,7 +1837,7 @@ namespace ao::audio::test
     CHECK(probePtr->target() == nullptr);
     CHECK_FALSE(player.clearPreparedNext());
 
-    REQUIRE(executor.drainUntil([&] { return failureCount == 1; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return failureCount == 1; }, std::chrono::seconds{5}));
   }
 
   TEST_CASE("Player - accepted play and stop filter an old route already queued on its executor",
@@ -1856,7 +1858,7 @@ namespace ao::audio::test
     auto* const oldTarget = probePtr->target();
     REQUIRE(oldTarget != nullptr);
     oldTarget->handleRouteReady("old-route");
-    REQUIRE(executor.waitUntilQueuedCount(2, std::chrono::seconds{5}));
+    REQUIRE(executor.tryWaitUntilQueuedCount(2, std::chrono::seconds{5}));
 
     auto barrier = Engine::PreparedCancellationBarrier{};
 
@@ -1908,7 +1910,7 @@ namespace ao::audio::test
     REQUIRE(oldTarget->renderPcm(output).bytesWritten == output.size());
     REQUIRE(oldTarget->renderPcm(output).drained);
     oldTarget->handleDrainComplete();
-    REQUIRE(executor.waitUntilQueuedCount(3, std::chrono::seconds{5}));
+    REQUIRE(executor.tryWaitUntilQueuedCount(3, std::chrono::seconds{5}));
 
     auto barrier = Engine::PreparedCancellationBarrier{};
 
@@ -1950,7 +1952,7 @@ namespace ao::audio::test
     REQUIRE(player.setOutputDevice(kSynchronousGraphBackend, DeviceId{"route-a"}, kProfileShared));
     REQUIRE(player.play(Engine::PlaybackItem{
       .id = Engine::PlaybackItemId{.value = 50}, .input = PlaybackInput{.filePath = "first.flac"}}));
-    REQUIRE(executor.drainUntil([&] { return probePtr->subscriptionCount() == 1; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return probePtr->subscriptionCount() == 1; }, std::chrono::seconds{5}));
 
     bool advanced = false;
     player.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced = true; });
@@ -1965,7 +1967,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(output).bytesWritten == output.size());
 
     REQUIRE(
-      executor.drainUntil([&] { return advanced && probePtr->subscriptionCount() == 2; }, std::chrono::seconds{5}));
+      executor.tryDrainUntil([&] { return advanced && probePtr->subscriptionCount() == 2; }, std::chrono::seconds{5}));
     auto const lock = std::scoped_lock{probePtr->mutex};
     CHECK(probePtr->activeRoute == "route-a");
   }
@@ -1990,7 +1992,7 @@ namespace ao::audio::test
         decoderPtr->setReadScript(
           {{.data = data, .endOfStream = false},
            {.endOfStream = false,
-            .result = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
+            .res = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
       }
       else
       {
@@ -2015,7 +2017,7 @@ namespace ao::audio::test
       .id = Engine::PlaybackItemId{.value = 21}, .input = PlaybackInput{.filePath = "prepared-failure.flac"}};
     auto const preparedRes = player.prepareNext(preparedItem);
     REQUIRE(preparedRes);
-    REQUIRE(executor.drainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
 
     REQUIRE(failures.size() == 1);
     CHECK(failures.front().kind == Engine::PlaybackFailureKind::Decode);

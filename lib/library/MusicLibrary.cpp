@@ -219,12 +219,12 @@ namespace ao::library
       return header;
     }
 
-    bool catalogKeyEquals(std::span<std::byte const> const key, std::string_view const expected) noexcept
+    bool matchesCatalogKey(std::span<std::byte const> const key, std::string_view const expected) noexcept
     {
       return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span{expected}));
     }
 
-    bool catalogIsEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)
+    bool isCatalogEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)
     {
       return mainDatabase.reader(transaction).entryCount() == 0;
     }
@@ -236,7 +236,7 @@ namespace ao::library
       {
         std::ignore = value;
 
-        if (catalogKeyEquals(key, "meta"))
+        if (matchesCatalogKey(key, "meta"))
         {
           return {};
         }
@@ -259,7 +259,7 @@ namespace ao::library
 
         for (std::size_t index = 0; index < kCurrentDatabaseNames.size(); ++index)
         {
-          if (catalogKeyEquals(key, kCurrentDatabaseNames[index]))
+          if (matchesCatalogKey(key, kCurrentDatabaseNames[index]))
           {
             seen[index] = true;
             matched = true;
@@ -989,7 +989,7 @@ namespace ao::library
       }
 
       auto const mainDatabase = std::move(*mainDatabaseRes);
-      auto const catalogEmpty = catalogIsEmpty(mainDatabase, *initializationTransactionRes);
+      auto const catalogEmpty = isCatalogEmpty(mainDatabase, *initializationTransactionRes);
       auto admittedSchemaRes = catalogEmpty ? createFreshSchema(*initializationTransactionRes)
                                             : admitCurrentSchema(mainDatabase, *initializationTransactionRes);
 
@@ -1062,9 +1062,9 @@ namespace ao::library
   {
     auto library = MusicLibrary{};
 
-    if (auto result = library.initialize(std::move(musicRoot), std::move(databasePath), options); !result)
+    if (auto res = library.initialize(std::move(musicRoot), std::move(databasePath), options); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return library;
@@ -1086,9 +1086,9 @@ namespace ao::library
 
       auto implPtr = std::move(*implRes);
 
-      if (auto result = implPtr->initializationTransaction.commit(); !result)
+      if (auto res = implPtr->initializationTransaction.commit(); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       _implPtr = std::move(implPtr);

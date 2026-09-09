@@ -164,8 +164,8 @@ A contract helper that owns the condition instead of expanding the ordinary macr
 ```cpp
 using FatalSink = bool (*)(FatalDiagnostic const&);
 
-bool registerFatalSink(FatalSink sink) noexcept;
-bool unregisterFatalSink(FatalSink sink) noexcept;
+bool tryRegisterFatalSink(FatalSink sink) noexcept;
+bool tryUnregisterFatalSink(FatalSink sink) noexcept;
 ```
 
 Exactly one non-null sink may be registered process-wide.

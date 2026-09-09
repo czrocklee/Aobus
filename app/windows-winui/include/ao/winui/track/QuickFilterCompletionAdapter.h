@@ -52,5 +52,5 @@ namespace ao::winui
                                                                   i18n::MessageCatalog const& textCatalog);
 
   /** Whether accepting this row still needs another expression token before submission. */
-  bool quickFilterSuggestionContinuesEditing(QuickFilterSuggestionRow const& row) noexcept;
+  bool shouldContinueEditingQuickFilterSuggestion(QuickFilterSuggestionRow const& row) noexcept;
 } // namespace ao::winui

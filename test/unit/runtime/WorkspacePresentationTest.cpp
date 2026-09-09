@@ -160,9 +160,9 @@ namespace ao::rt::test
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
-    auto const result = runtime.workspace().setActivePresentation(albumsPreset->spec);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
+    auto const res = runtime.workspace().setActivePresentation(albumsPreset->spec);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation deduplicates the current spec",
@@ -221,10 +221,10 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
-    auto const result = runtime.workspace().setActivePresentation("nonexistent");
+    auto const res = runtime.workspace().setActivePresentation("nonexistent");
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("WorkspaceService - preset resolution rejects unknown ids before checking focus",
@@ -233,10 +233,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const result = runtime.workspace().setActivePresentation("non_existent_preset");
+    auto const res = runtime.workspace().setActivePresentation("non_existent_preset");
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("WorkspaceService - custom presets can be added, updated, selected, and removed",

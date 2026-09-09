@@ -90,7 +90,7 @@ namespace ao::media::file::flac
       {
         if (auto const optField = detail::splitVorbisComment(comment); optField)
         {
-          std::ignore = detail::applyVorbisComment(builder, *optField);
+          std::ignore = detail::tryApplyVorbisComment(builder, *optField);
         }
       }
     }
@@ -181,16 +181,16 @@ namespace ao::media::file::flac
 
   Result<detail::Content> File::readContent() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
     auto builder = detail::ContentBuilder::makeEmpty();
 
-    for (auto const& block : indexResult->blocks)
+    for (auto const& block : indexRes->blocks)
     {
       switch (block.type)
       {
@@ -209,13 +209,13 @@ namespace ao::media::file::flac
 
   Result<PayloadView> File::audioPayload() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    return indexResult->payload;
+    return indexRes->payload;
   }
 } // namespace ao::media::file::flac

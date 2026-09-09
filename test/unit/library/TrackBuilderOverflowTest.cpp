@@ -32,9 +32,9 @@ namespace ao::library::test
       auto const title = std::string(kUint16Max + 1, 't');
       builder.metadata().title(title).artist("staged artist");
 
-      auto const result = context.trySerializeHot(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeHot(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
       CHECK_FALSE(context.dictionary().findId("staged artist"));
     }
 
@@ -57,9 +57,9 @@ namespace ao::library::test
         builder.tags().add(tagName);
       }
 
-      auto const result = context.trySerializeHot(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeHot(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
   }
 
@@ -77,9 +77,9 @@ namespace ao::library::test
       auto const uri = std::string(kUint16Overflow, 'u');
       builder.property().uri(uri);
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata value length")
@@ -89,9 +89,9 @@ namespace ao::library::test
       builder.property().uri("track.flac");
       builder.customMetadata().add("key", value);
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Cover art payload length")
@@ -106,9 +106,9 @@ namespace ao::library::test
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata count")
@@ -121,9 +121,9 @@ namespace ao::library::test
         builder.customMetadata().add("key", {});
       }
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("Custom metadata table offset")
@@ -138,9 +138,9 @@ namespace ao::library::test
         builder.customMetadata().add("key", {});
       }
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("URI offset after aligned custom payload")
@@ -152,9 +152,9 @@ namespace ao::library::test
       builder.property().uri("track.flac");
       builder.customMetadata().add("key", value);
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("URI offset after accumulated custom metadata values")
@@ -169,9 +169,9 @@ namespace ao::library::test
       builder.property().uri("track.flac");
       builder.customMetadata().add("first", value).add("second", value);
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("URI offset after multiple aligned payloads")
@@ -187,9 +187,9 @@ namespace ao::library::test
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
-      auto const result = context.trySerializeCold(builder);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::ValueTooLarge);
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
     }
   }
 

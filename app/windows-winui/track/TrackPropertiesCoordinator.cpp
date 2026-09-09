@@ -211,7 +211,7 @@ namespace ao::winui
         }
         else
         {
-          std::ignore = _formModel.mergeTrackField(row.field, rawValue);
+          std::ignore = _formModel.tryMergeTrackField(row.field, rawValue);
         }
       };
 
@@ -755,7 +755,7 @@ namespace ao::winui
     updateSaveEnabled();
   }
 
-  bool TrackPropertiesCoordinator::synchronizeFieldEdits()
+  bool TrackPropertiesCoordinator::trySynchronizeFieldEdits()
   {
     for (auto const& editor : _fieldEditors)
     {
@@ -791,7 +791,7 @@ namespace ao::winui
     {
       if ((editor.deleted && editor.existed) ||
           (!editor.deleted && editor.editable &&
-           customMetadataValueNeedsUpdate(
+           needsCustomMetadataValueUpdate(
              editor.existed, editor.optOriginalValue, winrt::to_string(editor.value.Text()))))
       {
         return true;
@@ -823,7 +823,7 @@ namespace ao::winui
       }
 
       if (auto value = winrt::to_string(editor.value.Text());
-          customMetadataValueNeedsUpdate(editor.existed, editor.optOriginalValue, value))
+          needsCustomMetadataValueUpdate(editor.existed, editor.optOriginalValue, value))
       {
         patch.customUpdates[editor.key] = std::move(value);
       }
@@ -869,7 +869,7 @@ namespace ao::winui
       return;
     }
 
-    auto const valid = !_sessionInvalid && _optSession && _optSession->isCurrent() && synchronizeFieldEdits();
+    auto const valid = !_sessionInvalid && _optSession && _optSession->isCurrent() && trySynchronizeFieldEdits();
     _dialog.IsPrimaryButtonEnabled(valid && !_saving && hasPendingChanges());
   }
 
@@ -914,7 +914,7 @@ namespace ao::winui
     // dialog open until the callback-executor completion says it was accepted.
     args.Cancel(true);
 
-    if (_saving || _sessionInvalid || !_optSession || !synchronizeFieldEdits() || !hasPendingChanges())
+    if (_saving || _sessionInvalid || !_optSession || !trySynchronizeFieldEdits() || !hasPendingChanges())
     {
       updateSaveEnabled();
       return;
@@ -929,7 +929,7 @@ namespace ao::winui
     updateSaveEnabled();
     rebuildTagRows();
 
-    auto submission = submitChanges(_optSession->submitProperties(rt::TrackPropertiesPatch{
+    auto submission = submitChangesAsync(_optSession->submitPropertiesAsync(rt::TrackPropertiesPatch{
       .metadata = std::move(metadataPatch),
       .tagsToAdd = std::move(addTags),
       .tagsToRemove = std::move(removeTags),
@@ -939,11 +939,11 @@ namespace ao::winui
       _tasks,
       [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
-      { return runSaveWorkflow(runtime, owner, token, std::move(submission), stopToken); },
+      { return runSaveWorkflowAsync(runtime, owner, token, std::move(submission), stopToken); },
       "Windows track-properties save");
   }
 
-  async::Task<Result<TrackPropertiesCommitState>> TrackPropertiesCoordinator::submitChanges(
+  async::Task<Result<TrackPropertiesCommitState>> TrackPropertiesCoordinator::submitChangesAsync(
     async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
   {
     auto propertiesRes = co_await std::move(submission);
@@ -956,23 +956,23 @@ namespace ao::winui
     co_return projectTrackPropertiesCommitState(propertiesRes->status);
   }
 
-  async::Task<void> TrackPropertiesCoordinator::runSaveWorkflow(
+  async::Task<void> TrackPropertiesCoordinator::runSaveWorkflowAsync(
     async::Runtime* const runtime,
     TrackPropertiesCoordinator* const owner,
     CallbackAdmissionGate::Token token,
     async::Task<Result<TrackPropertiesCommitState>> submission,
     std::stop_token const stopToken)
   {
-    auto result = co_await std::move(submission);
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    auto res = co_await std::move(submission);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
-    if (token.admits())
+    if (token.accepts())
     {
-      owner->finishSave(std::move(result));
+      owner->finishSave(std::move(res));
     }
   }
 
-  void TrackPropertiesCoordinator::finishSave(Result<TrackPropertiesCommitState> result)
+  void TrackPropertiesCoordinator::finishSave(Result<TrackPropertiesCommitState> res)
   {
     if (!_active)
     {
@@ -981,16 +981,16 @@ namespace ao::winui
 
     _saving = false;
 
-    if (!result)
+    if (!res)
     {
       updateSaveEnabled();
       rebuildTagRows();
       setError(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", result.error().message}}));
+        _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", res.error().message}}));
       return;
     }
 
-    switch (*result)
+    switch (*res)
     {
       case TrackPropertiesCommitState::Accepted:
         if (_dialog)

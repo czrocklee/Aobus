@@ -126,7 +126,7 @@ namespace clang::tidy::readability
       return false;
     }
 
-    bool declaresNamespaceNamed(DeclContext const* context, DeclarationName name)
+    bool hasNamespaceDeclarationNamed(DeclContext const* context, DeclarationName name)
     {
       if (context == nullptr || name.isEmpty())
       {
@@ -221,7 +221,7 @@ namespace clang::tidy::readability
             return true;
           }
 
-          if (declaresNamespaceNamed(dc, targetName))
+          if (hasNamespaceDeclarationNamed(dc, targetName))
           {
             return true;
           }
@@ -233,9 +233,9 @@ namespace clang::tidy::readability
       return false;
     }
 
-    bool extractSpecLocAndNode(MatchFinder::MatchResult const& result,
-                               NestedNameSpecifierLoc& specLoc,
-                               DynTypedNode& node)
+    bool tryExtractSpecLocAndNode(MatchFinder::MatchResult const& result,
+                                  NestedNameSpecifierLoc& specLoc,
+                                  DynTypedNode& node)
     {
       if (auto const* declRef = result.Nodes.getNodeAs<DeclRefExpr>("declRef"); declRef != nullptr)
       {
@@ -280,7 +280,7 @@ namespace clang::tidy::readability
     auto specLoc = NestedNameSpecifierLoc{};
     auto node = DynTypedNode{};
 
-    if (!extractSpecLocAndNode(result, specLoc, node))
+    if (!tryExtractSpecLocAndNode(result, specLoc, node))
     {
       return;
     }

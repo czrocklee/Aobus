@@ -23,7 +23,7 @@ namespace ao::utility::test
     }
 
     template<typename T>
-    bool parsesFully(std::string_view text, T& value)
+    bool isFullyParseable(std::string_view text, T& value)
     {
       auto const [ptr, ec] = parse(text, value);
       return ec == std::errc{} && ptr == text.data() + text.size();
@@ -33,20 +33,20 @@ namespace ao::utility::test
   TEST_CASE("FromChars - parses plain decimal values", "[utility][unit][from-chars]")
   {
     double value = 0.0;
-    REQUIRE(parsesFully("3.5", value));
+    REQUIRE(isFullyParseable("3.5", value));
     CHECK(value == 3.5);
 
-    REQUIRE(parsesFully("-2.25", value));
+    REQUIRE(isFullyParseable("-2.25", value));
     CHECK(value == -2.25);
 
-    REQUIRE(parsesFully("42", value));
+    REQUIRE(isFullyParseable("42", value));
     CHECK(value == 42.0);
   }
 
   TEST_CASE("FromChars - parses exponent notation", "[utility][unit][from-chars]")
   {
     double value = 0.0;
-    REQUIRE(parsesFully("1.5e3", value));
+    REQUIRE(isFullyParseable("1.5e3", value));
     CHECK(value == 1500.0);
   }
 
@@ -123,10 +123,10 @@ namespace ao::utility::test
   {
     double value = 0.0;
 
-    REQUIRE(parsesFully(".5", value));
+    REQUIRE(isFullyParseable(".5", value));
     CHECK(value == 0.5);
 
-    REQUIRE(parsesFully("1.", value));
+    REQUIRE(isFullyParseable("1.", value));
     CHECK(value == 1.0);
 
     CHECK(parse(".", value).ec == std::errc::invalid_argument);
@@ -147,11 +147,11 @@ namespace ao::utility::test
   TEST_CASE("FromChars - accepts representable subnormal values", "[utility][regression][from-chars]")
   {
     double value = 1.0;
-    REQUIRE(parsesFully("5e-324", value));
+    REQUIRE(isFullyParseable("5e-324", value));
     CHECK(value == std::numeric_limits<double>::denorm_min());
 
     float floatValue = 1.0F;
-    REQUIRE(parsesFully("1e-45", floatValue));
+    REQUIRE(isFullyParseable("1e-45", floatValue));
     CHECK(floatValue == std::numeric_limits<float>::denorm_min());
   }
 
@@ -174,10 +174,10 @@ namespace ao::utility::test
   TEST_CASE("FromChars - rounds finite values according to from_chars", "[utility][unit][from-chars]")
   {
     double value = 0.0;
-    REQUIRE(parsesFully("1.7976931348623157e308", value));
+    REQUIRE(isFullyParseable("1.7976931348623157e308", value));
     CHECK(value == std::numeric_limits<double>::max());
 
-    REQUIRE(parsesFully("9007199254740993", value));
+    REQUIRE(isFullyParseable("9007199254740993", value));
     CHECK(value == 9007199254740992.0);
   }
 

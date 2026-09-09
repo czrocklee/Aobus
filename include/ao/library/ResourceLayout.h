@@ -72,7 +72,7 @@ namespace ao::library
    * no test can hold: the store takes bytes, and a span claiming four gibibytes
    * would claim a range that does not exist.
    */
-  constexpr bool resourceByteLengthFits(std::size_t const byteLength) noexcept
+  constexpr bool canDescribeResourceByteLength(std::size_t const byteLength) noexcept
   {
     return byteLength <= std::numeric_limits<std::uint32_t>::max();
   }

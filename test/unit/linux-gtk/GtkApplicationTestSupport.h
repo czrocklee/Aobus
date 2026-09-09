@@ -21,8 +21,8 @@ namespace ao::gtk::test
   Glib::RefPtr<Gtk::Application> ensureGtkApplication();
   void drainGtkEvents();
   void drainGtkEventsFor(std::chrono::milliseconds duration);
-  bool pumpGtkEventsUntil(std::function<bool()> const& predicate,
-                          std::chrono::milliseconds timeout = std::chrono::milliseconds{500});
+  bool tryPumpGtkEventsUntil(std::function<bool()> const& predicate,
+                             std::chrono::milliseconds timeout = std::chrono::milliseconds{500});
 
   class GtkWindowFixture final
   {

@@ -46,14 +46,14 @@ namespace ao::gtk::layout::test
     ++_statePtr->saveCount;
   }
 
-  bool FakeLayoutComponentStateStore::prune(std::string_view /*presetId*/,
-                                            uimodel::PreparedLayout const& /*layout*/,
-                                            uimodel::LayoutSchema const& /*schema*/)
+  bool FakeLayoutComponentStateStore::tryPrune(std::string_view /*presetId*/,
+                                               uimodel::PreparedLayout const& /*layout*/,
+                                               uimodel::LayoutSchema const& /*schema*/)
   {
     return false;
   }
 
-  bool FakeLayoutComponentStateStore::removePreset(std::string_view const presetId)
+  bool FakeLayoutComponentStateStore::tryRemovePreset(std::string_view const presetId)
   {
     if (_statePtr->document.preset == presetId)
     {

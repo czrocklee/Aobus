@@ -544,11 +544,11 @@ namespace ao::rt
         }
       }
 
-      if (auto result =
+      if (auto res =
             scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, snapshot.manifest, seenUris, items);
-          !result)
+          !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       it.increment(ec);

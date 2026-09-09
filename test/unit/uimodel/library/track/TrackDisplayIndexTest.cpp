@@ -18,7 +18,7 @@ namespace ao::uimodel::test
       {.start = 2, .count = 3},
     });
 
-    REQUIRE(index.reset(5, sections));
+    REQUIRE(index.tryReset(5, sections));
     CHECK(index.displayCount() == 7);
     CHECK(index.itemAt(0) == TrackDisplayItem{
                                .kind = TrackDisplayItemKind::GroupHeader,
@@ -57,12 +57,12 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-display]")
   {
     auto index = TrackDisplayIndex{};
-    REQUIRE(index.reset(2, {}));
+    REQUIRE(index.tryReset(2, {}));
 
     auto const gap = std::to_array<TrackDisplaySection>({
       {.start = 1, .count = 1},
     });
-    CHECK_FALSE(index.reset(2, gap));
+    CHECK_FALSE(index.tryReset(2, gap));
     CHECK(index.displayCount() == 2);
     CHECK(index.itemAt(1) == TrackDisplayItem{
                                .kind = TrackDisplayItemKind::TrackRow,

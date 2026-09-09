@@ -32,7 +32,7 @@ namespace ao::gtk
     constexpr std::uint64_t kMaximumDecodedPixels = 32'000'000;
     constexpr std::size_t kDecodeInputChunkBytes = 4096;
 
-    bool dimensionsWithinLimits(std::int32_t const width, std::int32_t const height)
+    bool isWithinDimensionLimits(std::int32_t const width, std::int32_t const height)
     {
       if (width <= 0 || height <= 0 || width > kMaximumDecodedDimension || height > kMaximumDecodedDimension)
       {
@@ -52,7 +52,7 @@ namespace ao::gtk
         {
           sizePrepared = true;
 
-          if (!dimensionsWithinLimits(width, height))
+          if (!isWithinDimensionLimits(width, height))
           {
             rejected = true;
             loaderPtr->set_size(1, 1);
@@ -169,7 +169,7 @@ namespace ao::gtk
     return _runtime.spawnCancellable(
       [runtime = &_runtime, sourcePixbufPtr = std::move(sourcePixbufPtr), renderedSize, onReady = std::move(onReady)](
         std::stop_token const stopToken) mutable
-      { return render(runtime, std::move(sourcePixbufPtr), renderedSize, std::move(onReady), stopToken); },
+      { return renderAsync(runtime, std::move(sourcePixbufPtr), renderedSize, std::move(onReady), stopToken); },
       "GTK high-quality image render workflow");
   }
 
@@ -245,7 +245,7 @@ namespace ao::gtk
     auto dependency = _byteCache.request(key.resourceId,
                                          [this, key, token](rt::ResourceBytes bytes) mutable
                                          { spawnDecode(key, std::move(token), std::move(bytes)); });
-    _requests.retainDependency(token, std::move(dependency));
+    _requests.tryRetainDependency(token, std::move(dependency));
   }
 
   void ResourceImageLoader::spawnDecode(ImageCacheKey const key, Requests::FlightToken token, rt::ResourceBytes bytes)
@@ -256,20 +256,20 @@ namespace ao::gtk
       _scope,
       [loader = this, runtime = &_runtime, key, token = std::move(token), bytes = std::move(bytes)](
         std::stop_token const stopToken) mutable
-      { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); },
+      { return decodeAsync(loader, runtime, key, std::move(token), std::move(bytes), stopToken); },
       "GTK resource image decode workflow");
   }
 
-  async::Task<void> ResourceImageLoader::decode(ResourceImageLoader* const loader,
-                                                async::Runtime* const runtime,
-                                                ImageCacheKey const key,
-                                                Requests::FlightToken token,
-                                                rt::ResourceBytes bytes,
-                                                std::stop_token const stopToken)
+  async::Task<void> ResourceImageLoader::decodeAsync(ResourceImageLoader* const loader,
+                                                     async::Runtime* const runtime,
+                                                     ImageCacheKey const key,
+                                                     Requests::FlightToken token,
+                                                     rt::ResourceBytes bytes,
+                                                     std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     if (!bytes.empty())
     {
@@ -283,7 +283,7 @@ namespace ao::gtk
       }
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (decodedPtr && !loader->get(key))
     {
@@ -293,15 +293,15 @@ namespace ao::gtk
     loader->_requests.complete(token, decodedPtr);
   }
 
-  async::Task<void> ResourceImageLoader::render(async::Runtime* const runtime,
-                                                Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
-                                                RenderTarget const renderedSize,
-                                                OnImageReady onReady,
-                                                std::stop_token const stopToken)
+  async::Task<void> ResourceImageLoader::renderAsync(async::Runtime* const runtime,
+                                                     Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                                     RenderTarget const renderedSize,
+                                                     OnImageReady onReady,
+                                                     std::stop_token const stopToken)
   {
     auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     try
     {
@@ -315,7 +315,7 @@ namespace ao::gtk
       renderedPixbufPtr.reset();
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (onReady)
     {

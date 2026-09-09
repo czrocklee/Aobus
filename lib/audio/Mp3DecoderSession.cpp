@@ -32,6 +32,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <sys/types.h> // NOLINT(misc-include-cleaner) -- public owner for mpg123's native off_t API.
 #include <utility>
 #include <vector>
 
@@ -115,6 +116,8 @@ namespace ao::audio
       return static_cast<mpg123_ssize_t>(count);
     }
 
+    // Darwin exposes off_t through public <sys/types.h>, backed by an SDK-private declaration header.
+    // NOLINTNEXTLINE(misc-include-cleaner)
     static off_t lseekCb(void* handle, off_t offset, std::int32_t whence)
     {
       auto* self = static_cast<Impl*>(handle);
@@ -128,14 +131,14 @@ namespace ao::audio
         default: return -1;
       }
 
-      auto const result = self->fileCursor.seek(offset, origin);
+      auto const res = self->fileCursor.seek(offset, origin);
 
-      if (!result || *result > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
+      if (!res || *res > static_cast<std::uint64_t>(std::numeric_limits<off_t>::max()))
       {
         return -1;
       }
 
-      return static_cast<off_t>(*result);
+      return static_cast<off_t>(*res);
     }
 
     void configureOutputFormat() const
@@ -326,9 +329,9 @@ namespace ao::audio
     {
       _implPtr->configureOutputFormat();
 
-      if (auto const result = _implPtr->fileCursor.open(filePath); !result)
+      if (auto const res = _implPtr->fileCursor.open(filePath); !res)
       {
-        detail::throwDecoderError(result.error());
+        detail::throwDecoderError(res.error());
       }
 
       _implPtr->eof = false;

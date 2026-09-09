@@ -215,7 +215,7 @@ namespace ao::gtk::layout
       {
         if (_imageControllerPtr != nullptr)
         {
-          applyImageVisibility(_imageControllerPtr->imageAvailable());
+          applyImageVisibility(_imageControllerPtr->isImageAvailable());
         }
       }
 
@@ -233,9 +233,9 @@ namespace ao::gtk::layout
         switch (_action)
         {
           case Action::JumpToAlbum:
-            if (auto const result = _jumpToAlbum(_currentTrackId); !result)
+            if (auto const res = _jumpToAlbum(_currentTrackId); !res)
             {
-              APP_LOG_ERROR("PlaybackImage: Failed to jump to album: {}", result.error().message);
+              APP_LOG_ERROR("PlaybackImage: Failed to jump to album: {}", res.error().message);
             }
 
             break;
@@ -278,7 +278,7 @@ namespace ao::gtk::layout
       void updateImage()
       {
         _imageControllerPtr->load(_currentCoverArtId);
-        applyImageVisibility(_imageControllerPtr->imageAvailable());
+        applyImageVisibility(_imageControllerPtr->isImageAvailable());
       }
 
       /**

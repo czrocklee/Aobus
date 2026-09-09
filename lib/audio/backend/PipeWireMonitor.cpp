@@ -256,7 +256,7 @@ namespace ao::audio::backend
 
     ~State()
     {
-      requestShutdown();
+      tryRequestShutdown();
       completeShutdown();
 
       if (monitorHooksPtr)
@@ -337,13 +337,13 @@ namespace ao::audio::backend
 
     void start();
     bool isRunning() const noexcept;
-    bool requestShutdown() noexcept;
+    bool tryRequestShutdown() noexcept;
     void completeShutdown() noexcept;
     void waitForShutdown() noexcept;
     bool isCurrentCallback() const noexcept;
     void refresh();
     std::optional<RefreshBatch> prepareRefreshBatch();
-    bool deliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks);
+    bool tryDeliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks);
     void deliverDeviceCallbacks(std::vector<PendingDeviceCallback>& pendingCallbacks,
                                 std::vector<Device> const& devices);
 
@@ -400,36 +400,36 @@ namespace ao::audio::backend
         return;
       }
 
-      static ::pw_link_events const linkEvents = {.version = PW_VERSION_LINK_EVENTS,
-                                                  .info = [](void* data, ::pw_link_info const* info) noexcept
-                                                  {
-                                                    invokePipeWireCallback(
-                                                      "PipeWire link-info callback",
-                                                      [data, info]
-                                                      {
-                                                        if (!info)
-                                                        {
-                                                          return;
-                                                        }
+      static ::pw_link_events const kLinkEvents = {.version = PW_VERSION_LINK_EVENTS,
+                                                   .info = [](void* data, ::pw_link_info const* info) noexcept
+                                                   {
+                                                     invokePipeWireCallback(
+                                                       "PipeWire link-info callback",
+                                                       [data, info]
+                                                       {
+                                                         if (!info)
+                                                         {
+                                                           return;
+                                                         }
 
-                                                        auto* const impl = static_cast<PipeWireMonitor::State*>(data);
+                                                         auto* const impl = static_cast<PipeWireMonitor::State*>(data);
 
-                                                        {
-                                                          auto const lock = std::scoped_lock{impl->mutex};
-                                                          auto& link = impl->links[info->id];
+                                                         {
+                                                           auto const lock = std::scoped_lock{impl->mutex};
+                                                           auto& link = impl->links[info->id];
 
-                                                          link.outputNodeId = info->output_node_id;
-                                                          link.inputNodeId = info->input_node_id;
+                                                           link.outputNodeId = info->output_node_id;
+                                                           link.inputNodeId = info->input_node_id;
 
-                                                          if (info->change_mask & PW_LINK_CHANGE_MASK_STATE)
-                                                          {
-                                                            link.state = info->state;
-                                                          }
-                                                        }
+                                                           if (info->change_mask & PW_LINK_CHANGE_MASK_STATE)
+                                                           {
+                                                             link.state = info->state;
+                                                           }
+                                                         }
 
-                                                        impl->triggerRefresh();
-                                                      });
-                                                  }};
+                                                         impl->triggerRefresh();
+                                                       });
+                                                   }};
 
       {
         auto const lock = std::scoped_lock{impl->mutex};
@@ -448,7 +448,7 @@ namespace ao::audio::backend
             auto& binding = impl->linkBindings[id];
             binding.id = id;
             binding.proxyPtr.reset(static_cast<::pw_link*>(proxy));
-            ::pw_link_add_listener(binding.proxyPtr.get(), binding.listener.get(), &linkEvents, impl);
+            ::pw_link_add_listener(binding.proxyPtr.get(), binding.listener.get(), &kLinkEvents, impl);
           }
         }
       }
@@ -558,7 +558,7 @@ namespace ao::audio::backend
       impl->triggerRefresh();
     }
 
-    static inline ::pw_core_events const coreEvents = []
+    static inline ::pw_core_events const kCoreEvents = []
     {
       auto ev = ::pw_core_events{};
       ev.version = PW_VERSION_CORE_EVENTS;
@@ -567,7 +567,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_registry_events const registryEvents = []
+    static inline ::pw_registry_events const kRegistryEvents = []
     {
       auto ev = ::pw_registry_events{};
       ev.version = PW_VERSION_REGISTRY_EVENTS;
@@ -586,7 +586,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const streamNodeEvents = []
+    static inline ::pw_node_events const kStreamNodeEvents = []
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
@@ -605,7 +605,7 @@ namespace ao::audio::backend
       return ev;
     }();
 
-    static inline ::pw_node_events const sinkNodeEvents = []
+    static inline ::pw_node_events const kSinkNodeEvents = []
     {
       auto ev = ::pw_node_events{};
       ev.version = PW_VERSION_NODE_EVENTS;
@@ -670,7 +670,7 @@ namespace ao::audio::backend
                          invokeHook(retainedStatePtr->monitorHooksPtr->onMonitorExit, "PipeWire monitor-exit observer");
                        }
 
-                       retainedStatePtr->requestShutdown();
+                       retainedStatePtr->tryRequestShutdown();
                        retainedStatePtr->completeShutdown();
                      }};
     }
@@ -685,7 +685,7 @@ namespace ao::audio::backend
     void shutdown() noexcept
     {
       auto const statePtr = _statePtr;
-      auto const startedShutdown = statePtr->requestShutdown();
+      auto const startedShutdown = statePtr->tryRequestShutdown();
       auto const returnWithoutWaiting = statePtr->isCurrentCallback();
 
       if (statePtr->monitorHooksPtr)
@@ -832,8 +832,8 @@ namespace ao::audio::backend
 
         if (registryPtr)
         {
-          ::pw_registry_add_listener(registryPtr.get(), registryListener.get(), &State::registryEvents, this);
-          ::pw_core_add_listener(corePtr.get(), coreListener.get(), &State::coreEvents, this);
+          ::pw_registry_add_listener(registryPtr.get(), registryListener.get(), &State::kRegistryEvents, this);
+          ::pw_core_add_listener(corePtr.get(), coreListener.get(), &State::kCoreEvents, this);
           coreSyncSeq = ::pw_core_sync(corePtr.get(), PW_ID_CORE, 0);
         }
       }
@@ -848,7 +848,7 @@ namespace ao::audio::backend
     return lifecycle == Lifecycle::Running;
   }
 
-  bool PipeWireMonitor::State::requestShutdown() noexcept
+  bool PipeWireMonitor::State::tryRequestShutdown() noexcept
   {
     auto const lock = std::scoped_lock{lifecycleMutex};
 
@@ -1145,7 +1145,7 @@ namespace ao::audio::backend
       invokeHook(monitorHooksPtr->onRefreshPrepared, "PipeWire refresh-prepared observer");
     }
 
-    if (!deliverGraphCallbacks(optBatch->graphCallbacks))
+    if (!tryDeliverGraphCallbacks(optBatch->graphCallbacks))
     {
       return;
     }
@@ -1226,7 +1226,7 @@ namespace ao::audio::backend
     return batch;
   }
 
-  bool PipeWireMonitor::State::deliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks)
+  bool PipeWireMonitor::State::tryDeliverGraphCallbacks(std::vector<PendingGraphCallback>& pendingCallbacks)
   {
     // Serialize user delivery outside the PipeWire loop lock and state mutex.
     // Rechecking the id after copying lets cancellation suppress stale delivery.
@@ -1369,7 +1369,7 @@ namespace ao::audio::backend
       ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 1, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
       ::pw_node_enum_params(bindingPtr->proxyPtr.get(), 2, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
       auto* binding = bindingPtr.get();
-      ::pw_node_add_listener(binding->proxyPtr.get(), binding->listener.get(), &streamNodeEvents, binding);
+      ::pw_node_add_listener(binding->proxyPtr.get(), binding->listener.get(), &kStreamNodeEvents, binding);
       streamNodeBindings[streamId] = std::move(bindingPtr);
     }
   }
@@ -1403,7 +1403,7 @@ namespace ao::audio::backend
 
           auto* sinkBinding = bindingPtr.get();
           ::pw_node_add_listener(
-            sinkBinding->proxyPtr.get(), sinkBinding->listener.get(), &sinkNodeEvents, sinkBinding);
+            sinkBinding->proxyPtr.get(), sinkBinding->listener.get(), &kSinkNodeEvents, sinkBinding);
           sinkNodeBindings[id] = std::move(bindingPtr);
         }
       }

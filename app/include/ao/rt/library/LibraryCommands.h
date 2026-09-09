@@ -49,53 +49,56 @@ namespace ao::rt
     // counterparts, but return before commit and publish no change events.
     // Preview replies never include allocated ids; ids are only valid after a
     // successful committing call.
-    async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> updateMetadata(BoundTrackTargets targets,
-                                                                                       MetadataPatch patch);
-    async::Task<Result<UpdateTrackMetadataReply>> previewUpdateMetadata(std::vector<TrackId> trackIds,
-                                                                        MetadataPatch patch);
-    async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> editTags(BoundTrackTargets targets,
-                                                                           std::vector<std::string> tagsToAdd,
-                                                                           std::vector<std::string> tagsToRemove);
-    async::Task<Result<EditTrackTagsReply>> previewEditTags(std::vector<TrackId> trackIds,
-                                                            std::vector<std::string> tagsToAdd,
-                                                            std::vector<std::string> tagsToRemove);
-    async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> updateProperties(BoundTrackTargets targets,
-                                                                                           TrackPropertiesPatch patch);
-    async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> addTracksToList(ListId listId,
-                                                                                    BoundTrackTargets targets);
-    async::Task<Result<AddTracksToListReply>> previewAddTracksToList(ListId listId, std::vector<TrackId> trackIds);
-    async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> removeTracksFromList(
+    async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> updateMetadataAsync(BoundTrackTargets targets,
+                                                                                            MetadataPatch patch);
+    async::Task<Result<UpdateTrackMetadataReply>> previewUpdateMetadataAsync(std::vector<TrackId> trackIds,
+                                                                             MetadataPatch patch);
+    async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> editTagsAsync(BoundTrackTargets targets,
+                                                                                std::vector<std::string> tagsToAdd,
+                                                                                std::vector<std::string> tagsToRemove);
+    async::Task<Result<EditTrackTagsReply>> previewEditTagsAsync(std::vector<TrackId> trackIds,
+                                                                 std::vector<std::string> tagsToAdd,
+                                                                 std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> updatePropertiesAsync(
+      BoundTrackTargets targets,
+      TrackPropertiesPatch patch);
+    async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> addTracksToListAsync(ListId listId,
+                                                                                         BoundTrackTargets targets);
+    async::Task<Result<AddTracksToListReply>> previewAddTracksToListAsync(ListId listId, std::vector<TrackId> trackIds);
+    async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> removeTracksFromListAsync(
       ListId listId,
       BoundTrackTargets targets);
-    async::Task<Result<RemoveTracksFromListReply>> previewRemoveTracksFromList(ListId listId,
-                                                                               std::vector<TrackId> trackIds);
+    async::Task<Result<RemoveTracksFromListReply>> previewRemoveTracksFromListAsync(ListId listId,
+                                                                                    std::vector<TrackId> trackIds);
 
     // Returns an error when the draft is invalid, such as a malformed smart
     // filter or an invalid parent relationship.
-    async::Task<Result<ListId>> createList(ListDraft draft);
-    async::Task<Result<>> previewCreateList(ListDraft draft);
+    async::Task<Result<ListId>> createListAsync(ListDraft draft);
+    async::Task<Result<>> previewCreateListAsync(ListDraft draft);
     // Returns NotFound if no list with draft.listId exists (e.g. a stale id), or
     // another error when the draft is invalid.
-    async::Task<Result<UpdateListReply>> updateList(ListDraft draft);
-    async::Task<Result<UpdateListReply>> previewUpdateList(ListDraft draft);
-    async::Task<Result<AuthoringResult<MoveListOrderReply>>> moveListOrder(BoundListOrder order,
-                                                                           std::vector<TrackId> selectedTrackIds,
-                                                                           std::optional<TrackId> optBeforeTrackId);
-    async::Task<Result<AuthoringResult<ResetListOrderReply>>> resetListOrder(BoundListOrder order);
-    async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> forgetHiddenListOrder(BoundListOrder order);
-    async::Task<Result<DeleteListReply>> deleteList(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListReply>> previewDeleteList(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
-    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendants(ListId listId,
-                                                                                DeleteListOptions options = {});
+    async::Task<Result<UpdateListReply>> updateListAsync(ListDraft draft);
+    async::Task<Result<UpdateListReply>> previewUpdateListAsync(ListDraft draft);
+    async::Task<Result<AuthoringResult<MoveListOrderReply>>> moveListOrderAsync(
+      BoundListOrder order,
+      std::vector<TrackId> selectedTrackIds,
+      std::optional<TrackId> optBeforeTrackId);
+    async::Task<Result<AuthoringResult<ResetListOrderReply>>> resetListOrderAsync(BoundListOrder order);
+    async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> forgetHiddenListOrderAsync(BoundListOrder order);
+    async::Task<Result<DeleteListReply>> deleteListAsync(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<DeleteListReply>> previewDeleteListAsync(ListId listId, DeleteListOptions options = {});
+    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendantsAsync(ListId listId,
+                                                                              DeleteListOptions options = {});
+    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendantsAsync(ListId listId,
+                                                                                     DeleteListOptions options = {});
 
-    async::Task<Result<DeleteTrackReply>> deleteTrack(TrackId trackId);
-    async::Task<Result<DeleteTrackReply>> previewDeleteTrack(TrackId trackId);
+    async::Task<Result<DeleteTrackReply>> deleteTrackAsync(TrackId trackId);
+    async::Task<Result<DeleteTrackReply>> previewDeleteTrackAsync(TrackId trackId);
     // Imports one audio file under the music root. Recoverable failures include
     // missing/out-of-root files, unsupported or malformed media, and duplicate
     // manifest entries.
-    async::Task<Result<CreateTrackReply>> createTrackFromFile(std::filesystem::path path);
-    async::Task<Result<PreviewCreateTrackReply>> previewCreateTrackFromFile(std::filesystem::path path);
+    async::Task<Result<CreateTrackReply>> createTrackFromFileAsync(std::filesystem::path path);
+    async::Task<Result<PreviewCreateTrackReply>> previewCreateTrackFromFileAsync(std::filesystem::path path);
 
     LibraryCommands(LibraryCommands const&) = delete;
     LibraryCommands& operator=(LibraryCommands const&) = delete;

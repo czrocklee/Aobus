@@ -111,11 +111,11 @@ namespace ao::gtk
   void ShellLayoutComponentStateStore::save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc)
   {
     auto const lock = std::scoped_lock{_mutex};
-    saveUnlocked(presetId, doc);
+    trySaveUnlocked(presetId, doc);
   }
 
-  bool ShellLayoutComponentStateStore::saveUnlocked(std::string_view presetId,
-                                                    uimodel::LayoutComponentStateDocument const& doc)
+  bool ShellLayoutComponentStateStore::trySaveUnlocked(std::string_view presetId,
+                                                       uimodel::LayoutComponentStateDocument const& doc)
   {
     auto const path = filePath(presetId);
     auto stored = doc;
@@ -134,20 +134,20 @@ namespace ao::gtk
 
     auto const text = ryml::emitrs_yaml<std::string>(tree);
 
-    if (auto const result = utility::writeAtomically(path, text); !result)
+    if (auto const res = utility::writeAtomically(path, text); !res)
     {
       APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to save state file ({}): {}",
                     utility::pathToUtf8(path),
-                    result.error().message);
+                    res.error().message);
       return false;
     }
 
     return true;
   }
 
-  bool ShellLayoutComponentStateStore::prune(std::string_view presetId,
-                                             uimodel::PreparedLayout const& layout,
-                                             uimodel::LayoutSchema const& schema)
+  bool ShellLayoutComponentStateStore::tryPrune(std::string_view presetId,
+                                                uimodel::PreparedLayout const& layout,
+                                                uimodel::LayoutSchema const& schema)
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -159,7 +159,7 @@ namespace ao::gtk
 
     if (doc.components.empty())
     {
-      removePresetUnlocked(presetId);
+      tryRemovePresetUnlocked(presetId);
       return changed;
     }
 
@@ -168,16 +168,16 @@ namespace ao::gtk
       return false;
     }
 
-    return saveUnlocked(presetId, doc);
+    return trySaveUnlocked(presetId, doc);
   }
 
-  bool ShellLayoutComponentStateStore::removePreset(std::string_view presetId)
+  bool ShellLayoutComponentStateStore::tryRemovePreset(std::string_view presetId)
   {
     auto const lock = std::scoped_lock{_mutex};
-    return removePresetUnlocked(presetId);
+    return tryRemovePresetUnlocked(presetId);
   }
 
-  bool ShellLayoutComponentStateStore::removePresetUnlocked(std::string_view presetId)
+  bool ShellLayoutComponentStateStore::tryRemovePresetUnlocked(std::string_view presetId)
   {
     auto const path = filePath(presetId);
     auto ec = std::error_code{};

@@ -99,7 +99,7 @@ return ao::makeError(ao::Error::Code::NotFound, "Track does not exist");
 ```
 
 ```cpp
-ao::Result<> result{};
+ao::Result<> res{};
 ```
 
 ## Implementation authority

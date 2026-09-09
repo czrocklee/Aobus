@@ -88,10 +88,10 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns IoError for missing directory", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto const result = Environment::open(temp.path() / "missing", {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto const res = Environment::open(temp.path() / "missing", {.flags = kEnvNoTls, .maxDatabases = 20});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
   }
 
   TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")

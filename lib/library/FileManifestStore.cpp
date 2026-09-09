@@ -131,11 +131,11 @@ namespace ao::library
     return _writer.update(key.bytes(), prepared.bytes());
   }
 
-  bool FileManifestStore::Writer::remove(std::string_view uri)
+  bool FileManifestStore::Writer::tryRemove(std::string_view uri)
   {
     validateUri(uri);
     auto const key = detail::PaddedFileManifestKey{uri};
-    return _writer.del(key.bytes());
+    return _writer.tryDelete(key.bytes());
   }
 
   Result<> FileManifestStore::Writer::clear()

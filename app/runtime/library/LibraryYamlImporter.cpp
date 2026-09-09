@@ -305,9 +305,9 @@ namespace ao::rt
     {
       if (auto const custom = yaml::findChild(trackNode, "custom"); custom.readable())
       {
-        if (auto result = requireMap(custom, "Track record.custom"); !result)
+        if (auto res = requireMap(custom, "Track record.custom"); !res)
         {
-          return result;
+          return res;
         }
 
         auto keys = std::unordered_set<std::string_view>{};
@@ -329,21 +329,21 @@ namespace ao::rt
         return {};
       }
 
-      if (auto result = requireSequence(covers, "Track record.covers"); !result)
+      if (auto res = requireSequence(covers, "Track record.covers"); !res)
       {
-        return result;
+        return res;
       }
 
       for (auto const& cover : covers.children())
       {
-        if (auto result = requireMap(cover, "Track cover"); !result)
+        if (auto res = requireMap(cover, "Track cover"); !res)
         {
-          return result;
+          return res;
         }
 
-        if (auto result = rejectUnknownFields(cover, kCoverFields, "Track cover"); !result)
+        if (auto res = rejectUnknownFields(cover, kCoverFields, "Track cover"); !res)
         {
-          return result;
+          return res;
         }
       }
 
@@ -542,9 +542,9 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected, "List order reference must be a scalar or map");
       }
 
-      if (auto result = rejectUnknownFields(orderRef, kListReferenceFields, "List order reference"); !result)
+      if (auto res = rejectUnknownFields(orderRef, kListReferenceFields, "List order reference"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto const trackIdNode = yaml::findChild(orderRef, "id");
@@ -586,9 +586,9 @@ namespace ao::rt
 
     Result<> validateListOrder(ryml::ConstNodeRef const& orderNode, ValidatedList& list)
     {
-      if (auto result = requireSequence(orderNode, "List record.order"); !result)
+      if (auto res = requireSequence(orderNode, "List record.order"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       for (auto const& orderRef : orderNode.children())
@@ -651,31 +651,31 @@ namespace ao::rt
     Result<ValidatedList> validateListRecord(ryml::ConstNodeRef const& listNode,
                                              std::unordered_set<std::uint32_t>& seenYamlIds)
     {
-      if (auto result = requireMap(listNode, "List record"); !result)
+      if (auto res = requireMap(listNode, "List record"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = rejectUnknownFields(listNode, kListFields, "List record"); !result)
+      if (auto res = rejectUnknownFields(listNode, kListFields, "List record"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto list = ValidatedList{};
 
-      if (auto result = validateListIdentity(listNode, seenYamlIds, list); !result)
+      if (auto res = validateListIdentity(listNode, seenYamlIds, list); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = validateListMetadata(listNode, list); !result)
+      if (auto res = validateListMetadata(listNode, list); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = validateListContents(listNode, list); !result)
+      if (auto res = validateListContents(listNode, list); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       return list;
@@ -1003,10 +1003,9 @@ namespace ao::rt
 
     if (!prepared.tracks.empty())
     {
-      if (auto result = importTracks(prepared.tracks, transaction, yamlTrackIdToInternalId, prepared.mode, report);
-          !result)
+      if (auto res = importTracks(prepared.tracks, transaction, yamlTrackIdToInternalId, prepared.mode, report); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -1127,9 +1126,9 @@ namespace ao::rt
   {
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      if (auto result = writeTransaction.tracks().clear(); !result)
+      if (auto res = writeTransaction.tracks().clear(); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -1138,21 +1137,21 @@ namespace ao::rt
 
   Result<ValidatedImport> LibraryYamlImporter::Impl::validate(ryml::ConstNodeRef const& root) const
   {
-    if (auto result = requireMap(root, "YAML root"); !result)
+    if (auto res = requireMap(root, "YAML root"); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto validated = ValidatedImport{};
 
-    if (auto result = validateHeader(root, validated); !result)
+    if (auto res = validateHeader(root, validated); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
-    if (auto result = validateLibrary(root, validated); !result)
+    if (auto res = validateLibrary(root, validated); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return validated;
@@ -1181,9 +1180,9 @@ namespace ao::rt
 
     validated.version = *versionRes;
 
-    if (auto result = rejectUnknownFields(root, kRootFields, "YAML root"); !result)
+    if (auto res = rejectUnknownFields(root, kRootFields, "YAML root"); !res)
     {
-      return result;
+      return res;
     }
 
     auto exportModeTextRes = requireScalarField(root, "export_mode", "YAML root");
@@ -1231,14 +1230,14 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "Missing 'library' section in YAML");
     }
 
-    if (auto result = requireMap(library, "library"); !result)
+    if (auto res = requireMap(library, "library"); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
-    if (auto result = rejectUnknownFields(library, kLibraryFields, "library"); !result)
+    if (auto res = rejectUnknownFields(library, kLibraryFields, "library"); !res)
     {
-      return result;
+      return res;
     }
 
     auto const tracks = yaml::findChild(library, "tracks");
@@ -1252,9 +1251,9 @@ namespace ao::rt
       }
 
       // A listOnly payload carries no track, so it can carry no table either.
-      if (auto result = validateResources(library, validated); !result)
+      if (auto res = validateResources(library, validated); !res)
       {
-        return result;
+        return res;
       }
     }
     else
@@ -1264,27 +1263,27 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected, "library missing required 'tracks' field");
       }
 
-      if (auto result = requireSequence(tracks, "library.tracks"); !result)
+      if (auto res = requireSequence(tracks, "library.tracks"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = validateTracks(tracks, validated); !result)
+      if (auto res = validateTracks(tracks, validated); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       // The table is validated after the tracks, and before the closure that
       // joins the two: a document's tracks are its content, so a fault in one of
       // them is the more useful thing to report first.
-      if (auto result = validateResources(library, validated); !result)
+      if (auto res = validateResources(library, validated); !res)
       {
-        return result;
+        return res;
       }
 
-      if (auto result = validateCoverReferences(validated); !result)
+      if (auto res = validateCoverReferences(validated); !res)
       {
-        return result;
+        return res;
       }
     }
 
@@ -1293,14 +1292,14 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "library missing required 'lists' field");
     }
 
-    if (auto result = requireSequence(lists, "library.lists"); !result)
+    if (auto res = requireSequence(lists, "library.lists"); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
-    if (auto result = validateLists(lists, validated); !result)
+    if (auto res = validateLists(lists, validated); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return {};
@@ -1337,21 +1336,21 @@ namespace ao::rt
       return makeError(Error::Code::FormatRejected, "library missing required 'resources' field");
     }
 
-    if (auto result = requireSequence(resources, "library.resources"); !result)
+    if (auto res = requireSequence(resources, "library.resources"); !res)
     {
-      return result;
+      return res;
     }
 
     for (auto const& rowNode : resources.children())
     {
-      if (auto result = requireMap(rowNode, "Resource record"); !result)
+      if (auto res = requireMap(rowNode, "Resource record"); !res)
       {
-        return result;
+        return res;
       }
 
-      if (auto result = rejectUnknownFields(rowNode, kResourceFields, "Resource record"); !result)
+      if (auto res = rejectUnknownFields(rowNode, kResourceFields, "Resource record"); !res)
       {
-        return result;
+        return res;
       }
 
       auto digestTextRes = requireScalarField(rowNode, "digest", "Resource record");
@@ -1469,19 +1468,19 @@ namespace ao::rt
 
     for (auto const& trackNode : tracks.children())
     {
-      if (auto result = requireMap(trackNode, "Track record"); !result)
+      if (auto res = requireMap(trackNode, "Track record"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = rejectUnknownFields(trackNode, kTrackFields, "Track record"); !result)
+      if (auto res = rejectUnknownFields(trackNode, kTrackFields, "Track record"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
-      if (auto result = validateTrackNestedSchema(trackNode); !result)
+      if (auto res = validateTrackNestedSchema(trackNode); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto track = ValidatedTrack{};
@@ -1696,11 +1695,11 @@ namespace ao::rt
 
     for (auto const& preparedTrack : tracks)
     {
-      if (auto result =
+      if (auto res =
             importTrackRecord(preparedTrack, trackWriter, manifestReader, strategy, yamlTrackIdToInternalId, report);
-          !result)
+          !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
@@ -1779,7 +1778,7 @@ namespace ao::rt
   /**
    * @brief Applies the cover references a document declares.
    *
-   * A present `covers` collection replaces the baseline's covers, and an absent
+   * A present `contains` collection replaces the baseline's covers, and an absent
    * one preserves them: that overlay rule is what makes a `metadata` or `delta`
    * restore keep whatever its file baseline read, now that neither mode carries a
    * cover.
@@ -1807,9 +1806,9 @@ namespace ao::rt
 
     for (auto const coverNode : coversNode)
     {
-      if (auto result = requireMap(coverNode, "Track cover"); !result)
+      if (auto res = requireMap(coverNode, "Track cover"); !res)
       {
-        return result;
+        return res;
       }
 
       auto rawTypeRes = requireScalarFieldAs<std::uint32_t>(coverNode, "type", "Track cover");
@@ -1947,9 +1946,9 @@ namespace ao::rt
 
     if (payloadMode == ExportMode::Delta || payloadMode == ExportMode::Metadata)
     {
-      if (auto result = loadFileBaseline(uriStr, payloadMode, optBuilder, optMediaTrack); !result)
+      if (auto res = loadFileBaseline(uriStr, payloadMode, optBuilder, optMediaTrack); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
@@ -2137,9 +2136,9 @@ namespace ao::rt
   {
     if (auto tagsNode = yaml::findChild(trackNode, "tags"); tagsNode.readable())
     {
-      if (auto result = requireSequence(tagsNode, "Track record.tags"); !result)
+      if (auto res = requireSequence(tagsNode, "Track record.tags"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       builder.tags().clear();
@@ -2159,9 +2158,9 @@ namespace ao::rt
 
     if (auto customNode = yaml::findChild(trackNode, "custom"); customNode.readable())
     {
-      if (auto result = requireMap(customNode, "Track record.custom"); !result)
+      if (auto res = requireMap(customNode, "Track record.custom"); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       builder.customMetadata().clear();
@@ -2291,9 +2290,9 @@ namespace ao::rt
                        .description(importedList.description)
                        .filter(importedList.filter);
 
-      if (auto result = buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, report); !result)
+      if (auto res = buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, report); !res)
       {
-        return result;
+        return res;
       }
 
       auto createRes = listWriter.create(builder);
@@ -2317,9 +2316,9 @@ namespace ao::rt
 
     for (auto const& importedList : lists)
     {
-      if (auto result = updateListParent(importedList, yamlListIdToNewListId, listWriter, report); !result)
+      if (auto res = updateListParent(importedList, yamlListIdToNewListId, listWriter, report); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
     }
 
@@ -2393,9 +2392,9 @@ namespace ao::rt
 
     auto builder = library::ListBuilder::fromView(*optListView).parentId(parentIt->second);
 
-    if (auto result = listWriter.update(childId, builder); !result)
+    if (auto res = listWriter.update(childId, builder); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return {};

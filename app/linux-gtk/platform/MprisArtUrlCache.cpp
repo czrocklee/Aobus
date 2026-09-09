@@ -153,7 +153,7 @@ namespace ao::gtk::platform
       _scope,
       [cache = this, runtime = &_runtime, resourceId, cachedEntry = std::move(cachedEntry), token = std::move(token)](
         std::stop_token const stopToken) mutable
-      { return validateEntry(cache, runtime, resourceId, std::move(cachedEntry), std::move(token), stopToken); },
+      { return validateEntryAsync(cache, runtime, resourceId, std::move(cachedEntry), std::move(token), stopToken); },
       "MPRIS cover-art cache validation");
   }
 
@@ -162,7 +162,7 @@ namespace ao::gtk::platform
     auto dependency = _byteCache.request(resourceId,
                                          [this, resourceId, token](rt::ResourceBytes bytes) mutable
                                          { spawnExport(resourceId, std::move(token), std::move(bytes)); });
-    _requests.retainDependency(token, std::move(dependency));
+    _requests.tryRetainDependency(token, std::move(dependency));
   }
 
   void MprisArtUrlCache::spawnExport(ResourceId const resourceId, Requests::FlightToken token, rt::ResourceBytes bytes)
@@ -176,51 +176,51 @@ namespace ao::gtk::platform
        token = std::move(token),
        bytes = std::move(bytes)](std::stop_token const stopToken) mutable
       {
-        return exportBytes(
+        return exportBytesAsync(
           cache, runtime, std::move(cacheDir), resourceId, std::move(token), std::move(bytes), stopToken);
       },
       "MPRIS cover-art export");
   }
 
-  async::Task<void> MprisArtUrlCache::validateEntry(MprisArtUrlCache* const cache,
-                                                    async::Runtime* const runtime,
-                                                    ResourceId const resourceId,
-                                                    CacheEntry cachedEntry,
-                                                    Requests::FlightToken token,
-                                                    std::stop_token const stopToken)
+  async::Task<void> MprisArtUrlCache::validateEntryAsync(MprisArtUrlCache* const cache,
+                                                         async::Runtime* const runtime,
+                                                         ResourceId const resourceId,
+                                                         CacheEntry cachedEntry,
+                                                         Requests::FlightToken token,
+                                                         std::stop_token const stopToken)
   {
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     if (isCacheEntryValid(cachedEntry))
     {
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       cache->_cache[resourceId] = cachedEntry;
       cache->_requests.complete(token, cachedEntry.url);
       co_return;
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
     cache->requestBytes(resourceId, std::move(token));
   }
 
-  async::Task<void> MprisArtUrlCache::exportBytes(MprisArtUrlCache* const cache,
-                                                  async::Runtime* const runtime,
-                                                  std::filesystem::path cacheDir,
-                                                  ResourceId const resourceId,
-                                                  Requests::FlightToken token,
-                                                  rt::ResourceBytes bytes,
-                                                  std::stop_token const stopToken)
+  async::Task<void> MprisArtUrlCache::exportBytesAsync(MprisArtUrlCache* const cache,
+                                                       async::Runtime* const runtime,
+                                                       std::filesystem::path cacheDir,
+                                                       ResourceId const resourceId,
+                                                       Requests::FlightToken token,
+                                                       rt::ResourceBytes bytes,
+                                                       std::stop_token const stopToken)
   {
     auto optResult = std::optional<CacheEntry>{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     if (!bytes.empty())
     {
       optResult = exportResource(cacheDir, resourceId, bytes.view());
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (optResult)
     {

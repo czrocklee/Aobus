@@ -130,7 +130,7 @@ namespace ao::audio::test
     auto secondOut = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(secondOut).bytesWritten == secondOut.size());
     CHECK(std::vector<std::byte>{secondOut.begin(), secondOut.end()} == secondData);
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
     CHECK(advancedPath == "second.flac");
     CHECK(advancedItemId == secondItem.id);
     CHECK(engine.status().underrunCount == 0);
@@ -190,7 +190,7 @@ namespace ao::audio::test
 
     target->handlePositionAdvanced(renderRes.positionFrames);
 
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
     CHECK(engine.status().elapsed == std::chrono::milliseconds{2});
   }
 
@@ -237,7 +237,7 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == firstData);
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == secondData);
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
     // The first (retired) source has been destroyed off the render thread; only
     // the now-current second source remains live (no accumulation).
     CHECK(countersPtr->live() == 1);
@@ -252,7 +252,7 @@ namespace ao::audio::test
     // Second -> third splice.
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == thirdData);
-    REQUIRE(advancedLatch.waitForCount(2));
+    REQUIRE(advancedLatch.tryWaitForCount(2));
     CHECK(countersPtr->live() == 1);
     CHECK(endedLatch.count() == 0);
 
@@ -346,7 +346,7 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     backendRaw->emitRouteReady("anchor");
-    REQUIRE(routeEntered.waitForCount(1));
+    REQUIRE(routeEntered.tryWaitForCount(1));
 
     // Drive the render side (this thread stands in for the RT thread): consume
     // the first track and splice into the second.
@@ -374,7 +374,7 @@ namespace ao::audio::test
     // The advance notification is still delivered by the event worker once it
     // is unparked, so observers see the usual callback thread and order.
     releaseRoute.release();
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 0);
 
     // The whole splice-plus-windowed-seek ran on the original backend stream.
@@ -413,7 +413,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -484,7 +484,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -521,7 +521,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -629,7 +629,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -664,7 +664,7 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
     REQUIRE(target->renderPcm(output).bytesWritten == output.size());
     CHECK(std::vector<std::byte>{output.begin(), output.end()} == secondData);
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
   }
 
   TEST_CASE("Engine - clearNext before end of stream restores drain fallback", "[audio][unit][engine][gapless]")
@@ -700,7 +700,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -734,7 +734,7 @@ namespace ao::audio::test
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
 
     CHECK_FALSE(engine.clearNext());
-    REQUIRE(advancedLatch.waitForCount(1));
+    REQUIRE(advancedLatch.tryWaitForCount(1));
   }
 
   TEST_CASE("Engine - setNext reports prepare failure without installing a prepared track",
@@ -757,10 +757,10 @@ namespace ao::audio::test
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    auto const result = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
+    auto const res = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "missing.flac"}));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
 
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
@@ -770,7 +770,7 @@ namespace ao::audio::test
     CHECK(target->renderPcm(firstOut).drained);
 
     backendRaw->emitDrainComplete();
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
   }
@@ -819,7 +819,7 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
     auto output = std::array<std::byte, 8>{};
     REQUIRE(target->renderPcm(output).bytesWritten == output.size());
-    REQUIRE(advanced.waitForCount(1));
+    REQUIRE(advanced.tryWaitForCount(1));
     CHECK(optAdvancedItemId == secondItem.id);
   }
 
@@ -848,7 +848,7 @@ namespace ao::audio::test
 
     auto candidateRes = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"}));
     REQUIRE(candidateRes);
-    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
+    CHECK_FALSE(failureGate.tryWaitForRead(std::chrono::milliseconds{50}));
     CHECK(engine.playbackGeneration() == activeGeneration);
     CHECK(engine.transport() == Transport::Playing);
     CHECK(backendRaw->target() == activeTarget);
@@ -880,14 +880,14 @@ namespace ao::audio::test
     auto candidateRes = engine.stagePlayback(candidateItem);
     REQUIRE(candidateRes);
     auto releaseGuard = StagedFailureReleaseGuard{failureGate};
-    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
+    CHECK_FALSE(failureGate.tryWaitForRead(std::chrono::milliseconds{50}));
 
     auto const committedRes = engine.commitPlayback(std::move(*candidateRes));
     REQUIRE(committedRes);
-    REQUIRE(failureGate.waitForRead());
+    REQUIRE(failureGate.tryWaitForRead());
     releaseGuard.release();
-    REQUIRE(failureLatch.waitForCount(1));
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(failureLatch.tryWaitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
 
     REQUIRE(optFailure);
     CHECK(optFailure->kind == Engine::PlaybackFailureKind::Decode);
@@ -974,7 +974,7 @@ namespace ao::audio::test
         decoderPtr->setReadScript(
           {{.data = data, .endOfStream = false},
            {.endOfStream = false,
-            .result = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
+            .res = std::unexpected{Error{.code = Error::Code::IoError, .message = "prepared decode failed"}}}});
       }
       else
       {

@@ -49,7 +49,7 @@ namespace ao::gtk::test
       return findWidget<Gtk::Popover>(entry);
     }
 
-    bool emitCompletionKey(Gtk::Entry& entry, guint const keyval)
+    bool tryEmitCompletionKey(Gtk::Entry& entry, guint const keyval)
     {
       auto const keyControllerPtr = findControllerIf<Gtk::EventControllerKey>(
         entry,
@@ -297,7 +297,7 @@ namespace ao::gtk::test
       }};
 
     controller.update();
-    REQUIRE(controller.moveSelection(1));
+    REQUIRE(controller.tryMoveSelection(1));
 
     controller.update();
     controller.applySelected();
@@ -329,9 +329,9 @@ namespace ao::gtk::test
 
     SECTION("Down after the final item returns to the first item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Down));
       CHECK(popover->get_visible());
-      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Down));
       CHECK(popover->get_visible());
 
       controller.applySelected();
@@ -340,7 +340,7 @@ namespace ao::gtk::test
 
     SECTION("Up before the first item returns to the final item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_Up));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Up));
       CHECK(popover->get_visible());
 
       controller.applySelected();
@@ -349,9 +349,9 @@ namespace ao::gtk::test
 
     SECTION("Page Down moves forward and stops at the final item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Down));
       CHECK(popover->get_visible());
-      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Down));
       CHECK(popover->get_visible());
 
       controller.applySelected();
@@ -360,8 +360,8 @@ namespace ao::gtk::test
 
     SECTION("Page Up stops at the first item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_Down));
-      CHECK(emitCompletionKey(entry, GDK_KEY_Page_Up));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Down));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Up));
       CHECK(popover->get_visible());
 
       controller.applySelected();
@@ -370,21 +370,21 @@ namespace ao::gtk::test
 
     SECTION("Tab accepts the selected item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_Tab));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_Tab));
       CHECK(entry.get_text() == "$artist");
       CHECK_FALSE(popover->get_visible());
     }
 
     SECTION("Keypad Tab accepts the selected item")
     {
-      CHECK(emitCompletionKey(entry, GDK_KEY_KP_Tab));
+      CHECK(tryEmitCompletionKey(entry, GDK_KEY_KP_Tab));
       CHECK(entry.get_text() == "$artist");
       CHECK_FALSE(popover->get_visible());
     }
 
     SECTION("Return dismisses without accepting the selected item")
     {
-      CHECK_FALSE(emitCompletionKey(entry, GDK_KEY_Return));
+      CHECK_FALSE(tryEmitCompletionKey(entry, GDK_KEY_Return));
       CHECK(entry.get_text() == "$a");
       CHECK_FALSE(popover->get_visible());
 
@@ -394,7 +394,7 @@ namespace ao::gtk::test
 
     SECTION("Keypad Enter dismisses without accepting the selected item")
     {
-      CHECK_FALSE(emitCompletionKey(entry, GDK_KEY_KP_Enter));
+      CHECK_FALSE(tryEmitCompletionKey(entry, GDK_KEY_KP_Enter));
       CHECK(entry.get_text() == "$a");
       CHECK_FALSE(popover->get_visible());
 
@@ -430,9 +430,9 @@ namespace ao::gtk::test
     adjustmentPtr->set_upper(120.0);
     adjustmentPtr->set_page_size(30.0);
 
-    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
-    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Down));
-    CHECK(emitCompletionKey(entry, GDK_KEY_Page_Up));
+    CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Down));
+    CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Down));
+    CHECK(tryEmitCompletionKey(entry, GDK_KEY_Page_Up));
     CHECK(popover->get_visible());
 
     controller.applySelected();
@@ -466,7 +466,7 @@ namespace ao::gtk::test
       }};
 
     controller.update();
-    REQUIRE(emitFocusLeave(entry));
+    REQUIRE(tryEmitFocusLeave(entry));
     controller.applySelected();
 
     CHECK(entry.get_text() == "$al");
@@ -506,7 +506,7 @@ namespace ao::gtk::test
     controller.update();
     REQUIRE(popover->get_visible());
 
-    REQUIRE(emitGesturePressed(window, 1, -100.0, -100.0, Gtk::PropagationPhase::CAPTURE));
+    REQUIRE(tryEmitGesturePressed(window, 1, -100.0, -100.0, Gtk::PropagationPhase::CAPTURE));
 
     CHECK_FALSE(popover->get_visible());
     controller.applySelected();

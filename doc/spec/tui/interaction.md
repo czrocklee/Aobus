@@ -187,7 +187,7 @@ Replacing, closing, or destroying Quick Filter input requests stop on the pendin
 Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 An interrupted column drag instead discards its preview. Overlay changes, text input, list changes, unrelated pointer presses, and teardown therefore produce no column-layout model change or save.
 
-`:scan` and `:rescan` start one eager `LibraryScanController` flight through `uimodel::runLibraryScan`.
+`:scan` and `:rescan` start one eager `LibraryScanController` flight through `uimodel::runLibraryScanAsync`.
 `:scan cancel` requests stop on that flight.
 Start, cancel, retire, and completion bookkeeping run on the TUI callback executor, which is the FTXUI dispatch lane; `phase` is unsynchronized.
 A start while Running posts a transient already-running notice; a start while Cancelling posts a transient cancellation-in-progress notice.
@@ -238,7 +238,7 @@ Inline numeric validation flags parsing errors and disables save while preservin
 
 Metadata fields supporting vocabulary completion (Artist, Album, Album Artist, Genre, Composer, Conductor, Ensemble, Work, Movement, Soloist) query the runtime `CompletionService` synchronously on the event thread.
 Non-empty typing or `Ctrl-N` triggers completion candidates in an anchored popup.
-`Up`/`Down` and `PageUp`/`PageDown` navigate candidates, `Enter` replaces the targeted field text via checked range replacement (`replaceRange`), and `Esc` closes the completion popup without dismissing the editor.
+`Up`/`Down` and `PageUp`/`PageDown` navigate candidates, `Enter` replaces the targeted field text via checked range replacement (`tryReplaceRange`), and `Esc` closes the completion popup without dismissing the editor.
 The six-row candidate window moves only when arrow navigation leaves it; page navigation advances both selection and window by six rows, clamped at either end.
 The metadata viewport follows the selected candidate while completion is open, including in a terminal too short to show the entire popup.
 Every chord the popup declines -- `Ctrl-S`, `Ctrl-R`, `Ctrl-U`, `Ctrl-G`, and page switching -- closes it before the editor acts on it, so no confirmation prompt is drawn under candidates it cannot take input for.
@@ -265,7 +265,7 @@ Any effective library commit can invalidate the session, including one unrelated
 An invalidation arriving while a write is in flight is ignored, because that write reconciles its own binding and reports its own terminal result.
 `Ctrl-R` re-runs the same one-attempt preparation against the entire captured id vector and replaces the baseline, raw inputs, and session only on success; on failure the previous draft and its diagnostic remain, and no draft is ever reattached to a fresh session automatically.
 
-`Ctrl-S` compiles and submits one unified `TrackPropertiesPatch` containing metadata edits and tag changes (`tagsToAdd`, `tagsToRemove`) through the retained session via `submitProperties()`.
+`Ctrl-S` compiles and submits one unified `TrackPropertiesPatch` containing metadata edits and tag changes (`tagsToAdd`, `tagsToRemove`) through the retained session via `submitPropertiesAsync()`.
 Both entry into the lazy session submission and terminal-result handling run on the callback executor, alongside session invalidation.
 Changed targets across metadata and tags are deduplicated into a single mutation count.
 Applied and NoOp close the editor and post the applied or no-change result; a reply with fewer change records than targets is not partial failure.

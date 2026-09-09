@@ -45,7 +45,7 @@ namespace ao::winui::layout
      * rollback authority and therefore cannot convert a partially applied
      * command into ordinary success.
      */
-    bool invoke(std::string_view id, ActionContext const& context) const;
+    bool tryInvoke(std::string_view id, ActionContext const& context) const;
 
   private:
     boost::

@@ -73,7 +73,7 @@ namespace ao::rt
       _scope,
       [cache = this, asyncRuntime, readBytesPtr = std::move(readBytesPtr), resourceId, token = std::move(token)](
         std::stop_token const stopToken) mutable
-      { return runRead(cache, asyncRuntime, readBytesPtr, resourceId, std::move(token), stopToken); },
+      { return runReadAsync(cache, asyncRuntime, readBytesPtr, resourceId, std::move(token), stopToken); },
       "resource byte cache read");
   }
 
@@ -91,12 +91,12 @@ namespace ao::rt
     _requests.complete(token, resourceBytes);
   }
 
-  async::Task<void> ResourceByteMemoryCache::runRead(ResourceByteMemoryCache* const cache,
-                                                     async::Runtime* const asyncRuntime,
-                                                     std::shared_ptr<ReadBytes const> readBytesPtr,
-                                                     ResourceId const resourceId,
-                                                     Requests::FlightToken token,
-                                                     std::stop_token const stopToken)
+  async::Task<void> ResourceByteMemoryCache::runReadAsync(ResourceByteMemoryCache* const cache,
+                                                          async::Runtime* const asyncRuntime,
+                                                          std::shared_ptr<ReadBytes const> readBytesPtr,
+                                                          ResourceId const resourceId,
+                                                          Requests::FlightToken token,
+                                                          std::stop_token const stopToken)
   {
     auto bytes = std::vector<std::byte>{};
     auto bytesRes = co_await std::invoke(*readBytesPtr, resourceId, stopToken);
@@ -106,7 +106,7 @@ namespace ao::rt
       bytes = std::move(**bytesRes);
     }
 
-    co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
+    co_await asyncRuntime->resumeOnCallbackExecutorAsync(stopToken);
     cache->complete(resourceId, token, std::move(bytes));
   }
 

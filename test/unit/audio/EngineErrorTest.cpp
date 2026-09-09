@@ -322,7 +322,7 @@ namespace ao::audio::test
       // First block succeeds (preroll), second block fails
       // 100,000 bytes at 44.1kHz stereo 16-bit is ~566ms, satisfying the 500ms preroll
       decPtr->setReadScript({{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false},
-                             {.endOfStream = false, .result = std::unexpected(Error{.message = "decode failed"})}});
+                             {.endOfStream = false, .res = std::unexpected(Error{.message = "decode failed"})}});
       return decPtr;
     };
 

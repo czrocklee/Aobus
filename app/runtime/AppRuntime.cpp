@@ -237,7 +237,7 @@ namespace ao::rt
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
     auto restoredRes = Result<PlaybackSessionRestoreResult>{};
-    auto const accepted = _implPtr->playback.runSynchronousCommand(
+    auto const accepted = _implPtr->playback.tryRunSynchronousCommand(
       [this, &restoredRes]
       {
         restoredRes = _implPtr->playbackSessionPersistence.restore();

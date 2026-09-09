@@ -68,7 +68,7 @@ namespace ao::gtk::test
       return {start, end};
     }
 
-    bool sectionRangesAreValid(GtkSectionModel* model)
+    bool hasValidSectionRanges(GtkSectionModel* model)
     {
       auto const size = ::g_list_model_get_n_items(G_LIST_MODEL(model));
 
@@ -430,7 +430,7 @@ namespace ao::gtk::test
     auto sectionValidityDuringEvents = std::vector<bool>{};
     auto sectionConnection = sigc::scoped_connection{modelPtr->signal_items_changed().connect(
       [&sectionValidityDuringEvents, sectionModel](::guint, ::guint, ::guint)
-      { sectionValidityDuringEvents.push_back(sectionRangesAreValid(sectionModel)); })};
+      { sectionValidityDuringEvents.push_back(hasValidSectionRanges(sectionModel)); })};
 
     // Simulate multi-track addition during library scan (which causes multiple edit ranges in sorted projection)
     auto const newTrackA = addRuntimeTrack(runtime, makeTrackSpec("Track 0", "Artist A", "Album A"));

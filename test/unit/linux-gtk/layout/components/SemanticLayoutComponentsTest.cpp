@@ -83,8 +83,8 @@
 
 namespace ao::gtk::layout::test
 {
-  using ao::gtk::test::pumpGtkEventsUntil;
   using ao::gtk::test::runGtkTask;
+  using ao::gtk::test::tryPumpGtkEventsUntil;
 
   using namespace uimodel;
   using ao::gtk::test::collectAll;
@@ -399,7 +399,7 @@ namespace ao::gtk::layout::test
       drainGtkEvents();
 
       CHECK(coverArt->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Soul);
     }
 
@@ -450,7 +450,7 @@ namespace ao::gtk::layout::test
       auto* const undoButton = findWidgetByClass<Gtk::Button>(bar, "ao-undo-button");
       REQUIRE(undoButton != nullptr);
       emitClicked(*undoButton);
-      REQUIRE(pumpGtkEventsUntil([&fixture] { return !fixture.runtime().notifications().feed().entries.empty(); }));
+      REQUIRE(tryPumpGtkEventsUntil([&fixture] { return !fixture.runtime().notifications().feed().entries.empty(); }));
 
       auto const feed = fixture.runtime().notifications().feed();
       REQUIRE_FALSE(feed.entries.empty());
@@ -552,16 +552,16 @@ namespace ao::gtk::layout::test
     editor->signalTagsChanged().emit(std::span<std::string const>{firstAddition}, std::span<std::string const>{});
 
     auto const expectedTags = std::vector<std::string>{"First"};
-    REQUIRE(pumpGtkEventsUntil([&runtime, firstTrackId, &expectedTags]
-                               { return trackSpecFor(runtime, firstTrackId).tags == expectedTags; }));
-    REQUIRE(pumpGtkEventsUntil([&runtime] { return !runtime.notifications().feed().entries.empty(); }));
+    REQUIRE(tryPumpGtkEventsUntil([&runtime, firstTrackId, &expectedTags]
+                                  { return trackSpecFor(runtime, firstTrackId).tags == expectedTags; }));
+    REQUIRE(tryPumpGtkEventsUntil([&runtime] { return !runtime.notifications().feed().entries.empty(); }));
     CHECK(trackSpecFor(runtime, firstTrackId).tags == expectedTags);
     auto feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
     CHECK(std::get<std::string>(feed.entries.back().message) == "Tags added 1 for 1 track");
 
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     auto const secondAddition = std::array{std::string{"Second"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
 
@@ -572,7 +572,7 @@ namespace ao::gtk::layout::test
     auto const replacementAddition = std::array{std::string{"Replacement"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{replacementAddition}, std::span<std::string const>{});
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&runtime, secondTrackId]
       {
         return trackSpecFor(runtime, secondTrackId).tags == std::vector<std::string>{"Replacement"} &&
@@ -583,12 +583,13 @@ namespace ao::gtk::layout::test
     CHECK(trackSpecFor(runtime, firstTrackId).tags == expectedTags);
     drainGtkEvents();
 
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Invalidate Second"})));
+    REQUIRE(
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Invalidate Second"})));
     auto const notificationCount = runtime.notifications().feed().entries.size();
     auto const retryAddition = std::array{std::string{"Retry"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{retryAddition}, std::span<std::string const>{});
-    REQUIRE(pumpGtkEventsUntil([&runtime, notificationCount]
-                               { return runtime.notifications().feed().entries.size() > notificationCount; }));
+    REQUIRE(tryPumpGtkEventsUntil([&runtime, notificationCount]
+                                  { return runtime.notifications().feed().entries.size() > notificationCount; }));
 
     CHECK(trackSpecFor(runtime, secondTrackId).tags == std::vector<std::string>{"Replacement"});
     CHECK(runtime.notifications().feed().entries.back().severity == rt::NotificationSeverity::Error);
@@ -619,13 +620,13 @@ namespace ao::gtk::layout::test
     editor->signalTagsChanged().emit(std::span<std::string const>{firstAddition}, std::span<std::string const>{});
     editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
 
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&runtime]
       {
         return hasNotification(
           runtime.notifications(), rt::NotificationSeverity::Warning, "Library is busy. Try again.");
       }));
-    REQUIRE(pumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).tags.size() == 1; }));
+    REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).tags.size() == 1; }));
   }
 
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
@@ -641,7 +642,7 @@ namespace ao::gtk::layout::test
       ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
 
     undoController.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
-    REQUIRE(runGtkTask(fixture.runtime(), undoController.undo()));
+    REQUIRE(runGtkTask(fixture.runtime(), undoController.undoAsync()));
 
     auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
@@ -689,17 +690,17 @@ namespace ao::gtk::layout::test
     auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
     auto deletePatch = rt::MetadataPatch{};
     deletePatch.customUpdates["Mood"] = std::nullopt;
-    auto deleteRes = runGtkTask(runtime, sessionPtr.submitMetadata(deletePatch));
+    auto deleteRes = runGtkTask(runtime, sessionPtr.submitMetadataAsync(deletePatch));
     REQUIRE(deleteRes);
     REQUIRE(deleteRes->status == rt::AuthoringStatus::Applied);
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK_FALSE(controller.pendingCustomMetadataUndo()->session.isCurrent());
 
-    auto const undoRes = runGtkTask(runtime, controller.undo());
+    auto const undoRes = runGtkTask(runtime, controller.undoAsync());
 
     REQUIRE_FALSE(undoRes);
     CHECK(undoRes.error().message == "Library changed before metadata undo could be applied");
@@ -725,7 +726,7 @@ namespace ao::gtk::layout::test
       "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(sessionPtr));
     REQUIRE(controller.pendingCustomMetadataUndo());
 
-    auto const undoRes = runGtkTask(fixture.runtime(), controller.undo());
+    auto const undoRes = runGtkTask(fixture.runtime(), controller.undoAsync());
 
     REQUIRE_FALSE(undoRes);
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
@@ -753,7 +754,7 @@ namespace ao::gtk::layout::test
         controllerDestroyed = true;
       });
 
-    auto undoTask = controllerPtr->undo();
+    auto undoTask = controllerPtr->undoAsync();
     auto const undoRes = runGtkTask(runtime, std::move(undoTask));
 
     REQUIRE(undoRes);
@@ -791,7 +792,7 @@ namespace ao::gtk::layout::test
 
     emitClicked(titleEditor->editButton());
     REQUIRE(titleEditor->isEditing());
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
     drainGtkEvents();
 
     CHECK_FALSE(titleEditor->isEditing());
@@ -829,9 +830,9 @@ namespace ao::gtk::layout::test
     moodEditor->startEditing();
     REQUIRE(moodEditor->isEditing());
     moodEditor->entry().set_text("Dark");
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
 
-    REQUIRE(pumpGtkEventsUntil([moodEditor] { return !moodEditor->isEditing(); }));
+    REQUIRE(tryPumpGtkEventsUntil([moodEditor] { return !moodEditor->isEditing(); }));
 
     auto const spec = trackSpecFor(runtime, trackId);
     REQUIRE(spec.customMetadata.size() == 1);
@@ -896,13 +897,13 @@ namespace ao::gtk::layout::test
       editor->entry().set_text("Second");
       editor->stopEditing(true);
 
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&runtime]
         {
           return hasNotification(
             runtime.notifications(), rt::NotificationSeverity::Warning, "Library is busy. Try again.");
         }));
-      REQUIRE(pumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).title != "Before"; }));
+      REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).title != "Before"; }));
     }
 
     drainGtkEvents();
@@ -942,7 +943,7 @@ namespace ao::gtk::layout::test
     auto* const deleteButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-field-delete");
     REQUIRE(deleteButton != nullptr);
     emitClicked(*deleteButton);
-    REQUIRE(pumpGtkEventsUntil([undoBar] { return undoBar->get_visible(); }));
+    REQUIRE(tryPumpGtkEventsUntil([undoBar] { return undoBar->get_visible(); }));
 
     CHECK(undoBar->get_visible());
 
@@ -982,9 +983,9 @@ namespace ao::gtk::layout::test
     auto* const deleteButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-field-delete");
     REQUIRE(deleteButton != nullptr);
     emitClicked(*deleteButton);
-    REQUIRE(
-      pumpGtkEventsUntil([&runtime, trackId, undoBar]
-                         { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&runtime, trackId, undoBar]
+      { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
 
     CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
     CHECK(undoBar->get_visible());
@@ -997,7 +998,7 @@ namespace ao::gtk::layout::test
     REQUIRE(undoButton != nullptr);
     emitClicked(*undoButton);
     emitClicked(*undoButton);
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&runtime, trackId, undoBar]
       { return !trackSpecFor(runtime, trackId).customMetadata.empty() && !undoBar->get_visible(); }));
 
@@ -1041,9 +1042,9 @@ namespace ao::gtk::layout::test
 
     auto* const undoBar = findWidgetByClass<Gtk::Widget>(root, "ao-undo-bar");
     REQUIRE(undoBar != nullptr);
-    REQUIRE(
-      pumpGtkEventsUntil([&runtime, trackId, undoBar]
-                         { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&runtime, trackId, undoBar]
+      { return trackSpecFor(runtime, trackId).customMetadata.empty() && undoBar->get_visible(); }));
     CHECK(undoBar->get_visible());
     CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
 
@@ -1062,7 +1063,7 @@ namespace ao::gtk::layout::test
     auto* const submitButton = findButtonByLabel(*popover, "Add");
     REQUIRE(submitButton != nullptr);
     emitClicked(*submitButton);
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&runtime, trackId, popover, undoBar]
       {
         auto const current = trackSpecFor(runtime, trackId);

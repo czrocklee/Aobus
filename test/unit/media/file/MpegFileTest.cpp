@@ -268,9 +268,9 @@ namespace ao::media::file::mpeg::test
 
     ao::media::file::test::RecordedContent readContent(TestFile const& file)
     {
-      auto result = file.readContent();
-      REQUIRE(result);
-      return *result;
+      auto res = file.readContent();
+      REQUIRE(res);
+      return *res;
     }
   } // namespace
 
@@ -618,11 +618,11 @@ namespace ao::media::file::mpeg::test
 
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Mp3);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Mp3);
     }
 
     SECTION("Truncated ID3v2 header")
@@ -639,10 +639,10 @@ namespace ao::media::file::mpeg::test
 
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Oversized ID3v2 envelope is ignored when a complete MPEG frame follows")
@@ -693,11 +693,11 @@ namespace ao::media::file::mpeg::test
 
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Mp3);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Mp3);
     }
 
     SECTION("Missing MPEG frame sync")
@@ -705,10 +705,10 @@ namespace ao::media::file::mpeg::test
       auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
       auto const temp = TempFile{data, ".mp3"};
       auto const file = TestFile{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Truncated APIC frame does not overrun the buffer")

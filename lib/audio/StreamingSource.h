@@ -69,9 +69,9 @@ namespace ao::audio
     void fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken);
     DecodeBlockStatus decodeNextBlock(std::stop_token const& seekToken, std::stop_token const* threadStopToken);
     // Advances bytes in place to the unwritten remainder so retries resume without duplicating PCM.
-    bool writeBlock(std::span<std::byte const>& bytes,
-                    std::stop_token const& seekToken,
-                    std::stop_token const* threadStopToken);
+    bool tryWriteBlock(std::span<std::byte const>& bytes,
+                       std::stop_token const& seekToken,
+                       std::stop_token const* threadStopToken);
 
     std::unique_ptr<DecoderSession> _decoderPtr;
     std::function<void(Error const&)> _onError;

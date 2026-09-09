@@ -31,8 +31,8 @@ namespace ao::desktop
     }
 
     return LibrarySwitchPlan{
-      .disposition = sameLibraryRoot(*activeRes, *requestedRes) ? LibrarySwitchDisposition::ReuseActive
-                                                                : LibrarySwitchDisposition::Restart,
+      .disposition = isSameLibraryRoot(*activeRes, *requestedRes) ? LibrarySwitchDisposition::ReuseActive
+                                                                  : LibrarySwitchDisposition::Restart,
       .request = LibrarySwitchRequest{.libraryRoot = std::move(*requestedRes), .scanAfterOpen = scanAfterOpen},
     };
   }

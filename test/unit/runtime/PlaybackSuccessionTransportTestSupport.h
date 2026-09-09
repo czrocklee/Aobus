@@ -108,7 +108,7 @@ namespace ao::rt::test::playback_succession
     void queueNaturalAdvance();
     Result<> playAndWait(TrackId trackId);
     std::size_t lookaheadActivationCount(TrackId trackId) const;
-    bool waitForLookaheadAfter(TrackId trackId, std::size_t previousCount);
+    bool tryWaitForLookaheadAfter(TrackId trackId, std::size_t previousCount);
 
     std::shared_ptr<DecoderActivationProbe> decoderProbePtr;
     PlaybackTransportFixture<QueuedExecutor> transport;

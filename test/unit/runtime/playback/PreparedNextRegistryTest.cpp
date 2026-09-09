@@ -77,17 +77,17 @@ namespace ao::rt::test
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
-    CHECK(registry.acknowledgeDisarm(kFirstToken));
+    CHECK(registry.tryAcknowledgeDisarm(kFirstToken));
     CHECK(registry.size() == 0);
 
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
     registry.activate(kSecondToken, ProjectionAnchor::bound(kSecondTrack, 1, 2));
     REQUIRE(registry.isRetired(kFirstToken));
 
-    CHECK(registry.acknowledgeDisarm(kFirstToken));
+    CHECK(registry.tryAcknowledgeDisarm(kFirstToken));
     CHECK_FALSE(registry.contains(kFirstToken));
     CHECK(registry.activeToken() == kSecondToken);
-    CHECK_FALSE(registry.acknowledgeDisarm(kUnknownToken));
+    CHECK_FALSE(registry.tryAcknowledgeDisarm(kUnknownToken));
   }
 
   TEST_CASE("PreparedNextRegistry - retired winner closes the window while unknown token changes nothing",

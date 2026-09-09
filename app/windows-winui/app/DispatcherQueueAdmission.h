@@ -73,15 +73,15 @@ namespace ao::winui::detail
     std::optional<AdmissionTicket> tryAcquire(bool ownerThread);
 
     // Closing accepts work while the runtime stops and joins its producers.
-    bool beginClosing() noexcept;
+    bool tryBeginClosing() noexcept;
     // Draining seals foreign admission, waits for entered submissions, and
     // leaves owner-thread continuations open for the synchronous final drain.
-    bool beginDraining() noexcept;
-    bool finishClosing() noexcept;
+    bool tryBeginDraining() noexcept;
+    bool tryFinishClosing() noexcept;
     // Destruction fallback for construction failures and already-quiesced
     // owners. Seals admission and waits for entered foreign submissions under
     // one lock; queued task execution remains the executor owner's policy.
-    bool closeForDestruction() noexcept;
+    bool tryCloseForDestruction() noexcept;
 
     DispatcherQueueAdmissionState state() const;
 

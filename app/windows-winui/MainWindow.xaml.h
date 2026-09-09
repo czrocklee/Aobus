@@ -122,7 +122,7 @@ namespace winrt::Aobus::implementation
     void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
     void showSystemMenu();
-    bool modalWorkflowActive() const noexcept;
+    bool isModalWorkflowActive() const noexcept;
     void navigateHistory(bool forward);
 
     /**

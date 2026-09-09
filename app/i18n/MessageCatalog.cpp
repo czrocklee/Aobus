@@ -98,7 +98,7 @@ namespace ao::i18n
       return makeError(code, std::format("{}: {}", operation, ::u_errorName(status)));
     }
 
-    bool asciiCaseEqual(std::string_view const left, std::string_view const right) noexcept
+    bool isEqualIgnoringAsciiCase(std::string_view const left, std::string_view const right) noexcept
     {
       if (left.size() != right.size())
       {
@@ -233,7 +233,7 @@ namespace ao::i18n
                          }};
       }
 
-      if (asciiCaseEqual(*canonicalTagRes, "qps-ploc"))
+      if (isEqualIgnoringAsciiCase(*canonicalTagRes, "qps-ploc"))
       {
         return std::pair{std::string{"qps-ploc"},
                          std::vector<LocaleCandidate>{
@@ -357,7 +357,7 @@ namespace ao::i18n
       return pattern;
     }
 
-    bool argumentKindAccepts(detail::MessageArgumentKind const kind, MessageArgumentValue const& value) noexcept
+    bool acceptsArgumentKind(detail::MessageArgumentKind const kind, MessageArgumentValue const& value) noexcept
     {
       switch (kind)
       {
@@ -580,7 +580,7 @@ namespace ao::i18n
           Error::Code::InvalidInput, std::format("Message does not accept argument '{}'", argument.name));
       }
 
-      if (!argumentKindAccepts(expected->kind, argument.value))
+      if (!acceptsArgumentKind(expected->kind, argument.value))
       {
         return makeError(
           Error::Code::InvalidInput, std::format("Message argument '{}' has the wrong value kind", argument.name));
@@ -650,28 +650,28 @@ namespace ao::i18n
 
   std::string_view requiredText(MessageCatalog const& catalog, MessageId const id)
   {
-    auto result = catalog.text(id);
+    auto res = catalog.text(id);
 
-    if (!result)
+    if (!res)
     {
-      AO_FATAL("Could not resolve required message: {}", result.error().message);
+      AO_FATAL("Could not resolve required message: {}", res.error().message);
     }
 
-    return *result;
+    return *res;
   }
 
   std::string requiredFormat(MessageCatalog const& catalog,
                              MessageId const id,
                              std::span<MessageArgument const> const arguments)
   {
-    auto result = catalog.format(id, arguments);
+    auto res = catalog.format(id, arguments);
 
-    if (!result)
+    if (!res)
     {
-      AO_FATAL("Could not format required message: {}", result.error().message);
+      AO_FATAL("Could not format required message: {}", res.error().message);
     }
 
-    return std::move(result->text);
+    return std::move(res->text);
   }
 
   std::string requiredFormat(MessageCatalog const& catalog,

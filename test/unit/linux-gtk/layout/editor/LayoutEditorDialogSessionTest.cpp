@@ -50,10 +50,11 @@ namespace ao::gtk::layout::editor::test
           *runtimePtr,
           ShellLayoutCollaborators{
             .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
-        actionRegistry.registerAction(
+        actionRegistry.tryRegisterAction(
           {.id = "playback.showOutputDeviceSelector", .label = "Output Device", .category = "Playback"}, {});
-        actionRegistry.registerAction({.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell"}, {});
-        actionRegistry.registerAction({.id = "shell.showSoul", .label = "Show Soul", .category = "Shell"}, {});
+        actionRegistry.tryRegisterAction(
+          {.id = "shell.showSystemMenu", .label = "System Menu", .category = "Shell"}, {});
+        actionRegistry.tryRegisterAction({.id = "shell.showSoul", .label = "Show Soul", .category = "Shell"}, {});
       }
 
       Glib::RefPtr<Gtk::Application> appPtr = Gtk::Application::create("io.github.aobus.layout_editor_session_test");

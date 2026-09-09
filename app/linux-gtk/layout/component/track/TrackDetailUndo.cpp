@@ -89,7 +89,7 @@ namespace ao::gtk::layout
     _changed.emit();
   }
 
-  async::Task<Result<>> TrackDetailUndoController::undo()
+  async::Task<Result<>> TrackDetailUndoController::undoAsync()
   {
     if (!_optPendingCustomMetadataUndo)
     {
@@ -98,7 +98,7 @@ namespace ao::gtk::layout
 
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[_optPendingCustomMetadataUndo->key] = _optPendingCustomMetadataUndo->value;
-    auto submission = _optPendingCustomMetadataUndo->session.submitMetadata(std::move(patch));
+    auto submission = _optPendingCustomMetadataUndo->session.submitMetadataAsync(std::move(patch));
     auto clearPending = _presentationCallbacks.guard([this] { clear(); });
 
     auto const replyRes = co_await std::move(submission);
@@ -111,7 +111,7 @@ namespace ao::gtk::layout
       co_return std::unexpected{std::move(error)};
     }
 
-    auto result = Result<>{};
+    auto res = Result<>{};
 
     switch (replyRes->status)
     {
@@ -119,20 +119,20 @@ namespace ao::gtk::layout
       case rt::AuthoringStatus::NoOp: break;
       case rt::AuthoringStatus::Busy: co_return makeError(Error::Code::ResourceBusy, "Metadata undo is currently busy");
       case rt::AuthoringStatus::Stale:
-        result = makeError(Error::Code::InvalidState, "Library changed before metadata undo could be applied");
+        res = makeError(Error::Code::InvalidState, "Library changed before metadata undo could be applied");
         break;
       case rt::AuthoringStatus::Unavailable:
-        result = makeError(Error::Code::InvalidState, "Metadata undo is currently unavailable");
+        res = makeError(Error::Code::InvalidState, "Metadata undo is currently unavailable");
         break;
     }
 
-    if (!result)
+    if (!res)
     {
-      APP_LOG_ERROR("Metadata undo failed: {}", result.error().message);
+      APP_LOG_ERROR("Metadata undo failed: {}", res.error().message);
     }
 
     clearPending();
-    co_return result;
+    co_return res;
   }
 
   sigc::signal<void()>& TrackDetailUndoController::signalChanged()

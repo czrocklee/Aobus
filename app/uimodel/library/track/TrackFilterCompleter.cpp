@@ -23,7 +23,7 @@ namespace ao::uimodel
 {
   namespace
   {
-    bool rankedBefore(rt::VocabularyEntry const& lhs, rt::VocabularyEntry const& rhs)
+    bool isRankedBefore(rt::VocabularyEntry const& lhs, rt::VocabularyEntry const& rhs)
     {
       return lhs.frequency > rhs.frequency || (lhs.frequency == rhs.frequency && lhs.value < rhs.value);
     }
@@ -35,7 +35,7 @@ namespace ao::uimodel
       auto const position = std::ranges::lower_bound(matches,
                                                      &entry,
                                                      [](rt::VocabularyEntry const* lhs, rt::VocabularyEntry const* rhs)
-                                                     { return rankedBefore(*lhs, *rhs); });
+                                                     { return isRankedBefore(*lhs, *rhs); });
 
       if (matches.size() < limit)
       {

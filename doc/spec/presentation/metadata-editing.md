@@ -98,7 +98,7 @@ Any intervening effective commit makes undo stale instead of overwriting newer w
 
 ### Tags
 
-`applyTagEdit()` submits additions/removals through the targets already bound to its `TrackAuthoringSession`; it does not copy or rebind a second selected-id set.
+`applyTagEditAsync()` submits additions/removals through the targets already bound to its `TrackAuthoringSession`; it does not copy or rebind a second selected-id set.
 Its result reuses `AuthoringStatus` and carries display text only when the frontend has something to report.
 Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 

@@ -63,9 +63,9 @@ namespace ao::utility::test
            bytes({0xF4, 0x90, 0x80, 0x80}), // above U+10FFFF
          })
     {
-      auto const result = validateUtf8(invalid);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      auto const res = validateUtf8(invalid);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
   }
 

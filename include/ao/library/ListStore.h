@@ -118,7 +118,7 @@ namespace ao::library
     Result<ListId> create(ListBuilder::Prepared const& prepared);
     Result<> update(ListId id, ListBuilder::Prepared const& prepared);
     // Returns true if a row was removed, false if the id was absent.
-    bool remove(ListId id);
+    bool tryRemove(ListId id);
     Result<> clear();
 
     // Absence is the only normal miss. Write-snapshot faults abort the root

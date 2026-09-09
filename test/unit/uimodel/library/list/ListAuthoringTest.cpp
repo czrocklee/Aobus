@@ -19,23 +19,23 @@ namespace ao::uimodel::test
     auto storage = rt::test::MusicLibraryFixture{};
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
-    auto const listIdRes = commands.runTask(saveList(&commands.library(), rt::ListDraft{.name = "First name"}));
+    auto const listIdRes = commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.name = "First name"}));
     REQUIRE(listIdRes);
 
     auto updated = rt::ListDraft{.listId = *listIdRes, .name = "Renamed"};
-    auto const updatedIdRes = commands.runTask(saveList(&commands.library(), std::move(updated)));
+    auto const updatedIdRes = commands.runTask(saveListAsync(&commands.library(), std::move(updated)));
     REQUIRE(updatedIdRes);
     CHECK(*updatedIdRes == *listIdRes);
     REQUIRE(commands.library().snapshot().listNode(*listIdRes));
     CHECK(commands.library().snapshot().listNode(*listIdRes)->name == "Renamed");
 
-    auto const previewRes = commands.runTask(previewListDeletion(&commands.library(), *listIdRes, false));
+    auto const previewRes = commands.runTask(previewListDeletionAsync(&commands.library(), *listIdRes, false));
     REQUIRE(previewRes);
     REQUIRE(previewRes->deletedLists.size() == 1);
     CHECK(previewRes->rootListId == *listIdRes);
     CHECK(previewRes->deletedLists.front().listId == *listIdRes);
 
-    auto const deletedRes = commands.runTask(deleteList(&commands.library(), *listIdRes, false));
+    auto const deletedRes = commands.runTask(deleteListAsync(&commands.library(), *listIdRes, false));
     REQUIRE(deletedRes);
     CHECK_FALSE(commands.library().snapshot().listNode(*listIdRes));
   }
@@ -46,20 +46,20 @@ namespace ao::uimodel::test
     auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
 
-    auto const parentIdRes = commands.runTask(saveList(&commands.library(), rt::ListDraft{.name = "Parent"}));
+    auto const parentIdRes = commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.name = "Parent"}));
     REQUIRE(parentIdRes);
     auto const childIdRes =
-      commands.runTask(saveList(&commands.library(), rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
+      commands.runTask(saveListAsync(&commands.library(), rt::ListDraft{.parentId = *parentIdRes, .name = "Child"}));
     REQUIRE(childIdRes);
 
-    auto const previewRes = commands.runTask(previewListDeletion(&commands.library(), *parentIdRes, true));
+    auto const previewRes = commands.runTask(previewListDeletionAsync(&commands.library(), *parentIdRes, true));
     REQUIRE(previewRes);
     CHECK(previewRes->rootListId == *parentIdRes);
     REQUIRE(previewRes->deletedLists.size() == 2);
     CHECK(previewRes->deletedLists[0].listId == *parentIdRes);
     CHECK(previewRes->deletedLists[1].listId == *childIdRes);
 
-    auto const deletedRes = commands.runTask(deleteList(&commands.library(), *parentIdRes, true));
+    auto const deletedRes = commands.runTask(deleteListAsync(&commands.library(), *parentIdRes, true));
     REQUIRE(deletedRes);
     CHECK(*deletedRes == *previewRes);
     CHECK_FALSE(commands.library().snapshot().listNode(*parentIdRes));

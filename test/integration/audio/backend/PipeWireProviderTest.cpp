@@ -153,7 +153,7 @@ namespace ao::audio::backend::test
         _cv.notify_all();
       }
 
-      bool waitUntilContains(std::string_view expectedNameOrId, std::chrono::milliseconds timeout)
+      bool tryWaitUntilContains(std::string_view expectedNameOrId, std::chrono::milliseconds timeout)
       {
         auto lock = std::unique_lock{_mutex};
         return _cv.wait_for(lock, timeout, [this, expectedNameOrId] { return containsDeviceLocked(expectedNameOrId); });
@@ -253,7 +253,7 @@ namespace ao::audio::backend::test
 
     SECTION("Enumeration finds the dummy sink")
     {
-      auto const found = devicesPtr->waitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
+      auto const found = devicesPtr->tryWaitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
 
       INFO("Expected PipeWire device 'rs-test-null-sink' after 1s; observed "
            << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
@@ -262,7 +262,7 @@ namespace ao::audio::backend::test
 
     SECTION("Enumeration exposes one logical device per id")
     {
-      auto const found = devicesPtr->waitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
+      auto const found = devicesPtr->tryWaitUntilContains("rs-test-null-sink", std::chrono::seconds{1});
       REQUIRE(found);
 
       INFO("Observed PipeWire device snapshot: " << devicesPtr->describeSnapshot());
@@ -306,7 +306,7 @@ namespace ao::audio::backend::test
 
       if (proxyPtr)
       {
-        auto const found = devicesPtr->waitUntilContains("ao-test-duplex-sink", std::chrono::seconds{1});
+        auto const found = devicesPtr->tryWaitUntilContains("ao-test-duplex-sink", std::chrono::seconds{1});
 
         INFO("Expected PipeWire device 'ao-test-duplex-sink' after 1s; observed "
              << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());

@@ -61,7 +61,7 @@ namespace ao::uimodel
     void applyViewState(std::chrono::milliseconds duration, bool enabled) noexcept;
     void reset() noexcept;
 
-    bool beginPointerInteraction() noexcept;
+    bool tryBeginPointerInteraction() noexcept;
     SeekSliderUpdate endPointerInteraction(std::chrono::milliseconds elapsed) noexcept;
     SeekSliderUpdate valueChanged(std::chrono::milliseconds elapsed) noexcept;
 

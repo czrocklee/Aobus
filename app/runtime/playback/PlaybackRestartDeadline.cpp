@@ -132,16 +132,16 @@ namespace ao::rt
       auto const delay = kFirstRestartAvailableElapsed - elapsed;
       deadlineTask = asyncRuntime.spawnCancellable(
         [asyncRuntime = &asyncRuntime, state = this, delay](std::stop_token const stopToken)
-        { return waitForDeadline(asyncRuntime, state, delay, stopToken); });
+        { return waitForDeadlineAsync(asyncRuntime, state, delay, stopToken); });
     }
 
-    static async::Task<void> waitForDeadline(async::Runtime* asyncRuntime,
-                                             State* state,
-                                             Elapsed const delay,
-                                             std::stop_token const stopToken)
+    static async::Task<void> waitForDeadlineAsync(async::Runtime* asyncRuntime,
+                                                  State* state,
+                                                  Elapsed const delay,
+                                                  std::stop_token const stopToken)
     {
-      co_await asyncRuntime->sleepFor(delay, stopToken);
-      co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
+      co_await asyncRuntime->sleepForAsync(delay, stopToken);
+      co_await asyncRuntime->resumeOnCallbackExecutorAsync(stopToken);
       state->handleDeadline();
     }
 
@@ -250,7 +250,7 @@ namespace ao::rt
     return _statePtr->running;
   }
 
-  bool PlaybackRestartDeadline::restartAvailable() const noexcept
+  bool PlaybackRestartDeadline::isRestartAvailable() const noexcept
   {
     return _statePtr->restartAvailable;
   }

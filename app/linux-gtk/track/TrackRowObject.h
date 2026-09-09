@@ -29,7 +29,7 @@ namespace ao::gtk
     TrackId trackId() const { return _id; }
 
     Glib::ustring const* stringField(rt::TrackField field) const noexcept;
-    bool setStringField(rt::TrackField field, Glib::ustring const& value);
+    bool trySetStringField(rt::TrackField field, Glib::ustring const& value);
 
     // Display text for any field, without a by-value copy. Text-backed fields
     // return their stored slot directly; computed fields are formatted on first

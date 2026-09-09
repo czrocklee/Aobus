@@ -170,7 +170,7 @@ namespace ao::yaml
   /**
    * @brief Parses a boolean from a ryml node.
    */
-  bool asBool(ryml::ConstNodeRef const& node, bool defaultValue = false);
+  bool readBoolOr(ryml::ConstNodeRef const& node, bool defaultValue = false);
 
   /**
    * @brief Parses an integer from a ryml node.

@@ -18,17 +18,17 @@
 namespace ao::test
 {
   template<typename T>
-  T requireValue(Result<T>&& result)
+  T requireValue(Result<T>&& res)
   {
-    REQUIRE(result);
-    return *std::move(result);
+    REQUIRE(res);
+    return *std::move(res);
   }
 
   template<typename T>
-  T const& requireValue(Result<T> const& result)
+  T const& requireValue(Result<T> const& res)
   {
-    REQUIRE(result);
-    return *result;
+    REQUIRE(res);
+    return *res;
   }
 
   /**

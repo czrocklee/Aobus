@@ -23,10 +23,10 @@ namespace ao::uimodel
     }
   } // namespace
 
-  bool ordersAbsoluteCanvasBefore(std::int32_t zIndexA,
-                                  std::int32_t insertOrderA,
-                                  std::int32_t zIndexB,
-                                  std::int32_t insertOrderB)
+  bool isAbsoluteCanvasBefore(std::int32_t zIndexA,
+                              std::int32_t insertOrderA,
+                              std::int32_t zIndexB,
+                              std::int32_t insertOrderB)
   {
     if (zIndexA != zIndexB)
     {
@@ -36,9 +36,9 @@ namespace ao::uimodel
     return insertOrderA < insertOrderB;
   }
 
-  bool ordersAbsoluteCanvasBefore(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB)
+  bool isAbsoluteCanvasBefore(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB)
   {
-    return ordersAbsoluteCanvasBefore(itemA.zIndex, itemA.insertOrder, itemB.zIndex, itemB.insertOrder);
+    return isAbsoluteCanvasBefore(itemA.zIndex, itemA.insertOrder, itemB.zIndex, itemB.insertOrder);
   }
 
   std::optional<std::size_t> hitTestAbsoluteCanvas(std::span<AbsoluteCanvasItem const> items,
@@ -57,7 +57,7 @@ namespace ao::uimodel
         continue;
       }
 
-      if (!optHitIndex || ordersAbsoluteCanvasBefore(items[*optHitIndex], item))
+      if (!optHitIndex || isAbsoluteCanvasBefore(items[*optHitIndex], item))
       {
         optHitIndex = index;
       }

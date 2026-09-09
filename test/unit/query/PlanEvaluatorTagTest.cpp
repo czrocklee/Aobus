@@ -89,7 +89,7 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
     auto const plan = compileOk(parseOk(R"(#123 and %"Replay Gain" = "high")"));
 
-    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - compiles tag fields into bindable field loads", "[query][unit][plan-evaluator]")
@@ -182,7 +182,7 @@ namespace ao::query::test
     auto track = library::TrackView{data, std::span<std::byte const>{}};
     auto const evaluator = PlanEvaluator{};
 
-    CHECK(evaluator.evaluateFull(binding, track));
+    CHECK(evaluator.matchesFullPlan(binding, track));
     CHECK_FALSE(evaluator.matches(binding, track));
   }
 

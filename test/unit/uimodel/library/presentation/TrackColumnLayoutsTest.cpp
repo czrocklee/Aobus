@@ -71,11 +71,11 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const parentId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Parent"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Parent"})));
     auto const childId = ao::test::requireValue(
-      commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
+      commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto const unrelatedId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Unrelated"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Unrelated"})));
     auto layouts = TrackColumnLayouts{changes};
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
     layouts.restore(
@@ -90,7 +90,7 @@ namespace ao::uimodel::test
         removed.push_back(listId);
       });
 
-    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
+    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendantsAsync(parentId)));
 
     CHECK(removed == std::vector{parentId, childId});
     REQUIRE(layouts.snapshot().size() == 1);
@@ -132,9 +132,9 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const parentId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Parent"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Parent"})));
     auto const childId = ao::test::requireValue(
-      commandsFixture.runTask(commands.createList(rt::ListDraft{.parentId = parentId, .name = "Child"})));
+      commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.parentId = parentId, .name = "Child"})));
     auto layoutsPtr = std::make_unique<TrackColumnLayouts>(changes);
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
     layoutsPtr->restore({{parentId, state}, {childId, state}}, std::vector{parentId, childId});
@@ -150,7 +150,7 @@ namespace ao::uimodel::test
         }
       });
 
-    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendants(parentId)));
+    REQUIRE(commandsFixture.runTask(commands.deleteListAndDescendantsAsync(parentId)));
 
     CHECK(removed == std::vector{parentId, childId});
     CHECK(layoutsPtr == nullptr);
@@ -165,7 +165,7 @@ namespace ao::uimodel::test
     auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto& commands = commandsFixture.commands();
     auto const liveId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createList(rt::ListDraft{.name = "Live"})));
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Live"})));
     auto layouts = TrackColumnLayouts{changes};
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
     auto const staleId = ListId{liveId.raw() + 1};

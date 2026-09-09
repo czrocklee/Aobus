@@ -30,7 +30,7 @@ namespace ao::winui
     public:
       Token() = default;
 
-      bool admits() const noexcept { return !_statePtr.expired(); }
+      bool accepts() const noexcept { return !_statePtr.expired(); }
 
     private:
       friend class CallbackAdmissionGate;

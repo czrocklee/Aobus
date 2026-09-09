@@ -31,14 +31,14 @@ namespace ao::gtk::platform
                           uimodel::PlaybackActions& actions,
                           MprisBridge::Callbacks& callbacks);
 
-    bool dispatchPlayerMethod(std::string_view methodName) const;
-    bool dispatchRootMethod(std::string_view methodName) const;
-    bool dispatchSeek(std::int64_t offsetUs);
-    bool dispatchSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
-    bool dispatchSetRate(double rate) const;
+    bool tryDispatchPlayerMethod(std::string_view methodName) const;
+    bool tryDispatchRootMethod(std::string_view methodName) const;
+    bool tryHandleSeek(std::int64_t offsetUs);
+    bool tryHandleSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
+    bool tryDispatchSetRate(double rate) const;
     void dispatchSetVolume(double volume);
     void dispatchSetShuffle(bool shuffle);
-    bool dispatchSetLoopStatus(std::string_view loopStatus);
+    bool tryDispatchSetLoopStatus(std::string_view loopStatus);
     std::optional<bool> playerCapabilityProperty(std::string_view propertyName) const;
 
   private:

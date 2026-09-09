@@ -119,7 +119,7 @@ namespace ao::winui
         APP_LOG_WARN("LibraryWindowSession: failed to persist the selected library: {}", committedRes.error().message);
       }
 
-      if (_sessionPtr->scanAfterOpen())
+      if (_sessionPtr->shouldScanAfterOpen())
       {
         _sessionPtr->rescan();
       }
@@ -143,7 +143,7 @@ namespace ao::winui
     return _sessionPtr->musicRoot();
   }
 
-  bool LibraryWindowSession::active() const noexcept
+  bool LibraryWindowSession::isActive() const noexcept
   {
     return _window != nullptr && _sessionPtr != nullptr;
   }

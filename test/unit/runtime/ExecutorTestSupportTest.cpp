@@ -106,7 +106,7 @@ namespace ao::rt::test
 
                                  try
                                  {
-                                   std::ignore = executor.runOne();
+                                   std::ignore = executor.tryRunOne();
                                  }
                                  catch (...)
                                  {
@@ -120,8 +120,8 @@ namespace ao::rt::test
     CHECK(executor.queuedCount() == 1);
     checkRejection(drainFailure, "ManualExecutor can only be drained on its owner thread");
 
-    REQUIRE(executor.runOne());
+    REQUIRE(executor.tryRunOne());
     CHECK(callbackThread == ownerThread);
-    CHECK_FALSE(executor.runOne());
+    CHECK_FALSE(executor.tryRunOne());
   }
 } // namespace ao::rt::test

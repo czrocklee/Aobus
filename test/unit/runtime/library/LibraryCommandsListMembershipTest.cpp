@@ -54,11 +54,11 @@ namespace ao::rt::test
           builder.orderTrackIds().add(trackId);
         }
 
-        auto result =
+        auto res =
           transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
-        REQUIRE(result);
+        REQUIRE(res);
         REQUIRE(transaction.commit());
-        return *result;
+        return *res;
       }
 
       Library& library()
@@ -159,14 +159,14 @@ namespace ao::rt::test
     auto targets = fixture.bind(std::array{trackId});
     fixture.clearEvents();
 
-    auto const result = fixture.run(fixture.commands().addTracksToList(listId, targets));
+    auto const res = fixture.run(fixture.commands().addTracksToListAsync(listId, targets));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.listId == listId);
-    CHECK(result->reply.listName == "Road Trip");
-    CHECK(result->reply.tag == "road-trip");
-    REQUIRE(result->reply.tagEdit.changes.size() == 1);
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.listId == listId);
+    CHECK(res->reply.listName == "Road Trip");
+    CHECK(res->reply.tag == "road-trip");
+    REQUIRE(res->reply.tagEdit.changes.size() == 1);
     CHECK(fixture.hasTag(trackId, "road-trip"));
     CHECK(fixture.storedOrder(listId).empty());
     REQUIRE(fixture.events.size() == 1);
@@ -181,13 +181,13 @@ namespace ao::rt::test
     auto const trackId = fixture.addTrack("Road Song");
     auto const listId = fixture.seedList("Road Trip", R"(#"road-trip")");
     auto targets = fixture.bind(std::array{trackId});
-    auto firstRes = fixture.run(fixture.commands().addTracksToList(listId, targets));
+    auto firstRes = fixture.run(fixture.commands().addTracksToListAsync(listId, targets));
     REQUIRE(firstRes);
     REQUIRE(firstRes->optNextTargets);
     fixture.clearEvents();
     auto const revision = fixture.revision();
 
-    auto const secondRes = fixture.run(fixture.commands().addTracksToList(listId, *firstRes->optNextTargets));
+    auto const secondRes = fixture.run(fixture.commands().addTracksToListAsync(listId, *firstRes->optNextTargets));
 
     REQUIRE(secondRes);
     CHECK(secondRes->status == AuthoringStatus::NoOp);
@@ -206,13 +206,13 @@ namespace ao::rt::test
     auto const listId = fixture.seedList("Road Trip", R"(#"road-trip")", kInvalidListId, std::array{first, second});
     auto const repeated = std::array{first, second, first};
 
-    auto const addRes = fixture.run(fixture.commands().addTracksToList(listId, fixture.bind(repeated)));
+    auto const addRes = fixture.run(fixture.commands().addTracksToListAsync(listId, fixture.bind(repeated)));
 
     REQUIRE(addRes);
     CHECK(addRes->reply.targetTrackIds == std::vector{first, second});
     CHECK(addRes->reply.tagEdit.changes.size() == 2);
 
-    auto const removeRes = fixture.run(fixture.commands().removeTracksFromList(listId, fixture.bind(repeated)));
+    auto const removeRes = fixture.run(fixture.commands().removeTracksFromListAsync(listId, fixture.bind(repeated)));
 
     REQUIRE(removeRes);
     CHECK(removeRes->reply.targetTrackIds == std::vector{first, second});
@@ -223,7 +223,7 @@ namespace ao::rt::test
     // first-seen order from a sort. Ask again with the ids reversed.
     auto const reversed = std::array{second, first, second};
 
-    auto const reversedRes = fixture.run(fixture.commands().addTracksToList(listId, fixture.bind(reversed)));
+    auto const reversedRes = fixture.run(fixture.commands().addTracksToListAsync(listId, fixture.bind(reversed)));
 
     REQUIRE(reversedRes);
     CHECK(reversedRes->reply.targetTrackIds == std::vector{second, first});
@@ -242,7 +242,7 @@ namespace ao::rt::test
     auto targets = fixture.bind(std::array{eligible, outside});
     fixture.clearEvents();
 
-    auto const rejectedRes = fixture.run(fixture.commands().addTracksToList(childId, targets));
+    auto const rejectedRes = fixture.run(fixture.commands().addTracksToListAsync(childId, targets));
 
     REQUIRE_FALSE(rejectedRes);
     CHECK(rejectedRes.error().code == Error::Code::InvalidInput);
@@ -252,7 +252,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
 
     auto eligibleTargets = fixture.bind(std::array{eligible});
-    auto const acceptedRes = fixture.run(fixture.commands().addTracksToList(childId, eligibleTargets));
+    auto const acceptedRes = fixture.run(fixture.commands().addTracksToListAsync(childId, eligibleTargets));
     REQUIRE(acceptedRes);
     CHECK(acceptedRes->status == AuthoringStatus::Applied);
     CHECK(fixture.hasTag(eligible, "playlist"));
@@ -269,11 +269,11 @@ namespace ao::rt::test
     fixture.clearEvents();
     auto const beforeRevision = fixture.revision();
 
-    auto const result = fixture.run(fixture.commands().addTracksToList(childId, targets));
+    auto const res = fixture.run(fixture.commands().addTracksToListAsync(childId, targets));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
-    CHECK(result.error().message.contains("parent List " + std::to_string(parentId.raw())));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("parent List " + std::to_string(parentId.raw())));
     CHECK_FALSE(fixture.hasTag(trackId, "playlist"));
     CHECK(fixture.revision() == beforeRevision);
     CHECK(fixture.events.empty());
@@ -292,12 +292,12 @@ namespace ao::rt::test
     fixture.clearEvents();
     auto const beforeRevision = fixture.revision();
 
-    auto const result = fixture.run(fixture.commands().removeTracksFromList(listId, targets));
+    auto const res = fixture.run(fixture.commands().removeTracksFromListAsync(listId, targets));
 
-    REQUIRE(result);
-    CHECK(result->status == AuthoringStatus::Applied);
-    CHECK(result->reply.tag == "road-trip");
-    CHECK(result->reply.forgottenPositionTrackIds == std::vector{selected});
+    REQUIRE(res);
+    CHECK(res->status == AuthoringStatus::Applied);
+    CHECK(res->reply.tag == "road-trip");
+    CHECK(res->reply.forgottenPositionTrackIds == std::vector{selected});
     CHECK_FALSE(fixture.hasTag(selected, "road-trip"));
     CHECK(fixture.storedOrder(listId) == std::vector{hidden});
     CHECK(fixture.revision() == beforeRevision + 1);
@@ -331,11 +331,11 @@ namespace ao::rt::test
     auto const listId = fixture.seedList("Computed", R"(#"road-trip" and $year >= 2020)");
     auto targets = fixture.bind(std::array{trackId});
 
-    auto const result = fixture.run(fixture.commands().addTracksToList(listId, targets));
+    auto const res = fixture.run(fixture.commands().addTracksToListAsync(listId, targets));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("membership is computed"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("membership is computed"));
   }
 
   TEST_CASE("LibraryCommands List membership - preview validates without committing",
@@ -348,10 +348,10 @@ namespace ao::rt::test
     fixture.clearEvents();
     auto const revision = fixture.revision();
 
-    auto const result = fixture.run(fixture.commands().previewAddTracksToList(listId, std::vector{trackId}));
+    auto const res = fixture.run(fixture.commands().previewAddTracksToListAsync(listId, std::vector{trackId}));
 
-    REQUIRE(result);
-    REQUIRE(result->tagEdit.changes.size() == 1);
+    REQUIRE(res);
+    REQUIRE(res->tagEdit.changes.size() == 1);
     CHECK_FALSE(fixture.hasTag(trackId, "road-trip"));
     CHECK(fixture.revision() == revision);
     CHECK(fixture.events.empty());
@@ -370,7 +370,7 @@ namespace ao::rt::test
     fixture.clearEvents();
 
     auto const options = DeleteListOptions{.removeWritableTagFromTracks = true};
-    auto const previewRes = fixture.run(fixture.commands().previewDeleteList(listId, options));
+    auto const previewRes = fixture.run(fixture.commands().previewDeleteListAsync(listId, options));
 
     REQUIRE(previewRes);
     REQUIRE(previewRes->optTagImpact);
@@ -383,7 +383,7 @@ namespace ao::rt::test
     CHECK(fixture.hasTag(first, "road-trip"));
     CHECK(fixture.events.empty());
 
-    auto const committedRes = fixture.run(fixture.commands().deleteList(listId, options));
+    auto const committedRes = fixture.run(fixture.commands().deleteListAsync(listId, options));
 
     REQUIRE(committedRes);
     CHECK(*committedRes == *previewRes);
@@ -410,7 +410,7 @@ namespace ao::rt::test
     fixture.clearEvents();
     auto const options = DeleteListOptions{.removeWritableTagFromTracks = true};
 
-    auto const previewRes = fixture.run(fixture.commands().previewDeleteListAndDescendants(rootId, options));
+    auto const previewRes = fixture.run(fixture.commands().previewDeleteListAndDescendantsAsync(rootId, options));
 
     REQUIRE(previewRes);
     REQUIRE(previewRes->deletedLists.size() == 2);
@@ -423,7 +423,7 @@ namespace ao::rt::test
     CHECK(fixture.hasTag(trackId, "child"));
     CHECK(fixture.events.empty());
 
-    auto const committedRes = fixture.run(fixture.commands().deleteListAndDescendants(rootId, options));
+    auto const committedRes = fixture.run(fixture.commands().deleteListAndDescendantsAsync(rootId, options));
 
     REQUIRE(committedRes);
     CHECK(*committedRes == *previewRes);

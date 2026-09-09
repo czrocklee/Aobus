@@ -76,11 +76,11 @@ namespace ao::uimodel
     auto const resolved = resolveTrackFilter(rawText);
     _resolvedExpression = resolved.expression;
 
-    auto const result = _viewService.setFilter(_viewId, _resolvedExpression);
+    auto const res = _viewService.setFilter(_viewId, _resolvedExpression);
 
-    if (!result)
+    if (!res)
     {
-      _optFilterError = result.error();
+      _optFilterError = res.error();
     }
     else
     {

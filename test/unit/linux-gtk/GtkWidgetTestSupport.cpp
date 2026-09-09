@@ -125,7 +125,7 @@ namespace ao::gtk::test
     ::g_signal_emit_by_name(listBox.gobj(), "row-activated", row.gobj());
   }
 
-  bool emitFocusEnter(Gtk::Widget& widget)
+  bool tryEmitFocusEnter(Gtk::Widget& widget)
   {
     auto const focusControllerPtr = findController<Gtk::EventControllerFocus>(widget);
 
@@ -138,7 +138,7 @@ namespace ao::gtk::test
     return true;
   }
 
-  bool emitFocusLeave(Gtk::Widget& widget)
+  bool tryEmitFocusLeave(Gtk::Widget& widget)
   {
     auto const focusControllerPtr = findController<Gtk::EventControllerFocus>(widget);
 
@@ -151,7 +151,7 @@ namespace ao::gtk::test
     return true;
   }
 
-  bool emitPointerEnter(Gtk::Widget& widget, double const x, double const y)
+  bool tryEmitPointerEnter(Gtk::Widget& widget, double const x, double const y)
   {
     auto const motionControllerPtr = findController<Gtk::EventControllerMotion>(widget);
 
@@ -164,7 +164,7 @@ namespace ao::gtk::test
     return true;
   }
 
-  bool emitPointerLeave(Gtk::Widget& widget)
+  bool tryEmitPointerLeave(Gtk::Widget& widget)
   {
     auto const motionControllerPtr = findController<Gtk::EventControllerMotion>(widget);
 
@@ -177,11 +177,11 @@ namespace ao::gtk::test
     return true;
   }
 
-  bool emitGesturePressed(Gtk::Widget& widget,
-                          std::int32_t const nPress,
-                          double const x,
-                          double const y,
-                          std::optional<Gtk::PropagationPhase> const optPhase)
+  bool tryEmitGesturePressed(Gtk::Widget& widget,
+                             std::int32_t const nPress,
+                             double const x,
+                             double const y,
+                             std::optional<Gtk::PropagationPhase> const optPhase)
   {
     auto const gesturePtr =
       findControllerIf<Gtk::GestureClick>(widget,
@@ -197,11 +197,11 @@ namespace ao::gtk::test
     return true;
   }
 
-  bool emitGestureReleased(Gtk::Widget& widget,
-                           std::int32_t const nPress,
-                           double const x,
-                           double const y,
-                           std::optional<Gtk::PropagationPhase> const optPhase)
+  bool tryEmitGestureReleased(Gtk::Widget& widget,
+                              std::int32_t const nPress,
+                              double const x,
+                              double const y,
+                              std::optional<Gtk::PropagationPhase> const optPhase)
   {
     auto const gesturePtr =
       findControllerIf<Gtk::GestureClick>(widget,

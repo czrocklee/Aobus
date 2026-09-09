@@ -82,13 +82,13 @@ namespace ao::async
       throw;
     }
 
-    Task<void> runCancellable(CancellableTask task, std::stop_token const stopToken)
+    Task<void> runCancellableAsync(CancellableTask task, std::stop_token const stopToken)
     {
       throwIfStopRequested(stopToken);
       co_await task(stopToken);
     }
 
-    Task<void> waitForTimer(std::chrono::milliseconds const delay, std::stop_token const stopToken)
+    Task<void> waitForTimerAsync(std::chrono::milliseconds const delay, std::stop_token const stopToken)
     {
       throwIfStopRequested(stopToken);
 
@@ -173,7 +173,7 @@ namespace ao::async
     return _callbackStatePtr->workerPool;
   }
 
-  Task<void> Runtime::resumeOnCallbackExecutor(std::stop_token const stopToken)
+  Task<void> Runtime::resumeOnCallbackExecutorAsync(std::stop_token const stopToken)
   {
     throwIfStopRequested(stopToken);
 
@@ -195,7 +195,7 @@ namespace ao::async
     throwIfStopRequested(stopToken);
   }
 
-  Task<void> Runtime::resumeOnWorker(std::stop_token const stopToken)
+  Task<void> Runtime::resumeOnWorkerAsync(std::stop_token const stopToken)
   {
     throwIfStopRequested(stopToken);
 
@@ -211,20 +211,20 @@ namespace ao::async
     throwIfStopRequested(stopToken);
   }
 
-  Task<void> Runtime::sleepFor(std::chrono::milliseconds const delay, std::stop_token const stopToken)
+  Task<void> Runtime::sleepForAsync(std::chrono::milliseconds const delay, std::stop_token const stopToken)
   {
     AO_EXPECTS(delay > std::chrono::milliseconds::zero());
     throwIfStopRequested(stopToken);
 
     if (_sleeper != nullptr)
     {
-      co_await _sleeper->sleepFor(delay, stopToken);
+      co_await _sleeper->sleepForAsync(delay, stopToken);
     }
     else
     {
       auto executor = co_await boost::asio::this_coro::executor;
       auto timerExecutor = boost::asio::make_strand(executor);
-      co_await boost::asio::co_spawn(timerExecutor, waitForTimer(delay, stopToken), boost::asio::use_awaitable);
+      co_await boost::asio::co_spawn(timerExecutor, waitForTimerAsync(delay, stopToken), boost::asio::use_awaitable);
     }
 
     throwIfStopRequested(stopToken);
@@ -243,7 +243,7 @@ namespace ao::async
   {
     auto stopSourcePtr = std::make_shared<std::stop_source>();
     boost::asio::co_spawn(workerPool(),
-                          runCancellable(std::move(task), stopSourcePtr->get_token()),
+                          runCancellableAsync(std::move(task), stopSourcePtr->get_token()),
                           [completion = std::move(completion)](std::exception_ptr exPtr) { completion(exPtr); });
     return [stopSourcePtr] { std::ignore = stopSourcePtr->request_stop(); };
   }

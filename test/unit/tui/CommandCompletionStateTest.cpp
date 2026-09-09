@@ -66,12 +66,12 @@ namespace ao::tui::test
     auto state = CommandCompletionState{};
 
     state.set(completionResult());
-    CHECK(state.moveSelection(-1));
+    CHECK(state.tryMoveSelection(-1));
     CHECK(state.selection() == 1);
-    CHECK(state.moveSelection(1));
+    CHECK(state.tryMoveSelection(1));
     CHECK(state.selection() == 0);
 
-    state.moveSelection(1);
+    state.tryMoveSelection(1);
     state.set(completionResult());
     CHECK(state.selection() == 0);
   }
@@ -82,9 +82,9 @@ namespace ao::tui::test
     auto draft = std::string{"view so"};
 
     state.set(completionResult());
-    state.moveSelection(1);
+    state.tryMoveSelection(1);
 
-    CHECK(state.applyTo(draft));
+    CHECK(state.tryApplyTo(draft));
     CHECK(draft == "view albums");
     CHECK_FALSE(state.result());
     CHECK(state.selection() == 0);
@@ -109,7 +109,7 @@ namespace ao::tui::test
 
     state.set(std::move(result));
 
-    CHECK_FALSE(state.applyTo(draft));
+    CHECK_FALSE(state.tryApplyTo(draft));
     CHECK(draft == "view so");
     CHECK_FALSE(state.result());
     CHECK(state.selection() == 0);
@@ -120,13 +120,13 @@ namespace ao::tui::test
     auto state = CommandCompletionState{};
     state.set(pageCompletionResult());
 
-    CHECK(state.moveSelectionByPage(10));
+    CHECK(state.tryMoveSelectionByPage(10));
     CHECK(state.selection() == 10);
-    CHECK(state.moveSelectionByPage(10));
+    CHECK(state.tryMoveSelectionByPage(10));
     CHECK(state.selection() == 11);
-    CHECK(state.moveSelectionByPage(-10));
+    CHECK(state.tryMoveSelectionByPage(-10));
     CHECK(state.selection() == 1);
-    CHECK(state.moveSelectionByPage(-10));
+    CHECK(state.tryMoveSelectionByPage(-10));
     CHECK(state.selection() == 0);
   }
 } // namespace ao::tui::test

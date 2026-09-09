@@ -68,6 +68,8 @@ add_definitions(${LLVM_DEFINITIONS})
 set(AOBUS_LINT_PLUGIN_SOURCES
   check/AstHelpers.cpp
   check/AsyncCancellationGuardCheck.cpp
+  check/AsyncFunctionNamingCheck.cpp
+  check/BoolFunctionNamingCheck.cpp
   check/CApiGlobalQualificationCheck.cpp
   check/CalleeQualificationHelpers.cpp
   check/ConcreteFinalCheck.cpp
@@ -78,6 +80,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/ForbidTrailingReturnCheck.cpp
   check/ForbidRawFatalCheck.cpp
   check/ForbidRawThrowCheck.cpp
+  check/FunctionNamingHelpers.cpp
   check/HeaderFunctionDefinitionCheck.cpp
   check/IdentifierNamingExtensionsCheck.cpp
   check/ImplicitBoolConversionInInitCheck.cpp

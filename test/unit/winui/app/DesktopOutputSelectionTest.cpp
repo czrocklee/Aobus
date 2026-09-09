@@ -64,9 +64,9 @@ namespace ao::winui::test
     auto expected = settings;
     expected.preferredOutputSelection = selection;
 
-    CHECK(rememberDesktopOutputSelection(settings, selection));
+    CHECK(tryRememberDesktopOutputSelection(settings, selection));
     CHECK(settings == expected);
-    CHECK_FALSE(rememberDesktopOutputSelection(settings, selection));
+    CHECK_FALSE(tryRememberDesktopOutputSelection(settings, selection));
 
     auto tree = ryml::Tree{yaml::callbacks()};
     REQUIRE(DesktopSettingsYamlSchema{}.serialize(tree.rootref(), settings));

@@ -36,7 +36,7 @@ namespace ao::gtk::test
 {
   namespace
   {
-    bool emitCompletionKey(Gtk::Entry& entry, guint const keyval)
+    bool tryEmitCompletionKey(Gtk::Entry& entry, guint const keyval)
     {
       auto const keyControllerPtr = findControllerIf<Gtk::EventControllerKey>(
         entry,
@@ -174,10 +174,10 @@ namespace ao::gtk::test
       TrackQuickFilter{runtime.completion(), runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
 
-    CHECK(emitFocusEnter(filter));
+    CHECK(tryEmitFocusEnter(filter));
     CHECK(filter.has_css_class("ao-quick-filter-active"));
 
-    CHECK(emitFocusLeave(filter));
+    CHECK(tryEmitFocusLeave(filter));
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
   }
 
@@ -239,7 +239,7 @@ namespace ao::gtk::test
     REQUIRE(title != nullptr);
     CHECK(title->get_text() == "Aimer");
 
-    CHECK(emitCompletionKey(filter.entry(), GDK_KEY_Return));
+    CHECK(tryEmitCompletionKey(filter.entry(), GDK_KEY_Return));
     CHECK(filter.text() == "\"Aimer\"");
     CHECK_FALSE(popover->get_visible());
   }

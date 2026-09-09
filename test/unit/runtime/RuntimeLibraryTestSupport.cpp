@@ -120,8 +120,8 @@ namespace ao::rt::test
 
     auto& commands = runtime.library().commands();
     auto createRes = settlePublication
-                       ? runRuntimeTask(runtime, commands.createTrackFromFile(destinationPath), settlePublication)
-                       : runRuntimeTask(runtime, commands.createTrackFromFile(destinationPath));
+                       ? runRuntimeTask(runtime, commands.createTrackFromFileAsync(destinationPath), settlePublication)
+                       : runRuntimeTask(runtime, commands.createTrackFromFileAsync(destinationPath));
     REQUIRE(createRes);
     auto const trackId = createRes->trackId;
 
@@ -130,8 +130,8 @@ namespace ao::rt::test
     auto targets = std::move(*bindingRes);
     auto patchRes =
       settlePublication
-        ? runRuntimeTask(runtime, commands.updateMetadata(targets, metadataPatch(spec)), settlePublication)
-        : runRuntimeTask(runtime, commands.updateMetadata(targets, metadataPatch(spec)));
+        ? runRuntimeTask(runtime, commands.updateMetadataAsync(targets, metadataPatch(spec)), settlePublication)
+        : runRuntimeTask(runtime, commands.updateMetadataAsync(targets, metadataPatch(spec)));
     REQUIRE(patchRes);
     REQUIRE((patchRes->status == AuthoringStatus::Applied || patchRes->status == AuthoringStatus::NoOp));
 
@@ -143,8 +143,8 @@ namespace ao::rt::test
       }
 
       auto tagRes = settlePublication
-                      ? runRuntimeTask(runtime, commands.editTags(targets, spec.tags, {}), settlePublication)
-                      : runRuntimeTask(runtime, commands.editTags(targets, spec.tags, {}));
+                      ? runRuntimeTask(runtime, commands.editTagsAsync(targets, spec.tags, {}), settlePublication)
+                      : runRuntimeTask(runtime, commands.editTagsAsync(targets, spec.tags, {}));
       REQUIRE(tagRes);
       REQUIRE((tagRes->status == AuthoringStatus::Applied || tagRes->status == AuthoringStatus::NoOp));
     }
@@ -237,13 +237,14 @@ namespace ao::rt::test
     REQUIRE(spec.coverArtId == kInvalidResourceId);
     auto bindingRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
     REQUIRE(bindingRes);
-    auto result =
+    auto res =
       settlePublication
-        ? runRuntimeTask(
-            runtime, runtime.library().commands().updateMetadata(*bindingRes, metadataPatch(spec)), settlePublication)
-        : runRuntimeTask(runtime, runtime.library().commands().updateMetadata(*bindingRes, metadataPatch(spec)));
-    REQUIRE(result);
-    REQUIRE((result->status == AuthoringStatus::Applied || result->status == AuthoringStatus::NoOp));
+        ? runRuntimeTask(runtime,
+                         runtime.library().commands().updateMetadataAsync(*bindingRes, metadataPatch(spec)),
+                         settlePublication)
+        : runRuntimeTask(runtime, runtime.library().commands().updateMetadataAsync(*bindingRes, metadataPatch(spec)));
+    REQUIRE(res);
+    REQUIRE((res->status == AuthoringStatus::Applied || res->status == AuthoringStatus::NoOp));
   }
 
   struct MusicLibraryFixture::Impl final
@@ -330,7 +331,7 @@ namespace ao::rt::test
       auto asyncRuntime = async::Runtime{executor};
       auto writeLane =
         LibraryWriteLane{asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(storage), changes};
-      auto task = executeInteractiveMutation(
+      auto task = executeInteractiveMutationAsync(
         writeLane.captureSubmission(),
         [&storage, &spec, libraryReset](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
         {
@@ -450,7 +451,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(destinationPath.parent_path());
     std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
 
-    auto createRes = runTask(commands().createTrackFromFile(destinationPath));
+    auto createRes = runTask(commands().createTrackFromFileAsync(destinationPath));
     REQUIRE(createRes);
     auto const trackId = createRes->trackId;
     REQUIRE(updateMetadata(std::array{trackId}, metadataPatch(spec)));
@@ -479,7 +480,7 @@ namespace ao::rt::test
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().updateMetadata(*bindingRes, patch));
+    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().updateMetadataAsync(*bindingRes, patch));
 
     if (!outcomeRes)
     {
@@ -509,7 +510,7 @@ namespace ao::rt::test
       return std::unexpected{bindingRes.error()};
     }
 
-    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().editTags(
+    auto outcomeRes = runTask(_implPtr->ensureLibrary().commands().editTagsAsync(
       *bindingRes,
       std::vector<std::string>{tagsToAdd.begin(), tagsToAdd.end()},
       std::vector<std::string>{tagsToRemove.begin(), tagsToRemove.end()}));

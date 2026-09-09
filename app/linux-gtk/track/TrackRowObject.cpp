@@ -67,13 +67,13 @@ namespace ao::gtk
 
   ::GType TrackRowObject::objectType()
   {
-    static auto const type = []
+    static auto const kType = []
     {
       auto const objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
       // G_OBJECT_TYPE is a GLib function-like macro with an unavoidable C cast.
       return G_OBJECT_TYPE(objPtr->gobj());
     }();
-    return type;
+    return kType;
   }
 
   Glib::ustring const* TrackRowObject::stringField(rt::TrackField field) const noexcept
@@ -88,7 +88,7 @@ namespace ao::gtk
     return &_text.at(index);
   }
 
-  bool TrackRowObject::setStringField(rt::TrackField field, Glib::ustring const& value)
+  bool TrackRowObject::trySetStringField(rt::TrackField field, Glib::ustring const& value)
   {
     auto const index = static_cast<std::size_t>(field);
 

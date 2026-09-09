@@ -79,7 +79,7 @@ namespace ao::rt::test
     auto const nowPlayingSubscription = fixture.transport.playbackTransport.onNowPlayingChanged(
       [&](PlaybackTransport::NowPlayingChanged const& event) { nowPlayingTracks.push_back(event.trackId); });
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId));
-    auto const completed = fixture.transport.executor.drainUntil(
+    auto const completed = fixture.transport.executor.tryDrainUntil(
       [&]
       {
         return (settled && fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive) ||
@@ -133,7 +133,7 @@ namespace ao::rt::test
     fixture.openManualView(tracks);
     countCommittedStarts(fixture, committedStarts);
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, tracks[0]));
-    REQUIRE(fixture.transport.executor.drainUntil(
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&]
       {
         return fixture.successionPtr->state().currentTrackId == tracks[2] &&
@@ -141,8 +141,8 @@ namespace ao::rt::test
       }));
     CHECK(committedStarts == 3);
 
-    fixture.successionPtr->next();
-    REQUIRE(fixture.transport.executor.drainUntil(
+    fixture.successionPtr->tryMoveNext();
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&]
       {
         return fixture.successionPtr->state().currentTrackId == tracks[5] ||
@@ -172,7 +172,7 @@ namespace ao::rt::test
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
 
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.thirdTrackId));
-    auto const recovered = fixture.transport.executor.drainUntil(
+    auto const recovered = fixture.transport.executor.tryDrainUntil(
       [&]
       {
         return fixture.successionPtr->state().currentTrackId == fixture.fourthTrackId &&
@@ -208,7 +208,7 @@ namespace ao::rt::test
     fixture.openManualView(std::array{playable, brokenOne, brokenTwo, brokenThree, unreachable});
     REQUIRE(fixture.playAndWait(playable));
 
-    fixture.successionPtr->next();
+    fixture.successionPtr->tryMoveNext();
 
     CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
@@ -251,7 +251,7 @@ namespace ao::rt::test
     REQUIRE(fixture.transport.renderTarget != nullptr);
 
     fixture.transport.renderTarget->handleBackendError("device lost during succession playback");
-    REQUIRE(fixture.transport.executor.drainUntil(
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&] { return fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive; }));
 
     CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
@@ -270,13 +270,13 @@ namespace ao::rt::test
     auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
     fixture.buildSingleTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-    REQUIRE(failureGate.waitForRead());
+    REQUIRE(failureGate.tryWaitForRead());
 
-    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&] { return fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Invalidated; }));
     releaseGuard.release();
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&] { return fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive; }));
     CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
 
@@ -311,7 +311,7 @@ namespace ao::rt::test
     CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{3001});
     CHECK(succession.state().hasPrevious);
 
-    succession.previous();
+    succession.tryMovePrevious();
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK_FALSE(succession.state().hasPrevious);
     CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{0});
@@ -333,11 +333,11 @@ namespace ao::rt::test
     auto const repeatSubscription =
       succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&) noexcept { ++repeatEvents; });
 
-    succession.next();
+    succession.tryMoveNext();
     CHECK(succession.state().currentTrackId == fixture.secondTrackId);
     CHECK(succession.state().hasPrevious);
 
-    succession.previous();
+    succession.tryMovePrevious();
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
 
     succession.setRepeatMode(RepeatMode::One);
@@ -372,7 +372,7 @@ namespace ao::rt::test
       REQUIRE(optFailedCandidate);
       fixture.removePlayableFile(*optFailedCandidate);
 
-      succession.next();
+      succession.tryMoveNext();
 
       CHECK(succession.state().currentTrackId != fixture.firstTrackId);
       CHECK(succession.state().currentTrackId != *optFailedCandidate);
@@ -381,13 +381,13 @@ namespace ao::rt::test
 
     SECTION("failed history previous does not fall through to sequential previous")
     {
-      succession.next();
+      succession.tryMoveNext();
       auto const currentTrackId = succession.state().currentTrackId;
       REQUIRE(currentTrackId != fixture.firstTrackId);
       REQUIRE(succession.state().hasPrevious);
       fixture.removePlayableFile(fixture.firstTrackId);
 
-      succession.previous();
+      succession.tryMovePrevious();
 
       CHECK(succession.state().currentTrackId == currentTrackId);
       CHECK_FALSE(succession.state().hasPrevious);

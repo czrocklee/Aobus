@@ -78,20 +78,20 @@ namespace ao::rt::test
     ControlledSleeper(ControlledSleeper&&) = delete;
     ControlledSleeper& operator=(ControlledSleeper&&) = delete;
 
-    async::Task<void> sleepFor(Delay delay, std::stop_token stopToken) override;
-    bool waitForCallCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    async::Task<void> sleepForAsync(Delay delay, std::stop_token stopToken) override;
+    bool tryWaitForCallCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
     std::size_t callCount() const;
     Call call(std::size_t index) const;
-    bool waitForCancellation(std::size_t index, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    bool fire(std::size_t index);
-    bool fireNext();
-    bool fireNext(Delay delay);
-    bool fireById(std::uint64_t id);
+    bool tryWaitForCancellation(std::size_t index, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryFire(std::size_t index);
+    bool tryFireNext();
+    bool tryFireNext(Delay delay);
+    bool tryFireById(std::uint64_t id);
     std::uint64_t lastScheduledId() const;
     std::vector<Delay> pendingDelays() const;
-    bool waitForPendingDelays(std::vector<Delay> const& expected,
-                              std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    bool waitForPendingDelay(Delay delay, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitForPendingDelays(std::vector<Delay> const& expected,
+                                 std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitForPendingDelay(Delay delay, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
 
   private:
     struct Impl;
@@ -117,7 +117,9 @@ namespace ao::rt::test
       _dataPtr->cv.notify_all();
     }
 
+    // std::atomic<bool> has no fetch_add operation.
     T increment() const
+      requires(!std::is_same_v<T, bool>)
     {
       T result = {};
 
@@ -130,10 +132,10 @@ namespace ao::rt::test
 
     T load() const { return _dataPtr->value.load(); }
 
-    bool waitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    bool tryWaitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
     {
       auto lock = std::unique_lock{_dataPtr->mutex};
-      return _dataPtr->cv.wait_for(lock, timeout, [this, expected] { return load() == expected; });
+      return _dataPtr->cv.wait_for(lock, timeout, [this, expected] { return _dataPtr->value.load() == expected; });
     }
 
   private:
@@ -217,7 +219,7 @@ namespace ao::rt::test
   // The RAII flag also completes when Runtime teardown destroys a suspended
   // coroutine frame instead of resuming it through its normal return path.
   template<typename T>
-  async::Task<T> flagCompletion(std::shared_ptr<std::atomic_bool> completedPtr, async::Task<T> task)
+  async::Task<T> flagCompletionAsync(std::shared_ptr<std::atomic_bool> completedPtr, async::Task<T> task)
   {
     [[maybe_unused]] auto completionFlag = detail::TaskCompletionFlag{std::move(completedPtr)};
 
@@ -240,8 +242,8 @@ namespace ao::rt::test
                   std::chrono::milliseconds timeout = std::chrono::seconds{2})
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
-    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }, timeout));
+    auto future = runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }, timeout));
     return detail::finishDrivenTask(future, [&executor] { executor.drain(); });
   }
 
@@ -249,12 +251,12 @@ namespace ao::rt::test
   T runLoopTask(RuntimeType& runtime, async::LoopExecutor& executor, async::Task<T> task)
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
-    REQUIRE(runLoopUntil(executor, [completedPtr] { return completedPtr->load(); }));
+    auto future = runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));
+    REQUIRE(tryRunLoopUntil(executor, [completedPtr] { return completedPtr->load(); }));
     return detail::finishDrivenTask(future,
                                     [&executor]
                                     {
-                                      while (executor.runReadyTurn())
+                                      while (executor.tryRunReadyTurn())
                                       {
                                       }
                                     });
@@ -264,8 +266,8 @@ namespace ao::rt::test
   T runManualTask(RuntimeType& runtime, ManualExecutor& executor, async::Task<T> task)
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
-    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+    auto future = runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
     return detail::finishDrivenTask(future, [&executor] { executor.runUntilIdle(); });
   }
 

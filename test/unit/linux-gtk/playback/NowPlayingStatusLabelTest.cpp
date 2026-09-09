@@ -47,14 +47,14 @@ namespace ao::gtk::test
     auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(viewRes);
     REQUIRE(playback.commands().startFromView(*viewRes, trackId));
-    REQUIRE(waitForPlaybackSettlement(fixture.runtime(), trackId));
+    REQUIRE(tryWaitForPlaybackSettlement(fixture.runtime(), trackId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 
     auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
     auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
 
-    REQUIRE(emitGesturePressed(*gtkLabel));
+    REQUIRE(tryEmitGesturePressed(*gtkLabel));
     drainGtkEvents();
 
     REQUIRE(optRequest);

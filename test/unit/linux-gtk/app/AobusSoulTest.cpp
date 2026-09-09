@@ -197,7 +197,7 @@ namespace ao::gtk::test
     soul.setAura(Gdk::RGBA{"#A855F7"});
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
 
-    REQUIRE(pumpGtkEventsUntil([&soul] { return soul.visualFrame().motion.rotationDegrees > 0.1; }));
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return soul.visualFrame().motion.rotationDegrees > 0.1; }));
     auto const animated = soul.visualFrame();
 
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
@@ -223,6 +223,6 @@ namespace ao::gtk::test
 
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
     REQUIRE(soul.isTickActive());
-    CHECK(pumpGtkEventsUntil([&soul, frozen] { return soul.visualFrame().motion != frozen.motion; }));
+    CHECK(tryPumpGtkEventsUntil([&soul, frozen] { return soul.visualFrame().motion != frozen.motion; }));
   }
 } // namespace ao::gtk::test

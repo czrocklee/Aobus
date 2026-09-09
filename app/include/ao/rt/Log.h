@@ -47,7 +47,7 @@ namespace ao::rt
     static std::shared_ptr<spdlog::logger> const& audioLogger() noexcept { return _audioLoggerPtr; }
 
   private:
-    static bool submitFatal(FatalDiagnostic const& diagnostic) noexcept;
+    static bool trySubmitFatal(FatalDiagnostic const& diagnostic) noexcept;
 
     static std::shared_ptr<spdlog::logger> _appLoggerPtr;
     static std::shared_ptr<spdlog::logger> _audioLoggerPtr;

@@ -74,7 +74,7 @@ namespace ao::library::test
       return 0;
     }
 
-    bool seedInvalidIntegerKeyDatabase(std::filesystem::path const& path)
+    bool trySeedInvalidIntegerKeyDatabase(std::filesystem::path const& path)
     {
       auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
 
@@ -464,9 +464,9 @@ namespace ao::library::test
       }
 
       auto corruptTransaction = writableRes->writeTransaction();
-      auto const removed = exerciseWriter ? detail::PhysicalStoreAccess::removeHotTrackRecordForTest(
+      auto const removed = exerciseWriter ? detail::PhysicalStoreAccess::tryRemoveHotTrackRecordForTest(
                                               library.tracks(), corruptTransaction, *optTrackId)
-                                          : detail::PhysicalStoreAccess::removeColdTrackRecordForTest(
+                                          : detail::PhysicalStoreAccess::tryRemoveColdTrackRecordForTest(
                                               library.tracks(), corruptTransaction, *optTrackId);
 
       if (!removed || !corruptTransaction.commit())
@@ -701,7 +701,7 @@ namespace ao::library::test
 
       auto corruptTransaction = writableRes->writeTransaction();
       auto const removed =
-        detail::PhysicalStoreAccess::writer(library.manifest(), corruptTransaction).remove("probe.flac");
+        detail::PhysicalStoreAccess::writer(library.manifest(), corruptTransaction).tryRemove("probe.flac");
 
       if (!removed || !corruptTransaction.commit())
       {
@@ -795,7 +795,7 @@ namespace ao::library::test
       auto const invalidIntegerKey = scenario == "lmdb-invalid-integer-key";
       auto const emptyLowerBoundKey = scenario == "lmdb-empty-lower-bound-key";
 
-      if (invalidIntegerKey && !seedInvalidIntegerKeyDatabase(scratchPath))
+      if (invalidIntegerKey && !trySeedInvalidIntegerKeyDatabase(scratchPath))
       {
         return 3;
       }

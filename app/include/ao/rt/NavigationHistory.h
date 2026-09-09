@@ -29,7 +29,7 @@ namespace ao::rt
 
     explicit NavigationHistory(std::size_t maxSize = kDefaultMaxSize);
 
-    bool commit(NavigationPoint point);
+    bool tryCommit(NavigationPoint point);
     std::optional<NavigationPoint> back();
     std::optional<NavigationPoint> forward();
     std::optional<NavigationPoint> current() const;

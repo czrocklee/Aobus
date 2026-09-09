@@ -25,28 +25,28 @@ namespace ao::rt::test
 
     static_assert(!HasPublicWorkerPool<Runtime>);
 
-    Task<> incrementTask(std::atomic<std::int32_t>* counter)
+    Task<> incrementTaskAsync(std::atomic<std::int32_t>* counter)
     {
       counter->fetch_add(1);
       co_return;
     }
 
-    Task<> throwingTask()
+    Task<> throwingTaskAsync()
     {
       throw std::runtime_error{"whenAll test failure"};
       co_return;
     }
 
-    Task<> rendezvousTask(AsyncTestState<std::int32_t> started, AsyncBarrier* release)
+    Task<> rendezvousTaskAsync(AsyncTestState<std::int32_t> started, AsyncBarrier* release)
     {
       started.increment();
       release->wait();
       co_return;
     }
 
-    Task<> awaitAllTask(Runtime* runtime, std::vector<Task<>> tasks)
+    Task<> awaitAllTaskAsync(Runtime* runtime, std::vector<Task<>> tasks)
     {
-      co_await runtime->whenAll(std::move(tasks));
+      co_await runtime->whenAllAsync(std::move(tasks));
     }
   } // namespace
 
@@ -60,10 +60,10 @@ namespace ao::rt::test
 
     for (std::int32_t index = 0; index < 8; ++index)
     {
-      tasks.push_back(incrementTask(&counter));
+      tasks.push_back(incrementTaskAsync(&counter));
     }
 
-    runtime.spawn(awaitAllTask(&runtime, std::move(tasks))).get();
+    runtime.spawn(awaitAllTaskAsync(&runtime, std::move(tasks))).get();
 
     CHECK(counter.load() == 8);
   }
@@ -73,7 +73,7 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 1};
 
-    runtime.spawn(awaitAllTask(&runtime, {})).get();
+    runtime.spawn(awaitAllTaskAsync(&runtime, {})).get();
   }
 
   TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[runtime][unit][async]")
@@ -83,10 +83,10 @@ namespace ao::rt::test
     auto counter = std::atomic<std::int32_t>{0};
 
     auto tasks = std::vector<Task<>>{};
-    tasks.push_back(throwingTask());
-    tasks.push_back(incrementTask(&counter));
+    tasks.push_back(throwingTaskAsync());
+    tasks.push_back(incrementTaskAsync(&counter));
 
-    auto future = runtime.spawn(awaitAllTask(&runtime, std::move(tasks)));
+    auto future = runtime.spawn(awaitAllTaskAsync(&runtime, std::move(tasks)));
 
     CHECK_THROWS_AS(future.get(), std::runtime_error);
     CHECK(counter.load() == 1);
@@ -100,11 +100,11 @@ namespace ao::rt::test
     auto release = AsyncBarrier{};
 
     auto tasks = std::vector<Task<>>{};
-    tasks.push_back(rendezvousTask(started, &release));
-    tasks.push_back(rendezvousTask(started, &release));
+    tasks.push_back(rendezvousTaskAsync(started, &release));
+    tasks.push_back(rendezvousTaskAsync(started, &release));
 
-    auto future = runtime.spawn(awaitAllTask(&runtime, std::move(tasks)));
-    auto const bothStarted = started.waitUntil(2);
+    auto future = runtime.spawn(awaitAllTaskAsync(&runtime, std::move(tasks)));
+    auto const bothStarted = started.tryWaitUntil(2);
     release.release();
     future.get();
 
@@ -114,17 +114,17 @@ namespace ao::rt::test
   TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[runtime][unit][async][concurrency]")
   {
     // With a single-thread pool the coordinator must release its thread while
-    // suspended in whenAll; a blocking wait would deadlock here instead of
+    // suspended in whenAllAsync; a blocking wait would deadlock here instead of
     // letting the tasks run sequentially.
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 1};
     auto counter = std::atomic<std::int32_t>{0};
 
     auto tasks = std::vector<Task<>>{};
-    tasks.push_back(incrementTask(&counter));
-    tasks.push_back(incrementTask(&counter));
+    tasks.push_back(incrementTaskAsync(&counter));
+    tasks.push_back(incrementTaskAsync(&counter));
 
-    runtime.spawn(awaitAllTask(&runtime, std::move(tasks))).get();
+    runtime.spawn(awaitAllTaskAsync(&runtime, std::move(tasks))).get();
 
     CHECK(counter.load() == 2);
   }

@@ -25,7 +25,7 @@ namespace ao::library
 {
   namespace
   {
-    bool checkedAdd(std::size_t& value, std::size_t const amount) noexcept
+    bool tryAdd(std::size_t& value, std::size_t const amount) noexcept
     {
       if (amount > std::numeric_limits<std::size_t>::max() - value)
       {
@@ -150,12 +150,14 @@ namespace ao::library
   Result<std::vector<std::byte>> ListBuilder::serializeCandidate() const
   {
     auto nameRes = detail::normalizeLibraryText(_name, "List name");
+
     if (!nameRes)
     {
       return std::unexpected{nameRes.error()};
     }
 
     auto descriptionRes = detail::normalizeLibraryText(_description, "List description");
+
     if (!descriptionRes)
     {
       return std::unexpected{descriptionRes.error()};
@@ -194,8 +196,8 @@ namespace ao::library
 
     std::size_t logicalSize = kListHeaderSize;
 
-    if (!checkedAdd(logicalSize, orderTrackIdsSize) || !checkedAdd(logicalSize, nameLength) ||
-        !checkedAdd(logicalSize, descLength) || !checkedAdd(logicalSize, filterLength) ||
+    if (!tryAdd(logicalSize, orderTrackIdsSize) || !tryAdd(logicalSize, nameLength) ||
+        !tryAdd(logicalSize, descLength) || !tryAdd(logicalSize, filterLength) ||
         logicalSize > std::numeric_limits<std::size_t>::max() - (kListHeaderAlignment - 1))
     {
       return makeError(Error::Code::ValueTooLarge, "List record size overflows the host address space");

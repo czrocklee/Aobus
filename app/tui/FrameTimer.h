@@ -86,7 +86,7 @@ namespace ao::tui
     FrameTimer(FrameTimer&&) = delete;
     FrameTimer& operator=(FrameTimer&&) = delete;
 
-    bool enabled() const noexcept { return _enabled; }
+    bool isEnabled() const noexcept { return _enabled; }
 
     // Scope guard timing the element-tree build. Construct it at the top of the
     // renderer lambda; on destruction (after the returned Element is built, on

@@ -32,7 +32,7 @@ namespace ao::async
    * cancel their external work; the owner must cancel that work before
    * releasing any state it may access.
    *
-   * retainDependency() transfers a cancellable dependency to an exact flight.
+   * tryRetainDependency() transfers a cancellable dependency to an exact flight.
    * Completion, clear(), or starter rollback releases that dependency. A stale
    * token rejects and immediately releases the supplied dependency.
    */
@@ -150,7 +150,7 @@ namespace ao::async
       }
     }
 
-    bool retainDependency(FlightToken const& token, utility::ScopedRegistration dependency)
+    bool tryRetainDependency(FlightToken const& token, utility::ScopedRegistration dependency)
     {
       auto const tokenFlightPtr = token._flightPtr.lock();
 

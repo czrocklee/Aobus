@@ -21,7 +21,7 @@ namespace ao::winui::layout
     return _handlers.contains(id);
   }
 
-  bool ActionRegistry::invoke(std::string_view const id, ActionContext const& context) const
+  bool ActionRegistry::tryInvoke(std::string_view const id, ActionContext const& context) const
   {
     auto const it = _handlers.find(id);
 

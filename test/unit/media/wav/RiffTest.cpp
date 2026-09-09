@@ -116,29 +116,29 @@ namespace ao::media::wav::test
     SECTION("empty audio data")
     {
       auto data = ao::test::wav::makeWav({.audioData = {}});
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("truncated RIFF body")
     {
       auto data = ao::test::wav::makeWav({});
       data.pop_back();
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("unsupported extensible subformat")
     {
       auto data = ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::UnsupportedExtensible});
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("extensible valid bits narrower than the container")
@@ -147,29 +147,29 @@ namespace ao::media::wav::test
                                           .bitsPerSample = 32,
                                           .validBitsPerSample = 24,
                                           .audioData = {0, 0, 0, 0}});
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("channel count cannot be represented by Aobus audio formats")
     {
       auto data = ao::test::wav::makeWav({.channels = 256});
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("duplicate fmt chunks")
     {
       auto duplicateFmt = ao::test::wav::makeFmtChunk({});
       auto data = ao::test::wav::makeWav({.extraChunks = {{{.id = {'f', 'm', 't', ' '}, .payload = duplicateFmt}}}});
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("duplicate data chunks")
@@ -177,10 +177,10 @@ namespace ao::media::wav::test
       auto data = ao::test::wav::makeWav({
         .extraChunks = {{{.id = {'d', 'a', 't', 'a'}, .payload = {0, 0}}}},
       });
-      auto result = parseWave(asBytes(data));
+      auto res = parseWave(asBytes(data));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   }
 } // namespace ao::media::wav::test

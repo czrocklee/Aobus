@@ -18,5 +18,5 @@ namespace ao::uimodel
    *
    * @return Whether any panel size was promoted.
    */
-  bool promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc);
+  bool tryPromotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc);
 } // namespace ao::uimodel

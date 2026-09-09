@@ -77,9 +77,9 @@ namespace ao::rt
       }
 
       auto mutation = std::move(*mutationRes);
-      auto result = mutation.apply(std::move(operation));
+      auto res = mutation.apply(std::move(operation));
       mutation.abort();
-      co_return result;
+      co_return res;
     }
 
     template<typename Operation,
@@ -198,66 +198,72 @@ namespace ao::rt
 
   struct LibraryCommands::Impl final
   {
-    async::Task<Result<UpdateTrackMetadataReply>> previewUpdateMetadata(LibraryWriteLane::Submission submission,
-                                                                        std::vector<TrackId> trackIds,
-                                                                        MetadataPatch patch);
+    async::Task<Result<UpdateTrackMetadataReply>> previewUpdateMetadataAsync(LibraryWriteLane::Submission submission,
+                                                                             std::vector<TrackId> trackIds,
+                                                                             MetadataPatch patch);
     async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>>
-    applyUpdateMetadata(LibraryWriteLane::Submission submission, BoundTrackTargets targets, MetadataPatch patch);
-    async::Task<Result<EditTrackTagsReply>> previewEditTags(LibraryWriteLane::Submission submission,
-                                                            std::vector<TrackId> trackIds,
-                                                            std::vector<std::string> tagsToAdd,
-                                                            std::vector<std::string> tagsToRemove);
-    async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> applyEditTags(LibraryWriteLane::Submission submission,
-                                                                                BoundTrackTargets targets,
-                                                                                std::vector<std::string> tagsToAdd,
-                                                                                std::vector<std::string> tagsToRemove);
-    async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> applyUpdateProperties(
+    applyUpdateMetadataAsync(LibraryWriteLane::Submission submission, BoundTrackTargets targets, MetadataPatch patch);
+    async::Task<Result<EditTrackTagsReply>> previewEditTagsAsync(LibraryWriteLane::Submission submission,
+                                                                 std::vector<TrackId> trackIds,
+                                                                 std::vector<std::string> tagsToAdd,
+                                                                 std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> applyEditTagsAsync(
+      LibraryWriteLane::Submission submission,
+      BoundTrackTargets targets,
+      std::vector<std::string> tagsToAdd,
+      std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> applyUpdatePropertiesAsync(
       LibraryWriteLane::Submission submission,
       BoundTrackTargets targets,
       TrackPropertiesPatch patch);
-    async::Task<Result<AddTracksToListReply>> previewAddTracksToList(LibraryWriteLane::Submission submission,
-                                                                     ListId listId,
-                                                                     std::vector<TrackId> trackIds);
+    async::Task<Result<AddTracksToListReply>> previewAddTracksToListAsync(LibraryWriteLane::Submission submission,
+                                                                          ListId listId,
+                                                                          std::vector<TrackId> trackIds);
     async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>>
-    applyAddTracksToList(LibraryWriteLane::Submission submission, ListId listId, BoundTrackTargets targets);
-    async::Task<Result<RemoveTracksFromListReply>> previewRemoveTracksFromList(LibraryWriteLane::Submission submission,
-                                                                               ListId listId,
-                                                                               std::vector<TrackId> trackIds);
+    applyAddTracksToListAsync(LibraryWriteLane::Submission submission, ListId listId, BoundTrackTargets targets);
+    async::Task<Result<RemoveTracksFromListReply>> previewRemoveTracksFromListAsync(
+      LibraryWriteLane::Submission submission,
+      ListId listId,
+      std::vector<TrackId> trackIds);
     async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>
-    applyRemoveTracksFromList(LibraryWriteLane::Submission submission, ListId listId, BoundTrackTargets targets);
-    async::Task<Result<ListId>> createList(LibraryWriteLane::Submission submission, ListDraft draft);
-    async::Task<Result<>> previewCreateList(LibraryWriteLane::Submission submission, ListDraft draft);
-    async::Task<Result<UpdateListReply>> updateList(LibraryWriteLane::Submission submission, ListDraft draft);
-    async::Task<Result<UpdateListReply>> previewUpdateList(LibraryWriteLane::Submission submission, ListDraft draft);
-    async::Task<Result<AuthoringResult<MoveListOrderReply>>> applyMoveListOrder(
+    applyRemoveTracksFromListAsync(LibraryWriteLane::Submission submission, ListId listId, BoundTrackTargets targets);
+    async::Task<Result<ListId>> createListAsync(LibraryWriteLane::Submission submission, ListDraft draft);
+    async::Task<Result<>> previewCreateListAsync(LibraryWriteLane::Submission submission, ListDraft draft);
+    async::Task<Result<UpdateListReply>> updateListAsync(LibraryWriteLane::Submission submission, ListDraft draft);
+    async::Task<Result<UpdateListReply>> previewUpdateListAsync(LibraryWriteLane::Submission submission,
+                                                                ListDraft draft);
+    async::Task<Result<AuthoringResult<MoveListOrderReply>>> applyMoveListOrderAsync(
       LibraryWriteLane::Submission submission,
       BoundListOrder order,
       std::vector<TrackId> selectedTrackIds,
       std::optional<TrackId> optBeforeTrackId);
-    async::Task<Result<AuthoringResult<ResetListOrderReply>>> applyResetListOrder(
+    async::Task<Result<AuthoringResult<ResetListOrderReply>>> applyResetListOrderAsync(
       LibraryWriteLane::Submission submission,
       BoundListOrder order);
-    async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> applyForgetHiddenListOrder(
+    async::Task<Result<AuthoringResult<ForgetHiddenListOrderReply>>> applyForgetHiddenListOrderAsync(
       LibraryWriteLane::Submission submission,
       BoundListOrder order);
-    async::Task<Result<DeleteListReply>> deleteList(LibraryWriteLane::Submission submission,
-                                                    ListId listId,
-                                                    DeleteListOptions options);
-    async::Task<Result<DeleteListReply>> previewDeleteList(LibraryWriteLane::Submission submission,
-                                                           ListId listId,
-                                                           DeleteListOptions options);
-    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendants(LibraryWriteLane::Submission submission,
-                                                                         ListId listId,
-                                                                         DeleteListOptions options);
-    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendants(LibraryWriteLane::Submission submission,
-                                                                                ListId listId,
-                                                                                DeleteListOptions options);
-    async::Task<Result<DeleteTrackReply>> deleteTrack(LibraryWriteLane::Submission submission, TrackId trackId);
-    async::Task<Result<DeleteTrackReply>> previewDeleteTrack(LibraryWriteLane::Submission submission, TrackId trackId);
-    async::Task<Result<CreateTrackReply>> createTrackFromFile(LibraryWriteLane::Submission submission,
-                                                              std::filesystem::path path) const;
-    async::Task<Result<PreviewCreateTrackReply>> previewCreateTrackFromFile(LibraryWriteLane::Submission submission,
-                                                                            std::filesystem::path path) const;
+    async::Task<Result<DeleteListReply>> deleteListAsync(LibraryWriteLane::Submission submission,
+                                                         ListId listId,
+                                                         DeleteListOptions options);
+    async::Task<Result<DeleteListReply>> previewDeleteListAsync(LibraryWriteLane::Submission submission,
+                                                                ListId listId,
+                                                                DeleteListOptions options);
+    async::Task<Result<DeleteListSubtreeReply>> deleteListAndDescendantsAsync(LibraryWriteLane::Submission submission,
+                                                                              ListId listId,
+                                                                              DeleteListOptions options);
+    async::Task<Result<DeleteListSubtreeReply>> previewDeleteListAndDescendantsAsync(
+      LibraryWriteLane::Submission submission,
+      ListId listId,
+      DeleteListOptions options);
+    async::Task<Result<DeleteTrackReply>> deleteTrackAsync(LibraryWriteLane::Submission submission, TrackId trackId);
+    async::Task<Result<DeleteTrackReply>> previewDeleteTrackAsync(LibraryWriteLane::Submission submission,
+                                                                  TrackId trackId);
+    async::Task<Result<CreateTrackReply>> createTrackFromFileAsync(LibraryWriteLane::Submission submission,
+                                                                   std::filesystem::path path) const;
+    async::Task<Result<PreviewCreateTrackReply>> previewCreateTrackFromFileAsync(
+      LibraryWriteLane::Submission submission,
+      std::filesystem::path path) const;
 
     library::MusicLibrary& library;
     LibraryWriteLane& writeLane;

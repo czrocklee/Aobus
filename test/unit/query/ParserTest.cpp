@@ -27,12 +27,12 @@ namespace ao::query::test
   {
     Expression parseOk(std::string_view text)
     {
-      auto result = ::ao::query::parse(text);
-      REQUIRE(result.has_value());
-      return std::move(*result);
+      auto res = ::ao::query::parse(text);
+      REQUIRE(res.has_value());
+      return std::move(*res);
     }
 
-    bool parseFails(std::string_view text)
+    bool isParseRejected(std::string_view text)
     {
       return !::ao::query::parse(text).has_value();
     }
@@ -203,12 +203,12 @@ namespace ao::query::test
 
   TEST_CASE("Parser - rejects invalid variable names", "[query][unit][parser]")
   {
-    CHECK(parseFails(R"(#"")"));
-    CHECK(parseFails(R"(%"")"));
-    CHECK(parseFails(R"(#[""])"));
-    CHECK(parseFails(R"(%[""])"));
-    CHECK(parseFails("$123"));
-    CHECK(parseFails("@123"));
+    CHECK(isParseRejected(R"(#"")"));
+    CHECK(isParseRejected(R"(%"")"));
+    CHECK(isParseRejected(R"(#[""])"));
+    CHECK(isParseRejected(R"(%[""])"));
+    CHECK(isParseRejected("$123"));
+    CHECK(isParseRejected("@123"));
   }
 
   TEST_CASE("Parser - parses variable shortcuts", "[query][unit][parser]")
@@ -258,7 +258,7 @@ namespace ao::query::test
   {
     CHECK("[b{like}[v{m}title],[c{s}Love]]" == canonicalize(parseOk("$title~Love")));
     CHECK("[b{like}[v{m}artist],[c{s}Bach]]" == canonicalize(parseOk("$artist~Bach")));
-    CHECK(parseFails("$title~*Love"));
+    CHECK(isParseRejected("$title~*Love"));
   }
 
   TEST_CASE("Parser - parses in lists", "[query][unit][parser]")
@@ -419,52 +419,52 @@ namespace ao::query::test
   {
     SECTION("Empty and Whitespace")
     {
-      CHECK(parseFails(""));
-      CHECK(parseFails("   "));
+      CHECK(isParseRejected(""));
+      CHECK(isParseRejected("   "));
     }
 
     SECTION("Variable Token Rules")
     {
-      CHECK(parseFails("$1bad"));
-      CHECK(parseFails("$"));
-      CHECK(parseFails("@"));
-      CHECK(parseFails("#"));
-      CHECK(parseFails("%"));
+      CHECK(isParseRejected("$1bad"));
+      CHECK(isParseRejected("$"));
+      CHECK(isParseRejected("@"));
+      CHECK(isParseRejected("#"));
+      CHECK(isParseRejected("%"));
     }
 
     SECTION("Unterminated Quotes")
     {
-      CHECK(parseFails("'Bach"));
-      CHECK(parseFails("\"Bach"));
+      CHECK(isParseRejected("'Bach"));
+      CHECK(isParseRejected("\"Bach"));
     }
 
     SECTION("Malformed Parentheses")
     {
-      CHECK(parseFails("()"));
-      CHECK(parseFails("($artist = Bach"));
+      CHECK(isParseRejected("()"));
+      CHECK(isParseRejected("($artist = Bach"));
     }
 
     SECTION("Malformed Lists")
     {
-      CHECK(parseFails("$artist in []"));
-      CHECK(parseFails("$artist in [Bach,]"));
-      CHECK(parseFails("$artist in [Bach Mozart]"));
+      CHECK(isParseRejected("$artist in []"));
+      CHECK(isParseRejected("$artist in [Bach,]"));
+      CHECK(isParseRejected("$artist in [Bach Mozart]"));
     }
 
     SECTION("Malformed Ranges")
     {
-      CHECK(parseFails("$year in 1990.."));
-      CHECK(parseFails("$year in ..1999"));
-      CHECK(parseFails("$year in 1990...1999"));
+      CHECK(isParseRejected("$year in 1990.."));
+      CHECK(isParseRejected("$year in ..1999"));
+      CHECK(isParseRejected("$year in 1990...1999"));
     }
 
     SECTION("Invalid Escape Sequences")
     {
-      CHECK(parseFails(R"($title = "a \x")"));
-      CHECK(parseFails(R"($title = 'a \x')"));
-      CHECK(parseFails(R"($title = "a \u")"));
-      CHECK(parseFails(R"(%"bad\")"));
-      CHECK(parseFails(R"xy(%"trailing\)xy"));
+      CHECK(isParseRejected(R"($title = "a \x")"));
+      CHECK(isParseRejected(R"($title = 'a \x')"));
+      CHECK(isParseRejected(R"($title = "a \u")"));
+      CHECK(isParseRejected(R"(%"bad\")"));
+      CHECK(isParseRejected(R"xy(%"trailing\)xy"));
     }
   }
 
@@ -537,10 +537,10 @@ namespace ao::query::test
   TEST_CASE("Parser - admission rejects nested scalar lists before syntax parsing", "[query][regression][parser]")
   {
     auto const expression = std::string_view{"$year in [[1]]"};
-    auto const result = ::ao::query::parse(expression);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
-    CHECK(result.error().message.contains("complexity"));
+    auto const res = ::ao::query::parse(expression);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("complexity"));
     CHECK_FALSE(matchesExpressionSyntax(expression));
   }
 
@@ -550,10 +550,10 @@ namespace ao::query::test
                                    std::string{"$year in ["} + std::string(1000, '(') + "]",
                                    std::string{"$year in [1, 2"}})
     {
-      auto const result = ::ao::query::parse(expression);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("complexity"));
+      auto const res = ::ao::query::parse(expression);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("complexity"));
       CHECK_FALSE(matchesExpressionSyntax(expression));
     }
   }

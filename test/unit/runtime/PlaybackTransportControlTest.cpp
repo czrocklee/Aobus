@@ -256,10 +256,10 @@ namespace ao::rt::test
     auto const desc =
       playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});
 
-    auto const result = playbackTransport.play(desc, ListId{3});
+    auto const res = playbackTransport.play(desc, ListId{3});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidState);
     CHECK(preparingFired);
     CHECK_FALSE(startedFired);
     CHECK_FALSE(nowPlayingFired);

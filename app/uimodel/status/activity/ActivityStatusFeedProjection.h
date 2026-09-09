@@ -40,8 +40,8 @@ namespace ao::uimodel
 
     void handleFeedChanged(rt::NotificationFeedState const& feed);
     void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
-    bool refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const;
-    bool libraryTaskActive() const noexcept;
+    bool shouldRefreshVisibleTransient(rt::NotificationFeedUpdate const& update) const;
+    bool isLibraryTaskActive() const noexcept;
     void projectLibraryProgress(LibraryProgressState const& progress);
     void projectDetail(rt::NotificationFeedState const& feed);
     void projectPersistentCompact(rt::NotificationFeedState const& feed);
@@ -49,7 +49,7 @@ namespace ao::uimodel
     void setCompact(ActivityCompactState compact, std::vector<rt::NotificationId> sourceIds = {});
     bool hasPresentedCompactSource(std::vector<rt::NotificationId> const& sourceIds,
                                    rt::NotificationFeedState const& feed) const;
-    bool areCompactSourcesHidden(std::vector<rt::NotificationId> const& sourceIds) const;
+    bool hasOnlyHiddenCompactSources(std::vector<rt::NotificationId> const& sourceIds) const;
     bool isCompactSourceHidden(rt::NotificationId id) const;
     void rememberHiddenCompactSources();
     void pruneHiddenSources(rt::NotificationFeedState const& feed);

@@ -100,7 +100,7 @@ namespace ao::rt::test
         std::erase(_ids, id);
       }
 
-      std::ignore = publishDelta(std::move(*optBatch), previousSize);
+      std::ignore = tryPublishDelta(std::move(*optBatch), previousSize);
     }
   }
 
@@ -133,12 +133,12 @@ namespace ao::rt::test
   {
     auto const previousSize = _ids.size();
     _ids.assign(ids.begin(), ids.end());
-    std::ignore = publishDelta(std::move(batch), previousSize);
+    std::ignore = tryPublishDelta(std::move(batch), previousSize);
   }
 
   void MutableTrackSource::publishBatch(TrackSourceDelta batch)
   {
-    std::ignore = publishDelta(std::move(batch), _ids.size());
+    std::ignore = tryPublishDelta(std::move(batch), _ids.size());
   }
 
   std::size_t MutableTrackSource::size() const

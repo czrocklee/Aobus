@@ -139,7 +139,7 @@ namespace ao::gtk
                            uimodel::LayoutDocument document,
                            uimodel::PreparedLayout preparedLayout,
                            uimodel::LayoutComponentStateDocument componentState);
-    static async::Task<void> loadLayoutWorkflow(
+    static async::Task<void> loadLayoutWorkflowAsync(
       async::Runtime* asyncRuntime,
       std::shared_ptr<ShellLayoutStore> layoutStorePtr,
       std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,

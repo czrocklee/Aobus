@@ -104,7 +104,7 @@ namespace ao::rt
 
     if (auto const currentSize = size(); !matchedIds.empty() && matchedIds.size() <= currentSize)
     {
-      std::ignore = publishDelta(std::move(script), currentSize - matchedIds.size());
+      std::ignore = tryPublishDelta(std::move(script), currentSize - matchedIds.size());
     }
   }
 
@@ -155,13 +155,13 @@ namespace ao::rt
 
     if (!matchedIds.empty())
     {
-      std::ignore = publishDelta(std::move(script), size());
+      std::ignore = tryPublishDelta(std::move(script), size());
     }
   }
 
   void TrackSource::notifyReset()
   {
-    std::ignore = publishDelta(SourceReset{}, size());
+    std::ignore = tryPublishDelta(SourceReset{}, size());
   }
 
   void TrackSource::notifyInserted(TrackId id, std::size_t index)
@@ -169,14 +169,14 @@ namespace ao::rt
     if (auto const currentSize = size(); currentSize != 0)
     {
       std::ignore =
-        publishDelta(delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = index, .trackIds = {id}}}},
-                     currentSize - 1);
+        tryPublishDelta(delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = index, .trackIds = {id}}}},
+                        currentSize - 1);
     }
   }
 
   void TrackSource::notifyUpdated(TrackId id, std::size_t index)
   {
-    std::ignore = publishDelta(
+    std::ignore = tryPublishDelta(
       delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = index, .trackIds = {id}}}}, size());
   }
 
@@ -185,20 +185,19 @@ namespace ao::rt
     if (auto const currentSize = size(); currentSize != std::numeric_limits<std::size_t>::max())
     {
       std::ignore =
-        publishDelta(delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = index, .trackIds = {id}}}},
-                     currentSize + 1);
+        tryPublishDelta(delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = index, .trackIds = {id}}}},
+                        currentSize + 1);
     }
   }
 
-  bool TrackSource::publishDelta(TrackSourceDelta message, std::size_t const previousSize)
+  bool TrackSource::tryPublishDelta(TrackSourceDelta message, std::size_t const previousSize)
   {
     if (_state == TrackSourceState::Invalidated)
     {
       return false;
     }
 
-    AO_INVARIANT(validateTrackSourceDelta(message, previousSize) &&
-                 !std::holds_alternative<SourceInvalidated>(message));
+    AO_INVARIANT(isValidTrackSourceDelta(message, previousSize) && !std::holds_alternative<SourceInvalidated>(message));
 
     _changedSignal.emit(message);
     return true;

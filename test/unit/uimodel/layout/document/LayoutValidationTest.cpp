@@ -34,7 +34,7 @@ namespace ao::uimodel::test
     LayoutSchema fakeSchema()
     {
       auto schema = LayoutSchema{};
-      schema.addComponent(ComponentSchema{
+      schema.tryAddComponent(ComponentSchema{
         .id = "frame",
         .displayName = "Frame",
         .category = ComponentCategory::Container,
@@ -44,7 +44,7 @@ namespace ao::uimodel::test
         .minChildren = 1,
         .optMaxChildren = 2,
       });
-      schema.addComponent(ComponentSchema{
+      schema.tryAddComponent(ComponentSchema{
         .id = "readout",
         .displayName = "Readout",
         .category = ComponentCategory::Status,
@@ -52,7 +52,7 @@ namespace ao::uimodel::test
         .surfaces = static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Main) |
                     static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip),
       });
-      schema.addComponent(ComponentSchema{
+      schema.tryAddComponent(ComponentSchema{
         .id = "trigger",
         .displayName = "Trigger",
         .category = ComponentCategory::Generic,
@@ -60,7 +60,7 @@ namespace ao::uimodel::test
         .actionSlots = actionSlotBit(ActionSlot::PrimaryClick),
         .defaultActions = {{ActionSlot::PrimaryClick, "valid.action"}},
       });
-      schema.addAction({.id = "valid.action", .label = "Valid", .category = "Test"});
+      schema.tryAddAction({.id = "valid.action", .label = "Valid", .category = "Test"});
       return schema;
     }
 
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
       return node.propertyOr<std::string>("mode", "") == "leaf" ? std::optional<std::size_t>{0} : std::nullopt;
     }
 
-    bool fakeRequiresStableId(std::string_view const type)
+    bool needsFakeStableId(std::string_view const type)
     {
       return type == "readout";
     }
@@ -109,7 +109,7 @@ namespace ao::uimodel::test
         .name = "Fake",
         .layoutField = &fakeLayoutField,
         .presentationChildCount = &fakePresentationChildCount,
-        .requiresStableId = &fakeRequiresStableId,
+        .requiresStableId = &needsFakeStableId,
         .authorsTooltips = false,
       };
     }
@@ -194,7 +194,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][layout][validation]")
   {
     auto schema = fakeSchema();
-    REQUIRE(schema.addComponent(ComponentSchema{
+    REQUIRE(schema.tryAddComponent(ComponentSchema{
       .id = "bad-default",
       .displayName = "Bad Default",
       .optMaxChildren = 0,
@@ -299,7 +299,7 @@ namespace ao::uimodel::test
   {
     auto const bare = LayoutDialect{.name = "Bare"};
 
-    // fakeRequiresStableId demands one; a dialect that names no hook does not.
+    // needsFakeStableId demands one; a dialect that names no hook does not.
     auto const anonymous = LayoutNode{.type = "frame", .children = {LayoutNode{.type = "readout"}}};
     CHECK_FALSE(validate(anonymous, bare).has_value());
     CHECK(rejectionOf(anonymous, fakeDialect()).reason == LayoutRejectionReason::MissingRequiredId);

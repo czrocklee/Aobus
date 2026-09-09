@@ -163,7 +163,7 @@ namespace ao::rt::test
       .target = FilteredListTarget{.listId = childId, .filterExpression = {}},
     }));
 
-    while (executor.runReadyTurn())
+    while (executor.tryRunReadyTurn())
     {
     }
 
@@ -174,8 +174,8 @@ namespace ao::rt::test
     auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
     auto subscription = service.onFilterErrorChanged([&changedErrors](ViewService::FilterErrorChanged const& changed)
                                                      { changedErrors.push_back(changed); });
-    REQUIRE(commandsFixture.runTask(
-      commandsFixture.commands().updateList(ListDraft{.listId = parentId, .name = "Parent", .expression = "true"})));
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().updateListAsync(
+      ListDraft{.listId = parentId, .name = "Parent", .expression = "true"})));
 
     state = service.trackListState(viewId);
     CHECK_FALSE(state.optFilterError);

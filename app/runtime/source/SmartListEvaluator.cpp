@@ -439,7 +439,7 @@ namespace ao::rt
                                              delta::RegularTrackEditScript const& script,
                                              bool const verifyFinalSnapshot)
   {
-    AO_INVARIANT(delta::validate(script, bucket.upstreamTracks.size()));
+    AO_INVARIANT(delta::isValid(script, bucket.upstreamTracks.size()));
     AO_INVARIANT(!verifyFinalSnapshot || bucket.source->size() == bucket.upstreamTracks.size());
 
     for (auto const& edit : script.edits)
@@ -497,7 +497,7 @@ namespace ao::rt
 
     for (auto& work : works)
     {
-      std::ignore = work.list->publishDelta(std::move(work.script), work.previousSize);
+      std::ignore = work.list->tryPublishDelta(std::move(work.script), work.previousSize);
     }
   }
 
@@ -564,7 +564,7 @@ namespace ao::rt
         continue;
       }
 
-      std::ignore = work.list->publishDelta(std::move(work.script), work.oldMembers.size());
+      std::ignore = work.list->tryPublishDelta(std::move(work.script), work.oldMembers.size());
     }
   }
 
@@ -701,7 +701,7 @@ namespace ao::rt
         continue;
       }
 
-      std::ignore = list->publishDelta(SourceReset{}, previousSizes[index]);
+      std::ignore = list->tryPublishDelta(SourceReset{}, previousSizes[index]);
     }
   }
 

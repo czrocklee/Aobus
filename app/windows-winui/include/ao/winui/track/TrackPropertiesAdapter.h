@@ -61,7 +61,7 @@ namespace ao::winui
                                                               std::string_view prefix,
                                                               std::size_t limit);
   bool canPresentTrackProperties(std::span<TrackId const> selection) noexcept;
-  bool customMetadataValueNeedsUpdate(bool existed,
+  bool needsCustomMetadataValueUpdate(bool existed,
                                       std::optional<std::string> const& optOriginalValue,
                                       std::string_view value) noexcept;
   TrackPropertiesCommitState projectTrackPropertiesCommitState(rt::AuthoringStatus status) noexcept;

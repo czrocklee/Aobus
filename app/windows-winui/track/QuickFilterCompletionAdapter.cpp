@@ -150,7 +150,7 @@ namespace ao::winui
     return rows;
   }
 
-  bool quickFilterSuggestionContinuesEditing(QuickFilterSuggestionRow const& row) noexcept
+  bool shouldContinueEditingQuickFilterSuggestion(QuickFilterSuggestionRow const& row) noexcept
   {
     switch (row.detailKind)
     {

@@ -41,7 +41,7 @@ namespace ao::uimodel
     void clear();
 
     void loadFirstTrackField(rt::TrackField field, rt::TrackFieldRawValue rawValue);
-    bool mergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
+    bool tryMergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue);
     void setEditValue(rt::TrackField field, TrackFieldEditValue editValue);
     /// Replaces even a mixed baseline; a later setEditValue restores ordinary mixed-field preservation.
     void setExplicitFieldEdit(rt::TrackField field, TrackFieldEditValue value);

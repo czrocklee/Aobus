@@ -41,14 +41,14 @@ namespace ao::uimodel::test
         _saved.emplace_back(std::string{presetId}, document);
       }
 
-      bool prune(std::string_view /*presetId*/,
-                 PreparedLayout const& /*layout*/,
-                 LayoutSchema const& /*schema*/) override
+      bool tryPrune(std::string_view /*presetId*/,
+                    PreparedLayout const& /*layout*/,
+                    LayoutSchema const& /*schema*/) override
       {
         return false;
       }
 
-      bool removePreset(std::string_view /*presetId*/) override { return false; }
+      bool tryRemovePreset(std::string_view /*presetId*/) override { return false; }
 
       std::vector<std::pair<std::string, LayoutComponentStateDocument>> const& saved() const { return _saved; }
 

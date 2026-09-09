@@ -44,7 +44,7 @@ namespace ao::uimodel::test
       auto const optArtistIndex = model.groupKeyOptionIndex();
       REQUIRE(optArtistIndex);
 
-      CHECK(model.setGroupKeyByOptionIndex(*optArtistIndex + 1));
+      CHECK(model.trySetGroupKeyByOptionIndex(*optArtistIndex + 1));
       model.setLabel("Artist View");
 
       auto const state = model.collectState("custom-id-1");
@@ -60,17 +60,17 @@ namespace ao::uimodel::test
       CHECK(model.sortTerms()[2] == rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = true});
 
       REQUIRE(model.optionIndexForSortField(rt::TrackSortField::Duration));
-      CHECK(model.setSortFieldByOptionIndex(2, *model.optionIndexForSortField(rt::TrackSortField::Duration)));
-      CHECK(model.setSortAscending(2, false));
+      CHECK(model.trySetSortFieldByOptionIndex(2, *model.optionIndexForSortField(rt::TrackSortField::Duration)));
+      CHECK(model.trySetSortAscending(2, false));
       CHECK(model.sortTerms()[2] == rt::TrackSortTerm{.field = rt::TrackSortField::Duration, .ascending = false});
 
-      CHECK(model.moveSortTermUp(2));
+      CHECK(model.tryMoveSortTermUp(2));
       CHECK(model.sortTerms()[1].field == rt::TrackSortField::Duration);
 
-      CHECK(model.moveSortTermDown(1));
+      CHECK(model.tryMoveSortTermDown(1));
       CHECK(model.sortTerms()[2].field == rt::TrackSortField::Duration);
 
-      CHECK(model.removeSortTerm(1));
+      CHECK(model.tryRemoveSortTerm(1));
       REQUIRE(model.sortTerms().size() == 2);
       CHECK(model.sortTerms()[1].field == rt::TrackSortField::Duration);
     }
@@ -82,22 +82,22 @@ namespace ao::uimodel::test
       CHECK(model.visibleFields()[2] == rt::TrackField::Title);
 
       REQUIRE(model.optionIndexForVisibleField(rt::TrackField::Quality));
-      CHECK(model.setVisibleFieldByOptionIndex(2, *model.optionIndexForVisibleField(rt::TrackField::Quality)));
+      CHECK(model.trySetVisibleFieldByOptionIndex(2, *model.optionIndexForVisibleField(rt::TrackField::Quality)));
       CHECK(model.visibleFields()[2] == rt::TrackField::Quality);
 
-      CHECK(model.moveVisibleFieldUp(2));
+      CHECK(model.tryMoveVisibleFieldUp(2));
       CHECK(model.visibleFields()[1] == rt::TrackField::Quality);
 
-      CHECK(model.moveVisibleFieldDown(1));
+      CHECK(model.tryMoveVisibleFieldDown(1));
       CHECK(model.visibleFields()[2] == rt::TrackField::Quality);
 
-      CHECK(model.removeVisibleField(0));
+      CHECK(model.tryRemoveVisibleField(0));
       REQUIRE(model.visibleFields().size() == 2);
       CHECK(model.visibleFields()[1] == rt::TrackField::Quality);
 
-      CHECK(model.removeVisibleField(0));
+      CHECK(model.tryRemoveVisibleField(0));
       REQUIRE(model.visibleFields().size() == 1);
-      CHECK_FALSE(model.removeVisibleField(0));
+      CHECK_FALSE(model.tryRemoveVisibleField(0));
       REQUIRE(model.visibleFields().size() == 1);
       CHECK(model.visibleFields()[0] == rt::TrackField::Quality);
     }
@@ -113,18 +113,18 @@ namespace ao::uimodel::test
       auto const originalVisibleFields =
         std::vector<rt::TrackField>{originalVisibleFieldsSpan.begin(), originalVisibleFieldsSpan.end()};
 
-      CHECK_FALSE(model.setGroupKeyByOptionIndex(model.groupOptions().size()));
-      CHECK_FALSE(model.setSortFieldByOptionIndex(99, 0));
-      CHECK_FALSE(model.setSortFieldByOptionIndex(0, model.sortFieldOptions().size()));
-      CHECK_FALSE(model.setSortAscending(99, false));
-      CHECK_FALSE(model.moveSortTermUp(0));
-      CHECK_FALSE(model.moveSortTermDown(model.sortTerms().size()));
-      CHECK_FALSE(model.removeSortTerm(model.sortTerms().size()));
-      CHECK_FALSE(model.setVisibleFieldByOptionIndex(99, 0));
-      CHECK_FALSE(model.setVisibleFieldByOptionIndex(0, model.visibleFieldOptions().size()));
-      CHECK_FALSE(model.moveVisibleFieldUp(0));
-      CHECK_FALSE(model.moveVisibleFieldDown(model.visibleFields().size()));
-      CHECK_FALSE(model.removeVisibleField(model.visibleFields().size()));
+      CHECK_FALSE(model.trySetGroupKeyByOptionIndex(model.groupOptions().size()));
+      CHECK_FALSE(model.trySetSortFieldByOptionIndex(99, 0));
+      CHECK_FALSE(model.trySetSortFieldByOptionIndex(0, model.sortFieldOptions().size()));
+      CHECK_FALSE(model.trySetSortAscending(99, false));
+      CHECK_FALSE(model.tryMoveSortTermUp(0));
+      CHECK_FALSE(model.tryMoveSortTermDown(model.sortTerms().size()));
+      CHECK_FALSE(model.tryRemoveSortTerm(model.sortTerms().size()));
+      CHECK_FALSE(model.trySetVisibleFieldByOptionIndex(99, 0));
+      CHECK_FALSE(model.trySetVisibleFieldByOptionIndex(0, model.visibleFieldOptions().size()));
+      CHECK_FALSE(model.tryMoveVisibleFieldUp(0));
+      CHECK_FALSE(model.tryMoveVisibleFieldDown(model.visibleFields().size()));
+      CHECK_FALSE(model.tryRemoveVisibleField(model.visibleFields().size()));
 
       CHECK(model.label() == originalLabel);
       CHECK(model.collectState("test").spec.groupBy == originalGroupKey);

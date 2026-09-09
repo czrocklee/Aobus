@@ -75,9 +75,9 @@ shared:
 modern: {navigationBackground: '#0F172A', inspectorBackground: '#172033', nowPlayingBackground: '#0B1220'}
 classic: {chrome: system, toolbarBackground: '#F3F4F6', treeBackground: '#FFFFFF', statusBackground: '#E5E7EB'}
 )");
-      auto result = model.reload(invalid.rootref());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().message.contains("future"));
+      auto res = model.reload(invalid.rootref());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().message.contains("future"));
     }
 
     SECTION("invalid color")
@@ -95,9 +95,9 @@ shared:
 modern: {navigationBackground: '#0F172A', inspectorBackground: '#172033', nowPlayingBackground: '#0B1220'}
 classic: {chrome: system, toolbarBackground: '#F3F4F6', treeBackground: '#FFFFFF', statusBackground: '#E5E7EB'}
 )");
-      auto result = model.reload(invalid.rootref());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().message.contains("shared.accent"));
+      auto res = model.reload(invalid.rootref());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().message.contains("shared.accent"));
     }
 
     SECTION("invalid retro selector")
@@ -107,9 +107,9 @@ shared: {fontFamily: Segoe UI, accent: '#06B6D4', windowBackground: '#111827', s
 modern: {navigationBackground: '#0F172A', inspectorBackground: '#172033', nowPlayingBackground: '#0B1220'}
 classic: {chrome: arbitrary, toolbarBackground: '#F3F4F6', treeBackground: '#FFFFFF', statusBackground: '#E5E7EB'}
 )");
-      auto result = model.reload(invalid.rootref());
-      REQUIRE_FALSE(result);
-      CHECK(result.error().message.contains("classic.chrome"));
+      auto res = model.reload(invalid.rootref());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().message.contains("classic.chrome"));
     }
 
     CHECK(model.theme() == previous);
@@ -122,9 +122,9 @@ shared: {fontFamily: Segoe UI, accent: '#06B6D4', windowBackground: '#111827', s
 modern: {navigationBackground: '#0F172A', inspectorBackground: '#172033', nowPlayingBackground: '#0B1220'}
 classic: {chrome: retro, toolbarBackground: '#F3F4F6', treeBackground: '#FFFFFF', statusBackground: '#E5E7EB'}
 )");
-    auto result = ThemeYamlSchema{}.deserialize(tree.rootref(), Theme{});
+    auto res = ThemeYamlSchema{}.deserialize(tree.rootref(), Theme{});
 
-    REQUIRE(result);
-    CHECK(result->classic.chrome == ClassicChrome::Retro);
+    REQUIRE(res);
+    CHECK(res->classic.chrome == ClassicChrome::Retro);
   }
 } // namespace ao::winui::test

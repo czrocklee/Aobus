@@ -205,7 +205,7 @@ namespace ao::cli::test
       fs::path _previous;
     };
 
-    bool manifestHasAudioIdentity(CliFixture const& fixture, std::string_view uri)
+    bool hasManifestAudioIdentity(CliFixture const& fixture, std::string_view uri)
     {
       auto musicLibrary =
         library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
@@ -891,13 +891,13 @@ namespace ao::cli::test
     CHECK(contains(result.err, "scan:"));
     CHECK(contains(result.err, "apply:"));
     CHECK_FALSE(contains(result.err, "fingerprint:"));
-    CHECK_FALSE(manifestHasAudioIdentity(fixture, "track.flac"));
+    CHECK_FALSE(hasManifestAudioIdentity(fixture, "track.flac"));
 
     result = fixture.run({"lib", "fingerprint", "--pending", "--verbose"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "fingerprinted 1  skipped 0  failed 0"));
     CHECK(contains(result.err, "fingerprint:"));
-    CHECK(manifestHasAudioIdentity(fixture, "track.flac"));
+    CHECK(hasManifestAudioIdentity(fixture, "track.flac"));
 
     result = fixture.run({"-O", "json", "lib", "fingerprint", "--pending"});
     REQUIRE(result.status == 0);

@@ -26,41 +26,41 @@ namespace ao::library::test
 
   std::pair<std::vector<std::byte>, std::vector<std::byte>> TrackSerializationFixture::serialize(TrackBuilder& builder)
   {
-    auto result = physicalSerializeTrack(builder, _transaction, _library.resources());
-    REQUIRE(result);
+    auto res = physicalSerializeTrack(builder, _transaction, _library.resources());
+    REQUIRE(res);
     commitAndRenew();
-    return *result;
+    return *res;
   }
 
   Result<std::vector<std::byte>> TrackSerializationFixture::trySerializeHot(TrackBuilder& builder)
   {
-    auto result = physicalSerializeHotTrack(builder, _transaction);
+    auto res = physicalSerializeHotTrack(builder, _transaction);
 
-    if (result)
+    if (res)
     {
       commitAndRenew();
     }
 
-    return result;
+    return res;
   }
 
   Result<std::vector<std::byte>> TrackSerializationFixture::trySerializeCold(TrackBuilder& builder)
   {
-    auto result = physicalSerializeColdTrack(builder, _transaction, _library.resources());
+    auto res = physicalSerializeColdTrack(builder, _transaction, _library.resources());
 
-    if (result)
+    if (res)
     {
       commitAndRenew();
     }
 
-    return result;
+    return res;
   }
 
   std::vector<std::byte> TrackSerializationFixture::serializeCold(TrackBuilder& builder)
   {
-    auto result = trySerializeCold(builder);
-    REQUIRE(result);
-    return *result;
+    auto res = trySerializeCold(builder);
+    REQUIRE(res);
+    return *res;
   }
 
   WriteTransaction& TrackSerializationFixture::transaction()

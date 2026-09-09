@@ -20,10 +20,10 @@ namespace ao::rt::test
 
   TEST_CASE("MediaTrack - keeps borrowed builder fields alive across moves", "[runtime][unit][media-track]")
   {
-    auto result = readMediaTrack(audio::test::requireAudioFixture("basic_metadata.mp3"));
-    REQUIRE(result);
+    auto res = readMediaTrack(audio::test::requireAudioFixture("basic_metadata.mp3"));
+    REQUIRE(res);
 
-    auto mediaTrack = std::move(*result);
+    auto mediaTrack = std::move(*res);
     auto movedAgain = std::move(mediaTrack);
 
     auto const& metadata = movedAgain.builder().metadata();
@@ -48,10 +48,10 @@ namespace ao::rt::test
 
   TEST_CASE("MediaTrack - maps classical visitor fields into TrackBuilder", "[runtime][unit][media-track]")
   {
-    auto result = readMediaTrack(audio::test::requireAudioFixture("classical_metadata.mp3"));
-    REQUIRE(result);
+    auto res = readMediaTrack(audio::test::requireAudioFixture("classical_metadata.mp3"));
+    REQUIRE(res);
 
-    auto const& metadata = result->builder().metadata();
+    auto const& metadata = res->builder().metadata();
     CHECK(metadata.conductor() == "Fixture Conductor");
     CHECK(metadata.ensemble() == "Fixture Ensemble");
     CHECK(metadata.movement() == "Fixture Movement");
@@ -63,10 +63,10 @@ namespace ao::rt::test
 
   TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries", "[runtime][unit][media-track]")
   {
-    auto result = readMediaTrack(audio::test::requireAudioFixture("with_cover.mp3"));
-    REQUIRE(result);
+    auto res = readMediaTrack(audio::test::requireAudioFixture("with_cover.mp3"));
+    REQUIRE(res);
 
-    auto const& covers = result->builder().coverArt().entries();
+    auto const& covers = res->builder().coverArt().entries();
     REQUIRE(covers.size() == 1);
     CHECK(covers.front().type == PictureType::Other);
   }

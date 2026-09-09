@@ -86,17 +86,17 @@ namespace ao::winui::test
 
   TEST_CASE("elementKindAcceptsSurface - only the kinds that own a background accept one", "[winui][unit][layout]")
   {
-    CHECK(elementKindAcceptsSurface(ElementKind::Grid));
-    CHECK(elementKindAcceptsSurface(ElementKind::Border));
-    CHECK(elementKindAcceptsSurface(ElementKind::NavigationView));
-    CHECK(elementKindAcceptsSurface(ElementKind::TreeView));
-    CHECK(elementKindAcceptsSurface(ElementKind::ListView));
-    CHECK(elementKindAcceptsSurface(ElementKind::ScrollViewer));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::Grid));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::Border));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::NavigationView));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::TreeView));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::ListView));
+    CHECK(acceptsSurfaceForElementKind(ElementKind::ScrollViewer));
 
     // A TextBlock draws glyphs and nothing behind them, and a bare
     // FrameworkElement draws nothing at all.
-    CHECK_FALSE(elementKindAcceptsSurface(ElementKind::TextBlock));
-    CHECK_FALSE(elementKindAcceptsSurface(ElementKind::FrameworkElement));
+    CHECK_FALSE(acceptsSurfaceForElementKind(ElementKind::TextBlock));
+    CHECK_FALSE(acceptsSurfaceForElementKind(ElementKind::FrameworkElement));
   }
 
   TEST_CASE("planThemeSurface - an authored slot plans the surface it names", "[winui][unit][layout]")

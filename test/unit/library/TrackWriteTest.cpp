@@ -67,9 +67,9 @@ namespace ao::library::test
                                                                                   WriteTransaction& transaction,
                                                                                   ResourceStore const& resources)
     {
-      auto result = physicalPrepareTrack(builder, transaction, resources);
-      REQUIRE(result);
-      return *std::move(result);
+      auto res = physicalPrepareTrack(builder, transaction, resources);
+      REQUIRE(res);
+      return *std::move(res);
     }
   } // namespace
 
@@ -246,7 +246,7 @@ namespace ao::library::test
 
       try
       {
-        [[maybe_unused]] auto result = updatePreparedTrackRecord(updateWriter, trackId, updatedHot, updatedCold);
+        [[maybe_unused]] auto res = updatePreparedTrackRecord(updateWriter, trackId, updatedHot, updatedCold);
         FAIL("updatePreparedTrackRecord should abort when the cold reservation cannot fit");
       }
       catch (lmdb::detail::TransactionFailure const& transactionFailure)

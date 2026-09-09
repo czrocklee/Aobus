@@ -148,7 +148,7 @@ namespace ao::winui::layout
     for (auto const command : uimodel::playbackCommands())
     {
       _actions.registerAction(uimodel::playbackCommandActionId(command),
-                              [&playback, command](ActionContext const&) { playback.execute(command); });
+                              [&playback, command](ActionContext const&) { playback.tryExecute(command); });
     }
 
     bindCommand("library.open", _config.commands.openLibrary);
@@ -194,7 +194,7 @@ namespace ao::winui::layout
       return session->runtime().library().changes().onChanged(
         [handler = std::move(handler)](rt::LibraryChangeSet const& changeSet) mutable
         {
-          if (listTreeChangeRequiresRebuild(changeSet))
+          if (needsListTreeRebuild(changeSet))
           {
             handler();
           }
@@ -572,12 +572,12 @@ namespace ao::winui::layout
     applyKeymapAccelerators(_config.host,
                             _acceleratorPlans,
                             [this, token = _ownerCallbackGate.token()](std::string_view const id)
-                            { return token.admits() && invokeAction(id); });
+                            { return token.accepts() && tryInvokeAction(id); });
   }
 
-  bool ShellBuilder::invokeAction(std::string_view const actionId) const
+  bool ShellBuilder::tryInvokeAction(std::string_view const actionId) const
   {
-    return !_retired && _actions.invoke(actionId, ActionContext{});
+    return !_retired && _actions.tryInvoke(actionId, ActionContext{});
   }
 
   void ShellBuilder::retire() noexcept

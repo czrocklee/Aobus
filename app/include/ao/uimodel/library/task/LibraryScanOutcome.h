@@ -90,7 +90,7 @@ namespace ao::uimodel
   rt::NotificationLifetime libraryScanLifetime(LibraryScanVerdict verdict) noexcept;
 
   /** Run a scan and reduce every internal planning/apply state to one shell-facing outcome. */
-  async::Task<LibraryScanOutcome> runLibraryScan(rt::LibraryJobs* jobs,
-                                                 LibraryScanMode mode,
-                                                 std::stop_token stopToken = {});
+  async::Task<LibraryScanOutcome> runLibraryScanAsync(rt::LibraryJobs* jobs,
+                                                      LibraryScanMode mode,
+                                                      std::stop_token stopToken = {});
 } // namespace ao::uimodel

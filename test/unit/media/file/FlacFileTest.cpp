@@ -100,9 +100,9 @@ namespace ao::media::file::flac::test
 
     ao::media::file::test::RecordedContent readContent(File const& file)
     {
-      auto result = file.readContent();
-      REQUIRE(result);
-      return *result;
+      auto res = file.readContent();
+      REQUIRE(res);
+      return *res;
     }
   } // namespace
 
@@ -231,9 +231,9 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Block size exceeds file boundary")
@@ -252,9 +252,9 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Trailing bytes too small for the next block header")
@@ -273,9 +273,9 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Last metadata block cannot extend past file boundary")
@@ -292,9 +292,9 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Current last block size is validated before the last-block marker is honored")
@@ -312,9 +312,9 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("StreamInfo payload size must be exactly 34 bytes")
@@ -327,9 +327,9 @@ namespace ao::media::file::flac::test
 
         auto const temp = TempFile{data, ".flac"};
         auto const file = File{temp.path};
-        auto result = file.readContent();
-        REQUIRE_FALSE(result);
-        CHECK(result.error().code == Error::Code::CorruptData);
+        auto res = file.readContent();
+        REQUIRE_FALSE(res);
+        CHECK(res.error().code == Error::Code::CorruptData);
       }
     }
 
@@ -354,11 +354,11 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Flac);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Flac);
     }
 
     SECTION("Untrusted Vorbis comment count does not control allocation")
@@ -386,11 +386,11 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->text(TextField::Title).empty());
-      CHECK(result->codec() == AudioCodec::Flac);
+      REQUIRE(res);
+      CHECK(res->text(TextField::Title).empty());
+      CHECK(res->codec() == AudioCodec::Flac);
     }
 
     SECTION("Malformed bounded picture block is discarded")
@@ -408,10 +408,10 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE(result);
-      CHECK(result->pictures().empty());
-      CHECK(result->codec() == AudioCodec::Flac);
+      auto res = file.readContent();
+      REQUIRE(res);
+      CHECK(res->pictures().empty());
+      CHECK(res->codec() == AudioCodec::Flac);
     }
 
     SECTION("Structurally valid empty picture is omitted")
@@ -431,11 +431,11 @@ namespace ao::media::file::flac::test
 
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE(result);
-      CHECK(result->pictures().empty());
-      CHECK(result->codec() == AudioCodec::Flac);
+      REQUIRE(res);
+      CHECK(res->pictures().empty());
+      CHECK(res->codec() == AudioCodec::Flac);
     }
 
     SECTION("Invalid FLAC magic signature")
@@ -443,9 +443,9 @@ namespace ao::media::file::flac::test
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'K'};
       auto const temp = TempFile{data, ".flac"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      auto res = file.readContent();
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   }
 } // namespace ao::media::file::flac::test

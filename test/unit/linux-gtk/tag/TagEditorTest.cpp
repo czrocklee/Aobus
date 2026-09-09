@@ -46,9 +46,9 @@ namespace ao::gtk::test
       return count;
     }
 
-    bool emitWindowOutsideClick(Gtk::Window& window, double const x = 1.0, double const y = 1.0)
+    bool tryEmitWindowOutsideClick(Gtk::Window& window, double const x = 1.0, double const y = 1.0)
     {
-      return emitGesturePressed(window, 1, x, y);
+      return tryEmitGesturePressed(window, 1, x, y);
     }
 
     // Returns the first suggested chip among the editor's direct children, if present.
@@ -265,7 +265,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       // A press landing outside the trigger (here resolving to nothing) collapses the entry.
-      REQUIRE(emitWindowOutsideClick(window));
+      REQUIRE(tryEmitWindowOutsideClick(window));
       drainGtkEvents();
 
       CHECK_FALSE(entry->get_visible());
@@ -286,7 +286,7 @@ namespace ao::gtk::test
       drainGtkEvents();
       CHECK_FALSE(rockChip->get_visible()); // hidden while adding/searching
 
-      REQUIRE(emitWindowOutsideClick(window));
+      REQUIRE(tryEmitWindowOutsideClick(window));
       drainGtkEvents();
       CHECK(rockChip->get_visible()); // restored once the entry is dismissed
     }

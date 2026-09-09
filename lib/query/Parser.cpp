@@ -66,7 +66,7 @@ namespace
   // flat scalar storage; quoted text and lists remain bounded by the byte cap.
   // Keep tokenizer and grammar changes aligned with admission boundary tests;
   // this structural guard does not replace lexy syntax validation.
-  bool admitsExpression(std::string_view text)
+  bool acceptsExpression(std::string_view text)
   {
     constexpr std::size_t kMaximumBytes = 65536;
     constexpr std::size_t kMaximumStructuralTokens = 512;
@@ -144,6 +144,8 @@ namespace
   using detail::Constant;
   using detail::Variable;
 
+  // lexy discovers production members by these exact framework names.
+  // NOLINTBEGIN(readability-identifier-naming)
   struct ConstantList final
   {
     static constexpr auto rule = dsl::square_bracketed.list(dsl::p<Constant>, dsl::sep(dsl::comma));
@@ -276,13 +278,14 @@ namespace
     static constexpr auto rule = dsl::p<Expr> + dsl::eof;
     static constexpr auto value = lexy::forward<Expression>;
   };
+  // NOLINTEND(readability-identifier-naming)
 } // namespace
 
 namespace ao::query
 {
   bool matchesExpressionSyntax(std::string_view expr)
   {
-    if (!admitsExpression(expr))
+    if (!acceptsExpression(expr))
     {
       return false;
     }
@@ -293,7 +296,7 @@ namespace ao::query
 
   Result<Expression> parse(std::string_view expr)
   {
-    if (!admitsExpression(expr))
+    if (!acceptsExpression(expr))
     {
       return makeError(
         Error::Code::FormatRejected,

@@ -135,12 +135,12 @@ namespace ao::uimodel::test
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
     REQUIRE(sessionRes);
 
-    auto const result = commandsFixture.runTask(sessionRes->removeFromList(listId));
+    auto const res = commandsFixture.runTask(sessionRes->removeFromListAsync(listId));
 
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::Applied);
-    CHECK(result->forgottenPositionCount == 1);
-    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *result) ==
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::Applied);
+    CHECK(res->forgottenPositionCount == 1);
+    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *res) ==
           R"(#"road-trip" wurde von 1 Titel entfernt und 1 gespeicherte Position wurde in Road Trip verworfen.)");
   }
 
@@ -162,13 +162,13 @@ namespace ao::uimodel::test
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
     REQUIRE(sessionRes);
 
-    auto const result = commandsFixture.runTask(sessionRes->addToList(listId));
+    auto const res = commandsFixture.runTask(sessionRes->addToListAsync(listId));
 
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::Applied);
-    CHECK(result->targetTrackCount == 1);
-    CHECK(result->changedTrackCount == 1);
-    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *result) ==
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::Applied);
+    CHECK(res->targetTrackCount == 1);
+    CHECK(res->changedTrackCount == 1);
+    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *res) ==
           R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");
 
     auto scope = commandsFixture.library().snapshot();
@@ -201,23 +201,23 @@ namespace ao::uimodel::test
       auto source =
         ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
       auto moved = std::move(source);
-      auto task = moved.addToList(listId);
-      auto pending = commandsFixture.runtime().spawn(rt::test::flagCompletion(completedPtr, std::move(task)));
-      REQUIRE(executor.waitUntilQueued());
+      auto task = moved.addToListAsync(listId);
+      auto pending = commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(completedPtr, std::move(task)));
+      REQUIRE(executor.tryWaitUntilQueued());
       return pending;
     }();
 
-    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
-    auto const result = future.get();
-    REQUIRE(result);
-    CHECK(result->status == rt::AuthoringStatus::Applied);
-    CHECK(result->changedTrackCount == 1);
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
+    auto const res = future.get();
+    REQUIRE(res);
+    CHECK(res->status == rt::AuthoringStatus::Applied);
+    CHECK(res->changedTrackCount == 1);
     CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}) ==
           std::vector<std::string>{"road-trip"});
 
     auto cleanupSession =
       ao::test::requireValue(ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId}));
-    auto const cleanupRes = commandsFixture.runTask(cleanupSession.removeFromList(listId));
+    auto const cleanupRes = commandsFixture.runTask(cleanupSession.removeFromListAsync(listId));
     REQUIRE(cleanupRes);
     CHECK(cleanupRes->status == rt::AuthoringStatus::Applied);
     CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}).empty());

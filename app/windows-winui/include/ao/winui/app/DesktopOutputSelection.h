@@ -24,6 +24,6 @@ namespace ao::winui
                                                                                      rt::OutputState const& output);
 
   /** Update the in-memory desktop preference and report whether it changed. */
-  bool rememberDesktopOutputSelection(DesktopSettings& settings,
-                                      audio::OutputDeviceSelection const& selection) noexcept;
+  bool tryRememberDesktopOutputSelection(DesktopSettings& settings,
+                                         audio::OutputDeviceSelection const& selection) noexcept;
 } // namespace ao::winui

@@ -240,7 +240,7 @@ namespace ao::gtk
                                        layout::ActionHandler handler,
                                        layout::ActionStateProvider stateProvider = {})
     {
-      _actionRegistry.registerAction(
+      _actionRegistry.tryRegisterAction(
         uimodel::ActionSchema{
           .id = std::string{id}, .label = std::string{label}, .category = std::string{category}, .capabilities = caps},
         std::move(handler),
@@ -303,7 +303,7 @@ namespace ao::gtk
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
   {
     auto const execute = [this](uimodel::PlaybackCommand command)
-    { return [this, command](layout::ActionActivationContext&) { _playbackActions.execute(command); }; };
+    { return [this, command](layout::ActionActivationContext&) { _playbackActions.tryExecute(command); }; };
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
     {
@@ -704,18 +704,18 @@ namespace ao::gtk
        schema = std::move(schema),
        present = std::move(present)](std::stop_token const stopToken) mutable
       {
-        return loadLayoutWorkflow(asyncRuntime,
-                                  std::move(storePtr),
-                                  std::move(componentStateStorePtr),
-                                  std::move(configStorePtr),
-                                  std::move(schema),
-                                  std::move(present),
-                                  stopToken);
+        return loadLayoutWorkflowAsync(asyncRuntime,
+                                       std::move(storePtr),
+                                       std::move(componentStateStorePtr),
+                                       std::move(configStorePtr),
+                                       std::move(schema),
+                                       std::move(present),
+                                       stopToken);
       },
       "shell layout load workflow");
   }
 
-  async::Task<void> ShellLayoutController::loadLayoutWorkflow(
+  async::Task<void> ShellLayoutController::loadLayoutWorkflowAsync(
     async::Runtime* const asyncRuntime,
     std::shared_ptr<ShellLayoutStore> layoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
@@ -729,7 +729,7 @@ namespace ao::gtk
     APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
 
     auto optRes = std::optional<LayoutLoadResult>{};
-    co_await asyncRuntime->resumeOnWorker(stopToken);
+    co_await asyncRuntime->resumeOnWorkerAsync(stopToken);
     APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
     if (layoutStorePtr && configStorePtr)
@@ -737,7 +737,7 @@ namespace ao::gtk
       optRes = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, schema);
     }
 
-    co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
+    co_await asyncRuntime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (!optRes)
     {
@@ -981,7 +981,7 @@ namespace ao::gtk
       for (auto const& item : result.modified)
       {
         if (auto const& id = item.first;
-            !_componentStateStorePtr->prune(id, preparedModified.at(id), _registry.schema()))
+            !_componentStateStorePtr->tryPrune(id, preparedModified.at(id), _registry.schema()))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to prune runtime state for preset '{}'", id);
         }
@@ -989,7 +989,7 @@ namespace ao::gtk
 
       for (auto const& id : result.resets)
       {
-        if (!_componentStateStorePtr->removePreset(id))
+        if (!_componentStateStorePtr->tryRemovePreset(id))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", id);
         }
@@ -1042,7 +1042,7 @@ namespace ao::gtk
 
     if (_componentStateStorePtr)
     {
-      if (!_componentStateStorePtr->removePreset(presetId))
+      if (!_componentStateStorePtr->tryRemovePreset(presetId))
       {
         APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
       }
@@ -1131,7 +1131,7 @@ namespace ao::gtk
     {
       if (promotedState.components.empty())
       {
-        if (!_componentStateStorePtr->removePreset(presetId))
+        if (!_componentStateStorePtr->tryRemovePreset(presetId))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
         }
@@ -1169,7 +1169,7 @@ namespace ao::gtk
       return;
     }
 
-    _actionRegistry.activate(id, ctx);
+    _actionRegistry.tryActivate(id, ctx);
   }
 
   layout::ActionActivationContext ShellLayoutController::actionContext(std::string_view componentId)

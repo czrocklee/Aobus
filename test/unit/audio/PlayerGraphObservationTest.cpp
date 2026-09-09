@@ -51,7 +51,7 @@ namespace ao::audio::test
       void defer(compat::MoveOnlyFunction<void()> task) override { _queue.defer(std::move(task)); }
       rt::test::ManualExecutor& queue() { return _queue; }
       void blockNextForeignDispatch() { _blockNextForeign.store(true); }
-      bool waitForBlockedDispatch() { return _entered.try_acquire_for(std::chrono::seconds{5}); }
+      bool tryWaitForBlockedDispatch() { return _entered.try_acquire_for(std::chrono::seconds{5}); }
       void releaseBlockedDispatch() { _release.release(); }
 
     private:
@@ -164,8 +164,8 @@ namespace ao::audio::test
     }
 
     REQUIRE(queue.queuedCount() == 1);
-    REQUIRE(queue.runOne());
-    REQUIRE(queue.waitUntilQueued());
+    REQUIRE(queue.tryRunOne());
+    REQUIRE(queue.tryWaitUntilQueued());
 
     for (std::size_t index = 0; index < 1000; ++index)
     {
@@ -173,7 +173,7 @@ namespace ao::audio::test
     }
 
     REQUIRE(queue.queuedCount() == 1);
-    REQUIRE(queue.runOne());
+    REQUIRE(queue.tryRunOne());
     CHECK(fixture.graphName() == "after-handoff");
     CHECK(delivered == 0);
 
@@ -183,12 +183,12 @@ namespace ao::audio::test
     }
 
     REQUIRE(queue.queuedCount() == 1);
-    REQUIRE(queue.runOne());
+    REQUIRE(queue.tryRunOne());
     CHECK(delivered == 1);
-    REQUIRE(queue.runOne());
+    REQUIRE(queue.tryRunOne());
     CHECK(ownerWorkRan);
     CHECK(delivered == 1);
-    REQUIRE(queue.drainUntil([&] { return delivered == 2; }));
+    REQUIRE(queue.tryDrainUntil([&] { return delivered == 2; }));
     CHECK(fixture.graphName() == "reentrant-final");
     CHECK(queue.queuedCount() == 0);
   }
@@ -205,8 +205,8 @@ namespace ao::audio::test
     auto releaseWorker = utility::ScopedRegistration{[&] { fixture.executor.releaseBlockedDispatch(); }};
     fixture.executor.blockNextForeignDispatch();
     callback(observationGraph("first"));
-    REQUIRE(queue.runOne());
-    REQUIRE(fixture.executor.waitForBlockedDispatch());
+    REQUIRE(queue.tryRunOne());
+    REQUIRE(fixture.executor.tryWaitForBlockedDispatch());
 
     auto producer = std::jthread{[&]
                                  {
@@ -220,10 +220,10 @@ namespace ao::audio::test
     CHECK(delivered == 0);
     bool ownerWorkRan = false;
     queue.defer([&] { ownerWorkRan = true; });
-    REQUIRE(queue.runOne());
+    REQUIRE(queue.tryRunOne());
     CHECK(ownerWorkRan);
     releaseWorker.reset();
-    REQUIRE(queue.drainUntil([&] { return delivered == 1; }));
+    REQUIRE(queue.tryDrainUntil([&] { return delivered == 1; }));
     CHECK(fixture.graphName() == "latest");
     CHECK(queue.queuedCount() == 0);
   }
@@ -235,8 +235,8 @@ namespace ao::audio::test
     auto& queue = fixture.executor.queue();
     auto staleCallback = fixture.provider->callback();
     staleCallback(observationGraph("retired"));
-    REQUIRE(queue.runOne());
-    REQUIRE(queue.waitUntilQueued());
+    REQUIRE(queue.tryRunOne());
+    REQUIRE(queue.tryWaitUntilQueued());
 
     SECTION("Retire before applying the graph")
     {
@@ -244,7 +244,7 @@ namespace ao::audio::test
 
     SECTION("Retire after applying the graph but before outward publication")
     {
-      REQUIRE(queue.runOne());
+      REQUIRE(queue.tryRunOne());
       CHECK(fixture.graphName() == "retired");
     }
 
@@ -261,7 +261,7 @@ namespace ao::audio::test
     staleCallback(observationGraph("obsolete"));
     CHECK(queue.queuedCount() == 0);
     fixture.provider->callback()(observationGraph("current"));
-    REQUIRE(queue.drainUntil([&] { return delivered == 1; }));
+    REQUIRE(queue.tryDrainUntil([&] { return delivered == 1; }));
     CHECK(fixture.graphName() == "current");
   }
 
@@ -278,7 +278,7 @@ namespace ao::audio::test
     staleCallback(observationGraph("obsolete"));
     CHECK(queue.queuedCount() == 0);
     fixture.provider->callback()(observationGraph("current"));
-    REQUIRE(queue.drainUntil([&] { return delivered == 1; }));
+    REQUIRE(queue.tryDrainUntil([&] { return delivered == 1; }));
     CHECK(fixture.graphName() == "current");
   }
 
@@ -291,8 +291,8 @@ namespace ao::audio::test
     std::size_t delivered = 0;
     fixture.playerPtr->setOnQualityChanged([&](auto const&, bool) { ++delivered; });
     callback(observationGraph("queued"));
-    REQUIRE(queue.runOne());
-    REQUIRE(queue.waitUntilQueued());
+    REQUIRE(queue.tryRunOne());
+    REQUIRE(queue.tryWaitUntilQueued());
     fixture.playerPtr.reset();
     auto producer = std::jthread{[&] { callback(observationGraph("after-teardown")); }};
     producer.join();

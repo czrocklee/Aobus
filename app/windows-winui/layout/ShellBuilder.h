@@ -156,7 +156,7 @@ namespace ao::winui::layout
     winrt::Microsoft::UI::Xaml::FrameworkElement titleBar() const { return _host.activeTitleBar(); }
 
     /// Invoke one shell-lifetime action from fixed window chrome or an accelerator.
-    bool invokeAction(std::string_view actionId) const;
+    bool tryInvokeAction(std::string_view actionId) const;
 
   private:
     /**

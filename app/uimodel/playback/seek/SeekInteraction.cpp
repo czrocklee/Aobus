@@ -28,7 +28,7 @@ namespace ao::uimodel
     _pendingFinalSeek = false;
   }
 
-  bool SeekInteraction::beginPointerInteraction() noexcept
+  bool SeekInteraction::tryBeginPointerInteraction() noexcept
   {
     if (!_enabled)
     {

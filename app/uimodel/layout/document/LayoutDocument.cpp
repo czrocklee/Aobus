@@ -228,9 +228,9 @@ namespace ao::uimodel
   {
     constexpr auto kContext = std::string_view{"layout document"};
 
-    if (auto const result = yaml::requireMap(node, kContext); !result)
+    if (auto const res = yaml::requireMap(node, kContext); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);

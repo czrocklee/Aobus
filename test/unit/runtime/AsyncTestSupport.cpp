@@ -65,7 +65,7 @@ namespace ao::rt::test
       return delays;
     }
 
-    async::Task<void> waitForSignal(Delay const delay, std::stop_token const stopToken)
+    async::Task<void> waitForSignalAsync(Delay const delay, std::stop_token const stopToken)
     {
       auto executor = co_await boost::asio::this_coro::executor;
       auto timerPtr = std::make_shared<boost::asio::steady_timer>(executor);
@@ -142,15 +142,15 @@ namespace ao::rt::test
 
   ControlledSleeper::~ControlledSleeper() = default;
 
-  async::Task<void> ControlledSleeper::sleepFor(Delay const delay, std::stop_token const stopToken)
+  async::Task<void> ControlledSleeper::sleepForAsync(Delay const delay, std::stop_token const stopToken)
   {
     auto executor = co_await boost::asio::this_coro::executor;
     auto timerExecutor = boost::asio::make_strand(executor);
     co_await boost::asio::co_spawn(
-      timerExecutor, _implPtr->waitForSignal(delay, stopToken), boost::asio::use_awaitable);
+      timerExecutor, _implPtr->waitForSignalAsync(delay, stopToken), boost::asio::use_awaitable);
   }
 
-  bool ControlledSleeper::waitForCallCount(std::size_t const count, std::chrono::milliseconds const timeout) const
+  bool ControlledSleeper::tryWaitForCallCount(std::size_t const count, std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock,
@@ -193,7 +193,7 @@ namespace ao::rt::test
             .cancelledOn = entryValue.cancelledOn};
   }
 
-  bool ControlledSleeper::waitForCancellation(std::size_t const index, std::chrono::milliseconds const timeout) const
+  bool ControlledSleeper::tryWaitForCancellation(std::size_t const index, std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock,
@@ -205,7 +205,7 @@ namespace ao::rt::test
                                  });
   }
 
-  bool ControlledSleeper::fire(std::size_t const index)
+  bool ControlledSleeper::tryFire(std::size_t const index)
   {
     auto timerPtr = std::shared_ptr<boost::asio::steady_timer>{};
 
@@ -232,7 +232,7 @@ namespace ao::rt::test
     return true;
   }
 
-  bool ControlledSleeper::fireNext()
+  bool ControlledSleeper::tryFireNext()
   {
     std::size_t index = 0;
 
@@ -256,10 +256,10 @@ namespace ao::rt::test
       index = static_cast<std::size_t>(it - _implPtr->entries.begin());
     }
 
-    return fire(index);
+    return tryFire(index);
   }
 
-  bool ControlledSleeper::fireNext(Delay const delay)
+  bool ControlledSleeper::tryFireNext(Delay const delay)
   {
     std::size_t index = 0;
 
@@ -286,10 +286,10 @@ namespace ao::rt::test
       index = static_cast<std::size_t>(it - _implPtr->entries.begin());
     }
 
-    return fire(index);
+    return tryFire(index);
   }
 
-  bool ControlledSleeper::fireById(std::uint64_t const id)
+  bool ControlledSleeper::tryFireById(std::uint64_t const id)
   {
     std::size_t index = 0;
 
@@ -305,7 +305,7 @@ namespace ao::rt::test
       index = static_cast<std::size_t>(it - _implPtr->entries.begin());
     }
 
-    return fire(index);
+    return tryFire(index);
   }
 
   std::uint64_t ControlledSleeper::lastScheduledId() const
@@ -322,15 +322,15 @@ namespace ao::rt::test
     return _implPtr->pendingDelaysLocked();
   }
 
-  bool ControlledSleeper::waitForPendingDelays(std::vector<Delay> const& expected,
-                                               std::chrono::milliseconds const timeout) const
+  bool ControlledSleeper::tryWaitForPendingDelays(std::vector<Delay> const& expected,
+                                                  std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(
       lock, timeout, [this, &expected] { return _implPtr->pendingDelaysLocked() == expected; });
   }
 
-  bool ControlledSleeper::waitForPendingDelay(Delay const delay, std::chrono::milliseconds const timeout) const
+  bool ControlledSleeper::tryWaitForPendingDelay(Delay const delay, std::chrono::milliseconds const timeout) const
   {
     auto lock = std::unique_lock{_implPtr->mutex};
     return _implPtr->cv.wait_for(lock,

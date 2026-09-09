@@ -173,7 +173,7 @@ namespace ao::rt
       }
     }
 
-    bool sameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
+    bool isSameRecoverableError(std::optional<Error> const& first, std::optional<Error> const& second)
     {
       if (first.has_value() != second.has_value())
       {
@@ -218,7 +218,7 @@ namespace ao::rt
       {
         auto optFilterError = sources.sourceError(entry.activeSourceLease);
 
-        if (sameRecoverableError(entry.state.optFilterError, optFilterError))
+        if (isSameRecoverableError(entry.state.optFilterError, optFilterError))
         {
           continue;
         }

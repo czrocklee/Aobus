@@ -50,13 +50,13 @@ namespace ao::gtk
   void GtkLayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& layoutState,
                                  uimodel::ListPresentations::Snapshot const& prefState)
   {
-    if (auto const resRes = _storePtr->saveTogether(
+    if (auto const res = _storePtr->saveTogether(
           rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, layoutState, uimodel::TrackColumnLayoutYamlSchema{}),
           rt::configWrite(
             uimodel::kListPresentationsConfigGroup, prefState, uimodel::ListPresentationPreferenceYamlSchema{}));
-        !resRes)
+        !res)
     {
-      APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", resRes.error().message);
+      APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", res.error().message);
     }
   }
 } // namespace ao::gtk

@@ -98,9 +98,9 @@ namespace ao::audio::test
 
     auto const& entry = _script[_scriptIndex++];
 
-    if (!entry.result)
+    if (!entry.res)
     {
-      return std::unexpected{entry.result.error()};
+      return std::unexpected{entry.res.error()};
     }
 
     auto const outputFrameBytes = frameBytes(_info.outputFormat);
@@ -141,8 +141,8 @@ namespace ao::audio::test
     return _readCount;
   }
 
-  void ScriptedDecoderSession::setSeekResult(Result<> resRes)
+  void ScriptedDecoderSession::setSeekResult(Result<> res)
   {
-    _seekRes = std::move(resRes);
+    _seekRes = std::move(res);
   }
 } // namespace ao::audio::test

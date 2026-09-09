@@ -51,8 +51,8 @@ The TUI starts from the shared defaults, adds frontend-local defaults without mu
 
 `applyOverrides()` resets effective bindings to defaults, parses each override string, skips invalid strings with diagnostics, replaces the named action's chords, and deduplicates equivalent chords.
 
-`bind()` adds a valid chord when not already present for that action.
-`unbind()` removes one binding.
+`tryBind()` adds a valid chord when not already present for that action.
+`tryUnbind()` removes one binding.
 `resetToDefault()` removes the action's delta, and `resetAllToDefault()` restores the shipped map.
 `toOverrides()` emits only actions whose effective bindings differ from defaults.
 

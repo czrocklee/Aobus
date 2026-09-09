@@ -44,7 +44,7 @@ namespace ao::gtk
     void showPlaceholder(uimodel::CoverArtPlaceholderPresentation presentation);
     void clearImage();
 
-    bool showingPlaceholder() const noexcept { return _showingPlaceholder; }
+    bool isShowingPlaceholder() const noexcept { return _showingPlaceholder; }
     bool hasImage() const noexcept { return static_cast<bool>(_image.get_paintable()); }
     Glib::RefPtr<Gdk::Paintable const> imagePaintable() const { return _image.get_paintable(); }
     uimodel::CoverArtPlaceholderPresentation const& placeholderPresentation() const noexcept { return _presentation; }

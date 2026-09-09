@@ -88,7 +88,7 @@ Which action id fills a slot by default is drawn from the shell's own action inv
 
 ### Shell extensions
 
-A shell imports a shared entry through `LayoutSchema::addSharedComponent()` and supplies a `ComponentSchemaExtension` for shell-only properties, placement properties, action slots, and defaults.
+A shell imports a shared entry through `LayoutSchema::tryAddSharedComponent()` and supplies a `ComponentSchemaExtension` for shell-only properties, placement properties, action slots, and defaults.
 The added name must not be one the shared schema entry already spends: reusing a shared name describes the shared concept differently rather than extending it, which is the divergence this vocabulary exists to prevent.
 Registration rejects that outright.
 

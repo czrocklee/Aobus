@@ -111,20 +111,20 @@ namespace ao::gtk::test
     return findController<T>(widget) != nullptr;
   }
 
-  bool emitFocusEnter(Gtk::Widget& widget);
-  bool emitFocusLeave(Gtk::Widget& widget);
-  bool emitPointerEnter(Gtk::Widget& widget, double x = 0.0, double y = 0.0);
-  bool emitPointerLeave(Gtk::Widget& widget);
-  bool emitGesturePressed(Gtk::Widget& widget,
-                          std::int32_t nPress = 1,
-                          double x = 1.0,
-                          double y = 1.0,
-                          std::optional<Gtk::PropagationPhase> optPhase = std::nullopt);
-  bool emitGestureReleased(Gtk::Widget& widget,
-                           std::int32_t nPress = 1,
-                           double x = 1.0,
-                           double y = 1.0,
-                           std::optional<Gtk::PropagationPhase> optPhase = std::nullopt);
+  bool tryEmitFocusEnter(Gtk::Widget& widget);
+  bool tryEmitFocusLeave(Gtk::Widget& widget);
+  bool tryEmitPointerEnter(Gtk::Widget& widget, double x = 0.0, double y = 0.0);
+  bool tryEmitPointerLeave(Gtk::Widget& widget);
+  bool tryEmitGesturePressed(Gtk::Widget& widget,
+                             std::int32_t nPress = 1,
+                             double x = 1.0,
+                             double y = 1.0,
+                             std::optional<Gtk::PropagationPhase> optPhase = std::nullopt);
+  bool tryEmitGestureReleased(Gtk::Widget& widget,
+                              std::int32_t nPress = 1,
+                              double x = 1.0,
+                              double y = 1.0,
+                              std::optional<Gtk::PropagationPhase> optPhase = std::nullopt);
 
   template<typename Visitor>
   void walkWidgets(Gtk::Widget& root, Visitor const& visit)

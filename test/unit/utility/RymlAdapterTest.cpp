@@ -5,6 +5,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ryml.hpp>
 
@@ -77,6 +78,26 @@ namespace ao::test
     }
   }
 
+  TEST_CASE("RymlAdapter - readBoolOr reads exact boolean text or preserves fallback", "[core][unit][yaml]")
+  {
+    auto trueTree = parseYaml("true");
+    auto falseTree = parseYaml("false");
+    CHECK(yaml::readBoolOr(trueTree.rootref(), false));
+    CHECK_FALSE(yaml::readBoolOr(falseTree.rootref(), true));
+
+    for (auto const* text : {"1", "0", "TRUE", "unknown", "null", "[true]"})
+    {
+      INFO(text);
+      auto tree = parseYaml(text);
+      CHECK_FALSE(yaml::readBoolOr(tree.rootref()));
+      CHECK(yaml::readBoolOr(tree.rootref(), true));
+    }
+
+    auto tree = parseYaml("key: true");
+    CHECK_FALSE(yaml::readBoolOr(tree.rootref(), false));
+    CHECK(yaml::readBoolOr(tree.rootref(), true));
+  }
+
   TEST_CASE("RymlAdapter - recoverable helpers return Result", "[core][unit][yaml]")
   {
     SECTION("readFileResult reports missing files as IoError")
@@ -84,9 +105,9 @@ namespace ao::test
       auto const tempDir = TempDir{};
       auto const missing = std::filesystem::path{tempDir.path()} / "missing.yaml";
 
-      auto result = yaml::readFileResult(missing);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::IoError);
+      auto res = yaml::readFileResult(missing);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
 
     SECTION("readFileResult rejects directories before reading")
@@ -95,9 +116,9 @@ namespace ao::test
       auto const directory = std::filesystem::path{tempDir.path()} / "config.yaml";
       REQUIRE(std::filesystem::create_directory(directory));
 
-      auto const result = yaml::readFileResult(directory);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::IoError);
+      auto const res = yaml::readFileResult(directory);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
 
     SECTION("readFileResult applies its optional byte ceiling before reading")
@@ -119,19 +140,19 @@ namespace ao::test
     {
       auto tree = parseYaml("3.14px");
 
-      auto result = yaml::scalarAs<double>(tree.rootref(), "duration");
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK(result.error().message.contains("duration"));
+      auto res = yaml::scalarAs<double>(tree.rootref(), "duration");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message.contains("duration"));
     }
 
     SECTION("null is not accepted as a string scalar")
     {
       auto tree = parseYaml("null");
-      auto result = yaml::scalarAs<std::string>(tree.rootref(), "identifier");
+      auto res = yaml::scalarAs<std::string>(tree.rootref(), "identifier");
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("diagnostic context is bounded")

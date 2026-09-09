@@ -123,7 +123,7 @@ namespace ao::audio::test
         _blockStop = true;
       }
 
-      bool waitForStopEntered(std::chrono::milliseconds timeout)
+      bool tryWaitForStopEntered(std::chrono::milliseconds timeout)
       {
         auto lock = std::unique_lock{_mutex};
         return _cv.wait_for(lock, timeout, [this] { return _stopEntered; });
@@ -215,7 +215,7 @@ namespace ao::audio::test
 
     target->handleBackendError("Hardware failure");
 
-    CHECK(stateChanged.waitForCount(1));
+    CHECK(stateChanged.tryWaitForCount(1));
     auto const snap = engine.status();
 
     CHECK(snap.transport == Transport::Error);
@@ -273,7 +273,7 @@ namespace ao::audio::test
     target->handleFormatChanged(changedFormat);
     backendRaw->emitPropertyChanged(PropertyId::Volume);
 
-    CHECK(stateChanged.waitForCount(1));
+    CHECK(stateChanged.tryWaitForCount(1));
     CHECK(engine.status().routeState.engineOutputFormat.sampleRate == 48000);
   }
 
@@ -380,11 +380,11 @@ namespace ao::audio::test
 
     target->handleRouteReady("destroy-anchor");
 
-    REQUIRE(routeDelivered.waitForCount(1));
+    REQUIRE(routeDelivered.tryWaitForCount(1));
     CHECK(teardownRequested.load(std::memory_order_acquire));
     REQUIRE(enginePtr);
     enginePtr.reset();
-    REQUIRE(callbackStorageDestroyed.waitForCount(1));
+    REQUIRE(callbackStorageDestroyed.tryWaitForCount(1));
     CHECK(enginePtr == nullptr);
     CHECK(routeChanged.load(std::memory_order_acquire));
   }
@@ -401,7 +401,7 @@ namespace ao::audio::test
     REQUIRE(backendRaw->target() != nullptr);
     backendRaw->blockStop();
     auto shutdownFuture = std::async(std::launch::async, [&engine] { engine.shutdown(); });
-    auto const stopWasEntered = backendRaw->waitForStopEntered(std::chrono::seconds{1});
+    auto const stopWasEntered = backendRaw->tryWaitForStopEntered(std::chrono::seconds{1});
 
     if (!stopWasEntered)
     {
@@ -451,7 +451,7 @@ namespace ao::audio::test
 
     blockingBackendRaw->blockStop();
     auto stopFuture = std::async(std::launch::async, [&] { blockingEngine.stop(); });
-    CHECK(blockingBackendRaw->waitForStopEntered(std::chrono::seconds{1}));
+    CHECK(blockingBackendRaw->tryWaitForStopEntered(std::chrono::seconds{1}));
 
     blockingBackendRaw->emitRouteReady("stale-anchor");
     CHECK_FALSE(routeChanged.load(std::memory_order_acquire));

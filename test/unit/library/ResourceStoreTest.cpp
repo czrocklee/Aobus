@@ -281,7 +281,7 @@ namespace ao::library::test
     REQUIRE(writeTxn.commit());
 
     auto removeTxn = writeTransaction(library);
-    REQUIRE(physicalWriter(store, removeTxn).remove(*idRes));
+    REQUIRE(physicalWriter(store, removeTxn).tryRemove(*idRes));
     REQUIRE(removeTxn.commit());
 
     auto const readTxn = library.readTransaction();

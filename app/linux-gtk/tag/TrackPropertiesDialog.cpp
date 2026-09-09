@@ -306,7 +306,7 @@ namespace ao::gtk
     for (auto& editor : _editors)
     {
       if (auto const rawValue = scope.trackField(trackId, editor.field);
-          _formModel.mergeTrackField(editor.field, rawValue))
+          _formModel.tryMergeTrackField(editor.field, rawValue))
       {
         applyRowView(editor.widget, _formModel.rowView(editor.field));
       }
@@ -314,7 +314,8 @@ namespace ao::gtk
 
     for (auto& row : _readonlyRows)
     {
-      if (auto const rawValue = scope.trackField(trackId, row.field); _formModel.mergeTrackField(row.field, rawValue))
+      if (auto const rawValue = scope.trackField(trackId, row.field);
+          _formModel.tryMergeTrackField(row.field, rawValue))
       {
         applyRowView(row.widget, _formModel.rowView(row.field));
       }
@@ -348,7 +349,7 @@ namespace ao::gtk
       _tasks,
       *this,
       "track properties save",
-      _optEditSession->submitMetadata(std::move(patch)),
+      _optEditSession->submitMetadataAsync(std::move(patch)),
       [](TrackPropertiesDialog* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
       {
         owner->updateSaveEnabled();

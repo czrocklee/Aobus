@@ -59,16 +59,16 @@ namespace ao::rt::test
     TrackId importOne(library::MusicLibrary& library)
     {
       auto plan = LibraryScan{library}.buildPlan().value();
-      auto result = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
-      REQUIRE(result);
-      REQUIRE(result->insertedIds.size() == 1);
-      return result->insertedIds.front();
+      auto res = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
+      REQUIRE(res);
+      REQUIRE(res->insertedIds.size() == 1);
+      return res->insertedIds.front();
     }
 
     void removeTrack(library::MusicLibrary& library, TrackId const trackId)
     {
       auto transaction = library::test::writeTransaction(library);
-      auto result = transaction.apply(
+      auto res = transaction.apply(
         [trackId](library::LibraryWrite& write) -> Result<>
         {
           auto removeRes = write.tracks().remove(trackId);
@@ -76,7 +76,7 @@ namespace ao::rt::test
           REQUIRE(*removeRes);
           return {};
         });
-      REQUIRE(result);
+      REQUIRE(res);
       REQUIRE(transaction.commit());
     }
   } // namespace
@@ -114,11 +114,11 @@ namespace ao::rt::test
                                      spec.tags = {"favorite"};
                                    });
 
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->mutatedIds == std::vector{trackId});
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->mutatedIds == std::vector{trackId});
+    CHECK(res->failureCount == 0);
     CHECK(failures.count == 0);
     auto transaction = library.readTransaction();
     auto const optTrack = library.tracks().reader(transaction).get(trackId);
@@ -146,12 +146,12 @@ namespace ao::rt::test
     REQUIRE(operation.prepare());
 
     removeTrack(library, trackId);
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->mutatedIds.empty());
-    CHECK(result->staleCount == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->mutatedIds.empty());
+    CHECK(res->staleCount == 1);
+    CHECK(res->failureCount == 0);
     CHECK(failures.count == 0);
     auto transaction = library.readTransaction();
     CHECK_FALSE(library.tracks().reader(transaction).get(trackId));
@@ -179,12 +179,12 @@ namespace ao::rt::test
     auto replacement = library::test::makeEmptyTrackSpec("song.flac");
     replacement.title = "Replacement";
     auto const replacementTrackId = library::test::addTrack(library, replacement);
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->missingCount == 0);
-    CHECK(result->staleCount == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->missingCount == 0);
+    CHECK(res->staleCount == 1);
+    CHECK(res->failureCount == 0);
     CHECK(failures.count == 0);
     auto transaction = library.readTransaction();
     auto const optManifest = library.manifest().reader(transaction).get("song.flac");
@@ -226,12 +226,12 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->missingCount == 1);
-    CHECK(result->staleCount == 0);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->missingCount == 1);
+    CHECK(res->staleCount == 0);
+    CHECK(res->failureCount == 0);
     CHECK(failures.count == 0);
     auto transaction = library.readTransaction();
     auto const optManifest = library.manifest().reader(transaction).get("song.flac");
@@ -264,13 +264,13 @@ namespace ao::rt::test
     auto occupier = library::test::makeEmptyTrackSpec("renamed.flac");
     occupier.title = "Concurrent destination";
     auto const occupyingTrackId = library::test::addTrack(library, occupier);
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->staleCount == 0);
-    CHECK(result->failureCount == 1);
+    REQUIRE(res);
+    CHECK(res->insertedIds.empty());
+    CHECK(res->relinkedIds.empty());
+    CHECK(res->staleCount == 0);
+    CHECK(res->failureCount == 1);
     CHECK(failures.count == 1);
     auto transaction = library.readTransaction();
     auto trackReader = library.tracks().reader(transaction);
@@ -303,13 +303,13 @@ namespace ao::rt::test
     REQUIRE(operation.prepare());
 
     removeTrack(library, originalTrackId);
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->staleCount == 0);
-    CHECK(result->failureCount == 1);
+    REQUIRE(res);
+    CHECK(res->insertedIds.empty());
+    CHECK(res->relinkedIds.empty());
+    CHECK(res->staleCount == 0);
+    CHECK(res->failureCount == 1);
     CHECK(failures.count == 1);
     auto transaction = library.readTransaction();
     CHECK_FALSE(library.tracks().reader(transaction).get(originalTrackId));

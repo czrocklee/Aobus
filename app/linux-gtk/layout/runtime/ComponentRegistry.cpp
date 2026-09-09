@@ -56,7 +56,7 @@ namespace ao::gtk::layout
       return;
     }
 
-    auto const added = _schema.addComponent(std::move(schema));
+    auto const added = _schema.tryAddComponent(std::move(schema));
     AO_EXPECTS(added, "A component registration must provide one unique valid schema entry");
 
     if (!added)
@@ -76,7 +76,7 @@ namespace ao::gtk::layout
     // remains authoritative.
     if (!_schema.component(id))
     {
-      auto const added = _schema.addSharedComponent(id, std::move(extension));
+      auto const added = _schema.tryAddSharedComponent(id, std::move(extension));
       AO_EXPECTS(added, "A shared component registration must import a valid canonical schema entry");
 
       if (!added)

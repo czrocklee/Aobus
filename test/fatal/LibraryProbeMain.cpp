@@ -19,8 +19,8 @@ namespace
 {
   constexpr auto kProbeTimeout = std::chrono::seconds{15};
 
-  bool verifyProbe(ao::library::test::LibraryFatalProbeExpectation const& expectation,
-                   ao::test::ProbeProcessResult const& result)
+  bool tryVerifyProbe(ao::library::test::LibraryFatalProbeExpectation const& expectation,
+                      ao::test::ProbeProcessResult const& result)
   {
     auto const conditionMatches =
       expectation.condition.empty() || result.standardError.contains("condition=" + std::string{expectation.condition});
@@ -30,8 +30,8 @@ namespace
            result.standardError.contains(expectation.function);
   }
 
-  bool verifyProbe(ao::library::test::LibraryProbeObservationExpectation const& expectation,
-                   ao::test::ProbeProcessResult const& result)
+  bool tryVerifyProbe(ao::library::test::LibraryProbeObservationExpectation const& expectation,
+                      ao::test::ProbeProcessResult const& result)
   {
     auto const diagnosticMatches =
       expectation.standardErrorMarker.empty() || result.standardError.contains(expectation.standardErrorMarker);
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 
     auto const result = ao::test::runProbeProcess(executablePath, scenario, kProbeTimeout);
 
-    if (!verifyProbe(expectation, result))
+    if (!tryVerifyProbe(expectation, result))
     {
       std::println(stderr,
                    "ao_library_probe fatal scenario '{}' failed: started={} timed-out={} exited={} "
@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
 
     auto const result = ao::test::runProbeProcess(executablePath, scenario, kProbeTimeout);
 
-    if (!verifyProbe(expectation, result))
+    if (!tryVerifyProbe(expectation, result))
     {
       std::println(stderr,
                    "ao_library_probe observation scenario '{}' failed: started={} timed-out={} exited={} "

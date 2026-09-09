@@ -41,7 +41,7 @@ namespace clang::tidy::readability
       return method != nullptr && method->getParent()->isLambda();
     }
 
-    bool requiresVisibleDefinition(FunctionDecl const& function)
+    bool needsVisibleDefinition(FunctionDecl const& function)
     {
       if (function.isConstexpr() || function.getReturnType()->getContainedAutoType() != nullptr)
       {
@@ -64,19 +64,20 @@ namespace clang::tidy::readability
     class NestedExecutableDefinitionVisitor final : public RecursiveASTVisitor<NestedExecutableDefinitionVisitor>
     {
     public:
-      bool VisitLambdaExpr(LambdaExpr const* /*expression*/)
+      // Match RecursiveASTVisitor's customization signatures; the nodes are only inspected.
+      bool VisitLambdaExpr(LambdaExpr* /*expression*/)
       {
         _found = true;
         return false;
       }
 
-      bool VisitStmtExpr(StmtExpr const* /*expression*/)
+      bool VisitStmtExpr(StmtExpr* /*expression*/)
       {
         _found = true;
         return false;
       }
 
-      bool VisitFunctionDecl(FunctionDecl const* function)
+      bool VisitFunctionDecl(FunctionDecl* function)
       {
         if (function->doesThisDeclarationHaveABody())
         {
@@ -87,7 +88,7 @@ namespace clang::tidy::readability
         return true;
       }
 
-      bool found() const { return _found; }
+      bool hasFoundBody() const { return _found; }
 
     private:
       bool _found = false;
@@ -102,7 +103,7 @@ namespace clang::tidy::readability
 
       auto visitor = NestedExecutableDefinitionVisitor{};
       visitor.TraverseStmt(&statement);
-      return !visitor.found();
+      return !visitor.hasFoundBody();
     }
 
     bool hasAllowedBody(FunctionDecl const& function)
@@ -134,7 +135,7 @@ namespace clang::tidy::readability
     auto const* function = result.Nodes.getNodeAs<FunctionDecl>("function");
 
     if (function == nullptr || function->isImplicit() || function->isDeleted() || function->isDefaulted() ||
-        isLambdaCallOperator(*function) || requiresVisibleDefinition(*function) || hasAllowedBody(*function))
+        isLambdaCallOperator(*function) || needsVisibleDefinition(*function) || hasAllowedBody(*function))
     {
       return;
     }

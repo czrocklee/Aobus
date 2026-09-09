@@ -163,9 +163,9 @@ namespace ao::media::file::opus::test
 
     ao::media::file::test::RecordedContent readContent(File const& file)
     {
-      auto result = file.readContent();
-      REQUIRE(result);
-      return *result;
+      auto res = file.readContent();
+      REQUIRE(res);
+      return *res;
     }
 
     bool containsBytes(std::span<std::byte const> haystack, std::string_view needle)
@@ -307,9 +307,9 @@ namespace ao::media::file::opus::test
     {
       auto const temp = TempFile{bytes, ".opus"};
       auto const file = File{temp.path};
-      auto const result = file.readContent();
-      REQUIRE_FALSE(result);
-      return result.error().code;
+      auto const res = file.readContent();
+      REQUIRE_FALSE(res);
+      return res.error().code;
     };
 
     SECTION("Content that is not an Ogg stream is corrupt")

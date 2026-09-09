@@ -485,10 +485,10 @@ namespace ao::tui::test
   {
     auto const worstCaseRows = static_cast<std::int32_t>(trackDetailFields().size());
 
-    CHECK_FALSE(detailPaneShowsCoverArt(kCoverArtRows + worstCaseRows));
-    CHECK(detailPaneShowsCoverArt(kCoverArtRows + worstCaseRows + 3));
+    CHECK_FALSE(isDetailPaneShowingCoverArt(kCoverArtRows + worstCaseRows));
+    CHECK(isDetailPaneShowingCoverArt(kCoverArtRows + worstCaseRows + 3));
     // An 80x24 terminal spends its rows on metadata.
-    CHECK_FALSE(detailPaneShowsCoverArt(24 - 2));
+    CHECK_FALSE(isDetailPaneShowingCoverArt(24 - 2));
   }
 
   TEST_CASE("Render - Kitty paint state prevents redundant repaint and updates on change",
@@ -1199,7 +1199,7 @@ namespace ao::tui::test
 
     for (std::int32_t index = 0; index < 7; ++index)
     {
-      REQUIRE(shell.moveCommandCompletion(1));
+      REQUIRE(shell.tryMoveCommandCompletion(1));
     }
 
     auto const rendered =
@@ -1310,7 +1310,7 @@ namespace ao::tui::test
             .displayText = "Aimer", .insertText = "Aimer", .detail = rt::CompletionDetail::makeResolvedText("artist")},
         },
     });
-    REQUIRE(shell.moveCommandCompletion(1));
+    REQUIRE(shell.tryMoveCommandCompletion(1));
 
     auto const rendered = renderElement(commandPalettePanel(shell, 48), 48, 8);
 

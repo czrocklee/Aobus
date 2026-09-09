@@ -15,23 +15,23 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("CoreAudioLatency - converts the complete device and AudioUnit tail to client frames",
             "[audio][unit][coreaudio]")
   {
-    auto const result = coreAudioPresentationTailFrames({.ioBufferFrames = 480,
-                                                         .safetyOffsetFrames = 48,
-                                                         .deviceLatencyFrames = 24,
-                                                         .streamLatencyFrames = 8,
-                                                         .audioUnitLatencySeconds = 0.001,
-                                                         .deviceSampleRate = 48000.0,
-                                                         .clientSampleRate = 44100});
-    REQUIRE(result);
-    CHECK(*result == 559U);
+    auto const res = coreAudioPresentationTailFrames({.ioBufferFrames = 480,
+                                                      .safetyOffsetFrames = 48,
+                                                      .deviceLatencyFrames = 24,
+                                                      .streamLatencyFrames = 8,
+                                                      .audioUnitLatencySeconds = 0.001,
+                                                      .deviceSampleRate = 48000.0,
+                                                      .clientSampleRate = 44100});
+    REQUIRE(res);
+    CHECK(*res == 559U);
   }
 
   TEST_CASE("CoreAudioLatency - rounds any partial client frame upward", "[audio][unit][coreaudio]")
   {
-    auto const result =
+    auto const res =
       coreAudioPresentationTailFrames({.ioBufferFrames = 1, .deviceSampleRate = 48000.0, .clientSampleRate = 44100});
-    REQUIRE(result);
-    CHECK(*result == 1U);
+    REQUIRE(res);
+    CHECK(*res == 1U);
   }
 
   TEST_CASE("CoreAudioLatency - rejects invalid timing evidence and saturates overflow", "[audio][unit][coreaudio]")

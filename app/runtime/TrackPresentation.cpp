@@ -20,7 +20,7 @@ namespace ao::rt
     std::vector<TrackPresentationPreset> const& builtInPresets()
     {
       static auto const
-        presets =
+        kPresets =
           std::vector{
             // --- Daily listening ---
             TrackPresentationPreset{
@@ -258,7 +258,7 @@ namespace ao::rt
             },
           };
 
-      return presets;
+      return kPresets;
     }
   } // namespace
 

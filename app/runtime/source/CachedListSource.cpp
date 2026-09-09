@@ -75,7 +75,7 @@ namespace ao::rt
     _lastPublishedSize = _implementationPtr->size();
     subscribeToImplementation();
 
-    std::ignore = publishDelta(SourceReset{}, previousSize);
+    std::ignore = tryPublishDelta(SourceReset{}, previousSize);
   }
 
   std::optional<Error> CachedListSource::sourceError() const
@@ -172,6 +172,6 @@ namespace ao::rt
     auto const previousSize = _lastPublishedSize;
     _lastPublishedSize = _implementationPtr->size();
 
-    std::ignore = publishDelta(std::move(forwarded), previousSize);
+    std::ignore = tryPublishDelta(std::move(forwarded), previousSize);
   }
 } // namespace ao::rt

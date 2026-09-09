@@ -35,7 +35,7 @@ namespace ao::library
       return component.empty() || component == "." || component == "..";
     }
 
-    bool escapesRoot(std::filesystem::path const& relative) noexcept
+    bool isOutsideRoot(std::filesystem::path const& relative) noexcept
     {
       if (relative.empty() || relative == "." || relative.is_absolute())
       {
@@ -223,7 +223,7 @@ namespace ao::library
 
     auto const resolvedRelative = resolvedPath.lexically_relative(resolvedRoot);
 
-    if (escapesRoot(resolvedRelative))
+    if (isOutsideRoot(resolvedRelative))
     {
       return makeError(
         Error::Code::InvalidInput, std::format("Library URI '{}' resolves outside the library root", _value));

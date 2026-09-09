@@ -50,9 +50,9 @@ namespace ao::rt::test
 
     ListId createList(WriteTransaction& transaction, ListBuilder const& list)
     {
-      auto result = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
-      REQUIRE(result);
-      return *result;
+      auto res = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
+      REQUIRE(res);
+      return *res;
     }
 
     std::optional<std::vector<std::string>> listOrderUris(library::MusicLibrary& ml, std::string_view listName)

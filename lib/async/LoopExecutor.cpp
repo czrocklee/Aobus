@@ -14,7 +14,7 @@ namespace ao::async
     drainQueuedTasks();
   }
 
-  bool LoopExecutor::runReadyTurn()
+  bool LoopExecutor::tryRunReadyTurn()
   {
     AO_EXPECTS(isCurrent());
 

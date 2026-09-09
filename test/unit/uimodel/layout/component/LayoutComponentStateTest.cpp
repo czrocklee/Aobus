@@ -47,7 +47,7 @@ namespace ao::uimodel::test
     LayoutSchema persistentLayoutSchema()
     {
       auto schema = LayoutSchema{};
-      REQUIRE(schema.addSharedComponent("split"));
+      REQUIRE(schema.tryAddSharedComponent("split"));
       return schema;
     }
   } // namespace

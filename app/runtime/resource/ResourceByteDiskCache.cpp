@@ -181,27 +181,12 @@ namespace ao::rt
       return;
     }
 
-    if (accumulateWrite(bytes.size()))
-    {
-      converge();
-    }
-  }
-
-  std::filesystem::path ResourceByteDiskCache::entryPath(utility::Sha256Digest const& digest) const
-  {
-    AO_EXPECTS(isEnabled(), "A disabled cache has no entry paths");
-    auto const hex = utility::sha256Hex(digest);
-    return _config.directory / utility::pathFromUtf8(hex.substr(0, kShardNameLength)) / utility::pathFromUtf8(hex);
-  }
-
-  bool ResourceByteDiskCache::accumulateWrite(std::size_t const byteLength) const
-  {
     auto const share = _config.byteBudget / kConvergeWriteShare;
-    auto const written = _unconvergedBytes.fetch_add(byteLength, std::memory_order_relaxed) + byteLength;
+    auto const written = _unconvergedBytes.fetch_add(bytes.size(), std::memory_order_relaxed) + bytes.size();
 
     if (written < share)
     {
-      return false;
+      return;
     }
 
     // Concurrent writers may each cross the threshold and each walk, and one
@@ -209,7 +194,14 @@ namespace ao::rt
     // count. Both outcomes only change when the next walk happens, so the
     // approximation costs nothing worth an exchange loop.
     _unconvergedBytes.store(0, std::memory_order_relaxed);
-    return true;
+    converge();
+  }
+
+  std::filesystem::path ResourceByteDiskCache::entryPath(utility::Sha256Digest const& digest) const
+  {
+    AO_EXPECTS(isEnabled(), "A disabled cache has no entry paths");
+    auto const hex = utility::sha256Hex(digest);
+    return _config.directory / utility::pathFromUtf8(hex.substr(0, kShardNameLength)) / utility::pathFromUtf8(hex);
   }
 
   void ResourceByteDiskCache::converge() const

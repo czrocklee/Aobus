@@ -45,11 +45,11 @@ namespace ao::winui
 
     struct State;
 
-    static async::Task<void> prepareAndDisplay(std::weak_ptr<State> statePtr,
-                                               async::Runtime* runtime,
-                                               std::uint64_t generation,
-                                               rt::ResourceBytes bytes,
-                                               std::stop_token stopToken);
+    static async::Task<void> prepareAndDisplayAsync(std::weak_ptr<State> statePtr,
+                                                    async::Runtime* runtime,
+                                                    std::uint64_t generation,
+                                                    rt::ResourceBytes bytes,
+                                                    std::stop_token stopToken);
     static void display(State& state, std::uint64_t generation, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;

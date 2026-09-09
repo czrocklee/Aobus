@@ -185,7 +185,7 @@ namespace ao::gtk::test
     REQUIRE(albumsButton != nullptr);
 
     auto const secondListId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Other"})));
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other"})));
 
     emitClicked(*albumsButton);
 

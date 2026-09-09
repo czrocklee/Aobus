@@ -372,7 +372,7 @@ namespace ao::rt
     }
   } // namespace
 
-  async::Task<Result<AddTracksToListReply>> LibraryCommands::Impl::previewAddTracksToList(
+  async::Task<Result<AddTracksToListReply>> LibraryCommands::Impl::previewAddTracksToListAsync(
     LibraryWriteLane::Submission submission,
     ListId const listId,
     std::vector<TrackId> trackIds)
@@ -383,7 +383,7 @@ namespace ao::rt
       { return applyAddTracksToListInTransaction(library, transaction, listId, trackIds); });
   }
 
-  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryCommands::Impl::applyAddTracksToList(
+  async::Task<Result<TrackAuthoringResult<AddTracksToListReply>>> LibraryCommands::Impl::applyAddTracksToListAsync(
     LibraryWriteLane::Submission submission,
     ListId const listId,
     BoundTrackTargets targets)
@@ -418,7 +418,7 @@ namespace ao::rt
       });
   }
 
-  async::Task<Result<RemoveTracksFromListReply>> LibraryCommands::Impl::previewRemoveTracksFromList(
+  async::Task<Result<RemoveTracksFromListReply>> LibraryCommands::Impl::previewRemoveTracksFromListAsync(
     LibraryWriteLane::Submission submission,
     ListId const listId,
     std::vector<TrackId> trackIds)
@@ -436,10 +436,10 @@ namespace ao::rt
     co_return std::move(workRes->reply);
   }
 
-  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>> LibraryCommands::Impl::applyRemoveTracksFromList(
-    LibraryWriteLane::Submission submission,
-    ListId const listId,
-    BoundTrackTargets targets)
+  async::Task<Result<TrackAuthoringResult<RemoveTracksFromListReply>>>
+  LibraryCommands::Impl::applyRemoveTracksFromListAsync(LibraryWriteLane::Submission submission,
+                                                        ListId const listId,
+                                                        BoundTrackTargets targets)
   {
     return detail::executeBoundTrackAuthoringAsync<RemoveTracksFromListReply>(
       std::move(submission),

@@ -333,7 +333,7 @@ namespace ao::rt
       return RowSlot{.status = RowStatus::Hashed, .identity = **identityRes};
     }
 
-    async::Task<> fingerprintWorker(FingerprintBatch* batch)
+    async::Task<> fingerprintWorkerAsync(FingerprintBatch* batch)
     {
       while (!batch->stopToken.stop_requested())
       {
@@ -385,7 +385,7 @@ namespace ao::rt
   {
   }
 
-  async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPending(
+  async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPendingAsync(
     CommitBatchCallback commitBatchCallback,
     Options options,
     AudioIdentityIndexProgressCallback progressCallback,
@@ -447,10 +447,10 @@ namespace ao::rt
 
       for (std::size_t worker = 0; worker < workerCount; ++worker)
       {
-        workers.push_back(fingerprintWorker(&batch));
+        workers.push_back(fingerprintWorkerAsync(&batch));
       }
 
-      co_await _asyncRuntime.whenAll(std::move(workers));
+      co_await _asyncRuntime.whenAllAsync(std::move(workers));
 
       for (auto const& slot : slots)
       {

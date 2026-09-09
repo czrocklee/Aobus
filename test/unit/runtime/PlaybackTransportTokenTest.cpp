@@ -417,7 +417,7 @@ namespace ao::rt::test
     CHECK(startedCount == 0);
     CHECK(nowPlaying.empty());
     CHECK(notificationCount == 0);
-    REQUIRE(executor.drainUntil([&] { return notificationCount == 1; }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return notificationCount == 1; }, std::chrono::seconds{5}));
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
@@ -458,7 +458,7 @@ namespace ao::rt::test
     auto const committedRes = fixture.playbackTransport.commitPlayback(std::move(*stagedRes));
     REQUIRE(committedRes);
     CHECK(committedRes->generation > 0);
-    REQUIRE(fixture.executor.drainUntil([&] { return idleEvents == 1; }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return idleEvents == 1; }));
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
     CHECK(startedEvents == 0);
     CHECK(nowPlayingEvents == 0);
@@ -569,7 +569,7 @@ namespace ao::rt::test
     REQUIRE(failingToken != firstToken);
 
     releaseGuard.release();
-    REQUIRE(executor.drainUntil([&] { return !notifications.feed().entries.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.tryDrainUntil([&] { return !notifications.feed().entries.empty(); }, std::chrono::seconds{5}));
 
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);

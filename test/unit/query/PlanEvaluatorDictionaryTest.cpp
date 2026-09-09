@@ -36,23 +36,25 @@ namespace ao::query::test
     {
       auto expr = parseOk("$work = 'Symphony No. 5'");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) == false);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) ==
+            false);
     }
 
     SECTION("$w Equality (shorthand)")
     {
       auto expr = parseOk("$w = 'Symphony No. 5'");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
     }
 
     SECTION("$work LIKE")
     {
       auto expr = parseOk("$work ~ Symphony");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) == false);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithWork.view(), trackWithWork.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithoutWork.view(), trackWithoutWork.dictionary()) ==
+            false);
     }
   }
 
@@ -77,24 +79,26 @@ namespace ao::query::test
     {
       auto expr = parseOk("$movement = Finale");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()) == true);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithoutMovement.view(), trackWithoutMovement.dictionary()) ==
-            false);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()) ==
+            true);
+      CHECK(matchesFullPlanWithDictionary(
+              evaluator, plan, trackWithoutMovement.view(), trackWithoutMovement.dictionary()) == false);
     }
 
     SECTION("$m LIKE")
     {
       auto expr = parseOk("$m ~ Fin");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithMovement.view(), trackWithMovement.dictionary()) ==
+            true);
     }
 
     SECTION("Movement number existence")
     {
       auto expr = parseOk("$movementNumber? and $movementTotal?");
       auto plan = compileOk(expr);
-      CHECK(evaluator.evaluateFull(plan, trackWithMovement.view()) == true);
-      CHECK(evaluator.evaluateFull(plan, trackWithoutMovement.view()) == false);
+      CHECK(evaluator.matchesFullPlan(plan, trackWithMovement.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, trackWithoutMovement.view()) == false);
     }
   }
 
@@ -108,14 +112,16 @@ namespace ao::query::test
     {
       auto expr = parseOk("$composer = Beethoven");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithComposer.view(), trackWithComposer.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithComposer.view(), trackWithComposer.dictionary()) ==
+            true);
     }
 
     SECTION("$composer LIKE")
     {
       auto expr = parseOk("$composer ~ Beet");
       auto plan = compileOk(expr);
-      CHECK(evaluateWithDictionary(evaluator, plan, trackWithComposer.view(), trackWithComposer.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, trackWithComposer.view(), trackWithComposer.dictionary()) ==
+            true);
     }
   }
 
@@ -130,8 +136,8 @@ namespace ao::query::test
     auto const matchingPlan = compileOk(parseOk(R"($artist ~ "DIE ÄRZTE")"));
     auto const accentDistinctPlan = compileOk(parseOk(R"($artist ~ "ARZTE")"));
 
-    CHECK(evaluateWithDictionary(evaluator, matchingPlan, track.view(), track.dictionary()));
-    CHECK_FALSE(evaluateWithDictionary(evaluator, accentDistinctPlan, track.view(), track.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(evaluator, matchingPlan, track.view(), track.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, accentDistinctPlan, track.view(), track.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - matches custom text with Unicode caseless substring keys",
@@ -142,7 +148,7 @@ namespace ao::query::test
     auto track = TestTrack{spec};
     auto const plan = compileOk(parseOk(R"(%Location ~ "GROSSE STRASSE")"));
 
-    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - dictionary cache preserves string predicate results", "[query][unit][plan-evaluator]")
@@ -186,9 +192,9 @@ namespace ao::query::test
         auto const plan = compileOk(parseOk(testCase.expression));
         auto const binding = PlanBinding{plan, dictionaryContext};
 
-        CHECK(evaluator.evaluateFull(binding, matchingTrack) == true);
-        CHECK(evaluator.evaluateFull(binding, nonMatchingTrack) == false);
-        CHECK(evaluator.evaluateFull(binding, missingArtistTrack) == testCase.missingArtistMatches);
+        CHECK(evaluator.matchesFullPlan(binding, matchingTrack) == true);
+        CHECK(evaluator.matchesFullPlan(binding, nonMatchingTrack) == false);
+        CHECK(evaluator.matchesFullPlan(binding, missingArtistTrack) == testCase.missingArtistMatches);
       }
     }
   }
@@ -208,7 +214,7 @@ namespace ao::query::test
     auto track = TestTrack{spec, &dictionaryFixture.dictionary()};
     auto const plan = compileOk(parseOk(R"($album = ($artist = "Bach"))"));
 
-    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track.view(), dictionaryFixture.dictionary()) == false);
+    CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), dictionaryFixture.dictionary()) == false);
   }
 
   TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields", "[query][unit][plan-evaluator]")
@@ -234,37 +240,38 @@ namespace ao::query::test
     SECTION("Album")
     {
       auto plan = compileOk(parseOk("$album = 'Test Album'"));
-      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), dictionary) == true);
 
       auto planLike = compileOk(parseOk("$album ~ 'Test'"));
-      CHECK(evaluateWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
     }
 
     SECTION("Genre")
     {
       auto plan = compileOk(parseOk("$genre = 'Test Genre'"));
-      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), dictionary) == true);
 
       auto planLike = compileOk(parseOk("$genre ~ 'Genre'"));
-      CHECK(evaluateWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
     }
 
     SECTION("AlbumArtist")
     {
       auto plan = compileOk(parseOk("$albumArtist = 'Test Album Artist'"));
-      CHECK(evaluateWithDictionary(evaluator, plan, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), dictionary) == true);
 
       auto planLike = compileOk(parseOk("$albumArtist ~ 'Album Artist'"));
-      CHECK(evaluateWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, planLike, track.view(), dictionary) == true);
     }
 
     SECTION("Classical role fields")
     {
-      CHECK(evaluateWithDictionary(
+      CHECK(matchesFullPlanWithDictionary(
         evaluator, compileOk(parseOk("$conductor = 'Test Conductor'")), track.view(), dictionary));
-      CHECK(evaluateWithDictionary(evaluator, compileOk(parseOk("$ensemble ~ 'Ensemble'")), track.view(), dictionary));
-      CHECK(
-        evaluateWithDictionary(evaluator, compileOk(parseOk("$soloist = 'Test Soloist'")), track.view(), dictionary));
+      CHECK(matchesFullPlanWithDictionary(
+        evaluator, compileOk(parseOk("$ensemble ~ 'Ensemble'")), track.view(), dictionary));
+      CHECK(matchesFullPlanWithDictionary(
+        evaluator, compileOk(parseOk("$soloist = 'Test Soloist'")), track.view(), dictionary));
     }
 
     SECTION("Uri")
@@ -275,33 +282,33 @@ namespace ao::query::test
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
       plan.instructions.push_back({.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 1});
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("Channels")
     {
       auto plan = compileOk(parseOk("@channels = 2"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("BitDepth")
     {
       auto plan = compileOk(parseOk("@bitDepth = 16"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("Codec")
     {
       auto plan = compileOk(parseOk("@codec = FLAC"));
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("Numeric Metadata Fields")
     {
-      CHECK(evaluator.evaluateFull(compileOk(parseOk("$trackNumber = 3")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compileOk(parseOk("$trackTotal = 12")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compileOk(parseOk("$discNumber = 1")), track.view()) == true);
-      CHECK(evaluator.evaluateFull(compileOk(parseOk("$discTotal = 2")), track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$trackNumber = 3")), track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$trackTotal = 12")), track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$discNumber = 1")), track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$discTotal = 2")), track.view()) == true);
     }
 
     SECTION("CoverArtId")
@@ -312,7 +319,7 @@ namespace ao::query::test
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 99});
       plan.instructions.push_back(
         {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::CoverArtId), .operand = 1});
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("TagCount")
@@ -323,7 +330,7 @@ namespace ao::query::test
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
       plan.instructions.push_back(
         {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::TagCount), .operand = 1});
-      CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
     }
 
     SECTION("Custom Metadata")
@@ -333,7 +340,7 @@ namespace ao::query::test
       auto track2 = TestTrack{spec2};
 
       auto plan = compileOk(parseOk("%customName = 'customValue'"));
-      CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track2.view(), track2.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track2.view(), track2.dictionary()) == true);
 
       auto planManual = ExecutionPlan{};
       planManual.instructions.push_back(
@@ -343,7 +350,7 @@ namespace ao::query::test
       planManual.instructions.push_back(
         {.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Custom), .operand = 1, .constValue = 0});
       // Bytecode without a bound custom-key symbol represents an unresolved key.
-      CHECK_FALSE(PlanEvaluator{}.evaluateFull(planManual, track2.view()));
+      CHECK_FALSE(PlanEvaluator{}.matchesFullPlan(planManual, track2.view()));
     }
 
     SECTION("Invalid Field")
@@ -353,7 +360,7 @@ namespace ao::query::test
       plan.instructions.push_back({.op = OpCode::LoadField, .field = 255, .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
       plan.instructions.push_back({.op = OpCode::Like, .operand = 1});
-      CHECK(evaluator.evaluateFull(plan, track.view()) == false);
+      CHECK(evaluator.matchesFullPlan(plan, track.view()) == false);
     }
   }
 
@@ -370,7 +377,7 @@ namespace ao::query::test
 
     auto evaluator = PlanEvaluator{};
     auto evaluate = [&](ExecutionPlan const& plan, library::TrackView const& track)
-    { return evaluateWithDictionary(evaluator, plan, track, dictionary); };
+    { return matchesFullPlanWithDictionary(evaluator, plan, track, dictionary); };
 
     auto adeleData = makeHotOnlyTrack(adeleId);
     auto adele = library::TrackView{adeleData, std::span<std::byte const>{}};
@@ -453,7 +460,7 @@ namespace ao::query::test
 
     auto plan = compileOk(parseOk("$artist ~ 'Bach'"));
 
-    CHECK(evaluateWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
+    CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
   }
 
   TEST_CASE("PlanEvaluator - unresolved comparison symbols have explicit missing semantics",
@@ -464,17 +471,17 @@ namespace ao::query::test
 
     auto const equalPlan = compileOk(parseOk("$artist = 'never interned'"));
     auto const notEqualPlan = compileOk(parseOk("$artist != 'never interned'"));
-    CHECK_FALSE(evaluateWithDictionary(evaluator, equalPlan, track.view(), track.dictionary()));
-    CHECK(evaluateWithDictionary(evaluator, notEqualPlan, track.view(), track.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, equalPlan, track.view(), track.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(evaluator, notEqualPlan, track.view(), track.dictionary()));
 
     auto const customEqual = compileOk(parseOk("%missing = ''"));
     auto const customNotEqual = compileOk(parseOk("%missing != ''"));
     auto const customLike = compileOk(parseOk("%missing ~ ''"));
     auto const customIn = compileOk(parseOk("%missing in ['']"));
-    CHECK_FALSE(evaluateWithDictionary(evaluator, customEqual, track.view(), track.dictionary()));
-    CHECK(evaluateWithDictionary(evaluator, customNotEqual, track.view(), track.dictionary()));
-    CHECK_FALSE(evaluateWithDictionary(evaluator, customLike, track.view(), track.dictionary()));
-    CHECK_FALSE(evaluateWithDictionary(evaluator, customIn, track.view(), track.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customEqual, track.view(), track.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(evaluator, customNotEqual, track.view(), track.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customLike, track.view(), track.dictionary()));
+    CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customIn, track.view(), track.dictionary()));
   }
 
   TEST_CASE("PlanEvaluator - dictionary literal binding does not leak into later field comparisons",
@@ -490,6 +497,6 @@ namespace ao::query::test
     auto track = library::TrackView{data, std::span<std::byte const>{}};
     auto const plan = compileOk(parseOk("$artist = 'first' and $album = $genre"));
 
-    CHECK(evaluateWithDictionary(PlanEvaluator{}, plan, track, dictionaryFixture.dictionary()));
+    CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track, dictionaryFixture.dictionary()));
   }
 } // namespace ao::query::test

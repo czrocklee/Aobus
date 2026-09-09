@@ -224,7 +224,7 @@ If that already-started transition wins the race, its track becomes current and 
 ### Clear and mode changes
 
 `clear()` removes succession authority without stopping present transport.
-`next()`, `previous()`, and `clear()` are no-ops when no session is active.
+`tryMoveNext()`, `tryMovePrevious()`, and `clear()` are no-ops when no session is active.
 Public observer reentrancy is serialized by the owning `PlaybackService` commit boundary rather than rejected by succession.
 
 Shuffle and repeat preferences exist even while Inactive and are inherited by the next launch.

@@ -17,11 +17,11 @@ namespace ao::uimodel::test
     SECTION("disabled and zero-duration sliders ignore interaction")
     {
       model.applyViewState(std::chrono::seconds{12}, false);
-      CHECK_FALSE(model.beginPointerInteraction());
+      CHECK_FALSE(model.tryBeginPointerInteraction());
       CHECK(model.valueChanged(std::chrono::seconds{5}).action == SeekSliderAction::None);
 
       model.applyViewState(std::chrono::milliseconds{0}, true);
-      CHECK_FALSE(model.beginPointerInteraction());
+      CHECK_FALSE(model.tryBeginPointerInteraction());
       CHECK(model.valueChanged(std::chrono::seconds{5}).action == SeekSliderAction::None);
     }
 
@@ -29,7 +29,7 @@ namespace ao::uimodel::test
     {
       model.applyViewState(std::chrono::seconds{20}, true);
 
-      CHECK(model.beginPointerInteraction());
+      CHECK(model.tryBeginPointerInteraction());
       auto preview = model.valueChanged(std::chrono::seconds{7});
 
       CHECK(preview.action == SeekSliderAction::Preview);
@@ -68,7 +68,7 @@ namespace ao::uimodel::test
     SECTION("reset clears state")
     {
       model.applyViewState(std::chrono::seconds{20}, true);
-      CHECK(model.beginPointerInteraction());
+      CHECK(model.tryBeginPointerInteraction());
       std::ignore = model.valueChanged(std::chrono::seconds{3});
 
       model.reset();

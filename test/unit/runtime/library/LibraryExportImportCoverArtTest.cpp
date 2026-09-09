@@ -123,11 +123,11 @@ namespace ao::rt::test
     void requireRejected(MusicLibrary& ml, std::filesystem::path const& path, ImportMode const mode)
     {
       auto importer = LibraryYamlImporter{ml};
-      auto const result = importer.importFromYamlOffline(path, mode);
-      auto const message = result ? std::string{} : result.error().message;
+      auto const res = importer.importFromYamlOffline(path, mode);
+      auto const message = res ? std::string{} : res.error().message;
       INFO(message);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
   } // namespace
 

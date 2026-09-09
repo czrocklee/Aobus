@@ -138,7 +138,7 @@ namespace ao::tui
     rt::TrackPropertiesPatch buildPatch() const;
 
     /// Consumes @p event; an active editor answers for every key the terminal delivers.
-    bool handleEvent(ftxui::Event const& event);
+    bool tryHandleEvent(ftxui::Event const& event);
     ftxui::Element render() const;
     ftxui::Element renderModal(std::int32_t terminalColumns, std::int32_t terminalRows) const;
 
@@ -197,8 +197,8 @@ namespace ao::tui
 
     void maybeTriggerCompletion(MetadataRow const& row, bool explicitRequest);
     void closeCompletion();
-    bool handleCompletionEvent(ftxui::Event const& event);
-    bool handleCompletionNavigation(ftxui::Event const& event, std::size_t itemCount);
+    bool tryHandleCompletionEvent(ftxui::Event const& event);
+    bool tryHandleCompletionNavigation(ftxui::Event const& event, std::size_t itemCount);
 
     /// The query in the form a tag name is stored in, or nothing when it will not normalize.
     std::optional<std::string> normalizedTagQuery() const;
@@ -216,7 +216,7 @@ namespace ao::tui
     bool isEffectiveTagEdit(TagRow const& tag) const noexcept;
 
     /// Answers a pending confirmation prompt; reports whether one consumed @p event.
-    bool handleConfirmationEvent(ftxui::Event const& event);
+    bool tryHandleConfirmationEvent(ftxui::Event const& event);
 
     bool hasTracksTab() const noexcept { return _targets.size() > 1; }
 

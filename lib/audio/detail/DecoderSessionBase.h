@@ -29,9 +29,9 @@ namespace ao::audio::detail
       // before an error is returned.
       auto sessionPtr = std::unique_ptr<Derived>{new Derived{optOutputEncoding}};
 
-      if (auto const result = sessionPtr->initialize(filePath); !result)
+      if (auto const res = sessionPtr->initialize(filePath); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       return std::move(sessionPtr);

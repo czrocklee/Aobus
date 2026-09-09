@@ -297,27 +297,33 @@ namespace ao::gtk::platform
         }));
     }
 
-    bool dispatchPlayerMethod(std::string_view const methodName) const
+    bool tryDispatchPlayerMethod(std::string_view const methodName) const
     {
-      return endpoint.dispatchPlayerMethod(methodName);
+      return endpoint.tryDispatchPlayerMethod(methodName);
     }
 
-    bool dispatchRootMethod(std::string_view const methodName) const { return endpoint.dispatchRootMethod(methodName); }
-
-    bool dispatchSeek(std::int64_t const offsetUs) { return endpoint.dispatchSeek(offsetUs); }
-
-    bool dispatchSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
+    bool tryDispatchRootMethod(std::string_view const methodName) const
     {
-      return endpoint.dispatchSetPosition(requestedTrackObjectPath, positionUs);
+      return endpoint.tryDispatchRootMethod(methodName);
     }
 
-    bool dispatchSetRate(double const rate) const { return endpoint.dispatchSetRate(rate); }
+    bool tryHandleSeek(std::int64_t const offsetUs) { return endpoint.tryHandleSeek(offsetUs); }
+
+    bool tryHandleSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
+    {
+      return endpoint.tryHandleSetPosition(requestedTrackObjectPath, positionUs);
+    }
+
+    bool tryDispatchSetRate(double const rate) const { return endpoint.tryDispatchSetRate(rate); }
 
     void dispatchSetVolume(double const volume) { endpoint.dispatchSetVolume(volume); }
 
     void dispatchSetShuffle(bool const shuffle) { endpoint.dispatchSetShuffle(shuffle); }
 
-    bool dispatchSetLoopStatus(std::string_view const loopStatus) { return endpoint.dispatchSetLoopStatus(loopStatus); }
+    bool tryDispatchSetLoopStatus(std::string_view const loopStatus)
+    {
+      return endpoint.tryDispatchSetLoopStatus(loopStatus);
+    }
 
     std::optional<bool> playerCapabilityProperty(std::string_view const propertyName) const
     {
@@ -554,7 +560,9 @@ namespace ao::gtk::platform
                  Glib::ustring const& interfaceName,
                  Glib::ustring const& propertyName,
                  Glib::VariantBase const& value)
-          { return handlePlayerSetProperty(connectionPtr, sender, objectPath, interfaceName, propertyName, value); });
+          {
+            return tryHandlePlayerSetProperty(connectionPtr, sender, objectPath, interfaceName, propertyName, value);
+          });
 
         playerObjectRegistration =
           utility::ScopedRegistration{[busConnectionPtr, playerRegistrationId]
@@ -634,7 +642,7 @@ namespace ao::gtk::platform
                               Glib::VariantContainerBase const& /*parameters*/,
                               Glib::RefPtr<Gio::DBus::MethodInvocation> const& invocationPtr) const
     {
-      if (dispatchRootMethod(methodName.raw()))
+      if (tryDispatchRootMethod(methodName.raw()))
       {
         invocationPtr->return_value({});
         return;
@@ -666,7 +674,7 @@ namespace ao::gtk::platform
         auto offsetUsVariant = Glib::Variant<std::int64_t>{};
         parameters.get_child(offsetUsVariant, 0);
 
-        if (auto const offsetUs = offsetUsVariant.get(); dispatchSeek(offsetUs))
+        if (auto const offsetUs = offsetUsVariant.get(); tryHandleSeek(offsetUs))
         {
           invocationPtr->return_value({});
           return;
@@ -685,7 +693,7 @@ namespace ao::gtk::platform
         auto const requestedTrackObjectPath = requestedTrackObjectPathVariant.get();
 
         if (auto const positionUs = positionUsVariant.get();
-            dispatchSetPosition(requestedTrackObjectPath.raw(), positionUs))
+            tryHandleSetPosition(requestedTrackObjectPath.raw(), positionUs))
         {
           invocationPtr->return_value({});
           return;
@@ -695,7 +703,7 @@ namespace ao::gtk::platform
         return;
       }
 
-      if (dispatchPlayerMethod(methodName.raw()))
+      if (tryDispatchPlayerMethod(methodName.raw()))
       {
         invocationPtr->return_value({});
         return;
@@ -714,12 +722,12 @@ namespace ao::gtk::platform
       property = playerProperty(propertyName.raw());
     }
 
-    bool handlePlayerSetProperty(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
-                                 Glib::ustring const& /*sender*/,
-                                 Glib::ustring const& /*objectPath*/,
-                                 Glib::ustring const& /*interfaceName*/,
-                                 Glib::ustring const& propertyName,
-                                 Glib::VariantBase const& value)
+    bool tryHandlePlayerSetProperty(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
+                                    Glib::ustring const& /*sender*/,
+                                    Glib::ustring const& /*objectPath*/,
+                                    Glib::ustring const& /*interfaceName*/,
+                                    Glib::ustring const& propertyName,
+                                    Glib::VariantBase const& value)
     {
       if (propertyName == "Volume")
       {
@@ -729,7 +737,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "Rate")
       {
-        if (dispatchSetRate(value.get_dynamic<double>()))
+        if (tryDispatchSetRate(value.get_dynamic<double>()))
         {
           return true;
         }
@@ -745,7 +753,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "LoopStatus")
       {
-        if (auto const loopStatus = value.get_dynamic<Glib::ustring>(); dispatchSetLoopStatus(loopStatus.raw()))
+        if (auto const loopStatus = value.get_dynamic<Glib::ustring>(); tryDispatchSetLoopStatus(loopStatus.raw()))
         {
           return true;
         }

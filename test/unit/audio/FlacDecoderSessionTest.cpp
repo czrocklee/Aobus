@@ -60,9 +60,9 @@ namespace ao::audio::test
   TEST_CASE("FlacDecoderSession - rejects precision-losing output", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("hires.flac");
-    auto const result = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    auto const res = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("FlacDecoderSession - seek to reported duration lands on the final frame", "[audio][unit][flac]")

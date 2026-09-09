@@ -7,13 +7,17 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/audio/BackendTestSupport.h" // NOLINT(misc-include-cleaner) -- provides SpyBackend to FakeIt.
+#include "test/unit/audio/ScriptedDecoderSession.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/Error.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
@@ -27,6 +31,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -37,10 +43,10 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    auto const result = fixture.playbackTransport.playTrack(TrackId{99999}, ListId{7});
+    auto const res = fixture.playbackTransport.playTrack(TrackId{99999}, ListId{7});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("PlaybackTransport playback - playTrack resolves track metadata", "[runtime][unit][playback][play]")
@@ -87,11 +93,11 @@ namespace ao::rt::test
       outside.path(), fixture.libraryFixture.root() / "alias", ao::test::SymlinkType::Directory};
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Outside", .uri = "alias/song.flac"});
 
-    auto const result = fixture.playbackTransport.playTrack(trackId, ListId{7});
+    auto const res = fixture.playbackTransport.playTrack(trackId, ListId{7});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("outside the library root"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("outside the library root"));
     CHECK(fixture.playbackTransport.state().nowPlaying == NowPlayingInfo{});
   }
 
@@ -119,9 +125,24 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport playback - drain emits idle when playback is actually idle",
-            "[runtime][unit][playback][drain]")
+            "[runtime][regression][drain][concurrency]")
   {
-    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto const format =
+      audio::PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
+    auto const factory = [format](auto const&, std::optional<audio::SampleEncoding> optOutputEncoding)
+    {
+      auto const sourceFormat = audio::signalFormat(format);
+      auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
+        .duration = std::chrono::milliseconds{10},
+        .isLossy = false});
+      // Nonempty PCM and EOF both fit in preroll, so render progress does not
+      // depend on scheduling the background decoder before an iteration limit.
+      decoderPtr->setReadScript({{.data = std::vector(20, std::byte{0})}, {.endOfStream = true}});
+      return decoderPtr;
+    };
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{factory};
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
 
@@ -135,17 +156,12 @@ namespace ao::rt::test
     REQUIRE(fixture.renderTarget != nullptr);
 
     auto buffer = std::array<std::byte, 4096>{};
-    bool isDrained = false;
-
-    for (std::int32_t i = 0; i < 100000 && !isDrained; ++i)
-    {
-      isDrained = fixture.renderTarget->renderPcm(buffer).drained;
-    }
-
-    REQUIRE(isDrained);
+    CHECK(fixture.renderTarget->renderPcm(buffer).bytesWritten > 0);
+    CHECK(idleCount == 0);
+    REQUIRE(fixture.renderTarget->renderPcm(buffer).drained);
     fixture.renderTarget->handleDrainComplete();
 
-    REQUIRE(fixture.executor.drainUntil([&idleCount] { return idleCount > 0; }));
+    REQUIRE(fixture.executor.tryDrainUntil([&idleCount] { return idleCount > 0; }));
     CHECK(idleCount == 1);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
   }
@@ -184,8 +200,8 @@ namespace ao::rt::test
     // marshals it onto the executor, which drain() runs on this thread.
     auto buffer = std::array<std::byte, 4096>{};
 
-    REQUIRE(
-      driveRenderUntil(*fixture.renderTarget, fixture.executor, buffer, [&nowPlaying] { return !nowPlaying.empty(); }));
+    REQUIRE(tryDriveRenderUntil(
+      *fixture.renderTarget, fixture.executor, buffer, [&nowPlaying] { return !nowPlaying.empty(); }));
 
     // Item-id match: the prepared request is committed as now-playing, exactly
     // once, without an idle in between (idle would send playback down the
@@ -225,7 +241,7 @@ namespace ao::rt::test
     nowPlaying.clear();
 
     auto buffer = std::array<std::byte, 4096>{};
-    REQUIRE(driveRenderUntilTaskQueued(*fixture.renderTarget, fixture.executor, buffer));
+    REQUIRE(tryDriveRenderUntilTaskQueued(*fixture.renderTarget, fixture.executor, buffer));
 
     fixture.playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
     fixture.executor.drain();
@@ -246,10 +262,10 @@ namespace ao::rt::test
 
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
 
-    auto const result = fixture.playbackTransport.playTrack(trackId, ListId{7});
+    auto const res = fixture.playbackTransport.playTrack(trackId, ListId{7});
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message.contains("Unsupported audio file extension"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message.contains("Unsupported audio file extension"));
     fixture.executor.drain();
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
@@ -332,7 +348,7 @@ namespace ao::rt::test
     // The request itself is accepted; the route failure arrives on the engine's
     // own notification path rather than as a synchronous rejection.
     CHECK(fixture.playbackTransport.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
 
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
@@ -377,7 +393,7 @@ namespace ao::rt::test
     REQUIRE(fixture.renderTarget != nullptr);
 
     fixture.renderTarget->handleBackendError("device lost");
-    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+    REQUIRE(fixture.executor.tryDrainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
 
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);

@@ -135,7 +135,7 @@ namespace clang::tidy::modernize
 
     auto const rangeText = aobus::getExprSourceText(*rangeExpr, sm, langOpts);
 
-    if (!aobus::verifyEndObject(*endCall, rangeText, sm, langOpts))
+    if (!aobus::isMatchingEndObject(*endCall, rangeText, sm, langOpts))
     {
       return;
     }

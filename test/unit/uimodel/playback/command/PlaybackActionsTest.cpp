@@ -34,7 +34,7 @@ namespace ao::uimodel::test
 
     SECTION("Play uses selection when idle without a current track")
     {
-      CHECK(actions.execute(PlaybackCommand::Play));
+      CHECK(actions.tryExecute(PlaybackCommand::Play));
 
       CHECK(playSelectionCount == 1);
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
@@ -44,11 +44,11 @@ namespace ao::uimodel::test
     {
       REQUIRE(fixture.playFromView(trackId));
 
-      CHECK(actions.execute(PlaybackCommand::PlayPause));
+      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
 
       CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
 
-      CHECK(actions.execute(PlaybackCommand::PlayPause));
+      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
 
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
     }
@@ -64,7 +64,7 @@ namespace ao::uimodel::test
       REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
       CHECK(actions.isEnabled(PlaybackCommand::Pause));
       CHECK(actions.isEnabled(PlaybackCommand::PlayPause));
-      CHECK(actions.execute(PlaybackCommand::PlayPause));
+      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
       CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
     }
 
@@ -81,7 +81,7 @@ namespace ao::uimodel::test
       REQUIRE(playback.snapshot().transport.nowPlaying.trackId == trackId);
       REQUIRE(playback.snapshot().succession.currentTrackId == trackId);
 
-      CHECK(actions.execute(PlaybackCommand::PlayPause));
+      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
       CHECK(playSelectionCount == 0);
     }
@@ -100,7 +100,7 @@ namespace ao::uimodel::test
       REQUIRE(playback.snapshot().transport.nowPlaying.trackId == trackId);
       REQUIRE(playback.snapshot().succession.currentTrackId == kInvalidTrackId);
 
-      CHECK(actions.execute(PlaybackCommand::PlayPause));
+      CHECK(actions.tryExecute(PlaybackCommand::PlayPause));
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
       CHECK(playSelectionCount == 1);
     }
@@ -108,13 +108,13 @@ namespace ao::uimodel::test
     SECTION("Stop is enabled only outside idle")
     {
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Stop));
-      CHECK_FALSE(actions.execute(PlaybackCommand::Stop));
+      CHECK_FALSE(actions.tryExecute(PlaybackCommand::Stop));
 
       REQUIRE(fixture.playFromView(trackId));
 
       CHECK(actions.isEnabled(PlaybackCommand::Stop));
 
-      CHECK(actions.execute(PlaybackCommand::Stop));
+      CHECK(actions.tryExecute(PlaybackCommand::Stop));
 
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Stop));
@@ -138,18 +138,18 @@ namespace ao::uimodel::test
       CHECK(actions.isEnabled(PlaybackCommand::Next));
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Previous));
 
-      actions.execute(PlaybackCommand::Next);
+      actions.tryExecute(PlaybackCommand::Next);
 
       CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
       CHECK_FALSE(actions.isEnabled(PlaybackCommand::Next));
       CHECK(actions.isEnabled(PlaybackCommand::Previous));
 
-      actions.execute(PlaybackCommand::Next);
+      actions.tryExecute(PlaybackCommand::Next);
 
       CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
 
-      actions.execute(PlaybackCommand::Previous);
+      actions.tryExecute(PlaybackCommand::Previous);
 
       CHECK(playback.snapshot().succession.currentTrackId == firstTrack);
     }
@@ -159,19 +159,19 @@ namespace ao::uimodel::test
       REQUIRE(fixture.playFromView(secondTrack));
       REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
-      actions.execute(PlaybackCommand::CycleRepeat);
+      actions.tryExecute(PlaybackCommand::CycleRepeat);
 
       CHECK(playback.snapshot().succession.repeat == RepeatMode::All);
       CHECK(playback.snapshot().succession.hasNext);
 
-      actions.execute(PlaybackCommand::CycleRepeat);
+      actions.tryExecute(PlaybackCommand::CycleRepeat);
       CHECK(playback.snapshot().succession.repeat == RepeatMode::One);
 
-      actions.execute(PlaybackCommand::CycleRepeat);
+      actions.tryExecute(PlaybackCommand::CycleRepeat);
       CHECK(playback.snapshot().succession.repeat == RepeatMode::Off);
       CHECK_FALSE(playback.snapshot().succession.hasNext);
 
-      actions.execute(PlaybackCommand::ToggleShuffle);
+      actions.tryExecute(PlaybackCommand::ToggleShuffle);
 
       CHECK(playback.snapshot().succession.shuffle == ShuffleMode::On);
       CHECK(playback.snapshot().succession.hasNext);
@@ -203,7 +203,7 @@ namespace ao::uimodel::test
 
     CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
     CHECK_FALSE(actions.isEnabled(PlaybackCommand::PlayPause));
-    CHECK_FALSE(actions.execute(PlaybackCommand::PlayPause));
+    CHECK_FALSE(actions.tryExecute(PlaybackCommand::PlayPause));
     CHECK(playSelectionCount == 0);
 
     fixture.makePlaybackReady();

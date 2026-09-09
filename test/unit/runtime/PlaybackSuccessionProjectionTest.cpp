@@ -65,7 +65,7 @@ namespace ao::rt::test
     fixture.thirdTrackId = fixture.addPlayableTrack("Third", 2010);
     fixture.sources.reloadAllTracks();
     fixture.listId = ao::test::requireValue(fixture.commandsFixture.runTask(
-      fixture.commands().createList(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
+      fixture.commands().createListAsync(ListDraft{.name = "Recent", .expression = "$year >= 2000"})));
     fixture.viewId = ao::test::requireValue(fixture.workspace.navigate(navigationRequest(TrackListViewConfig{
       .listId = fixture.listId,
       .optPresentation =
@@ -122,14 +122,14 @@ namespace ao::rt::test
     CHECK(emptyLive.optResolvedSuccessor == fixture.firstTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteList(fixture.listId)));
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
     auto const invalidated = succession.state();
     CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
     CHECK_FALSE(invalidated.hasNext);
     CHECK_FALSE(invalidated.optResolvedSuccessor);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    succession.next();
+    succession.tryMoveNext();
     CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
 
@@ -167,7 +167,7 @@ namespace ao::rt::test
     CHECK_FALSE(succession.state().optResolvedSuccessor);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
-    succession.next();
+    succession.tryMoveNext();
     CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
 

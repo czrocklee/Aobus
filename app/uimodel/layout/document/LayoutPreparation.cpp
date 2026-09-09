@@ -61,16 +61,16 @@ namespace ao::uimodel
 
         if (auto const* values = value.getIf<std::vector<std::string>>(); values != nullptr)
         {
-          if (auto result = consumeEntries(values->size()); !result)
+          if (auto res = consumeEntries(values->size()); !res)
           {
-            return result;
+            return res;
           }
 
           for (auto const& item : *values)
           {
-            if (auto result = consumeText(item); !result)
+            if (auto res = consumeText(item); !res)
             {
-              return result;
+              return res;
             }
           }
         }
@@ -80,21 +80,21 @@ namespace ao::uimodel
 
       Result<> consumeValueMap(LayoutValueMap const& values)
       {
-        if (auto result = consumeEntries(values.size()); !result)
+        if (auto res = consumeEntries(values.size()); !res)
         {
-          return result;
+          return res;
         }
 
         for (auto const& [key, value] : values)
         {
-          if (auto result = consumeText(key); !result)
+          if (auto res = consumeText(key); !res)
           {
-            return result;
+            return res;
           }
 
-          if (auto result = consumeValue(value); !result)
+          if (auto res = consumeValue(value); !res)
           {
-            return result;
+            return res;
           }
         }
 
@@ -108,24 +108,24 @@ namespace ao::uimodel
           return makeError(Error::Code::FormatRejected, "Layout node type must not be empty");
         }
 
-        if (auto result = consumeEntries(1); !result)
+        if (auto res = consumeEntries(1); !res)
         {
-          return result;
+          return res;
         }
 
-        if (auto result = consumeText(node.id); !result)
+        if (auto res = consumeText(node.id); !res)
         {
-          return result;
+          return res;
         }
 
-        if (auto result = consumeText(node.type); !result)
+        if (auto res = consumeText(node.type); !res)
         {
-          return result;
+          return res;
         }
 
-        if (auto result = consumeValueMap(node.props); !result)
+        if (auto res = consumeValueMap(node.props); !res)
         {
-          return result;
+          return res;
         }
 
         return consumeValueMap(node.layout);
@@ -152,21 +152,21 @@ namespace ao::uimodel
 
     Result<> measureAuthoredNode(LayoutNode const& node, TreeBudgetMeter& meter, std::size_t depth)
     {
-      if (auto result = meter.consumeDepth(depth); !result)
+      if (auto res = meter.consumeDepth(depth); !res)
       {
-        return result;
+        return res;
       }
 
-      if (auto result = meter.consumeNode(node); !result)
+      if (auto res = meter.consumeNode(node); !res)
       {
-        return result;
+        return res;
       }
 
       for (auto const& child : node.children)
       {
-        if (auto result = measureAuthoredNode(child, meter, depth + 1); !result)
+        if (auto res = measureAuthoredNode(child, meter, depth + 1); !res)
         {
-          return result;
+          return res;
         }
       }
 
@@ -180,26 +180,26 @@ namespace ao::uimodel
 
     Result<> measureAuthoredDocument(LayoutDocument const& document, TreeBudgetMeter& meter)
     {
-      if (auto result = measureAuthoredNode(document.root, meter, 1); !result)
+      if (auto res = measureAuthoredNode(document.root, meter, 1); !res)
       {
-        return result;
+        return res;
       }
 
-      if (auto result = meter.consumeEntries(document.templates.size()); !result)
+      if (auto res = meter.consumeEntries(document.templates.size()); !res)
       {
-        return result;
+        return res;
       }
 
       for (auto const& [templateId, root] : document.templates)
       {
-        if (auto result = meter.consumeText(templateId); !result)
+        if (auto res = meter.consumeText(templateId); !res)
         {
-          return result;
+          return res;
         }
 
-        if (auto result = measureAuthoredNode(root, meter, 1); !result)
+        if (auto res = measureAuthoredNode(root, meter, 1); !res)
         {
-          return result;
+          return res;
         }
       }
 
@@ -225,9 +225,9 @@ namespace ao::uimodel
     {
       auto node = LayoutNode{.id = std::string{id}, .type = boundedTemplateDiagnostic(std::move(message))};
 
-      if (auto result = meter.consumeNode(node); !result)
+      if (auto res = meter.consumeNode(node); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       return node;
@@ -246,9 +246,9 @@ namespace ao::uimodel
                                   TreeBudgetMeter& meter,
                                   std::size_t depth)
     {
-      if (auto result = meter.consumeDepth(depth); !result)
+      if (auto res = meter.consumeDepth(depth); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       if (node.type == "template")
@@ -293,17 +293,17 @@ namespace ao::uimodel
 
         if (!node.id.empty())
         {
-          if (auto result = meter.consumeText(node.id); !result)
+          if (auto res = meter.consumeText(node.id); !res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
           expandedRes->id = node.id;
         }
 
-        if (auto result = consumeOverride(node.layout, meter); !result)
+        if (auto res = consumeOverride(node.layout, meter); !res)
         {
-          return std::unexpected{result.error()};
+          return std::unexpected{res.error()};
         }
 
         for (auto const& [key, value] : node.layout)
@@ -318,19 +318,19 @@ namespace ao::uimodel
             continue;
           }
 
-          if (auto result = meter.consumeEntries(1); !result)
+          if (auto res = meter.consumeEntries(1); !res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
-          if (auto result = meter.consumeText(key); !result)
+          if (auto res = meter.consumeText(key); !res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
-          if (auto result = meter.consumeValue(value); !result)
+          if (auto res = meter.consumeValue(value); !res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
           expandedRes->props[key] = value;
@@ -363,9 +363,9 @@ namespace ao::uimodel
         return expandedRes;
       }
 
-      if (auto result = meter.consumeNode(node); !result)
+      if (auto res = meter.consumeNode(node); !res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       auto result = LayoutNode{.id = node.id, .type = node.type, .props = node.props, .layout = node.layout};
@@ -409,9 +409,9 @@ namespace ao::uimodel
 
     auto authoredMeter = TreeBudgetMeter{limits.authored, "authored"};
 
-    if (auto result = measureAuthoredDocument(document, authoredMeter); !result)
+    if (auto res = measureAuthoredDocument(document, authoredMeter); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto effectiveMeter = TreeBudgetMeter{limits.effective, "effective"};

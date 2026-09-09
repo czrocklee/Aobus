@@ -145,7 +145,7 @@ namespace ao::gtk::layout::test
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
-      REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
+      REQUIRE(ao::gtk::test::tryWaitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace
 
@@ -235,7 +235,7 @@ namespace ao::gtk::layout::test
 
       CHECK_FALSE(picture->has_css_class("ao-nowplaying-image-thumb"));
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
 
       std::int32_t width = -1;
@@ -333,7 +333,7 @@ namespace ao::gtk::layout::test
 
       CHECK(button->get_visible());
       CHECK_FALSE(coverArt->hasImage());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
     }
 
@@ -361,7 +361,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Monogram);
       CHECK(coverArt->placeholderPresentation().monogram == "A");
 
@@ -404,7 +404,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       REQUIRE(popover->get_visible());
@@ -421,7 +421,7 @@ namespace ao::gtk::layout::test
       CHECK(button->get_visible());
       CHECK(button->get_sensitive());
       CHECK_FALSE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK_FALSE(popover->get_visible());
@@ -432,8 +432,8 @@ namespace ao::gtk::layout::test
 
       CHECK(tooltipButton->get_visible());
       CHECK_FALSE(popover->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK(popover->get_visible());
@@ -443,12 +443,12 @@ namespace ao::gtk::layout::test
       bool corruptDecodeSettled = false;
       [[maybe_unused]] auto const corruptDecodeProbe = imageLoaderPtr->requestFull(
         corruptCoverResourceId, [&corruptDecodeSettled](auto const&) { corruptDecodeSettled = true; });
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&corruptDecodeSettled] { return corruptDecodeSettled; }));
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&corruptDecodeSettled] { return corruptDecodeSettled; }));
 
       CHECK_FALSE(tooltipButton->get_visible());
       CHECK_FALSE(popover->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       CHECK_FALSE(popover->get_visible());
@@ -484,7 +484,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
       REQUIRE(popover->get_visible());
@@ -494,7 +494,7 @@ namespace ao::gtk::layout::test
       auto const viewRes = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(fixture.runtime().playback().commands().startFromView(*viewRes, mutableCoverTrackId));
-      REQUIRE(ao::gtk::test::waitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
+      REQUIRE(ao::gtk::test::tryWaitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
       ao::gtk::test::drainGtkEvents();
 
       CHECK(tooltipButton->get_visible());
@@ -537,7 +537,7 @@ namespace ao::gtk::layout::test
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE_FALSE(tooltipButton->get_visible());
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       CHECK(scheduledHoverCount == 0);
 
       fixture.runtime().playback().commands().stop();
@@ -550,8 +550,8 @@ namespace ao::gtk::layout::test
       CHECK_FALSE(popover->get_visible());
       CHECK(scheduledHoverCount == 0);
 
-      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
-      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::tryEmitPointerEnter(*button));
       REQUIRE(scheduledHoverCount == 1);
       manualHoverTimeout.emit();
       ao::gtk::test::drainGtkEvents();
@@ -633,7 +633,7 @@ namespace ao::gtk::layout::test
       auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
       REQUIRE(coverArt != nullptr);
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
 
       startPlayback(fixture.runtime(), mutableCoverTrackId);
       ao::gtk::test::drainGtkEvents();
@@ -657,7 +657,7 @@ namespace ao::gtk::layout::test
         return currentPaintablePtr && currentPaintablePtr->get_intrinsic_width() == 96 &&
                currentPaintablePtr->get_intrinsic_height() == 48;
       };
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil(showsSecondCover, kCoverMutationTimeout));
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil(showsSecondCover, kCoverMutationTimeout));
 
       REQUIRE(button->get_visible());
       runtime.playback().commands().pause();
@@ -670,17 +670,18 @@ namespace ao::gtk::layout::test
       writeCoverImport(importPath, std::nullopt);
       importCoverAndWait(runtime, importPath);
       CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) == kInvalidResourceId);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return coverArt->showingPlaceholder(); }, kCoverMutationTimeout));
+      REQUIRE(
+        ao::gtk::test::tryPumpGtkEventsUntil([&] { return coverArt->isShowingPlaceholder(); }, kCoverMutationTimeout));
 
       runtime.playback().commands().pause();
       ao::gtk::test::drainGtkEvents();
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK_FALSE(coverArt->imagePaintable());
       runtime.playback().commands().resume();
       ao::gtk::test::drainGtkEvents();
       CHECK(button->get_visible());
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK_FALSE(coverArt->imagePaintable());
     }
   }

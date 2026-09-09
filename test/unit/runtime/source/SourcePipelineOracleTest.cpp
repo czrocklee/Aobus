@@ -157,11 +157,11 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
-    auto const orderedListId = ao::test::requireValue(commandsFixture.runTask(commands.createList(ListDraft{
+    auto const orderedListId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(ListDraft{
       .name = "Oracle ordered",
       .expression = "$year >= 2020",
     })));
-    auto const smartListId = ao::test::requireValue(commandsFixture.runTask(commands.createList(ListDraft{
+    auto const smartListId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(ListDraft{
       .name = "Oracle smart",
       .expression = "$year >= 2020",
     })));
@@ -206,8 +206,8 @@ namespace ao::rt::test
       REQUIRE(visibleTrackIds.size() > 1);
       auto const rankedTrackId = visibleTrackIds.back();
       auto binding = ao::test::requireValue(commandsFixture.library().bindListOrder(orderedListId, visibleTrackIds));
-      auto const moveRes =
-        commandsFixture.runTask(commands.moveListOrder(binding, std::vector{rankedTrackId}, visibleTrackIds.front()));
+      auto const moveRes = commandsFixture.runTask(
+        commands.moveListOrderAsync(binding, std::vector{rankedTrackId}, visibleTrackIds.front()));
       REQUIRE(moveRes);
       REQUIRE(moveRes->status == AuthoringStatus::Applied);
       assertOracle();
@@ -245,10 +245,10 @@ namespace ao::rt::test
             auto const target = orderedTrackIds[1 + (step % (orderedTrackIds.size() - 1))];
             auto binding =
               ao::test::requireValue(commandsFixture.library().bindListOrder(orderedListId, orderedTrackIds));
-            auto const result =
-              commandsFixture.runTask(commands.moveListOrder(binding, std::vector{target}, orderedTrackIds.front()));
-            REQUIRE(result);
-            REQUIRE((result->status == AuthoringStatus::Applied || result->status == AuthoringStatus::NoOp));
+            auto const res = commandsFixture.runTask(
+              commands.moveListOrderAsync(binding, std::vector{target}, orderedTrackIds.front()));
+            REQUIRE(res);
+            REQUIRE((res->status == AuthoringStatus::Applied || res->status == AuthoringStatus::NoOp));
           }
 
           break;
@@ -256,16 +256,16 @@ namespace ao::rt::test
         {
           auto binding =
             ao::test::requireValue(commandsFixture.library().bindListOrder(orderedListId, orderedTrackIds));
-          auto const result = commandsFixture.runTask(commands.resetListOrder(binding));
-          REQUIRE(result);
-          REQUIRE((result->status == AuthoringStatus::Applied || result->status == AuthoringStatus::NoOp));
+          auto const res = commandsFixture.runTask(commands.resetListOrderAsync(binding));
+          REQUIRE(res);
+          REQUIRE((res->status == AuthoringStatus::Applied || res->status == AuthoringStatus::NoOp));
 
           break;
         }
         case 3:
           if (liveTrackIds.size() > 12)
           {
-            REQUIRE(commandsFixture.runTask(commands.deleteTrack(liveTrackIds.back())));
+            REQUIRE(commandsFixture.runTask(commands.deleteTrackAsync(liveTrackIds.back())));
           }
 
           break;

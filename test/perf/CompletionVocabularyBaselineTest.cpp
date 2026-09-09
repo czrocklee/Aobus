@@ -125,7 +125,7 @@ namespace ao::rt::test
         auto resetRes =
           runLoopTask(asyncRuntime,
                       executor,
-                      executeInteractiveMutation(
+                      executeInteractiveMutationAsync(
                         writeLane.captureSubmission(),
                         [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
                         { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));

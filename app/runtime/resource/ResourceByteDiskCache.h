@@ -117,9 +117,6 @@ namespace ao::rt
     std::filesystem::path entryPath(utility::Sha256Digest const& digest) const;
 
   private:
-    /// Records @p byteLength as written and answers whether a pass is now due.
-    bool accumulateWrite(std::size_t byteLength) const;
-
     void converge() const;
     void touch(std::filesystem::path const& path) const;
 

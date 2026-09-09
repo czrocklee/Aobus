@@ -44,7 +44,7 @@ namespace ao::gtk::test
 {
   namespace
   {
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readEmptyAfterOneFailure(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readEmptyAfterOneFailureAsync(
       std::shared_ptr<std::atomic_bool> failNextPtr,
       rt::test::AsyncTestState<std::size_t> readCount,
       ResourceId /*resourceId*/,
@@ -60,7 +60,7 @@ namespace ao::gtk::test
       co_return std::optional<std::vector<std::byte>>{};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelResourceRead(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelResourceReadAsync(
       rt::test::AsyncTestState<std::size_t> readCount,
       ResourceId /*resourceId*/,
       std::stop_token /*stopToken*/)
@@ -70,7 +70,7 @@ namespace ao::gtk::test
       co_return std::optional<std::vector<std::byte>>{};
     }
 
-    async::Task<Result<std::optional<std::vector<std::byte>>>> readResourceAfterRelease(
+    async::Task<Result<std::optional<std::vector<std::byte>>>> readResourceAfterReleaseAsync(
       rt::test::AsyncTestState<std::size_t> readCount,
       rt::test::AsyncBarrier* release,
       std::vector<std::byte> bytes,
@@ -122,7 +122,7 @@ namespace ao::gtk::test
         validResourceId, [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr) { receivedPtr = pixbufPtr; });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(receivedPtr); }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return static_cast<bool>(receivedPtr); }));
       CHECK(receivedPtr->get_width() == 256);
       CHECK(loader.getFull(validResourceId).get() == receivedPtr.get());
       CHECK_FALSE(loader.getThumbnail(validResourceId, kPixelSize));
@@ -144,7 +144,7 @@ namespace ao::gtk::test
                                                      });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(renderedPixbufPtr); }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return static_cast<bool>(renderedPixbufPtr); }));
       CHECK(callbackThread == ownerThread);
       CHECK(renderedPixbufPtr->get_width() == 96);
       CHECK(renderedPixbufPtr->get_height() == 72);
@@ -168,7 +168,7 @@ namespace ao::gtk::test
                                              });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount > 0; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount > 0; }));
       CHECK(callbackCount == 1);
       REQUIRE(receivedPtr);
       // Decode-at-scale bounds the result below the 256px source.
@@ -207,7 +207,7 @@ namespace ao::gtk::test
       REQUIRE(firstRequest);
       REQUIRE(secondRequest);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return firstDone && secondDone; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return firstDone && secondDone; }));
       CHECK(firstPtr);
       CHECK(secondPtr);
       // Both callbacks receive the very same decoded object: only one decode ran.
@@ -226,7 +226,7 @@ namespace ao::gtk::test
           resourceId, kPixelSize, [&, index](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackOrder.push_back(index); }));
       }
 
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackOrder.size() == 4; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackOrder.size() == 4; }));
       CHECK(callbackOrder == std::vector<int>{0, 1, 2, 3});
     }
 
@@ -244,7 +244,7 @@ namespace ao::gtk::test
       REQUIRE(smallRequest);
       REQUIRE(largeRequest);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return smallPtr && largePtr; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return smallPtr && largePtr; }));
       CHECK(smallPtr.get() != largePtr.get());
       CHECK(std::max(smallPtr->get_width(), smallPtr->get_height()) <= 48);
       CHECK(std::max(largePtr->get_width(), largePtr->get_height()) >= 96);
@@ -257,7 +257,7 @@ namespace ao::gtk::test
 
       loader.prefetchThumbnail(resourceId, kPixelSize);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
       CHECK(loader.getThumbnail(resourceId, kPixelSize));
     }
 
@@ -274,7 +274,7 @@ namespace ao::gtk::test
       REQUIRE(request);
       loader.prefetchThumbnail(resourceId, kPixelSize);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount == 1; }));
       auto const firstCachedPtr = loader.getThumbnail(resourceId, kPixelSize);
       REQUIRE(firstCachedPtr);
 
@@ -305,7 +305,7 @@ namespace ao::gtk::test
       auto request = loader.requestThumbnail(resourceId, kPixelSize, ResourceImageLoader::OnImageReady{});
       CHECK_FALSE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
       CHECK(loader.getThumbnail(resourceId, kPixelSize));
     }
 
@@ -342,14 +342,14 @@ namespace ao::gtk::test
                                              });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount == 1; }));
       CHECK(wasEmpty);
       CHECK_FALSE(loader.getThumbnail(missingId, kPixelSize));
 
       auto retryRequest =
         loader.requestThumbnail(missingId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
       REQUIRE(retryRequest);
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 2; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount == 2; }));
     }
 
     SECTION("malformed image bytes report an empty result and are not cached")
@@ -367,7 +367,7 @@ namespace ao::gtk::test
                                              });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return callbackCount == 1; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount == 1; }));
       CHECK(wasEmpty);
       CHECK_FALSE(loader.getThumbnail(resourceId, kPixelSize));
     }
@@ -384,7 +384,7 @@ namespace ao::gtk::test
                                         });
       REQUIRE(request);
 
-      REQUIRE(pumpGtkEventsUntil([&] { return completed; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return completed; }));
       CHECK_FALSE(receivedPtr);
       CHECK_FALSE(loader.getFull(oversizedDimensionResourceId));
     }
@@ -400,7 +400,7 @@ namespace ao::gtk::test
 
       request.reset();
 
-      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kPixelSize)); }));
       CHECK(callbackCount == 0);
     }
 
@@ -425,7 +425,7 @@ namespace ao::gtk::test
       auto replacementRequest = replacementLoader.requestThumbnail(
         resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++replacementCallbackCount; });
       REQUIRE(replacementRequest);
-      REQUIRE(pumpGtkEventsUntil([&] { return replacementCallbackCount == 1; }));
+      REQUIRE(tryPumpGtkEventsUntil([&] { return replacementCallbackCount == 1; }));
       CHECK(callbackCount == 0);
     }
   }
@@ -446,7 +446,7 @@ namespace ao::gtk::test
       auto receivedImage = rt::test::AsyncTestState<bool>::create(true);
       auto failNextPtr = std::make_shared<std::atomic_bool>(true);
       auto byteCache =
-        rt::ResourceByteMemoryCache{runtime, std::bind_front(readEmptyAfterOneFailure, failNextPtr, readCount)};
+        rt::ResourceByteMemoryCache{runtime, std::bind_front(readEmptyAfterOneFailureAsync, failNextPtr, readCount)};
       auto loader = ResourceImageLoader{byteCache, cache, runtime};
 
       auto request = loader.requestThumbnail(kMissingResourceId,
@@ -457,7 +457,7 @@ namespace ao::gtk::test
                                                callbackCount.increment();
                                              });
       REQUIRE(request);
-      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 1; }));
+      REQUIRE(executor.tryDrainUntil([&] { return callbackCount.load() == 1; }));
       CHECK_FALSE(receivedImage.load());
 
       auto retryReceivedImage = rt::test::AsyncTestState<bool>::create(true);
@@ -470,7 +470,7 @@ namespace ao::gtk::test
                                   callbackCount.increment();
                                 });
       REQUIRE(retry);
-      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
+      REQUIRE(executor.tryDrainUntil([&] { return callbackCount.load() == 2; }));
       CHECK(readCount.load() == 2);
       CHECK_FALSE(retryReceivedImage.load());
 
@@ -482,7 +482,7 @@ namespace ao::gtk::test
     {
       auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
       auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
-      auto byteCache = rt::ResourceByteMemoryCache{runtime, std::bind_front(cancelResourceRead, readCount)};
+      auto byteCache = rt::ResourceByteMemoryCache{runtime, std::bind_front(cancelResourceReadAsync, readCount)};
       auto loader = ResourceImageLoader{byteCache, cache, runtime};
 
       auto request =
@@ -490,7 +490,7 @@ namespace ao::gtk::test
                                 kPixelSize,
                                 [callbackCount](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackCount.increment(); });
       REQUIRE(request);
-      REQUIRE(readCount.waitUntil(1));
+      REQUIRE(readCount.tryWaitUntil(1));
 
       runtime.requestStop();
       runtime.join();
@@ -508,8 +508,8 @@ namespace ao::gtk::test
     auto release = rt::test::AsyncBarrier{};
     auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto const pngBytes = encodePng(makePixbuf(256));
-    auto byteCache =
-      rt::ResourceByteMemoryCache{runtime, std::bind_front(readResourceAfterRelease, readCount, &release, pngBytes)};
+    auto byteCache = rt::ResourceByteMemoryCache{
+      runtime, std::bind_front(readResourceAfterReleaseAsync, readCount, &release, pngBytes)};
     auto imageCache = ImageCache{200};
     auto imageLoader = ResourceImageLoader{byteCache, imageCache, runtime};
     auto tempDir = ao::test::TempDir{};
@@ -535,7 +535,7 @@ namespace ao::gtk::test
                                urlCallbackCount.increment();
                              });
     REQUIRE(urlRequest);
-    REQUIRE(executor.drainUntil([&] { return readCount.load() == 1; }));
+    REQUIRE(executor.tryDrainUntil([&] { return readCount.load() == 1; }));
 
     auto imageCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto nonEmptyImageCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -566,7 +566,7 @@ namespace ao::gtk::test
     CHECK(readCount.load() == 1);
 
     release.release();
-    REQUIRE(executor.drainUntil([&] { return urlCallbackCount.load() == 1 && imageCallbackCount.load() == 2; }));
+    REQUIRE(executor.tryDrainUntil([&] { return urlCallbackCount.load() == 1 && imageCallbackCount.load() == 2; }));
     CHECK(imageLoader.getThumbnail(kResourceId, 48));
     CHECK(imageLoader.getThumbnail(kResourceId, 96));
 

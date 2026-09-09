@@ -53,7 +53,7 @@ namespace ao::rt
 
     // Reports only whether immediate admission was available. Invariant faults
     // from an admitted operation remain exceptions after commit bookkeeping.
-    bool runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation);
+    bool tryRunSynchronousCommand(compat::MoveOnlyFunction<bool()> operation);
     void shutdown() noexcept;
 
     std::unique_ptr<Impl> _implPtr;

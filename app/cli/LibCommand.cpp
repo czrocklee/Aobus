@@ -244,9 +244,9 @@ namespace ao::cli
 
       auto const exportPath = utility::pathFromUtf8(path);
 
-      if (auto const result = cli.runTask(cli.library().jobs().exportLibraryAsync(exportPath, mode)); !result)
+      if (auto const res = cli.runTask(cli.library().jobs().exportLibraryAsync(exportPath, mode)); !res)
       {
-        auto const& error = result.error();
+        auto const& error = res.error();
         throwCommandError(error, "export failed: {}", error.message);
       }
 
@@ -297,15 +297,15 @@ namespace ao::cli
         return;
       }
 
-      auto const result = cli.runTask(cli.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto const res = cli.runTask(cli.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
 
-      if (!result)
+      if (!res)
       {
-        auto const& error = result.error();
+        auto const& error = res.error();
         throwCommandError(error, "import failed: {}", error.message);
       }
 
-      printLibraryImport(os, format, path, modeStr, false, *result);
+      printLibraryImport(os, format, path, modeStr, false, *res);
     }
 
     std::string_view formatFileStatus(library::FileStatus status)
@@ -868,7 +868,7 @@ namespace ao::cli
       auto failures = std::vector<std::string>{};
       auto const stopToken = std::stop_token{};
       auto progressCallback = rt::LibraryJobs::ScanProgressCallback{};
-      auto result = cli.runTask(cli.library().jobs().applyScanPlanAsync(
+      auto res = cli.runTask(cli.library().jobs().applyScanPlanAsync(
         std::move(relinkPlan),
         // Default (eager) options on purpose: Moved items are fingerprinted
         // during apply regardless of policy, so a relink must never leave the
@@ -883,13 +883,13 @@ namespace ao::cli
                                : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message));
         }));
 
-      if (!result)
+      if (!res)
       {
-        auto const& error = result.error();
+        auto const& error = res.error();
         throwCommandError(error, "relink failed: {}", error.message);
       }
 
-      if (result->failureCount != 0 || result->relinkedIds.size() != 1)
+      if (res->failureCount != 0 || res->relinkedIds.size() != 1)
       {
         auto const message = failures.empty() ? "relink did not update the library" : failures.front();
         throwCommandError(Error::Code::IoError, "relink failed: {}", message);
@@ -984,7 +984,7 @@ namespace ao::cli
       // The CLI drives its callback loop until the coordinated maintenance
       // operation reaches a terminal result. Diagnostic callbacks remain
       // worker-produced and indexer-serialized.
-      auto result = cli.runTask(cli.library().jobs().backfillAudioIdentityAsync(
+      auto res = cli.runTask(cli.library().jobs().backfillAudioIdentityAsync(
         {},
         verbose ? rt::AudioIdentityIndexProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
                                                          {
@@ -998,13 +998,13 @@ namespace ao::cli
                 : nullptr,
         [&err](rt::AudioIdentityIndexFailure const& failure) { printBackfillFailure(failure, err); }));
 
-      if (!result)
+      if (!res)
       {
-        auto const& error = result.error();
+        auto const& error = res.error();
         throwCommandError(error, "fingerprint failed: {}", error.message);
       }
 
-      printFingerprintReport(*result, format, os);
+      printFingerprintReport(*res, format, os);
     }
 
     std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary const& ml)
@@ -1080,15 +1080,15 @@ namespace ao::cli
                         OutputFormat format,
                         std::ostream& os)
     {
-      auto result = cli.runTask(cli.core().readResourceBytesForExportAsync(id));
+      auto res = cli.runTask(cli.core().readResourceBytesForExportAsync(id));
 
-      if (!result)
+      if (!res)
       {
-        auto const& error = result.error();
+        auto const& error = res.error();
         throwCommandError(error, "failed to read resource {}: {}", id, error.message);
       }
 
-      if (!*result)
+      if (!*res)
       {
         auto const& ml = cli.musicLibrary();
         auto const transaction = ml.readTransaction();
@@ -1101,7 +1101,7 @@ namespace ao::cli
         throwCommandError(Error::Code::NotFound, "resource not available: {}", id);
       }
 
-      auto const bytes = *std::move(*result);
+      auto const bytes = *std::move(*res);
       auto directoryError = std::error_code{};
 
       // The destination directory is the user's to name: the atomic write below

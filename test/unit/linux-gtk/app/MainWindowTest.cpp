@@ -297,7 +297,7 @@ namespace ao::gtk::test
       SECTION("playback stays blocked while ordinary window state saves")
       {
         REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
-        REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+        REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
         runtimePtr->playback().commands().pause();
         drainGtkEvents();
         CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
@@ -542,7 +542,7 @@ namespace ao::gtk::test
       return nullptr;
     };
 
-    REQUIRE(pumpGtkEventsUntil([&findApplicationMenu] { return findApplicationMenu() != nullptr; }));
+    REQUIRE(tryPumpGtkEventsUntil([&findApplicationMenu] { return findApplicationMenu() != nullptr; }));
 
     auto* const applicationMenu = findApplicationMenu();
     REQUIRE(applicationMenu != nullptr);
@@ -665,19 +665,20 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
-    auto const sourceListId = ao::test::requireValue(runGtkTask(runtime,
-                                                                runtime.library().commands().createList(rt::ListDraft{
-                                                                  .name = "Temporary sequence source",
-                                                                })));
+    auto const sourceListId =
+      ao::test::requireValue(runGtkTask(runtime,
+                                        runtime.library().commands().createListAsync(rt::ListDraft{
+                                          .name = "Temporary sequence source",
+                                        })));
     runtime.sources().reloadAllTracks();
     auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
-    REQUIRE(waitForPlaybackSettlement(runtime, trackId));
+    REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
     playback.commands().setRepeatMode(rt::RepeatMode::All);
     REQUIRE(runtime.savePlaybackSession());
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteList(sourceListId)));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().deleteListAsync(sourceListId)));
     playback.commands().stop();
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
@@ -729,7 +730,7 @@ namespace ao::gtk::test
     REQUIRE(listOrder != nullptr);
     REQUIRE(runtime.views().setPresentation(viewId, listOrder->spec));
     REQUIRE(playback.commands().startFromView(viewId, track1));
-    REQUIRE(waitForPlaybackSettlement(runtime, track1));
+    REQUIRE(tryWaitForPlaybackSettlement(runtime, track1));
     playback.commands().seek(std::chrono::milliseconds{250});
     playback.commands().next();
     playback.commands().seek(std::chrono::milliseconds{550});

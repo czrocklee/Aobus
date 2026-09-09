@@ -70,55 +70,55 @@ namespace ao::audio::test
       for (auto const path : std::array<std::string_view, 2>{"song.ogg", "video.mp4"})
       {
         CAPTURE(path);
-        auto const result = openDecoderSession(path, SampleEncoding::Signed16Le);
+        auto const res = openDecoderSession(path, SampleEncoding::Signed16Le);
 
-        REQUIRE_FALSE(result);
-        CHECK(result.error().code == Error::Code::NotSupported);
+        REQUIRE_FALSE(res);
+        CHECK(res.error().code == Error::Code::NotSupported);
       }
     }
 
     SECTION("Unrecognized MP4 audio codec")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("ec-3"), ".m4a"};
-      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
+      auto const res = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("MP4 container without an audio track")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeAtom("moov", {}), ".m4a"};
-      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
+      auto const res = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Malformed MP4 structure")
     {
       auto const m4a = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".m4a"};
-      auto const result = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
+      auto const res = openDecoderSession(m4a.path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Missing supported file")
     {
-      auto const result = openDecoderSession("missing.flac", SampleEncoding::Signed16Le);
+      auto const res = openDecoderSession("missing.flac", SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::IoError);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
 
     SECTION("Existing malformed supported file")
     {
       auto const flac = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".flac"};
-      auto const result = openDecoderSession(flac.path, SampleEncoding::Signed16Le);
+      auto const res = openDecoderSession(flac.path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::DecodeFailed);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::DecodeFailed);
     }
   }
 

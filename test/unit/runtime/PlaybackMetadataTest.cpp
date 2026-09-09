@@ -63,12 +63,12 @@ namespace ao::rt::test
       template<typename Operation>
       auto commit(Operation operation)
       {
-        auto result = runTestTask(transport.asyncRuntime,
-                                  transport.executor,
-                                  executeInteractiveMutation(writeLane.captureSubmission(), std::move(operation)));
-        REQUIRE(result);
+        auto res = runTestTask(transport.asyncRuntime,
+                               transport.executor,
+                               executeInteractiveMutationAsync(writeLane.captureSubmission(), std::move(operation)));
+        REQUIRE(res);
         transport.executor.drain();
-        return result->value;
+        return res->value;
       }
 
       TrackId addTrack(std::string const& title, std::span<std::byte const> const cover = kFirstCover)
@@ -86,9 +86,9 @@ namespace ao::rt::test
               builder.coverArt().add(PictureType::FrontCover, cover);
             }
 
-            auto result = write.tracks().create(builder, library::FileManifestBuilder::makeEmpty());
-            REQUIRE(result);
-            return Changed<TrackId>{.value = *result, .changeSet = {.tracksInserted = {*result}}};
+            auto res = write.tracks().create(builder, library::FileManifestBuilder::makeEmpty());
+            REQUIRE(res);
+            return Changed<TrackId>{.value = *res, .changeSet = {.tracksInserted = {*res}}};
           });
       }
 
@@ -113,7 +113,7 @@ namespace ao::rt::test
       void start(TrackId const id)
       {
         REQUIRE(transport.playbackTransport.playTrack(id, ListId{7}));
-        REQUIRE(transport.executor.drainUntil(
+        REQUIRE(transport.executor.tryDrainUntil(
           [&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
         transport.executor.drain();
       }
@@ -284,10 +284,10 @@ namespace ao::rt::test
     auto const beforeActivation = fixture.playback.snapshot();
     auto output = std::array<std::byte, 4096>{};
     REQUIRE(fixture.transport.renderTarget != nullptr);
-    REQUIRE(driveRenderUntil(*fixture.transport.renderTarget,
-                             fixture.transport.executor,
-                             output,
-                             [&] { return fixture.playback.snapshot().transport.nowPlaying.trackId == nextId; }));
+    REQUIRE(tryDriveRenderUntil(*fixture.transport.renderTarget,
+                                fixture.transport.executor,
+                                output,
+                                [&] { return fixture.playback.snapshot().transport.nowPlaying.trackId == nextId; }));
     CHECK(fixture.playback.snapshot().transport.nowPlaying.title == (deleted ? "Next" : "Edited next"));
     CHECK(fixture.playback.snapshot().transport.nowPlaying.artist == (deleted ? "Launch artist" : "Next artist"));
     CHECK(fixture.playback.snapshot().transport.nowPlaying.album == (deleted ? "Launch album" : "Next album"));
@@ -308,7 +308,7 @@ namespace ao::rt::test
     auto const viewRes = fixture.workspace.navigate({.target = kAllTracksListId});
     REQUIRE(viewRes);
     REQUIRE(fixture.commands().startFromView(*viewRes, trackId));
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&] { return fixture.playback.snapshot().transport.transport == audio::Transport::Playing; }));
     fixture.executor.drain();
     auto const before = fixture.playback.snapshot();
@@ -394,7 +394,7 @@ namespace ao::rt::test
     auto const viewRes = fixture.workspace.navigate({.target = kAllTracksListId});
     REQUIRE(viewRes);
     REQUIRE(fixture.commands().startFromView(*viewRes, trackId));
-    REQUIRE(fixture.executor.drainUntil(
+    REQUIRE(fixture.executor.tryDrainUntil(
       [&] { return fixture.playback.snapshot().transport.transport == audio::Transport::Playing; }));
     fixture.executor.drain();
     std::size_t publications = 0;

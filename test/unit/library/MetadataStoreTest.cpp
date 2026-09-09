@@ -49,9 +49,9 @@ namespace ao::library::test
       REQUIRE(wtxn.commit());
     }
 
-    auto const result = MusicLibrary::open(temp.path(), temp.path());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    auto const res = MusicLibrary::open(temp.path(), temp.path());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header", "[library][unit][music-library]")

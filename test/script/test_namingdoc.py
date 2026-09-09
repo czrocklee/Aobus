@@ -25,6 +25,7 @@ class NamingDocTest(unittest.TestCase):
             ("`Utils`", "`BogusSuffix`"),
             ("`Spy*`", "`Bogus*`"),
             ("`IdentifierNamingExtensionsCheck`", "`MissingNamingCheck`"),
+            ("`ResultNamingConventionCheck`", "`IdentifierNamingExtensionsCheck`"),
             ("## Enforcement", "## Other enforcement"),
         ):
             altered = original.replace(before, after)

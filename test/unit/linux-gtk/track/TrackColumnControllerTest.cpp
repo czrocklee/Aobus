@@ -69,6 +69,39 @@ namespace ao::gtk::test
     }
   } // namespace
 
+  TEST_CASE("TrackColumnController - teardown cancels queued updates while the column view survives",
+            "[gtk][regression][track][column]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
+    auto columnView = Gtk::ColumnView{};
+    auto titleColumnPtr = Glib::RefPtr<Gtk::ColumnViewColumn>{};
+
+    {
+      auto controller =
+        TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist});
+      drainGtkEvents();
+      REQUIRE(columnLayouts.snapshot().empty());
+      titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+      REQUIRE(titleColumnPtr);
+
+      titleColumnPtr->set_fixed_width(333);
+      REQUIRE(controller.isTitlePositionUpdateQueued());
+    }
+
+    drainGtkEvents();
+    CHECK(columnLayouts.snapshot().empty());
+
+    // The surviving emitter must not enqueue work for its former controller.
+    titleColumnPtr->set_fixed_width(444);
+    drainGtkEvents();
+    CHECK(columnLayouts.snapshot().empty());
+  }
+
   TEST_CASE("TrackColumnController - builds and updates visible track columns", "[gtk][unit][track][column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

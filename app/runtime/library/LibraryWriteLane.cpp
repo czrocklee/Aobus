@@ -71,8 +71,8 @@ namespace ao::rt
     /**
      * One waiter, one signal, one terminal value.
      *
-     * wait() deliberately does not bind the handler's cancellation slot: the
-     * lane is the only authority that may end a wait, and it ends one by
+     * waitAsync() deliberately does not bind the handler's cancellation slot: the
+     * lane is the only authority that may end a waitAsync, and it ends one by
      * signalling a terminal value (retire()/grant()) rather than by cancelling.
      * A second authority could only race the first, and both a second waiter
      * and a second signal are fatal here, so an Asio cancellation would have to
@@ -83,7 +83,7 @@ namespace ao::rt
     class OneShotEvent final
     {
     public:
-      async::Task<Value> wait() const
+      async::Task<Value> waitAsync() const
       {
         auto statePtr = _statePtr;
         return boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void(Value)>(
@@ -190,7 +190,7 @@ namespace ao::rt
     LibraryMutationOwnerLease& operator=(LibraryMutationOwnerLease&&) = delete;
 
     LibraryWriteLane& owner() const noexcept { return *_owner; }
-    bool ownerIsOpen() const noexcept;
+    bool isOwnerOpen() const noexcept;
     void releaseCommand(std::shared_ptr<LibraryMutationCommandRequest> const& requestPtr) noexcept;
     LibraryWriteLane* releaseOwner() noexcept { return std::exchange(_owner, nullptr); }
     std::shared_ptr<LibraryMutationLifetimeState> releaseState() noexcept { return std::move(_statePtr); }
@@ -287,7 +287,7 @@ namespace ao::rt
     {
     }
 
-    bool LibraryMutationOwnerLease::ownerIsOpen() const noexcept
+    bool LibraryMutationOwnerLease::isOwnerOpen() const noexcept
     {
       auto const lock = std::scoped_lock{_owner->_stateMutex};
       return _owner->_lifecycle == LibraryWriteLane::Lifecycle::Open;
@@ -307,7 +307,7 @@ namespace ao::rt
     {
     }
 
-    async::Task<bool> wait() const { return event.wait(); }
+    async::Task<bool> waitAsync() const { return event.waitAsync(); }
     void grant() noexcept { event.signal(true); }
     void retire() noexcept { event.signal(false); }
     std::stop_token closingStopToken() const noexcept { return closingStopSource.get_token(); }
@@ -325,7 +325,7 @@ namespace ao::rt
     {
     }
 
-    async::Task<LibraryPublicationTerminal> wait() const { return event.wait(); }
+    async::Task<LibraryPublicationTerminal> waitAsync() const { return event.waitAsync(); }
     void signal(LibraryPublicationTerminal const terminal) noexcept { event.signal(terminal); }
 
     std::uint64_t revision;
@@ -339,7 +339,7 @@ namespace ao::rt
     {
     }
 
-    async::Task<bool> wait() const { return event.wait(); }
+    async::Task<bool> waitAsync() const { return event.waitAsync(); }
     void complete() noexcept { event.signal(true); }
     void retire() noexcept { event.signal(false); }
 
@@ -386,9 +386,9 @@ namespace ao::rt
       CommandAdmissionGuard& operator=(CommandAdmissionGuard&&) = delete;
 
       LibraryWriteLane& owner() const noexcept { return _ownerPermit.owner(); }
-      bool ownerIsOpen() const noexcept { return _ownerPermit.ownerIsOpen(); }
+      bool isOwnerOpen() const noexcept { return _ownerPermit.isOwnerOpen(); }
       std::stop_token closingStopToken() const noexcept { return _requestPtr->closingStopToken(); }
-      async::Task<bool> wait() const { return _requestPtr->wait(); }
+      async::Task<bool> waitAsync() const { return _requestPtr->waitAsync(); }
       void markGranted() noexcept { _granted = true; }
 
       CommandAdmission release() noexcept
@@ -440,14 +440,14 @@ namespace ao::rt
 
       auto guard = CommandAdmissionGuard{std::move(*optOwnerPermit), std::move(*requestRes)};
 
-      if (!co_await guard.wait())
+      if (!co_await guard.waitAsync())
       {
         async::throwOperationCancelled();
       }
 
       guard.markGranted();
 
-      if (!guard.ownerIsOpen())
+      if (!guard.isOwnerOpen())
       {
         async::throwOperationCancelled();
       }
@@ -786,7 +786,7 @@ namespace ao::rt
   LibraryWriteLane::Submission LibraryWriteLane::captureSubmission() const noexcept
   {
     auto const lock = std::scoped_lock{_stateMutex};
-    return Submission{_lifetimeStatePtr, _callbackExecutor.isCurrent() && submissionIsReentrantLocked()};
+    return Submission{_lifetimeStatePtr, _callbackExecutor.isCurrent() && isSubmissionReentrantLocked()};
   }
 
   Result<std::shared_ptr<detail::LibraryMutationCommandRequest>> LibraryWriteLane::enqueueCommand(
@@ -922,7 +922,7 @@ namespace ao::rt
       }
     }
 
-    if (!owner.beginTransaction())
+    if (!owner.tryBeginTransaction())
     {
       async::throwOperationCancelled();
     }
@@ -1053,7 +1053,7 @@ namespace ao::rt
 
     if (lockedLeaseStatePtr == nullptr || lockedLeaseStatePtr != submissionStatePtr)
     {
-      return async::makeReadyTask(
+      return async::makeReadyTaskAsync(
         Result<Mutation>{makeError(Error::Code::InvalidState, "Library background task is no longer active")});
     }
 
@@ -1065,7 +1065,7 @@ namespace ao::rt
                               std::move(preTransaction));
   }
 
-  bool LibraryWriteLane::beginTransaction() noexcept
+  bool LibraryWriteLane::tryBeginTransaction() noexcept
   {
     auto const lock = std::scoped_lock{_stateMutex};
 
@@ -1169,7 +1169,7 @@ namespace ao::rt
       eventPtr = _activePublicationEventPtr;
     }
 
-    auto const terminal = co_await eventPtr->wait();
+    auto const terminal = co_await eventPtr->waitAsync();
     completeCommittedCommand(revision);
     co_return terminal;
   }
@@ -1445,7 +1445,7 @@ namespace ao::rt
       }
     }
 
-    auto const delivered = co_await deliveryPtr->wait();
+    auto const delivered = co_await deliveryPtr->waitAsync();
 
     {
       auto const lock = std::scoped_lock{_stateMutex};
@@ -1522,7 +1522,7 @@ namespace ao::rt
 
     if (lockedGuardStatePtr == nullptr || lockedGuardStatePtr != submissionStatePtr)
     {
-      return async::makeReadyTask(
+      return async::makeReadyTaskAsync(
         Result<Mutation>{makeError(Error::Code::InvalidState, "Library maintenance session is no longer active")});
     }
 
@@ -1552,7 +1552,7 @@ namespace ao::rt
     return _optActivePublicationDiagnosticContext;
   }
 
-  bool LibraryWriteLane::beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept
+  bool LibraryWriteLane::tryBeginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept
   {
     auto const stateLock = std::scoped_lock{_stateMutex};
 
@@ -1579,7 +1579,7 @@ namespace ao::rt
 
   void LibraryWriteLane::emitAvailability(LibraryAuthoringAvailability const& expected) noexcept
   {
-    if (!beginAvailabilityNotification(expected))
+    if (!tryBeginAvailabilityNotification(expected))
     {
       return;
     }
@@ -1588,9 +1588,9 @@ namespace ao::rt
     completeAvailabilityNotification();
   }
 
-  bool LibraryWriteLane::submissionIsReentrantLocked() const noexcept
+  bool LibraryWriteLane::isSubmissionReentrantLocked() const noexcept
   {
-    return _availabilityNotificationInProgress || _changes.publicationDeliveryInProgressFromCoordinator();
+    return _availabilityNotificationInProgress || _changes.isPublicationDeliveryInProgressFromCoordinator();
   }
 
   bool LibraryWriteLane::hasOutstandingCommandLocked(CommandKind const kind) const noexcept

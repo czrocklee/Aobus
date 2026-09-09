@@ -57,64 +57,64 @@ namespace ao::uimodel::test
     SECTION("Unsupported version")
     {
       document.version = 3;
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotSupported);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
     }
 
     SECTION("Unknown field")
     {
       document.layouts[0].columns[0].field = "future-field";
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Duplicate field")
     {
       document.layouts[0].columns.push_back(document.layouts[0].columns[0]);
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Invalid width and weight")
     {
       document.layouts[0].columns[0].width = 200;
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Flexible field uses fixed form")
     {
       document.layouts[0].columns[0] = StoredTrackColumn{.field = "title", .width = 200};
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Fixed field uses flexible form")
     {
       document.layouts[0].columns[0] = StoredTrackColumn{.field = "duration", .weight = 1.0};
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("Invalid list id")
     {
       document.layouts[0].listId = kInvalidListId.raw();
-      auto const result = trackColumnLayoutsFromDocument(document);
+      auto const res = trackColumnLayoutsFromDocument(document);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
   }
 

@@ -267,13 +267,13 @@ namespace ao::rt::test
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     REQUIRE(runtime.workspace().closeView(viewA));
-    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.firstListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteListAsync(fixture.firstListId)));
     auto const before = runtime.workspace().snapshot();
 
-    auto const result = runtime.workspace().goBack();
+    auto const res = runtime.workspace().goBack();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     auto const after = runtime.workspace().snapshot();
     CHECK(after.activeViewId == viewB);
     CHECK(after.activeViewId == before.activeViewId);
@@ -290,13 +290,13 @@ namespace ao::rt::test
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     requireBackNavigation(runtime);
     REQUIRE(runtime.workspace().closeView(viewB));
-    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteList(fixture.secondListId)));
+    REQUIRE(runRuntimeTask(runtime, runtime.library().commands().deleteListAsync(fixture.secondListId)));
     auto const before = runtime.workspace().snapshot();
 
-    auto const result = runtime.workspace().goForward();
+    auto const res = runtime.workspace().goForward();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     auto const after = runtime.workspace().snapshot();
     CHECK(after.activeViewId == viewA);
     CHECK(after.activeViewId == before.activeViewId);

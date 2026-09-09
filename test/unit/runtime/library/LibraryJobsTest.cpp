@@ -88,16 +88,16 @@ namespace ao::rt::test
       REQUIRE(sawCancellation);
     }
 
-    async::Task<void> applyScanPlanAndRecordCancellation(LibraryJobs* jobs,
-                                                         ScanPlan plan,
-                                                         AsyncTestState<bool> fingerprintingEntered,
-                                                         AsyncBarrier* fingerprintingRelease,
-                                                         AsyncTestState<bool> sawCancellation,
-                                                         std::stop_token const stopToken)
+    async::Task<void> applyScanPlanAndRecordCancellationAsync(LibraryJobs* jobs,
+                                                              ScanPlan plan,
+                                                              AsyncTestState<bool> fingerprintingEntered,
+                                                              AsyncBarrier* fingerprintingRelease,
+                                                              AsyncTestState<bool> sawCancellation,
+                                                              std::stop_token const stopToken)
     {
       try
       {
-        [[maybe_unused]] auto result = co_await jobs->applyScanPlanAsync(
+        [[maybe_unused]] auto res = co_await jobs->applyScanPlanAsync(
           std::move(plan),
           {},
           stopToken,
@@ -137,7 +137,7 @@ namespace ao::rt::test
                      async::Task<T> task,
                      std::shared_ptr<std::atomic_bool> const& completedPtr)
     {
-      return runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+      return runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));
     }
 
     bool isReady(std::shared_ptr<std::atomic_bool> const& completedPtr)
@@ -156,7 +156,8 @@ namespace ao::rt::test
     {
       auto completedPtr = std::make_shared<std::atomic_bool>(false);
       auto future = spawnFuture(runtime, jobs.backfillAudioIdentityAsync(), completedPtr);
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
+      REQUIRE(
+        executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
       REQUIRE(future.get());
     }
   } // namespace
@@ -170,13 +171,13 @@ namespace ao::rt::test
     auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
-    auto const result = runQueuedTask(
+    auto const res = runQueuedTask(
       runtime, executor, jobs.prepareLibraryImportAsync("/nonexistent_path_123.yaml", ImportMode::Restore));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::IoError);
-    CHECK(result.error().message.contains("Failed to read"));
-    CHECK(std::string_view{result.error().location.file_name()}.contains("LibraryYamlImporter.cpp"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+    CHECK(res.error().message.contains("Failed to read"));
+    CHECK(std::string_view{res.error().location.file_name()}.contains("LibraryYamlImporter.cpp"));
   }
 
   TEST_CASE("LibraryJobs - import plans bind preview bytes and target state",
@@ -202,31 +203,32 @@ namespace ao::rt::test
 
     SECTION("unchanged preview applies")
     {
-      auto result = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
-      INFO((result ? "import applied" : result.error().message));
-      REQUIRE(result);
-      CHECK(result->tracksCreated == 1);
+      INFO((res ? "import applied" : res.error().message));
+      REQUIRE(res);
+      CHECK(res->tracksCreated == 1);
     }
 
     SECTION("changed source is rejected")
     {
       writeImportPayload(yamlPath, "Changed");
-      auto result = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::Conflict);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
     }
 
     SECTION("changed target revision is rejected")
     {
-      auto deleteRes = runQueuedTask(runtime, executor, runtimeLibraryPtr->commands().deleteTrack(existingTrackId));
+      auto deleteRes =
+        runQueuedTask(runtime, executor, runtimeLibraryPtr->commands().deleteTrackAsync(existingTrackId));
       INFO((deleteRes ? "target changed" : deleteRes.error().message));
       REQUIRE(deleteRes);
-      auto result = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
+      auto res = runQueuedTask(runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::Conflict);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
     }
   }
 
@@ -243,22 +245,22 @@ namespace ao::rt::test
       auto runtime = async::Runtime{executor};
       auto changes = makeLibraryChanges(executor, libraryFixture.library());
       auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
-      auto result = runQueuedTask(
+      auto res = runQueuedTask(
         runtime, executor, runtimeLibraryPtr->jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
-      REQUIRE(result);
-      optPlan.emplace(std::move(*result));
+      REQUIRE(res);
+      optPlan.emplace(std::move(*res));
     }
 
     auto otherExecutor = QueuedExecutor{};
     auto otherRuntime = async::Runtime{otherExecutor};
     auto otherChanges = makeLibraryChanges(otherExecutor, libraryFixture.library());
     auto otherLibraryPtr = makeLibrary(otherRuntime, libraryFixture.library(), otherChanges);
-    auto result = runQueuedTask(
+    auto res = runQueuedTask(
       otherRuntime, otherExecutor, otherLibraryPtr->jobs().applyLibraryImportPlanAsync(std::move(*optPlan)));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::Conflict);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::Conflict);
   }
 
   TEST_CASE("LibraryJobs - cancelled import preparation never enters maintenance",
@@ -291,7 +293,7 @@ namespace ao::rt::test
       executor.checkQueued();
 
       REQUIRE(stopSource.request_stop());
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
     }
 
@@ -328,7 +330,7 @@ namespace ao::rt::test
       runtimeLibraryPtr->jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
       completedPtr);
 
-    REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
     CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
     CHECK(observed == std::vector{LibraryAuthoringState::Maintenance, LibraryAuthoringState::Available});
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
@@ -351,7 +353,7 @@ namespace ao::rt::test
     auto prepareFuture =
       spawnFuture(runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore), prepareCompletedPtr);
 
-    REQUIRE(executor.drainUntil([&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }));
     auto planRes = prepareFuture.get();
     REQUIRE(planRes);
     executor.drain();
@@ -364,13 +366,13 @@ namespace ao::rt::test
     auto applyFuture = spawnFuture(
       runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes), stopSource.get_token()), applyCompletedPtr);
 
-    REQUIRE(executor.drainUntil([&committed] { return committed.load(); }));
+    REQUIRE(executor.tryDrainUntil([&committed] { return committed.load(); }));
     REQUIRE(stopSource.request_stop());
-    REQUIRE(executor.drainUntil([&applyCompletedPtr] { return isReady(applyCompletedPtr); }));
-    auto result = applyFuture.get();
+    REQUIRE(executor.tryDrainUntil([&applyCompletedPtr] { return isReady(applyCompletedPtr); }));
+    auto res = applyFuture.get();
 
-    REQUIRE(result);
-    CHECK(result->tracksCreated == 1);
+    REQUIRE(res);
+    CHECK(res->tracksCreated == 1);
     executor.drain();
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     runtime.requestStop();
@@ -386,11 +388,11 @@ namespace ao::rt::test
     auto runtimeLibraryPtr = makeLibrary(runtime, libraryFixture.library(), changes);
     auto& jobs = runtimeLibraryPtr->jobs();
 
-    auto const result =
+    auto const res =
       runQueuedTask(runtime, executor, jobs.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::IoError);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
   }
 
   TEST_CASE("LibraryJobs - YAML transfers publish coarse progress and one terminal pulse",
@@ -464,9 +466,9 @@ namespace ao::rt::test
     auto progressFinishedSub = jobs.onProgressFinished(
       [&progressFinishedCount](LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
 
-    auto const result = runQueuedTask(runtime, executor, jobs.buildScanPlanAsync());
+    auto const res = runQueuedTask(runtime, executor, jobs.buildScanPlanAsync());
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(progressFinishedCount == 1);
   }
 
@@ -496,7 +498,7 @@ namespace ao::rt::test
     {
       auto future = spawnFuture(runtime, jobs.buildScanPlanAsync(stopSource.get_token()), completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -511,7 +513,7 @@ namespace ao::rt::test
       auto future =
         spawnFuture(runtime, jobs.applyScanPlanAsync(std::move(*planRes), {}, stopSource.get_token()), completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -523,7 +525,7 @@ namespace ao::rt::test
     {
       auto future = spawnFuture(runtime, jobs.backfillAudioIdentityAsync(stopSource.get_token()), completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -538,7 +540,7 @@ namespace ao::rt::test
       auto future = spawnFuture(
         runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Merge, stopSource.get_token()), completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -559,7 +561,7 @@ namespace ao::rt::test
       auto future = spawnFuture(
         runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes), stopSource.get_token()), completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -574,7 +576,7 @@ namespace ao::rt::test
         jobs.exportLibraryAsync(libraryFixture.root() / "export.yaml", ExportMode::Full, stopSource.get_token()),
         completedPtr);
 
-      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
       CHECK(progressCount == 0);
       CHECK(progressFinishedCount == 0);
       CHECK(availabilityCount == 0);
@@ -598,11 +600,11 @@ namespace ao::rt::test
     // Scanning progress is phase-coalesced, so a later path under the same
     // music root may replace this filename before callback delivery. The scan
     // plan is the durable per-file result and therefore owns this assertion.
-    auto const result = runQueuedTask(runtime, executor, jobs.buildScanPlanAsync());
+    auto const res = runQueuedTask(runtime, executor, jobs.buildScanPlanAsync());
 
-    REQUIRE(result);
-    REQUIRE(result->size() == 1);
-    CHECK(result->items().front().uri == expected);
+    REQUIRE(res);
+    REQUIRE(res->size() == 1);
+    CHECK(res->items().front().uri == expected);
   }
 
   TEST_CASE("LibraryJobs - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
@@ -618,14 +620,14 @@ namespace ao::rt::test
     auto& jobs = runtimeLibraryPtr->jobs();
 
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
-    auto const result = runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
+    auto const res = runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
 
-    REQUIRE(result);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->mutatedIds.empty());
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->failureCount == 0);
-    CHECK(result->libraryRevision == 0);
+    REQUIRE(res);
+    CHECK(res->insertedIds.empty());
+    CHECK(res->mutatedIds.empty());
+    CHECK(res->relinkedIds.empty());
+    CHECK(res->failureCount == 0);
+    CHECK(res->libraryRevision == 0);
     CHECK(observed.empty());
     auto transaction = libraryFixture.library().readTransaction();
     CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
@@ -647,13 +649,13 @@ namespace ao::rt::test
     auto plan = scanService.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto const result = runQueuedTask(
+    auto const res = runQueuedTask(
       runtime,
       executor,
       jobs.applyScanPlanAsync(std::move(plan), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}));
 
-    REQUIRE(result);
-    REQUIRE(result->insertedIds.size() == 1);
+    REQUIRE(res);
+    REQUIRE(res->insertedIds.size() == 1);
     auto transaction = libraryFixture.library().readTransaction();
     auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(optManifest);
@@ -695,17 +697,17 @@ namespace ao::rt::test
                                                    }),
       completedPtr);
 
-    auto const startedInTime = executor.drainUntil([&preparationStarted] { return preparationStarted.load(); });
+    auto const startedInTime = executor.tryDrainUntil([&preparationStarted] { return preparationStarted.load(); });
 
     if (startedInTime)
     {
       auto const availability = runtimeLibraryPtr->authoringAvailability();
       CHECK(availability.state == LibraryAuthoringState::Available);
 
-      auto authoringRes = runQueuedTask(
-        runtime,
-        executor,
-        runtimeLibraryPtr->commands().updateMetadata(*bindingRes, MetadataPatch{.optTitle = "Edited during scan"}));
+      auto authoringRes = runQueuedTask(runtime,
+                                        executor,
+                                        runtimeLibraryPtr->commands().updateMetadataAsync(
+                                          *bindingRes, MetadataPatch{.optTitle = "Edited during scan"}));
       CHECK(authoringRes);
 
       if (authoringRes)
@@ -716,14 +718,14 @@ namespace ao::rt::test
       executor.drain();
 
       auto listRes = runQueuedTask(
-        runtime, executor, runtimeLibraryPtr->commands().createList(ListDraft{.name = "Created during scan"}));
+        runtime, executor, runtimeLibraryPtr->commands().createListAsync(ListDraft{.name = "Created during scan"}));
       CHECK(listRes);
 
       auto overlapCompletedPtr = std::make_shared<std::atomic_bool>(false);
       auto overlapFuture =
         spawnFuture(runtime, runtimeLibraryPtr->jobs().backfillAudioIdentityAsync(), overlapCompletedPtr);
       auto const overlapCompleted =
-        executor.drainUntil([&overlapCompletedPtr] { return isReady(overlapCompletedPtr); });
+        executor.tryDrainUntil([&overlapCompletedPtr] { return isReady(overlapCompletedPtr); });
       CHECK(overlapCompleted);
 
       if (overlapCompleted)
@@ -740,10 +742,10 @@ namespace ao::rt::test
 
     releasePreparation.release();
     REQUIRE(startedInTime);
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
-    auto result = future.get();
-    REQUIRE(result);
-    REQUIRE(result->insertedIds.size() == 1);
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
+    auto res = future.get();
+    REQUIRE(res);
+    REQUIRE(res->insertedIds.size() == 1);
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     {
       auto transaction = libraryFixture.library().readTransaction();
@@ -756,7 +758,7 @@ namespace ao::rt::test
     REQUIRE(postScanBindingRes);
     auto postScanAuthoringRes = runQueuedTask(runtime,
                                               executor,
-                                              runtimeLibraryPtr->commands().updateMetadata(
+                                              runtimeLibraryPtr->commands().updateMetadataAsync(
                                                 *postScanBindingRes, MetadataPatch{.optTitle = "Edited after scan"}));
     REQUIRE(postScanAuthoringRes);
     CHECK(postScanAuthoringRes->status == AuthoringStatus::Applied);
@@ -828,17 +830,17 @@ namespace ao::rt::test
     std::filesystem::remove(firstFile);
     std::filesystem::remove(secondFile);
 
-    auto const result = runQueuedTask(
+    auto const res = runQueuedTask(
       runtime,
       executor,
       jobs.applyScanPlanAsync(
         std::move(plan), {}, {}, {}, [&failureCallbackCount](ScanFailure const&) { ++failureCallbackCount; }));
 
-    REQUIRE(result);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->mutatedIds.empty());
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->failureCount == 2);
+    REQUIRE(res);
+    CHECK(res->insertedIds.empty());
+    CHECK(res->mutatedIds.empty());
+    CHECK(res->relinkedIds.empty());
+    CHECK(res->failureCount == 2);
     CHECK(failureCallbackCount == 2);
 
     REQUIRE(expectedNames.size() == 2);
@@ -911,19 +913,19 @@ namespace ao::rt::test
                               }),
       completedPtr);
 
-    REQUIRE(executor.drainUntil([firstProgressEntered] { return firstProgressEntered.load(); }));
+    REQUIRE(executor.tryDrainUntil([firstProgressEntered] { return firstProgressEntered.load(); }));
     firstProgressRelease.release();
-    REQUIRE(progressCount.waitUntil(kFileCount));
+    REQUIRE(progressCount.tryWaitUntil(kFileCount));
 
     // One progress delivery may already have run before the worker barrier;
     // the remaining burst owns at most one queued delivery plus its completion.
     CHECK(executor.queuedCount() <= 2);
-    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
-    auto const result = future.get();
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
+    auto const res = future.get();
     executor.drain();
 
-    REQUIRE(result);
-    CHECK(std::cmp_equal(result->failureCount, kFileCount));
+    REQUIRE(res);
+    CHECK(std::cmp_equal(res->failureCount, kFileCount));
     REQUIRE_FALSE(progressEvents.empty());
     CHECK(progressEvents.size() <= 2);
     CHECK(progressEvents.back().subject == expectedLastSubject);
@@ -969,14 +971,14 @@ namespace ao::rt::test
        fingerprintingBarrier = &fingerprintingRelease,
        sawCancellation](std::stop_token const stopToken) mutable
       {
-        return applyScanPlanAndRecordCancellation(
+        return applyScanPlanAndRecordCancellationAsync(
           jobs, std::move(plan), fingerprintingEntered, fingerprintingBarrier, sawCancellation, stopToken);
       });
 
-    REQUIRE(executor.drainUntil([&fingerprintingEntered] { return fingerprintingEntered.load(); }));
+    REQUIRE(executor.tryDrainUntil([&fingerprintingEntered] { return fingerprintingEntered.load(); }));
     taskHandle.reset();
     fingerprintingRelease.release();
-    REQUIRE(executor.drainUntil([&sawCancellation] { return sawCancellation.load(); }));
+    REQUIRE(executor.tryDrainUntil([&sawCancellation] { return sawCancellation.load(); }));
     CHECK(fingerprintingEntered.load());
     CHECK(progressFinished.load());
 
@@ -1021,7 +1023,8 @@ namespace ao::rt::test
                                           }),
                   completedPtr);
 
-    auto const completed = executor.drainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
+    auto const completed =
+      executor.tryDrainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
     CAPTURE(callbackCount.load(), executor.queuedCount());
     REQUIRE(completed);
     CHECK_THROWS_AS(future.get(), std::runtime_error);
@@ -1067,7 +1070,8 @@ namespace ao::rt::test
                                                   }),
                   completedPtr);
 
-    auto const completed = executor.drainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
+    auto const completed =
+      executor.tryDrainUntil([&] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout);
     CAPTURE(callbackCount.load(), executor.queuedCount());
     REQUIRE(completed);
     CHECK_THROWS_AS(future.get(), std::runtime_error);
@@ -1104,7 +1108,7 @@ namespace ao::rt::test
                               [&stopSource](ScanApplyProgress const&) { std::ignore = stopSource.request_stop(); }),
       completedPtr);
 
-    REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     CHECK(progressFinished.load());
     CHECK_THROWS_AS(future.get(), async::OperationCancelled);
@@ -1146,7 +1150,7 @@ namespace ao::rt::test
                                                               { std::ignore = stopSource.request_stop(); }),
                               completedPtr);
 
-    REQUIRE(executor.drainUntil([&] { return isReady(completedPtr); }));
+    REQUIRE(executor.tryDrainUntil([&] { return isReady(completedPtr); }));
     CHECK(runtimeLibraryPtr->authoringAvailability().state == LibraryAuthoringState::Available);
     CHECK(progressFinished.load());
     CHECK_THROWS_AS(future.get(), async::OperationCancelled);

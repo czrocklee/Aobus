@@ -317,9 +317,9 @@ namespace ao::media::file::mp4::test
 
     ao::media::file::test::RecordedContent readContent(File const& file)
     {
-      auto result = file.readContent();
-      REQUIRE(result);
-      return *result;
+      auto res = file.readContent();
+      REQUIRE(res);
+      return *res;
     }
 
     std::uint16_t loadMovementValue(MovementField field,
@@ -841,10 +841,10 @@ namespace ao::media::file::mp4::test
 
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("End-of-file moov without mdat")
@@ -863,10 +863,10 @@ namespace ao::media::file::mp4::test
 
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Length less than header size")
@@ -884,10 +884,10 @@ namespace ao::media::file::mp4::test
 
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto result = file.readContent();
+      auto res = file.readContent();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Metadata atom shorter than the data-atom header")
@@ -917,10 +917,10 @@ namespace ao::media::file::mp4::test
 
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto result = file.audioPayload();
+      auto res = file.audioPayload();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Truncated atom after mdat invalidates the required top-level walk")
@@ -932,10 +932,10 @@ namespace ao::media::file::mp4::test
 
       auto const temp = TempFile{data, ".m4a"};
       auto const file = File{temp.path};
-      auto result = file.audioPayload();
+      auto res = file.audioPayload();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Malformed text metadata atom does not overwrite valid metadata")

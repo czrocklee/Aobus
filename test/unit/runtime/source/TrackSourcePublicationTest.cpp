@@ -85,10 +85,10 @@ namespace ao::rt::test
         phases.emplace_back("phase two");
       });
 
-    auto result = runQueuedTask(
+    auto res = runQueuedTask(
       runtime,
       executor,
-      executeInteractiveMutation(
+      executeInteractiveMutationAsync(
         lane.captureSubmission(),
         [&storage, a, c](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
         {
@@ -121,16 +121,16 @@ namespace ao::rt::test
         }));
     phases.emplace_back("completed");
 
-    REQUIRE(result);
-    REQUIRE(result->optCommittedRevision);
-    auto const b = result->value;
+    REQUIRE(res);
+    REQUIRE(res->optCommittedRevision);
+    auto const b = res->value;
     CHECK(allSnapshots == std::vector<std::vector<TrackId>>{{a, b}});
     CHECK(smartSnapshots == std::vector<std::vector<TrackId>>{{b}});
     CHECK(phases == std::vector<std::string_view>{"source", "source", "phase two", "completed"});
     CHECK(phaseTwoAll == std::vector{a, b});
     CHECK(phaseTwoSmart == std::vector{b});
     REQUIRE(published.size() == 1);
-    CHECK(published.front().libraryRevision == *result->optCommittedRevision);
+    CHECK(published.front().libraryRevision == *res->optCommittedRevision);
     CHECK(lane.availability().state == LibraryAuthoringState::Available);
     auto const transaction = storage.readTransaction();
     auto const reader = storage.tracks().reader(transaction);

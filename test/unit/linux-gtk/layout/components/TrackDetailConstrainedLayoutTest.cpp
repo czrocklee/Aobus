@@ -40,12 +40,12 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::collectAll;
   using ao::gtk::test::emitClicked;
-  using ao::gtk::test::emitGesturePressed;
   using ao::gtk::test::findButtonByLabel;
   using ao::gtk::test::findLabelByText;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::findWidgetByClass;
   using ao::gtk::test::hasAccessibleLabel;
+  using ao::gtk::test::tryEmitGesturePressed;
   using ao::gtk::test::walkWidgets;
 
   namespace
@@ -159,7 +159,7 @@ namespace ao::gtk::layout::test
     CHECK(secondEntry.get_child_visible());
     CHECK(events == std::vector<std::string>{"begin first", "commit first", "begin second"});
 
-    REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
+    REQUIRE(tryEmitGesturePressed(window, 1, 1.0, 1.0));
     CHECK_FALSE(second.isEditing());
     CHECK_FALSE(secondEntry.get_child_visible());
   }
@@ -704,7 +704,7 @@ namespace ao::gtk::layout::test
       CHECK(entry.get_width() <= builtInValueEditor->get_width());
       CHECK(entry.get_height() <= builtInValueEditor->get_height());
 
-      REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
+      REQUIRE(tryEmitGesturePressed(window, 1, 1.0, 1.0));
       CHECK_FALSE(entry.get_child_visible());
       CHECK(editButton.get_visible());
     }

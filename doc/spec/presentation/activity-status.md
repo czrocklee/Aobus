@@ -86,7 +86,7 @@ Later notifications with different ids may surface normally.
 History and pinned info compact states use the presentation-only `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
 The view model records a steady-clock deadline for such compact state.
 `autoDismissCompact()` clears that temporary presentation and reprojects warning/error state.
-`autoDismissCompactIfDue()` performs the same transition only after the deadline.
+`tryAutoDismissCompactIfDue()` performs the same transition only after the deadline.
 
 Warning and error compact states have no local timeout.
 Runtime-transient info also has no local timeout because its authoritative service expiry removes it for all consumers.

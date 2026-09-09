@@ -435,11 +435,11 @@ namespace ao::rt
       return UpdateTrackMetadataReply{.changes = std::move(changes)};
     }
 
-    bool applyTrackTagChanges(library::TrackBuilder& builder,
-                              std::span<std::string const> const normalizedAdd,
-                              std::span<std::string const> const normalizedRemove,
-                              std::vector<std::string>& addedTags,
-                              std::vector<std::string>& removedTags)
+    bool tryApplyTrackTagChanges(library::TrackBuilder& builder,
+                                 std::span<std::string const> const normalizedAdd,
+                                 std::span<std::string const> const normalizedRemove,
+                                 std::vector<std::string>& addedTags,
+                                 std::vector<std::string>& removedTags)
     {
       bool tagsChanged = false;
 
@@ -520,7 +520,8 @@ namespace ao::rt
 
         auto addedTags = std::vector<std::string>{};
         auto removedTags = std::vector<std::string>{};
-        bool const tagsChanged = applyTrackTagChanges(builder, normalizedAdd, normalizedRemove, addedTags, removedTags);
+        bool const tagsChanged =
+          tryApplyTrackTagChanges(builder, normalizedAdd, normalizedRemove, addedTags, removedTags);
 
         if (tagsChanged)
         {
@@ -562,7 +563,7 @@ namespace ao::rt
     }
   } // namespace
 
-  async::Task<Result<UpdateTrackMetadataReply>> LibraryCommands::Impl::previewUpdateMetadata(
+  async::Task<Result<UpdateTrackMetadataReply>> LibraryCommands::Impl::previewUpdateMetadataAsync(
     LibraryWriteLane::Submission submission,
     std::vector<TrackId> trackIds,
     MetadataPatch patch)
@@ -573,7 +574,7 @@ namespace ao::rt
       { return applyMetadataPatchInTransaction(library, transaction, trackIds, patch); });
   }
 
-  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::Impl::applyUpdateMetadata(
+  async::Task<Result<TrackAuthoringResult<UpdateTrackMetadataReply>>> LibraryCommands::Impl::applyUpdateMetadataAsync(
     LibraryWriteLane::Submission submission,
     BoundTrackTargets targets,
     MetadataPatch patch)
@@ -608,7 +609,7 @@ namespace ao::rt
       });
   }
 
-  async::Task<Result<EditTrackTagsReply>> LibraryCommands::Impl::previewEditTags(
+  async::Task<Result<EditTrackTagsReply>> LibraryCommands::Impl::previewEditTagsAsync(
     LibraryWriteLane::Submission submission,
     std::vector<TrackId> trackIds,
     std::vector<std::string> tagsToAdd,
@@ -621,7 +622,7 @@ namespace ao::rt
       { return detail::applyTagPatchInTransaction(library, transaction, trackIds, tagsToAdd, tagsToRemove); });
   }
 
-  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::Impl::applyEditTags(
+  async::Task<Result<TrackAuthoringResult<EditTrackTagsReply>>> LibraryCommands::Impl::applyEditTagsAsync(
     LibraryWriteLane::Submission submission,
     BoundTrackTargets targets,
     std::vector<std::string> tagsToAdd,
@@ -658,10 +659,10 @@ namespace ao::rt
       });
   }
 
-  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>> LibraryCommands::Impl::applyUpdateProperties(
-    LibraryWriteLane::Submission submission,
-    BoundTrackTargets targets,
-    TrackPropertiesPatch patch)
+  async::Task<Result<TrackAuthoringResult<UpdateTrackPropertiesReply>>>
+  LibraryCommands::Impl::applyUpdatePropertiesAsync(LibraryWriteLane::Submission submission,
+                                                    BoundTrackTargets targets,
+                                                    TrackPropertiesPatch patch)
   {
     return detail::executeBoundTrackAuthoringAsync<UpdateTrackPropertiesReply>(
       std::move(submission),

@@ -52,24 +52,24 @@ namespace ao::uimodel
     std::span<TrackSortFieldOption const> sortFieldOptions() const noexcept { return _sortFieldOptions; }
     std::span<TrackVisibleFieldOption const> visibleFieldOptions() const noexcept { return _visibleFieldOptions; }
 
-    bool setGroupKeyByOptionIndex(std::size_t optionIndex);
+    bool trySetGroupKeyByOptionIndex(std::size_t optionIndex);
     std::optional<std::size_t> groupKeyOptionIndex() const;
 
     std::span<rt::TrackSortTerm const> sortTerms() const noexcept { return _sortTerms; }
     void addSortTerm();
-    bool removeSortTerm(std::size_t index);
-    bool moveSortTermUp(std::size_t index);
-    bool moveSortTermDown(std::size_t index);
-    bool setSortFieldByOptionIndex(std::size_t termIndex, std::size_t optionIndex);
-    bool setSortAscending(std::size_t termIndex, bool ascending);
+    bool tryRemoveSortTerm(std::size_t index);
+    bool tryMoveSortTermUp(std::size_t index);
+    bool tryMoveSortTermDown(std::size_t index);
+    bool trySetSortFieldByOptionIndex(std::size_t termIndex, std::size_t optionIndex);
+    bool trySetSortAscending(std::size_t termIndex, bool ascending);
     std::optional<std::size_t> optionIndexForSortField(rt::TrackSortField field) const;
 
     std::span<rt::TrackField const> visibleFields() const noexcept { return _visibleFields; }
     void addVisibleField();
-    bool removeVisibleField(std::size_t index);
-    bool moveVisibleFieldUp(std::size_t index);
-    bool moveVisibleFieldDown(std::size_t index);
-    bool setVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex);
+    bool tryRemoveVisibleField(std::size_t index);
+    bool tryMoveVisibleFieldUp(std::size_t index);
+    bool tryMoveVisibleFieldDown(std::size_t index);
+    bool trySetVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex);
     std::optional<std::size_t> optionIndexForVisibleField(rt::TrackField field) const;
 
     rt::CustomTrackPresentationPreset collectState(std::string_view generatedId) const;
@@ -79,7 +79,7 @@ namespace ao::uimodel
     // and every dropdown resolves a current value back to its option index.
 
     template<typename T>
-    static bool moveElementUp(std::vector<T>& elements, std::size_t index)
+    static bool tryMoveElementUp(std::vector<T>& elements, std::size_t index)
     {
       if (index == 0 || index >= elements.size())
       {
@@ -91,7 +91,7 @@ namespace ao::uimodel
     }
 
     template<typename T>
-    static bool moveElementDown(std::vector<T>& elements, std::size_t index)
+    static bool tryMoveElementDown(std::vector<T>& elements, std::size_t index)
     {
       if (index + 1 >= elements.size())
       {
@@ -103,7 +103,7 @@ namespace ao::uimodel
     }
 
     template<typename T>
-    static bool eraseElementAt(std::vector<T>& elements, std::size_t index)
+    static bool tryEraseElementAt(std::vector<T>& elements, std::size_t index)
     {
       if (index >= elements.size())
       {

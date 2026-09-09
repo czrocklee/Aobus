@@ -63,10 +63,10 @@ namespace ao::uimodel
     std::uint64_t boundRevision() const noexcept;
     async::Subscription onInvalidated(compat::MoveOnlyFunction<void()> handler) const;
 
-    async::Task<Result<TrackMetadataSubmitResult>> submitMetadata(rt::MetadataPatch patch);
-    async::Task<Result<TrackTagSubmitResult>> submitTags(std::vector<std::string> tagsToAdd,
-                                                         std::vector<std::string> tagsToRemove);
-    async::Task<Result<TrackPropertiesSubmitResult>> submitProperties(rt::TrackPropertiesPatch patch);
+    async::Task<Result<TrackMetadataSubmitResult>> submitMetadataAsync(rt::MetadataPatch patch);
+    async::Task<Result<TrackTagSubmitResult>> submitTagsAsync(std::vector<std::string> tagsToAdd,
+                                                              std::vector<std::string> tagsToRemove);
+    async::Task<Result<TrackPropertiesSubmitResult>> submitPropertiesAsync(rt::TrackPropertiesPatch patch);
 
   private:
     struct State;
@@ -129,8 +129,8 @@ namespace ao::uimodel
     ListMembershipAuthoringSession& operator=(ListMembershipAuthoringSession&&) = delete;
 
     std::span<TrackId const> targetIds() const noexcept;
-    async::Task<Result<ListMembershipEditResult>> addToList(ListId listId);
-    async::Task<Result<ListMembershipEditResult>> removeFromList(ListId listId);
+    async::Task<Result<ListMembershipEditResult>> addToListAsync(ListId listId);
+    async::Task<Result<ListMembershipEditResult>> removeFromListAsync(ListId listId);
 
   private:
     struct State;

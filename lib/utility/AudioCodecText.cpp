@@ -34,7 +34,7 @@ namespace ao
       return ch >= 'a' && ch <= 'z' ? static_cast<char>(ch - 'a' + 'A') : ch;
     }
 
-    bool equalsIgnoreAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
+    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
     {
       if (lhs.size() != rhs.size())
       {
@@ -68,14 +68,14 @@ namespace ao
 
   std::optional<AudioCodec> parseAudioCodecName(std::string_view name) noexcept
   {
-    if (equalsIgnoreAsciiCase(name, "UNKNOWN"))
+    if (isEqualIgnoringAsciiCase(name, "UNKNOWN"))
     {
       return AudioCodec::Unknown;
     }
 
     for (auto const& entry : kAudioCodecNames)
     {
-      if (equalsIgnoreAsciiCase(name, entry.name))
+      if (isEqualIgnoringAsciiCase(name, entry.name))
       {
         return entry.codec;
       }

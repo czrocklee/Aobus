@@ -12,7 +12,7 @@
 
 namespace ao::rt
 {
-  bool validateTrackSourceDelta(TrackSourceDelta const& message, std::size_t const initialSize) noexcept
+  bool isValidTrackSourceDelta(TrackSourceDelta const& message, std::size_t const initialSize) noexcept
   {
     return std::visit(
       [initialSize](auto const& value) noexcept
@@ -21,7 +21,7 @@ namespace ao::rt
 
         if constexpr (std::same_as<Value, delta::RegularTrackEditScript>)
         {
-          return !value.edits.empty() && delta::validate(value, initialSize);
+          return !value.edits.empty() && delta::isValid(value, initialSize);
         }
         else
         {

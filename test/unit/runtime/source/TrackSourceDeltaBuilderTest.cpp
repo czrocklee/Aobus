@@ -19,7 +19,7 @@ namespace ao::rt::test
   {
     std::vector<TrackId> replay(std::vector<TrackId> ids, delta::RegularTrackEditScript const& script)
     {
-      REQUIRE(delta::validate(script, ids.size()));
+      REQUIRE(delta::isValid(script, ids.size()));
 
       for (auto const& edit : script.edits)
       {

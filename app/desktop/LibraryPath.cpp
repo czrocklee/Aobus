@@ -64,7 +64,7 @@ namespace ao::desktop
     return makeError(Error::Code::NotFound, std::format("Library root is not a directory: '{}'", displayPath));
   }
 
-  bool sameLibraryRoot(std::filesystem::path const& left, std::filesystem::path const& right)
+  bool isSameLibraryRoot(std::filesystem::path const& left, std::filesystem::path const& right)
   {
     auto error = std::error_code{};
     auto const equivalent = std::filesystem::equivalent(left, right, error);

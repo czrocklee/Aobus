@@ -236,7 +236,7 @@ namespace ao::gtk
     _renderRequest.reset();
   }
 
-  bool ImageWidget::pendingRenderMatches(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
+  bool ImageWidget::matchesPendingRender(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
                                          RenderTarget const target,
                                          RenderTarget const renderedSize) const
   {
@@ -384,7 +384,7 @@ namespace ao::gtk
       return;
     }
 
-    if (pendingRenderMatches(_sourcePixbufPtr, target, fitTarget))
+    if (matchesPendingRender(_sourcePixbufPtr, target, fitTarget))
     {
       return;
     }

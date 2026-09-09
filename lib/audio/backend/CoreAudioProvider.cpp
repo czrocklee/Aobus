@@ -144,7 +144,7 @@ namespace ao::audio::backend
         return ::noErr;
       }
 
-      bool installNativeListeners()
+      bool tryInstallNativeListeners()
       {
         if (monitorHooksPtr && monitorHooksPtr->enumerateDevices)
         {
@@ -265,7 +265,7 @@ namespace ao::audio::backend
           };
         }
 
-        if (!statePtr->installNativeListeners())
+        if (!statePtr->tryInstallNativeListeners())
         {
           auto const lock = std::scoped_lock{_lifecycleMutex};
           _monitorExited = true;

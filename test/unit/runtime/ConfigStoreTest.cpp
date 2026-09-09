@@ -323,12 +323,12 @@ namespace ao::rt::test
 
     SECTION("A returned serialization error commits no groups")
     {
-      auto const result = store.saveTogether(configWrite("staged", State{.count = 22}, StateYamlSchema{}),
-                                             configWrite("broken", State{}, RejectingYamlSchema{}));
+      auto const res = store.saveTogether(configWrite("staged", State{.count = 22}, StateYamlSchema{}),
+                                          configWrite("broken", State{}, RejectingYamlSchema{}));
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidState);
-      CHECK(result.error().message.contains("broken"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidState);
+      CHECK(res.error().message.contains("broken"));
       CHECK(ao::test::readFile(configPath) == originalContents);
     }
 
@@ -425,10 +425,10 @@ namespace ao::rt::test
       CAPTURE(original);
       writeFile(configPath, original);
       auto store = ConfigStore{configPath};
-      auto const result = store.save("replacement", State{.count = 7}, StateYamlSchema{});
+      auto const res = store.save("replacement", State{.count = 7}, StateYamlSchema{});
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
       CHECK(ao::test::readFile(configPath) == original);
     }
   }

@@ -21,9 +21,9 @@ namespace ao::query::test
   {
     Expression parseOk(std::string_view text)
     {
-      auto result = ::ao::query::parse(text);
-      REQUIRE(result.has_value());
-      return std::move(*result);
+      auto res = ::ao::query::parse(text);
+      REQUIRE(res.has_value());
+      return std::move(*res);
     }
   } // namespace
 

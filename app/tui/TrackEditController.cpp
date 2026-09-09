@@ -99,7 +99,7 @@ namespace ao::tui
         return;
       }
 
-      std::ignore = form.mergeTrackField(field, rawValue);
+      std::ignore = form.tryMergeTrackField(field, rawValue);
     }
 
     /**
@@ -343,7 +343,7 @@ namespace ao::tui
     }
 
     /// Installs a prepared editor, reporting false when its session was already gone.
-    bool install(PreparedEditor prepared)
+    bool tryInstall(PreparedEditor prepared)
     {
       auto session = std::move(prepared.session);
       // The observer is attached before the currency recheck, so a session
@@ -557,13 +557,13 @@ namespace ao::tui
     _statePtr->outputs = Outputs{};
   }
 
-  bool TrackEditController::open(std::vector<TrackId> targetIds)
+  bool TrackEditController::tryOpen(std::vector<TrackId> targetIds)
   {
     auto& state = *_statePtr;
     state.expectCallbackExecutor();
 
     // A write from the previous editor is still in flight, and its settle path
-    // reports on whichever editor is open when it lands; a second editor opened
+    // reports on whichever editor is tryOpen when it lands; a second editor opened
     // now would be handed the first one's result.
     if (state.retired || state.optEditor || state.submissionPending)
     {
@@ -584,7 +584,7 @@ namespace ao::tui
       return false;
     }
 
-    if (!state.install(std::move(*preparedRes)))
+    if (!state.tryInstall(std::move(*preparedRes)))
     {
       state.postText(rt::NotificationSeverity::Warning, MessageId::TuiEditorOpenUnavailable);
       return false;
@@ -604,7 +604,7 @@ namespace ao::tui
     return _statePtr->submissionPending;
   }
 
-  bool TrackEditController::handleEvent(ftxui::Event const& event)
+  bool TrackEditController::tryHandleEvent(ftxui::Event const& event)
   {
     auto& state = *_statePtr;
     state.expectCallbackExecutor();
@@ -614,7 +614,7 @@ namespace ao::tui
       return false;
     }
 
-    std::ignore = state.optEditor->handleEvent(event);
+    std::ignore = state.optEditor->tryHandleEvent(event);
     serviceRequest();
     // An open editor answers for everything the terminal delivers, so the
     // workspace behind it never sees a key it would act on.
@@ -674,11 +674,11 @@ namespace ao::tui
     // The task is built here, from the session just found current, so the
     // coroutine that awaits it never has to reach for a session that the
     // editor's own closure may already have released.
-    auto submission = state.optSession->submitProperties(editor.buildPatch());
+    auto submission = state.optSession->submitPropertiesAsync(editor.buildPatch());
     editor.setStatus(TrackEditorStatus::Submitting);
     state.submissionPending = true;
     state.requestRefresh();
-    state.runtime.spawnLogged(runSubmit(_statePtr, std::move(submission)), "TUI track properties write");
+    state.runtime.spawnLogged(runSubmitAsync(_statePtr, std::move(submission)), "TUI track properties write");
   }
 
   void TrackEditController::reload()
@@ -717,7 +717,7 @@ namespace ao::tui
 
     // A refused install replaced nothing, so the editor still open is the one
     // that lost its binding.
-    if (!state.install(std::move(*preparedRes)) && state.optEditor)
+    if (!state.tryInstall(std::move(*preparedRes)) && state.optEditor)
     {
       state.optEditor->setStatus(TrackEditorStatus::Stale);
     }
@@ -725,8 +725,9 @@ namespace ao::tui
     state.requestRefresh();
   }
 
-  async::Task<void> TrackEditController::runSubmit(std::shared_ptr<State> const statePtr,
-                                                   async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
+  async::Task<void> TrackEditController::runSubmitAsync(
+    std::shared_ptr<State> const statePtr,
+    async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission)
   {
     auto submitRes = Result<uimodel::TrackPropertiesSubmitResult>{};
     auto unexpected = std::exception_ptr{};
@@ -735,7 +736,7 @@ namespace ao::tui
     try
     {
       // Session state shares the event thread with invalidation callbacks.
-      co_await statePtr->runtime.resumeOnCallbackExecutor();
+      co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
       submitRes = co_await std::move(submission);
     }
     catch (std::exception const& error)
@@ -754,7 +755,7 @@ namespace ao::tui
       unexpected = std::current_exception();
     }
 
-    co_await statePtr->runtime.resumeOnCallbackExecutor();
+    co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
     statePtr->completeSubmission(cancelled, std::move(submitRes), unexpected);
   }
 } // namespace ao::tui

@@ -104,7 +104,7 @@ namespace ao::rt
     {
       ensureOnExecutor();
       AO_EXPECTS(
-        !insideBoundary(), "PlaybackService cannot be destroyed synchronously from an active publication or command");
+        !isInsideBoundary(), "PlaybackService cannot be destroyed synchronously from an active publication or command");
       subscriptions.clear();
       deferredControlPtr->owner = nullptr;
       deferredControlPtr.reset();
@@ -165,12 +165,12 @@ namespace ao::rt
 
     void next() override
     {
-      submitPositioning([this] { return succession.next(); }, true, true);
+      submitPositioning([this] { return succession.tryMoveNext(); }, true, true);
     }
 
     void previous() override
     {
-      submitPositioning([this] { return succession.previous(); }, true, true);
+      submitPositioning([this] { return succession.tryMovePrevious(); }, true, true);
     }
 
     void clearSequence() override
@@ -271,11 +271,11 @@ namespace ao::rt
         latestInvalidatingGeneration = command.generation;
       }
 
-      if (insideBoundary() || hasQueuedCommandBacklog())
+      if (isInsideBoundary() || hasQueuedCommandBacklog())
       {
         queuedCommands.push_back(std::move(command));
 
-        if (!insideBoundary())
+        if (!isInsideBoundary())
         {
           scheduleCommandDrain();
         }
@@ -322,16 +322,16 @@ namespace ao::rt
 
       beginCommit();
       auto const closeCommitOnExit = gsl_lite::finally([this] { closeCommit(); });
-      auto result = Result<bool>{};
+      auto res = Result<bool>{};
       bool forcesPositionAnchor = false;
 
       try
       {
-        result = command.operation();
+        res = command.operation();
 
-        if (result)
+        if (res)
         {
-          forcesPositionAnchor = *result;
+          forcesPositionAnchor = *res;
         }
       }
       catch (...)
@@ -350,9 +350,9 @@ namespace ao::rt
         throw;
       }
 
-      if (!result)
+      if (!res)
       {
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       return {};
@@ -360,16 +360,16 @@ namespace ao::rt
 
     Result<> executeCommandAndContinue(QueuedCommand& command)
     {
-      auto result = executeCommand(command);
+      auto res = executeCommand(command);
       scheduleCommandDrain();
-      return result;
+      return res;
     }
 
-    bool runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
+    bool tryRunSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
     {
       ensureOnExecutor();
 
-      if (closed || insideBoundary() || hasQueuedCommandBacklog())
+      if (closed || isInsideBoundary() || hasQueuedCommandBacklog())
       {
         return false;
       }
@@ -386,7 +386,7 @@ namespace ao::rt
 
     void scheduleCommandDrain() noexcept
     {
-      if (closed || commandDrainScheduled || queuedCommands.empty() || insideBoundary())
+      if (closed || commandDrainScheduled || queuedCommands.empty() || isInsideBoundary())
       {
         return;
       }
@@ -428,13 +428,13 @@ namespace ao::rt
       auto command = std::move(queuedCommands.front());
       queuedCommands.pop_front();
 
-      if (auto const result = executeCommandAndContinue(command); !result)
+      if (auto const res = executeCommandAndContinue(command); !res)
       {
-        APP_LOG_WARN("Queued playback command rejected: {}", result.error().message);
+        APP_LOG_WARN("Queued playback command rejected: {}", res.error().message);
       }
     }
 
-    bool insideBoundary() const noexcept { return commitDepth != 0 || publicationDepth != 0; }
+    bool isInsideBoundary() const noexcept { return commitDepth != 0 || publicationDepth != 0; }
     bool hasQueuedCommandBacklog() const noexcept { return commandDrainScheduled || !queuedCommands.empty(); }
 
     // Adapter wiring ----------------------------------------------------------
@@ -726,7 +726,7 @@ namespace ao::rt
       signal.emit(args...);
       --publicationDepth;
 
-      if (!insideBoundary())
+      if (!isInsideBoundary())
       {
         scheduleCommandDrain();
       }
@@ -736,7 +736,7 @@ namespace ao::rt
     {
       ensureOnExecutor();
       AO_EXPECTS(
-        !insideBoundary(), "PlaybackService cannot shut down synchronously from an active publication or command");
+        !isInsideBoundary(), "PlaybackService cannot shut down synchronously from an active publication or command");
       closeService();
     }
 
@@ -896,9 +896,9 @@ namespace ao::rt
     return *_implPtr;
   }
 
-  bool PlaybackService::runSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
+  bool PlaybackService::tryRunSynchronousCommand(compat::MoveOnlyFunction<bool()> operation)
   {
-    return _implPtr->runSynchronousCommand(std::move(operation));
+    return _implPtr->tryRunSynchronousCommand(std::move(operation));
   }
 
   void PlaybackService::shutdown() noexcept

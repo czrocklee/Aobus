@@ -32,7 +32,7 @@ namespace ao::uimodel
     PlaybackActions(PlaybackActions&&) = delete;
     PlaybackActions& operator=(PlaybackActions&&) = delete;
 
-    bool execute(PlaybackCommand command);
+    bool tryExecute(PlaybackCommand command);
     bool isEnabled(PlaybackCommand command) const;
     bool isCapable(PlaybackCommand command) const;
 

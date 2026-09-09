@@ -338,9 +338,9 @@ namespace ao::media::mp4
   {
     auto demuxer = Demuxer{fileData};
 
-    if (auto const result = demuxer.parseTrack(targetFormat); !result)
+    if (auto const res = demuxer.parseTrack(targetFormat); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     return Result<Demuxer>{std::in_place, std::move(demuxer)};

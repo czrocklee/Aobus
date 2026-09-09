@@ -23,6 +23,6 @@ namespace ao::audio::backend::detail
   Result<PcmFormat> selectLosslessCoreAudioClientFormat(SignalFormat const& sourceFormat,
                                                         TryCoreAudioClientFormat const& tryFormat);
 
-  bool sameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
-                              ::AudioStreamBasicDescription const& rhs) noexcept;
+  bool isSameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,
+                                ::AudioStreamBasicDescription const& rhs) noexcept;
 } // namespace ao::audio::backend::detail

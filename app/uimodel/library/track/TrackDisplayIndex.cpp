@@ -11,7 +11,7 @@
 
 namespace ao::uimodel
 {
-  bool TrackDisplayIndex::reset(std::size_t const rowCount, std::span<TrackDisplaySection const> const sections)
+  bool TrackDisplayIndex::tryReset(std::size_t const rowCount, std::span<TrackDisplaySection const> const sections)
   {
     if (!sections.empty())
     {

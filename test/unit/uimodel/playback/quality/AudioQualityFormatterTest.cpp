@@ -25,8 +25,8 @@ namespace ao::uimodel::test
   {
     AudioQualityFormatter const& englishFormatter()
     {
-      static auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
-      return formatter;
+      static auto const kFormatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
+      return kFormatter;
     }
 
     std::string audioNodeTypeLabel(audio::flow::NodeType const type)

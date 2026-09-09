@@ -511,8 +511,8 @@ namespace ao::rt
 
     if (!record.resolved)
     {
-      auto const result = _completionAliasPolicy->makeAliasesInto(record.values, text);
-      AO_INVARIANT(result.has_value(), "Admitted completion text failed alias derivation: {}", result.error().message);
+      auto const res = _completionAliasPolicy->makeAliasesInto(record.values, text);
+      AO_INVARIANT(res.has_value(), "Admitted completion text failed alias derivation: {}", res.error().message);
       record.resolved = true;
     }
 

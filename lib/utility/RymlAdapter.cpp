@@ -361,7 +361,7 @@ namespace ao::yaml
     return true;
   }
 
-  bool asBool(ryml::ConstNodeRef const& node, bool defaultValue)
+  bool readBoolOr(ryml::ConstNodeRef const& node, bool defaultValue)
   {
     if (!node.has_val())
     {

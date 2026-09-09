@@ -465,7 +465,7 @@ namespace ao::gtk::layout
         updateMetadataVisibility(snap);
       }
 
-      bool selectionMatches(std::vector<TrackId> const& trackIds) const
+      bool matchesSelection(std::vector<TrackId> const& trackIds) const
       {
         return _scope != nullptr && _scope->snapshot().trackIds == trackIds;
       }
@@ -618,11 +618,11 @@ namespace ao::gtk::layout
         updateField(row.secondaryEditor, row.secondaryField, snap);
       }
 
-      bool applyFieldEdit(rt::TrackField field,
-                          std::string_view newValue,
-                          rt::TrackDetailSnapshot const& snap,
-                          std::string_view mixedText,
-                          bool showTechnicalUnknown)
+      bool tryApplyFieldEdit(rt::TrackField field,
+                             std::string_view newValue,
+                             rt::TrackDetailSnapshot const& snap,
+                             std::string_view mixedText,
+                             bool showTechnicalUnknown)
       {
         auto const* uiDef = trackFieldUiDefinition(field);
 
@@ -653,7 +653,7 @@ namespace ao::gtk::layout
 
         auto patch = rt::MetadataPatch{};
 
-        if (!uimodel::writeTrackFieldPatch(patch, field, *editValueRes))
+        if (!uimodel::tryWriteTrackFieldPatch(patch, field, *editValueRes))
         {
           return false;
         }
@@ -663,13 +663,13 @@ namespace ao::gtk::layout
                     _tasks,
                     *this,
                     "metadata update",
-                    _optEditSession->submitMetadata(std::move(patch)),
+                    _optEditSession->submitMetadataAsync(std::move(patch)),
                     [field, newText, oldText, trackIds = std::move(trackIds)](
                       TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
                     {
-                      if (owner->reportMetadataSubmissionFailure(replyRes, "Metadata update"))
+                      if (owner->tryReportMetadataSubmissionFailure(replyRes, "Metadata update"))
                       {
-                        if (owner->selectionMatches(trackIds))
+                        if (owner->matchesSelection(trackIds))
                         {
                           owner->restoreFieldEditor(field);
                         }
@@ -677,7 +677,7 @@ namespace ao::gtk::layout
                         return;
                       }
 
-                      if (owner->selectionMatches(trackIds))
+                      if (owner->matchesSelection(trackIds))
                       {
                         owner->setFieldEditorText(
                           field, replyRes->status == rt::AuthoringStatus::Applied ? newText : oldText);
@@ -710,7 +710,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(field, newValue, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true))
+        if (!tryApplyFieldEdit(field, newValue, snap, gtkText(_textCatalog, MessageId::TrackMultipleValues), true))
         {
           updateBuiltInRow(*row, snap);
         }
@@ -742,7 +742,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        if (!applyFieldEdit(field, newValue, snap, uimodel::kCompositeMixedTrackText, false))
+        if (!tryApplyFieldEdit(field, newValue, snap, uimodel::kCompositeMixedTrackText, false))
         {
           updateCompositeRow(*row, snap);
         }
@@ -862,7 +862,7 @@ namespace ao::gtk::layout
                                      std::vector<TrackId> trackIds,
                                      bool const clearInputs)
       {
-        auto submission = session.submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
+        auto submission = session.submitMetadataAsync(uimodel::makeCustomMetadataUpdatePatch(key, value));
         spawnUiTask(_async,
                     _tasks,
                     *this,
@@ -874,7 +874,7 @@ namespace ao::gtk::layout
                       auto const operation = clearInputs ? std::string_view{"Custom metadata add"}
                                                          : std::string_view{"Custom metadata update"};
 
-                      if (owner->reportMetadataSubmissionFailure(replyRes, operation))
+                      if (owner->tryReportMetadataSubmissionFailure(replyRes, operation))
                       {
                         return;
                       }
@@ -884,7 +884,7 @@ namespace ao::gtk::layout
                         owner->_detailUndo->clearIfAffectsCustomMetadata(key, trackIds);
                       }
 
-                      if (clearInputs && owner->selectionMatches(trackIds))
+                      if (clearInputs && owner->matchesSelection(trackIds))
                       {
                         owner->_addMetadataButton.clearInputs();
                       }
@@ -933,7 +933,7 @@ namespace ao::gtk::layout
         }
 
         auto session = std::move(*sessionRes);
-        auto submission = session.submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+        auto submission = session.submitMetadataAsync(uimodel::makeCustomMetadataDeletePatch(key));
         auto trackIds = snap.trackIds;
         spawnUiTask(_async,
                     _tasks,
@@ -943,13 +943,13 @@ namespace ao::gtk::layout
                     [key = std::move(key), optPrevValue, session = std::move(session), trackIds = std::move(trackIds)](
                       TrackFieldGridComponent* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes) mutable
                     {
-                      if (owner->reportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
+                      if (owner->tryReportMetadataSubmissionFailure(replyRes, "Custom metadata delete"))
                       {
                         return;
                       }
 
                       if (replyRes->status == rt::AuthoringStatus::Applied && optPrevValue &&
-                          owner->selectionMatches(trackIds) && owner->_detailUndo != nullptr)
+                          owner->matchesSelection(trackIds) && owner->_detailUndo != nullptr)
                       {
                         owner->_detailUndo->presentCustomMetadataDeletedUndo(
                           std::move(key), *optPrevValue, std::move(session));
@@ -987,18 +987,18 @@ namespace ao::gtk::layout
         submitCustomMetadataValue(*sessionRes, std::move(key), value, snap.trackIds, true);
       }
 
-      bool reportMetadataSubmissionFailure(Result<uimodel::TrackMetadataSubmitResult> const& result,
-                                           std::string_view operation)
+      bool tryReportMetadataSubmissionFailure(Result<uimodel::TrackMetadataSubmitResult> const& res,
+                                              std::string_view operation)
       {
         auto message = std::string{};
 
-        if (!result)
+        if (!res)
         {
-          message = result.error().message;
+          message = res.error().message;
         }
         else
         {
-          switch (result->status)
+          switch (res->status)
           {
             case rt::AuthoringStatus::Applied:
             case rt::AuthoringStatus::NoOp: return false;

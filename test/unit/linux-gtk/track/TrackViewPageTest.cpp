@@ -185,7 +185,7 @@ namespace ao::gtk::test
       REQUIRE(coverArt != nullptr);
       CHECK(coverArt->get_width() >= layout::kSectionCoverLogicalSize);
       CHECK(coverArt->get_height() >= layout::kSectionCoverLogicalSize);
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().monogram == "A");
 
       std::int32_t minSize = {};
@@ -225,7 +225,7 @@ namespace ao::gtk::test
       CHECK(coverSlot->get_visible());
       auto* const coverArt = dynamic_cast<CoverArtView*>(coverSlot->get_first_child());
       REQUIRE(coverArt != nullptr);
-      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().monogram == "23");
     }
   }
@@ -296,7 +296,7 @@ namespace ao::gtk::test
                                      { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
@@ -367,7 +367,7 @@ namespace ao::gtk::test
                                      }};
     auto& runtime = fixture.runtime();
     auto const listId = ao::test::requireValue(
-      runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Ordered"})));
+      runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Ordered"})));
     auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(manual != nullptr);
     auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
@@ -453,7 +453,7 @@ namespace ao::gtk::test
     auto expectedTrackIds = initialTrackIds;
     std::ranges::reverse(expectedTrackIds);
     auto observedTrackIds = std::vector<TrackId>{};
-    REQUIRE(pumpGtkEventsUntil(
+    REQUIRE(tryPumpGtkEventsUntil(
       [&]
       {
         auto const reorderedRes = runtime.views().listSourceTrackIds(viewId);
@@ -520,10 +520,10 @@ namespace ao::gtk::test
     auto* const entry = dynamic_cast<Gtk::Entry*>(titleStack->get_child_by_name("edit"));
     REQUIRE(entry != nullptr);
     titleStack->set_visible_child("edit");
-    REQUIRE(emitFocusEnter(*entry));
+    REQUIRE(tryEmitFocusEnter(*entry));
     entry->set_text("After");
-    REQUIRE(runGtkTask(runtime, runtime.library().commands().createList(rt::ListDraft{.name = "Unrelated"})));
-    REQUIRE(pumpGtkEventsUntil([titleStack] { return titleStack->get_visible_child_name() == "display"; }));
+    REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+    REQUIRE(tryPumpGtkEventsUntil([titleStack] { return titleStack->get_visible_child_name() == "display"; }));
 
     CHECK(titleStack->get_visible_child_name() == "display");
     auto const rowPtr = rowCache.trackRow(trackId);

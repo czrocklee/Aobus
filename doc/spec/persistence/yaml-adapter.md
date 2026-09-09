@@ -197,9 +197,11 @@ Both string overloads reject YAML null rather than converting it to empty text.
 `scalarAs<T>(node, context)` returns the converted scalar or `FormatRejected` with caller-supplied context.
 It is the adapter's only result-returning scalar conversion helper.
 
-`asBool(node, defaultValue)` and `asInt<T>(node, defaultValue)` are lenient accessors.
+`readBoolOr(node, defaultValue)` and `asInt<T>(node, defaultValue)` are lenient accessors.
 They return the supplied default for absence or malformed scalar text and provide no diagnostic that fallback occurred.
-The model or payload owner decides where such coercion is permitted.
+`readBoolOr` accepts only the exact scalar text `true` or `false`; numbers and
+other strings use the fallback rather than truthiness coercion.
+The model or payload owner decides where such fallback is permitted.
 
 ## Failure and cancellation
 
@@ -214,7 +216,7 @@ The low-level channel depends on the operation:
 | Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation | `Result` with `FormatRejected` and bounded caller context. |
 | Caller-supplied sequence or string-map writer or reader | The first returned error, without adapter-side logging or translation. |
 | Empty string-map key | `InvalidState` while serialization live state; `FormatRejected` while deserialization persisted input. |
-| Lenient `asBool` or `asInt` | Caller-supplied default. |
+| Lenient `readBoolOr` or `asInt` | Caller-supplied default. |
 
 A public configuration, interchange, layout, or component-state boundary preserves the parse result or adds owner context while retaining `FormatRejected`.
 Wrong node kinds, unsupported schema versions, and semantic rejection are not parser errors at this layer.

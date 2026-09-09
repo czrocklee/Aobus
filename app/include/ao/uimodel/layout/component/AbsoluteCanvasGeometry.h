@@ -44,12 +44,12 @@ namespace ao::uimodel
     Right = 3
   };
 
-  bool ordersAbsoluteCanvasBefore(std::int32_t zIndexA,
-                                  std::int32_t insertOrderA,
-                                  std::int32_t zIndexB,
-                                  std::int32_t insertOrderB);
+  bool isAbsoluteCanvasBefore(std::int32_t zIndexA,
+                              std::int32_t insertOrderA,
+                              std::int32_t zIndexB,
+                              std::int32_t insertOrderB);
 
-  bool ordersAbsoluteCanvasBefore(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB);
+  bool isAbsoluteCanvasBefore(AbsoluteCanvasItem const& itemA, AbsoluteCanvasItem const& itemB);
 
   std::optional<std::size_t> hitTestAbsoluteCanvas(std::span<AbsoluteCanvasItem const> items,
                                                    std::int32_t xPosition,

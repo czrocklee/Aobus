@@ -23,7 +23,7 @@ namespace ao::winui
   DispatcherQueueExecutor::~DispatcherQueueExecutor()
   {
     AO_EXPECTS(isCurrent());
-    bool const closed = _admission.closeForDestruction();
+    bool const closed = _admission.tryCloseForDestruction();
     AO_INVARIANT(closed, "Dispatcher queue executor destruction began inside an owner callback");
     _dispatchStatePtr->executorPtr.store(nullptr);
   }
@@ -31,17 +31,17 @@ namespace ao::winui
   void DispatcherQueueExecutor::beginClosing() noexcept
   {
     AO_EXPECTS(isCurrent());
-    bool const closingStarted = _admission.beginClosing();
+    bool const closingStarted = _admission.tryBeginClosing();
     AO_INVARIANT(closingStarted, "Dispatcher queue executor closure began from an invalid state");
   }
 
   void DispatcherQueueExecutor::completeClosing() noexcept
   {
     AO_EXPECTS(isCurrent());
-    bool const drainingStarted = _admission.beginDraining();
+    bool const drainingStarted = _admission.tryBeginDraining();
     AO_INVARIANT(drainingStarted, "Dispatcher queue executor final drain began with owner callbacks active");
     drainQueuedTasksUntilIdle();
-    bool const closed = _admission.finishClosing();
+    bool const closed = _admission.tryFinishClosing();
     AO_INVARIANT(closed, "Dispatcher queue executor final drain did not reach quiescence");
   }
 

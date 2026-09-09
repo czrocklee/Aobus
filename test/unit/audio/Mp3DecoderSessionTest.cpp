@@ -179,10 +179,10 @@ namespace ao::audio::test
         ofs << "NOT AN MP3 FILE! Random garbage data...";
       }
 
-      auto const result = Mp3DecoderSession::open(tempFile.path, SampleEncoding::Signed16Le);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().message.contains(":"));
-      CHECK(result.error().message != "Failed to get MP3 format: A generic mpg123 error.");
+      auto const res = Mp3DecoderSession::open(tempFile.path, SampleEncoding::Signed16Le);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().message.contains(":"));
+      CHECK(res.error().message != "Failed to get MP3 format: A generic mpg123 error.");
     }
 
     SECTION("Seek way beyond duration")

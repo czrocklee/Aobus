@@ -186,7 +186,7 @@ namespace ao::tui
     _selectedPresentation = moveSelection(_selectedPresentation, delta, _presentationEntries.size());
   }
 
-  bool LibraryController::setSelectedPresentation(std::int32_t const index)
+  bool LibraryController::trySetSelectedPresentation(std::int32_t const index)
   {
     if (index < 0 || static_cast<std::size_t>(index) >= _presentationEntries.size())
     {
@@ -395,7 +395,7 @@ namespace ao::tui
     return librarySection(_textCatalog, trackSectionDisplayName(_textCatalog, section));
   }
 
-  bool LibraryController::setSelectedTrackById(TrackId const trackId)
+  bool LibraryController::trySetSelectedTrackById(TrackId const trackId)
   {
     if (trackId == kInvalidTrackId)
     {
@@ -502,9 +502,9 @@ namespace ao::tui
       return;
     }
 
-    if (auto result = _views.setSelection(_activeViewId, selectedTrackIds()); !result)
+    if (auto res = _views.setSelection(_activeViewId, selectedTrackIds()); !res)
     {
-      APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
+      APP_LOG_ERROR("Failed to publish TUI selection: {}", res.error().message);
     }
 
     focusActiveView();
@@ -556,7 +556,7 @@ namespace ao::tui
       return tuiChromeText(_textCatalog, i18n::MessageId::TuiLibraryNoCurrentTrack);
     }
 
-    if (setSelectedTrackById(trackId))
+    if (trySetSelectedTrackById(trackId))
     {
       afterFocusMove();
       return libraryRevealedTrack(_textCatalog, trackDisplayTitle(_textCatalog, _tracks[_selectedTrack].row));
@@ -574,14 +574,14 @@ namespace ao::tui
 
     auto const selectedBefore = selectedTrackView();
     auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
-    auto const result = _workspace.setActivePresentation(presentationId);
+    auto const res = _workspace.setActivePresentation(presentationId);
 
-    if (!result)
+    if (!res)
     {
       return libraryUnknownView(_textCatalog, presentationId);
     }
 
-    auto const& spec = *result;
+    auto const& spec = *res;
     auto snapshotRes = materializeView(_activeViewId);
 
     if (!snapshotRes)
@@ -597,7 +597,7 @@ namespace ao::tui
 
     _listPresentations.setPresentationIdForList(_currentListId, spec.id);
 
-    if (!setSelectedTrackById(previousTrackId))
+    if (!trySetSelectedTrackById(previousTrackId))
     {
       _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     }
@@ -672,7 +672,7 @@ namespace ao::tui
     }
     else
     {
-      if (!setSelectedTrackById(previousTrackId))
+      if (!trySetSelectedTrackById(previousTrackId))
       {
         _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
       }
@@ -731,7 +731,7 @@ namespace ao::tui
       // Re-materializing a no-op filter can still drop rows, so the kept focus
       // follows its track the way every other rematerialize path does, and marks
       // are reconciled only once that focus is settled.
-      if (!setSelectedTrackById(previousTrackId))
+      if (!trySetSelectedTrackById(previousTrackId))
       {
         _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
       }
@@ -963,7 +963,7 @@ namespace ao::tui
 
     // Reattaching the open view reconciles focus alongside marks; only a
     // different view starts at the top.
-    if (!setSelectedTrackById(previousTrackId))
+    if (!trySetSelectedTrackById(previousTrackId))
     {
       _selectedTrack = moveSelection(previousSelectedTrack, 0, _tracks.size());
     }

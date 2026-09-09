@@ -67,12 +67,12 @@ When `libraryJobs` is present, it subscribes to that job owner's task progress a
 | Member | Return |
 |---|---|
 | `viewState() const noexcept` | `ActivityStatusViewState const&` |
-| `autoDismissCompactIfDue()` | `bool` |
+| `tryAutoDismissCompactIfDue()` | `bool` |
 | `autoDismissCompact()` | `void` |
 | `dismissCompact()` | `void` |
 | `hideDetailNotification(NotificationId)` | `void` |
 
-`autoDismissCompactIfDue()` returns true only when it clears a due temporary compact presentation.
+`tryAutoDismissCompactIfDue()` returns true only when it clears a due temporary compact presentation.
 `autoDismissCompact()` is used by a frontend-owned timer that already waited for `optAutoDismissTimeout`.
 Neither command mutates the runtime notification feed.
 

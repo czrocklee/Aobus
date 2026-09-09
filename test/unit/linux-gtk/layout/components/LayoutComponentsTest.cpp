@@ -60,7 +60,7 @@ namespace ao::gtk::layout::test
     auto const optSoul = fixture.components().schema().component("playback.soulButton");
 
     REQUIRE(optSoul);
-    CHECK(optSoul->allows(uimodel::ActionSlot::SecondaryLongPress));
+    CHECK(optSoul->accepts(uimodel::ActionSlot::SecondaryLongPress));
   }
 
   TEST_CASE("LayoutComponents - standard layout registry creates status and semantic components",

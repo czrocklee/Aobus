@@ -332,8 +332,8 @@ namespace ao::rt
     }
   } // namespace
 
-  async::Task<Result<DeleteTrackReply>> LibraryCommands::Impl::deleteTrack(LibraryWriteLane::Submission submission,
-                                                                           TrackId const trackId)
+  async::Task<Result<DeleteTrackReply>> LibraryCommands::Impl::deleteTrackAsync(LibraryWriteLane::Submission submission,
+                                                                                TrackId const trackId)
   {
     return detail::executeChangedWorkAsync<DeleteTrackReply>(
       std::move(submission),
@@ -342,7 +342,7 @@ namespace ao::rt
       { return applyDeleteTrackInTransaction(library, transaction, trackId); });
   }
 
-  async::Task<Result<DeleteTrackReply>> LibraryCommands::Impl::previewDeleteTrack(
+  async::Task<Result<DeleteTrackReply>> LibraryCommands::Impl::previewDeleteTrackAsync(
     LibraryWriteLane::Submission submission,
     TrackId const trackId)
   {
@@ -352,7 +352,7 @@ namespace ao::rt
       { return applyDeleteTrackInTransaction(library, transaction, trackId); });
   }
 
-  async::Task<Result<CreateTrackReply>> LibraryCommands::Impl::createTrackFromFile(
+  async::Task<Result<CreateTrackReply>> LibraryCommands::Impl::createTrackFromFileAsync(
     LibraryWriteLane::Submission submission,
     std::filesystem::path path) const
   {
@@ -394,7 +394,7 @@ namespace ao::rt
     co_return committedCreateTrackReply(std::move(executionRes->value));
   }
 
-  async::Task<Result<PreviewCreateTrackReply>> LibraryCommands::Impl::previewCreateTrackFromFile(
+  async::Task<Result<PreviewCreateTrackReply>> LibraryCommands::Impl::previewCreateTrackFromFileAsync(
     LibraryWriteLane::Submission submission,
     std::filesystem::path path) const
   {

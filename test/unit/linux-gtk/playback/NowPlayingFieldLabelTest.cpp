@@ -49,7 +49,7 @@ namespace ao::gtk::test
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace
 
@@ -136,7 +136,7 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(gtkLabel->has_css_class("ao-clickable"));
-      REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();
 
       auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -161,7 +161,7 @@ namespace ao::gtk::test
       startPlayback(runtime, trackId);
       drainGtkEvents();
 
-      REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();
 
       REQUIRE(optRequest);
@@ -189,7 +189,7 @@ namespace ao::gtk::test
       auto startSub = runtime.playback().events().onSnapshot(
         [&](rt::PlaybackSnapshot const& snapshot) noexcept
         { started = snapshot.transport.transport == audio::Transport::Playing; });
-      REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();
       CHECK(started);
     }

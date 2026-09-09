@@ -80,7 +80,7 @@ namespace ao::lmdb::test
     {
       auto wtxn2 = beginWriteTransaction(env);
       auto writer2 = db.writer(wtxn2);
-      REQUIRE(writer2.del(3));
+      REQUIRE(writer2.tryDelete(3));
       REQUIRE(wtxn2.commit());
     }
 
@@ -107,7 +107,7 @@ namespace ao::lmdb::test
     {
       auto wtxn2 = beginWriteTransaction(env);
       auto writer2 = db.writer(wtxn2);
-      REQUIRE(writer2.del(2));
+      REQUIRE(writer2.tryDelete(2));
       REQUIRE(wtxn2.commit());
     }
 

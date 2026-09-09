@@ -101,7 +101,7 @@ namespace ao::uimodel
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
-  bool PlaybackActions::execute(PlaybackCommand command)
+  bool PlaybackActions::tryExecute(PlaybackCommand command)
   {
     if (!isEnabled(command))
     {

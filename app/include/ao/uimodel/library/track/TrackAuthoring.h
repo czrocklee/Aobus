@@ -27,7 +27,7 @@ namespace ao::uimodel
   Result<TrackFieldEditValue> parseUint16EditValue(std::string_view value);
 
   bool canWriteTrackFieldPatch(rt::TrackField field) noexcept;
-  bool writeTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value);
+  bool tryWriteTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value);
   bool isProtectedInlineEditText(rt::TrackField field,
                                  rt::TrackDetailSnapshot const& snap,
                                  std::string_view newText,

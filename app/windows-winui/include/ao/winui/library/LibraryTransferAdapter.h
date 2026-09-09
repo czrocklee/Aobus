@@ -27,7 +27,7 @@ namespace ao::winui
   /// Maps the native import-policy selector's stable row order to runtime policy.
   std::optional<rt::ImportMode> libraryImportModeForSelection(std::int32_t selection) noexcept;
 
-  bool libraryImportRequiresDestructiveConfirmation(rt::ImportMode mode) noexcept;
+  bool needsLibraryImportDestructiveConfirmation(rt::ImportMode mode) noexcept;
 
   /// Turns the shared dry-run report into the destructive native confirmation.
   LibraryRestorePreviewState makeLibraryRestorePreviewState(i18n::MessageCatalog const& textCatalog,

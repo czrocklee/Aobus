@@ -114,13 +114,13 @@ namespace ao::library::test
   {
     constexpr std::size_t kMaximum = std::numeric_limits<std::uint32_t>::max();
 
-    STATIC_REQUIRE(resourceByteLengthFits(0));
-    STATIC_REQUIRE(resourceByteLengthFits(kMaximum));
+    STATIC_REQUIRE(canDescribeResourceByteLength(0));
+    STATIC_REQUIRE(canDescribeResourceByteLength(kMaximum));
 
     // The store refuses this rather than truncating it, which is why the check is
     // a predicate over a length: the size is unreachable through the byte-taking
     // entry point, since a span for it would claim a range that does not exist.
-    STATIC_REQUIRE_FALSE(resourceByteLengthFits(kMaximum + 1U));
+    STATIC_REQUIRE_FALSE(canDescribeResourceByteLength(kMaximum + 1U));
   }
 
   TEST_CASE("parseResourceDescriptor - refuses anything that is not a descriptor's width", "[library][unit][resource]")

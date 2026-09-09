@@ -147,8 +147,8 @@ namespace ao::winui
       std::weak_ptr<void> _lifetimePtr;
     };
 
-    bool materializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
-                                  std::span<rt::TrackField const> const presentationFields)
+    bool tryMaterializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
+                                     std::span<rt::TrackField const> const presentationFields)
     {
       auto order = std::vector<rt::TrackField>{};
       order.reserve(stored.size());
@@ -361,9 +361,9 @@ namespace ao::winui
 
     auto displayIndex = uimodel::TrackDisplayIndex{};
 
-    if (!displayIndex.reset(rowCount, sections))
+    if (!displayIndex.tryReset(rowCount, sections))
     {
-      std::ignore = displayIndex.reset(rowCount, {});
+      std::ignore = displayIndex.tryReset(rowCount, {});
     }
 
     _displayIndex = displayIndex;
@@ -650,7 +650,7 @@ namespace ao::winui
 
     if (existing == stored.end())
     {
-      if (!materializeStoredColumns(stored, state.presentation.visibleFields))
+      if (!tryMaterializeStoredColumns(stored, state.presentation.visibleFields))
       {
         return makeError(Error::Code::InvalidState, resourceString("ColumnLayoutPolicyMissing"));
       }

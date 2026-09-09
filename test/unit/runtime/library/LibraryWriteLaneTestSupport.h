@@ -19,7 +19,7 @@ namespace ao::rt::test
   template<typename Operation,
            typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Operation, library::LibraryWrite&>>,
            typename Value = ::ao::rt::detail::OperationResultTraits<OperationResult>::ValueType>
-  async::Task<Result<MutationExecution<Value>>> executeInteractiveMutation(
+  async::Task<Result<MutationExecution<Value>>> executeInteractiveMutationAsync(
     LibraryWriteLane::Submission submission,
     Operation operation,
     library::WriteTransaction::Options options = {},

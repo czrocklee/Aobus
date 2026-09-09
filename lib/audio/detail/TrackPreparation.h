@@ -36,7 +36,7 @@ namespace ao::audio::detail
     Result<> inspect();
     Result<> selectPrewarmFormat(Engine& engine);
     Result<> prepare();
-    bool requiresWorker() const noexcept;
+    bool needsWorker() const noexcept;
     Result<Engine::PreparedPlaybackStart> adoptStart(Engine& engine) &&;
     Result<Engine::PreparedNextResult> adoptNext(Engine& engine) &&;
 

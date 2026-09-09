@@ -179,7 +179,7 @@ namespace ao::library
      *
      * Returns true if a row was removed, false if the id was absent.
      */
-    bool remove(ResourceId id) { return _writer.del(id.raw()); }
+    bool tryRemove(ResourceId id) { return _writer.tryDelete(id.raw()); }
 
     Result<> clear() { return _writer.clear(); }
 

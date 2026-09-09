@@ -73,7 +73,7 @@ namespace ao::gtk::layout::test
     SECTION("Exports pure command actions")
     {
       std::int32_t action1Fired = 0;
-      registry.registerAction(
+      registry.tryRegisterAction(
         ActionSchema{.id = "test.action1", .label = "Action 1", .category = "Test", .capabilities = 0},
         [&](ActionActivationContext&) { action1Fired++; });
 
@@ -89,11 +89,11 @@ namespace ao::gtk::layout::test
 
     SECTION("Does not export anchored actions if no safe anchor")
     {
-      registry.registerAction(ActionSchema{.id = "test.action2",
-                                           .label = "Action 2",
-                                           .category = "Test",
-                                           .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
-                              [&](ActionActivationContext&) {});
+      registry.tryRegisterAction(ActionSchema{.id = "test.action2",
+                                              .label = "Action 2",
+                                              .category = "Test",
+                                              .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
+                                 [&](ActionActivationContext&) {});
 
       [[maybe_unused]] auto session = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
@@ -103,11 +103,11 @@ namespace ao::gtk::layout::test
 
     SECTION("Does not export menu-presenting actions if no safe anchor")
     {
-      registry.registerAction(ActionSchema{.id = "test.action3",
-                                           .label = "Action 3",
-                                           .category = "Test",
-                                           .capabilities = actionCapabilityBit(ActionCapability::PresentsMenu)},
-                              [&](ActionActivationContext&) {});
+      registry.tryRegisterAction(ActionSchema{.id = "test.action3",
+                                              .label = "Action 3",
+                                              .category = "Test",
+                                              .capabilities = actionCapabilityBit(ActionCapability::PresentsMenu)},
+                                 [&](ActionActivationContext&) {});
 
       [[maybe_unused]] auto session = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
@@ -119,11 +119,11 @@ namespace ao::gtk::layout::test
     {
       contextProvider.setCanProvideSafeAnchor(true);
 
-      registry.registerAction(ActionSchema{.id = "test.action_anchored",
-                                           .label = "Anchored Action",
-                                           .category = "Test",
-                                           .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
-                              [&](ActionActivationContext&) {});
+      registry.tryRegisterAction(ActionSchema{.id = "test.action_anchored",
+                                              .label = "Anchored Action",
+                                              .category = "Test",
+                                              .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
+                                 [&](ActionActivationContext&) {});
 
       [[maybe_unused]] auto session = GioActionBridge::exportActions(registry, *actionMapPtr, contextProvider);
 
@@ -134,7 +134,7 @@ namespace ao::gtk::layout::test
     SECTION("refreshStates updates enabled state of exported actions")
     {
       bool isEnabled = true;
-      registry.registerAction(
+      registry.tryRegisterAction(
         ActionSchema{.id = "test.action_refresh", .label = "Refresh Action", .category = "Test", .capabilities = 0},
         [&](ActionActivationContext&) {},
         [&](ActionActivationContext const&) { return ActionAvailability{.enabled = isEnabled, .disabledReason = ""}; });
@@ -154,7 +154,7 @@ namespace ao::gtk::layout::test
     SECTION("session teardown unexports actions and revokes retained activation")
     {
       std::int32_t activationCount = 0;
-      registry.registerAction(
+      registry.tryRegisterAction(
         ActionSchema{.id = "test.retained", .label = "Retained", .category = "Test", .capabilities = 0},
         [&activationCount](ActionActivationContext&) { ++activationCount; });
 
@@ -176,8 +176,9 @@ namespace ao::gtk::layout::test
     SECTION("moving a session preserves wiring and leaves the source inert")
     {
       std::int32_t activationCount = 0;
-      registry.registerAction(ActionSchema{.id = "test.moved", .label = "Moved", .category = "Test", .capabilities = 0},
-                              [&activationCount](ActionActivationContext&) { ++activationCount; });
+      registry.tryRegisterAction(
+        ActionSchema{.id = "test.moved", .label = "Moved", .category = "Test", .capabilities = 0},
+        [&activationCount](ActionActivationContext&) { ++activationCount; });
 
       auto retainedActionPtr = Glib::RefPtr<Gio::SimpleAction>{};
       auto optMovedSession = std::optional<GioActionBridgeSession>{};
@@ -205,7 +206,7 @@ namespace ao::gtk::layout::test
       bool isEnabled = true;
       std::int32_t oldActivationCount = 0;
       std::int32_t replacementActivationCount = 0;
-      registry.registerAction(
+      registry.tryRegisterAction(
         ActionSchema{.id = "test.replaced", .label = "Replaced", .category = "Test", .capabilities = 0},
         [&oldActivationCount](ActionActivationContext&) { ++oldActivationCount; },
         [&isEnabled](ActionActivationContext const&)
@@ -239,9 +240,10 @@ namespace ao::gtk::layout::test
 
     SECTION("failed partial export rolls back actions already installed")
     {
-      registry.registerAction(ActionSchema{.id = "test.first", .label = "First", .category = "Test", .capabilities = 0},
-                              [](ActionActivationContext&) {});
-      registry.registerAction(
+      registry.tryRegisterAction(
+        ActionSchema{.id = "test.first", .label = "First", .category = "Test", .capabilities = 0},
+        [](ActionActivationContext&) {});
+      registry.tryRegisterAction(
         ActionSchema{.id = "test.second", .label = "Second", .category = "Test", .capabilities = 0},
         [](ActionActivationContext&) {},
         [](ActionActivationContext const&) -> ActionAvailability { throw std::runtime_error{"state failure"}; });
@@ -255,11 +257,11 @@ namespace ao::gtk::layout::test
 
     SECTION("skipped anchored action leaves a foreign action untouched")
     {
-      registry.registerAction(ActionSchema{.id = "test.foreign",
-                                           .label = "Foreign",
-                                           .category = "Test",
-                                           .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
-                              [](ActionActivationContext&) {});
+      registry.tryRegisterAction(ActionSchema{.id = "test.foreign",
+                                              .label = "Foreign",
+                                              .category = "Test",
+                                              .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
+                                 [](ActionActivationContext&) {});
       auto foreignActionPtr = Gio::SimpleAction::create("test.foreign");
       actionMapPtr->add_action(foreignActionPtr);
 

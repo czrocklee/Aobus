@@ -88,7 +88,7 @@ namespace ao::uimodel::test
     auto const configPath = tempDir.path() / "config.yaml";
     auto store = rt::ConfigStore{configPath};
     auto keymap = KeymapModel{sampleDefaults()};
-    REQUIRE(keymap.bind("", chord("Ctrl+E")));
+    REQUIRE(keymap.tryBind("", chord("Ctrl+E")));
 
     auto const savedRes = saveKeymap(store, keymap);
     REQUIRE_FALSE(savedRes);

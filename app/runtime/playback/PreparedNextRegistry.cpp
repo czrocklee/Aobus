@@ -25,7 +25,7 @@ namespace ao::rt
     _optActive.emplace(Commitment{.token = token, .anchor = std::move(anchor)});
   }
 
-  bool PreparedNextRegistry::acknowledgeDisarm(PreparedNextToken const token)
+  bool PreparedNextRegistry::tryAcknowledgeDisarm(PreparedNextToken const token)
   {
     if (_optActive && _optActive->token == token)
     {
@@ -48,7 +48,7 @@ namespace ao::rt
   {
     if (optDisarmedToken)
     {
-      std::ignore = acknowledgeDisarm(*optDisarmedToken);
+      std::ignore = tryAcknowledgeDisarm(*optDisarmedToken);
     }
 
     retireActive();

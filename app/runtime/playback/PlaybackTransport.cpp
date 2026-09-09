@@ -702,9 +702,9 @@ namespace ao::rt
         profileId = backend.descriptor.supportedProfiles.front().id;
       }
 
-      if (auto const result = playerPtr->setOutputDevice(backend.descriptor.id, device.id, profileId); !result)
+      if (auto const res = playerPtr->setOutputDevice(backend.descriptor.id, device.id, profileId); !res)
       {
-        APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
+        APP_LOG_ERROR("Failed to select audio output device: {}", res.error().message);
       }
     }
 
@@ -1260,11 +1260,11 @@ namespace ao::rt
             return;
           }
 
-          if (auto const result =
+          if (auto const res =
                 playerPtr->setOutputDevice(optSelection->backendId, optSelection->deviceId, optSelection->profileId);
-              !result)
+              !res)
           {
-            APP_LOG_ERROR("Failed to select audio output device: {}", result.error().message);
+            APP_LOG_ERROR("Failed to select audio output device: {}", res.error().message);
           }
 
           if (isClosing())
@@ -1756,20 +1756,20 @@ namespace ao::rt
     detail::expectPreparedNextSlotAvailable(impl->optActivePreparedToken.has_value());
 
     auto item = impl->makePlaybackItem(request.input);
-    auto const result = impl->playerPtr->prepareNext(item);
+    auto const res = impl->playerPtr->prepareNext(item);
 
     if (impl->isClosing())
     {
       return makeError(Error::Code::InvalidState, "Playback transport closed while preparing next track");
     }
 
-    if (!result)
+    if (!res)
     {
-      APP_LOG_WARN("Playback not prepared: {}", result.error().message);
-      return std::unexpected{result.error()};
+      APP_LOG_WARN("Playback not prepared: {}", res.error().message);
+      return std::unexpected{res.error()};
     }
 
-    return impl->installPreparedNext(request, sourceListId, *result);
+    return impl->installPreparedNext(request, sourceListId, *res);
   }
 
   Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
@@ -1909,9 +1909,9 @@ namespace ao::rt
 
     std::ignore = impl->clearPreparedNext();
 
-    if (auto const result = impl->playerPtr->setOutputDevice(backendId, deviceId, profileId); !result)
+    if (auto const res = impl->playerPtr->setOutputDevice(backendId, deviceId, profileId); !res)
     {
-      APP_LOG_ERROR("Failed to set audio output device: {}", result.error().message);
+      APP_LOG_ERROR("Failed to set audio output device: {}", res.error().message);
     }
 
     if (impl->isClosing())
@@ -1934,9 +1934,9 @@ namespace ao::rt
 
     auto const normalizedVolume = normalizePlaybackVolume(volume);
 
-    if (auto const result = impl->playerPtr->setVolume(normalizedVolume); !result)
+    if (auto const res = impl->playerPtr->setVolume(normalizedVolume); !res)
     {
-      APP_LOG_ERROR("Failed to set volume: {}", result.error().message);
+      APP_LOG_ERROR("Failed to set volume: {}", res.error().message);
     }
 
     if (impl->isClosing())
@@ -1958,9 +1958,9 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    if (auto const result = impl->playerPtr->setMuted(muted); !result)
+    if (auto const res = impl->playerPtr->setMuted(muted); !res)
     {
-      APP_LOG_ERROR("Failed to set muted state: {}", result.error().message);
+      APP_LOG_ERROR("Failed to set muted state: {}", res.error().message);
     }
 
     if (impl->isClosing())

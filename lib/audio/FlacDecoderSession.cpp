@@ -188,9 +188,9 @@ namespace ao::audio
   {
     try
     {
-      if (auto const result = _implPtr->fileCursor.open(filePath); !result)
+      if (auto const res = _implPtr->fileCursor.open(filePath); !res)
       {
-        detail::throwDecoderError(result.error());
+        detail::throwDecoderError(res.error());
       }
 
       _implPtr->eof = false;

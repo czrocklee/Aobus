@@ -65,7 +65,8 @@ namespace ao::winui
     constexpr std::wstring_view kDismissGlyph = L"\uE711";
     constexpr std::wstring_view kNotificationGlyph = L"\uEA8F";
 
-    bool sameCompactPresentation(uimodel::ActivityCompactState const& left, uimodel::ActivityCompactState const& right)
+    bool isSameCompactPresentation(uimodel::ActivityCompactState const& left,
+                                   uimodel::ActivityCompactState const& right)
     {
       return left.kind == right.kind && left.text == right.text &&
              left.optProgressFraction == right.optProgressFraction && left.dismissible == right.dismissible &&
@@ -390,7 +391,7 @@ namespace ao::winui
       return;
     }
 
-    if (_optScheduledCompact && sameCompactPresentation(*_optScheduledCompact, compact))
+    if (_optScheduledCompact && isSameCompactPresentation(*_optScheduledCompact, compact))
     {
       return;
     }
@@ -411,7 +412,7 @@ namespace ao::winui
 
                                _optScheduledCompact.reset();
 
-                               if (!_viewModelPtr->autoDismissCompactIfDue())
+                               if (!_viewModelPtr->tryAutoDismissCompactIfDue())
                                {
                                  _optScheduledCompact = _viewModelPtr->viewState().compact;
                                  _autoDismissTimer.Interval(std::chrono::milliseconds{1});

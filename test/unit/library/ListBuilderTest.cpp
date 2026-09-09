@@ -30,11 +30,11 @@ namespace ao::library::test
   {
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
-      auto result = writer.create(prepared);
-      REQUIRE(result);
-      auto optView = writer.get(*result);
+      auto res = writer.create(prepared);
+      REQUIRE(res);
+      auto optView = writer.get(*res);
       REQUIRE(optView);
-      return {*result, *optView};
+      return {*res, *optView};
     }
 
     std::vector<std::byte> duplicateOrderPayload(std::span<TrackId const> trackIds)
@@ -104,23 +104,23 @@ namespace ao::library::test
   TEST_CASE("ListBuilder - rejects malformed UTF-8 text", "[library][unit][list][unicode]")
   {
     auto const malformed = std::string{"\xC0\xAF", 2};
-    auto const result = ListBuilder::makeEmpty().name(malformed).serialize();
+    auto const res = ListBuilder::makeEmpty().name(malformed).serialize();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("List name"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("List name"));
   }
 
   TEST_CASE("ListBuilder - validation rejects persisted non-NFC text", "[library][unit][list][unicode]")
   {
     auto const payload = rawNamePayload("Cafe\u0301");
     auto const view = ListView{payload};
-    auto const result = validateSerializedList(payload);
+    auto const res = validateSerializedList(payload);
 
     REQUIRE(view.isValid());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
-    CHECK(result.error().message.contains("List name"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message.contains("List name"));
   }
 
   TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][regression][list]")

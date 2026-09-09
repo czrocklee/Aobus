@@ -69,7 +69,7 @@ namespace ao::winui
     TrackPropertiesCoordinator& operator=(TrackPropertiesCoordinator&&) = delete;
 
     Result<> present();
-    bool active() const noexcept { return _active; }
+    bool isActive() const noexcept { return _active; }
     void retire() noexcept;
 
   private:
@@ -116,7 +116,7 @@ namespace ao::winui
     std::string editorText(FieldEditor const& editor) const;
     void refreshTagSuggestions();
     void refreshCustomKeySuggestions();
-    bool synchronizeFieldEdits();
+    bool trySynchronizeFieldEdits();
     bool hasPendingChanges() const;
     rt::MetadataPatch buildMetadataPatch() const;
     std::vector<std::string> tagsToAdd() const;
@@ -126,16 +126,16 @@ namespace ao::winui
     void clearError();
     void handleSessionInvalidated();
     void handleSaveClicked(winrt::Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& args);
-    void finishSave(Result<TrackPropertiesCommitState> result);
+    void finishSave(Result<TrackPropertiesCommitState> res);
     void handleClosed();
 
-    static async::Task<Result<TrackPropertiesCommitState>> submitChanges(
+    static async::Task<Result<TrackPropertiesCommitState>> submitChangesAsync(
       async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission);
-    static async::Task<void> runSaveWorkflow(async::Runtime* runtime,
-                                             TrackPropertiesCoordinator* owner,
-                                             CallbackAdmissionGate::Token token,
-                                             async::Task<Result<TrackPropertiesCommitState>> submission,
-                                             std::stop_token stopToken);
+    static async::Task<void> runSaveWorkflowAsync(async::Runtime* runtime,
+                                                  TrackPropertiesCoordinator* owner,
+                                                  CallbackAdmissionGate::Token token,
+                                                  async::Task<Result<TrackPropertiesCommitState>> submission,
+                                                  std::stop_token stopToken);
 
     winrt::Microsoft::UI::Xaml::XamlRoot _xamlRoot{nullptr};
     async::Runtime& _asyncRuntime;

@@ -127,7 +127,7 @@ namespace ao::library::test
       fixture.library, TrackSpec{.title = "Removed", .artist = "Removed artist", .duration = std::chrono::minutes{2}});
 
     auto wtxn = writeTransaction(fixture.library);
-    REQUIRE(physicalWriter(fixture.store, wtxn).remove(id));
+    REQUIRE(physicalWriter(fixture.store, wtxn).tryRemove(id));
     REQUIRE(wtxn.commit());
 
     auto rtxn = fixture.library.readTransaction();

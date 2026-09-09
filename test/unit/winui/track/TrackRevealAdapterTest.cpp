@@ -24,7 +24,7 @@ namespace ao::winui::test
 
     CHECK_FALSE(resolveTrackRevealTarget(intent, viewId, std::nullopt, displayIndex));
 
-    REQUIRE(displayIndex.reset(3, {}));
+    REQUIRE(displayIndex.tryReset(3, {}));
     CHECK(resolveTrackRevealTarget(intent, viewId, 1, displayIndex) == TrackRevealTarget{
                                                                          .serial = 1,
                                                                          .displayIndex = 1,
@@ -35,7 +35,7 @@ namespace ao::winui::test
   {
     auto intent = TrackRevealIntent{};
     auto displayIndex = uimodel::TrackDisplayIndex{};
-    REQUIRE(displayIndex.reset(1, {}));
+    REQUIRE(displayIndex.tryReset(1, {}));
 
     recordTrackRevealIntent(intent, rt::ViewId{3}, TrackId{8});
     recordTrackRevealIntent(intent, rt::ViewId{4}, TrackId{9});

@@ -103,8 +103,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (!aobus::refersToVarDecl(firstBeginCall->getImplicitObjectArgument(), *container) ||
-        !aobus::refersToVarDecl(secondEndCall->getImplicitObjectArgument(), *container))
+    if (!aobus::isVarDeclReference(firstBeginCall->getImplicitObjectArgument(), *container) ||
+        !aobus::isVarDeclReference(secondEndCall->getImplicitObjectArgument(), *container))
     {
       return;
     }

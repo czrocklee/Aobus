@@ -15,19 +15,19 @@ namespace ao::winui::test
   TEST_CASE("CallbackAdmissionGate - retirement invalidates existing callback tokens", "[winui][unit][lifetime]")
   {
     auto const emptyToken = CallbackAdmissionGate::Token{};
-    CHECK_FALSE(emptyToken.admits());
+    CHECK_FALSE(emptyToken.accepts());
 
     auto gate = CallbackAdmissionGate{};
     auto const token = gate.token();
 
     REQUIRE(gate.isOpen());
-    REQUIRE(token.admits());
+    REQUIRE(token.accepts());
 
     gate.retire();
     gate.retire();
 
     CHECK_FALSE(gate.isOpen());
-    CHECK_FALSE(token.admits());
+    CHECK_FALSE(token.accepts());
   }
 
   TEST_CASE("CallbackAdmissionGate - renewal cannot reopen an older generation", "[winui][unit][lifetime]")
@@ -39,11 +39,11 @@ namespace ao::winui::test
     auto const currentToken = gate.token();
 
     CHECK(gate.isOpen());
-    CHECK_FALSE(oldToken.admits());
-    CHECK(currentToken.admits());
+    CHECK_FALSE(oldToken.accepts());
+    CHECK(currentToken.accepts());
 
     gate.retire();
     CHECK_FALSE(gate.isOpen());
-    CHECK_FALSE(currentToken.admits());
+    CHECK_FALSE(currentToken.accepts());
   }
 } // namespace ao::winui::test

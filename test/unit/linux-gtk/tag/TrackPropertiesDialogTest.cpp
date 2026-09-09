@@ -166,7 +166,7 @@ namespace ao::gtk::test
       emitClicked(*saveButton);
 
       AppDialog* busyDialog = nullptr;
-      REQUIRE(pumpGtkEventsUntil(
+      REQUIRE(tryPumpGtkEventsUntil(
         [&busyDialog, &dialog]
         {
           for (auto* const topLevel : Gtk::Window::list_toplevels())

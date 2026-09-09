@@ -121,7 +121,7 @@ namespace ao::library::test
 
         auto const optView = writer.get(uri);
         REQUIRE(optView);
-        REQUIRE(writer.remove(uri));
+        REQUIRE(writer.tryRemove(uri));
         auto const optViewAgain = writer.get(uri);
         CHECK_FALSE(optViewAgain);
       }
@@ -208,8 +208,8 @@ namespace ao::library::test
 
     auto writer = physicalWriter(store, wtxn);
     REQUIRE(writer.put(prepared));
-    CHECK(writer.remove("song.flac"));
-    CHECK_FALSE(writer.remove("song.flac"));
+    CHECK(writer.tryRemove("song.flac"));
+    CHECK_FALSE(writer.tryRemove("song.flac"));
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();

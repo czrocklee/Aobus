@@ -961,7 +961,7 @@ namespace ao::rt
       }
     };
 
-    bool sourceMatches(std::span<TrackId const> expected) const
+    bool matchesSource(std::span<TrackId const> expected) const
     {
       auto const& source = sourceLease.source();
 
@@ -998,14 +998,14 @@ namespace ao::rt
 
       if (resolution.hasStructuralChanges)
       {
-        auto result = delta::apply(sourceOrder, script);
+        auto res = delta::apply(sourceOrder, script);
 
-        if (!result)
+        if (!res)
         {
           return std::nullopt;
         }
 
-        resolution.finalTrackIds = std::move(*result);
+        resolution.finalTrackIds = std::move(*res);
         finalSourceOrder = resolution.finalTrackIds;
       }
       else
@@ -1021,7 +1021,7 @@ namespace ao::rt
         }
       }
 
-      if (!sourceMatches(finalSourceOrder))
+      if (!matchesSource(finalSourceOrder))
       {
         return std::nullopt;
       }
@@ -1230,7 +1230,7 @@ namespace ao::rt
       }
     }
 
-    bool applyIncrementalBatch(delta::RegularTrackEditScript const& script)
+    bool tryApplyIncrementalBatch(delta::RegularTrackEditScript const& script)
     {
       auto optSourceOrderResolution = resolveFinalSourceOrder(script);
 
@@ -1378,7 +1378,7 @@ namespace ao::rt
         return;
       }
 
-      AO_INVARIANT(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
+      AO_INVARIANT(!batch.deltas.empty() && isValidTrackListProjectionDeltaBatch(batch, previousSize) &&
                    !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
 
       changedSignal.emit(batch);
@@ -1411,12 +1411,12 @@ namespace ao::rt
       changedSignal.disconnectAll();
     }
 
-    static bool sourceOrderBatchMatches(std::vector<TrackId> const& previousTrackIds,
+    static bool matchesSourceOrderBatch(std::vector<TrackId> const& previousTrackIds,
                                         delta::RegularTrackEditScript const& script,
                                         std::vector<TrackId> const& finalTrackIds)
     {
-      auto const result = delta::apply(previousTrackIds, script);
-      return result && *result == finalTrackIds;
+      auto const res = delta::apply(previousTrackIds, script);
+      return res && *res == finalTrackIds;
     }
 
     static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(delta::RegularTrackEditScript const& script)
@@ -1469,7 +1469,7 @@ namespace ao::rt
         return;
       }
 
-      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
           finalSizeOf(batch, previousSize) != orderIndex.size())
       {
         publishReset(previousSize);
@@ -1505,7 +1505,7 @@ namespace ao::rt
 
       auto const& script = std::get<delta::RegularTrackEditScript>(sourceBatch);
 
-      if (!applyIncrementalBatch(script))
+      if (!tryApplyIncrementalBatch(script))
       {
         rebuildOrderIndex();
         publishReset(previousSize);
@@ -1525,7 +1525,7 @@ namespace ao::rt
       }
 
       if (auto const finalTrackIds = projectionTrackIds();
-          !sourceOrderBatchMatches(previousTrackIds, script, finalTrackIds))
+          !matchesSourceOrderBatch(previousTrackIds, script, finalTrackIds))
       {
         publishReset(previousSize);
         return;
@@ -1533,7 +1533,7 @@ namespace ao::rt
 
       auto batch = sourceOrderProjectionBatch(script);
 
-      if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
+      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
           finalSizeOf(batch, previousSize) != orderIndex.size())
       {
         publishReset(previousSize);

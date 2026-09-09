@@ -53,12 +53,12 @@ namespace ao::winui
         return makeError(Error::Code::FormatRejected, "Windows theme fontFamily cannot be empty");
       }
 
-      auto result = Result<>{};
-      auto const validate = [&result](std::string_view const name, std::string_view const value)
+      auto res = Result<>{};
+      auto const validate = [&res](std::string_view const name, std::string_view const value)
       {
-        if (result)
+        if (res)
         {
-          result = validateColor(name, value);
+          res = validateColor(name, value);
         }
       };
       validate("shared.accent", theme.shared.accent);
@@ -74,7 +74,7 @@ namespace ao::winui
       validate("classic.toolbarBackground", theme.classic.toolbarBackground);
       validate("classic.treeBackground", theme.classic.treeBackground);
       validate("classic.statusBackground", theme.classic.statusBackground);
-      return result;
+      return res;
     }
 
     std::string_view chromeId(ClassicChrome const chrome) noexcept
@@ -176,11 +176,11 @@ namespace ao::winui
         .requiredScalar("toolbarBackground", value.toolbarBackground)
         .requiredScalar("treeBackground", value.treeBackground)
         .requiredScalar("statusBackground", value.statusBackground);
-      auto result = std::move(reader).finish(std::move(value));
+      auto res = std::move(reader).finish(std::move(value));
 
-      if (!result)
+      if (!res)
       {
-        return result;
+        return res;
       }
 
       auto parsedChromeRes = chromeFromId(chrome);
@@ -190,8 +190,8 @@ namespace ao::winui
         return std::unexpected{parsedChromeRes.error()};
       }
 
-      result->chrome = *parsedChromeRes;
-      return result;
+      res->chrome = *parsedChromeRes;
+      return res;
     }
   } // namespace
 
@@ -217,19 +217,19 @@ namespace ao::winui
     reader.requiredValue("shared", state.shared, readShared)
       .requiredValue("modern", state.modern, readModern)
       .requiredValue("classic", state.classic, readClassic);
-    auto result = std::move(reader).finish(std::move(state));
+    auto res = std::move(reader).finish(std::move(state));
 
-    if (!result)
+    if (!res)
     {
-      return result;
+      return res;
     }
 
-    if (auto const validRes = validateTheme(*result); !validRes)
+    if (auto const validRes = validateTheme(*res); !validRes)
     {
       return std::unexpected{validRes.error()};
     }
 
-    return result;
+    return res;
   }
 
   Result<> ThemeSessionModel::reload(ryml::ConstNodeRef node)

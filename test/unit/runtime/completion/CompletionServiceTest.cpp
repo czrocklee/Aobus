@@ -380,7 +380,7 @@ namespace ao::rt::test
     REQUIRE(updatedArtists.size() == 1);
     CHECK(aliasValues(updatedArtists.front().aliases) == std::vector<std::string>{"wangfei"});
 
-    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrack(trackId)));
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrackAsync(trackId)));
     CHECK(service.aggregateValues({.fields = kFields, .includeTags = true}).empty());
     CHECK(service.tags().empty());
     CHECK(service.customKeys().empty());
@@ -448,7 +448,7 @@ namespace ao::rt::test
     auto asyncRuntime = async::Runtime{changesExecutor};
     auto writeLane = LibraryWriteLane{
       asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(libraryFixture.library()), changes};
-    auto task = executeInteractiveMutation(
+    auto task = executeInteractiveMutationAsync(
       writeLane.captureSubmission(),
       [&libraryFixture](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
       {
@@ -559,7 +559,7 @@ namespace ao::rt::test
     SECTION("Deletion")
     {
       auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-      REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrack(originalId)));
+      REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrackAsync(originalId)));
       CHECK(vocabulary().empty());
     }
 
@@ -693,7 +693,7 @@ namespace ao::rt::test
       REQUIRE_FALSE(service.valuesFor(field).empty());
     }
 
-    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrack(trackId)));
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteTrackAsync(trackId)));
 
     CHECK(service.tags().empty());
     CHECK(service.customKeys().empty());

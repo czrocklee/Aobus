@@ -33,7 +33,7 @@ namespace ao::winui
     }
   }
 
-  bool libraryImportRequiresDestructiveConfirmation(rt::ImportMode const mode) noexcept
+  bool needsLibraryImportDestructiveConfirmation(rt::ImportMode const mode) noexcept
   {
     return mode == rt::ImportMode::Restore;
   }

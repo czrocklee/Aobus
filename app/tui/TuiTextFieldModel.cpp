@@ -89,7 +89,7 @@ namespace ao::tui
     _cursor = _value.size();
   }
 
-  bool TuiTextFieldModel::insert(std::string_view const text)
+  bool TuiTextFieldModel::tryInsert(std::string_view const text)
   {
     if (text.empty() || containsControlCharacter(text) || !utility::validateUtf8(text))
     {
@@ -103,7 +103,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::replaceRange(std::size_t const begin, std::size_t const end, std::string_view const text)
+  bool TuiTextFieldModel::tryReplaceRange(std::size_t const begin, std::size_t const end, std::string_view const text)
   {
     if (begin > end || end > _value.size())
     {
@@ -134,7 +134,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::backspace()
+  bool TuiTextFieldModel::tryBackspace()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_value, _cursor);
 
@@ -148,7 +148,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::deleteForward()
+  bool TuiTextFieldModel::tryDeleteForward()
   {
     auto const boundaryRes = utility::nextUtf8GraphemeBoundary(_value, _cursor);
 
@@ -162,7 +162,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::moveLeft()
+  bool TuiTextFieldModel::tryMoveLeft()
   {
     auto const boundaryRes = utility::previousUtf8GraphemeBoundary(_value, _cursor);
 
@@ -175,7 +175,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::moveRight()
+  bool TuiTextFieldModel::tryMoveRight()
   {
     auto const boundaryRes = utility::nextUtf8GraphemeBoundary(_value, _cursor);
 
@@ -188,7 +188,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::moveToBegin()
+  bool TuiTextFieldModel::tryMoveToBegin()
   {
     if (_cursor == 0)
     {
@@ -199,7 +199,7 @@ namespace ao::tui
     return true;
   }
 
-  bool TuiTextFieldModel::moveToEnd()
+  bool TuiTextFieldModel::tryMoveToEnd()
   {
     if (_cursor == _value.size())
     {

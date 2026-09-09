@@ -214,6 +214,24 @@ def _check_naming_contract(documents: dict[Path, Document], root: Path) -> list[
     for name in sorted(referenced_checks):
         if not (checks / f"{name}.h").is_file():
             issues.append(Issue(path, 1, "naming-contract", f"unknown naming lint check: {name}"))
+
+    module_path = root / "tool/lint/AobusLintModule.cpp"
+    if module_path.is_file():
+        registrations = re.findall(
+            r'registerCheck<(?:[A-Za-z_][A-Za-z0-9_]*::)*([A-Za-z_][A-Za-z0-9_]*Check)>\s*\(\s*"([^"]+)"',
+            module_path.read_text(encoding="utf-8", errors="replace"),
+        )
+        registered_naming_checks = {class_name for class_name, alias in registrations if "naming" in alias}
+        if referenced_checks != registered_naming_checks:
+            issues.append(
+                Issue(
+                    path,
+                    1,
+                    "naming-contract",
+                    "documented naming checks: "
+                    f"expected {sorted(registered_naming_checks)}, found {sorted(referenced_checks)}",
+                )
+            )
     return issues
 
 

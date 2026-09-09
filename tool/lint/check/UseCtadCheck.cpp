@@ -493,11 +493,11 @@ namespace clang::tidy::readability
 
     constexpr std::int32_t kMaxTypeReferencesDepth = 64;
 
-    bool referencesTemplateParameter(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth = 0);
+    bool hasTemplateParameterReference(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth = 0);
 
-    bool referencesTemplateParameter(TemplateSpecializationType const* tst,
-                                     TemplateTypeParmDecl const* parameter,
-                                     std::int32_t depth)
+    bool hasTemplateParameterReference(TemplateSpecializationType const* tst,
+                                       TemplateTypeParmDecl const* parameter,
+                                       std::int32_t depth)
     {
       if (tst == nullptr)
       {
@@ -508,13 +508,13 @@ namespace clang::tidy::readability
                                  [parameter, depth](TemplateArgument const& argument)
                                  {
                                    return argument.getKind() == TemplateArgument::Type &&
-                                          referencesTemplateParameter(argument.getAsType(), parameter, depth + 1);
+                                          hasTemplateParameterReference(argument.getAsType(), parameter, depth + 1);
                                  });
     }
 
-    bool referencesTemplateParameter(ClassTemplateSpecializationDecl const* spec,
-                                     TemplateTypeParmDecl const* parameter,
-                                     std::int32_t depth)
+    bool hasTemplateParameterReference(ClassTemplateSpecializationDecl const* spec,
+                                       TemplateTypeParmDecl const* parameter,
+                                       std::int32_t depth)
     {
       if (spec == nullptr)
       {
@@ -526,7 +526,7 @@ namespace clang::tidy::readability
       for (std::uint32_t i = 0; i < args.size(); ++i)
       {
         if (args[i].getKind() == TemplateArgument::Type &&
-            referencesTemplateParameter(args[i].getAsType(), parameter, depth + 1))
+            hasTemplateParameterReference(args[i].getAsType(), parameter, depth + 1))
         {
           return true;
         }
@@ -547,7 +547,7 @@ namespace clang::tidy::readability
     }
 
     // Recursively check whether a QualType references a given TemplateTypeParmDecl.
-    bool referencesTemplateParameter(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth)
+    bool hasTemplateParameterReference(QualType type, TemplateTypeParmDecl const* parameter, std::int32_t depth)
     {
       if (type.isNull() || parameter == nullptr || depth > kMaxTypeReferencesDepth)
       {
@@ -572,13 +572,13 @@ namespace clang::tidy::readability
         }
 
         return (replaced->getDepth() == parameter->getDepth() && replaced->getIndex() == parameter->getIndex()) ||
-               referencesTemplateParameter(substParmType->getReplacementType(), parameter, depth + 1);
+               hasTemplateParameterReference(substParmType->getReplacementType(), parameter, depth + 1);
       }
 
       // Pointer / array element type.
       if (type->isPointerType() || type->isArrayType())
       {
-        return referencesTemplateParameter(
+        return hasTemplateParameterReference(
           type->getPointeeOrArrayElementType()->getCanonicalTypeInternal(), parameter, depth + 1);
       }
 
@@ -586,20 +586,20 @@ namespace clang::tidy::readability
       // Alias templates are not generally deducible in CTAD, so be conservative and do not
       // consider a parameter deducible merely because it appears in an alias template argument list.
       if (auto const* tst = type->getAs<TemplateSpecializationType>();
-          isNonAliasTemplateSpecialization(tst) && referencesTemplateParameter(tst, parameter, depth))
+          isNonAliasTemplateSpecialization(tst) && hasTemplateParameterReference(tst, parameter, depth))
       {
         return true;
       }
 
       // Also try the desugared RecordType path (for type aliases / elaborated types).
-      if (auto const* spec = getTemplateSpecialization(type); referencesTemplateParameter(spec, parameter, depth))
+      if (auto const* spec = getTemplateSpecialization(type); hasTemplateParameterReference(spec, parameter, depth))
       {
         return true;
       }
 
       auto const desugared = type->getLocallyUnqualifiedSingleStepDesugaredType();
 
-      return desugared != type && referencesTemplateParameter(desugared, parameter, depth + 1);
+      return desugared != type && hasTemplateParameterReference(desugared, parameter, depth + 1);
     }
 
     bool isSameTemplateArgument(TemplateArgument const& lhs, TemplateArgument const& rhs)
@@ -720,7 +720,7 @@ namespace clang::tidy::readability
     {
       for (std::uint32_t i = 0; i < primaryCtor->getNumParams(); ++i)
       {
-        if (referencesTemplateParameter(primaryCtor->getParamDecl(i)->getType(), typeParm))
+        if (hasTemplateParameterReference(primaryCtor->getParamDecl(i)->getType(), typeParm))
         {
           return true;
         }

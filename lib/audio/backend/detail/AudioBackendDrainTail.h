@@ -7,15 +7,22 @@
 
 namespace ao::audio::backend::detail
 {
+  /// Reports completion produced by one update, not a persistent drained state.
+  enum class DrainTailEvent : std::uint8_t
+  {
+    None,
+    Completed,
+  };
+
   /** @brief Counts conservative silent presentation frames after a drained render. */
   class AudioBackendDrainTail final
   {
   public:
-    bool start(std::uint64_t presentationTailFrames, std::uint64_t silentSuffixFrames) noexcept;
-    bool consume(std::uint64_t silentFrames) noexcept;
+    DrainTailEvent start(std::uint64_t presentationTailFrames, std::uint64_t silentSuffixFrames) noexcept;
+    DrainTailEvent consume(std::uint64_t silentFrames) noexcept;
     void reset() noexcept;
 
-    bool active() const noexcept;
+    bool isActive() const noexcept;
     std::uint64_t remainingFrames() const noexcept;
 
   private:

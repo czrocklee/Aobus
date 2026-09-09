@@ -44,7 +44,7 @@ namespace ao::uimodel
     _label = std::string{label};
   }
 
-  bool CustomPresentationEditorModel::setGroupKeyByOptionIndex(std::size_t optionIndex)
+  bool CustomPresentationEditorModel::trySetGroupKeyByOptionIndex(std::size_t optionIndex)
   {
     if (optionIndex >= _groupOptions.size())
     {
@@ -65,22 +65,22 @@ namespace ao::uimodel
     _sortTerms.push_back({.field = rt::TrackSortField::Title, .ascending = true});
   }
 
-  bool CustomPresentationEditorModel::removeSortTerm(std::size_t index)
+  bool CustomPresentationEditorModel::tryRemoveSortTerm(std::size_t index)
   {
-    return eraseElementAt(_sortTerms, index);
+    return tryEraseElementAt(_sortTerms, index);
   }
 
-  bool CustomPresentationEditorModel::moveSortTermUp(std::size_t index)
+  bool CustomPresentationEditorModel::tryMoveSortTermUp(std::size_t index)
   {
-    return moveElementUp(_sortTerms, index);
+    return tryMoveElementUp(_sortTerms, index);
   }
 
-  bool CustomPresentationEditorModel::moveSortTermDown(std::size_t index)
+  bool CustomPresentationEditorModel::tryMoveSortTermDown(std::size_t index)
   {
-    return moveElementDown(_sortTerms, index);
+    return tryMoveElementDown(_sortTerms, index);
   }
 
-  bool CustomPresentationEditorModel::setSortFieldByOptionIndex(std::size_t termIndex, std::size_t optionIndex)
+  bool CustomPresentationEditorModel::trySetSortFieldByOptionIndex(std::size_t termIndex, std::size_t optionIndex)
   {
     if (termIndex >= _sortTerms.size() || optionIndex >= _sortFieldOptions.size())
     {
@@ -91,7 +91,7 @@ namespace ao::uimodel
     return true;
   }
 
-  bool CustomPresentationEditorModel::setSortAscending(std::size_t termIndex, bool ascending)
+  bool CustomPresentationEditorModel::trySetSortAscending(std::size_t termIndex, bool ascending)
   {
     if (termIndex >= _sortTerms.size())
     {
@@ -112,24 +112,24 @@ namespace ao::uimodel
     _visibleFields.push_back(rt::TrackField::Title);
   }
 
-  bool CustomPresentationEditorModel::removeVisibleField(std::size_t index)
+  bool CustomPresentationEditorModel::tryRemoveVisibleField(std::size_t index)
   {
     // A presentation with no visible columns would render nothing, so the last
     // field is not removable.
-    return _visibleFields.size() != 1 && eraseElementAt(_visibleFields, index);
+    return _visibleFields.size() != 1 && tryEraseElementAt(_visibleFields, index);
   }
 
-  bool CustomPresentationEditorModel::moveVisibleFieldUp(std::size_t index)
+  bool CustomPresentationEditorModel::tryMoveVisibleFieldUp(std::size_t index)
   {
-    return moveElementUp(_visibleFields, index);
+    return tryMoveElementUp(_visibleFields, index);
   }
 
-  bool CustomPresentationEditorModel::moveVisibleFieldDown(std::size_t index)
+  bool CustomPresentationEditorModel::tryMoveVisibleFieldDown(std::size_t index)
   {
-    return moveElementDown(_visibleFields, index);
+    return tryMoveElementDown(_visibleFields, index);
   }
 
-  bool CustomPresentationEditorModel::setVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex)
+  bool CustomPresentationEditorModel::trySetVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex)
   {
     if (fieldIndex >= _visibleFields.size() || optionIndex >= _visibleFieldOptions.size())
     {

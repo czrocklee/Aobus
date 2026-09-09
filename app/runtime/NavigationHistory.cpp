@@ -15,7 +15,7 @@ namespace ao::rt
   {
   }
 
-  bool NavigationHistory::commit(NavigationPoint point)
+  bool NavigationHistory::tryCommit(NavigationPoint point)
   {
     if (_optCurrentIndex && _points[*_optCurrentIndex] == point)
     {

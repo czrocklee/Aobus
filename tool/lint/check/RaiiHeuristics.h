@@ -41,7 +41,7 @@ namespace clang::tidy::aobus
                                                                            "Blocker"});
 
     bool isScopedOrRaiiType(QualType type, ASTContext& context);
-    bool ownsScopedOrRaiiType(QualType type, ASTContext& context);
+    bool hasScopedOrRaiiTypeOwnership(QualType type, ASTContext& context);
 
     struct IsRAIIMatcher final : public ast_matchers::internal::MatcherInterface<CXXRecordDecl>
     {

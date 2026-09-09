@@ -46,7 +46,7 @@ namespace ao::tui::test
     }
 #endif
 
-    bool waitForFlag(std::atomic_bool& flag, std::condition_variable& cv, std::mutex& mutex)
+    bool tryWaitForFlag(std::atomic_bool& flag, std::condition_variable& cv, std::mutex& mutex)
     {
       auto lock = std::unique_lock{mutex};
       return cv.wait_for(lock, std::chrono::seconds{2}, [&] { return flag.load(); });
@@ -72,7 +72,7 @@ namespace ao::tui::test
         return 1;
       }
 
-      if (!waitForFlag(called, cv, mutex))
+      if (!tryWaitForFlag(called, cv, mutex))
       {
         std::println(stderr, "callback was not invoked");
         return 1;
@@ -142,7 +142,7 @@ namespace ao::tui::test
                                          cv.notify_all();
                                        }};
 
-      if (::GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0) == 0 || !waitForFlag(called, cv, mutex))
+      if (::GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0) == 0 || !tryWaitForFlag(called, cv, mutex))
       {
         // Session-0 SSH and redirected-stdio children often have no console
         // that can deliver CTRL_C_EVENT. Keep the scenario invokable from an

@@ -19,11 +19,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 256000};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }
 
@@ -34,11 +34,11 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 48000};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
   }
 
@@ -50,15 +50,15 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
 
     auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
-    auto result = evaluator.evaluateFull(plan, track1.view());
+    auto result = evaluator.matchesFullPlan(plan, track1.view());
     CHECK(result == true);
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 192000, 44100};
-    result = evaluator.evaluateFull(plan, track2.view());
+    result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
 
     auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 32000};
-    result = evaluator.evaluateFull(plan, track3.view());
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -72,9 +72,9 @@ namespace ao::query::test
     auto track = TrackFixture{spec};
     auto evaluator = PlanEvaluator{};
 
-    CHECK(evaluator.evaluateFull(compileOk(parseOk("@duration > 3m")), track.view()) == true);
-    CHECK(evaluator.evaluateFull(compileOk(parseOk("@duration > 4m")), track.view()) == false);
-    CHECK(evaluator.evaluateFull(compileOk(parseOk("@bitrate = 320k")), track.view()) == true);
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@duration > 3m")), track.view()) == true);
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@duration > 4m")), track.view()) == false);
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@bitrate = 320k")), track.view()) == true);
   }
 
   TEST_CASE("PlanEvaluator - matches AAC codec expressions", "[query][unit][plan-evaluator]")
@@ -86,6 +86,6 @@ namespace ao::query::test
     auto evaluator = PlanEvaluator{};
     auto plan = compileOk(parseOk("@codec = AAC"));
 
-    CHECK(evaluator.evaluateFull(plan, track.view()) == true);
+    CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
   }
 } // namespace ao::query::test

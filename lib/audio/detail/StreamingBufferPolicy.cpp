@@ -34,10 +34,10 @@ namespace ao::audio::detail
     return static_cast<std::size_t>(std::min(roundedBytes, static_cast<std::uint64_t>(capacity)));
   }
 
-  bool permitsDecode(std::size_t targetByteCount,
-                     std::size_t bufferedByteCount,
-                     std::size_t writableByteCount,
-                     std::size_t previousBlockByteCount) noexcept
+  bool canDecode(std::size_t targetByteCount,
+                 std::size_t bufferedByteCount,
+                 std::size_t writableByteCount,
+                 std::size_t previousBlockByteCount) noexcept
   {
     if (bufferedByteCount >= targetByteCount)
     {

@@ -54,7 +54,7 @@ namespace ao::audio::backend::test
         _errors.fetch_add(1U, std::memory_order_relaxed);
       }
 
-      bool waitForDrain(std::chrono::seconds const timeout) { return _drained.try_acquire_for(timeout); }
+      bool tryWaitForDrain(std::chrono::seconds const timeout) { return _drained.try_acquire_for(timeout); }
       std::size_t renderCalls() const noexcept { return _renderCalls.load(std::memory_order_relaxed); }
       std::size_t errors() const noexcept { return _errors.load(std::memory_order_relaxed); }
 
@@ -86,7 +86,7 @@ namespace ao::audio::backend::test
         _errors.fetch_add(1U, std::memory_order_relaxed);
       }
 
-      bool waitForRender(std::chrono::seconds const timeout) { return _renderEntered.try_acquire_for(timeout); }
+      bool tryWaitForRender(std::chrono::seconds const timeout) { return _renderEntered.try_acquire_for(timeout); }
       void releaseRender() { _releaseRender.release(); }
       std::size_t renderCalls() const noexcept { return _renderCalls.load(std::memory_order_relaxed); }
       std::size_t drainCompletions() const noexcept { return _drainCompletions.load(std::memory_order_relaxed); }
@@ -205,7 +205,7 @@ namespace ao::audio::backend::test
     REQUIRE(openedRes);
 
     backend.start();
-    REQUIRE(target.waitForDrain(std::chrono::seconds{5}));
+    REQUIRE(target.tryWaitForDrain(std::chrono::seconds{5}));
     CHECK(target.renderCalls() == 1U);
     CHECK(target.errors() == 0U);
 
@@ -264,7 +264,7 @@ namespace ao::audio::backend::test
     REQUIRE(backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
     backend.start();
-    REQUIRE(target.waitForRender(std::chrono::seconds{5}));
+    REQUIRE(target.tryWaitForRender(std::chrono::seconds{5}));
 
     auto stopEntered = std::binary_semaphore{0};
     auto stopReturned = std::binary_semaphore{0};

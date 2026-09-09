@@ -82,19 +82,19 @@ namespace ao::tui::test
     CHECK(controller.viewState().outputBackendSummary == "mock_backend");
     CHECK(controller.selectedRow() == 1);
 
-    CHECK(controller.moveSelection(1));
+    CHECK(controller.tryMoveSelection(1));
     CHECK(controller.selectedRow() == 2);
-    CHECK(controller.moveSelection(-1));
+    CHECK(controller.tryMoveSelection(-1));
     CHECK(controller.selectedRow() == 1);
-    CHECK(controller.moveSelection(1));
+    CHECK(controller.tryMoveSelection(1));
     CHECK(controller.selectedRow() == 2);
-    CHECK_FALSE(controller.moveSelection(1));
+    CHECK_FALSE(controller.tryMoveSelection(1));
     CHECK(controller.selectedRow() == 2);
-    CHECK(controller.moveSelection(-10));
+    CHECK(controller.tryMoveSelection(-10));
     CHECK(controller.selectedRow() == 1);
-    CHECK(controller.moveSelection(10));
+    CHECK(controller.tryMoveSelection(10));
     CHECK(controller.selectedRow() == 2);
-    CHECK_FALSE(controller.moveSelection(0));
+    CHECK_FALSE(controller.tryMoveSelection(0));
     CHECK(controller.selectedRow() == 2);
   }
 
@@ -115,7 +115,7 @@ namespace ao::tui::test
       uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
                                               { optRecorded = selection; })};
 
-    REQUIRE(controller.selectRow(1));
+    REQUIRE(controller.trySelectRow(1));
 
     REQUIRE(optRecorded);
     CHECK(optRecorded->backendId == audio::BackendId{"mock_backend"});
@@ -133,12 +133,12 @@ namespace ao::tui::test
     auto controller = OutputDeviceController{
       controllerPlayback.playback, ao::test::englishMessageCatalog(), uimodel::OutputDeviceIntent::discarded()};
 
-    CHECK_FALSE(controller.selectRow(-1));
-    CHECK_FALSE(controller.selectRow(0));
+    CHECK_FALSE(controller.trySelectRow(-1));
+    CHECK_FALSE(controller.trySelectRow(0));
     CHECK(controller.selectedRow() == 1);
     CHECK(fixture.playbackTransport.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
 
-    CHECK(controller.selectRow(1));
+    CHECK(controller.trySelectRow(1));
     auto const& selection = fixture.playbackTransport.state().output.selectedDevice;
 
     CHECK(selection.backendId == audio::BackendId{"mock_backend"});
@@ -147,7 +147,7 @@ namespace ao::tui::test
 
     REQUIRE(controller.viewState().rows.size() == 3);
     CHECK(controller.viewState().rows[2].profileId == audio::kProfileExclusive);
-    CHECK(controller.selectRow(2));
+    CHECK(controller.trySelectRow(2));
     CHECK(controller.selectedRow() == 2);
   }
 
@@ -171,7 +171,7 @@ namespace ao::tui::test
       ao::test::englishMessageCatalog(),
       uimodel::OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
                                               { optRecorded = selection; })};
-    REQUIRE(controller.selectRow(1));
+    REQUIRE(controller.trySelectRow(1));
 
     auto const& view = controller.viewState();
     REQUIRE(view.rows.size() == 2U);

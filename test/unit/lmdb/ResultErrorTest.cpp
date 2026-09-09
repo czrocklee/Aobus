@@ -24,14 +24,14 @@ namespace ao::lmdb::test
     SECTION("resultFromCode points at the caller, not the resultFromCode/lmdbError wrappers")
     {
       auto const expectedLine = std::source_location::current().line() + 1;
-      auto const result = resultFromCode("mdb_get", MDB_NOTFOUND);
+      auto const res = resultFromCode("mdb_get", MDB_NOTFOUND);
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::NotFound);
-      CHECK(result.error().location.line() == expectedLine);
-      CHECK(std::string_view{result.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotFound);
+      CHECK(res.error().location.line() == expectedLine);
+      CHECK(std::string_view{res.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
 
-      auto const fn = std::string_view{result.error().location.function_name()};
+      auto const fn = std::string_view{res.error().location.function_name()};
       CHECK_FALSE(fn.contains("resultFromCode"));
       CHECK_FALSE(fn.contains("lmdbError"));
     }

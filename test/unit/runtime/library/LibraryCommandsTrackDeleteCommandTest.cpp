@@ -68,7 +68,7 @@ namespace ao::rt::test
     auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upsertedLists = ev.listsUpserted; });
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
-    auto const deletedRes = commandsFixture.runTask(commands.deleteTrack(trackId));
+    auto const deletedRes = commandsFixture.runTask(commands.deleteTrackAsync(trackId));
     REQUIRE(deletedRes);
     CHECK(deletedRes->trackId == trackId);
     CHECK(mutated.empty());
@@ -105,7 +105,7 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
-    auto const deletedRes = commandsFixture.runTask(commands.deleteTrack(TrackId{99999}));
+    auto const deletedRes = commandsFixture.runTask(commands.deleteTrackAsync(TrackId{99999}));
     CHECK_FALSE(deletedRes);
     CHECK(mutated.empty());
   }

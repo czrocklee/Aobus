@@ -196,9 +196,9 @@ namespace ao::winui
   {
     if (auto const optIndex = suggestionIndex(args.ChosenSuggestion()); optIndex)
     {
-      auto const continuesEditing = quickFilterSuggestionContinuesEditing(_suggestionRows[*optIndex]);
+      auto const continuesEditing = shouldContinueEditingQuickFilterSuggestion(_suggestionRows[*optIndex]);
 
-      if (acceptSuggestion(*optIndex) && continuesEditing)
+      if (tryAcceptSuggestion(*optIndex) && continuesEditing)
       {
         _debounceTimer.Stop();
         _commitPending = false;
@@ -236,9 +236,9 @@ namespace ao::winui
       return;
     }
 
-    auto const continuesEditing = quickFilterSuggestionContinuesEditing(_suggestionRows[suggestionIndex]);
+    auto const continuesEditing = shouldContinueEditingQuickFilterSuggestion(_suggestionRows[suggestionIndex]);
 
-    if (!acceptSuggestion(suggestionIndex))
+    if (!tryAcceptSuggestion(suggestionIndex))
     {
       return;
     }
@@ -263,10 +263,10 @@ namespace ao::winui
 
   void TrackQuickFilterControl::handleLoaded()
   {
-    std::ignore = bindEditor();
+    std::ignore = tryBindEditor();
   }
 
-  bool TrackQuickFilterControl::bindEditor()
+  bool TrackQuickFilterControl::tryBindEditor()
   {
     auto const editor = findTextBox(_input);
 
@@ -296,7 +296,7 @@ namespace ao::winui
 
   void TrackQuickFilterControl::refreshSuggestions()
   {
-    if (_applyingState || !_completerPtr || (!bindEditor() && !_editor))
+    if (_applyingState || !_completerPtr || (!tryBindEditor() && !_editor))
     {
       clearSuggestions();
       return;
@@ -369,7 +369,7 @@ namespace ao::winui
     return index < _suggestionRows.size() ? std::optional{index} : std::nullopt;
   }
 
-  bool TrackQuickFilterControl::acceptSuggestion(std::size_t const index)
+  bool TrackQuickFilterControl::tryAcceptSuggestion(std::size_t const index)
   {
     if (!_optCompletionResult || index >= _suggestionRows.size())
     {
@@ -411,7 +411,7 @@ namespace ao::winui
       _input.Text(winrt::hstring{nativeText});
       clearSuggestions();
 
-      if (bindEditor())
+      if (tryBindEditor())
       {
         _editor.Select(static_cast<std::int32_t>(caret), 0);
       }

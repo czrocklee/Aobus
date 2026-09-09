@@ -61,19 +61,19 @@ namespace ao::winui
         .optionalScalar("width", window.width)
         .optionalScalar("height", window.height)
         .optionalScalar("maximized", window.maximized);
-      auto result = std::move(reader).finish(std::move(window));
+      auto res = std::move(reader).finish(std::move(window));
 
-      if (!result)
+      if (!res)
       {
-        return result;
+        return res;
       }
 
-      if (result->width < kMinimumWindowWidth || result->height < kMinimumWindowHeight)
+      if (res->width < kMinimumWindowWidth || res->height < kMinimumWindowHeight)
       {
         return makeError(Error::Code::FormatRejected, "Windows window size must be at least 640x480");
       }
 
-      return result;
+      return res;
     }
 
     Result<> requireCurrentVersion(std::uint32_t const version)
@@ -162,9 +162,9 @@ namespace ao::winui
   {
     constexpr auto kContext = std::string_view{"Windows desktop settings"};
 
-    if (auto const result = yaml::requireMap(node, kContext); !result)
+    if (auto const res = yaml::requireMap(node, kContext); !res)
     {
-      return std::unexpected{result.error()};
+      return std::unexpected{res.error()};
     }
 
     auto versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
@@ -204,11 +204,11 @@ namespace ao::winui
       .optionalScalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
       .optionalScalar("navigationPaneWidth", state.navigationPaneWidth)
       .optionalScalar("inspectorPaneWidth", state.inspectorPaneWidth);
-    auto result = std::move(reader).finish(std::move(state));
+    auto res = std::move(reader).finish(std::move(state));
 
-    if (!result)
+    if (!res)
     {
-      return result;
+      return res;
     }
 
     auto modeRes = shellModeFromId(modeId);
@@ -218,13 +218,13 @@ namespace ao::winui
       return std::unexpected{modeRes.error()};
     }
 
-    result->shellMode = *modeRes;
+    res->shellMode = *modeRes;
 
-    if (auto const validRes = validateSettingsValues(*result); !validRes)
+    if (auto const validRes = validateSettingsValues(*res); !validRes)
     {
       return std::unexpected{validRes.error()};
     }
 
-    return result;
+    return res;
   }
 } // namespace ao::winui

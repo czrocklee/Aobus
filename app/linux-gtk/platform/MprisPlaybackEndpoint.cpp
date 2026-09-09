@@ -27,7 +27,7 @@ namespace ao::gtk::platform
   {
   }
 
-  bool MprisPlaybackEndpoint::dispatchPlayerMethod(std::string_view const methodName) const
+  bool MprisPlaybackEndpoint::tryDispatchPlayerMethod(std::string_view const methodName) const
   {
     auto const optCommand = commandForPlayerMethod(methodName);
 
@@ -36,11 +36,11 @@ namespace ao::gtk::platform
       return false;
     }
 
-    _actions.execute(*optCommand);
+    _actions.tryExecute(*optCommand);
     return true;
   }
 
-  bool MprisPlaybackEndpoint::dispatchRootMethod(std::string_view const methodName) const
+  bool MprisPlaybackEndpoint::tryDispatchRootMethod(std::string_view const methodName) const
   {
     if (methodName == "Raise")
     {
@@ -55,7 +55,7 @@ namespace ao::gtk::platform
     return false;
   }
 
-  bool MprisPlaybackEndpoint::dispatchSeek(std::int64_t const offsetUs)
+  bool MprisPlaybackEndpoint::tryHandleSeek(std::int64_t const offsetUs)
   {
     auto const& state = _playback.snapshot().transport;
 
@@ -66,7 +66,7 @@ namespace ao::gtk::platform
 
     if (isRelativeSeekPastEnd(state, offsetUs))
     {
-      _actions.execute(uimodel::PlaybackCommand::Next);
+      _actions.tryExecute(uimodel::PlaybackCommand::Next);
       return true;
     }
 
@@ -74,8 +74,8 @@ namespace ao::gtk::platform
     return true;
   }
 
-  bool MprisPlaybackEndpoint::dispatchSetPosition(std::string_view const requestedTrackObjectPath,
-                                                  std::int64_t const positionUs)
+  bool MprisPlaybackEndpoint::tryHandleSetPosition(std::string_view const requestedTrackObjectPath,
+                                                   std::int64_t const positionUs)
   {
     auto const& state = _playback.snapshot().transport;
 
@@ -105,7 +105,7 @@ namespace ao::gtk::platform
     return true;
   }
 
-  bool MprisPlaybackEndpoint::dispatchSetRate(double const rate) const
+  bool MprisPlaybackEndpoint::tryDispatchSetRate(double const rate) const
   {
     if (!std::isfinite(rate))
     {
@@ -114,7 +114,7 @@ namespace ao::gtk::platform
 
     if (rate == 0.0)
     {
-      _actions.execute(uimodel::PlaybackCommand::Pause);
+      _actions.tryExecute(uimodel::PlaybackCommand::Pause);
     }
 
     return true;
@@ -130,7 +130,7 @@ namespace ao::gtk::platform
     _playbackCommands.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
   }
 
-  bool MprisPlaybackEndpoint::dispatchSetLoopStatus(std::string_view const loopStatus)
+  bool MprisPlaybackEndpoint::tryDispatchSetLoopStatus(std::string_view const loopStatus)
   {
     auto const optMode = MprisBridge::repeatModeForLoopStatus(loopStatus);
 

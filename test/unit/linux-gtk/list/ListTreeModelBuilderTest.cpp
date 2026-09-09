@@ -32,17 +32,17 @@ namespace ao::gtk::test
     // 1. Add some lists to the library
     auto& commands = fixture.runtime().library().commands();
     auto const idA = ao::test::requireValue(
-      runGtkTask(fixture.runtime(), commands.createList(rt::ListDraft{.name = "Parent List A"})));
+      runGtkTask(fixture.runtime(), commands.createListAsync(rt::ListDraft{.name = "Parent List A"})));
     drainGtkEvents();
     auto const idB = ao::test::requireValue(runGtkTask(fixture.runtime(),
-                                                       commands.createList(rt::ListDraft{
+                                                       commands.createListAsync(rt::ListDraft{
                                                          .parentId = idA,
                                                          .name = "Filtered Child B",
                                                          .expression = "$genre = Rock",
                                                        })));
     drainGtkEvents();
-    auto const idC =
-      ao::test::requireValue(runGtkTask(fixture.runtime(), commands.createList(rt::ListDraft{.name = "Root List C"})));
+    auto const idC = ao::test::requireValue(
+      runGtkTask(fixture.runtime(), commands.createListAsync(rt::ListDraft{.name = "Root List C"})));
     drainGtkEvents();
 
     // 2. Build the model

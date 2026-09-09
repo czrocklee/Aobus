@@ -5,6 +5,7 @@
 
 #include <ao/winui/layout/ElementKind.h>
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -63,7 +64,7 @@ namespace ao::winui
    * A `TextBlock` draws glyphs and nothing behind them, so a slot authored on
    * one would silently do nothing. Rejecting it keeps the preset honest.
    */
-  bool elementKindAcceptsSurface(ElementKind kind) noexcept;
+  bool acceptsSurfaceForElementKind(ElementKind kind) noexcept;
 
   /**
    * @brief Surface @p node authors, or nullopt when it authors none.

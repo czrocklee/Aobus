@@ -32,11 +32,11 @@ namespace ao::library::test
     static_assert(!HasRawListUpdate<ListStore::Writer>);
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
-      auto result = writer.create(prepared);
-      REQUIRE(result);
-      auto optView = writer.get(*result);
+      auto res = writer.create(prepared);
+      REQUIRE(res);
+      auto optView = writer.get(*res);
       REQUIRE(optView);
-      return {*result, *optView};
+      return {*res, *optView};
     }
   } // namespace
 
@@ -103,7 +103,7 @@ namespace ao::library::test
 
     // Delete it
     auto wtxn3 = writeTransaction(library);
-    REQUIRE(physicalWriter(store, wtxn3).remove(id));
+    REQUIRE(physicalWriter(store, wtxn3).tryRemove(id));
     REQUIRE(wtxn3.commit());
 
     // Verify it's gone

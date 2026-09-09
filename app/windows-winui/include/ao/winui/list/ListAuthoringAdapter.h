@@ -41,7 +41,7 @@ namespace ao::winui
   };
 
   /// Whether one committed library publication changes the saved-List tree.
-  bool listTreeChangeRequiresRebuild(rt::LibraryChangeSet const& changeSet) noexcept;
+  bool needsListTreeRebuild(rt::LibraryChangeSet const& changeSet) noexcept;
 
   /// Resolve the presentation that an authored saved List must display after save.
   rt::TrackPresentationSpec resolveListAuthoringPresentation(uimodel::ListPresentations const& listPresentations,

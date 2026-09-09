@@ -63,7 +63,7 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}, {"revealed", LayoutValue{false}}},
     };
 
-    auto const changed = promotePanelSizeDefaults(doc, stateDoc);
+    auto const changed = tryPromotePanelSizeDefaults(doc, stateDoc);
 
     CHECK(changed);
 
@@ -90,7 +90,7 @@ namespace ao::uimodel::test
 
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
 
-    auto const changed = promotePanelSizeDefaults(doc, stateDoc);
+    auto const changed = tryPromotePanelSizeDefaults(doc, stateDoc);
 
     CHECK_FALSE(changed);
   }
@@ -119,7 +119,7 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}},
     };
 
-    CHECK(promotePanelSizeDefaults(doc, stateDoc));
+    CHECK(tryPromotePanelSizeDefaults(doc, stateDoc));
   }
 
   TEST_CASE("LayoutStatePromoter - rejects mismatched baseline hash", "[uimodel][unit][layout][component]")
@@ -136,7 +136,7 @@ namespace ao::uimodel::test
       .state = {{"positionPercent", LayoutValue{0.42}}},
     };
 
-    CHECK_FALSE(promotePanelSizeDefaults(doc, stateDoc));
+    CHECK_FALSE(tryPromotePanelSizeDefaults(doc, stateDoc));
   }
 
   TEST_CASE("LayoutStatePromoter - ignores malformed state types", "[uimodel][unit][layout][component]")
@@ -153,6 +153,6 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{true}}},
     };
 
-    CHECK_FALSE(promotePanelSizeDefaults(doc, stateDoc));
+    CHECK_FALSE(tryPromotePanelSizeDefaults(doc, stateDoc));
   }
 } // namespace ao::uimodel::test

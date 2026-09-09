@@ -33,29 +33,29 @@ namespace ao::test
       throw std::forward<T>(value);
     }
 
-    bool acceptingSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       std::fputs("AOBUS_TEST sink=accepted\n", stderr);
       std::fflush(stderr);
       return true;
     }
 
-    bool rejectingSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptRejectedFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       return false;
     }
 
-    bool throwingSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptFatalWithThrow(FatalDiagnostic const& /*diagnostic*/)
     {
       throwProbeValue(std::runtime_error{"probe sink failure"});
     }
 
-    bool recursiveSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptFatalRecursively(FatalDiagnostic const& /*diagnostic*/)
     {
       AO_FATAL("recursive sink entry");
     }
 
-    bool blockingSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptFatalAfterBlocking(FatalDiagnostic const& /*diagnostic*/)
     {
       concurrentFatalEntered().release();
 
@@ -65,7 +65,7 @@ namespace ao::test
       }
     }
 
-    bool throwingCondition()
+    bool isThrowingCondition()
     {
       throwProbeValue(std::runtime_error{"probe condition failure"});
     }
@@ -77,7 +77,7 @@ namespace ao::test
 
     void requireSinkRegistration(FatalSink sink)
     {
-      auto const registered = registerFatalSink(sink);
+      auto const registered = tryRegisterFatalSink(sink);
       AO_INVARIANT(registered, "Fatal probe could not register its sink");
     }
   } // namespace
@@ -112,31 +112,31 @@ namespace ao::test
 
     if (scenario == "realtime-invariant")
     {
-      requireSinkRegistration(&acceptingSink);
+      requireSinkRegistration(&tryAcceptFatal);
       AO_RT_INVARIANT(false, "realtime probe");
     }
 
     if (scenario == "accepted-sink")
     {
-      requireSinkRegistration(&acceptingSink);
+      requireSinkRegistration(&tryAcceptFatal);
       AO_FATAL("accepted sink probe");
     }
 
     if (scenario == "rejected-sink")
     {
-      requireSinkRegistration(&rejectingSink);
+      requireSinkRegistration(&tryAcceptRejectedFatal);
       AO_FATAL("rejected sink probe");
     }
 
     if (scenario == "throwing-sink")
     {
-      requireSinkRegistration(&throwingSink);
+      requireSinkRegistration(&tryAcceptFatalWithThrow);
       AO_FATAL("throwing sink probe");
     }
 
     if (scenario == "recursive-sink")
     {
-      requireSinkRegistration(&recursiveSink);
+      requireSinkRegistration(&tryAcceptFatalRecursively);
       AO_FATAL("recursive sink probe");
     }
 
@@ -184,7 +184,7 @@ namespace ao::test
 
     if (scenario == "throwing-condition")
     {
-      AO_EXPECTS(throwingCondition(), "unreachable context");
+      AO_EXPECTS(isThrowingCondition(), "unreachable context");
     }
 
     if (scenario == "throwing-context")
@@ -194,7 +194,7 @@ namespace ao::test
 
     if (scenario == "concurrent-entry")
     {
-      requireSinkRegistration(&blockingSink);
+      requireSinkRegistration(&tryAcceptFatalAfterBlocking);
       auto firstFatalThread = std::jthread{[] { AO_FATAL("first concurrent fatal"); }};
       concurrentFatalEntered().acquire();
       AO_FATAL("second concurrent fatal");

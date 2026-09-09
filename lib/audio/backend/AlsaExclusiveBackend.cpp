@@ -154,7 +154,7 @@ namespace ao::audio::backend
       return format.sampleRate != 0U && format.channels != 0U && format.encoding != SampleEncoding::Unknown;
     }
 
-    bool setPlaybackVolumeAll(::snd_mixer_elem_t* elem, std::ptrdiff_t value)
+    bool trySetPlaybackVolumeAll(::snd_mixer_elem_t* elem, std::ptrdiff_t value)
     {
       return ::snd_mixer_selem_set_playback_volume_all(elem, toAlsaMixerLevel(value)) == 0;
     }
@@ -215,7 +215,7 @@ namespace ao::audio::backend
       return candidates;
     }
 
-    bool verifyMixerWriteReadback(AlsaMixerCandidate const& candidate, AlsaMixerRange const& range)
+    bool tryVerifyMixerWriteReadback(AlsaMixerCandidate const& candidate, AlsaMixerRange const& range)
     {
       auto const optOriginal = optPlaybackVolume(candidate.elem, SND_MIXER_SCHN_FRONT_LEFT);
 
@@ -231,7 +231,7 @@ namespace ao::audio::backend
         return false;
       }
 
-      if (!setPlaybackVolumeAll(candidate.elem, *optTarget))
+      if (!trySetPlaybackVolumeAll(candidate.elem, *optTarget))
       {
         return false;
       }
@@ -240,11 +240,11 @@ namespace ao::audio::backend
 
       if (!optReadback || *optReadback != *optTarget)
       {
-        setPlaybackVolumeAll(candidate.elem, *optOriginal);
+        trySetPlaybackVolumeAll(candidate.elem, *optOriginal);
         return false;
       }
 
-      if (!setPlaybackVolumeAll(candidate.elem, *optOriginal))
+      if (!trySetPlaybackVolumeAll(candidate.elem, *optOriginal))
       {
         return false;
       }
@@ -257,11 +257,11 @@ namespace ao::audio::backend
     public:
       AlsaMixerSession() = default;
 
-      bool init(::snd_pcm_t* pcm)
+      bool tryInit(::snd_pcm_t* pcm)
       {
         auto const lock = std::scoped_lock{_handleMutex};
 
-        if (!openMixer(pcm))
+        if (!tryOpenMixer(pcm))
         {
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
           return false;
@@ -287,13 +287,13 @@ namespace ao::audio::backend
         _volumeMode = detail::AlsaVolumeControlMode::Unavailable;
       }
 
-      bool setVolume(float vol)
+      bool trySetVolume(float vol)
       {
         auto const lock = std::scoped_lock{_handleMutex};
         float const clamped = std::clamp(vol, 0.0F, 1.0F);
         _softwareVolume = clamped;
 
-        if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !applyHardwareVolume(clamped))
+        if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !tryApplyHardwareVolume(clamped))
         {
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
           return false;
@@ -302,12 +302,12 @@ namespace ao::audio::backend
         return true;
       }
 
-      bool setMuted(bool mute)
+      bool trySetMuted(bool mute)
       {
         auto const lock = std::scoped_lock{_handleMutex};
         _softwareMuted = mute;
 
-        if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !applyHardwareMute(mute))
+        if (_volumeMode.load() == detail::AlsaVolumeControlMode::HardwareMixer && !tryApplyHardwareMute(mute))
         {
           _volumeMode = detail::AlsaVolumeControlMode::SoftwareGain;
           return false;
@@ -342,7 +342,7 @@ namespace ao::audio::backend
         return 1.0F;
       }
 
-      bool readHardwareMuted() const
+      bool isHardwareMuted() const
       {
         auto const lock = std::scoped_lock{_handleMutex};
 
@@ -365,7 +365,7 @@ namespace ao::audio::backend
       bool isSoftwareMuted() const { return _softwareMuted.load(); }
 
     private:
-      bool openMixer(::snd_pcm_t* pcm)
+      bool tryOpenMixer(::snd_pcm_t* pcm)
       {
         ::snd_pcm_info_t* info = nullptr;
         snd_pcm_info_alloca(&info);
@@ -407,7 +407,7 @@ namespace ao::audio::backend
       {
         auto const optRange = optPlaybackVolumeRange(candidate.elem);
 
-        if (!optRange || !verifyMixerWriteReadback(candidate, *optRange))
+        if (!optRange || !tryVerifyMixerWriteReadback(candidate, *optRange))
         {
           return false;
         }
@@ -428,7 +428,7 @@ namespace ao::audio::backend
         return true;
       }
 
-      bool applyHardwareVolume(float vol) const
+      bool tryApplyHardwareVolume(float vol) const
       {
         if (_mixerElem == nullptr)
         {
@@ -455,7 +455,7 @@ namespace ao::audio::backend
         return err == 0;
       }
 
-      bool applyHardwareMute(bool mute) const
+      bool tryApplyHardwareMute(bool mute) const
       {
         if (_mixerElem == nullptr)
         {
@@ -556,7 +556,7 @@ namespace ao::audio::backend
     Result<NegotiatedMode> negotiateHwParams(::snd_pcm_t* pcm, SignalFormat const& sourceFormat);
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
-    bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
+    bool tryWaitForFrames(::snd_pcm_uframes_t periodSize) const;
     void handleXrun(std::int32_t err) const;
     void commitFrames(::snd_pcm_uframes_t offset,
                       ::snd_pcm_uframes_t framesRead,
@@ -603,7 +603,7 @@ namespace ao::audio::backend
         continue;
       }
 
-      if (!waitForFrames(periodSize))
+      if (!tryWaitForFrames(periodSize))
       {
         continue;
       }
@@ -732,7 +732,7 @@ namespace ao::audio::backend
     }
   }
 
-  bool AlsaExclusiveBackend::Impl::waitForFrames(::snd_pcm_uframes_t periodSize) const
+  bool AlsaExclusiveBackend::Impl::tryWaitForFrames(::snd_pcm_uframes_t periodSize) const
   {
     auto const avail = ::snd_pcm_avail_update(pcmPtr.get());
 
@@ -798,7 +798,7 @@ namespace ao::audio::backend
     if (mode == detail::AlsaVolumeControlMode::HardwareMixer)
     {
       vol = mixer.readHardwareVolume();
-      muted = mixer.readHardwareMuted();
+      muted = mixer.isHardwareMuted();
     }
     else
     {
@@ -818,14 +818,14 @@ namespace ao::audio::backend
   }
   Result<> AlsaExclusiveBackend::Impl::setVolumeProperty(PropertyValue const& value)
   {
-    mixer.setVolume(std::get<float>(value));
+    mixer.trySetVolume(std::get<float>(value));
     publishGraphState();
     return {};
   }
 
   Result<> AlsaExclusiveBackend::Impl::setMutedProperty(PropertyValue const& value)
   {
-    mixer.setMuted(std::get<bool>(value));
+    mixer.trySetMuted(std::get<bool>(value));
     publishGraphState();
     return {};
   }
@@ -947,7 +947,7 @@ namespace ao::audio::backend
 
     canPause = (::snd_pcm_hw_params_can_pause(applied) == 1);
 
-    if (!samePcmMode(clientFormat, *optCurrentFormat))
+    if (!isSamePcmMode(clientFormat, *optCurrentFormat))
     {
       return makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested");
     }
@@ -1072,9 +1072,9 @@ namespace ao::audio::backend
       return std::unexpected{negotiatedRes.error()};
     }
 
-    if (auto const resRes = _implPtr->configureSwParams(safePcmPtr.get(), negotiatedRes->periodSize); !resRes)
+    if (auto const res = _implPtr->configureSwParams(safePcmPtr.get(), negotiatedRes->periodSize); !res)
     {
-      return std::unexpected{resRes.error()};
+      return std::unexpected{res.error()};
     }
 
     _implPtr->optOpenedMode = negotiatedRes->mode;
@@ -1083,7 +1083,7 @@ namespace ao::audio::backend
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
 
-    _implPtr->mixer.init(_implPtr->pcmPtr.get());
+    _implPtr->mixer.tryInit(_implPtr->pcmPtr.get());
 
     _implPtr->publishGraphState();
 
@@ -1215,7 +1215,7 @@ namespace ao::audio::backend
     {
       if (_implPtr->mixer.volumeMode() == detail::AlsaVolumeControlMode::HardwareMixer)
       {
-        return _implPtr->mixer.readHardwareMuted();
+        return _implPtr->mixer.isHardwareMuted();
       }
 
       return _implPtr->mixer.isSoftwareMuted();

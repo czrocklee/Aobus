@@ -80,15 +80,15 @@ namespace ao::query::test
     }
   } // namespace
 
-  bool evaluateWithDictionary(PlanEvaluator const& evaluator,
-                              ExecutionPlan const& plan,
-                              TrackView const& track,
-                              DictionaryStore const& dictionary)
+  bool matchesFullPlanWithDictionary(PlanEvaluator const& evaluator,
+                                     ExecutionPlan const& plan,
+                                     TrackView const& track,
+                                     DictionaryStore const& dictionary)
   {
     auto cache = DictionaryReadCache{dictionary};
     auto context = DictionaryReadContext{cache};
     auto const binding = PlanBinding{plan, context};
-    return evaluator.evaluateFull(binding, track);
+    return evaluator.matchesFullPlan(binding, track);
   }
 
   bool matchesWithDictionary(PlanEvaluator const& evaluator,

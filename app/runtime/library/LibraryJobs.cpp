@@ -138,7 +138,7 @@ namespace ao::rt
       bool cancelled = false;
     };
 
-    async::Task<Result<CoordinatedScanResult>> applyCoordinatedScan(
+    async::Task<Result<CoordinatedScanResult>> applyCoordinatedScanAsync(
       LibraryWriteLane::Submission submission,
       LibraryWriteLane::BackgroundTaskLease const* backgroundTask,
       library::MusicLibrary* library,
@@ -158,7 +158,7 @@ namespace ao::rt
         co_return std::unexpected{prepareRes.error()};
       }
 
-      if (operation.cancelled())
+      if (operation.isCancelled())
       {
         co_return CoordinatedScanResult{.result = std::move(*prepareRes), .cancelled = true};
       }
@@ -173,14 +173,14 @@ namespace ao::rt
           auto propagateStop = [&combinedStopSource] { std::ignore = combinedStopSource.request_stop(); };
           auto callerStop = std::stop_callback{stopToken, propagateStop};
           auto closingStop = std::stop_callback{closingStopToken, propagateStop};
-          auto result = operation.revalidatePreparedFiles(combinedStopSource.get_token());
+          auto res = operation.revalidatePreparedFiles(combinedStopSource.get_token());
 
-          if (!result)
+          if (!res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
-          revalidatedResult = std::move(*result);
+          revalidatedResult = std::move(*res);
           return {};
         });
 
@@ -191,13 +191,13 @@ namespace ao::rt
 
       auto mutation = std::move(*mutationRes);
 
-      if (operation.cancelled())
+      if (operation.isCancelled())
       {
         mutation.abort();
         co_return CoordinatedScanResult{.result = std::move(revalidatedResult), .cancelled = true};
       }
 
-      if (!operation.readyForMutation())
+      if (!operation.isReadyForMutation())
       {
         mutation.abort();
         co_return CoordinatedScanResult{.result = std::move(revalidatedResult)};
@@ -221,14 +221,14 @@ namespace ao::rt
 
           auto result = std::move(*applyRes);
 
-          if (operation.cancelled())
+          if (operation.isCancelled())
           {
             return Unchanged<CoordinatedScanResult>{
               .value = CoordinatedScanResult{.result = std::move(result), .cancelled = true},
             };
           }
 
-          if (!operation.transactionShouldCommit())
+          if (!operation.shouldCommitTransaction())
           {
             return Unchanged<CoordinatedScanResult>{
               .value = CoordinatedScanResult{.result = std::move(result)},
@@ -308,7 +308,7 @@ namespace ao::rt
       };
     }
 
-    async::Task<Result<AudioIdentityBatchCommitResult>> commitAudioIdentityBatch(
+    async::Task<Result<AudioIdentityBatchCommitResult>> commitAudioIdentityBatchAsync(
       LibraryWriteLane::Submission submission,
       LibraryWriteLane::BackgroundTaskLease const* backgroundTask,
       std::vector<AudioIdentityWriteCandidate> candidates)
@@ -326,19 +326,19 @@ namespace ao::rt
         [candidates = std::move(candidates)](
           library::LibraryWrite& transaction) -> Result<OperationOutcome<AudioIdentityBatchCommitResult>>
         {
-          auto result = applyAudioIdentityBatch(transaction, candidates);
+          auto res = applyAudioIdentityBatch(transaction, candidates);
 
-          if (!result)
+          if (!res)
           {
-            return std::unexpected{result.error()};
+            return std::unexpected{res.error()};
           }
 
-          if (result->completedCount == 0)
+          if (res->completedCount == 0)
           {
-            return Unchanged<AudioIdentityBatchCommitResult>{.value = std::move(*result)};
+            return Unchanged<AudioIdentityBatchCommitResult>{.value = std::move(*res)};
           }
 
-          return Changed<AudioIdentityBatchCommitResult>{.value = std::move(*result), .changeSet = {}};
+          return Changed<AudioIdentityBatchCommitResult>{.value = std::move(*res), .changeSet = {}};
         },
         "Backfill audio identity");
 
@@ -356,7 +356,7 @@ namespace ao::rt
     {
       return [submission = std::move(submission),
               backgroundTask = &backgroundTask](std::vector<AudioIdentityWriteCandidate> candidates) mutable
-      { return commitAudioIdentityBatch(submission, backgroundTask, std::move(candidates)); };
+      { return commitAudioIdentityBatchAsync(submission, backgroundTask, std::move(candidates)); };
     }
 
     AudioIdentityIndexProgressCallback makeAudioIdentityProgressReporter(LibraryTaskProgressPublisher publish,
@@ -501,13 +501,13 @@ namespace ao::rt
       signalsPtr->progressFinished.emit(LibraryTaskProgressFinished{.id = id});
     }
 
-    async::Task<void> resumeOnCallbackExecutorForFinalization()
+    async::Task<void> resumeOnCallbackExecutorForFinalizationAsync()
     {
       auto deferredFailure = std::exception_ptr{};
 
       try
       {
-        co_await asyncRuntime.resumeOnCallbackExecutor();
+        co_await asyncRuntime.resumeOnCallbackExecutorAsync();
       }
       catch (...)
       {
@@ -551,7 +551,7 @@ namespace ao::rt
                                                                                 ImportMode const mode,
                                                                                 std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
     auto progressConversation = _implPtr->makeProgressConversation();
     progressConversation.publish(LibraryTaskProgressKind::PreparingImport, 0.0, utility::pathToUtf8(path.filename()));
     auto backgroundTaskRes = _implPtr->writeLane.beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::Import);
@@ -567,7 +567,7 @@ namespace ao::rt
 
     if (!maintenanceRes)
     {
-      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
       backgroundTask.finish();
       _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
@@ -581,7 +581,7 @@ namespace ao::rt
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("LibraryImportPreview");
 
       auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
@@ -643,7 +643,7 @@ namespace ao::rt
       settlementFailure = std::current_exception();
     }
 
-    co_await _implPtr->resumeOnCallbackExecutorForFinalization();
+    co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
 
     backgroundTask.finish();
     _implPtr->notifyProgressFinished(progressConversation.id);
@@ -671,7 +671,7 @@ namespace ao::rt
   async::Task<Result<ImportReport>> LibraryJobs::applyLibraryImportPlanAsync(LibraryImportPlan plan,
                                                                              std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
 
     AO_EXPECTS(plan._implPtr, "Import plan has already been consumed");
     auto progressConversation = _implPtr->makeProgressConversation();
@@ -691,7 +691,7 @@ namespace ao::rt
 
     if (!maintenanceRes)
     {
-      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
       backgroundTask.finish();
       _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
@@ -705,7 +705,7 @@ namespace ao::rt
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("LibraryImport");
 
       if (auto const& binding = *plan._implPtr; availability.runtimeInstanceId != binding.runtimeInstanceId)
@@ -797,7 +797,7 @@ namespace ao::rt
       settlementFailure = std::current_exception();
     }
 
-    co_await _implPtr->resumeOnCallbackExecutorForFinalization();
+    co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
 
     backgroundTask.finish();
     _implPtr->notifyProgressFinished(progressConversation.id);
@@ -820,20 +820,20 @@ namespace ao::rt
                                                         rt::ExportMode mode,
                                                         std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
     auto progressConversation = _implPtr->makeProgressConversation();
     progressConversation.publish(LibraryTaskProgressKind::Exporting, 0.0, utility::pathToUtf8(path.filename()));
-    auto result = Result<>{};
+    auto res = Result<>{};
     auto deferredFailure = std::exception_ptr{};
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("LibraryExport");
       // Export only opens a read transaction; the LMDB snapshot is consistent
       // on its own, so it does not serialize against in-flight mutations.
       auto exporter = ao::rt::LibraryYamlExporter{_implPtr->library};
-      result = exporter.exportToYaml(path, mode, stopToken);
+      res = exporter.exportToYaml(path, mode, stopToken);
     }
     catch (...)
     {
@@ -843,7 +843,7 @@ namespace ao::rt
     // Resumed without the token so that a cancelled export still hands its
     // continuation back on the callback executor rather than throwing here, on a
     // worker.
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
     _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
@@ -856,19 +856,19 @@ namespace ao::rt
       async::throwOperationCancelled();
     }
 
-    co_return result;
+    co_return res;
   }
 
   async::Task<Result<ScanPlan>> LibraryJobs::buildScanPlanAsync(std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
     auto progressConversation = _implPtr->makeProgressConversation();
     auto optPlanRes = std::optional<Result<ScanPlan>>{};
     auto deferredFailure = std::exception_ptr{};
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("LibraryScan");
 
       // Plan building only opens a read transaction; the LMDB snapshot is
@@ -885,7 +885,7 @@ namespace ao::rt
       deferredFailure = std::current_exception();
     }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
     _implPtr->notifyProgressFinished(progressConversation.id);
 
     if (deferredFailure)
@@ -908,7 +908,7 @@ namespace ao::rt
                                                                        ScanProgressCallback progressCallback,
                                                                        ScanFailureCallback failureCallback)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
     auto progressConversation = _implPtr->makeProgressConversation();
     auto backgroundTaskRes = _implPtr->writeLane.beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
 
@@ -926,27 +926,27 @@ namespace ao::rt
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("ApplyScanPlan");
       auto progress =
         makeScanProgressReporter(totalItems, std::move(progressConversation.publish), std::move(progressCallback));
       auto failure = makeScanFailureReporter(std::move(failureCallback));
 
-      coordinatedScanRes = co_await applyCoordinatedScan(std::move(submission),
-                                                         &backgroundTask,
-                                                         &_implPtr->library,
-                                                         std::move(plan),
-                                                         options,
-                                                         std::move(progress),
-                                                         std::move(failure),
-                                                         stopToken);
+      coordinatedScanRes = co_await applyCoordinatedScanAsync(std::move(submission),
+                                                              &backgroundTask,
+                                                              &_implPtr->library,
+                                                              std::move(plan),
+                                                              options,
+                                                              std::move(progress),
+                                                              std::move(failure),
+                                                              stopToken);
     }
     catch (...)
     {
       deferredFailure = std::current_exception();
     }
 
-    co_await _implPtr->resumeOnCallbackExecutorForFinalization();
+    co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
 
     backgroundTask.finish();
     _implPtr->notifyProgressFinished(progressConversation.id);
@@ -980,7 +980,7 @@ namespace ao::rt
     AudioIdentityIndexProgressCallback progressCallback,
     AudioIdentityIndexFailureCallback failureCallback)
   {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync(stopToken);
     auto progressConversation = _implPtr->makeProgressConversation();
     auto backgroundTaskRes =
       _implPtr->writeLane.beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::AudioIdentityBackfill);
@@ -998,7 +998,7 @@ namespace ao::rt
 
     try
     {
-      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      co_await _implPtr->asyncRuntime.resumeOnWorkerAsync(stopToken);
       setCurrentThreadName("AudioBackfill");
       auto commitBatch = makeAudioIdentityCommitBatch(std::move(submission), backgroundTask);
       auto progress =
@@ -1008,15 +1008,15 @@ namespace ao::rt
       // Fingerprinting runs without writeLane writer ownership; each
       // bounded write-back acquires its own background mutation.
       auto indexer = AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library};
-      backfillRes =
-        co_await indexer.indexPending(std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
+      backfillRes = co_await indexer.indexPendingAsync(
+        std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
     }
     catch (...)
     {
       deferredFailure = std::current_exception();
     }
 
-    co_await _implPtr->resumeOnCallbackExecutorForFinalization();
+    co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
 
     backgroundTask.finish();
     _implPtr->notifyProgressFinished(progressConversation.id);

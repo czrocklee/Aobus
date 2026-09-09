@@ -67,7 +67,7 @@ namespace ao::winui::detail
     return std::optional<AdmissionTicket>{AdmissionTicket{*this, ownerThread}};
   }
 
-  bool DispatcherQueueAdmission::beginClosing() noexcept
+  bool DispatcherQueueAdmission::tryBeginClosing() noexcept
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -79,7 +79,7 @@ namespace ao::winui::detail
     return _state == DispatcherQueueAdmissionState::Closing;
   }
 
-  bool DispatcherQueueAdmission::beginDraining() noexcept
+  bool DispatcherQueueAdmission::tryBeginDraining() noexcept
   {
     auto lock = std::unique_lock{_mutex};
 
@@ -93,7 +93,7 @@ namespace ao::winui::detail
     return true;
   }
 
-  bool DispatcherQueueAdmission::finishClosing() noexcept
+  bool DispatcherQueueAdmission::tryFinishClosing() noexcept
   {
     auto const lock = std::scoped_lock{_mutex};
 
@@ -106,7 +106,7 @@ namespace ao::winui::detail
     return true;
   }
 
-  bool DispatcherQueueAdmission::closeForDestruction() noexcept
+  bool DispatcherQueueAdmission::tryCloseForDestruction() noexcept
   {
     auto lock = std::unique_lock{_mutex};
 

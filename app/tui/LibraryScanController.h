@@ -74,7 +74,7 @@ namespace ao::tui
   private:
     struct State;
 
-    static async::Task<void> runScan(std::shared_ptr<State> statePtr, std::stop_token stopToken);
+    static async::Task<void> runScanAsync(std::shared_ptr<State> statePtr, std::stop_token stopToken);
 
     std::shared_ptr<State> _statePtr;
   };

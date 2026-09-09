@@ -73,7 +73,7 @@ namespace ao::audio
 
     // Teardown gate shared by executor-marshalled callbacks. Foreign threads
     // may enqueue work after teardown begins, but queued work checks this gate
-    // before touching Impl and becomes a no-op once shutdown() has run.
+    // before touching Impl and becomes a no-op once tryShutdown() has run.
     struct CallbackGate final : std::enable_shared_from_this<CallbackGate>
     {
       CallbackGate(async::Executor& executor, Impl& owner)
@@ -110,7 +110,7 @@ namespace ao::audio
           });
       }
 
-      bool shutdown() noexcept
+      bool tryShutdown() noexcept
       {
         AO_EXPECTS(executor.isCurrent());
 
@@ -182,7 +182,7 @@ namespace ao::audio
       AO_EXPECTS(executor.isCurrent());
       AO_EXPECTS(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
 
-      if (!gatePtr->shutdown())
+      if (!gatePtr->tryShutdown())
       {
         return;
       }
@@ -332,20 +332,20 @@ namespace ao::audio
     }
 
     template<typename Acceptance, typename Completion, typename Adopter>
-    static async::Task<void> runPreparation(async::Runtime* runtime,
-                                            std::shared_ptr<CallbackGate> callbackGatePtr,
-                                            async::TaskHandle Impl::* taskSlot,
-                                            detail::TrackPreparation preparation,
-                                            Acceptance acceptance,
-                                            Completion completion,
-                                            Adopter adopter,
-                                            std::stop_token stopToken)
+    static async::Task<void> runPreparationAsync(async::Runtime* runtime,
+                                                 std::shared_ptr<CallbackGate> callbackGatePtr,
+                                                 async::TaskHandle Impl::* taskSlot,
+                                                 detail::TrackPreparation preparation,
+                                                 Acceptance acceptance,
+                                                 Completion completion,
+                                                 Adopter adopter,
+                                                 std::stop_token stopToken)
     {
       auto preparedRes = preparation.inspect();
 
       if (preparedRes)
       {
-        co_await runtime->resumeOnCallbackExecutor(stopToken);
+        co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
         if (!callbackGatePtr->canAcceptCallbacks())
         {
@@ -358,12 +358,12 @@ namespace ao::audio
 
         if (preparedRes)
         {
-          co_await runtime->resumeOnWorker(stopToken);
+          co_await runtime->resumeOnWorkerAsync(stopToken);
           preparedRes = preparation.prepare();
         }
       }
 
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
+      co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
       settlePreparation(callbackGatePtr,
                         taskSlot,
                         std::move(preparation),
@@ -1103,7 +1103,7 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runPreparation(
+        return Impl::runPreparationAsync(
           runtime,
           std::move(callbackGatePtr),
           &Impl::startPreparationTask,
@@ -1183,7 +1183,7 @@ namespace ao::audio
       return std::unexpected{preparationRes.error()};
     }
 
-    if (!preparationRes->requiresWorker())
+    if (!preparationRes->needsWorker())
     {
       auto preparedRes = preparationRes->inspect();
 
@@ -1219,7 +1219,7 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runPreparation(
+        return Impl::runPreparationAsync(
           runtime,
           std::move(callbackGatePtr),
           &Impl::lookaheadPreparationTask,

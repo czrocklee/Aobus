@@ -166,26 +166,26 @@ namespace ao::rt::test
 
     SECTION("CoreRuntime")
     {
-      auto const result = CoreRuntime::create(std::make_unique<InlineExecutor>(),
-                                              tempDir.path(),
-                                              databaseFile.path,
-                                              tempDir.path() / "cache",
-                                              library::test::kTestMusicLibraryMapBytes);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::IoError);
+      auto const res = CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                           tempDir.path(),
+                                           databaseFile.path,
+                                           tempDir.path() / "cache",
+                                           library::test::kTestMusicLibraryMapBytes);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
 
     SECTION("AppRuntime")
     {
-      auto const result = AppRuntime::create(AppRuntimeDependencies{
+      auto const res = AppRuntime::create(AppRuntimeDependencies{
         .executorPtr = std::make_unique<InlineExecutor>(),
         .musicRoot = tempDir.path(),
         .databasePath = databaseFile.path,
         .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
         .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
       });
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::IoError);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
     }
   }
 
@@ -263,9 +263,9 @@ namespace ao::rt::test
     CHECK(static_cast<void const*>(&optRuntime->playback()) == playbackAddress);
     CHECK(static_cast<void const*>(&optRuntime->workspace()) == workspaceAddress);
     CHECK(static_cast<void const*>(&optRuntime->resourceBytes()) == resourcesAddress);
-    auto const result = optRuntime->playSelectionInFocusedView();
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
+    auto const res = optRuntime->playSelectionInFocusedView();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("AppRuntime - factory materializes All Tracks before exposure", "[runtime][unit][app-runtime][factory]")
@@ -378,8 +378,8 @@ namespace ao::rt::test
                                                               library::test::kTestMusicLibraryMapBytes));
 
     [[maybe_unused]] auto future =
-      runtime.async().spawn(runtime.library().commands().createList(ListDraft{.name = "Committed before close"}));
-    REQUIRE(executor->waitUntilQueued());
+      runtime.async().spawn(runtime.library().commands().createListAsync(ListDraft{.name = "Committed before close"}));
+    REQUIRE(executor->tryWaitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
 
     runtime.shutdown();
@@ -420,13 +420,13 @@ namespace ao::rt::test
                       [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
     auto const listId = ao::test::requireValue(runRuntimeTask(*appPtr,
-                                                              appPtr->library().commands().createList(ListDraft{
+                                                              appPtr->library().commands().createListAsync(ListDraft{
                                                                 .name = "Teardown order",
                                                               })));
     auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
     auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
     REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
-    REQUIRE(waitForPlaybackSettlement(
+    REQUIRE(tryWaitForPlaybackSettlement(
       *executor, previousPositionRevision, [&] { return appPtr->playback().snapshot().transport.positionRevision; }));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
@@ -441,7 +441,7 @@ namespace ao::rt::test
 
     executor->drain();
     auto output = std::array<std::byte, 4096>{};
-    REQUIRE(driveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
+    REQUIRE(tryDriveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
     CHECK(callbackCompleted);
     REQUIRE(appPtr);
 

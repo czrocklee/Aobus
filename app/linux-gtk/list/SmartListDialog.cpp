@@ -171,7 +171,7 @@ namespace ao::gtk
     _errorLabel.set_visible(!message.empty());
   }
 
-  bool SmartListDialog::beginSubmission()
+  bool SmartListDialog::tryBeginSubmission()
   {
     if (std::exchange(_submissionPending, true))
     {

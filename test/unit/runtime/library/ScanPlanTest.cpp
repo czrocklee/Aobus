@@ -263,7 +263,7 @@ namespace ao::rt::test
     auto const denied =
       ao::test::ScopedDirectoryAccessGuard{musicRoot / "restricted_dir", ao::test::DeniedDirectoryAccess::Read};
 
-    if (!denied.effective())
+    if (!denied.isEffective())
     {
       SKIP("the current process bypasses directory read restrictions");
     }
@@ -328,10 +328,10 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     auto scanner = LibraryScan{ml};
-    auto const result = scanner.buildPlan();
+    auto const res = scanner.buildPlan();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity", "[runtime][unit][library][scan]")
@@ -514,9 +514,9 @@ namespace ao::rt::test
       std::ignore = putManifestEntry(ml, "old.flac", AudioIdentity{});
       auto plan = LibraryScan{ml}.buildPlan().value();
 
-      auto result = std::move(plan).makeRelinkPlan("old.flac", "new.flac");
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      auto res = std::move(plan).makeRelinkPlan("old.flac", "new.flac");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("different non-pending identities")
@@ -537,9 +537,9 @@ namespace ao::rt::test
 
       REQUIRE(plan.count(ScanClassification::New) == 1);
       REQUIRE(plan.count(ScanClassification::Missing) == 2);
-      auto result = std::move(plan).makeRelinkPlan("old-basic.flac", "new.flac");
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
+      auto res = std::move(plan).makeRelinkPlan("old-basic.flac", "new.flac");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
   }
 

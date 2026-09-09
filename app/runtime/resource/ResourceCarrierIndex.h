@@ -76,7 +76,7 @@ namespace ao::rt
     ///
     /// Both the request that decides whether to rebuild and the rebuild that
     /// re-checks under its lock ask this one question, so they cannot disagree.
-    bool answersRevision(std::uint64_t const requestRevision) const noexcept
+    bool canAnswerRevision(std::uint64_t const requestRevision) const noexcept
     {
       return _libraryRevision >= requestRevision;
     }

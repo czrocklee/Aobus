@@ -51,7 +51,7 @@ namespace ao::uimodel
     std::optional<rt::ScanApplyResult> optApplyResult{};
     bool shouldBackfillAudioIdentity = false;
 
-    bool mutatedLibrary() const noexcept;
+    bool hasMutatedLibrary() const noexcept;
   };
 
   struct LibraryScanWorkflowFailure final
@@ -73,5 +73,5 @@ namespace ao::uimodel
   LibraryScanOutcome decideLibraryScanOutcome(
     std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure> const& result);
   async::Task<std::expected<LibraryScanWorkflowResult, LibraryScanWorkflowFailure>>
-  runLibraryScanWorkflow(rt::LibraryJobs* jobs, LibraryScanMode mode, std::stop_token stopToken = {});
+  runLibraryScanWorkflowAsync(rt::LibraryJobs* jobs, LibraryScanMode mode, std::stop_token stopToken = {});
 } // namespace ao::uimodel

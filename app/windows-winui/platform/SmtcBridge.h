@@ -56,11 +56,11 @@ namespace ao::winui
     static void retireNativeSession(State& state) noexcept;
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void updateArtwork(ResourceId resourceId);
-    static async::Task<void> prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
-                                                    async::Runtime* runtime,
-                                                    ResourceId resourceId,
-                                                    rt::ResourceBytes bytes,
-                                                    std::stop_token stopToken);
+    static async::Task<void> prepareAndWriteArtworkAsync(std::weak_ptr<State> statePtr,
+                                                         async::Runtime* runtime,
+                                                         ResourceId resourceId,
+                                                         rt::ResourceBytes bytes,
+                                                         std::stop_token stopToken);
     static void writeArtworkStream(State& state, ResourceId resourceId, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;

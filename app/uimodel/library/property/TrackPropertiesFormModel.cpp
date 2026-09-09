@@ -21,7 +21,7 @@ namespace ao::uimodel
 {
   namespace
   {
-    bool editMatchesOriginal(TrackPropertiesFormFieldState const& state)
+    bool matchesOriginalEdit(TrackPropertiesFormFieldState const& state)
     {
       if (auto const* text = std::get_if<std::string>(&state.currentEditValue); text != nullptr)
       {
@@ -67,8 +67,8 @@ namespace ao::uimodel
       };
     }
 
-    bool mergeTrackPropertiesFormFieldState(TrackPropertiesFormFieldState& state,
-                                            rt::TrackFieldRawValue const& rawValue)
+    bool tryMergeTrackPropertiesFormFieldState(TrackPropertiesFormFieldState& state,
+                                               rt::TrackFieldRawValue const& rawValue)
     {
       if (state.mixed || rawValue == state.originalRawValue)
       {
@@ -79,25 +79,25 @@ namespace ao::uimodel
       return true;
     }
 
-    bool writeTrackPropertiesFormEdit(rt::MetadataPatch& patch, TrackPropertiesFormFieldState const& state)
+    bool tryWriteTrackPropertiesFormEdit(rt::MetadataPatch& patch, TrackPropertiesFormFieldState const& state)
     {
       if (!state.editable || !canWriteTrackFieldPatch(state.field) || (state.mixed && !state.explicitReplacement))
       {
         return false;
       }
 
-      if (!state.mixed && editMatchesOriginal(state))
+      if (!state.mixed && matchesOriginalEdit(state))
       {
         return false;
       }
 
-      return writeTrackFieldPatch(patch, state.field, state.currentEditValue);
+      return tryWriteTrackFieldPatch(patch, state.field, state.currentEditValue);
     }
 
     bool hasFieldChange(TrackPropertiesFormFieldState const& state)
     {
       auto patch = rt::MetadataPatch{};
-      return writeTrackPropertiesFormEdit(patch, state);
+      return tryWriteTrackPropertiesFormEdit(patch, state);
     }
   } // namespace
 
@@ -124,11 +124,11 @@ namespace ao::uimodel
     }
   }
 
-  bool TrackPropertiesFormModel::mergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue)
+  bool TrackPropertiesFormModel::tryMergeTrackField(rt::TrackField field, rt::TrackFieldRawValue const& rawValue)
   {
     if (auto* const state = findField(field); state != nullptr)
     {
-      return mergeTrackPropertiesFormFieldState(*state, rawValue);
+      return tryMergeTrackPropertiesFormFieldState(*state, rawValue);
     }
 
     return false;
@@ -179,7 +179,7 @@ namespace ao::uimodel
 
     for (auto const& state : _fields)
     {
-      std::ignore = writeTrackPropertiesFormEdit(patch, state);
+      std::ignore = tryWriteTrackPropertiesFormEdit(patch, state);
     }
 
     return patch;

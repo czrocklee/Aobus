@@ -142,7 +142,7 @@ namespace ao::audio::test
       engine.setOnTrackEnded([&](Engine::TrackEnded const&) { trackEndedLatch.notify(); });
 
       backendRaw->emitDrainComplete();
-      CHECK(trackEndedLatch.waitForCount(1));
+      CHECK(trackEndedLatch.tryWaitForCount(1));
       CHECK(engine.status().transport == Transport::Idle);
     }
 
@@ -160,7 +160,7 @@ namespace ao::audio::test
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       backendRaw->emitBackendError("lost device");
-      CHECK(stateChanged.waitForCount(1));
+      CHECK(stateChanged.tryWaitForCount(1));
       CHECK(engine.status().transport == Transport::Error);
       CHECK(engine.status().statusText == "lost device");
     }
@@ -197,7 +197,7 @@ namespace ao::audio::test
 
     REQUIRE(committedRes);
     CHECK_FALSE(committedRes->playbackStarted);
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(endedGeneration.load(std::memory_order_acquire) == committedRes->generation);
     CHECK(engine.status().transport == Transport::Idle);
     auto const events = backendRaw->events();
@@ -250,7 +250,7 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     backendRaw->emitRouteReady("first-anchor");
-    REQUIRE(routeEntered.waitForCount(1));
+    REQUIRE(routeEntered.tryWaitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
@@ -268,7 +268,7 @@ namespace ao::audio::test
 
     backendRaw->emitRouteReady("second-anchor");
     releaseRoute.release();
-    REQUIRE(secondRouteLatch.waitForCount(1));
+    REQUIRE(secondRouteLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Playing);
   }
@@ -321,7 +321,7 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     backendRaw->emitRouteReady("before-seek");
-    REQUIRE(routeEntered.waitForCount(1));
+    REQUIRE(routeEntered.tryWaitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
@@ -338,7 +338,7 @@ namespace ao::audio::test
 
     backendRaw->emitRouteReady("after-seek");
     releaseRoute.release();
-    REQUIRE(afterSeekRouteLatch.waitForCount(1));
+    REQUIRE(afterSeekRouteLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Playing);
   }
@@ -389,7 +389,7 @@ namespace ao::audio::test
     // The quiesce path retired the render session, so the in-flight drain
     // signal is inert: only the seek's synchronous natural-completion path may
     // publish track end, and it quiesces the backend exactly once.
-    REQUIRE(endedLatch.waitForCount(1));
+    REQUIRE(endedLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 1);
     CHECK(engine.status().transport == Transport::Idle);
     CHECK(backendRaw->closeCount() == closesAfterPlay + 1);

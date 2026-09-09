@@ -44,10 +44,10 @@ namespace ao::rt::test
         output << payload.yaml;
       }
 
-      auto const result = LibraryYamlImporter{library}.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
-      CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string{payload.error}));
+      auto const res = LibraryYamlImporter{library}.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring(std::string{payload.error}));
     }
   } // namespace
 
@@ -305,10 +305,10 @@ library:
 )";
     }
 
-    auto const result = LibraryYamlImporter{library}.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
-    CHECK(result.error().message.contains("resolves outside the library root"));
+    auto const res = LibraryYamlImporter{library}.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("resolves outside the library root"));
   }
 
   TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][workflow][import-export][schema]")

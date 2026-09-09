@@ -156,10 +156,10 @@ namespace ao::audio::test
     auto const sourceFormat =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed24In32Le, destination);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(destination == std::vector<std::byte>{std::byte{0x56},
                                                 std::byte{0x34},
                                                 std::byte{0x12},
@@ -176,10 +176,10 @@ namespace ao::audio::test
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(destination == std::vector<std::byte>{std::byte{0x00},
                                                 std::byte{0x00},
                                                 std::byte{0x34},
@@ -197,10 +197,10 @@ namespace ao::audio::test
     auto const sourceFormat =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(destination == std::vector<std::byte>{std::byte{0x00}, std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
   }
 
@@ -213,11 +213,11 @@ namespace ao::audio::test
     auto const sourceFormat =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed16Le, destination);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
     CHECK(destination.empty());
   }
 
@@ -227,11 +227,11 @@ namespace ao::audio::test
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
 
-    auto const result = convertPcmEncoding(
+    auto const res = convertPcmEncoding(
       source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed24PackedLe, destination);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
     CHECK(destination.empty());
   }
 
@@ -243,10 +243,10 @@ namespace ao::audio::test
     auto const sourceFormat =
       PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Float32Le, destination);
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(destination == std::vector<std::byte>{std::byte{0xFE},
                                                 std::byte{0xFF},
                                                 std::byte{0x7F},
@@ -263,11 +263,11 @@ namespace ao::audio::test
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotSupported);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
     CHECK(destination.empty());
   }
 
@@ -278,11 +278,11 @@ namespace ao::audio::test
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(destination.empty());
   }
 
@@ -293,11 +293,11 @@ namespace ao::audio::test
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const mismatchedSignal = SignalFormat{.sampleRate = 44100, .channels = 1, .precisionBits = 16};
 
-    auto const result =
+    auto const res =
       convertPcmEncoding(source, sourceFormat, mismatchedSignal, SampleEncoding::Signed32Le, destination);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(destination.empty());
   }
 } // namespace ao::audio::test

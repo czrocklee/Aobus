@@ -35,36 +35,36 @@ namespace ao::gtk::test
 
       void markBodyFinished() const { bodyFinished.set(true); }
 
-      bool waitBodyFinished() const { return bodyFinished.waitUntil(true); }
+      bool tryWaitBodyFinished() const { return bodyFinished.tryWaitUntil(true); }
     };
 
-    async::Task<void> succeedingWorkflowBody(async::Runtime* runtime,
-                                             WorkflowOwner* owner,
-                                             std::stop_token const stopToken)
+    async::Task<void> succeedingWorkflowBodyAsync(async::Runtime* runtime,
+                                                  WorkflowOwner* owner,
+                                                  std::stop_token const stopToken)
     {
       owner->bodyEntered = true;
       owner->bodyEntryThread = std::this_thread::get_id();
-      co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorkerAsync(stopToken);
       owner->markBodyFinished();
     }
 
-    async::Task<void> markUnexpectedEntry(WorkflowOwner* owner, std::stop_token /*stopToken*/)
+    async::Task<void> markUnexpectedEntryAsync(WorkflowOwner* owner, std::stop_token /*stopToken*/)
     {
       owner->bodyEntered = true;
       co_return;
     }
 
-    async::Task<std::int32_t> produceResult(async::Runtime* runtime)
+    async::Task<std::int32_t> produceResultAsync(async::Runtime* runtime)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       co_return 42;
     }
 
-    async::Task<std::int32_t> produceDelayedResult(async::Runtime* runtime,
-                                                   AsyncTestState<bool> entered,
-                                                   AsyncBarrier* release)
+    async::Task<std::int32_t> produceDelayedResultAsync(async::Runtime* runtime,
+                                                        AsyncTestState<bool> entered,
+                                                        AsyncBarrier* release)
     {
-      co_await runtime->resumeOnWorker();
+      co_await runtime->resumeOnWorkerAsync();
       entered.set(true);
       release->wait();
       co_return 42;
@@ -83,11 +83,11 @@ namespace ao::gtk::test
                     owner,
                     "test UI workflow",
                     [&runtime](WorkflowOwner* self, std::stop_token const stopToken)
-                    { return succeedingWorkflowBody(&runtime, self, stopToken); });
+                    { return succeedingWorkflowBodyAsync(&runtime, self, stopToken); });
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     executor.runUntilIdle();
-    REQUIRE(owner.waitBodyFinished());
+    REQUIRE(owner.tryWaitBodyFinished());
 
     runtime.requestStop();
     runtime.join();
@@ -110,9 +110,9 @@ namespace ao::gtk::test
                     owner,
                     "test UI workflow cancellation",
                     [](WorkflowOwner* self, std::stop_token const stopToken)
-                    { return markUnexpectedEntry(self, stopToken); });
+                    { return markUnexpectedEntryAsync(self, stopToken); });
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     scope.cancelAll();
     executor.runUntilIdle();
 
@@ -134,7 +134,7 @@ namespace ao::gtk::test
                 scope,
                 owner,
                 "test UI result workflow",
-                produceResult(&runtime),
+                produceResultAsync(&runtime),
                 [](WorkflowOwner* self, std::int32_t const result)
                 {
                   self->result = result;
@@ -142,9 +142,9 @@ namespace ao::gtk::test
                   self->markBodyFinished();
                 });
 
-    REQUIRE(executor.waitUntilQueued());
-    REQUIRE(executor.drainUntil([&owner] { return owner.bodyFinished.load(); }));
-    REQUIRE(executor.drainUntil([&scope] { return scope.empty(); }));
+    REQUIRE(executor.tryWaitUntilQueued());
+    REQUIRE(executor.tryDrainUntil([&owner] { return owner.bodyFinished.load(); }));
+    REQUIRE(executor.tryDrainUntil([&scope] { return scope.empty(); }));
 
     runtime.requestStop();
     runtime.join();
@@ -169,12 +169,12 @@ namespace ao::gtk::test
                 scope,
                 *ownerPtr,
                 "test late UI result",
-                produceDelayedResult(&runtime, taskEntered, &releaseTask),
+                produceDelayedResultAsync(&runtime, taskEntered, &releaseTask),
                 [&completionCalled](WorkflowOwner*, std::int32_t) { completionCalled = true; });
 
-    REQUIRE(executor.waitUntilQueued());
+    REQUIRE(executor.tryWaitUntilQueued());
     executor.runUntilIdle();
-    auto const entered = taskEntered.waitUntil(true);
+    auto const entered = taskEntered.tryWaitUntil(true);
 
     if (!entered)
     {
@@ -188,7 +188,7 @@ namespace ao::gtk::test
     scope.cancelAll();
     ownerPtr.reset();
     releaseTask.release();
-    REQUIRE(executor.drainUntil([&scope] { return scope.empty(); }));
+    REQUIRE(executor.tryDrainUntil([&scope] { return scope.empty(); }));
 
     runtime.requestStop();
     runtime.join();

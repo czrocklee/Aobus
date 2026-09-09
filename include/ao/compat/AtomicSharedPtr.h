@@ -106,7 +106,7 @@ namespace ao::compat::detail
       {
         auto const lock = std::scoped_lock{_mutex};
 
-        if (equivalent(_value, expected))
+        if (isEquivalent(_value, expected))
         {
           discardedPtr = std::exchange(_value, std::move(desired));
           succeeded = true;
@@ -145,7 +145,7 @@ namespace ao::compat::detail
      * blocks aimed at one object, which is a different slot value; mutual
      * owner_before separates those, and is false both ways for empty pointers.
      */
-    static bool equivalent(std::shared_ptr<T> const& left, std::shared_ptr<T> const& right) noexcept
+    static bool isEquivalent(std::shared_ptr<T> const& left, std::shared_ptr<T> const& right) noexcept
     {
       return left.get() == right.get() && !left.owner_before(right) && !right.owner_before(left);
     }

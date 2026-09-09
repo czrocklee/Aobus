@@ -20,11 +20,11 @@ namespace ao::gtk::layout
   {
   }
 
-  bool ActionRegistry::registerAction(uimodel::ActionSchema schema,
-                                      ActionHandler handler,
-                                      ActionStateProvider stateProvider)
+  bool ActionRegistry::tryRegisterAction(uimodel::ActionSchema schema,
+                                         ActionHandler handler,
+                                         ActionStateProvider stateProvider)
   {
-    if (!_schema.addAction(schema))
+    if (!_schema.tryAddAction(schema))
     {
       APP_LOG_ERROR("ActionRegistry: Duplicate registration for action id '{}'", schema.id);
       return false;
@@ -56,7 +56,7 @@ namespace ao::gtk::layout
     return ActionAvailability{.enabled = true, .disabledReason = ""};
   }
 
-  bool ActionRegistry::activate(std::string_view id, ActionActivationContext& ctx) const
+  bool ActionRegistry::tryActivate(std::string_view id, ActionActivationContext& ctx) const
   {
     auto const it = std::ranges::find_if(_entries, [&](auto const& entry) { return entry.id == id; });
 

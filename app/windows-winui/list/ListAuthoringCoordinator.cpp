@@ -400,7 +400,7 @@ namespace ao::winui
                                              winrt::to_string(_nameInput.Text()),
                                              winrt::to_string(_descriptionInput.Text()),
                                              winrt::to_string(_filterInput.Text()));
-    auto submission = uimodel::saveList(&_library, std::move(draft));
+    auto submission = uimodel::saveListAsync(&_library, std::move(draft));
 
     if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
     {
@@ -413,24 +413,24 @@ namespace ao::winui
       [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
-        return finishOnCallbackExecutor(
+        return finishOnCallbackExecutorAsync(
           runtime,
           owner,
           token,
           std::move(submission),
-          [](ListAuthoringCoordinator* target, Result<ListId> result) { target->finishEditorSave(std::move(result)); },
+          [](ListAuthoringCoordinator* target, Result<ListId> res) { target->finishEditorSave(std::move(res)); },
           stopToken);
       },
       "Windows List save");
   }
 
-  void ListAuthoringCoordinator::finishEditorSave(Result<ListId> result)
+  void ListAuthoringCoordinator::finishEditorSave(Result<ListId> res)
   {
     _submitting = false;
 
-    if (!result)
+    if (!res)
     {
-      _mutationError = result.error().message;
+      _mutationError = res.error().message;
       updateEditorPreview();
       return;
     }
@@ -439,18 +439,18 @@ namespace ao::winui
 
     if (selected > 0 && static_cast<std::size_t>(selected) < _presentationIds.size())
     {
-      _listPresentations.setPresentationIdForList(*result, _presentationIds[static_cast<std::size_t>(selected)]);
+      _listPresentations.setPresentationIdForList(*res, _presentationIds[static_cast<std::size_t>(selected)]);
     }
     else
     {
-      _listPresentations.clearPresentationForList(*result);
+      _listPresentations.clearPresentationForList(*res);
     }
 
     auto const name = _nameInput ? winrt::to_string(_nameInput.Text()) : std::string{};
     auto const expression = _filterInput ? winrt::to_string(_filterInput.Text()) : std::string{};
-    auto const presentation = resolveListAuthoringPresentation(_listPresentations, *result, expression);
+    auto const presentation = resolveListAuthoringPresentation(_listPresentations, *res, expression);
 
-    if (auto const navigatedRes = _trackList.navigateTo(*result); !navigatedRes)
+    if (auto const navigatedRes = _trackList.navigateTo(*res); !navigatedRes)
     {
       if (_reportStatus)
       {
@@ -488,7 +488,7 @@ namespace ao::winui
 
     beginDialogWorkflow();
     _dialogActive = true;
-    auto submission = uimodel::previewListDeletion(&_library, listId, includeDescendants);
+    auto submission = uimodel::previewListDeletionAsync(&_library, listId, includeDescendants);
     AO_INVARIANT(_optDialogTasks.has_value() && _dialogGenerationGate.isOpen(),
                  "A List deletion preview requires an active dialog workflow");
     auto const token = _dialogGenerationGate.token();
@@ -497,13 +497,13 @@ namespace ao::winui
       [runtime = &_asyncRuntime, owner = this, token, listId, includeDescendants, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
-        return finishOnCallbackExecutor(
+        return finishOnCallbackExecutorAsync(
           runtime,
           owner,
           token,
           std::move(submission),
-          [listId, includeDescendants](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> result)
-          { target->finishDeletePreview(listId, includeDescendants, std::move(result)); },
+          [listId, includeDescendants](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> res)
+          { target->finishDeletePreview(listId, includeDescendants, std::move(res)); },
           stopToken);
       },
       "Windows List deletion preview");
@@ -511,14 +511,14 @@ namespace ao::winui
 
   void ListAuthoringCoordinator::finishDeletePreview(ListId const listId,
                                                      bool const includeDescendants,
-                                                     Result<rt::DeleteListSubtreeReply> result)
+                                                     Result<rt::DeleteListSubtreeReply> res)
   {
-    if (result && result->deletedLists.empty())
+    if (res && res->deletedLists.empty())
     {
-      result = makeError(Error::Code::InvalidState, "The list deletion preview returned no lists");
+      res = makeError(Error::Code::InvalidState, "The list deletion preview returned no lists");
     }
 
-    if (!result)
+    if (!res)
     {
       _dialogActive = false;
       _dialogGenerationGate.retire();
@@ -526,13 +526,13 @@ namespace ao::winui
       if (_reportStatus)
       {
         _reportStatus(i18n::requiredFormat(
-          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
+          _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", res.error().message}}));
       }
 
       return;
     }
 
-    buildDeleteDialog(listId, includeDescendants, *result);
+    buildDeleteDialog(listId, includeDescendants, *res);
     showDialog();
   }
 
@@ -629,7 +629,7 @@ namespace ao::winui
     _submitting = true;
     _dialog.IsPrimaryButtonEnabled(false);
     auto const removeTag = _removeTagCheck && _removeTagCheck.IsChecked().GetBoolean();
-    auto submission = uimodel::deleteList(
+    auto submission = uimodel::deleteListAsync(
       &_library, _deleteListId, _deleteDescendants, rt::DeleteListOptions{.removeWritableTagFromTracks = removeTag});
 
     if (!_optDialogTasks || !_dialogGenerationGate.isOpen())
@@ -643,26 +643,26 @@ namespace ao::winui
       [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
-        return finishOnCallbackExecutor(
+        return finishOnCallbackExecutorAsync(
           runtime,
           owner,
           token,
           std::move(submission),
-          [](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> result)
-          { target->finishDeleteCommit(std::move(result)); },
+          [](ListAuthoringCoordinator* target, Result<rt::DeleteListSubtreeReply> res)
+          { target->finishDeleteCommit(std::move(res)); },
           stopToken);
       },
       "Windows List deletion");
   }
 
-  void ListAuthoringCoordinator::finishDeleteCommit(Result<rt::DeleteListSubtreeReply> result)
+  void ListAuthoringCoordinator::finishDeleteCommit(Result<rt::DeleteListSubtreeReply> res)
   {
     _submitting = false;
 
-    if (!result)
+    if (!res)
     {
       _dialog.IsPrimaryButtonEnabled(true);
-      setDialogError(result.error().message);
+      setDialogError(res.error().message);
       return;
     }
 
@@ -714,40 +714,40 @@ namespace ao::winui
     }
 
     auto session = std::move(*sessionRes);
-    auto submission = add ? session.addToList(listId) : session.removeFromList(listId);
+    auto submission = add ? session.addToListAsync(listId) : session.removeFromListAsync(listId);
     auto const token = _ownerCallbackGate.token();
     _asyncRuntime.spawnWithLifetime(
       _commandTasks,
       [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
-        return finishOnCallbackExecutor(
+        return finishOnCallbackExecutorAsync(
           runtime,
           owner,
           token,
           std::move(submission),
-          [](ListAuthoringCoordinator* target, Result<uimodel::ListMembershipEditResult> result)
-          { target->finishMembership(std::move(result)); },
+          [](ListAuthoringCoordinator* target, Result<uimodel::ListMembershipEditResult> res)
+          { target->finishMembership(std::move(res)); },
           stopToken);
       },
       "Windows List membership edit");
   }
 
-  void ListAuthoringCoordinator::finishMembership(Result<uimodel::ListMembershipEditResult> result)
+  void ListAuthoringCoordinator::finishMembership(Result<uimodel::ListMembershipEditResult> res)
   {
     if (!_reportStatus)
     {
       return;
     }
 
-    if (!result)
+    if (!res)
     {
       _reportStatus(i18n::requiredFormat(
-        _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", result.error().message}}));
+        _textCatalog, i18n::MessageId::WinUiError, {i18n::MessageArgument{"detail", res.error().message}}));
       return;
     }
 
-    _reportStatus(uimodel::formatListMembershipEditNotification(_textCatalog, *result));
+    _reportStatus(uimodel::formatListMembershipEditNotification(_textCatalog, *res));
   }
 
   uimodel::ListOrderCapabilityState ListAuthoringCoordinator::orderCapabilities() const
@@ -800,19 +800,19 @@ namespace ao::winui
 
     if (command == ListOrderCommand::Reset)
     {
-      auto submission = session.resetOrder();
+      auto submission = session.resetOrderAsync();
       _asyncRuntime.spawnWithLifetime(
         _commandTasks,
         [runtime = &_asyncRuntime, owner = this, token, submission = std::move(submission)](
           std::stop_token const stopToken) mutable
         {
-          return finishOnCallbackExecutor(
+          return finishOnCallbackExecutorAsync(
             runtime,
             owner,
             token,
             std::move(submission),
-            [](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::ResetListOrderReply>> result)
-            { target->finishOrderReset(std::move(result)); },
+            [](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::ResetListOrderReply>> res)
+            { target->finishOrderReset(std::move(res)); },
             stopToken);
         },
         "Windows List order reset");
@@ -823,52 +823,52 @@ namespace ao::winui
     {
       switch (command)
       {
-        case ListOrderCommand::MoveUp: return session.moveUp(std::move(selected));
-        case ListOrderCommand::MoveDown: return session.moveDown(std::move(selected));
-        case ListOrderCommand::MoveToTop: return session.moveToTop(std::move(selected));
-        case ListOrderCommand::MoveToBottom: return session.moveToBottom(std::move(selected));
+        case ListOrderCommand::MoveUp: return session.moveUpAsync(std::move(selected));
+        case ListOrderCommand::MoveDown: return session.moveDownAsync(std::move(selected));
+        case ListOrderCommand::MoveToTop: return session.moveToTopAsync(std::move(selected));
+        case ListOrderCommand::MoveToBottom: return session.moveToBottomAsync(std::move(selected));
         case ListOrderCommand::Reset: break;
       }
 
-      return session.moveUp({});
+      return session.moveUpAsync({});
     }();
     _asyncRuntime.spawnWithLifetime(
       _commandTasks,
       [runtime = &_asyncRuntime, owner = this, token, command, submission = std::move(submission)](
         std::stop_token const stopToken) mutable
       {
-        return finishOnCallbackExecutor(
+        return finishOnCallbackExecutorAsync(
           runtime,
           owner,
           token,
           std::move(submission),
-          [command](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::MoveListOrderReply>> result)
-          { target->finishOrder(command, std::move(result)); },
+          [command](ListAuthoringCoordinator* target, Result<rt::AuthoringResult<rt::MoveListOrderReply>> res)
+          { target->finishOrder(command, std::move(res)); },
           stopToken);
       },
       "Windows List order edit");
   }
 
   void ListAuthoringCoordinator::finishOrder(ListOrderCommand const /*command*/,
-                                             Result<rt::AuthoringResult<rt::MoveListOrderReply>> result)
+                                             Result<rt::AuthoringResult<rt::MoveListOrderReply>> res)
   {
     if (!_reportStatus)
     {
       return;
     }
 
-    if (!result)
+    if (!res)
     {
-      _reportStatus(result.error().message);
+      _reportStatus(res.error().message);
       return;
     }
 
-    switch (result->status)
+    switch (res->status)
     {
       case rt::AuthoringStatus::Applied:
         _reportStatus(i18n::requiredFormat(_textCatalog,
                                            i18n::MessageId::ListOrderMoved,
-                                           {i18n::MessageArgument{"count", affectedTrackCount(result->reply)}}));
+                                           {i18n::MessageArgument{"count", affectedTrackCount(res->reply)}}));
         return;
       case rt::AuthoringStatus::NoOp:
         _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});
@@ -885,25 +885,25 @@ namespace ao::winui
     }
   }
 
-  void ListAuthoringCoordinator::finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> result)
+  void ListAuthoringCoordinator::finishOrderReset(Result<rt::AuthoringResult<rt::ResetListOrderReply>> res)
   {
     if (!_reportStatus)
     {
       return;
     }
 
-    if (!result)
+    if (!res)
     {
-      _reportStatus(result.error().message);
+      _reportStatus(res.error().message);
       return;
     }
 
-    switch (result->status)
+    switch (res->status)
     {
       case rt::AuthoringStatus::Applied:
         _reportStatus(i18n::requiredFormat(_textCatalog,
                                            i18n::MessageId::ListOrderReset,
-                                           {i18n::MessageArgument{"count", result->reply.forgottenPositionCount}}));
+                                           {i18n::MessageArgument{"count", res->reply.forgottenPositionCount}}));
         return;
       case rt::AuthoringStatus::NoOp:
         _reportStatus(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::ListOrderUnchanged)});

@@ -37,7 +37,7 @@ namespace ao::rt::delta
       return RangeEditKind::Update;
     }
 
-    bool checkedAdd(std::size_t& value, std::size_t amount) noexcept
+    bool tryAdd(std::size_t& value, std::size_t amount) noexcept
     {
       if (amount > std::numeric_limits<std::size_t>::max() - value)
       {
@@ -138,7 +138,9 @@ namespace ao::rt::delta
     }
   } // namespace
 
-  bool RangeEditValidator::accept(RangeEditKind const kind, std::size_t const start, std::size_t const count) noexcept
+  bool RangeEditValidator::tryAccept(RangeEditKind const kind,
+                                     std::size_t const start,
+                                     std::size_t const count) noexcept
   {
     if (count == 0)
     {
@@ -167,7 +169,7 @@ namespace ao::rt::delta
 
       case RangeEditKind::Insert:
       {
-        if (start < _previousInsertEnd || start > _size || !checkedAdd(_size, count))
+        if (start < _previousInsertEnd || start > _size || !tryAdd(_size, count))
         {
           return false;
         }
@@ -194,7 +196,7 @@ namespace ao::rt::delta
     return false;
   }
 
-  bool validate(RegularTrackEditScript const& script, std::size_t const initialSize) noexcept
+  bool isValid(RegularTrackEditScript const& script, std::size_t const initialSize) noexcept
   {
     auto validator = RangeEditValidator{initialSize};
 
@@ -202,7 +204,7 @@ namespace ao::rt::delta
     {
       auto const accepted =
         std::visit([&validator](auto const& range)
-                   { return validator.accept(rangeEditKindOf(range), range.start, range.trackIds.size()); },
+                   { return validator.tryAccept(rangeEditKindOf(range), range.start, range.trackIds.size()); },
                    edit);
 
       if (!accepted)
@@ -216,7 +218,7 @@ namespace ao::rt::delta
 
   Result<std::vector<TrackId>> apply(std::vector<TrackId> initial, RegularTrackEditScript const& script)
   {
-    if (!validate(script, initial.size()))
+    if (!isValid(script, initial.size()))
     {
       return std::unexpected{makeError(Error::Code::InvalidInput, "Invalid regular track edit script")};
     }

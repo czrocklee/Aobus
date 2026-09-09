@@ -198,16 +198,16 @@ namespace ao::lmdb::test
     auto writer = db.writer(wtxn);
     std::int32_t encoderCalls = 0;
     std::size_t encodedSize = 0;
-    auto const result = ReservationAccess::create(writer,
-                                                  1,
-                                                  10,
-                                                  [&](std::span<std::byte> output) noexcept
-                                                  {
-                                                    ++encoderCalls;
-                                                    encodedSize = output.size();
-                                                    std::memset(output.data(), 'x', output.size());
-                                                  });
-    REQUIRE(result);
+    auto const res = ReservationAccess::create(writer,
+                                               1,
+                                               10,
+                                               [&](std::span<std::byte> output) noexcept
+                                               {
+                                                 ++encoderCalls;
+                                                 encodedSize = output.size();
+                                                 std::memset(output.data(), 'x', output.size());
+                                               });
+    REQUIRE(res);
     CHECK(encoderCalls == 1);
     CHECK(encodedSize == 10);
 
@@ -436,16 +436,16 @@ namespace ao::lmdb::test
     auto writer = db.writer(updateTransaction);
     std::int32_t encoderCalls = 0;
     std::size_t encodedSize = 0;
-    auto const result = ReservationAccess::update(writer,
-                                                  1,
-                                                  7,
-                                                  [&](std::span<std::byte> output) noexcept
-                                                  {
-                                                    ++encoderCalls;
-                                                    encodedSize = output.size();
-                                                    std::memcpy(output.data(), "changed", output.size());
-                                                  });
-    REQUIRE(result);
+    auto const res = ReservationAccess::update(writer,
+                                               1,
+                                               7,
+                                               [&](std::span<std::byte> output) noexcept
+                                               {
+                                                 ++encoderCalls;
+                                                 encodedSize = output.size();
+                                                 std::memcpy(output.data(), "changed", output.size());
+                                               });
+    REQUIRE(res);
     CHECK(encoderCalls == 1);
     CHECK(encodedSize == 7);
     REQUIRE(updateTransaction.commit());
@@ -465,8 +465,8 @@ namespace ao::lmdb::test
     auto db = openByteKeyDatabase(writeTransaction, "test");
     auto writer = db.writer(writeTransaction);
     auto const key = createStringData("blob-key");
-    auto const result = writer.create(key, createStringData("blob-value"));
-    REQUIRE(result);
+    auto const res = writer.create(key, createStringData("blob-value"));
+    REQUIRE(res);
     REQUIRE(writeTransaction.commit());
 
     {
@@ -511,7 +511,7 @@ namespace ao::lmdb::test
     {
       auto deleteTransaction = beginWriteTransaction(env);
       auto deleteWriter = db.writer(deleteTransaction);
-      REQUIRE(deleteWriter.del(1));
+      REQUIRE(deleteWriter.tryDelete(1));
       REQUIRE(deleteTransaction.commit());
     }
 
@@ -533,7 +533,7 @@ namespace ao::lmdb::test
     auto db = openIntegerKeyDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    REQUIRE_FALSE(writer.del(123));
+    REQUIRE_FALSE(writer.tryDelete(123));
     REQUIRE(writer.create(1, createStringData("after miss")));
     REQUIRE(wtxn.commit());
 
@@ -589,9 +589,9 @@ namespace ao::lmdb::test
 
     REQUIRE(writer.create(1, createStringData("first")));
 
-    auto const result = writer.create(1, createStringData("duplicate"));
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::Conflict);
+    auto const res = writer.create(1, createStringData("duplicate"));
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::Conflict);
     REQUIRE(writer.create(2, createStringData("after conflict")));
     REQUIRE(wtxn.commit());
 
@@ -617,10 +617,10 @@ namespace ao::lmdb::test
     REQUIRE(writer.create(1, createStringData("initial")));
 
     std::int32_t duplicateEncoderCalls = 0;
-    auto const result =
+    auto const res =
       ReservationAccess::create(writer, 1, 5, [&](std::span<std::byte>) noexcept { ++duplicateEncoderCalls; });
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::Conflict);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::Conflict);
     CHECK(duplicateEncoderCalls == 0);
 
     std::int32_t successEncoderCalls = 0;

@@ -84,7 +84,8 @@ namespace ao::utility::test
 #ifdef _WIN32
         std::ignore = ::_putenv_s(_name, value);
 #else
-        // NOLINTNEXTLINE(concurrency-mt-unsafe): single-threaded test scope.
+        // Darwin's public <cstdlib> wrapper delegates this POSIX declaration to an SDK-private header.
+        // NOLINTNEXTLINE(concurrency-mt-unsafe, misc-include-cleaner): single-threaded test scope.
         std::ignore = ::setenv(_name, value, 1);
 #endif
       }
@@ -94,7 +95,8 @@ namespace ao::utility::test
 #ifdef _WIN32
         std::ignore = ::_putenv_s(_name, "");
 #else
-        // NOLINTNEXTLINE(concurrency-mt-unsafe): single-threaded test scope.
+        // Darwin's public <cstdlib> wrapper delegates this POSIX declaration to an SDK-private header.
+        // NOLINTNEXTLINE(concurrency-mt-unsafe, misc-include-cleaner): single-threaded test scope.
         std::ignore = ::unsetenv(_name);
 #endif
       }
@@ -114,10 +116,10 @@ namespace ao::utility::test
 #endif
     primary.set(kPrimaryRoot);
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kPrimaryRoot} / kExpectedDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kPrimaryRoot} / kExpectedDirectoryName);
   }
 
   TEST_CASE("applicationConfigDirectory - falls back when the primary variable is unset", "[utility][unit][paths]")
@@ -128,20 +130,20 @@ namespace ao::utility::test
     primary.clear();
     fallback.set(kFallbackRoot);
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kFallbackRoot} / kExpectedDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kFallbackRoot} / kExpectedDirectoryName);
 #else
     auto const primary = ScopedEnvironment{"XDG_CONFIG_HOME"};
     auto const home = ScopedEnvironment{"HOME"};
     primary.clear();
     home.set(kHomeRoot);
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kHomeRoot} / ".config" / kExpectedDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kHomeRoot} / ".config" / kExpectedDirectoryName);
 #endif
   }
 
@@ -159,10 +161,10 @@ namespace ao::utility::test
     home.set(kHomeRoot);
 #endif
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE(result);
-    CHECK(result->empty() == false);
+    REQUIRE(res);
+    CHECK(res->empty() == false);
   }
 
   TEST_CASE("applicationConfigDirectory - a relative variable is treated as unset", "[utility][unit][paths]")
@@ -192,10 +194,10 @@ namespace ao::utility::test
       INFO(relative);
       primary.set(relative);
 
-      auto const result = applicationConfigDirectory();
+      auto const res = applicationConfigDirectory();
 
-      REQUIRE(result);
-      CHECK(*result == expected);
+      REQUIRE(res);
+      CHECK(*res == expected);
     }
   }
 
@@ -208,10 +210,10 @@ namespace ao::utility::test
     primary.clear();
     fallback.clear();
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 #else
 
@@ -225,11 +227,11 @@ namespace ao::utility::test
     primary.clear();
     home.clear();
 
-    auto const result = applicationConfigDirectory();
+    auto const res = applicationConfigDirectory();
 
-    REQUIRE(result);
-    CHECK(result->filename() == kExpectedDirectoryName);
-    CHECK(result->parent_path().filename() == ".config");
+    REQUIRE(res);
+    CHECK(res->filename() == kExpectedDirectoryName);
+    CHECK(res->parent_path().filename() == ".config");
   }
 #endif
 
@@ -239,18 +241,18 @@ namespace ao::utility::test
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
     primary.set(kCacheRoot);
 
-    auto const result = applicationCacheDirectory();
+    auto const res = applicationCacheDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName / kExpectedCacheDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName / kExpectedCacheDirectoryName);
 #else
     auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
     primary.set(kCacheRoot);
 
-    auto const result = applicationCacheDirectory();
+    auto const res = applicationCacheDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kCacheRoot} / kExpectedDirectoryName);
 #endif
   }
 
@@ -266,10 +268,10 @@ namespace ao::utility::test
     primary.clear();
     roaming.set(kFallbackRoot);
 
-    auto const result = applicationCacheDirectory();
+    auto const res = applicationCacheDirectory();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset", "[utility][unit][paths]")
@@ -298,10 +300,10 @@ namespace ao::utility::test
     primary.clear();
     home.set(kHomeRoot);
 
-    auto const result = applicationCacheDirectory();
+    auto const res = applicationCacheDirectory();
 
-    REQUIRE(result);
-    CHECK(*result == std::filesystem::path{kHomeRoot} / ".cache" / kExpectedDirectoryName);
+    REQUIRE(res);
+    CHECK(*res == std::filesystem::path{kHomeRoot} / ".cache" / kExpectedDirectoryName);
   }
 
   TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset", "[utility][unit][paths]")
@@ -316,10 +318,10 @@ namespace ao::utility::test
       INFO(rejected);
       primary.set(rejected);
 
-      auto const result = applicationCacheDirectory();
+      auto const res = applicationCacheDirectory();
 
-      REQUIRE(result);
-      CHECK(*result == expected);
+      REQUIRE(res);
+      CHECK(*res == expected);
     }
   }
 
@@ -330,11 +332,11 @@ namespace ao::utility::test
     primary.clear();
     home.clear();
 
-    auto const result = applicationCacheDirectory();
+    auto const res = applicationCacheDirectory();
 
-    REQUIRE(result);
-    CHECK(result->filename() == kExpectedDirectoryName);
-    CHECK(result->parent_path().filename() == ".cache");
+    REQUIRE(res);
+    CHECK(res->filename() == kExpectedDirectoryName);
+    CHECK(res->parent_path().filename() == ".cache");
   }
 #endif
 } // namespace ao::utility::test

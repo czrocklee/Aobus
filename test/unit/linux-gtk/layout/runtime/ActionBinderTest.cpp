@@ -32,16 +32,16 @@ namespace ao::gtk::layout::test
     auto lastComponentId = std::string{};
     Gtk::Widget* lastAnchor = nullptr;
 
-    registry.registerAction(ActionSchema{.id = "test.action",
-                                         .label = "Test Action",
-                                         .category = "Test",
-                                         .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
-                            [&](ActionActivationContext& ctx)
-                            {
-                              lastFiredId = "test.action";
-                              lastComponentId = ctx.componentId;
-                              lastAnchor = &ctx.anchorWidget;
-                            });
+    registry.tryRegisterAction(ActionSchema{.id = "test.action",
+                                            .label = "Test Action",
+                                            .category = "Test",
+                                            .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
+                               [&](ActionActivationContext& ctx)
+                               {
+                                 lastFiredId = "test.action";
+                                 lastComponentId = ctx.componentId;
+                                 lastAnchor = &ctx.anchorWidget;
+                               });
 
     // Binder doesn't need LayoutBuildContext, only registry and parent window
     auto const binder = ActionBinder{registry, window};

@@ -52,9 +52,9 @@ namespace ao::rt::test
   {
     ListId createList(WriteTransaction& transaction, ListBuilder const& list)
     {
-      auto result = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
-      REQUIRE(result);
-      return *result;
+      auto res = transaction.apply([&list](LibraryWrite& write) { return write.lists().create(list); });
+      REQUIRE(res);
+      return *res;
     }
 
     std::size_t trackCount(MusicLibrary& ml)
@@ -736,14 +736,14 @@ library:
       yaml << "        - 2\n";
     }
 
-    auto result = importer.importFromYamlOffline(yamlPath);
+    auto res = importer.importFromYamlOffline(yamlPath);
 
-    if (!result)
+    if (!res)
     {
-      INFO("Import failed: " << result.error().message);
+      INFO("Import failed: " << res.error().message);
     }
 
-    REQUIRE(result);
+    REQUIRE(res);
 
     // Delta mode coverage
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
@@ -788,9 +788,9 @@ library:
 )";
       yaml.close();
 
-      auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
     SECTION("unknown root field")
@@ -806,9 +806,9 @@ library:
 )";
       yaml.close();
 
-      auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::FormatRejected);
+      auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
     }
   }
 
@@ -835,8 +835,8 @@ library:
     }
 
     auto importer = LibraryYamlImporter{ml};
-    auto result = importer.importFromYamlOffline(yamlPath);
-    REQUIRE(result);
+    auto res = importer.importFromYamlOffline(yamlPath);
+    REQUIRE(res);
 
     auto transaction = ml.readTransaction();
     auto reader = ml.tracks().reader(transaction);

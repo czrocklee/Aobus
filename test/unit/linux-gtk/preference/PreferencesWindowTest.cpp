@@ -34,7 +34,8 @@ namespace ao::gtk::test
     uimodel::LayoutSchema makeSchema()
     {
       auto schema = uimodel::LayoutSchema{};
-      schema.addAction({.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
+      schema.tryAddAction(
+        {.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
       return schema;
     }
 

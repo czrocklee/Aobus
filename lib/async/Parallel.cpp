@@ -18,7 +18,7 @@ namespace ao::async
 {
   namespace
   {
-    Task<> deferTaskStart(boost::asio::thread_pool* workerPool, Task<> task)
+    Task<> deferTaskStartAsync(boost::asio::thread_pool* workerPool, Task<> task)
     {
       // A parallel_group initiates deferred operations sequentially. Suspend
       // each child once so all operations start before user code can block an
@@ -35,7 +35,7 @@ namespace ao::async
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
-    Task<> whenAllImpl(boost::asio::thread_pool* workerPool, std::vector<Task<>> tasks)
+    Task<> whenAllImplAsync(boost::asio::thread_pool* workerPool, std::vector<Task<>> tasks)
     {
       if (tasks.empty())
       {
@@ -43,14 +43,14 @@ namespace ao::async
       }
 
       using SpawnOperation = decltype(boost::asio::co_spawn(
-        *workerPool, deferTaskStart(workerPool, std::move(tasks.front())), boost::asio::deferred));
+        *workerPool, deferTaskStartAsync(workerPool, std::move(tasks.front())), boost::asio::deferred));
       auto operations = std::vector<SpawnOperation>{};
       operations.reserve(tasks.size());
 
       for (auto& task : tasks)
       {
         operations.push_back(
-          boost::asio::co_spawn(*workerPool, deferTaskStart(workerPool, std::move(task)), boost::asio::deferred));
+          boost::asio::co_spawn(*workerPool, deferTaskStartAsync(workerPool, std::move(task)), boost::asio::deferred));
       }
 
       auto [completionOrder, exceptions] =
@@ -70,8 +70,8 @@ namespace ao::async
 #endif
   } // namespace
 
-  Task<> Runtime::whenAll(std::vector<Task<>> tasks)
+  Task<> Runtime::whenAllAsync(std::vector<Task<>> tasks)
   {
-    return whenAllImpl(&workerPool(), std::move(tasks));
+    return whenAllImplAsync(&workerPool(), std::move(tasks));
   }
 } // namespace ao::async

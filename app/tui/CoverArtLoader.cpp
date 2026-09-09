@@ -66,7 +66,7 @@ namespace ao::tui
 
     _settleTask =
       _runtime.spawnCancellable([loader = this, runtime = &_runtime, resourceId](std::stop_token const stopToken)
-                                { return waitForSelectionSettle(loader, runtime, resourceId, stopToken); },
+                                { return waitForSelectionSettleAsync(loader, runtime, resourceId, stopToken); },
                                 "TUI cover-art selection settle");
   }
 
@@ -95,13 +95,13 @@ namespace ao::tui
     _byteRequest.reset();
   }
 
-  async::Task<void> CoverArtLoader::waitForSelectionSettle(CoverArtLoader* const loader,
-                                                           async::Runtime* const runtime,
-                                                           ResourceId const resourceId,
-                                                           std::stop_token const stopToken)
+  async::Task<void> CoverArtLoader::waitForSelectionSettleAsync(CoverArtLoader* const loader,
+                                                                async::Runtime* const runtime,
+                                                                ResourceId const resourceId,
+                                                                std::stop_token const stopToken)
   {
-    co_await runtime->sleepFor(kCoverArtSelectionSettleInterval, stopToken);
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->sleepForAsync(kCoverArtSelectionSettleInterval, stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     // The settle window is not the publication fence: it only decides whether a
     // read is worth starting, and the selection may have moved on regardless.
@@ -118,28 +118,29 @@ namespace ao::tui
 
   void CoverArtLoader::startByteRequest(ResourceId const resourceId)
   {
-    _byteRequest = _byteCache.request(resourceId,
-                                      [this, mode = _mode, columns = _columns](rt::ResourceBytes bytes)
-                                      {
-                                        _task = _runtime.spawnCancellable(
-                                          [loader = this, runtime = &_runtime, mode, columns, bytes = std::move(bytes)](
-                                            std::stop_token const stopToken) mutable
-                                          { return load(loader, runtime, mode, columns, std::move(bytes), stopToken); },
-                                          "TUI cover-art decode workflow");
-                                      });
+    _byteRequest =
+      _byteCache.request(resourceId,
+                         [this, mode = _mode, columns = _columns](rt::ResourceBytes bytes)
+                         {
+                           _task = _runtime.spawnCancellable(
+                             [loader = this, runtime = &_runtime, mode, columns, bytes = std::move(bytes)](
+                               std::stop_token const stopToken) mutable
+                             { return loadAsync(loader, runtime, mode, columns, std::move(bytes), stopToken); },
+                             "TUI cover-art decode workflow");
+                         });
   }
 
-  async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,
-                                         async::Runtime* const runtime,
-                                         CoverArtDeliveryMode const mode,
-                                         std::int32_t const columns,
-                                         rt::ResourceBytes bytes,
-                                         std::stop_token const stopToken)
+  async::Task<void> CoverArtLoader::loadAsync(CoverArtLoader* const loader,
+                                              async::Runtime* const runtime,
+                                              CoverArtDeliveryMode const mode,
+                                              std::int32_t const columns,
+                                              rt::ResourceBytes bytes,
+                                              std::stop_token const stopToken)
   {
     auto optPreview = std::optional<CoverArtRows>{};
     auto optKittyPng = std::optional<std::vector<std::byte>>{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
 
     if (mode == CoverArtDeliveryMode::Blocks)
     {
@@ -151,7 +152,7 @@ namespace ao::tui
       optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtDimension, kKittyCoverArtDimension);
     }
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     loader->_optPreview = std::move(optPreview);
     loader->_optKittyPng = std::move(optKittyPng);

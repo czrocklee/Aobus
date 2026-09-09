@@ -69,7 +69,7 @@ It carries no payload and has no distinct persisted representation; it lets prep
 | Writer | `create(bytes)` | Existing id for equal content or a newly created id, with a counted length; `ValueTooLarge` above `UINT32_MAX`; typed error on storage failure or exhaustion. |
 | Writer | `getOrCreate(descriptor)` | Existing id for that digest, or a newly created row with the declared length. |
 | Writer | `getOrCreate(observed)` | Existing id for that digest, correcting a disagreeing length, or a newly created row with the counted length. |
-| Writer | `remove(id)` | `true` when a row existed and was removed. No production path calls it. |
+| Writer | `tryRemove(id)` | `true` when a row existed and was removed. No production path calls it. |
 | Writer | `clear()` | Typed result from clearing all rows. |
 
 Descriptors are append-only in practice: a rescan that replaces a track's covers leaves earlier rows in place, and a row displaced by a collision must stay reachable along its probe chain.

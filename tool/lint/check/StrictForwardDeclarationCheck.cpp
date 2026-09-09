@@ -58,7 +58,7 @@ namespace clang::tidy::aobus
       return nullptr;
     }
 
-    bool storesTemplateArgumentsByValue(QualType qt)
+    bool hasTemplateArgumentsByValue(QualType qt)
     {
       auto const* templateDecl = getTemplateDeclFromType(qt);
 
@@ -202,7 +202,7 @@ namespace clang::tidy::aobus
         // These wrappers embed their type arguments in their value
         // representation, so a by-value wrapper use also requires those
         // argument definitions.
-        if (storesTemplateArgumentsByValue(qt))
+        if (hasTemplateArgumentsByValue(qt))
         {
           auto const recordArgument = [this](TemplateArgument const& argument)
           {
@@ -407,10 +407,10 @@ namespace clang::tidy::aobus
         }
       }
 
-      bool findDefinitionAndCheckSameFile(CXXRecordDecl const* crd,
-                                          FileID refFile,
-                                          FileID& outWeakDefFile,
-                                          SourceManager& sourceManager) const
+      bool tryFindSameFileDeclarationAndDefinition(CXXRecordDecl const* crd,
+                                                   FileID refFile,
+                                                   FileID& outWeakDefFile,
+                                                   SourceManager& sourceManager) const
       {
         bool inSame = false;
 
@@ -498,7 +498,7 @@ namespace clang::tidy::aobus
             result.SourceManager->getFileID(result.SourceManager->getExpansionLoc(weak->getLocation()));
           auto weakDefFile = FileID{};
 
-          hasDeclInSameFile = findDefinitionAndCheckSameFile(crd, refFile, weakDefFile, *result.SourceManager);
+          hasDeclInSameFile = tryFindSameFileDeclarationAndDefinition(crd, refFile, weakDefFile, *result.SourceManager);
 
           bool const sharesFileWithStrongDep = weakDefFile.isValid() && strongFileIDs.contains(weakDefFile);
 

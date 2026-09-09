@@ -37,7 +37,7 @@ namespace clang::tidy::readability
       return name == "std::filesystem::path" || (name.starts_with("std::filesystem::") && name.ends_with("::path"));
     }
 
-    bool returnsNarrowString(CXXMethodDecl const& method, ASTContext const& context)
+    bool hasNarrowStringReturn(CXXMethodDecl const& method, ASTContext const& context)
     {
       auto const* record = method.getReturnType().getCanonicalType()->getAsCXXRecordDecl();
       auto const* specialization = dyn_cast_or_null<ClassTemplateSpecializationDecl>(record);
@@ -133,7 +133,7 @@ namespace clang::tidy::readability
     auto const* record = method != nullptr ? method->getParent() : nullptr;
 
     if (call == nullptr || method == nullptr || record == nullptr || result.Context == nullptr ||
-        !isFilesystemPath(*record) || !returnsNarrowString(*method, *result.Context) ||
+        !isFilesystemPath(*record) || !hasNarrowStringReturn(*method, *result.Context) ||
         !aobus::isPolicySource(*result.SourceManager, call->getBeginLoc()))
     {
       return;

@@ -433,7 +433,7 @@ namespace ao::winui::layout
                            {
                              if (uimodel::isGenerationActive(_gatePtr))
                              {
-                               std::ignore = _actions.invoke("track.presentProperties", ActionContext{});
+                               std::ignore = _actions.tryInvoke("track.presentProperties", ActionContext{});
                              }
                            }));
         _contextFlyout.Items().Append(properties);
@@ -494,7 +494,7 @@ namespace ao::winui::layout
           else
           {
             auto const action = [this](std::string_view const id)
-            { return [this, id = std::string{id}] { std::ignore = _actions.invoke(id, ActionContext{}); }; };
+            { return [this, id = std::string{id}] { std::ignore = _actions.tryInvoke(id, ActionContext{}); }; };
             appendItem(ordering.Items(),
                        i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveUp),
                        action("track.orderMoveUp"),

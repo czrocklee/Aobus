@@ -395,10 +395,10 @@ namespace ao::rt::test
 
     auto counts = FailureCounts{};
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::ResourceExhausted);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::ResourceExhausted);
     CHECK(counts.failed == 0);
 
     auto transaction = ml.readTransaction();
@@ -424,7 +424,7 @@ namespace ao::rt::test
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
     REQUIRE(operation.prepare());
     REQUIRE(operation.revalidatePreparedFiles());
-    REQUIRE(operation.readyForMutation());
+    REQUIRE(operation.isReadyForMutation());
 
     auto writableRes = library::WritableMusicLibrary::acquire(ml);
     REQUIRE(writableRes);
@@ -574,7 +574,7 @@ namespace ao::rt::test
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), std::move(progress), counts.callback()};
     REQUIRE_THROWS_AS(executor.run(stopSource.get_token()), async::OperationCancelled);
-    CHECK(executor.cancelled());
+    CHECK(executor.isCancelled());
     CHECK(counts.failed == 0);
     CHECK(sawFingerprinting);
     CHECK(progressCount >= 2);
@@ -623,7 +623,7 @@ namespace ao::rt::test
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), std::move(progress), counts.callback()};
     REQUIRE_THROWS_AS(executor.run(stopSource.get_token()), async::OperationCancelled);
-    CHECK(executor.cancelled());
+    CHECK(executor.isCancelled());
     CHECK(counts.failed == 0);
     CHECK(sawChunkProgress);
 
@@ -670,7 +670,7 @@ namespace ao::rt::test
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), std::move(progress), counts.callback()};
     REQUIRE_THROWS_AS(executor.run(stopSource.get_token()), async::OperationCancelled);
-    CHECK(executor.cancelled());
+    CHECK(executor.isCancelled());
     CHECK(counts.failed == 1);
   }
 
@@ -1151,10 +1151,10 @@ namespace ao::rt::test
 
     auto operation = ScanApplyOperation{
       secondLibrary, std::move(plan), [&sawProgress](ScanApplyProgress const&) { sawProgress = true; }, nullptr};
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK_FALSE(sawProgress);
     auto transaction = secondLibrary.readTransaction();
     auto trackReader = secondLibrary.tracks().reader(transaction);

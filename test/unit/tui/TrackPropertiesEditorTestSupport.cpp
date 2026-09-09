@@ -97,7 +97,7 @@ namespace ao::tui::test
             }
             else
             {
-              preparation.baseline.mergeTrackField(row.field, rawFor(track, row.field));
+              preparation.baseline.tryMergeTrackField(row.field, rawFor(track, row.field));
             }
           }
         }
@@ -161,12 +161,12 @@ namespace ao::tui::test
 
     for (std::size_t step = 0; step < spec.metadataRows.size(); ++step)
     {
-      editor.handleEvent(ftxui::Event::ArrowUp);
+      editor.tryHandleEvent(ftxui::Event::ArrowUp);
     }
 
     for (std::size_t step = 0; step < targetIndex; ++step)
     {
-      editor.handleEvent(ftxui::Event::ArrowDown);
+      editor.tryHandleEvent(ftxui::Event::ArrowDown);
     }
   }
 
@@ -174,7 +174,7 @@ namespace ao::tui::test
   {
     for (std::size_t i = 0; i < 4 && editor.tab() != tab; ++i)
     {
-      editor.handleEvent(ftxui::Event::Tab);
+      editor.tryHandleEvent(ftxui::Event::Tab);
     }
 
     REQUIRE(editor.tab() == tab);
@@ -182,7 +182,7 @@ namespace ao::tui::test
 
   void typeText(TrackPropertiesEditor& editor, std::string_view const text)
   {
-    editor.handleEvent(ftxui::Event::Character(std::string{text}));
+    editor.tryHandleEvent(ftxui::Event::Character(std::string{text}));
   }
 
   /// Whether @p line carries an inverted cell, which is how an input draws its caret.

@@ -48,7 +48,7 @@ namespace ao::gtk::layout
     void presentCustomMetadataDeletedUndo(std::string key, std::string value, uimodel::TrackAuthoringSession session);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
-    async::Task<Result<>> undo();
+    async::Task<Result<>> undoAsync();
 
     sigc::signal<void()>& signalChanged();
 

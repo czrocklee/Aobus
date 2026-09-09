@@ -311,9 +311,9 @@ namespace ao::gtk::test
     drainGtkEvents();
     REQUIRE(okButton->get_sensitive());
 
-    CHECK(dialog.beginSubmission());
+    CHECK(dialog.tryBeginSubmission());
     CHECK_FALSE(okButton->get_sensitive());
-    CHECK_FALSE(dialog.beginSubmission());
+    CHECK_FALSE(dialog.tryBeginSubmission());
 
     nameEntry->set_text("Changed while pending");
     drainGtkEvents();

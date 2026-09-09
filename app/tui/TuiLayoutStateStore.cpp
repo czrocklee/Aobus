@@ -28,8 +28,10 @@
 #endif
 
 #ifdef __APPLE__
-#include <strings.h>
+#include <strings.h> // NOLINT(misc-include-cleaner) -- public Darwin header for strcasecmp.
 #include <unistd.h>
+
+#include <sys/unistd.h>
 #endif
 
 namespace ao::tui
@@ -52,7 +54,7 @@ namespace ao::tui
     }
 
 #ifdef __APPLE__
-    bool pathMayIgnoreCase(std::filesystem::path path)
+    bool canIgnorePathCase(std::filesystem::path path)
     {
       auto ec = std::error_code{};
 
@@ -73,7 +75,7 @@ namespace ao::tui
     }
 #endif
 
-    bool pathsReferToSameFile(std::filesystem::path const& left, std::filesystem::path const& right)
+    bool isSameFilePath(std::filesystem::path const& left, std::filesystem::path const& right)
     {
       if (auto ec = std::error_code{}; std::filesystem::equivalent(left, right, ec))
       {
@@ -88,7 +90,9 @@ namespace ao::tui
              ::CompareStringOrdinal(normalizedLeft.c_str(), -1, normalizedRight.c_str(), -1, TRUE) == CSTR_EQUAL;
 #elifdef __APPLE__
       return normalizedLeft == normalizedRight ||
-             (pathMayIgnoreCase(normalizedLeft) && pathMayIgnoreCase(normalizedRight) &&
+             (canIgnorePathCase(normalizedLeft) && canIgnorePathCase(normalizedRight) &&
+              // Darwin exposes strcasecmp through <strings.h>, backed by an SDK-private declaration header.
+              // NOLINTNEXTLINE(misc-include-cleaner)
               ::strcasecmp(normalizedLeft.c_str(), normalizedRight.c_str()) == 0);
 #else
       return normalizedLeft == normalizedRight;
@@ -107,19 +111,19 @@ namespace ao::tui
   {
     auto const layoutPath = tuiLayoutStatePath(musicRoot);
 
-    if (pathsReferToSameFile(workspaceConfigPath, layoutPath))
+    if (isSameFilePath(workspaceConfigPath, layoutPath))
     {
       return makeError(
         Error::Code::InvalidInput, "The TUI workspace configuration path aliases the TUI layout-state file");
     }
 
-    if (optAppConfigPath && pathsReferToSameFile(workspaceConfigPath, *optAppConfigPath))
+    if (optAppConfigPath && isSameFilePath(workspaceConfigPath, *optAppConfigPath))
     {
       return makeError(
         Error::Code::InvalidInput, "The TUI workspace configuration path aliases the TUI application-preference file");
     }
 
-    if (optAppConfigPath && pathsReferToSameFile(layoutPath, *optAppConfigPath))
+    if (optAppConfigPath && isSameFilePath(layoutPath, *optAppConfigPath))
     {
       return makeError(
         Error::Code::InvalidInput, "The TUI layout-state path aliases the TUI application-preference file");

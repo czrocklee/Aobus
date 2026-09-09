@@ -95,10 +95,10 @@ namespace ao::media::mp4::test
       auto const bytes = toBytes(data);
       auto cursor = AtomView::root(bytes).children();
 
-      auto const result = cursor.next();
+      auto const res = cursor.next();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Extended size smaller than its header")
@@ -110,10 +110,10 @@ namespace ao::media::mp4::test
       auto const bytes = toBytes(data);
       auto cursor = AtomView::root(bytes).children();
 
-      auto const result = cursor.next();
+      auto const res = cursor.next();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Extended size exceeds the remaining container")
@@ -125,10 +125,10 @@ namespace ao::media::mp4::test
       auto const bytes = toBytes(data);
       auto cursor = AtomView::root(bytes).children();
 
-      auto const result = cursor.next();
+      auto const res = cursor.next();
 
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::CorruptData);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
     }
   }
 
@@ -167,13 +167,13 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(ao::test::mp4::makeAtom("moov", track));
     auto const path = std::to_array<std::string_view>({"root", "moov", "trak", "mdia", "minf", "stbl", "stsd"});
 
-    auto result = findAtom(AtomView::root(bytes), path);
+    auto res = findAtom(AtomView::root(bytes), path);
 
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK((*result)->type() == "stsd");
-    CHECK((*result)->bytes().data() >= bytes.data());
-    CHECK((*result)->bytes().data() + (*result)->bytes().size() <= bytes.data() + bytes.size());
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK((*res)->type() == "stsd");
+    CHECK((*res)->bytes().data() >= bytes.data());
+    CHECK((*res)->bytes().data() + (*res)->bytes().size() <= bytes.data() + bytes.size());
   }
 
   TEST_CASE("MP4 AtomCursor - reports malformed trailing child boundaries", "[media][unit][mp4]")
@@ -203,10 +203,10 @@ namespace ao::media::mp4::test
     auto const bytes = toBytes(data);
     auto const path = std::to_array<std::string_view>({"root", "moov"});
 
-    auto result = findAtom(AtomView::root(bytes), path);
+    auto res = findAtom(AtomView::root(bytes), path);
 
-    REQUIRE(result);
-    REQUIRE(*result);
-    CHECK((*result)->type() == "moov");
+    REQUIRE(res);
+    REQUIRE(*res);
+    CHECK((*res)->type() == "moov");
   }
 } // namespace ao::media::mp4::test

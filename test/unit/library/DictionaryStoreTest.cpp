@@ -97,11 +97,11 @@ namespace ao::library::test
     auto library = openTestLibrary(temp);
     auto transaction = writeTransaction(library);
     auto const malformed = std::string{"\xC0\xAF", 2};
-    auto const result = physicalDictionary(transaction).intern(malformed);
+    auto const res = physicalDictionary(transaction).intern(malformed);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.find("Dictionary text") != std::string::npos);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("Dictionary text"));
     REQUIRE(transaction.commit());
     CHECK(library.dictionary().size() == 0);
   }
@@ -145,9 +145,9 @@ namespace ao::library::test
     auto manifestWriter = physicalWriter(library.manifest(), transaction);
 
     auto const failedId = requireIntern(transaction, "failed");
-    auto result = transaction.commit();
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message == "injected commit failure");
+    auto res = transaction.commit();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message == "injected commit failure");
     CHECK_FALSE(dictionary.findId("failed"));
     CHECK(dictionary.size() == 0);
     CHECK(dictionary.generation() == initialGeneration);
@@ -293,10 +293,10 @@ namespace ao::library::test
 
           for (std::int32_t index = 0; index < 8; ++index)
           {
-            auto const result =
+            auto const res =
               physicalDictionary(transaction).intern("batch_" + std::to_string(batch) + "_" + std::to_string(index));
 
-            if (!result)
+            if (!res)
             {
               failed.store(true, std::memory_order_relaxed);
               break;

@@ -19,7 +19,7 @@ namespace ao::uimodel
   class KeyRepeatGuard final
   {
   public:
-    bool acceptPress(std::uint32_t physicalKeycode);
+    bool tryAcceptPress(std::uint32_t physicalKeycode);
     void release(std::uint32_t physicalKeycode);
     void reset() noexcept;
 

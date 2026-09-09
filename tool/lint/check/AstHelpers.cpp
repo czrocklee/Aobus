@@ -53,11 +53,11 @@ namespace clang::tidy::aobus
     return !isTestSource || isLintFixture;
   }
 
-  bool enclosingFunctionBeginsWithPolicyMarker(Stmt const& statement,
-                                               ASTContext& context,
-                                               SourceManager const& sourceManager,
-                                               std::string_view const markerHelperName,
-                                               std::string_view const macroName)
+  bool hasEnclosingFunctionPolicyMarker(Stmt const& statement,
+                                        ASTContext& context,
+                                        SourceManager const& sourceManager,
+                                        std::string_view const markerHelperName,
+                                        std::string_view const macroName)
   {
     auto current = DynTypedNode::create(statement);
     FunctionDecl const* function = nullptr;
@@ -77,14 +77,14 @@ namespace clang::tidy::aobus
     }
 
     auto const* body = function->getBody();
-    return body != nullptr && blockBeginsWithPolicyMarker(*body, context, sourceManager, markerHelperName, macroName);
+    return body != nullptr && hasBlockPolicyMarker(*body, context, sourceManager, markerHelperName, macroName);
   }
 
-  bool blockBeginsWithPolicyMarker(Stmt const& block,
-                                   ASTContext const& context,
-                                   SourceManager const& sourceManager,
-                                   std::string_view const markerHelperName,
-                                   std::string_view const macroName)
+  bool hasBlockPolicyMarker(Stmt const& block,
+                            ASTContext const& context,
+                            SourceManager const& sourceManager,
+                            std::string_view const markerHelperName,
+                            std::string_view const macroName)
   {
     auto const* body = dyn_cast<CompoundStmt>(&block);
 
@@ -165,7 +165,7 @@ namespace clang::tidy::aobus
     return current;
   }
 
-  bool refersToVarDecl(Expr const* expr, VarDecl const& var)
+  bool isVarDeclReference(Expr const* expr, VarDecl const& var)
   {
     if (expr == nullptr)
     {
@@ -275,10 +275,10 @@ namespace clang::tidy::aobus
     return name == "end" || name == "cend";
   }
 
-  bool verifyEndObject(CallExpr const& endCall,
-                       std::string const& rangeStr,
-                       SourceManager const& sm,
-                       LangOptions const& langOpts)
+  bool isMatchingEndObject(CallExpr const& endCall,
+                           std::string const& rangeStr,
+                           SourceManager const& sm,
+                           LangOptions const& langOpts)
   {
     Expr const* endObj = nullptr;
 

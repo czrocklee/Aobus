@@ -136,7 +136,7 @@ namespace ao::winui::layout
      * both decisions on false evidence. Checking it here keeps the schema's
      * native-element column enforced rather than merely documented.
      */
-    bool elementIsKind(FrameworkElement const& element, ElementKind const kind)
+    bool isElementKind(FrameworkElement const& element, ElementKind const kind)
     {
       using namespace winrt::Microsoft::UI::Xaml;
 
@@ -229,7 +229,7 @@ namespace ao::winui::layout
                             ResourceDictionary const& resources,
                             SurfaceBrushResolver const& surfaceBrush)
   {
-    if (!elementIsKind(element, kind))
+    if (!isElementKind(element, kind))
     {
       return makeError(Error::Code::FormatRejected,
                        std::format("Component '{}' constructs an element that is not the {} its schema entry declares",

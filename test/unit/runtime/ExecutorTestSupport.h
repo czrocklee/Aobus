@@ -35,23 +35,24 @@ namespace ao::rt::test
     bool isCurrent() const noexcept override;
     void dispatch(compat::MoveOnlyFunction<void()> task) override;
     void defer(compat::MoveOnlyFunction<void()> task) override;
-    bool runOne();
+    bool tryRunOne();
     void runUntilIdle();
 
     template<typename Predicate>
-    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    bool tryDrainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
     {
       auto const deadline = std::chrono::steady_clock::now() + timeout;
 
       while (!predicate())
       {
-        if (runOne())
+        if (tryRunOne())
         {
           continue;
         }
 
         if (auto const now = std::chrono::steady_clock::now();
-            now >= deadline || !waitUntilQueued(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)))
+            now >= deadline ||
+            !tryWaitUntilQueued(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)))
         {
           return predicate();
         }
@@ -61,8 +62,9 @@ namespace ao::rt::test
     }
 
     std::size_t queuedCount() const;
-    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    bool waitUntilQueuedCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitUntilQueuedCount(std::size_t expected,
+                                 std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
     void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
 
   private:
@@ -113,13 +115,13 @@ namespace ao::rt::test
     void drain();
 
     template<typename Predicate>
-    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    bool tryDrainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
     {
       auto const deadline = std::chrono::steady_clock::now() + timeout;
 
       while (!predicate())
       {
-        if (runReadyTurn())
+        if (tryRunReadyTurn())
         {
           continue;
         }
@@ -136,26 +138,27 @@ namespace ao::rt::test
 
         // The predicate may observe worker-owned state that does not notify
         // this executor, so periodically recheck it while the queue is empty.
-        std::ignore = waitUntilQueued(pollInterval);
+        std::ignore = tryWaitUntilQueued(pollInterval);
       }
 
       return true;
     }
 
     std::size_t queuedCount() const;
-    bool waitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    bool waitUntilQueuedCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitUntilQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitUntilQueuedCount(std::size_t expected,
+                                 std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
     void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
 
   private:
-    bool runReadyTurn();
+    bool tryRunReadyTurn();
     void enqueue(compat::MoveOnlyFunction<void()> task);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
 
-  bool runLoopUntil(async::LoopExecutor& executor,
-                    compat::MoveOnlyFunction<bool()> predicate,
-                    std::chrono::milliseconds timeout = std::chrono::seconds{5});
+  bool tryRunLoopUntil(async::LoopExecutor& executor,
+                       compat::MoveOnlyFunction<bool()> predicate,
+                       std::chrono::milliseconds timeout = std::chrono::seconds{5});
 } // namespace ao::rt::test

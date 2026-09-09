@@ -83,9 +83,9 @@ namespace ao::gtk
       std::int32_t width = 0;
     };
 
-    bool flushSharedColumnLayoutUpdate();
-    bool flushColumnResolve();
-    bool flushTitlePositionVariableUpdate();
+    void flushSharedColumnLayoutUpdate();
+    void flushColumnResolve();
+    void flushTitlePositionVariableUpdate();
     void connectHorizontalAdjustmentSignals();
     void updateSharedColumnLayout();
     void applySolvedColumnWidths(std::span<uimodel::TrackColumnSolveSpec const> specs);

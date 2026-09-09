@@ -37,14 +37,14 @@ namespace ao::uimodel
                                 MessageId const id,
                                 std::span<MessageArgument const> const arguments = {})
     {
-      auto result = catalog.format(id, arguments);
+      auto res = catalog.format(id, arguments);
 
-      if (!result)
+      if (!res)
       {
-        AO_FATAL("Could not format required audio-quality message: {}", result.error().message);
+        AO_FATAL("Could not format required audio-quality message: {}", res.error().message);
       }
 
-      return std::move(result->text);
+      return std::move(res->text);
     }
 
     std::string joinSharedApps(std::vector<std::string> const& apps)

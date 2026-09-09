@@ -38,10 +38,10 @@ namespace ao::query::test
   using namespace ao::library;
   using namespace ao::library::test;
 
-  bool evaluateWithDictionary(PlanEvaluator const& evaluator,
-                              ExecutionPlan const& plan,
-                              TrackView const& track,
-                              DictionaryStore const& dictionary);
+  bool matchesFullPlanWithDictionary(PlanEvaluator const& evaluator,
+                                     ExecutionPlan const& plan,
+                                     TrackView const& track,
+                                     DictionaryStore const& dictionary);
   bool matchesWithDictionary(PlanEvaluator const& evaluator,
                              ExecutionPlan const& plan,
                              TrackView const& track,

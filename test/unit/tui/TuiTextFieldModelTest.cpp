@@ -49,32 +49,32 @@ namespace ao::tui::test
 
     SECTION("A cursor step crosses a joined sequence in one move")
     {
-      REQUIRE(field.moveToBegin());
+      REQUIRE(field.tryMoveToBegin());
       CHECK(field.cursor() == 0);
-      CHECK(field.moveRight());
+      CHECK(field.tryMoveRight());
       CHECK(field.cursor() == 1);
-      CHECK(field.moveRight());
+      CHECK(field.tryMoveRight());
       CHECK(field.cursor() == 1 + kFamily.size());
-      CHECK(field.moveLeft());
+      CHECK(field.tryMoveLeft());
       CHECK(field.cursor() == 1);
     }
 
     SECTION("Backspace removes the joined sequence whole")
     {
-      REQUIRE(field.moveLeft());
+      REQUIRE(field.tryMoveLeft());
       REQUIRE(field.cursor() == 1 + kFamily.size());
 
-      CHECK(field.backspace());
+      CHECK(field.tryBackspace());
       CHECK(field.value() == "ab");
       CHECK(field.cursor() == 1);
     }
 
     SECTION("Delete removes the cluster ahead of the cursor")
     {
-      REQUIRE(field.moveToBegin());
-      REQUIRE(field.moveRight());
+      REQUIRE(field.tryMoveToBegin());
+      REQUIRE(field.tryMoveRight());
 
-      CHECK(field.deleteForward());
+      CHECK(field.tryDeleteForward());
       CHECK(field.value() == "ab");
       CHECK(field.cursor() == 1);
     }
@@ -83,7 +83,7 @@ namespace ao::tui::test
     {
       field.reset(std::string{kJapanFlag});
 
-      CHECK(field.backspace());
+      CHECK(field.tryBackspace());
       CHECK(field.value().empty());
       CHECK(field.cursor() == 0);
     }
@@ -95,9 +95,9 @@ namespace ao::tui::test
 
     SECTION("Interior insertion keeps the cursor after the typed text")
     {
-      REQUIRE(field.moveToBegin());
+      REQUIRE(field.tryMoveToBegin());
 
-      CHECK(field.insert("A "));
+      CHECK(field.tryInsert("A "));
       CHECK(field.value() == "A Blue");
       CHECK(field.cursor() == 2);
     }
@@ -105,20 +105,20 @@ namespace ao::tui::test
     SECTION("Text that joins the following cluster leaves the cursor on a boundary")
     {
       field.reset(std::string{kCombiningAcute});
-      REQUIRE(field.moveToBegin());
+      REQUIRE(field.tryMoveToBegin());
 
-      CHECK(field.insert("a"));
+      CHECK(field.tryInsert("a"));
       CHECK(field.value() == std::string{"a"} + std::string{kCombiningAcute});
       // The typed letter and the following mark are now one cluster, so the
       // cursor settles after it rather than inside it.
       CHECK(field.cursor() == field.value().size());
-      CHECK(field.moveLeft());
+      CHECK(field.tryMoveLeft());
       CHECK(field.cursor() == 0);
     }
 
     SECTION("An empty insertion is not an edit")
     {
-      CHECK_FALSE(field.insert(""));
+      CHECK_FALSE(field.tryInsert(""));
       CHECK(field.value() == "Blue");
     }
   }
@@ -129,7 +129,7 @@ namespace ao::tui::test
 
     auto const checkRejected = [&field](std::string_view const text)
     {
-      CHECK_FALSE(field.insert(text));
+      CHECK_FALSE(field.tryInsert(text));
       CHECK(field.value() == "Blue");
       CHECK(field.cursor() == 4);
     };
@@ -152,14 +152,14 @@ namespace ao::tui::test
 
     // U+2028 and U+2029 break a line as surely as U+000A, so a single-line
     // value refuses them on the same grounds and leaves itself untouched.
-    CHECK_FALSE(model.insert("\u2028"));
-    CHECK_FALSE(model.insert("So\u2028What"));
-    CHECK_FALSE(model.insert("So\u2029What"));
+    CHECK_FALSE(model.tryInsert("\u2028"));
+    CHECK_FALSE(model.tryInsert("So\u2028What"));
+    CHECK_FALSE(model.tryInsert("So\u2029What"));
     CHECK(model.value() == "Kind of Blue");
     CHECK(model.cursor() == model.value().size());
 
     // U+2027 and U+202A share bytes with them and are ordinary characters.
-    CHECK(model.insert("\u2027"));
+    CHECK(model.tryInsert("\u2027"));
     CHECK(model.value() == "Kind of Blue\u2027");
   }
 
@@ -169,12 +169,12 @@ namespace ao::tui::test
 
     SECTION("An empty value has nothing to move across or delete")
     {
-      CHECK_FALSE(field.moveLeft());
-      CHECK_FALSE(field.moveRight());
-      CHECK_FALSE(field.moveToBegin());
-      CHECK_FALSE(field.moveToEnd());
-      CHECK_FALSE(field.backspace());
-      CHECK_FALSE(field.deleteForward());
+      CHECK_FALSE(field.tryMoveLeft());
+      CHECK_FALSE(field.tryMoveRight());
+      CHECK_FALSE(field.tryMoveToBegin());
+      CHECK_FALSE(field.tryMoveToEnd());
+      CHECK_FALSE(field.tryBackspace());
+      CHECK_FALSE(field.tryDeleteForward());
       CHECK(field.empty());
     }
 
@@ -182,10 +182,10 @@ namespace ao::tui::test
     {
       field.reset("Blue");
 
-      CHECK_FALSE(field.deleteForward());
-      REQUIRE(field.moveToBegin());
-      CHECK_FALSE(field.backspace());
-      CHECK_FALSE(field.moveToBegin());
+      CHECK_FALSE(field.tryDeleteForward());
+      REQUIRE(field.tryMoveToBegin());
+      CHECK_FALSE(field.tryBackspace());
+      CHECK_FALSE(field.tryMoveToBegin());
       CHECK(field.value() == "Blue");
     }
   }
@@ -196,7 +196,7 @@ namespace ao::tui::test
 
     SECTION("Replaces entire text and parks cursor at end")
     {
-      CHECK(field.replaceRange(0, 4, "Kind of Blue"));
+      CHECK(field.tryReplaceRange(0, 4, "Kind of Blue"));
       CHECK(field.value() == "Kind of Blue");
       CHECK(field.cursor() == 12);
     }
@@ -204,22 +204,22 @@ namespace ao::tui::test
     SECTION("Replaces range with empty string (deletion)")
     {
       field.reset("Kind of Blue");
-      CHECK(field.replaceRange(4, 7, ""));
+      CHECK(field.tryReplaceRange(4, 7, ""));
       CHECK(field.value() == "Kind Blue");
       CHECK(field.cursor() == 4);
     }
 
     SECTION("Accepts same-value replacement")
     {
-      CHECK(field.replaceRange(0, 4, "Blue"));
+      CHECK(field.tryReplaceRange(0, 4, "Blue"));
       CHECK(field.value() == "Blue");
       CHECK(field.cursor() == 4);
     }
 
     SECTION("Rejects invalid range boundaries")
     {
-      CHECK_FALSE(field.replaceRange(3, 2, "X"));
-      CHECK_FALSE(field.replaceRange(0, 5, "X"));
+      CHECK_FALSE(field.tryReplaceRange(3, 2, "X"));
+      CHECK_FALSE(field.tryReplaceRange(0, 5, "X"));
       CHECK(field.value() == "Blue");
       CHECK(field.cursor() == 4);
     }
@@ -230,25 +230,25 @@ namespace ao::tui::test
       REQUIRE(field.cursor() == kFamily.size());
 
       // Cut into the family emoji cluster
-      CHECK_FALSE(field.replaceRange(0, 4, "X"));
-      CHECK_FALSE(field.replaceRange(2, kFamily.size(), "X"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "X"));
+      CHECK_FALSE(field.tryReplaceRange(2, kFamily.size(), "X"));
       CHECK(field.value() == kFamily);
       CHECK(field.cursor() == kFamily.size());
     }
 
     SECTION("Rejects control characters and invalid UTF-8")
     {
-      CHECK_FALSE(field.replaceRange(0, 4, "Kind of\nBlue"));
-      CHECK_FALSE(field.replaceRange(0, 4, "Kind\tof Blue"));
-      CHECK_FALSE(field.replaceRange(0, 4, "\x1b[31mBlue"));
-      CHECK_FALSE(field.replaceRange(0, 4, std::string{"Bl"} + static_cast<char>(0x80) + "ue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind of\nBlue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind\tof Blue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "\x1b[31mBlue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, std::string{"Bl"} + static_cast<char>(0x80) + "ue"));
       CHECK(field.value() == "Blue");
       CHECK(field.cursor() == 4);
     }
 
     SECTION("Correctly settles caret with multibyte and emoji replacements")
     {
-      CHECK(field.replaceRange(0, 4, std::string{kJapanFlag}));
+      CHECK(field.tryReplaceRange(0, 4, std::string{kJapanFlag}));
       CHECK(field.value() == kJapanFlag);
       CHECK(field.cursor() == kJapanFlag.size());
     }

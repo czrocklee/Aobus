@@ -121,10 +121,10 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription =
       changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
 
-    auto const result = commandsFixture.editTags(std::array{trackId}, tag, tag);
+    auto const res = commandsFixture.editTags(std::array{trackId}, tag, tag);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(publicationCount == 0);
     CHECK(commandsFixture.bind(std::array{trackId}).revision() == revision);
     auto transaction = storage.library().readTransaction();

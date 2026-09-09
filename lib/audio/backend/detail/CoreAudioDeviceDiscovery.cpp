@@ -38,7 +38,7 @@ namespace ao::audio::backend::detail
                                                               .mElement = ::kAudioObjectPropertyElementMain};
 
     template<typename Value>
-    bool readScalar(::AudioObjectID const object, ::AudioObjectPropertyAddress address, Value& value) noexcept
+    bool tryReadScalar(::AudioObjectID const object, ::AudioObjectPropertyAddress address, Value& value) noexcept
     {
       auto size = static_cast<::UInt32>(sizeof(Value));
       return ::AudioObjectGetPropertyData(
@@ -74,7 +74,7 @@ namespace ao::audio::backend::detail
       address.mSelector = selector;
       ::CFStringRef rawValue = nullptr;
 
-      if (!readScalar(object, address, rawValue) || rawValue == nullptr)
+      if (!tryReadScalar(object, address, rawValue) || rawValue == nullptr)
       {
         return {};
       }
@@ -89,7 +89,7 @@ namespace ao::audio::backend::detail
       auto aliveAddress = kGlobalMain;
       aliveAddress.mSelector = ::kAudioDevicePropertyDeviceIsAlive;
 
-      if (::UInt32 alive = 0U; !readScalar(device, aliveAddress, alive) || alive == 0U)
+      if (::UInt32 alive = 0U; !tryReadScalar(device, aliveAddress, alive) || alive == 0U)
       {
         return false;
       }
@@ -149,7 +149,7 @@ namespace ao::audio::backend::detail
       auto address = kGlobalMain;
       address.mSelector = ::kAudioHardwarePropertyDefaultOutputDevice;
       ::AudioObjectID result = ::kAudioObjectUnknown;
-      readScalar(::kAudioObjectSystemObject, address, result);
+      tryReadScalar(::kAudioObjectSystemObject, address, result);
       return result;
     }
   } // namespace

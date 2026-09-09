@@ -34,7 +34,7 @@ namespace ao::gtk
   /**
    * Shared GTK cover-art decoder for full-size and thumbnail requests.
    *
-   * Equal cache keys share one worker decode. Successful work is salvaged into
+   * Equal cache keys share one worker decodeAsync. Successful work is salvaged into
    * the cache even after every individual callback interest is cancelled.
    * Public methods and loader-owned state are confined to the GTK callback
    * executor.
@@ -73,17 +73,17 @@ namespace ao::gtk
     void prefetch(ImageCacheKey key);
     void requestBytes(ImageCacheKey key, Requests::FlightToken token);
     void spawnDecode(ImageCacheKey key, Requests::FlightToken token, rt::ResourceBytes bytes);
-    static async::Task<void> decode(ResourceImageLoader* loader,
-                                    async::Runtime* runtime,
-                                    ImageCacheKey key,
-                                    Requests::FlightToken token,
-                                    rt::ResourceBytes bytes,
-                                    std::stop_token stopToken);
-    static async::Task<void> render(async::Runtime* runtime,
-                                    Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
-                                    RenderTarget renderedSize,
-                                    OnImageReady onReady,
-                                    std::stop_token stopToken);
+    static async::Task<void> decodeAsync(ResourceImageLoader* loader,
+                                         async::Runtime* runtime,
+                                         ImageCacheKey key,
+                                         Requests::FlightToken token,
+                                         rt::ResourceBytes bytes,
+                                         std::stop_token stopToken);
+    static async::Task<void> renderAsync(async::Runtime* runtime,
+                                         Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                         RenderTarget renderedSize,
+                                         OnImageReady onReady,
+                                         std::stop_token stopToken);
 
     rt::ResourceByteMemoryCache& _byteCache;
     ImageCache& _cache;

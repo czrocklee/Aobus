@@ -68,19 +68,19 @@ namespace ao::gtk::platform
     void startEntryValidation(ResourceId resourceId, CacheEntry cachedEntry, Requests::FlightToken token);
     void requestBytes(ResourceId resourceId, Requests::FlightToken token);
     void spawnExport(ResourceId resourceId, Requests::FlightToken token, rt::ResourceBytes bytes);
-    static async::Task<void> validateEntry(MprisArtUrlCache* cache,
-                                           async::Runtime* runtime,
-                                           ResourceId resourceId,
-                                           CacheEntry cachedEntry,
-                                           Requests::FlightToken token,
-                                           std::stop_token stopToken);
-    static async::Task<void> exportBytes(MprisArtUrlCache* cache,
-                                         async::Runtime* runtime,
-                                         std::filesystem::path cacheDir,
-                                         ResourceId resourceId,
-                                         Requests::FlightToken token,
-                                         rt::ResourceBytes bytes,
-                                         std::stop_token stopToken);
+    static async::Task<void> validateEntryAsync(MprisArtUrlCache* cache,
+                                                async::Runtime* runtime,
+                                                ResourceId resourceId,
+                                                CacheEntry cachedEntry,
+                                                Requests::FlightToken token,
+                                                std::stop_token stopToken);
+    static async::Task<void> exportBytesAsync(MprisArtUrlCache* cache,
+                                              async::Runtime* runtime,
+                                              std::filesystem::path cacheDir,
+                                              ResourceId resourceId,
+                                              Requests::FlightToken token,
+                                              rt::ResourceBytes bytes,
+                                              std::stop_token stopToken);
     static std::optional<CacheEntry> exportResource(std::filesystem::path const& cacheDir,
                                                     ResourceId resourceId,
                                                     std::span<std::byte const> bytes);

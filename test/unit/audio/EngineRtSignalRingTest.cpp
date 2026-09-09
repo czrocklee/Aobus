@@ -101,13 +101,13 @@ namespace ao::audio::test
     CHECK(ring.readAvailable() == 2);
 
     auto signal = ProbeSignal{};
-    REQUIRE(ring.pop(signal));
+    REQUIRE(ring.tryPop(signal));
     CHECK(signal.kind == ProbeSignalKind::Spliced);
     CHECK(signal.sequence == 1);
-    REQUIRE(ring.pop(signal));
+    REQUIRE(ring.tryPop(signal));
     CHECK(signal.kind == ProbeSignalKind::Drained);
     CHECK(signal.sequence == 2);
-    CHECK_FALSE(ring.pop(signal));
+    CHECK_FALSE(ring.tryPop(signal));
   }
 
   TEST_CASE("Engine RT signal ring - serialized producer ownership may hand off between threads",
@@ -121,9 +121,9 @@ namespace ao::audio::test
     secondProducer.join();
 
     auto signal = ProbeSignal{};
-    REQUIRE(ring.pop(signal));
+    REQUIRE(ring.tryPop(signal));
     CHECK(signal.sequence == 1);
-    REQUIRE(ring.pop(signal));
+    REQUIRE(ring.tryPop(signal));
     CHECK(signal.sequence == 2);
   }
 
@@ -210,7 +210,7 @@ namespace ao::audio::test
     CHECK(timeline.lookaheadNode() == node);
 
     auto signal = ProbeSignal{};
-    REQUIRE(ring.pop(signal));
+    REQUIRE(ring.tryPop(signal));
     CHECK(signal.kind == ProbeSignalKind::Drained);
 
     auto* const disarmed = timeline.disarmLookahead();
@@ -274,7 +274,7 @@ namespace ao::audio::test
     CHECK_FALSE(combinedResult.drained);
     CHECK(drainedResult.bytesWritten == 0);
     CHECK(drainedResult.drained);
-    REQUIRE(ended.waitForCount(1));
+    REQUIRE(ended.tryWaitForCount(1));
     REQUIRE(callbacks.size() == 2);
     CHECK(callbacks[0] == "advanced");
     CHECK(callbacks[1] == "ended");

@@ -10,7 +10,7 @@ namespace ao::tui::test
 {
   TuiKeymapPlan const& defaultTuiKeymapPlan()
   {
-    static auto const plan = TuiKeymapPlan{uimodel::KeymapModel{tuiDefaultKeymap()}};
-    return plan;
+    static auto const kPlan = TuiKeymapPlan{uimodel::KeymapModel{tuiDefaultKeymap()}};
+    return kPlan;
   }
 } // namespace ao::tui::test

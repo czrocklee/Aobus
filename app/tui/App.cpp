@@ -407,7 +407,7 @@ namespace ao::tui
         auto const mainContentRows = terminalRows - playbackRows - kStatusBarRows;
         auto const detailVisible = shell.overlay() == Overlay::DetailPanel;
         auto const coverArtVisible =
-          detailVisible && selectedTrackView.track != nullptr && detailPaneShowsCoverArt(mainContentRows);
+          detailVisible && selectedTrackView.track != nullptr && isDetailPaneShowingCoverArt(mainContentRows);
 
         // Artwork nobody can see is still a resource read and a transform, so
         // the request follows what the frame will actually show.
@@ -763,9 +763,9 @@ namespace ao::tui
           rt::loadAppPrefs(*configStore, prefs);
           prefs.preferredOutputSelection = selection;
 
-          if (auto const result = rt::saveAppPrefs(*configStore, prefs); !result)
+          if (auto const res = rt::saveAppPrefs(*configStore, prefs); !res)
           {
-            APP_LOG_WARN("TUI: failed to record the requested output route: {}", result.error().message);
+            APP_LOG_WARN("TUI: failed to record the requested output route: {}", res.error().message);
           }
         });
     }
@@ -1110,7 +1110,7 @@ namespace ao::tui
     auto rendererPtr = ftxui::Renderer([&frameRenderer] { return frameRenderer(); });
 
     auto componentPtr =
-      ftxui::CatchEvent(rendererPtr, [&](ftxui::Event const& event) { return events.handleEvent(event); });
+      ftxui::CatchEvent(rendererPtr, [&](ftxui::Event const& event) { return events.tryHandleEvent(event); });
 
     // FTXUI Loop::Loop calls ScreenInteractive::Install, which disables ISIG
     // (terminal Ctrl-C is Event::CtrlC, not SIGINT) and installs std::signal
@@ -1138,7 +1138,7 @@ namespace ao::tui
         saveLayoutState();
       }
 
-      activityStatusViewModel.autoDismissCompactIfDue();
+      activityStatusViewModel.tryAutoDismissCompactIfDue();
 
       if (kittyCoverArt)
       {

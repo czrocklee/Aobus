@@ -43,7 +43,7 @@ namespace ao::uimodel
   class TrackDisplayIndex final
   {
   public:
-    bool reset(std::size_t rowCount, std::span<TrackDisplaySection const> sections);
+    bool tryReset(std::size_t rowCount, std::span<TrackDisplaySection const> sections);
     void clear() noexcept;
 
     std::size_t rowCount() const noexcept { return _rowCount; }

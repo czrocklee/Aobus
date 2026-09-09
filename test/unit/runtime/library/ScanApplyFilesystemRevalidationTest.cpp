@@ -34,10 +34,10 @@ namespace ao::rt::test
     TrackId importOne(library::MusicLibrary& library)
     {
       auto plan = LibraryScan{library}.buildPlan().value();
-      auto result = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
-      REQUIRE(result);
-      REQUIRE(result->insertedIds.size() == 1);
-      return result->insertedIds.front();
+      auto res = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
+      REQUIRE(res);
+      REQUIRE(res->insertedIds.size() == 1);
+      return res->insertedIds.front();
     }
   } // namespace
 
@@ -55,12 +55,12 @@ namespace ao::rt::test
     REQUIRE(operation.prepare());
 
     replaceFile(target, audio::test::requireAudioFixture("hires.flac"));
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->staleCount == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->insertedIds.empty());
+    CHECK(res->staleCount == 1);
+    CHECK(res->failureCount == 0);
     auto transaction = library.readTransaction();
     CHECK_FALSE(library.manifest().reader(transaction).get("song.flac"));
     auto trackReader = library.tracks().reader(transaction);
@@ -91,12 +91,12 @@ namespace ao::rt::test
     REQUIRE(operation.prepare());
 
     replaceFile(target, audio::test::requireAudioFixture("with_cover.flac"));
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->mutatedIds.empty());
-    CHECK(result->staleCount == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->mutatedIds.empty());
+    CHECK(res->staleCount == 1);
+    CHECK(res->failureCount == 0);
     auto transaction = library.readTransaction();
     auto const optTrack = library.tracks().reader(transaction).get(trackId);
     REQUIRE(optTrack);
@@ -122,12 +122,12 @@ namespace ao::rt::test
 
     auto const preparedTime = std::filesystem::last_write_time(moved);
     std::filesystem::last_write_time(moved, preparedTime + std::chrono::seconds{10});
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->staleCount == 0);
-    CHECK(result->failureCount == 1);
+    REQUIRE(res);
+    CHECK(res->relinkedIds.empty());
+    CHECK(res->staleCount == 0);
+    CHECK(res->failureCount == 1);
     auto transaction = library.readTransaction();
     auto const optTrack = library.tracks().reader(transaction).get(trackId);
     REQUIRE(optTrack);
@@ -154,12 +154,12 @@ namespace ao::rt::test
     REQUIRE(operation.prepare());
 
     std::filesystem::copy_file(source, target);
-    auto result = operation.run();
+    auto res = operation.run();
 
-    REQUIRE(result);
-    CHECK(result->missingCount == 0);
-    CHECK(result->staleCount == 1);
-    CHECK(result->failureCount == 0);
+    REQUIRE(res);
+    CHECK(res->missingCount == 0);
+    CHECK(res->staleCount == 1);
+    CHECK(res->failureCount == 0);
     auto transaction = library.readTransaction();
     auto const optManifest = library.manifest().reader(transaction).get("song.flac");
     REQUIRE(optManifest);

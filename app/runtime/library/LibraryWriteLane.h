@@ -139,14 +139,14 @@ namespace ao::rt
 
         try
         {
-          auto result = _transaction.apply(std::forward<Function>(function));
+          auto res = _transaction.apply(std::forward<Function>(function));
 
-          if (!result)
+          if (!res)
           {
             abort();
           }
 
-          return result;
+          return res;
         }
         catch (...)
         {
@@ -392,7 +392,7 @@ namespace ao::rt
                                                                                   bool reentrant,
                                                                                   std::string_view operation);
     void releaseCommand(std::shared_ptr<detail::LibraryMutationCommandRequest> const& requestPtr) noexcept;
-    bool beginTransaction() noexcept;
+    bool tryBeginTransaction() noexcept;
     Result<std::uint64_t> commitMutation(Mutation& mutation, LibraryChangeSet changeSet);
     async::Task<detail::LibraryPublicationTerminal> settleMutationAsync(std::uint64_t revision);
     [[noreturn]] void abortPostCommitSettlement(std::exception_ptr exceptionPtr) noexcept;
@@ -410,11 +410,11 @@ namespace ao::rt
                            std::string libraryIdentity,
                            std::string replicaName);
     std::optional<PublicationDiagnosticContext> activePublicationDiagnosticContext() const noexcept;
-    bool beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept;
+    bool tryBeginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept;
     void completeAvailabilityNotification() noexcept;
     void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
     LibraryAuthoringAvailability availabilityLocked() const noexcept;
-    bool submissionIsReentrantLocked() const noexcept;
+    bool isSubmissionReentrantLocked() const noexcept;
     bool hasOutstandingCommandLocked(CommandKind kind) const noexcept;
     bool hasMaintenanceTransitionLocked() const noexcept;
 

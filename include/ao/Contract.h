@@ -39,8 +39,8 @@ namespace ao
 
   std::string_view fatalCategoryName(FatalCategory category) noexcept;
 
-  bool registerFatalSink(FatalSink sink) noexcept;
-  bool unregisterFatalSink(FatalSink sink) noexcept;
+  bool tryRegisterFatalSink(FatalSink sink) noexcept;
+  bool tryUnregisterFatalSink(FatalSink sink) noexcept;
 
   [[noreturn]] void fatalFromException(std::exception_ptr exceptionPtr,
                                        std::string_view context,

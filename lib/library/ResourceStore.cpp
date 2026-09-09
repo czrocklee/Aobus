@@ -111,7 +111,7 @@ namespace ao::library
 
   Result<ResourceId> Writer::create(std::span<std::byte const> const data)
   {
-    if (!resourceByteLengthFits(data.size()))
+    if (!canDescribeResourceByteLength(data.size()))
     {
       return makeError(Error::Code::ValueTooLarge,
                        std::format("Resource content of {} bytes exceeds the stored length field", data.size()));

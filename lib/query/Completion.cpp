@@ -46,7 +46,7 @@ namespace ao::query
                         [](char lhs, char rhs) { return utility::toAsciiLower(lhs) == utility::toAsciiLower(rhs); });
     }
 
-    bool equalsInsensitive(std::string_view lhs, std::string_view rhs)
+    bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs)
     {
       return lhs.size() == rhs.size() && startsWithInsensitive(lhs, rhs);
     }
@@ -66,7 +66,7 @@ namespace ao::query
     bool hasExactAlias(QueryVariableDescriptor const& descriptor, std::string_view prefix)
     {
       return std::ranges::any_of(
-        descriptor.aliases, [prefix](std::string_view alias) { return equalsInsensitive(alias, prefix); });
+        descriptor.aliases, [prefix](std::string_view alias) { return isEqualIgnoringAsciiCase(alias, prefix); });
     }
 
     bool containsCanonical(std::span<QueryVariableCompletionMatch const> matches, std::string_view canonicalName)
@@ -318,12 +318,12 @@ namespace ao::query
 
       if (token->kind == detail::CompletionTokenKind::RelationalOperator)
       {
-        return ParsedOperator{.text = equalsInsensitive(value, "in") ? std::string_view{"in"} : value,
+        return ParsedOperator{.text = isEqualIgnoringAsciiCase(value, "in") ? std::string_view{"in"} : value,
                               .begin = token->begin,
                               .end = token->end};
       }
 
-      if (token->kind == detail::CompletionTokenKind::Bareword && equalsInsensitive(value, "in"))
+      if (token->kind == detail::CompletionTokenKind::Bareword && isEqualIgnoringAsciiCase(value, "in"))
       {
         return ParsedOperator{.text = "in", .begin = token->begin, .end = token->end};
       }

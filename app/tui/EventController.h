@@ -87,7 +87,7 @@ namespace ao::tui
 
     bool isQualityHoverVisible() const noexcept { return _qualityHoverVisible; }
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
-    bool handleEvent(ftxui::Event const& event);
+    bool tryHandleEvent(ftxui::Event const& event);
     void cancelTransientInteractions();
 
   private:
@@ -114,25 +114,25 @@ namespace ao::tui
     void cancelFilterDebounce() noexcept;
     void applyPendingFilter(std::uint64_t generation);
     void closeQuickFilter(bool acceptCompletion);
-    static async::Task<void> waitForFilterDebounce(async::Runtime* runtime,
-                                                   EventController* owner,
-                                                   std::uint64_t generation,
-                                                   std::stop_token stopToken);
-    bool handleMouse(ftxui::Mouse const& mouse);
+    static async::Task<void> waitForFilterDebounceAsync(async::Runtime* runtime,
+                                                        EventController* owner,
+                                                        std::uint64_t generation,
+                                                        std::stop_token stopToken);
+    bool tryHandleMouse(ftxui::Mouse const& mouse);
     std::optional<bool> handleActiveMouseDrag(ftxui::Mouse const& mouse);
-    bool handleTrackColumnResizeDrag(ftxui::Mouse const& mouse);
+    bool tryHandleTrackColumnResizeDrag(ftxui::Mouse const& mouse);
     std::optional<bool> handleMouseWheel(ftxui::Mouse const& mouse);
-    bool handleMouseMove(ftxui::Mouse const& mouse);
+    bool tryHandleMouseMove(ftxui::Mouse const& mouse);
     std::optional<bool> handleSeekRailPress(ftxui::Mouse const& mouse, bool modalInputActive);
     std::optional<bool> handleColumnResizePress(ftxui::Mouse const& mouse);
     std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleButtonPress(ftxui::Mouse const& mouse);
-    bool handleOverlayPress(ftxui::Mouse const& mouse);
-    bool handleCommandEvent(ftxui::Event const& event);
-    bool handleOverlayEvent(ftxui::Event const& event);
-    bool handleRootEvent(ftxui::Event const& event);
-    bool selectTrackFromScrollbar(std::int32_t row);
+    bool tryHandleOverlayPress(ftxui::Mouse const& mouse);
+    bool tryHandleCommandEvent(ftxui::Event const& event);
+    bool tryHandleOverlayEvent(ftxui::Event const& event);
+    bool tryHandleRootEvent(ftxui::Event const& event);
+    bool trySelectTrackFromScrollbar(std::int32_t row);
     void syncSeekSlider();
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);

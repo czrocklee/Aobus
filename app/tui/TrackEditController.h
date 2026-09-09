@@ -83,16 +83,16 @@ namespace ao::tui
      * changes cannot shrink or grow what the editor writes. A refusal reports
      * itself through the notification feed and changes nothing else.
      */
-    bool open(std::vector<TrackId> targetIds);
+    bool tryOpen(std::vector<TrackId> targetIds);
 
-    /// The editor to render and route input to, or null when none is open.
+    /// The editor to render and route input to, or null when none is tryOpen.
     TrackPropertiesEditor const* activeEditor() const noexcept;
     bool isActive() const noexcept { return activeEditor() != nullptr; }
-    /// Whether a submitted write is still settling, editor open or not.
+    /// Whether a submitted write is still settling, editor tryOpen or not.
     bool hasPendingSubmission() const noexcept;
 
     /// Routes @p event to the open editor; reports false only when none is open.
-    bool handleEvent(ftxui::Event const& event);
+    bool tryHandleEvent(ftxui::Event const& event);
 
     /// Closes any open editor without waiting for a submitted write to settle.
     void retire();
@@ -107,8 +107,8 @@ namespace ao::tui
      * current, so this coroutine never reads the session again and can outlive
      * both it and the editor that started the write.
      */
-    static async::Task<void> runSubmit(std::shared_ptr<State> statePtr,
-                                       async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission);
+    static async::Task<void> runSubmitAsync(std::shared_ptr<State> statePtr,
+                                            async::Task<Result<uimodel::TrackPropertiesSubmitResult>> submission);
 
     /// Acts on whatever the editor asked for during the last event.
     void serviceRequest();

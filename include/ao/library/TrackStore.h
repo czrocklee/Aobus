@@ -244,7 +244,7 @@ namespace ao::library
      * Delete both hot and cold track data.
      * @return true if a row was removed, false if the id was absent.
      */
-    bool remove(TrackId id);
+    bool tryRemove(TrackId id);
 
     /**
      * Clear all tracks.

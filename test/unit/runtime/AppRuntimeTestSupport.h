@@ -68,7 +68,7 @@ namespace ao::rt::test
   T runRuntimeTask(AppRuntime& runtime, async::Task<T> task, Pump& pump)
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
-    auto future = runtime.async().spawn(flagCompletion(completedPtr, std::move(task)));
+    auto future = runtime.async().spawn(flagCompletionAsync(completedPtr, std::move(task)));
     auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
 
     while (!completedPtr->load() && std::chrono::steady_clock::now() < deadline)

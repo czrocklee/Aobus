@@ -287,11 +287,11 @@ namespace ao::library
         throw;
       }
 
-      if (auto result = optWriter->create(id.raw(), utility::bytes::view(delta.back().text)); !result)
+      if (auto res = optWriter->create(id.raw(), utility::bytes::view(delta.back().text)); !res)
       {
         delta.pop_back();
         overlay.erase(overlayIt);
-        return std::unexpected{result.error()};
+        return std::unexpected{res.error()};
       }
 
       nextId = nextId == std::numeric_limits<std::uint32_t>::max() ? 0 : nextId + 1;

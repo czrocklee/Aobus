@@ -50,7 +50,7 @@ namespace ao::rt::test
     // The drain only enqueues a render-thread signal, so the advance lands an
     // executor hop after the first queued task. Waiting for the advance itself
     // rather than for a queued task keeps the pump thread out of the race.
-    REQUIRE(fixture.transport.executor.drainUntil(
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&]
       {
         return fixture.successionPtr->state().currentTrackId == fixture.secondTrackId &&
@@ -87,7 +87,7 @@ namespace ao::rt::test
       playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
     }
 
-    REQUIRE(fixture.waitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
     auto const optReplacementToken = playbackTransport.clearPreparedNext();
     REQUIRE(optReplacementToken);
     CHECK(*optReplacementToken != *optFirstToken);
@@ -171,13 +171,13 @@ namespace ao::rt::test
     fixture.queueNaturalAdvance();
 
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.thirdTrackId));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(gatePtr->tryWaitForEntry());
     auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.transport.executor.drain();
     REQUIRE(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
 
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.drainUntil(
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&] { return gatePtr->destroyedPtr->load(std::memory_order_relaxed) > 0; }, std::chrono::seconds{5}));
 
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);

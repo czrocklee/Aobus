@@ -132,9 +132,9 @@ namespace ao::tui
     void backspaceInput();
     void closeInput();
     void setCommandCompletion(std::optional<rt::CompletionResult> optCompletion);
-    bool moveCommandCompletion(std::int32_t delta);
-    bool moveCommandCompletionByPage(std::int32_t delta);
-    bool applyCommandCompletion();
+    bool tryMoveCommandCompletion(std::int32_t delta);
+    bool tryMoveCommandCompletionByPage(std::int32_t delta);
+    bool tryApplyCommandCompletion();
     void clearCommandCompletion();
 
     void openOverlay(Overlay overlay) noexcept;

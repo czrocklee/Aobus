@@ -146,7 +146,7 @@ namespace ao::rt
       return;
     }
 
-    std::ignore = publishDelta(std::move(*optBatch), previousSize);
+    std::ignore = tryPublishDelta(std::move(*optBatch), previousSize);
   }
 
   std::optional<std::size_t> AllTracksSource::indexOf(TrackId const id) const

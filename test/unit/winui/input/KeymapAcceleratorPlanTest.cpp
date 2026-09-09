@@ -40,14 +40,14 @@ namespace ao::winui::test
     LayoutSchema schemaWith(std::string id, uimodel::ActionCapabilityMask const capabilities)
     {
       auto schema = LayoutSchema{};
-      schema.addAction({.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
+      schema.tryAddAction({.id = std::move(id), .label = "Test", .category = "Test", .capabilities = capabilities});
       return schema;
     }
 
     /// Answers yes for everything, so a case can isolate the other rules.
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
 
-    bool shippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
+    bool isShippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
     {
       if (schema.action(id))
       {
@@ -196,7 +196,7 @@ namespace ao::winui::test
     // keymap when the running shell offers a handler.
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
+    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
 
     auto const plans = planKeymapAccelerators(keymap, schema, offered);
 
@@ -229,7 +229,7 @@ namespace ao::winui::test
   {
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return shippedWindowsAction(schema, id); };
+    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
 
     auto const plans = planKeymapAccelerators(keymap, schema, offered);
     auto seen = std::set<std::pair<std::uint32_t, std::uint32_t>>{};

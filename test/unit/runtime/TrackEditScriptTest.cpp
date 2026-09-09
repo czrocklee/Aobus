@@ -104,12 +104,12 @@ namespace ao::rt::delta::test
     auto const [from, to] = sequencesFor(seed);
     auto const script = diff(from, to);
 
-    REQUIRE(validate(script, from.size()));
-    auto const result = apply(from, script);
-    REQUIRE(result);
-    CHECK(*result == to);
+    REQUIRE(isValid(script, from.size()));
+    auto const res = apply(from, script);
+    REQUIRE(res);
+    CHECK(*res == to);
     CHECK(applyNaively(from, script) == to);
-    CHECK(validateTrackListProjectionDeltaBatch(eraseTrackIds(script), from.size()));
+    CHECK(isValidTrackListProjectionDeltaBatch(eraseTrackIds(script), from.size()));
 
     bool seenInsertion = false;
     auto previousRemovalStart = from.size();
@@ -139,10 +139,10 @@ namespace ao::rt::delta::test
     auto const updated = std::vector{TrackId{1}, TrackId{3}, TrackId{4}, TrackId{2}};
     auto const script = diff(from, to, updated);
 
-    REQUIRE(validate(script, from.size()));
-    auto const result = apply(from, script);
-    REQUIRE(result);
-    CHECK(*result == to);
+    REQUIRE(isValid(script, from.size()));
+    auto const res = apply(from, script);
+    REQUIRE(res);
+    CHECK(*res == to);
 
     std::size_t updateCount = 0;
 
@@ -181,9 +181,9 @@ namespace ao::rt::delta::test
                                        UpdateRange{.start = 0, .trackIds = {TrackId{1}}},
                                        InsertRange{.start = 2, .trackIds = {TrackId{4}}}}};
 
-    CHECK_FALSE(validate(updateThenRemove, initial.size()));
-    CHECK_FALSE(validate(updateThenInsert, initial.size()));
-    CHECK_FALSE(validate(removeUpdateInsert, initial.size()));
+    CHECK_FALSE(isValid(updateThenRemove, initial.size()));
+    CHECK_FALSE(isValid(updateThenInsert, initial.size()));
+    CHECK_FALSE(isValid(removeUpdateInsert, initial.size()));
     CHECK_FALSE(apply(initial, updateThenRemove));
     CHECK_FALSE(apply(initial, updateThenInsert));
     CHECK_FALSE(apply(initial, removeUpdateInsert));
@@ -199,11 +199,10 @@ namespace ao::rt::delta::test
     coalescer.appendUpdate(0, std::array{TrackId{1}, TrackId{7}});
     auto const script = coalescer.take();
 
-    REQUIRE(validate(script, 6));
-    auto const result =
-      apply(std::vector{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}, TrackId{6}}, script);
-    REQUIRE(result);
-    CHECK(*result == std::vector{TrackId{1}, TrackId{7}, TrackId{8}, TrackId{2}});
+    REQUIRE(isValid(script, 6));
+    auto const res = apply(std::vector{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}, TrackId{5}, TrackId{6}}, script);
+    REQUIRE(res);
+    CHECK(*res == std::vector{TrackId{1}, TrackId{7}, TrackId{8}, TrackId{2}});
   }
 
   TEST_CASE("RangeEditValidator - enforces stage order and running bounds without payloads", "[runtime][unit][delta]")
@@ -213,71 +212,71 @@ namespace ao::rt::delta::test
     SECTION("descending removes, then ascending inserts, then ascending updates")
     {
       auto validator = RangeEditValidator{6};
-      CHECK(validator.accept(Kind::Remove, 4, 2));
-      CHECK(validator.accept(Kind::Remove, 2, 2));
-      CHECK(validator.accept(Kind::Insert, 1, 1));
-      CHECK(validator.accept(Kind::Insert, 2, 1));
-      CHECK(validator.accept(Kind::Update, 0, 2));
+      CHECK(validator.tryAccept(Kind::Remove, 4, 2));
+      CHECK(validator.tryAccept(Kind::Remove, 2, 2));
+      CHECK(validator.tryAccept(Kind::Insert, 1, 1));
+      CHECK(validator.tryAccept(Kind::Insert, 2, 1));
+      CHECK(validator.tryAccept(Kind::Update, 0, 2));
     }
 
     SECTION("removals must strictly descend")
     {
       auto validator = RangeEditValidator{6};
-      REQUIRE(validator.accept(Kind::Remove, 2, 2));
-      CHECK_FALSE(validator.accept(Kind::Remove, 2, 1));
+      REQUIRE(validator.tryAccept(Kind::Remove, 2, 2));
+      CHECK_FALSE(validator.tryAccept(Kind::Remove, 2, 1));
     }
 
     SECTION("a removal after an insertion is rejected")
     {
       auto validator = RangeEditValidator{6};
-      REQUIRE(validator.accept(Kind::Insert, 0, 1));
-      CHECK_FALSE(validator.accept(Kind::Remove, 0, 1));
+      REQUIRE(validator.tryAccept(Kind::Insert, 0, 1));
+      CHECK_FALSE(validator.tryAccept(Kind::Remove, 0, 1));
     }
 
     SECTION("a removal after an update is rejected")
     {
       auto validator = RangeEditValidator{6};
-      REQUIRE(validator.accept(Kind::Update, 0, 1));
-      CHECK_FALSE(validator.accept(Kind::Remove, 5, 1));
+      REQUIRE(validator.tryAccept(Kind::Update, 0, 1));
+      CHECK_FALSE(validator.tryAccept(Kind::Remove, 5, 1));
     }
 
     SECTION("an insertion after an update is rejected")
     {
       auto validator = RangeEditValidator{6};
-      REQUIRE(validator.accept(Kind::Update, 0, 1));
-      CHECK_FALSE(validator.accept(Kind::Insert, 6, 1));
+      REQUIRE(validator.tryAccept(Kind::Update, 0, 1));
+      CHECK_FALSE(validator.tryAccept(Kind::Insert, 6, 1));
     }
 
     SECTION("insertions must not overlap and address the post-removal size")
     {
       auto validator = RangeEditValidator{2};
-      REQUIRE(validator.accept(Kind::Insert, 0, 2));
-      CHECK_FALSE(validator.accept(Kind::Insert, 1, 1));
-      CHECK(validator.accept(Kind::Insert, 4, 1));
-      CHECK_FALSE(validator.accept(Kind::Insert, 9, 1));
+      REQUIRE(validator.tryAccept(Kind::Insert, 0, 2));
+      CHECK_FALSE(validator.tryAccept(Kind::Insert, 1, 1));
+      CHECK(validator.tryAccept(Kind::Insert, 4, 1));
+      CHECK_FALSE(validator.tryAccept(Kind::Insert, 9, 1));
     }
 
     SECTION("updates address the final sequence and must ascend")
     {
       auto validator = RangeEditValidator{3};
-      REQUIRE(validator.accept(Kind::Update, 0, 2));
-      CHECK_FALSE(validator.accept(Kind::Update, 1, 1));
-      CHECK(validator.accept(Kind::Update, 2, 1));
-      CHECK_FALSE(validator.accept(Kind::Update, 3, 1));
+      REQUIRE(validator.tryAccept(Kind::Update, 0, 2));
+      CHECK_FALSE(validator.tryAccept(Kind::Update, 1, 1));
+      CHECK(validator.tryAccept(Kind::Update, 2, 1));
+      CHECK_FALSE(validator.tryAccept(Kind::Update, 3, 1));
     }
 
     SECTION("an empty range is never a valid edit")
     {
       auto validator = RangeEditValidator{4};
-      CHECK_FALSE(validator.accept(Kind::Remove, 0, 0));
-      CHECK_FALSE(validator.accept(Kind::Insert, 0, 0));
-      CHECK_FALSE(validator.accept(Kind::Update, 0, 0));
+      CHECK_FALSE(validator.tryAccept(Kind::Remove, 0, 0));
+      CHECK_FALSE(validator.tryAccept(Kind::Insert, 0, 0));
+      CHECK_FALSE(validator.tryAccept(Kind::Update, 0, 0));
     }
 
     SECTION("an insertion that would overflow the size counter is rejected")
     {
       auto validator = RangeEditValidator{1};
-      CHECK_FALSE(validator.accept(Kind::Insert, 0, std::numeric_limits<std::size_t>::max()));
+      CHECK_FALSE(validator.tryAccept(Kind::Insert, 0, std::numeric_limits<std::size_t>::max()));
     }
   }
 } // namespace ao::rt::delta::test

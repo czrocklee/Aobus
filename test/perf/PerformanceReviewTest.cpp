@@ -438,7 +438,7 @@ namespace ao::rt::test
       return dataset;
     }
 
-    bool lessEntry(OrderEntry const& left, OrderEntry const& right)
+    bool isLessEntry(OrderEntry const& left, OrderEntry const& right)
     {
       if (auto const comparison = left.groupOrderKey.compare(right.groupOrderKey); comparison != 0)
       {
@@ -513,7 +513,7 @@ namespace ao::rt::test
         });
       }
 
-      std::ranges::sort(prepared.entries, lessEntry);
+      std::ranges::sort(prepared.entries, isLessEntry);
       return prepared;
     }
 
@@ -552,7 +552,7 @@ namespace ao::rt::test
       deriveSortKeyInto(scratch, updatedTitle, optPolicy);
       std::size_t generatedKeyBytes = 0;
       updated.titleKey = internCounted(*baseline.arenaPtr, scratch, generatedKeyBytes);
-      auto const insertion = std::ranges::lower_bound(entries, updated, lessEntry);
+      auto const insertion = std::ranges::lower_bound(entries, updated, isLessEntry);
       entries.insert(insertion, updated);
 
       return OperationResult{
@@ -684,9 +684,9 @@ namespace ao::rt::test
     {
       auto aliases = std::vector<std::string>{};
 
-      if (auto const result = policy.makeAliasesInto(aliases, text); !result)
+      if (auto const res = policy.makeAliasesInto(aliases, text); !res)
       {
-        throw std::runtime_error{result.error().message};
+        throw std::runtime_error{res.error().message};
       }
 
       auto operation = OperationResult{.checksum = aliases.size()};
@@ -705,7 +705,7 @@ namespace ao::rt::test
       auto executionRes =
         runLoopTask(harness.asyncRuntime,
                     harness.executor,
-                    executeInteractiveMutation(
+                    executeInteractiveMutationAsync(
                       harness.writeLane.captureSubmission(),
                       [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
                       { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
@@ -1350,7 +1350,7 @@ namespace ao::rt::test
       CHECK(executor.queuedCount() == 1);
       CHECK(delivered == 0);
       auto const startTime = std::chrono::steady_clock::now();
-      REQUIRE(executor.drainUntil([&] { return delivered == 1; }, std::chrono::seconds{30}));
+      REQUIRE(executor.tryDrainUntil([&] { return delivered == 1; }, std::chrono::seconds{30}));
       auto const elapsed =
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - startTime).count();
       auto const final = player.status();

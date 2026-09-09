@@ -335,20 +335,20 @@ namespace ao::uimodel::test
     REQUIRE(
       workspace.navigate(NavigationRequest{.target = FilteredListTarget{.listId = listId, .filterExpression = {}}}));
 
-    while (executor.runReadyTurn())
+    while (executor.tryRunReadyTurn())
     {
     }
 
     REQUIRE(renderLog.last().hasError);
     CHECK(renderLog.last().tooltip.contains("Filter error"));
 
-    REQUIRE(commandsFixture.runTask(commandsFixture.commands().updateList(ListDraft{
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().updateListAsync(ListDraft{
       .listId = listId,
       .name = "Repaired source",
       .expression = "true",
     })));
 
-    while (executor.runReadyTurn())
+    while (executor.tryRunReadyTurn())
     {
     }
 

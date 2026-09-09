@@ -40,7 +40,8 @@ namespace ao::rt::test
 
     std::vector<std::byte> filled(std::size_t const byteLength, std::byte const value)
     {
-      return std::vector<std::byte>(byteLength, value);
+      auto bytes = std::vector<std::byte>(byteLength, value);
+      return bytes;
     }
 
     void writeRaw(std::filesystem::path const& path, std::span<std::byte const> bytes)
@@ -208,6 +209,22 @@ namespace ao::rt::test
     CHECK(entryCount(temp.path()) == 3);
   }
 
+  TEST_CASE("ResourceByteDiskCache - a zero byte budget converges after every write", "[runtime][unit][resource-cache]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const cache = makeCache(temp.path(), 0);
+    auto const bytes = filled(64, std::byte{0x3A});
+    auto const digest = utility::computeSha256(bytes);
+
+    REQUIRE(cache.isEnabled());
+    cache.store(digest, bytes);
+    CHECK_FALSE(std::filesystem::exists(cache.entryPath(digest)));
+    CHECK_FALSE(cache.read(digest));
+
+    cache.store(digest, bytes);
+    CHECK(entryCount(temp.path()) == 0);
+  }
+
   TEST_CASE("ResourceByteDiskCache - convergence is amortized over writes rather than run on each one",
             "[runtime][unit][resource-cache]")
   {
@@ -368,7 +385,7 @@ namespace ao::rt::test
     auto const denied = ao::test::ScopedDirectoryAccessGuard{
       cache.entryPath(blockedDigest).parent_path(), ao::test::DeniedDirectoryAccess::Read};
 
-    if (!denied.effective())
+    if (!denied.isEffective())
     {
       SKIP("the current process bypasses directory permissions");
     }

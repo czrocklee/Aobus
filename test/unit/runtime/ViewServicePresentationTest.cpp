@@ -50,9 +50,9 @@ namespace ao::rt::test
     auto const view = env.requireView();
     REQUIRE(env.workspace.closeView(view));
 
-    auto const result = service.setPresentation(view, defaultTrackPresentationSpec());
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    auto const res = service.setPresentation(view, defaultTrackPresentationSpec());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
@@ -84,7 +84,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createListAsync(ListDraft{
         .name = "Saved List",
       })));
 
@@ -102,7 +102,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createListAsync(ListDraft{
         .name = "Explicit order",
       })));
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
@@ -122,7 +122,7 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto& service = env.service;
     auto const listId =
-      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createList(ListDraft{
+      ao::test::requireValue(env.commandsFixture.runTask(env.commandsFixture.commands().createListAsync(ListDraft{
         .name = "Filtered List",
         .expression = "true",
       })));

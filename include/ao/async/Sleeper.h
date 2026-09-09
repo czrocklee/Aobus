@@ -11,7 +11,7 @@
 namespace ao::async
 {
   /**
-   * Injectable delay strategy for Runtime::sleepFor.
+   * Injectable delay strategy for Runtime::sleepForAsync.
    *
    * A composition root may supply a virtual or controlled clock in place of the
    * Runtime's default steady-timer sleep. The Runtime holds a non-owning
@@ -33,7 +33,7 @@ namespace ao::async
     Sleeper(Sleeper&&) = delete;
     Sleeper& operator=(Sleeper&&) = delete;
 
-    virtual Task<void> sleepFor(std::chrono::milliseconds delay, std::stop_token stopToken) = 0;
+    virtual Task<void> sleepForAsync(std::chrono::milliseconds delay, std::stop_token stopToken) = 0;
 
   protected:
     Sleeper() = default;

@@ -129,6 +129,8 @@ namespace ao::query::detail
     constexpr auto kAdd = dsl::lit_c<'+'>;
   } // namespace oplit
 
+  // lexy discovers production members by these exact framework names.
+  // NOLINTBEGIN(readability-identifier-naming)
   struct SystemVariable : lexy::token_production
   {
     static constexpr auto rule = dsl::symbol<kSystemVarTypes> >>
@@ -236,4 +238,5 @@ namespace ao::query::detail
       dsl::p<BooleanConstant> | dsl::p<UnitConstant> | dsl::p<IntegerConstant> | dsl::p<StringConstant>;
     static constexpr auto value = lexy::construct<ConstantExpression>;
   };
+  // NOLINTEND(readability-identifier-naming)
 } // namespace ao::query::detail

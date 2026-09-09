@@ -33,13 +33,13 @@ namespace ao::uimodel::test
   TEST_CASE("LibraryScanWorkflow - mutation detection excludes issue-only results", "[uimodel][unit][library][scan]")
   {
     auto result = LibraryScanWorkflowResult{};
-    CHECK_FALSE(result.mutatedLibrary());
+    CHECK_FALSE(result.hasMutatedLibrary());
 
     result.optApplyResult = rt::ScanApplyResult{};
     result.optApplyResult->missingCount = 1;
-    CHECK_FALSE(result.mutatedLibrary());
+    CHECK_FALSE(result.hasMutatedLibrary());
 
     result.optApplyResult->insertedIds.emplace_back(1);
-    CHECK(result.mutatedLibrary());
+    CHECK(result.hasMutatedLibrary());
   }
 } // namespace ao::uimodel::test

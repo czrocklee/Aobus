@@ -145,7 +145,7 @@ namespace ao::winui
             {
               if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
               {
-                statePtr->actions->execute(command);
+                statePtr->actions->tryExecute(command);
               }
             });
         }
@@ -228,24 +228,24 @@ namespace ao::winui
           auto* const runtime = &_asyncRuntime;
           _artworkTask = runtime->spawnCancellable(
             [statePtr, runtime, resourceId, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
-            { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); },
+            { return prepareAndWriteArtworkAsync(statePtr, runtime, resourceId, std::move(bytes), stopToken); },
             "Windows SMTC cover-art stream preparation");
         }
       });
   }
 
-  async::Task<void> SmtcBridge::prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
-                                                       async::Runtime* const runtime,
-                                                       ResourceId const resourceId,
-                                                       rt::ResourceBytes bytes,
-                                                       std::stop_token const stopToken)
+  async::Task<void> SmtcBridge::prepareAndWriteArtworkAsync(std::weak_ptr<State> statePtr,
+                                                            async::Runtime* const runtime,
+                                                            ResourceId const resourceId,
+                                                            rt::ResourceBytes bytes,
+                                                            std::stop_token const stopToken)
   {
     auto prepared = PreparedMemoryRandomAccessStream{};
 
-    co_await runtime->resumeOnWorker(stopToken);
+    co_await runtime->resumeOnWorkerAsync(stopToken);
     prepared = prepareMemoryRandomAccessStream(bytes.view());
 
-    co_await runtime->resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
 
     if (auto lockedStatePtr = statePtr.lock();
         lockedStatePtr && lockedStatePtr->active && lockedStatePtr->displayedArtworkId == resourceId)

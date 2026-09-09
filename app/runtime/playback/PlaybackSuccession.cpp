@@ -144,7 +144,7 @@ namespace ao::rt
                : PlaybackSuccessionSourceState::Invalidated;
     }
 
-    static bool sameSemanticTuple(PlaybackSuccessionState const& lhs, PlaybackSuccessionState const& rhs) noexcept
+    static bool isSameSemanticTuple(PlaybackSuccessionState const& lhs, PlaybackSuccessionState const& rhs) noexcept
     {
       return lhs.sourceState == rhs.sourceState && lhs.currentTrackId == rhs.currentTrackId &&
              lhs.hasNext == rhs.hasNext && lhs.hasPrevious == rhs.hasPrevious &&
@@ -170,7 +170,7 @@ namespace ao::rt
         next.optResolvedSuccessor = semantic.optResolvedSuccessor;
       }
 
-      auto const semanticChanged = !sameSemanticTuple(state, next);
+      auto const semanticChanged = !isSameSemanticTuple(state, next);
 
       state = std::move(next);
 
@@ -228,7 +228,7 @@ namespace ao::rt
       return pendingLookaheadPtr == pendingPtr && isLookaheadCandidateCurrent(*pendingPtr);
     }
 
-    bool acceptPendingStart()
+    bool acceptsPendingStart()
     {
       return !isClosing() && optPendingViewStart && optPendingViewStart->sessionPtr &&
              optPendingViewStart->sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Live &&
@@ -275,7 +275,7 @@ namespace ao::rt
       // preserves the streak until playback actually starts.
       resetFailureState();
       restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
-      reprepareNext(false);
+      tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
 
@@ -418,7 +418,7 @@ namespace ao::rt
       }
       else
       {
-        reprepareNext(false);
+        tryReprepareNext(false);
       }
 
       if (changes.semanticChanged || sourceInvalidated)
@@ -432,7 +432,7 @@ namespace ao::rt
       }
     }
 
-    bool retryLookahead(PendingLookahead pending)
+    bool tryRetryLookahead(PendingLookahead pending)
     {
       if (!isLookaheadCandidateCurrent(pending) || sessionPtr->cursor().shuffleMode() != ShuffleMode::On)
       {
@@ -459,10 +459,11 @@ namespace ao::rt
       }
 
       pending.trackId = *optRetry;
-      return prepareLookahead(std::move(pending));
+      return tryPrepareLookahead(std::move(pending));
     }
 
-    bool completeLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr, Result<PreparedNextToken> preparedRes)
+    bool tryCompleteLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr,
+                              Result<PreparedNextToken> preparedRes)
     {
       if (pendingLookaheadPtr != pendingPtr)
       {
@@ -474,7 +475,7 @@ namespace ao::rt
 
       if (!preparedRes)
       {
-        return preparedRes.error().code != Error::Code::Conflict && retryLookahead(std::move(pending));
+        return preparedRes.error().code != Error::Code::Conflict && tryRetryLookahead(std::move(pending));
       }
 
       if (!sessionPtr)
@@ -500,7 +501,7 @@ namespace ao::rt
       return true;
     }
 
-    bool prepareLookahead(PendingLookahead pending)
+    bool tryPrepareLookahead(PendingLookahead pending)
     {
       auto const successor = pending.trackId;
       auto const sourceListId = pending.sourceListId;
@@ -520,19 +521,19 @@ namespace ao::rt
         {
           if (auto const lockedPendingPtr = pendingWeakPtr.lock(); lockedPendingPtr)
           {
-            std::ignore = completeLookahead(lockedPendingPtr, std::move(preparedRes));
+            std::ignore = tryCompleteLookahead(lockedPendingPtr, std::move(preparedRes));
           }
         });
 
       if (!admittedRes)
       {
-        return completeLookahead(pendingPtr, std::unexpected{admittedRes.error()});
+        return tryCompleteLookahead(pendingPtr, std::unexpected{admittedRes.error()});
       }
 
       return true;
     }
 
-    bool reprepareNext(bool const force)
+    bool tryReprepareNext(bool const force)
     {
       if (!sessionPtr)
       {
@@ -568,7 +569,7 @@ namespace ao::rt
 
       auto const successor = *optSuccessor;
       auto const sourceListId = session.cursor().launchSpec().sourceListId;
-      return prepareLookahead(
+      return tryPrepareLookahead(
         PendingLookahead{.trackId = successor, .sourceListId = sourceListId, .failedTrackIds = {}});
     }
 
@@ -608,7 +609,7 @@ namespace ao::rt
       }
 
       restartDeadline.replaceSession(std::chrono::milliseconds{0}, startRes->playbackStarted);
-      reprepareNext(false);
+      tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
       return {};
@@ -741,10 +742,12 @@ namespace ao::rt
       }
     }
 
-    bool attemptNavigation(PlaybackCursor::CommandResolution resolution,
-                           ShuffleHistory::TransitionOrigin const origin,
-                           NavigationDirection const direction,
-                           bool const stopWhenExhausted)
+    // A handled navigation includes a requested stop or failure-limit termination.
+    // Candidate exhaustion remains unhandled even if settling it stops playback.
+    bool tryHandleNavigation(PlaybackCursor::CommandResolution resolution,
+                             ShuffleHistory::TransitionOrigin const origin,
+                             NavigationDirection const direction,
+                             bool const stopWhenExhausted)
     {
       if (!sessionPtr)
       {
@@ -820,10 +823,10 @@ namespace ao::rt
         return;
       }
 
-      std::ignore = attemptNavigation(sessionPtr->cursor().resolveNext(),
-                                      ShuffleHistory::TransitionOrigin::Forward,
-                                      NavigationDirection::Forward,
-                                      true);
+      std::ignore = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
+                                        ShuffleHistory::TransitionOrigin::Forward,
+                                        NavigationDirection::Forward,
+                                        true);
     }
 
     void handleNowPlayingChanged(PlaybackTransport::NowPlayingChanged const& event)
@@ -857,7 +860,7 @@ namespace ao::rt
       cancelPendingStart();
       resetFailureState();
       restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
-      reprepareNext(false);
+      tryReprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
     }
@@ -878,10 +881,10 @@ namespace ao::rt
           return PlaybackFailureDisposition::Unhandled;
         }
 
-        std::ignore = registry.acknowledgeDisarm(*failure.optPreparedNextToken);
-        sessionPtr->shuffleHistory().discardForwardCandidate(failure.trackId);
+        std::ignore = registry.tryAcknowledgeDisarm(*failure.optPreparedNextToken);
+        sessionPtr->shuffleHistory().tryDiscardForwardCandidate(failure.trackId);
         std::ignore = sessionPtr->refreshSemanticState();
-        reprepareNext(false);
+        tryReprepareNext(false);
         synchronizeState();
         return PlaybackFailureDisposition::Recovered;
       }
@@ -913,10 +916,10 @@ namespace ao::rt
       }
 
       reportSkippedTrack();
-      auto const recovered = attemptNavigation(sessionPtr->cursor().resolveNext(),
-                                               ShuffleHistory::TransitionOrigin::Forward,
-                                               NavigationDirection::Forward,
-                                               true);
+      auto const recovered = tryHandleNavigation(sessionPtr->cursor().resolveNext(),
+                                                 ShuffleHistory::TransitionOrigin::Forward,
+                                                 NavigationDirection::Forward,
+                                                 true);
       return recovered && sessionPtr ? PlaybackFailureDisposition::Recovered : PlaybackFailureDisposition::Stopped;
     }
 
@@ -969,7 +972,7 @@ namespace ao::rt
           if (!isClosing())
           {
             cancelPendingStart();
-            reprepareNext(true);
+            tryReprepareNext(true);
           }
         });
       seekSubscription = transport.onSeekUpdate(
@@ -979,7 +982,7 @@ namespace ao::rt
           {
             cancelPendingStart();
             restartDeadline.seek(transport.elapsed());
-            reprepareNext(true);
+            tryReprepareNext(true);
           }
           else if (!isClosing() && event.mode == PlaybackTransport::SeekMode::Final)
           {
@@ -1134,7 +1137,7 @@ namespace ao::rt
     auto admittedRes = impl->transport.stageSuccessionPlaybackAsync(
       *requestRes,
       launchSpecRes->sourceListId,
-      [impl] { return impl->acceptPendingStart(); },
+      [impl] { return impl->acceptsPendingStart(); },
       [impl](Result<PreparedPlaybackStart> preparedStartRes) mutable
       { impl->completePendingStart(std::move(preparedStartRes)); });
 
@@ -1147,7 +1150,7 @@ namespace ao::rt
     return {};
   }
 
-  bool PlaybackSuccession::next()
+  bool PlaybackSuccession::tryMoveNext()
   {
     auto* const impl = checkedImpl();
     impl->cancelPendingStart();
@@ -1159,13 +1162,13 @@ namespace ao::rt
     }
 
     impl->resetFailureState();
-    return impl->attemptNavigation(impl->sessionPtr->cursor().resolveNext(),
-                                   ShuffleHistory::TransitionOrigin::Forward,
-                                   Impl::NavigationDirection::Forward,
-                                   true);
+    return impl->tryHandleNavigation(impl->sessionPtr->cursor().resolveNext(),
+                                     ShuffleHistory::TransitionOrigin::Forward,
+                                     Impl::NavigationDirection::Forward,
+                                     true);
   }
 
-  bool PlaybackSuccession::previous()
+  bool PlaybackSuccession::tryMovePrevious()
   {
     auto* const impl = checkedImpl();
     impl->cancelPendingStart();
@@ -1178,7 +1181,7 @@ namespace ao::rt
 
     impl->resetFailureState();
     auto const shufflePrevious = impl->sessionPtr->cursor().shuffleMode() == ShuffleMode::On &&
-                                 !impl->sessionPtr->cursor().previousRestartAvailable();
+                                 !impl->sessionPtr->cursor().isPreviousRestartAvailable();
     auto const resolution = impl->sessionPtr->resolvePrevious();
 
     if (shufflePrevious && resolution.action == PlaybackCursor::CommandAction::NoOp)
@@ -1189,11 +1192,11 @@ namespace ao::rt
       }
     }
 
-    return impl->attemptNavigation(resolution,
-                                   shufflePrevious ? ShuffleHistory::TransitionOrigin::HistoryPrevious
-                                                   : ShuffleHistory::TransitionOrigin::SequentialPrevious,
-                                   Impl::NavigationDirection::Backward,
-                                   false);
+    return impl->tryHandleNavigation(resolution,
+                                     shufflePrevious ? ShuffleHistory::TransitionOrigin::HistoryPrevious
+                                                     : ShuffleHistory::TransitionOrigin::SequentialPrevious,
+                                     Impl::NavigationDirection::Backward,
+                                     false);
   }
 
   void PlaybackSuccession::clear()
@@ -1217,7 +1220,7 @@ namespace ao::rt
     if (impl->sessionPtr)
     {
       std::ignore = impl->sessionPtr->setShuffleMode(mode);
-      impl->reprepareNext(true);
+      impl->tryReprepareNext(true);
     }
 
     impl->synchronizeState();
@@ -1241,7 +1244,7 @@ namespace ao::rt
     if (impl->sessionPtr)
     {
       std::ignore = impl->sessionPtr->setRepeatMode(mode);
-      impl->reprepareNext(true);
+      impl->tryReprepareNext(true);
     }
 
     impl->synchronizeState();
@@ -1290,9 +1293,9 @@ namespace ao::rt
     return impl->sessionPtr != nullptr;
   }
 
-  bool PlaybackSuccession::capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
-                                                          TrackId& currentTrackId,
-                                                          std::size_t& anchorIndex) const
+  bool PlaybackSuccession::tryCapturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
+                                                             TrackId& currentTrackId,
+                                                             std::size_t& anchorIndex) const
   {
     auto* const impl = checkedImpl();
 
@@ -1354,7 +1357,7 @@ namespace ao::rt
     impl->resetFailureState();
     impl->startObservingCurrentSession();
     impl->restartDeadline.replaceSession(elapsed, false);
-    impl->reprepareNext(false);
+    impl->tryReprepareNext(false);
     impl->synchronizeState();
 
     // Restore enters while the service is active, but signal delivery is

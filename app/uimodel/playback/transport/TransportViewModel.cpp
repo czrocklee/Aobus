@@ -119,7 +119,7 @@ namespace ao::uimodel
 
   void TransportViewModel::handleClick()
   {
-    _actions.execute(_command);
+    _actions.tryExecute(_command);
   }
 
   void TransportViewModel::refresh()

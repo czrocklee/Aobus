@@ -80,7 +80,7 @@ namespace ao::rt
     }
 
     auto script = coalescer.take();
-    AO_INVARIANT(delta::validate(script, _initialSize));
+    AO_INVARIANT(delta::isValid(script, _initialSize));
     return script;
   }
 } // namespace ao::rt

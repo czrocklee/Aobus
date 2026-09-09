@@ -16,11 +16,11 @@ namespace ao::test
 {
   namespace
   {
-    bool firstSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptFirstFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       return true;
     }
-    bool secondSink(FatalDiagnostic const& /*diagnostic*/)
+    bool tryAcceptSecondFatal(FatalDiagnostic const& /*diagnostic*/)
     {
       return false;
     }
@@ -69,13 +69,13 @@ namespace ao::test
 
   TEST_CASE("Fatal - sink registration preserves exact ownership", "[utility][unit][fatal]")
   {
-    REQUIRE(registerFatalSink(&firstSink));
-    CHECK_FALSE(registerFatalSink(&secondSink));
-    CHECK_FALSE(unregisterFatalSink(&secondSink));
-    CHECK(unregisterFatalSink(&firstSink));
-    CHECK_FALSE(unregisterFatalSink(&firstSink));
-    CHECK_FALSE(registerFatalSink(nullptr));
-    CHECK_FALSE(unregisterFatalSink(nullptr));
+    REQUIRE(tryRegisterFatalSink(&tryAcceptFirstFatal));
+    CHECK_FALSE(tryRegisterFatalSink(&tryAcceptSecondFatal));
+    CHECK_FALSE(tryUnregisterFatalSink(&tryAcceptSecondFatal));
+    CHECK(tryUnregisterFatalSink(&tryAcceptFirstFatal));
+    CHECK_FALSE(tryUnregisterFatalSink(&tryAcceptFirstFatal));
+    CHECK_FALSE(tryRegisterFatalSink(nullptr));
+    CHECK_FALSE(tryUnregisterFatalSink(nullptr));
   }
 
   TEST_CASE("Fatal - concurrent sink registration has one winner", "[utility][unit][fatal][concurrency]")
@@ -83,16 +83,18 @@ namespace ao::test
     auto start = std::barrier{3};
     auto results = std::array<std::atomic_bool, 2>{};
 
-    auto firstThread = std::jthread{[&]
-                                    {
-                                      start.arrive_and_wait();
-                                      results[0].store(registerFatalSink(&firstSink), std::memory_order_relaxed);
-                                    }};
-    auto secondThread = std::jthread{[&]
-                                     {
-                                       start.arrive_and_wait();
-                                       results[1].store(registerFatalSink(&secondSink), std::memory_order_relaxed);
-                                     }};
+    auto firstThread =
+      std::jthread{[&]
+                   {
+                     start.arrive_and_wait();
+                     results[0].store(tryRegisterFatalSink(&tryAcceptFirstFatal), std::memory_order_relaxed);
+                   }};
+    auto secondThread =
+      std::jthread{[&]
+                   {
+                     start.arrive_and_wait();
+                     results[1].store(tryRegisterFatalSink(&tryAcceptSecondFatal), std::memory_order_relaxed);
+                   }};
 
     start.arrive_and_wait();
     firstThread.join();
@@ -104,11 +106,11 @@ namespace ao::test
 
     if (firstRegistered)
     {
-      CHECK(unregisterFatalSink(&firstSink));
+      CHECK(tryUnregisterFatalSink(&tryAcceptFirstFatal));
     }
     else
     {
-      CHECK(unregisterFatalSink(&secondSink));
+      CHECK(tryUnregisterFatalSink(&tryAcceptSecondFatal));
     }
   }
 } // namespace ao::test

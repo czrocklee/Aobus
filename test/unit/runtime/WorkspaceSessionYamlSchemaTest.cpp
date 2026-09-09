@@ -219,10 +219,10 @@ namespace ao::rt::test
       presentation.redundantFields.push_back(presentation.redundantFields[0]);
     }
 
-    auto const result = detail::workspaceSessionStateFromDocument(document);
+    auto const res = detail::workspaceSessionStateFromDocument(document);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == expectedCode);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == expectedCode);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][workspace][session-schema]")

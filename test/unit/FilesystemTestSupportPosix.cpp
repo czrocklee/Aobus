@@ -24,12 +24,12 @@ namespace ao::test
       return ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted;
     }
 
-    bool symlinkCreationIsUnavailable(std::error_code const& ec)
+    bool isSymlinkCreationUnavailable(std::error_code const& ec)
     {
       return isAccessDenied(ec) || ec == std::errc::function_not_supported || ec == std::errc::read_only_file_system;
     }
 
-    bool readRestrictionIsEffective(std::filesystem::path const& path)
+    bool isReadRestrictionEffective(std::filesystem::path const& path)
     {
       auto ec = std::error_code{};
       [[maybe_unused]] auto const iterator = std::filesystem::directory_iterator{path, ec};
@@ -47,7 +47,7 @@ namespace ao::test
       throw std::system_error{ec, "failed to probe denied directory read access"};
     }
 
-    bool writeRestrictionIsEffective(std::filesystem::path const& path)
+    bool isWriteRestrictionEffective(std::filesystem::path const& path)
     {
       auto const probeTemplate = (path / ".ao.access-probe.XXXXXX").string();
       auto probePath = std::vector<char>{probeTemplate.begin(), probeTemplate.end()};
@@ -118,7 +118,7 @@ namespace ao::test
       return;
     }
 
-    if (symlinkCreationIsUnavailable(ec))
+    if (isSymlinkCreationUnavailable(ec))
     {
       SKIP("symlink fixture is unavailable: " << ec.message());
     }
@@ -170,8 +170,8 @@ namespace ao::test
 
       try
       {
-        restrictionEffective = inputAccess == DeniedDirectoryAccess::Read ? readRestrictionIsEffective(path)
-                                                                          : writeRestrictionIsEffective(path);
+        restrictionEffective = inputAccess == DeniedDirectoryAccess::Read ? isReadRestrictionEffective(path)
+                                                                          : isWriteRestrictionEffective(path);
       }
       catch (...)
       {
@@ -218,7 +218,7 @@ namespace ao::test
 
   ScopedDirectoryAccessGuard::~ScopedDirectoryAccessGuard() noexcept = default;
 
-  bool ScopedDirectoryAccessGuard::effective() const noexcept
+  bool ScopedDirectoryAccessGuard::isEffective() const noexcept
   {
     return _implPtr->restrictionEffective;
   }

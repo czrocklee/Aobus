@@ -78,7 +78,7 @@ namespace ao::rt::test
     ListId createList(AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(
-        runRuntimeTask(runtime, runtime.library().commands().createList(ListDraft{.name = std::move(name)})));
+        runRuntimeTask(runtime, runtime.library().commands().createListAsync(ListDraft{.name = std::move(name)})));
     }
   } // namespace
 
@@ -88,9 +88,9 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
-    auto const result = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
+    auto const res = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
 
-    REQUIRE(result);
+    REQUIRE(res);
     CHECK(runtimePtr->workspace().snapshot().openViews.empty());
     CHECK(runtimePtr->workspace().snapshot().activeViewId == kInvalidViewId);
   }
@@ -260,7 +260,7 @@ namespace ao::rt::test
       });
 
     REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
-    runRuntimeTask(*runtimePtr, runtimePtr->async().resumeOnCallbackExecutor());
+    runRuntimeTask(*runtimePtr, runtimePtr->async().resumeOnCallbackExecutorAsync());
 
     CHECK(changeCount == 1);
     CHECK(changed.cause == WorkspaceChangeCause::Restore);
@@ -287,9 +287,9 @@ namespace ao::rt::test
     std::ofstream{configPath} << "workspace: \"not a map\"";
 
     auto badConfigStorePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    auto const result = runtimePtr->workspace().restoreSession(*badConfigStorePtr);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
+    auto const res = runtimePtr->workspace().restoreSession(*badConfigStorePtr);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("WorkspaceService - out-of-bounds active index rejects before mutation",
@@ -315,10 +315,10 @@ namespace ao::rt::test
     auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    auto const result = runtimePtr->workspace().restoreSession(*storePtr);
+    auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
     CHECK(runtimePtr->workspace().snapshot() == beforeSnapshot);
     CHECK(runtimePtr->workspace().snapshot().openViews == beforeSnapshot.openViews);
     CHECK(runtimePtr->workspace().customPresets().size() == 1);
@@ -372,10 +372,10 @@ namespace ao::rt::test
     writeWorkspaceConfig(configPath, {listId.raw(), 999999}, 0);
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    auto const result = runtimePtr->workspace().restoreSession(*storePtr);
+    auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
     auto const layout = runtimePtr->workspace().snapshot();
     CHECK(layout.openViews.empty());
     CHECK(layout.activeViewId == kInvalidViewId);
@@ -410,10 +410,10 @@ namespace ao::rt::test
     }
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    auto const result = runtimePtr->workspace().restoreSession(*storePtr);
+    auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == expectedCode);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == expectedCode);
     CHECK(runtimePtr->workspace().snapshot().openViews.empty());
     CHECK(runtimePtr->workspace().snapshot().openViews.empty());
   }
@@ -430,10 +430,10 @@ namespace ao::rt::test
                                  "  customPresets: []\n";
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    auto const result = runtimePtr->workspace().restoreSession(*storePtr);
+    auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
     CHECK(runtimePtr->workspace().snapshot().revision == 0);
   }
 } // namespace ao::rt::test

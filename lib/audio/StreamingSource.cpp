@@ -151,9 +151,9 @@ namespace ao::audio
       {
         auto lock = std::scoped_lock{_decoderMutex};
 
-        if (auto const resRes = _decoderPtr->seek(offset); !resRes)
+        if (auto const res = _decoderPtr->seek(offset); !res)
         {
-          detail::throwDecoderError(resRes.error());
+          detail::throwDecoderError(res.error());
         }
       }
 
@@ -230,10 +230,10 @@ namespace ao::audio
       {
         // An already decoded block must finish before admission of another
         // read, even when its original size exceeds the remaining capacity.
-        if (!_optPendingBlock && !detail::permitsDecode(_decodeHighWatermarkByteCount,
-                                                        _ringBuffer.size(),
-                                                        _ringBuffer.availableToWrite(),
-                                                        _previousBlockByteCount))
+        if (!_optPendingBlock && !detail::canDecode(_decodeHighWatermarkByteCount,
+                                                    _ringBuffer.size(),
+                                                    _ringBuffer.availableToWrite(),
+                                                    _previousBlockByteCount))
         {
           std::this_thread::sleep_for(kDecodeBackoffInterval);
           continue;
@@ -269,10 +269,10 @@ namespace ao::audio
     auto const targetByteCount =
       detail::bufferByteCountForDuration(_bytesPerSecond, targetBufferedThreshold, _ringBuffer.capacity());
 
-    while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-           !seekToken.stop_requested() &&
-           detail::permitsDecode(
-             targetByteCount, _ringBuffer.size(), _ringBuffer.availableToWrite(), _previousBlockByteCount))
+    while (
+      !_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
+      !seekToken.stop_requested() &&
+      detail::canDecode(targetByteCount, _ringBuffer.size(), _ringBuffer.availableToWrite(), _previousBlockByteCount))
     {
       if (auto const status = decodeNextBlock(seekToken, nullptr);
           status == StreamingSource::DecodeBlockStatus::Stopped)
@@ -329,7 +329,7 @@ namespace ao::audio
 
     auto& pendingBlock = *_optPendingBlock;
 
-    if (!writeBlock(pendingBlock.bytes, seekToken, threadStopToken))
+    if (!tryWriteBlock(pendingBlock.bytes, seekToken, threadStopToken))
     {
       return DecodeBlockStatus::Stopped;
     }
@@ -346,9 +346,9 @@ namespace ao::audio
     return DecodeBlockStatus::Decoded;
   }
 
-  bool StreamingSource::writeBlock(std::span<std::byte const>& bytes,
-                                   std::stop_token const& seekToken,
-                                   std::stop_token const* threadStopToken)
+  bool StreamingSource::tryWriteBlock(std::span<std::byte const>& bytes,
+                                      std::stop_token const& seekToken,
+                                      std::stop_token const* threadStopToken)
   {
     auto const stopRequested = [&]
     { return seekToken.stop_requested() || (threadStopToken && threadStopToken->stop_requested()); };

@@ -78,7 +78,7 @@ namespace ao::tui
     _selectedRow = -1;
   }
 
-  bool OutputDeviceController::moveSelection(std::int32_t const delta)
+  bool OutputDeviceController::tryMoveSelection(std::int32_t const delta)
   {
     if (_view.rows.empty())
     {
@@ -153,12 +153,12 @@ namespace ao::tui
     return false;
   }
 
-  bool OutputDeviceController::selectSelected()
+  bool OutputDeviceController::trySelectSelected()
   {
-    return selectRow(_selectedRow);
+    return trySelectRow(_selectedRow);
   }
 
-  bool OutputDeviceController::selectRow(std::int32_t const rowIndex)
+  bool OutputDeviceController::trySelectRow(std::int32_t const rowIndex)
   {
     if (!isSelectableRow(rowIndex))
     {

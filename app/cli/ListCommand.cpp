@@ -440,25 +440,25 @@ namespace ao::cli
 
       if (dryRun)
       {
-        auto const result = cli.runTask(cli.library().commands().previewCreateList(draft));
+        auto const res = cli.runTask(cli.library().commands().previewCreateListAsync(draft));
 
-        if (!result)
+        if (!res)
         {
-          throwCommandError(result.error());
+          throwCommandError(res.error());
         }
 
         printListCreateMutation(cli, std::nullopt, draft, true);
         return;
       }
 
-      auto const result = cli.runTask(cli.library().commands().createList(draft));
+      auto const res = cli.runTask(cli.library().commands().createListAsync(draft));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      printListCreateMutation(cli, *result, draft, false);
+      printListCreateMutation(cli, *res, draft, false);
     }
 
     void printListUpdateMutation(CliRuntime& cli,
@@ -519,15 +519,15 @@ namespace ao::cli
         draft.parentId = ListId{*optParent};
       }
 
-      auto const result = cli.runTask(dryRun ? cli.library().commands().previewUpdateList(draft)
-                                             : cli.library().commands().updateList(draft));
+      auto const res = cli.runTask(dryRun ? cli.library().commands().previewUpdateListAsync(draft)
+                                          : cli.library().commands().updateListAsync(draft));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      printListUpdateMutation(cli, listId, *result, dryRun);
+      printListUpdateMutation(cli, listId, *res, dryRun);
     }
 
     void printListDeleteMutation(CliRuntime& cli, rt::DeleteListReply const& reply, bool const dryRun)
@@ -603,9 +603,9 @@ namespace ao::cli
 
     void requireSuccessfulListOrderStatus(rt::AuthoringStatus const status)
     {
-      if (auto result = validateListOrderCommandStatus(status); !result)
+      if (auto res = validateListOrderCommandStatus(status); !res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
     }
 
@@ -692,32 +692,32 @@ namespace ao::cli
       {
         if (add)
         {
-          auto result = cli.runTask(cli.library().commands().previewAddTracksToList(listId, targets));
+          auto res = cli.runTask(cli.library().commands().previewAddTracksToListAsync(listId, targets));
 
-          if (!result)
+          if (!res)
           {
-            throwCommandError(result.error());
+            throwCommandError(res.error());
           }
 
           printListMembershipMutation(cli,
                                       ListMembershipReportDto{
                                         .action = "add",
                                         .dryRun = true,
-                                        .listId = result->listId,
-                                        .listName = result->listName,
-                                        .tag = result->tag,
-                                        .changed = !result->tagEdit.changes.empty(),
-                                        .targetTrackIds = result->targetTrackIds,
-                                        .changes = result->tagEdit.changes,
+                                        .listId = res->listId,
+                                        .listName = res->listName,
+                                        .tag = res->tag,
+                                        .changed = !res->tagEdit.changes.empty(),
+                                        .targetTrackIds = res->targetTrackIds,
+                                        .changes = res->tagEdit.changes,
                                       });
           return;
         }
 
-        auto result = cli.runTask(cli.library().commands().previewRemoveTracksFromList(listId, targets));
+        auto res = cli.runTask(cli.library().commands().previewRemoveTracksFromListAsync(listId, targets));
 
-        if (!result)
+        if (!res)
         {
-          throwCommandError(result.error());
+          throwCommandError(res.error());
         }
 
         printListMembershipMutation(
@@ -725,13 +725,13 @@ namespace ao::cli
           ListMembershipReportDto{
             .action = "remove",
             .dryRun = true,
-            .listId = result->listId,
-            .listName = result->listName,
-            .tag = result->tag,
-            .changed = !result->tagEdit.changes.empty() || !result->forgottenPositionTrackIds.empty(),
-            .targetTrackIds = result->targetTrackIds,
-            .changes = result->tagEdit.changes,
-            .forgottenPositionTrackIds = result->forgottenPositionTrackIds,
+            .listId = res->listId,
+            .listName = res->listName,
+            .tag = res->tag,
+            .changed = !res->tagEdit.changes.empty() || !res->forgottenPositionTrackIds.empty(),
+            .targetTrackIds = res->targetTrackIds,
+            .changes = res->tagEdit.changes,
+            .forgottenPositionTrackIds = res->forgottenPositionTrackIds,
           });
         return;
       }
@@ -745,19 +745,19 @@ namespace ao::cli
 
       if (add)
       {
-        auto result = cli.runTask(cli.library().commands().addTracksToList(listId, *bindingRes));
+        auto res = cli.runTask(cli.library().commands().addTracksToListAsync(listId, *bindingRes));
 
-        if (!result)
+        if (!res)
         {
-          throwCommandError(result.error());
+          throwCommandError(res.error());
         }
 
-        if (result->status == rt::AuthoringStatus::Stale)
+        if (res->status == rt::AuthoringStatus::Stale)
         {
           throwCommandError(Error::Code::Conflict, "List membership targets became stale");
         }
 
-        if (result->status == rt::AuthoringStatus::Busy || result->status == rt::AuthoringStatus::Unavailable)
+        if (res->status == rt::AuthoringStatus::Busy || res->status == rt::AuthoringStatus::Unavailable)
         {
           throwCommandError(Error::Code::InvalidState, "Library is busy");
         }
@@ -765,29 +765,29 @@ namespace ao::cli
         printListMembershipMutation(cli,
                                     ListMembershipReportDto{
                                       .action = "add",
-                                      .listId = result->reply.listId,
-                                      .listName = result->reply.listName,
-                                      .tag = result->reply.tag,
-                                      .changed = result->status == rt::AuthoringStatus::Applied,
-                                      .targetTrackIds = result->reply.targetTrackIds,
-                                      .changes = result->reply.tagEdit.changes,
+                                      .listId = res->reply.listId,
+                                      .listName = res->reply.listName,
+                                      .tag = res->reply.tag,
+                                      .changed = res->status == rt::AuthoringStatus::Applied,
+                                      .targetTrackIds = res->reply.targetTrackIds,
+                                      .changes = res->reply.tagEdit.changes,
                                     });
         return;
       }
 
-      auto result = cli.runTask(cli.library().commands().removeTracksFromList(listId, *bindingRes));
+      auto res = cli.runTask(cli.library().commands().removeTracksFromListAsync(listId, *bindingRes));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      if (result->status == rt::AuthoringStatus::Stale)
+      if (res->status == rt::AuthoringStatus::Stale)
       {
         throwCommandError(Error::Code::Conflict, "List membership targets became stale");
       }
 
-      if (result->status == rt::AuthoringStatus::Busy || result->status == rt::AuthoringStatus::Unavailable)
+      if (res->status == rt::AuthoringStatus::Busy || res->status == rt::AuthoringStatus::Unavailable)
       {
         throwCommandError(Error::Code::InvalidState, "Library is busy");
       }
@@ -795,27 +795,27 @@ namespace ao::cli
       printListMembershipMutation(cli,
                                   ListMembershipReportDto{
                                     .action = "remove",
-                                    .listId = result->reply.listId,
-                                    .listName = result->reply.listName,
-                                    .tag = result->reply.tag,
-                                    .changed = result->status == rt::AuthoringStatus::Applied,
-                                    .targetTrackIds = result->reply.targetTrackIds,
-                                    .changes = result->reply.tagEdit.changes,
-                                    .forgottenPositionTrackIds = result->reply.forgottenPositionTrackIds,
+                                    .listId = res->reply.listId,
+                                    .listName = res->reply.listName,
+                                    .tag = res->reply.tag,
+                                    .changed = res->status == rt::AuthoringStatus::Applied,
+                                    .targetTrackIds = res->reply.targetTrackIds,
+                                    .changes = res->reply.tagEdit.changes,
+                                    .forgottenPositionTrackIds = res->reply.forgottenPositionTrackIds,
                                   });
     }
 
     rt::BoundListOrder bindCurrentListOrder(CliRuntime& cli, ListId const listId)
     {
       auto effectiveIds = effectiveListTrackIds(cli, listId);
-      auto result = cli.library().bindListOrder(listId, std::move(effectiveIds));
+      auto res = cli.library().bindListOrder(listId, std::move(effectiveIds));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      return std::move(*result);
+      return std::move(*res);
     }
 
     void printListOrderMutation(CliRuntime& cli, ListOrderReportDto const& report)
@@ -850,61 +850,61 @@ namespace ao::cli
       auto const selectedTrackIds = trackIds(rawTrackIds);
       auto const optBeforeTrackId = optRawBeforeTrackId ? std::optional{TrackId{*optRawBeforeTrackId}} : std::nullopt;
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().commands().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
+      auto res = cli.runTask(cli.library().commands().moveListOrderAsync(binding, selectedTrackIds, optBeforeTrackId));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      requireSuccessfulListOrderStatus(result->status);
+      requireSuccessfulListOrderStatus(res->status);
       printListOrderMutation(cli,
                              ListOrderReportDto{
                                .action = "move",
                                .listId = listId,
-                               .status = std::string{orderStatusName(result->status)},
-                               .selectedTrackIds = result->reply.selectedTrackIds,
-                               .optBeforeTrackId = result->reply.optBeforeTrackId,
+                               .status = std::string{orderStatusName(res->status)},
+                               .selectedTrackIds = res->reply.selectedTrackIds,
+                               .optBeforeTrackId = res->reply.optBeforeTrackId,
                              });
     }
 
     void resetListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().commands().resetListOrder(binding));
+      auto res = cli.runTask(cli.library().commands().resetListOrderAsync(binding));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      requireSuccessfulListOrderStatus(result->status);
+      requireSuccessfulListOrderStatus(res->status);
       printListOrderMutation(cli,
                              ListOrderReportDto{
                                .action = "reset",
                                .listId = listId,
-                               .status = std::string{orderStatusName(result->status)},
-                               .optForgottenPositionCount = result->reply.forgottenPositionCount,
+                               .status = std::string{orderStatusName(res->status)},
+                               .optForgottenPositionCount = res->reply.forgottenPositionCount,
                              });
     }
 
     void forgetHiddenListOrder(CliRuntime& cli, ListId const listId)
     {
       auto const binding = bindCurrentListOrder(cli, listId);
-      auto result = cli.runTask(cli.library().commands().forgetHiddenListOrder(binding));
+      auto res = cli.runTask(cli.library().commands().forgetHiddenListOrderAsync(binding));
 
-      if (!result)
+      if (!res)
       {
-        throwCommandError(result.error());
+        throwCommandError(res.error());
       }
 
-      requireSuccessfulListOrderStatus(result->status);
+      requireSuccessfulListOrderStatus(res->status);
       printListOrderMutation(cli,
                              ListOrderReportDto{
                                .action = "forget-hidden",
                                .listId = listId,
-                               .status = std::string{orderStatusName(result->status)},
-                               .optForgottenPositionCount = result->reply.forgottenPositionCount,
+                               .status = std::string{orderStatusName(res->status)},
+                               .optForgottenPositionCount = res->reply.forgottenPositionCount,
                              });
     }
 
@@ -1080,27 +1080,27 @@ namespace ao::cli
 
         if (deleteDescendants->count() > 0)
         {
-          auto const result = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAndDescendants(listId)
-                                                 : cli.library().commands().deleteListAndDescendants(listId));
+          auto const res = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAndDescendantsAsync(listId)
+                                              : cli.library().commands().deleteListAndDescendantsAsync(listId));
 
-          if (!result)
+          if (!res)
           {
-            throwCommandError(result.error());
+            throwCommandError(res.error());
           }
 
-          printListDeleteSubtreeMutation(cli, *result, dryRun);
+          printListDeleteSubtreeMutation(cli, *res, dryRun);
           return;
         }
 
-        auto const result = cli.runTask(dryRun ? cli.library().commands().previewDeleteList(listId)
-                                               : cli.library().commands().deleteList(listId));
+        auto const res = cli.runTask(dryRun ? cli.library().commands().previewDeleteListAsync(listId)
+                                            : cli.library().commands().deleteListAsync(listId));
 
-        if (!result)
+        if (!res)
         {
-          throwCommandError(result.error());
+          throwCommandError(res.error());
         }
 
-        printListDeleteMutation(cli, *result, dryRun);
+        printListDeleteMutation(cli, *res, dryRun);
       });
 
     auto* dump = list->add_subcommand("dump", "Dump lists from database");

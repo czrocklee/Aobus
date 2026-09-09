@@ -54,7 +54,7 @@ namespace ao::gtk::test
       auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(viewRes);
       REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
       drainGtkEvents();
     }
   } // namespace

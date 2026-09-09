@@ -764,7 +764,7 @@ namespace ao::gtk
         }
 
         if (auto const physicalKeycode = keycode == 0 ? keyval : keycode;
-            isSinglePressTrackOrderAction(*optActionId) && !_orderKeyRepeatGuard.acceptPress(physicalKeycode))
+            isSinglePressTrackOrderAction(*optActionId) && !_orderKeyRepeatGuard.tryAcceptPress(physicalKeycode))
         {
           return true;
         }
