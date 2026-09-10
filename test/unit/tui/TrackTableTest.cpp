@@ -5,6 +5,8 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
+#include "tui/NavigationPanel.h"
+#include "tui/Style.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackListEntry.h"
 #include "tui/TrackSection.h"
@@ -14,7 +16,9 @@
 #include <ao/rt/TrackRow.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
+#include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
@@ -170,6 +174,63 @@ namespace ao::tui::test
       return lhs.isSectionHeader ? lhs.sectionIndex == rhs.sectionIndex : lhs.trackIndex == rhs.trackIndex;
     }
   } // namespace
+
+  TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar", "[tui][regression][track-table]")
+  {
+    using namespace ftxui;
+    auto const presentation = rt::TrackPresentationSpec{.id = "padding", .visibleFields = {rt::TrackField::Title}};
+
+    for (auto const count : {0U, 2U, 40U})
+    {
+      for (auto const columns : {80, 140})
+      {
+        auto const tracks = manyTracks(count);
+        auto const geometry = navigationGeometry(columns, 0, false);
+        auto regions = std::vector<TrackRowHitRegion>{};
+        auto handles = std::vector<TrackColumnResizeHandle>{};
+        auto tableBox = Box{};
+        auto tablePtr = trackTableView(tracks,
+                                       0,
+                                       kInvalidTrackId,
+                                       presentation,
+                                       {.resizeHandles = &handles,
+                                        .tableBox = &tableBox,
+                                        .trackRowHitRegions = &regions,
+                                        .availableColumns = geometry.trackColumns,
+                                        .emptyText = std::string(2 * static_cast<std::size_t>(columns), 'X')});
+        auto const rendered =
+          renderElement(style::titledPanel("", style::scrollablePanelBody(std::move(tablePtr))), columns, 10);
+        CHECK(tableBox.x_min == 2);
+        CHECK(tableBox.x_max == columns - 2);
+        REQUIRE(handles.size() == 1);
+        CHECK(handles.front().availableColumns == tableBox.x_max - tableBox.x_min + 1);
+
+        if (count == 0)
+        {
+          CHECK(regions.empty());
+
+          for (std::int32_t row = 2; row < 9; ++row)
+          {
+            auto const& gutter = rendered.screen.PixelAt(columns - 2, row).character;
+            CHECK((gutter.empty() || gutter == " "));
+          }
+
+          continue;
+        }
+
+        REQUIRE_FALSE(regions.empty());
+        auto const selectedRow = regions.front().box;
+        CHECK(selectedRow.x_min == 2);
+        CHECK(selectedRow.x_max == columns - 3);
+        CHECK(rendered.screen.PixelAt(1, selectedRow.y_min).background_color == Color::Default);
+        CHECK(rendered.screen.PixelAt(2, selectedRow.y_min).background_color == Color::Yellow);
+        CHECK(rendered.screen.PixelAt(columns - 3, selectedRow.y_min).background_color == Color::Yellow);
+        CHECK(rendered.screen.PixelAt(columns - 2, selectedRow.y_min).background_color == Color::Default);
+        auto const& scrollbar = rendered.screen.PixelAt(columns - 2, selectedRow.y_min).character;
+        CHECK((!scrollbar.empty() && scrollbar != " ") == (count == 40));
+      }
+    }
+  }
 
   TEST_CASE("TrackTable - track rows keep metadata columns aligned", "[tui][unit][track-table]")
   {

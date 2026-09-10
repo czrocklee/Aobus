@@ -26,6 +26,10 @@ namespace ao::tui::test
   TEST_CASE("Command - command parser recognizes terminal app commands", "[tui][unit][shell]")
   {
     CHECK(requiredCommand(":lists").action == CommandAction::OpenLists);
+    CHECK(requiredCommand(":sidebar").action == CommandAction::TogglePinnedLists);
+    CHECK(requiredCommand(":goto").action == CommandAction::OpenGoTo);
+    CHECK(requiredCommand(":artist").action == CommandAction::OpenCurrentArtist);
+    CHECK(requiredCommand(":album").action == CommandAction::OpenCurrentAlbum);
     CHECK(requiredCommand(":detail").action == CommandAction::OpenDetail);
     CHECK(requiredCommand("details").action == CommandAction::OpenDetail);
     CHECK(requiredCommand(":quality").action == CommandAction::OpenQuality);
@@ -87,6 +91,12 @@ namespace ao::tui::test
   {
     constexpr auto kRelations = std::to_array<std::pair<CommandAction, KeyAction>>({
       {CommandAction::OpenLists, KeyAction::ToggleLists},
+      {CommandAction::TogglePinnedLists, KeyAction::TogglePinnedLists},
+      {CommandAction::OpenGoTo, KeyAction::OpenGoTo},
+      {CommandAction::OpenCurrentArtist, KeyAction::OpenCurrentArtist},
+      {CommandAction::OpenCurrentAlbum, KeyAction::OpenCurrentAlbum},
+      {CommandAction::Back, KeyAction::WorkspaceBack},
+      {CommandAction::Forward, KeyAction::WorkspaceForward},
       {CommandAction::OpenDetail, KeyAction::ToggleDetails},
       {CommandAction::OpenQuality, KeyAction::ToggleAudioPipeline},
       {CommandAction::OpenOutputDevices, KeyAction::ToggleOutputDevices},

@@ -374,10 +374,11 @@ namespace ao::tui
       });
     }
 
-    return selectableList(
-      std::move(rows),
-      SelectableListOptions{
-        .focusRow = static_cast<std::int32_t>(_readonlyRow), .flex = true, .viewportBox = &_propertiesViewport});
+    return selectableList(std::move(rows),
+                          SelectableListOptions{.focusRow = static_cast<std::int32_t>(_readonlyRow),
+                                                .horizontalScroll = false,
+                                                .flex = true,
+                                                .viewportBox = &_propertiesViewport});
   }
 
   void TrackMetadataEditor::moveMetadataRow(std::int32_t const delta)
@@ -609,7 +610,7 @@ namespace ao::tui
           candidateElements.push_back(std::move(itemRowPtr) | ftxui::reflect(_candidateBoxes[candIndex]));
         }
 
-        auto popupBoxPtr = vbox(std::move(candidateElements)) | border | clear_under;
+        auto popupBoxPtr = style::panelBody(vbox(std::move(candidateElements))) | border | clear_under;
         auto const indentSize = static_cast<std::size_t>(labelColumns) + 5;
         auto indentedPopupPtr = hbox({
           text(std::string(indentSize, ' ')),

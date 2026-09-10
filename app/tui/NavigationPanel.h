@@ -4,6 +4,8 @@
 #pragma once
 
 #include "MouseBindings.h"
+#include "PanelWidths.h"
+#include "Style.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 
@@ -17,24 +19,24 @@ namespace ao::tui
 {
   inline constexpr std::int32_t kNavigationColumns = 26;
 
-  class KeymapPlan;
   class ListNavigationModel;
 
   struct NavigationGeometry final
   {
     bool canDock = false;
     bool docked = false;
-    bool drawer = false;
     std::int32_t columns = 0;
     std::int32_t trackColumns = 1;
+    std::int32_t detailColumns = 0;
+    std::int32_t terminalColumns = 0;
     bool operator==(NavigationGeometry const&) const = default;
   };
 
   NavigationGeometry navigationGeometry(std::int32_t terminalColumns,
                                         std::int32_t detailColumns,
-                                        bool enabled,
-                                        bool focused,
-                                        bool suspended);
+                                        bool pinned,
+                                        bool separateBorders = false,
+                                        PanelWidths widths = {});
 
   struct NavigationRowHit final
   {
@@ -57,9 +59,22 @@ namespace ao::tui
     NavigationHitRegions* regions = nullptr;
   };
 
+  /// Joins framed Lists and workspace panes using shared or separate borders.
+  ftxui::Element dockNavigationPanel(ftxui::Element navigationPtr,
+                                     ftxui::Element workspacePtr,
+                                     std::int32_t navigationColumns,
+                                     ftxui::Box* pinBox = nullptr,
+                                     bool hovered = false,
+                                     style::PanelDividerOptions options = {});
+
+  ftxui::Element collapsedNavigationPanel(ftxui::Element workspacePtr,
+                                          ftxui::Box& pinBox,
+                                          bool hovered = false,
+                                          bool revealOnHover = false,
+                                          ftxui::Box* hoverBox = nullptr);
+
   ftxui::Element navigationPanel(i18n::MessageCatalog const& catalog,
                                  ListNavigationModel const& model,
                                  ListId activeList,
-                                 KeymapPlan const& keymap,
                                  NavigationPanelOptions options);
 } // namespace ao::tui

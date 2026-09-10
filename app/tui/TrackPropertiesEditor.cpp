@@ -245,12 +245,12 @@ namespace ao::tui
     }();
 
     return vbox({
-             hbox(std::move(header)),
-             renderTabStrip(),
-             separator(),
-             std::move(bodyPtr) | flex | ftxui::reflect(_bodyBox),
-             separator(),
-             renderFooter(),
+             style::panelBody(hbox(std::move(header))),
+             style::panelBody(renderTabStrip()),
+             style::panelBody(separator()),
+             style::scrollablePanelBody(std::move(bodyPtr)) | ftxui::reflect(_bodyBox),
+             style::panelBody(separator()),
+             style::panelBody(renderFooter()),
            }) |
            border;
   }
@@ -479,6 +479,7 @@ namespace ao::tui
     // half of a large capture can never be scrolled into view.
     return selectableList(std::move(rows),
                           SelectableListOptions{.focusRow = static_cast<std::int32_t>(_tracksRow) * kTargetRowLines,
+                                                .horizontalScroll = false,
                                                 .flex = true,
                                                 .viewportBox = &_targetViewport});
   }

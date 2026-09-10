@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "LibraryNavigation.h"
 #include "ListNavigationModel.h"
 #include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
@@ -27,6 +28,7 @@ namespace ao::rt
   class Library;
   class ViewService;
   class WorkspaceService;
+  struct NavigationRequest;
 } // namespace ao::rt
 
 namespace ao::uimodel
@@ -96,10 +98,19 @@ namespace ao::tui
     std::string revealTrack(TrackId trackId,
                             rt::ViewId preferredViewId = rt::kInvalidViewId,
                             ListId preferredListId = kInvalidListId);
+    bool canNavigateBack() const;
+    bool canNavigateForward() const;
     Result<> navigateHistory(bool forward);
+    Result<> navigateToArtist(std::string_view artist);
+    Result<> revealAlbum(TrackId trackId);
     std::string setPresentation(std::string_view presentationId);
     std::string selectSelectedPresentation();
     Result<bool> openList(ListId id);
+    std::vector<LibraryNavEntry> const& libraryEntries() const noexcept { return _libraryEntries; }
+    std::vector<std::string> const& libraryLabels() const noexcept { return _libraryLabels; }
+    std::int32_t selectedList() const noexcept { return _selectedList; }
+    void selectListRow(std::int32_t index);
+    void revealActiveList();
     ListNavigationModel& navigation() noexcept { return _navigation; }
     ListNavigationModel const& navigation() const noexcept { return _navigation; }
     std::string reloadActiveList();
@@ -135,6 +146,7 @@ namespace ao::tui
     Result<bool> attachActiveWorkspaceView();
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> navigateToList(ListId listId);
+    Result<> navigateFromActiveView(rt::NavigationRequest const& request);
 
     rt::Library& _library;
     rt::ViewService& _views;
@@ -142,6 +154,9 @@ namespace ao::tui
     i18n::MessageCatalog _textCatalog;
     uimodel::ListPresentations& _listPresentations;
     ListNavigationModel _navigation{};
+    std::vector<LibraryNavEntry> _libraryEntries{};
+    std::vector<std::string> _libraryLabels{};
+    std::int32_t _selectedList = 0;
     std::string _viewSyncError{};
     std::vector<TrackPresentationNavEntry> _presentationEntries{};
     std::vector<TrackListEntry> _tracks{};

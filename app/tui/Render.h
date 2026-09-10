@@ -4,12 +4,15 @@
 #pragma once
 
 #include "CoverArt.h"
+#include "Style.h"
+#include "TrackDetailLines.h"
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/screen/box.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -57,12 +60,11 @@ namespace ao::tui
                                 std::int32_t columns,
                                 ftxui::Box* optArtworkBox = nullptr);
   /**
-   * @brief Whether artwork fits beside worst-case metadata in @p availableRows.
+   * @brief Whether @p availableRows can hold artwork and the reserved first page of detail text.
    *
-   * Measured against every field Detail can show rather than the rows one
-   * track produces, so artwork cannot appear and disappear as the selection
-   * moves between sparse and fully tagged tracks. Metadata wins the short
-   * terminal.
+   * A fixed budget for artwork, panel chrome, and ten text rows keeps artwork
+   * visibility stable as the selected track changes. Longer metadata scrolls;
+   * short terminals reserve the available space for detail text.
    */
   bool isDetailPaneShowingCoverArt(std::int32_t availableRows);
   /// The escape drawing @p png into @p coverBox, empty when the box reserves no cells.
@@ -101,10 +103,31 @@ namespace ao::tui
   std::int32_t detailPaneColumns(i18n::MessageCatalog const& textCatalog,
                                  std::int32_t terminalColumns,
                                  std::int32_t coverColumns);
+  ftxui::Element dockDetailPane(ftxui::Element workspacePtr,
+                                ftxui::Element detailPtr,
+                                std::int32_t columns,
+                                ftxui::Box* toggleBox = nullptr,
+                                bool hovered = false,
+                                style::PanelDividerOptions options = {});
+  ftxui::Element collapsedDetailPane(ftxui::Element workspacePtr,
+                                     ftxui::Box& toggleBox,
+                                     bool hovered = false,
+                                     bool revealOnHover = false,
+                                     ftxui::Box* hoverBox = nullptr);
+  struct DetailPaneOptions final
+  {
+    DetailSectionState sections{};
+    std::array<ftxui::Box, 2>* headerBoxes = nullptr;
+    bool focused = false;
+  };
+
   ftxui::Element detailPane(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
-                            std::int32_t columns);
+                            std::int32_t columns,
+                            PanelMouseRegions* regions = nullptr,
+                            std::int32_t scrollRow = 0,
+                            DetailPaneOptions options = {});
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog,
                           KeymapPlan const& keymapPlan,
                           std::int32_t terminalColumns = 0,

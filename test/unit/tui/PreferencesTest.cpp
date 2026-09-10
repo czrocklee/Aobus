@@ -31,6 +31,7 @@ namespace ao::tui::test
                                  "preferences: {version: 1, seekSeconds: 61}",
                                  "preferences: {version: 1, volumePercent: 0}",
                                  "preferences: {version: 1, coverArtMode: invalid}",
+                                 "preferences: {version: 1, panelSeparator: triple}",
                                  "preferences: {version: 1, language: unsupported}",
                                  "preferences: {version: 1, unknown: true}"})
     {
@@ -62,6 +63,19 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("Preferences - existing version one documents default to a single panel separator", "[tui][unit][config]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
+    std::ofstream{path} << "preferences: {version: 1, coverArtMode: off}";
+    auto store = rt::ConfigStore{path};
+    auto loadedRes = loadPreferences(store);
+    REQUIRE(loadedRes);
+    CHECK(loadedRes->panelSeparator == "single");
+    CHECK(loadedRes->coverArtMode == "off");
+    CHECK_FALSE(loadedRes->revealIndicatorsOnHover);
+  }
+
   TEST_CASE("Preferences - round trips language and preserves sibling keymap writes", "[tui][unit][config]")
   {
     auto temp = ao::test::TempDir{};
@@ -70,6 +84,8 @@ namespace ao::tui::test
     auto store = rt::ConfigStore{path};
     auto preferences = Preferences{.language = "zh-Hant",
                                    .coverArtMode = "blocks",
+                                   .panelSeparator = "double",
+                                   .revealIndicatorsOnHover = true,
                                    .dimBackdrop = false,
                                    .reducedMotion = true,
                                    .mouseEnabled = false,
@@ -127,6 +143,10 @@ namespace ao::tui::test
     auto candidate = Preferences{.language = "en_US!"};
     CHECK_FALSE(savePreferences(store, candidate));
     candidate.language.clear();
+    candidate.panelSeparator = "triple";
+    CHECK_FALSE(savePreferences(store, candidate));
+    CHECK(ao::test::readFile(path) == original);
+    candidate.panelSeparator = "single";
     candidate.wheelStep = 0;
     CHECK_FALSE(savePreferences(store, candidate));
     CHECK(ao::test::readFile(path) == original);

@@ -91,6 +91,12 @@ The literal plus key is `+` without modifiers or a trailing doubled plus after m
 Other actions have no shipped global shortcut.
 `Ctrl+,` is an app-scoped fixed preference accelerator and is not part of this keymap.
 
+### Go to menu protocol
+
+The TUI Go to action opens a modal menu (default `g`, command `:goto`). Its fixed suffixes are `t` for the playing track, `a` for its artist, `b` for its album, `[` for previous view, and `]` for next view. Suffixes are menu input rather than persisted multi-chord bindings. Escape or unrelated input cancels; arrows/j/k and Enter select and activate. There is no timeout.
+
+The prefix and each root navigation action can be rebound separately. Effective direct shortcuts take precedence in discovery hints; otherwise Help and the Command Palette show the effective prefix plus the suffix. Unbinding the prefix removes that fallback hint but leaves `:goto` available. Existing action descriptors precede the newly introduced navigation descriptors when resolving projected collisions, preserving existing custom bindings.
+
 ### TUI defaults
 
 The TUI defines its own defaults and reuses shared action identities for playback and reveal. Desktop chords are not inherited. Global TUI overrides apply to this terminal default map.
@@ -102,6 +108,7 @@ The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shif
 | `tui.shell.quit` | `Shift+Q` |
 | `tui.shell.toggleListChooser` | `L` |
 | `tui.shell.toggleTrackDetail` | `D` |
+| `tui.detail.focus` | `Shift+D` |
 | `tui.shell.toggleAudioQuality` | `A` |
 | `tui.shell.toggleOutputDevices` | `O` |
 | `tui.shell.togglePresentationChooser` | `P` |
@@ -109,6 +116,13 @@ The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shif
 | `tui.shell.showHelp` | `?`, `F1` |
 | `tui.shell.openCommandPalette` | `:` |
 | `tui.workspace.switchFocus` | `Tab`, `Shift+Tab` |
+| `tui.workspace.beginPanelResize` | `Ctrl+W` |
+| `tui.workspace.togglePinnedLists` | `Shift+L` |
+| `tui.navigation.openGoTo` | `G` |
+| `tui.navigation.currentArtist` | none |
+| `tui.navigation.currentAlbum` | none |
+| `tui.navigation.back` | none |
+| `tui.navigation.forward` | none |
 | `tui.library.openQuickFilter` | `/` |
 | `tui.library.clearFilter` | `Shift+C` |
 | `tui.library.reloadActiveList` | `Shift+R` |
@@ -264,3 +278,7 @@ There is no explicit migration table for renamed actions or key tokens.
 - [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
 - [GTK layout schema and action reference](layout-schema.md)
 - [Application managed-state surface](../persistence/application-config.md)
+
+In the TUI, Shift+Left/Right are fixed contextual keys for moving the focused Lists or Detail divider. They are not editable action bindings; Tracks, text inputs, and popovers retain their own input ownership.
+
+`tui.workspace.beginPanelResize` defaults to Ctrl+W and is rebindable in the TUI. From Tracks, Lists, or Detail it enters a temporary layout adjustment; Tab switches visible dividers, arrows move, Enter applies, and Escape cancels. Text inputs keep their Ctrl+W word-deletion behavior.

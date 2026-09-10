@@ -28,7 +28,6 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kPresentationPanelMarkerColumns = 2;
-    constexpr std::int32_t kPresentationPanelScrollIndicatorColumns = 1;
 
     std::string presentationPanelRowText(TrackPresentationNavEntry const& item)
     {
@@ -50,8 +49,7 @@ namespace ao::tui
                                         KeymapPlan const& keymapPlan,
                                         std::int32_t const terminalColumns)
   {
-    auto contentColumns = std::max(cellWidth(chromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)) +
-                                     kPresentationPanelScrollIndicatorColumns,
+    auto contentColumns = std::max(cellWidth(chromeText(textCatalog, i18n::MessageId::TuiLibraryNoViewsAvailable)),
                                    cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
     contentColumns = std::max(contentColumns,
                               cellWidth(overlayLabel(textCatalog, Overlay::PresentationPanel)) + cellWidth(" · ") +
@@ -59,9 +57,8 @@ namespace ao::tui
 
     for (auto const& item : items)
     {
-      contentColumns = std::max(contentColumns,
-                                kPresentationPanelMarkerColumns + cellWidth(presentationPanelRowText(item)) +
-                                  kPresentationPanelScrollIndicatorColumns);
+      contentColumns =
+        std::max(contentColumns, kPresentationPanelMarkerColumns + cellWidth(presentationPanelRowText(item)));
     }
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
@@ -130,10 +127,10 @@ namespace ao::tui
 
     if (search != nullptr)
     {
-      rows.push_back(search->render(textCatalog));
+      rows.push_back(style::panelBody(search->render(textCatalog)));
     }
 
-    rows.push_back(
+    rows.push_back(style::scrollablePanelBody(
       selectableList(std::move(listRows),
                      SelectableListOptions{.focusRow = focusRow,
                                            .height = kPresentationPanelListRows,
@@ -141,17 +138,18 @@ namespace ao::tui
                                                                    (search != nullptr) && search->isActive()
                                                                      ? i18n::MessageId::TuiListSearchEmpty
                                                                      : i18n::MessageId::TuiLibraryNoViewsAvailable),
-                                           .viewportBox = viewportBox}));
-    rows.push_back(separator());
-    rows.push_back(
+                                           .horizontalScroll = false,
+                                           .viewportBox = viewportBox})));
+    rows.push_back(style::panelBody(separator()));
+    rows.push_back(style::panelBody(
       style::panelFooterHint((search != nullptr) && search->isActive()
                                ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiListSearchHint)}
-                               : overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel)));
+                               : overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel))));
 
     auto activePresentationLabel = trackPresentationDisplayId(textCatalog, activePresentationId);
-    return style::popupPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),
-                             vbox(std::move(rows)),
-                             style::PanelOptions{.rightTitle = activePresentationLabel}) |
+    return style::titledPanel(overlayLabel(textCatalog, Overlay::PresentationPanel),
+                              vbox(std::move(rows)),
+                              style::PanelOptions{.rightTitle = activePresentationLabel}) |
            size(WIDTH, EQUAL, panelColumns);
   }
 } // namespace ao::tui

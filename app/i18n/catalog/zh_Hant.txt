@@ -3,6 +3,24 @@
 
 zh_Hant:table {
   messages:table {
+    tui_go_to_back { "後退" }
+    tui_go_to_forward { "前進" }
+    tui_go_to_cancel { "取消" }
+    tui_navigation_pin { "顯示或隱藏常駐列表" }
+    tui_go_to_title { "跳轉" }
+    tui_go_to_status { "跳轉" }
+    tui_go_to_now_playing { "目前播放" }
+    tui_go_to_history { "瀏覽歷史" }
+    tui_go_to_hint { "↑/↓ 選擇 · Enter 開啟 · Esc 取消" }
+    tui_go_to_artist { "跳轉到目前播放藝人" }
+    tui_go_to_album { "跳轉到目前播放專輯" }
+    tui_key_group_navigation { "跳轉" }
+    tui_key_group_browse { "瀏覽" }
+    tui_key_group_playback { "播放" }
+    tui_key_group_selection { "選取與編輯" }
+    tui_key_group_panels { "面板" }
+    tui_key_group_application { "應用程式" }
+
     tui_workspace_back { "返回上一個檢視" }
     tui_workspace_forward { "前進到下一個檢視" }
     tui_workspace_history_unavailable { "沒有可切換的歷史檢視。" }
@@ -22,6 +40,10 @@ zh_Hant:table {
     tui_settings_dim { "淡化對話框背景" }
     tui_settings_motion { "減少動態效果" }
     tui_settings_cover { "封面顯示模式" }
+    tui_settings_separator { "面板分隔" }
+    tui_settings_separator_single { "單線 │" }
+    tui_settings_separator_double { "雙線 ││" }
+    tui_settings_reveal_indicators_on_hover { "懸停顯示面板指示器" }
     tui_settings_mouse { "滑鼠操作" }
     tui_settings_wheel { "滾輪移動步長" }
     tui_settings_seek { "鍵盤快轉步長" }
@@ -30,9 +52,25 @@ zh_Hant:table {
     tui_settings_on { "開啟" }
     tui_settings_off { "關閉" }
     tui_settings_unbound { "未繫結" }
-    tui_settings_immediate { "確認變更後立即儲存。" }
     tui_settings_language_hint { "語言立即生效，包括文字排序。播放不會中斷。" }
     tui_settings_invalid_chord { "請輸入有效的按鍵組合，例如 {example}。" }
+    tui_settings_action_change { "修改" }
+    tui_settings_action_choose { "選擇" }
+    tui_settings_action_apply { "套用" }
+    tui_settings_action_save { "儲存" }
+    tui_settings_action_cancel { "取消" }
+    tui_settings_action_pages { "切頁" }
+    tui_settings_action_close { "關閉" }
+    tui_settings_action_edit { "編輯" }
+    tui_settings_action_add { "新增" }
+    tui_settings_action_remove { "移除" }
+    tui_settings_action_reset { "重設" }
+    tui_settings_action_search { "搜尋" }
+    tui_settings_action_clear { "清除" }
+    tui_settings_action_retry { "重試儲存" }
+    tui_settings_action_discard { "捨棄修改" }
+    tui_settings_action_keep_editing { "繼續編輯" }
+    tui_settings_action_binding { "選擇綁定" }
     tui_settings_close_prompt { "關閉並放棄未儲存的變更？" }
     tui_settings_palette { "命令面板" }
     tui_settings_previous_row { "上一列" }
@@ -49,13 +87,6 @@ zh_Hant:table {
     tui_settings_conflict { "已由 {detail} 使用，請先移除該繫結。" }
     tui_settings_unsupported { "終端不支援或保留此按鍵：{detail}" }
     tui_settings_stored_issue { "既有繫結需要處理：{detail}" }
-    tui_settings_page_keys { "{pages} 切頁 · {close} 關閉" }
-    tui_settings_preference_keys { "{change} 變更值" }
-    tui_settings_language_keys { "{move} 選擇 · {apply} 套用 · {close} 取消" }
-    tui_settings_chord_keys { "{apply} 儲存按鍵 · {close} 取消" }
-    tui_settings_confirm_keys { "{apply} 確認 · {retry} 重試儲存 · {close} 繼續編輯" }
-    tui_settings_retry_keys { "{retry} 重試 · {discard} 放棄候選變更 · {close} 關閉" }
-    tui_settings_keyboard_keys { "{choose} 選擇繫結 · {edit} 取代 · {add} 新增 · {remove} 移除 · {reset} 重設動作" }
 
     pilot_library_title { "音樂庫" }
     pilot_greeting { "歡迎，{name}" }
@@ -451,7 +482,8 @@ zh_Hant:table {
     tui_input_history_hint { "Ctrl+P/N 歷史" }
     tui_navigation_focus { "切換列表與曲目焦點" }
     tui_navigation_return { "{key} 返回曲目" }
-    tui_navigation_keys { "↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · Esc 返回曲目" }
+    tui_navigation_search { "/ 搜尋" }
+    tui_navigation_keys { "Shift+←/→ 調整寬度 · ↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · Esc 返回曲目" }
     tui_layout_save_failed { "無法儲存工作區配置：{detail}" }
     tui_navigation_open_failed { "無法開啟列表：{detail}" }
     tui_navigation_sync_failed { "無法顯示目前列表：{detail}" }
@@ -470,6 +502,8 @@ zh_Hant:table {
     tui_shell_overlay_views { "檢視" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "說明" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{pinState, select, bound {{pinKey} 常駐  } other {}}{openKey} 開啟  {closeKey} 關閉" }
+    tui_library_no_lists_found { "未找到列表" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{closeKey} 關閉" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切換  } other {}}{selectKey} 選取  {closeKey} 關閉" }
@@ -990,8 +1024,6 @@ zh_Hant:table {
     gtk_layout_value_center { "居中" }
     tui_untitled_section { "無標題分節" }
     tui_notification_none { "無通知" }
-    tui_detail_closed { "詳情已關閉" }
-    tui_detail_opened { "詳情面板" }
     tui_pipeline_closed { "音訊鏈路已關閉" }
     tui_pipeline_opened { "音訊鏈路" }
     tui_output_closed { "輸出裝置已關閉" }
@@ -1007,5 +1039,13 @@ zh_Hant:table {
     tui_section_unavailable { "分節已不再可用" }
     tui_unknown_command { "未知命令：{command}" }
     tui_filter_failed { "篩選失敗：{detail}" }
+    tui_begin_panel_resize { "調整面板寬度" }
+    tui_panel_resize_status { "調寬" }
+    tui_panel_resize_keys { "Tab 分隔線 · ←/→ 或 h/l 移動 · Enter 儲存 · Esc 取消" }
+    tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
+    tui_panel_resize { "移動目前側欄的分隔線" }
+    tui_detail_focus { "進入曲目詳情" }
+    tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
+    tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
   }
 }

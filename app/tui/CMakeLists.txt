@@ -8,10 +8,15 @@ add_library(aobus-tui-lib STATIC
     Executor.cpp
     ExitController.cpp
     FrameTimer.cpp
+    GoToMenu.cpp
     ListSearch.cpp
     ListNavigationModel.cpp
     NavigationPanel.cpp
     NavigationEvents.cpp
+    PanelResize.cpp
+    PanelResizeEvents.cpp
+    LibraryChooser.cpp
+    LibraryNavigation.cpp
     LibraryController.cpp
     LibraryScanController.cpp
     MouseBindings.cpp

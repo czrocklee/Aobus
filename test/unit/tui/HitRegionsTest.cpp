@@ -18,9 +18,9 @@ namespace ao::tui::test
     auto regions = HitRegions{};
     regions.outputDeviceButtonBox = ftxui::Box{.x_min = 1, .x_max = 5, .y_min = 0, .y_max = 0};
     regions.soulButtonBox = ftxui::Box{.x_min = 6, .x_max = 8, .y_min = 0, .y_max = 0};
-    regions.libraryButtonBox = ftxui::Box{.x_min = 0, .x_max = 9, .y_min = 10, .y_max = 10};
     regions.presentationButtonBox = ftxui::Box{.x_min = 10, .x_max = 19, .y_min = 10, .y_max = 10};
     regions.activityStatusBox = ftxui::Box{.x_min = 20, .x_max = 39, .y_min = 10, .y_max = 10};
+    regions.libraryButtonBox = {.x_min = 1, .x_max = 5, .y_min = 10, .y_max = 10};
 
     CHECK(regions.hitTestButton(2, 0).hoveredButton == HoveredButton::OutputDevice);
     CHECK(regions.hitTestButton(2, 0).isQualityHoverVisible == false);
@@ -52,10 +52,10 @@ namespace ao::tui::test
     CHECK(overlaySoulHit.isQualityHoverVisible == false);
   }
 
-  TEST_CASE("HitRegions - clearFrameLocalRows keeps persistent button boxes", "[tui][unit][hit-region]")
+  TEST_CASE("HitRegions - clearFrameLocalRows clears conditional footer buttons", "[tui][unit][hit-region]")
   {
     auto regions = HitRegions{};
-    regions.libraryButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};
+    regions.presentationButtonBox = ftxui::Box{.x_min = 1, .x_max = 4, .y_min = 2, .y_max = 2};
     regions.shuffleBox = {.x_min = 20, .x_max = 20, .y_min = 0, .y_max = 0};
     regions.repeatBox = {.x_min = 22, .x_max = 23, .y_min = 0, .y_max = 0};
     regions.outputDeviceRows.push_back(OutputDeviceRowHitRegion{.rowIndex = 1});
@@ -73,7 +73,7 @@ namespace ao::tui::test
     CHECK(regions.notificationDetailRows.empty());
     CHECK(regions.trackColumnResizeHandles.empty());
     CHECK(regions.trackSectionRows.empty());
-    CHECK(regions.libraryButtonBox.x_min == 1);
-    CHECK(regions.libraryButtonBox.x_max == 4);
+    CHECK(regions.presentationButtonBox.IsEmpty());
+    CHECK(regions.hitTestButton(2, 2, {}).hoveredButton == HoveredButton::None);
   }
 } // namespace ao::tui::test

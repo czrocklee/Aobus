@@ -63,6 +63,7 @@ namespace ao::tui
     ftxui::Element renderModal(std::int32_t columns, std::int32_t rows) const;
 
   private:
+    void handleLanguageChoice(ftxui::Event const& event);
     void handleMouse(ftxui::Mouse const& mouse);
     std::size_t rowCount() const;
     std::vector<std::string> keyboardLabels() const;
@@ -80,7 +81,8 @@ namespace ao::tui
     std::string preferenceValue(std::size_t index) const;
     ftxui::Element renderKeyboard(std::int32_t columns) const;
     ftxui::Element renderBody(std::int32_t columns) const;
-    ftxui::Element renderFooter() const;
+    ftxui::Element renderFooterActions(std::int32_t columns) const;
+    ftxui::Element renderFooter(std::int32_t columns) const;
 
     i18n::MessageCatalog const& _textCatalog;
     Preferences const& _preferences;

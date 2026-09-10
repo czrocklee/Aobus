@@ -18,6 +18,7 @@ namespace ao::tui
   {
     QuickFilter,
     OpenLists,
+    TogglePinnedLists,
     OpenDetail,
     OpenQuality,
     OpenOutputDevices,
@@ -25,7 +26,10 @@ namespace ao::tui
     OpenNotifications,
     CloseOverlay,
     ShowHelp,
+    OpenGoTo,
     RevealCurrentTrack,
+    OpenCurrentArtist,
+    OpenCurrentAlbum,
     SetPresentation,
     ClearFilter,
     Reload,
@@ -75,6 +79,8 @@ namespace ao::tui
   struct CommandAliasSpec final
   {
     std::string_view alias;
+    /// Fixed mnemonic in the Go to menu, empty for commands outside that menu.
+    std::string_view goToKey{};
     CommandAction action;
     i18n::MessageId detail;
     i18n::MessageId category;
@@ -86,5 +92,7 @@ namespace ao::tui
   std::optional<KeyAction> shortcutActionForCommand(CommandAction action) noexcept;
   /// The command action with the same semantics as a root key action.
   std::optional<CommandAction> commandActionForKeyAction(KeyAction action) noexcept;
+  /// Effective direct shortcut, or the Go to menu path when no direct key is bound.
+  std::string commandShortcut(KeymapPlan const& keymapPlan, CommandAction action);
   std::optional<Command> parseCommand(std::string_view input);
 } // namespace ao::tui

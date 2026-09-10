@@ -31,6 +31,8 @@ namespace ao::tui::test
                           .composer = "Composer",
                           .conductor = "Conductor",
                           .ensemble = "Ensemble",
+                          .work = "Piano Concerto",
+                          .movement = "Adagio",
                           .soloist = "Soloist",
                           .tags = "favourite",
                           .duration = std::chrono::seconds{299},
@@ -54,72 +56,85 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetailLines - expose user-facing metadata", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - identity and facts have separate labeled rows", "[tui][unit][track-detail]")
   {
+    using Kind = TrackDetailLine::Kind;
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), fullyPopulatedRow());
-
-    CHECK(lines.size() == trackDetailFields().size());
+    REQUIRE(lines.size() >= 6);
+    CHECK(lines[0].kind == Kind::Title);
     CHECK(lines[0].label == "Title");
     CHECK(lines[0].value == "Seven");
-    CHECK(valueFor(lines, "Artist") == "Aimer");
+    CHECK(lines[1].label == "Artist");
+    CHECK(lines[1].value == "Aimer");
+    CHECK(lines[2].label == "Album");
+    CHECK(lines[2].value == "Midnight Sun");
+    CHECK(lines[3].label == "Year");
+    CHECK(lines[3].value == "2014");
+    CHECK(valueFor(lines, "Track") == "7 / 12");
+    CHECK(valueFor(lines, "Duration") == "4:59");
+    CHECK(valueFor(lines, "Work") == "Piano Concerto");
+    CHECK(valueFor(lines, "Movement") == "Adagio");
     CHECK(valueFor(lines, "Conductor") == "Conductor");
     CHECK(valueFor(lines, "Ensemble") == "Ensemble");
     CHECK(valueFor(lines, "Soloist") == "Soloist");
-    CHECK(valueFor(lines, "Year") == "2014");
-    CHECK(valueFor(lines, "Duration") == "4:59");
-    CHECK(valueFor(lines, "Sample Rate") == "44100 Hz");
-    CHECK(valueFor(lines, "Bit Depth") == "16-bit");
-    CHECK(valueFor(lines, "Tags") == "favourite");
-
+    CHECK(lines.back().kind == Kind::Tags);
+    CHECK(lines.back().value == "favourite");
     auto const german = ao::test::messageCatalog("de-DE");
-    auto const germanLines = trackDetailLines(german, fullyPopulatedRow());
-    CHECK(germanLines[0].label == "Titel");
-    CHECK(germanLines[0].value == "Seven");
-    CHECK(hasLabel(germanLines, "Dirigent"));
+    CHECK(hasLabel(trackDetailLines(german, fullyPopulatedRow()), "Dirigent"));
   }
 
-  TEST_CASE("TrackDetailLines - keep every field a fully tagged track carries", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - labeled fields keep a stable sizing schema", "[tui][unit][track-detail]")
   {
-    auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto const lines = trackDetailLines(textCatalog, fullyPopulatedRow());
-    auto lineIt = lines.begin();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto row = fullyPopulatedRow();
+    row.channels = 2;
+    row.bitrate = 1000;
+    row.fileSize = 1024;
+    auto lines = trackDetailLines(catalog, row);
+    auto const technical = trackDetailTechnicalLines(catalog, row);
+    lines.insert(lines.end(), technical.begin(), technical.end());
 
-    // Display order is the pane's field order, which is also what its width is
-    // measured against.
     for (auto const field : trackDetailFields())
     {
-      REQUIRE(lineIt != lines.end());
-      CHECK(lineIt->label == uimodel::trackFieldLabel(textCatalog, field));
-      ++lineIt;
+      CHECK(hasLabel(lines, uimodel::trackFieldLabel(catalog, field)));
     }
-
-    CHECK(lineIt == lines.end());
   }
 
-  TEST_CASE("TrackDetailLines - a sparse track omits optional rows instead of filling them",
+  TEST_CASE("TrackDetailLines - sparse identity has no placeholders or duplicate album artist",
             "[tui][unit][track-detail]")
   {
-    auto const row = rt::TrackRow{.id = TrackId{3}, .title = "Untagged"};
-    auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
-
-    CHECK(hasLabel(lines, "Title"));
-    CHECK(hasLabel(lines, "Artist"));
-    CHECK(hasLabel(lines, "Album"));
-    CHECK(hasLabel(lines, "Track #"));
-    CHECK(hasLabel(lines, "Duration"));
-    CHECK(valueFor(lines, "Artist") == "-");
-    CHECK(valueFor(lines, "Duration") == "-");
-
+    auto row = rt::TrackRow{.id = TrackId{3}, .title = "Untagged"};
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto lines = trackDetailLines(catalog, row);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines.front().value == "Untagged");
+    row.artist = "Artist";
+    row.albumArtist = "Artist";
+    lines = trackDetailLines(catalog, row);
     CHECK_FALSE(hasLabel(lines, "Album Artist"));
-    CHECK_FALSE(hasLabel(lines, "Composer"));
-    CHECK_FALSE(hasLabel(lines, "Conductor"));
-    CHECK_FALSE(hasLabel(lines, "Ensemble"));
-    CHECK_FALSE(hasLabel(lines, "Soloist"));
-    CHECK_FALSE(hasLabel(lines, "Genre"));
+    row.albumArtist = "Various Artists";
+    CHECK(hasLabel(trackDetailLines(catalog, row), "Album Artist"));
+    row.duration = std::chrono::seconds{61};
+    lines = trackDetailLines(catalog, row);
+    CHECK(valueFor(lines, "Duration") == "1:01");
     CHECK_FALSE(hasLabel(lines, "Year"));
-    CHECK_FALSE(hasLabel(lines, "Codec"));
-    CHECK_FALSE(hasLabel(lines, "Sample Rate"));
-    CHECK_FALSE(hasLabel(lines, "Bit Depth"));
-    CHECK_FALSE(hasLabel(lines, "Tags"));
+    CHECK_FALSE(hasLabel(lines, "Track"));
+  }
+
+  TEST_CASE("TrackDetailLines - missing metadata title does not become a filename field", "[tui][unit][track-detail]")
+  {
+    auto const row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
+    CHECK(trackDetailLines(ao::test::englishMessageCatalog(), row).empty());
+  }
+
+  TEST_CASE("TrackDetailLines - track numbering retains disc and total context", "[tui][unit][track-detail]")
+  {
+    auto row = fullyPopulatedRow();
+    row.discNumber = 2;
+    row.discTotal = 3;
+    auto const& catalog = ao::test::englishMessageCatalog();
+    CHECK(valueFor(trackDetailLines(catalog, row), "Track") == "2-7 / 12");
+    row.trackTotal = 0;
+    CHECK(valueFor(trackDetailLines(catalog, row), "Track") == "2-7");
   }
 } // namespace ao::tui::test

@@ -3,6 +3,24 @@
 
 de:table {
   messages:table {
+    tui_go_to_back { "Zurück" }
+    tui_go_to_forward { "Vorwärts" }
+    tui_go_to_cancel { "Abbrechen" }
+    tui_navigation_pin { "Angeheftete Listen ein-/ausblenden" }
+    tui_go_to_title { "Gehe zu" }
+    tui_go_to_status { "Gehe zu" }
+    tui_go_to_now_playing { "Aktuelle Wiedergabe" }
+    tui_go_to_history { "Ansichtsverlauf" }
+    tui_go_to_hint { "↑/↓ wählen · Enter öffnen · Esc abbrechen" }
+    tui_go_to_artist { "Zum aktuellen Künstler" }
+    tui_go_to_album { "Zum aktuellen Album" }
+    tui_key_group_navigation { "Navigation" }
+    tui_key_group_browse { "Durchsuchen" }
+    tui_key_group_playback { "Wiedergabe" }
+    tui_key_group_selection { "Auswahl und Bearbeitung" }
+    tui_key_group_panels { "Bereiche" }
+    tui_key_group_application { "Anwendung" }
+
     tui_workspace_back { "Vorherige Arbeitsansicht" }
     tui_workspace_forward { "Nächste Arbeitsansicht" }
     tui_workspace_history_unavailable { "Keine Ansicht in dieser Richtung." }
@@ -22,6 +40,10 @@ de:table {
     tui_settings_dim { "Dialoghintergrund abdunkeln" }
     tui_settings_motion { "Bewegungen reduzieren" }
     tui_settings_cover { "Cover-Darstellung" }
+    tui_settings_separator { "Panel-Trennung" }
+    tui_settings_separator_single { "Einfach │" }
+    tui_settings_separator_double { "Doppelt ││" }
+    tui_settings_reveal_indicators_on_hover { "Panel-Indikatoren beim Überfahren anzeigen" }
     tui_settings_mouse { "Maussteuerung" }
     tui_settings_wheel { "Schrittweite des Mausrads" }
     tui_settings_seek { "Sprungweite per Tastatur" }
@@ -30,9 +52,25 @@ de:table {
     tui_settings_on { "Ein" }
     tui_settings_off { "Aus" }
     tui_settings_unbound { "Nicht belegt" }
-    tui_settings_immediate { "Bestätigte Änderungen werden sofort gespeichert." }
     tui_settings_language_hint { "Die Sprache gilt sofort, auch für die Textsortierung. Die Wiedergabe läuft weiter." }
     tui_settings_invalid_chord { "Gültige Tastenkombination eingeben, zum Beispiel {example}." }
+    tui_settings_action_change { "Ändern" }
+    tui_settings_action_choose { "Auswählen" }
+    tui_settings_action_apply { "Anwenden" }
+    tui_settings_action_save { "Speichern" }
+    tui_settings_action_cancel { "Abbrechen" }
+    tui_settings_action_pages { "Seiten" }
+    tui_settings_action_close { "Schließen" }
+    tui_settings_action_edit { "Bearbeiten" }
+    tui_settings_action_add { "Hinzufügen" }
+    tui_settings_action_remove { "Entfernen" }
+    tui_settings_action_reset { "Zurücksetzen" }
+    tui_settings_action_search { "Suchen" }
+    tui_settings_action_clear { "Leeren" }
+    tui_settings_action_retry { "Speichern wiederholen" }
+    tui_settings_action_discard { "Änderungen verwerfen" }
+    tui_settings_action_keep_editing { "Weiter bearbeiten" }
+    tui_settings_action_binding { "Belegung" }
     tui_settings_close_prompt { "Schließen und ungespeicherte Änderungen verwerfen?" }
     tui_settings_palette { "Befehlspalette" }
     tui_settings_previous_row { "Vorherige Zeile" }
@@ -49,13 +87,6 @@ de:table {
     tui_settings_conflict { "Bereits {detail} zugewiesen; diese Belegung zuerst entfernen." }
     tui_settings_unsupported { "Nicht verfügbare oder reservierte Terminaltaste: {detail}" }
     tui_settings_stored_issue { "Gespeicherte Belegung prüfen: {detail}" }
-    tui_settings_page_keys { "{pages} Seiten · {close} Schließen" }
-    tui_settings_preference_keys { "{change} Wert ändern" }
-    tui_settings_language_keys { "{move} Auswählen · {apply} Anwenden · {close} Abbrechen" }
-    tui_settings_chord_keys { "{apply} Belegung speichern · {close} Abbrechen" }
-    tui_settings_confirm_keys { "{apply} Bestätigen · {retry} Speichern wiederholen · {close} Weiter bearbeiten" }
-    tui_settings_retry_keys { "{retry} Wiederholen · {discard} Entwurf verwerfen · {close} Schließen" }
-    tui_settings_keyboard_keys { "{choose} Belegung · {edit} Ersetzen · {add} Hinzufügen · {remove} Entfernen · {reset} Aktion zurücksetzen" }
 
     pilot_library_title { "Musikbibliothek" }
     pilot_greeting { "Willkommen, {name}" }
@@ -451,7 +482,8 @@ de:table {
     tui_input_history_hint { "Ctrl+P/N Verlauf" }
     tui_navigation_focus { "Fokus zwischen Listen und Titeln wechseln" }
     tui_navigation_return { "{key} Titel" }
-    tui_navigation_keys { "↑↓ bewegen · ←→ Baum · Enter öffnen · Esc Titel" }
+    tui_navigation_search { "/ suchen" }
+    tui_navigation_keys { "Shift+←/→ Breite · ↑↓ bewegen · ←→ Baum · Enter öffnen · Esc Titel" }
     tui_layout_save_failed { "Arbeitsbereich konnte nicht gespeichert werden: {detail}" }
     tui_navigation_open_failed { "Liste konnte nicht geöffnet werden: {detail}" }
     tui_navigation_sync_failed { "Aktive Liste konnte nicht angezeigt werden: {detail}" }
@@ -470,6 +502,8 @@ de:table {
     tui_shell_overlay_views { "Ansichten" }
     tui_shell_overlay_notifications { "Benachrichtigungen" }
     tui_shell_overlay_help { "Hilfe" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{pinState, select, bound {{pinKey} Seitenleiste  } other {}}{openKey} öffnen  {closeKey} schließen" }
+    tui_library_no_lists_found { "Keine Listen gefunden" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
@@ -990,8 +1024,6 @@ de:table {
     gtk_layout_value_center { "Zentriert" }
     tui_untitled_section { "Unbenannter Abschnitt" }
     tui_notification_none { "Keine Benachrichtigungen" }
-    tui_detail_closed { "Details geschlossen" }
-    tui_detail_opened { "Detailbereich" }
     tui_pipeline_closed { "Audiokette geschlossen" }
     tui_pipeline_opened { "Audiokette" }
     tui_output_closed { "Ausgabegeräte geschlossen" }
@@ -1007,5 +1039,13 @@ de:table {
     tui_section_unavailable { "Abschnitt ist nicht mehr verfügbar" }
     tui_unknown_command { "Unbekannter Befehl: {command}" }
     tui_filter_failed { "Filter fehlgeschlagen: {detail}" }
+    tui_begin_panel_resize { "Panelbreiten anpassen" }
+    tui_panel_resize_status { "Breite" }
+    tui_panel_resize_keys { "Tab Trennlinie · ←/→ oder h/l bewegen · Enter anwenden · Esc abbrechen" }
+    tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
+    tui_panel_resize { "Trennlinie der fokussierten Seitenleiste verschieben" }
+    tui_detail_focus { "Titeldetails fokussieren" }
+    tui_detail_keys { "Shift+←/→ Breite · j/k Abschnitte · Enter umschalten · ←/→ zu/auf · PgUp/PgDn scrollen · Esc Titel" }
+    tui_detail_keys_compact { "Shift+←/→ Breite · Enter auf/zu · Esc Titel" }
   }
 }

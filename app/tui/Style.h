@@ -12,7 +12,7 @@
 namespace ao::tui::style
 {
   inline constexpr std::int32_t kClassicStatusSlotColumns = 24;
-  inline constexpr std::int32_t kPopupPanelBodyPaddingColumns = 1;
+  inline constexpr std::int32_t kPanelBodyPaddingColumns = 1;
 
   ftxui::Decorator muted();
   ftxui::Decorator accent();
@@ -25,8 +25,26 @@ namespace ao::tui::style
   ftxui::Decorator buttonHover();
   ftxui::Element shortcutChip(std::string_view key, std::string_view label);
   ftxui::Element mutedSeparator(std::string_view separator = " · ");
+  /// Clears the popover and a one-cell outer halo without enlarging its hit regions.
+  ftxui::Element popoverClearHalo(ftxui::Element popoverPtr);
+
   ftxui::Element panelFooterHint(std::string_view hint);
   ftxui::Element statusSlot(ftxui::Element bodyPtr, std::int32_t minColumns = kClassicStatusSlotColumns);
+
+  struct PanelDividerOptions final
+  {
+    bool separateBorders = false;
+    ftxui::Box* hoverBox = nullptr;
+    bool revealOnHover = false;
+    bool dragging = false;
+  };
+
+  ftxui::Element panelIndicator(std::string_view arrow, ftxui::Box& box, bool hovered, bool onHoverOnly);
+
+  ftxui::Element panelDivider(std::string_view arrow,
+                              ftxui::Box* toggleBox,
+                              bool hovered,
+                              PanelDividerOptions options = {});
 
   struct PanelEdgeButton final
   {
@@ -53,6 +71,10 @@ namespace ao::tui::style
   std::int32_t titledPanelBodyColumns(std::int32_t panelColumns, PanelOptions options = {});
   std::int32_t popupPanelColumnsForContent(std::int32_t contentColumns, std::int32_t terminalColumns);
   std::int32_t popupPanelBodyColumns(std::int32_t panelColumns);
+  ftxui::Element panelBody(ftxui::Element bodyPtr);
+  /// Pads a body whose built-in one-column scrollbar supplies its right gutter.
+  /// Use inside titledPanel with no additional body padding.
+  ftxui::Element scrollablePanelBody(ftxui::Element bodyPtr);
   ftxui::Element titledPanel(std::string_view title, ftxui::Element bodyPtr, PanelOptions options = {});
   ftxui::Element popupPanel(std::string_view title, ftxui::Element bodyPtr, PanelOptions options = {});
 } // namespace ao::tui::style

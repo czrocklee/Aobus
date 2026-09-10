@@ -696,7 +696,7 @@ namespace ao::tui::test
       auto const optTitleCells = findTextCells(rendered.screen, "Track Properties");
 
       REQUIRE(optTitleCells);
-      CHECK(optTitleCells->x_min == 1);
+      CHECK(optTitleCells->x_min == 2);
       CHECK(lineIndexContaining(rendered.text, "Track Properties") == 1);
     }
 

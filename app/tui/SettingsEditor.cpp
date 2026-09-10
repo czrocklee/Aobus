@@ -8,6 +8,7 @@
 #include "Keymap.h"
 #include "MouseBindings.h"
 #include "Preferences.h"
+#include "Render.h"
 #include "SelectionNavigation.h"
 #include "Style.h"
 #include "TextCell.h"
@@ -45,8 +46,11 @@ namespace ao::tui
                                                       MessageId::TuiSettingsAppearance,
                                                       MessageId::TuiSettingsInteraction,
                                                       MessageId::TuiSettingsKeyboard});
-    constexpr auto kAppearanceLabels =
-      std::to_array<MessageId>({MessageId::TuiSettingsDim, MessageId::TuiSettingsMotion, MessageId::TuiSettingsCover});
+    constexpr auto kAppearanceLabels = std::to_array<MessageId>({MessageId::TuiSettingsDim,
+                                                                 MessageId::TuiSettingsMotion,
+                                                                 MessageId::TuiSettingsCover,
+                                                                 MessageId::TuiSettingsSeparator,
+                                                                 MessageId::TuiSettingsRevealIndicatorsOnHover});
     constexpr auto kInteractionLabels = std::to_array<MessageId>({MessageId::TuiSettingsMouse,
                                                                   MessageId::TuiSettingsWheel,
                                                                   MessageId::TuiSettingsSeek,
@@ -64,26 +68,17 @@ namespace ao::tui
       return kChoices;
     }
 
-    std::string settingsText(i18n::MessageCatalog const& catalog, MessageId const id)
+    ftxui::Element settingsArrowButton(MouseBindings& bindings, bool const vertical, std::string const& label)
     {
-      switch (id)
-      {
-        case MessageId::TuiSettingsPageKeys:
-          return i18n::requiredFormat(catalog, id, {{"pages", "Tab/Shift+Tab"}, {"close", "Esc"}});
-        case MessageId::TuiSettingsPreferenceKeys: return i18n::requiredFormat(catalog, id, {{"change", "←/→/Enter"}});
-        case MessageId::TuiSettingsLanguageKeys:
-          return i18n::requiredFormat(catalog, id, {{"move", "↑/↓"}, {"apply", "Enter"}, {"close", "Esc"}});
-        case MessageId::TuiSettingsChordKeys:
-          return i18n::requiredFormat(catalog, id, {{"apply", "Enter"}, {"close", "Esc"}});
-        case MessageId::TuiSettingsConfirmKeys:
-          return i18n::requiredFormat(catalog, id, {{"apply", "Enter"}, {"retry", "Ctrl+R"}, {"close", "Esc"}});
-        case MessageId::TuiSettingsRetryKeys:
-          return i18n::requiredFormat(catalog, id, {{"retry", "Ctrl+R"}, {"discard", "Ctrl+G"}, {"close", "Esc"}});
-        case MessageId::TuiSettingsKeyboardKeys:
-          return i18n::requiredFormat(
-            catalog, id, {{"choose", "←/→"}, {"edit", "Enter"}, {"add", "a"}, {"remove", "Delete"}, {"reset", "r"}});
-        default: return std::string{i18n::requiredText(catalog, id)};
-      }
+      using namespace ftxui;
+      return hbox({
+        bindings.bind(
+          text(vertical ? "↑" : "←") | style::accent() | bold, vertical ? Event::ArrowUp : Event::ArrowLeft),
+        text("/") | style::accent() | bold,
+        bindings.bind(
+          text(vertical ? "↓" : "→") | style::accent() | bold, vertical ? Event::ArrowDown : Event::ArrowRight),
+        bindings.bind(text(" " + label), vertical ? Event::ArrowDown : Event::ArrowRight),
+      });
     }
 
     ftxui::Element selectedRow(std::string value, bool const selected)
@@ -167,22 +162,7 @@ namespace ao::tui
 
     if (_choosingLanguage)
     {
-      if (event == ftxui::Event::Escape)
-      {
-        _choosingLanguage = false;
-      }
-      else if (auto optDelta = listNavigationDelta(event, navigationPageRows(_bodyBox), true); optDelta)
-      {
-        _language = movedIndex(_language, *optDelta, languageChoices().size());
-      }
-      else if (event == ftxui::Event::Return)
-      {
-        auto candidate = _preferences;
-        candidate.language = languageChoices()[_language].tag;
-        _choosingLanguage = false;
-        applyPreferences(std::move(candidate));
-      }
-
+      handleLanguageChoice(event);
       return true;
     }
 
@@ -244,11 +224,30 @@ namespace ao::tui
     return true;
   }
 
+  void SettingsEditor::handleLanguageChoice(ftxui::Event const& event)
+  {
+    if (event == ftxui::Event::Escape)
+    {
+      _choosingLanguage = false;
+    }
+    else if (auto optDelta = listNavigationDelta(event, navigationPageRows(_bodyBox), true); optDelta)
+    {
+      _language = movedIndex(_language, *optDelta, languageChoices().size());
+    }
+    else if (event == ftxui::Event::Return)
+    {
+      auto candidate = _preferences;
+      candidate.language = languageChoices()[_language].tag;
+      _choosingLanguage = false;
+      applyPreferences(std::move(candidate));
+    }
+  }
+
   ftxui::Element SettingsEditor::renderModal(std::int32_t const columns, std::int32_t const rows) const
   {
     using namespace ftxui;
-    auto const width = std::min(columns, std::clamp(columns - 4, 76, 100));
-    auto const height = std::min(rows, 28);
+    auto const width = std::min(std::max(0, columns - 2), std::clamp(columns - 4, 76, 100));
+    auto const height = std::clamp(rows - 2, 0, 28);
     _mouseBindings.clear();
     _tabBoxes.assign(kPages.size(), kEmptyMouseBox);
     _rowBoxes.clear();
@@ -272,15 +271,18 @@ namespace ao::tui
     auto context = std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsGlobal)};
 
     title += " · " + context;
-    auto modalPtr = vbox({hbox({text(ellipsizeToCellWidth(title, width - kTitleControlColumns)) | bold | flex,
-                                _mouseBindings.bind(text(" × "), Event::Escape)}),
-                          hflow(std::move(tabs)),
-                          separator(),
-                          renderBody(width - 2) | ftxui::reflect(_bodyBox),
-                          separator(),
-                          renderFooter()}) |
-                    border | size(WIDTH, EQUAL, width) | size(HEIGHT, EQUAL, height) | clear_under;
-    return vbox({filler(), hbox({filler(), std::move(modalPtr), filler()}), filler()});
+    auto const contentColumns = style::popupPanelBodyColumns(width);
+    auto modalPtr =
+      vbox(
+        {style::panelBody(hbox({text(ellipsizeToCellWidth(title, contentColumns - kTitleControlColumns)) | bold | flex,
+                                _mouseBindings.bind(text(" × "), Event::Escape)})),
+         style::panelBody(hflow(std::move(tabs))),
+         style::panelBody(separator()),
+         renderBody(contentColumns) | ftxui::reflect(_bodyBox),
+         style::panelBody(separator()),
+         style::panelBody(renderFooter(contentColumns))}) |
+      border | size(WIDTH, EQUAL, width) | size(HEIGHT, EQUAL, height);
+    return centerPopover(std::move(modalPtr));
   }
 
   void SettingsEditor::handleMouse(ftxui::Mouse const& mouse)
@@ -451,13 +453,21 @@ namespace ao::tui
       {
         candidate.reducedMotion = !candidate.reducedMotion;
       }
-      else
+      else if (_row == 2)
       {
         auto const index = static_cast<std::int32_t>(std::ranges::distance(
           kCoverArtModes.begin(),
           std::ranges::find(kCoverArtModes, candidate.coverArtMode, &CoverArtModeDescriptor::name)));
         auto const count = static_cast<std::int32_t>(kCoverArtModes.size());
         candidate.coverArtMode = kCoverArtModes[static_cast<std::size_t>((index + delta + count) % count)].name;
+      }
+      else if (_row == 3)
+      {
+        candidate.panelSeparator = candidate.panelSeparator == "single" ? "double" : "single";
+      }
+      else if (_row == 4)
+      {
+        candidate.revealIndicatorsOnHover = !candidate.revealIndicatorsOnHover;
       }
     }
     else if (_page == SettingsPage::Interaction)
@@ -698,6 +708,9 @@ namespace ao::tui
 
     switch (descriptor.action)
     {
+      case KeyAction::BeginPanelResize:
+        return std::string{i18n::requiredText(_textCatalog, MessageId::TuiBeginPanelResize)};
+      case KeyAction::FocusDetails: return std::string{i18n::requiredText(_textCatalog, MessageId::TuiDetailFocus)};
       case KeyAction::SwitchWorkspaceFocus:
         return std::string{i18n::requiredText(_textCatalog, MessageId::TuiNavigationFocus)};
       case KeyAction::OpenQuickFilter:
@@ -768,7 +781,20 @@ namespace ao::tui
         return boolean(preferences.reducedMotion);
       }
 
-      return preferences.coverArtMode;
+      if (index == 2)
+      {
+        return preferences.coverArtMode;
+      }
+
+      if (index == 4)
+      {
+        return boolean(preferences.revealIndicatorsOnHover);
+      }
+
+      return std::string{i18n::requiredText(_textCatalog,
+                                            preferences.panelSeparator == "double"
+                                              ? MessageId::TuiSettingsSeparatorDouble
+                                              : MessageId::TuiSettingsSeparatorSingle)};
     }
 
     switch (index)
@@ -829,9 +855,25 @@ namespace ao::tui
       rows.push_back(text(std::string{i18n::requiredText(_textCatalog, MessageId::TuiListSearchEmpty)}) | dim);
     }
 
-    return vbox({paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsKeyboardScope)}) | dim,
-                 _search.render(_textCatalog, !_editingChord),
-                 vbox(std::move(rows)) | vscroll_indicator | yframe | flex | reflect(_keyboardViewport)}) |
+    auto warningPtr = emptyElement();
+
+    if (auto const id = actionDescriptors()[_row].actionId; _search.matches(labels[_row]))
+    {
+      if (auto const res = validateActionBindings(_keymap, id); !res)
+      {
+        warningPtr =
+          style::panelBody(paragraph(i18n::requiredFormat(
+                             _textCatalog, MessageId::TuiSettingsStoredIssue, {{"detail", res.error().message}})) |
+                           style::warning());
+      }
+    }
+
+    return vbox({style::panelBody(
+                   paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsKeyboardScope)}) | dim),
+                 _search.isActive() ? style::panelBody(_search.render(_textCatalog, !_editingChord)) : emptyElement(),
+                 style::scrollablePanelBody(vbox(std::move(rows)) | vscroll_indicator | yframe | flex |
+                                            reflect(_keyboardViewport)),
+                 std::move(warningPtr)}) |
            flex;
   }
 
@@ -872,117 +914,171 @@ namespace ao::tui
                   ftxui::reflect(_valueBoxes[index])});
         rows.push_back((index == _row ? std::move(rowPtr) | style::selected() | focus : rowPtr) |
                        ftxui::reflect(_rowBoxes[index]));
+
+        if (_page == SettingsPage::General)
+        {
+          rows.push_back(paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsLanguageHint)}) |
+                         dim);
+        }
+        else if (_page == SettingsPage::Appearance && index == 2)
+        {
+          rows.push_back(paragraph(i18n::requiredFormat(
+                           _textCatalog, MessageId::TuiSettingsEffectiveCover, {{"mode", _outputs.coverMode()}})) |
+                         dim);
+        }
       }
     }
 
-    return vbox(std::move(rows)) | vscroll_indicator | yframe | flex;
+    return style::scrollablePanelBody(vbox(std::move(rows)) | vscroll_indicator | yframe | flex);
   }
 
-  ftxui::Element SettingsEditor::renderFooter() const
+  ftxui::Element SettingsEditor::renderFooterActions(std::int32_t const columns) const
   {
     using namespace ftxui;
     auto rows = Elements{};
-    auto line = [&](MessageId id) { rows.push_back(paragraph(settingsText(_textCatalog, id))); };
-    auto buttons = Elements{};
-    auto button = [&](std::string const& label, Event event)
-    { buttons.push_back(_mouseBindings.bind(text(" [" + label + "] ") | bold, std::move(event))); };
+    auto parts = Elements{};
+    std::int32_t usedColumns = 0;
+    auto flush = [&]
+    {
+      parts.insert(parts.begin(), filler());
+      rows.push_back(hbox(std::move(parts)));
+      parts = Elements{};
+      usedColumns = 0;
+    };
+    auto append = [&](Element chipPtr, std::int32_t const width)
+    {
+      if (!parts.empty() && usedColumns + 3 + width > columns)
+      {
+        flush();
+      }
 
-    if (_confirmClose || _choosingLanguage || _editingChord || _search.isActive())
-    {
-      button("Enter", Event::Return);
-    }
-    else if (_optPreferenceCandidate || _optKeymapCandidate)
-    {
-      button("Ctrl-R", Event::CtrlR);
-      button("Ctrl-G", Event::CtrlG);
-    }
-    else if (_page == SettingsPage::Keyboard)
-    {
-      button("a", Event::Character("a"));
-      button("Enter", Event::Return);
-      button("Delete", Event::Delete);
-      button("r", Event::Character("r"));
-    }
-    else
-    {
-      button("←", Event::ArrowLeft);
-      button("→", Event::ArrowRight);
-    }
+      if (!parts.empty())
+      {
+        parts.push_back(style::mutedSeparator());
+        usedColumns += 3;
+      }
 
-    button("Esc", Event::Escape);
-    rows.push_back(hflow(std::move(buttons)));
+      parts.push_back(std::move(chipPtr));
+      usedColumns += width;
+    };
+    auto button = [&](std::string_view const key, MessageId const id, Event event)
+    {
+      auto const label = ellipsizeToCellWidth(i18n::requiredText(_textCatalog, id), columns - cellWidth(key) - 1);
+      append(
+        _mouseBindings.bind(style::shortcutChip(key, label), std::move(event)), cellWidth(key) + 1 + cellWidth(label));
+    };
+    auto arrows = [&](bool const vertical, MessageId const id)
+    {
+      auto const label = ellipsizeToCellWidth(i18n::requiredText(_textCatalog, id), columns - 4);
+      append(settingsArrowButton(_mouseBindings, vertical, label), 4 + cellWidth(label));
+    };
+
+    auto finish = [&]
+    {
+      flush();
+      return vbox(std::move(rows));
+    };
 
     if (_confirmClose)
     {
-      line(MessageId::TuiSettingsClosePrompt);
-      line(MessageId::TuiSettingsConfirmKeys);
-      return vbox(std::move(rows));
-    }
-
-    if (!_diagnostic.empty())
-    {
-      rows.push_back(paragraph(_diagnostic) | style::danger());
+      button("Enter", MessageId::TuiSettingsActionDiscard, Event::Return);
+      button("Ctrl+R", MessageId::TuiSettingsActionRetry, Event::CtrlR);
+      button("Esc", MessageId::TuiSettingsActionKeepEditing, Event::Escape);
+      return finish();
     }
 
     if (_optPreferenceCandidate || _optKeymapCandidate)
     {
-      line(MessageId::TuiSettingsRetryKeys);
-      return vbox(std::move(rows));
+      button("Ctrl+R", MessageId::TuiSettingsActionRetry, Event::CtrlR);
+      button("Ctrl+G", MessageId::TuiSettingsActionDiscard, Event::CtrlG);
+      button("Esc", MessageId::TuiSettingsActionClose, Event::Escape);
+      return finish();
     }
 
     if (_editingChord)
     {
-      rows.push_back(textFieldValue(_chordInput, &_chordTextBox) | ftxui::reflect(_chordInputBox));
-      line(MessageId::TuiSettingsChordKeys);
-      return vbox(std::move(rows));
+      button("Enter", MessageId::TuiSettingsActionSave, Event::Return);
+      button("Esc", MessageId::TuiSettingsActionCancel, Event::Escape);
+      return finish();
     }
 
     if (_choosingLanguage)
     {
-      line(MessageId::TuiSettingsLanguageKeys);
-      return vbox(std::move(rows));
+      arrows(true, MessageId::TuiSettingsActionChoose);
+      button("Enter", MessageId::TuiSettingsActionApply, Event::Return);
+      button("Esc", MessageId::TuiSettingsActionCancel, Event::Escape);
+      return finish();
     }
 
     if (_search.isActive())
     {
-      line(MessageId::TuiListSearchHint);
-      line(MessageId::TuiSettingsPageKeys);
-      return vbox(std::move(rows));
+      if (_search.matches(actionLabel(_row) + " " + std::string{actionDescriptors()[_row].actionId}))
+      {
+        arrows(true, MessageId::TuiSettingsActionChoose);
+        button("Enter", MessageId::TuiSettingsActionEdit, Event::Return);
+      }
+
+      button("Esc", MessageId::TuiSettingsActionClear, Event::Escape);
+      return finish();
     }
 
     if (_page == SettingsPage::Keyboard)
     {
-      auto const id = actionDescriptors()[_row].actionId;
-      rows.push_back(text(id) | dim);
+      auto const chords = _keymap.chordsFor(actionDescriptors()[_row].actionId);
+      button("/", MessageId::TuiSettingsActionSearch, Event::Character("/"));
 
-      if (auto const res = validateActionBindings(_keymap, id); !res)
+      if (chords.size() > 1)
       {
-        rows.push_back(paragraph(i18n::requiredFormat(
-                         _textCatalog, MessageId::TuiSettingsStoredIssue, {{"detail", res.error().message}})) |
-                       style::warning());
+        arrows(false, MessageId::TuiSettingsActionBinding);
       }
 
-      line(MessageId::TuiSettingsKeyboardKeys);
-      line(MessageId::TuiSettingsImmediate);
+      button("Enter", MessageId::TuiSettingsActionEdit, Event::Return);
+      button("a", MessageId::TuiSettingsActionAdd, Event::Character("a"));
+
+      if (!chords.empty())
+      {
+        button("Delete", MessageId::TuiSettingsActionRemove, Event::Delete);
+      }
+
+      button("r", MessageId::TuiSettingsActionReset, Event::Character("r"));
+    }
+    else if (_page == SettingsPage::General)
+    {
+      button("Enter", MessageId::TuiSettingsActionChoose, Event::Return);
     }
     else
     {
-      if (_page == SettingsPage::General)
-      {
-        line(MessageId::TuiSettingsLanguageHint);
-      }
-
-      if (_page == SettingsPage::Appearance && _row == 2)
-      {
-        rows.push_back(paragraph(
-          i18n::requiredFormat(_textCatalog, MessageId::TuiSettingsEffectiveCover, {{"mode", _outputs.coverMode()}})));
-      }
-
-      line(MessageId::TuiSettingsPreferenceKeys);
-      line(MessageId::TuiSettingsImmediate);
+      arrows(false, MessageId::TuiSettingsActionChange);
     }
 
-    line(MessageId::TuiSettingsPageKeys);
+    button("Tab", MessageId::TuiSettingsActionPages, Event::Tab);
+    button("Esc", MessageId::TuiSettingsActionClose, Event::Escape);
+    return finish();
+  }
+
+  ftxui::Element SettingsEditor::renderFooter(std::int32_t const columns) const
+  {
+    using namespace ftxui;
+    auto rows = Elements{};
+
+    if (_confirmClose)
+    {
+      rows.push_back(paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsClosePrompt)}));
+    }
+    else
+    {
+      if (!_diagnostic.empty())
+      {
+        rows.push_back(paragraph(_diagnostic) | style::danger());
+      }
+
+      if (_editingChord)
+      {
+        rows.push_back(textFieldValue(_chordInput, &_chordTextBox) | ftxui::reflect(_chordInputBox));
+      }
+    }
+
+    rows.push_back(renderFooterActions(columns));
     return vbox(std::move(rows));
   }
 } // namespace ao::tui

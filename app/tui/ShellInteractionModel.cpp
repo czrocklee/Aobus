@@ -21,11 +21,11 @@
 
 namespace ao::tui
 {
-  void ShellInteractionModel::setNavigationEnabled(bool const enabled) noexcept
+  void ShellInteractionModel::setNavigationPinned(bool const pinned) noexcept
   {
-    _navigationEnabled = enabled;
+    _navigationPinned = pinned;
 
-    if (!enabled)
+    if (!pinned && isNavigationFocused())
     {
       focusTracks();
     }
@@ -33,17 +33,54 @@ namespace ao::tui
 
   void ShellInteractionModel::focusNavigation() noexcept
   {
-    _navigationEnabled = true;
     _workspaceFocus = WorkspaceFocus::Lists;
+  }
+
+  void ShellInteractionModel::reconcileNavigationLayout(bool const canDock) noexcept
+  {
+    if (!_navigationPinned || !canDock)
+    {
+      if (isNavigationFocused())
+      {
+        focusTracks();
+      }
+
+      return;
+    }
+
+    if (_overlay == Overlay::ListChooser)
+    {
+      closeOverlay();
+      focusNavigation();
+    }
   }
 
   void ShellInteractionModel::toggleNavigation(bool const canDock) noexcept
   {
-    if (_navigationEnabled && (canDock || isNavigationFocused()))
+    if (!_navigationPinned || !canDock)
     {
-      setNavigationEnabled(false);
+      focusTracks();
+
+      if (_overlay == Overlay::ListChooser)
+      {
+        closeOverlay();
+      }
+      else
+      {
+        openOverlay(Overlay::ListChooser);
+      }
+
+      return;
     }
-    else
+
+    focusNavigation();
+  }
+
+  void ShellInteractionModel::toggleNavigationPin() noexcept
+  {
+    setNavigationPinned(!_navigationPinned);
+
+    if (_navigationPinned)
     {
       focusNavigation();
     }
@@ -51,11 +88,11 @@ namespace ao::tui
 
   void ShellInteractionModel::switchWorkspaceFocus(bool const canDock) noexcept
   {
-    if (isNavigationFocused())
+    if (isNavigationFocused() || isDetailFocused())
     {
       focusTracks();
     }
-    else if (_navigationEnabled && canDock)
+    else if (_navigationPinned && canDock)
     {
       focusNavigation();
     }
@@ -65,13 +102,14 @@ namespace ao::tui
   {
     switch (overlay)
     {
-      case Overlay::None:
-      case Overlay::DetailPanel: return false;
+      case Overlay::None: return false;
       case Overlay::QualityPanel:
       case Overlay::OutputDevices:
       case Overlay::PresentationPanel:
       case Overlay::Notifications:
-      case Overlay::Help: return true;
+      case Overlay::Help:
+      case Overlay::ListChooser:
+      case Overlay::GoTo: return true;
     }
 
     return true;
@@ -82,40 +120,17 @@ namespace ao::tui
     switch (overlay)
     {
       case Overlay::None: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
-      case Overlay::DetailPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayDetail);
       case Overlay::QualityPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayPipeline);
       case Overlay::OutputDevices: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayOutput);
       case Overlay::PresentationPanel: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayViews);
       case Overlay::Notifications:
         return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayNotifications);
       case Overlay::Help: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayHelp);
+      case Overlay::ListChooser: return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayLists);
+      case Overlay::GoTo: return i18n::requiredText(textCatalog, i18n::MessageId::TuiGoToTitle);
     }
 
     return i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayTracks);
-  }
-
-  std::string_view overlayToggleShortcut(KeymapPlan const& keymapPlan, Overlay const overlay)
-  {
-    static auto const kSelectionEvents =
-      std::to_array({ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k")});
-    static auto const kSearchEvents = std::to_array(
-      {ftxui::Event::Return, ftxui::Event::Character("j"), ftxui::Event::Character("k"), ftxui::Event::Character("/")});
-    static auto const kScrollEvents = std::to_array({ftxui::Event::Character("j"), ftxui::Event::Character("k")});
-    static auto const kNotificationEvents =
-      std::to_array({ftxui::Event::Character("x"), ftxui::Event::Character("j"), ftxui::Event::Character("k")});
-
-    switch (overlay)
-    {
-      case Overlay::DetailPanel: return keymapPlan.shortcutFor(KeyAction::ToggleDetails);
-      case Overlay::QualityPanel: return keymapPlan.shortcutFor(KeyAction::ToggleAudioPipeline, kScrollEvents);
-      case Overlay::OutputDevices: return keymapPlan.shortcutFor(KeyAction::ToggleOutputDevices, kSelectionEvents);
-      case Overlay::PresentationPanel: return keymapPlan.shortcutFor(KeyAction::TogglePresentations, kSearchEvents);
-      case Overlay::Notifications: return keymapPlan.shortcutFor(KeyAction::ToggleNotifications, kNotificationEvents);
-      case Overlay::None:
-      case Overlay::Help: return {};
-    }
-
-    return {};
   }
 
   std::string overlayHint(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan, Overlay const overlay)
@@ -123,22 +138,28 @@ namespace ao::tui
     switch (overlay)
     {
       case Overlay::None: return {};
-      case Overlay::DetailPanel:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintDetail, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::QualityPanel:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintPipeline, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::OutputDevices:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintOutput, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::PresentationPanel:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintViews, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::Notifications:
-        return overlayHintText(
-          textCatalog, i18n::MessageId::TuiShellHintNotifications, overlayToggleShortcut(keymapPlan, overlay));
-      case Overlay::Help: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintHelp, {});
+      case Overlay::ListChooser:
+      {
+        auto const unavailable = std::to_array({ftxui::Event::Return,
+                                                ftxui::Event::Character("j"),
+                                                ftxui::Event::Character("k"),
+                                                ftxui::Event::Character("/")});
+        auto const pinKey = keymapPlan.shortcutFor(KeyAction::TogglePinnedLists, unavailable);
+        return i18n::requiredFormat(textCatalog,
+                                    i18n::MessageId::TuiShellHintLists,
+                                    {{"toggleState", "unbound"},
+                                     {"toggleKey", ""},
+                                     {"pinState", pinKey.empty() ? "unbound" : "bound"},
+                                     {"pinKey", pinKey},
+                                     {"openKey", "Enter"},
+                                     {"closeKey", "Esc"}});
+      }
+      case Overlay::QualityPanel: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintPipeline);
+      case Overlay::OutputDevices: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintOutput);
+      case Overlay::PresentationPanel: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintViews);
+      case Overlay::Notifications: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintNotifications);
+      case Overlay::GoTo: return std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiGoToHint)};
+      case Overlay::Help: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintHelp);
     }
 
     return {};
@@ -244,6 +265,37 @@ namespace ao::tui
     return _overlay;
   }
 
+  void ShellInteractionModel::toggleDetail() noexcept
+  {
+    _detailVisible = !_detailVisible;
+
+    if (!_detailVisible && isDetailFocused())
+    {
+      focusTracks();
+    }
+
+    resetDetailScroll();
+  }
+
+  void ShellInteractionModel::focusDetail() noexcept
+  {
+    _detailVisible = true;
+    _workspaceFocus = WorkspaceFocus::Detail;
+    _detailSections.revealSelected = true;
+  }
+
+  void ShellInteractionModel::resetDetailScroll() noexcept
+  {
+    _detailScroll = 0;
+    _detailSections.revealSelected = false;
+  }
+
+  void ShellInteractionModel::scrollDetail(std::int32_t const delta, std::int32_t const lastRow)
+  {
+    _detailScroll = static_cast<std::int32_t>(
+      std::clamp<std::int64_t>(static_cast<std::int64_t>(_detailScroll) + delta, 0, std::max(0, lastRow)));
+  }
+
   void ShellInteractionModel::scrollOverlay(std::int32_t const delta, std::int32_t const lastRow)
   {
     _overlayScroll = static_cast<std::int32_t>(
@@ -252,6 +304,11 @@ namespace ao::tui
 
   void ShellInteractionModel::beginInput(ShellInputMode const mode, std::string draft)
   {
+    if (_overlay == Overlay::GoTo)
+    {
+      closeOverlay();
+    }
+
     _inputMode = mode;
     _input.reset(std::move(draft));
     _optHistoryIndex.reset();

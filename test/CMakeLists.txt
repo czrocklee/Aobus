@@ -728,6 +728,7 @@ target_link_libraries(ao_tui_signal_probe PRIVATE ao_fatal_probe_support aobus-t
 add_executable(ao_tui_test
     unit/tui/CoverArtTestSupport.cpp
     unit/tui/KeymapTestSupport.cpp
+    unit/tui/EventControllerTestSupport.cpp
     unit/tui/RenderTestSupport.cpp
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandTest.cpp
@@ -742,9 +743,15 @@ add_executable(ao_tui_test
     unit/tui/ExitControllerTest.cpp
     unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
+    unit/tui/LibraryNavigationTest.cpp
     unit/tui/LibraryScanControllerTest.cpp
     unit/tui/ListNavigationModelTest.cpp
     unit/tui/NavigationPanelTest.cpp
+    unit/tui/PinnedNavigationTest.cpp
+    unit/tui/DetailSectionsTest.cpp
+    unit/tui/DetailFieldLayoutTest.cpp
+    unit/tui/PanelDividerTest.cpp
+    unit/tui/PanelResizeTest.cpp
     unit/tui/PlaybackStatusFormatterTest.cpp
     unit/tui/SelectionNavigationTest.cpp
     unit/tui/SignalExitWatcherTest.cpp
@@ -758,6 +765,8 @@ add_executable(ao_tui_test
     unit/tui/TrackPropertiesEditorTestSupport.cpp
     unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
+    unit/tui/PlaybackNavigationTest.cpp
+    unit/tui/GoToMenuTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
     unit/tui/WorkspaceUsabilityTest.cpp

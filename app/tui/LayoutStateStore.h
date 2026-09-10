@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "PanelWidths.h"
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -36,10 +37,12 @@ namespace ao::tui
 
     void load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
               uimodel::ListPresentations::Snapshot& listPresentations,
-              bool& navigationEnabled) const;
+              bool& navigationEnabled,
+              PanelWidths& widths) const;
     Result<> save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
                   uimodel::ListPresentations::Snapshot const& listPresentations,
-                  bool navigationEnabled);
+                  bool navigationEnabled,
+                  PanelWidths widths);
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

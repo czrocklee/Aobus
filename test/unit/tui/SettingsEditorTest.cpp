@@ -82,9 +82,9 @@ namespace ao::tui::test
           REQUIRE(editor.tryHandleEvent(ftxui::Event::Tab));
         }
       }
-      void click(std::string_view const label)
+      void click(std::string_view const label, std::int32_t const columns = 80)
       {
-        auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
+        auto const rendered = renderElement(editor.renderModal(columns, 24), columns, 24);
         auto const optBox = findTextCells(rendered.screen, label);
         REQUIRE(optBox);
         REQUIRE(editor.tryHandleEvent(ftxui::Event::Mouse(
@@ -97,7 +97,7 @@ namespace ao::tui::test
       {
         auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(columns), ftxui::Dimension::Fixed(rows));
         ftxui::Render(screen, editor.renderModal(columns, rows));
-        return screen.ToString();
+        return stripAnsi(screen.ToString());
       }
     };
   } // namespace
@@ -134,6 +134,29 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("SettingsEditor - hover-only panel indicators use the live preference save path", "[tui][unit][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+
+    for (std::int32_t step = 0; step < 4; ++step)
+    {
+      REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowDown));
+    }
+
+    CHECK(fixture.render().contains("Reveal indicators on hover"));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    CHECK(fixture.preferences.revealIndicatorsOnHover);
+    CHECK(fixture.preferences.panelSeparator == "single");
+    fixture.fail = true;
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowLeft));
+    CHECK(fixture.preferences.revealIndicatorsOnHover);
+    fixture.fail = false;
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::CtrlR));
+    CHECK_FALSE(fixture.preferences.revealIndicatorsOnHover);
+  }
+
   TEST_CASE("SettingsEditor - cover renderer cycles in both directions and wraps", "[tui][unit][settings]")
   {
     auto fixture = SettingsFixture{};
@@ -150,6 +173,34 @@ namespace ao::tui::test
 
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowLeft));
     CHECK(fixture.preferences.coverArtMode == "off");
+  }
+
+  TEST_CASE("SettingsEditor - panel separation cycles without changing the cover renderer", "[tui][unit][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+
+    for (std::int32_t step = 0; step < 3; ++step)
+    {
+      REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowDown));
+    }
+
+    CHECK(fixture.render().contains("Single │"));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowRight));
+    CHECK(fixture.preferences.panelSeparator == "double");
+    CHECK(fixture.render().contains("Double ││"));
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowLeft));
+    CHECK(fixture.preferences.panelSeparator == "single");
+    fixture.click("Single │");
+    CHECK(fixture.preferences.panelSeparator == "double");
+    CHECK(fixture.preferences.coverArtMode == "auto");
+    fixture.fail = true;
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    CHECK(fixture.preferences.panelSeparator == "double");
+    fixture.fail = false;
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::CtrlR));
+    CHECK(fixture.preferences.panelSeparator == "single");
   }
 
   TEST_CASE("SettingsEditor - failed preference save preserves applied values until retry", "[tui][unit][settings]")
@@ -379,7 +430,7 @@ namespace ao::tui::test
     CHECK(fixture.preferences.dimBackdrop != previous);
     fixture.click("Interaction");
     CHECK(fixture.editor.page() == SettingsPage::Interaction);
-    fixture.click("[Esc]");
+    fixture.click("Esc Close");
     CHECK_FALSE(fixture.editor.isActive());
   }
 
@@ -394,9 +445,9 @@ namespace ao::tui::test
     fixture.click("<");
     CHECK(fixture.preferences.dimBackdrop == previous);
     fixture.fail = false;
-    fixture.click("[Ctrl-R]");
+    fixture.click("Ctrl+R Retry save");
     CHECK(fixture.preferences.dimBackdrop != previous);
-    fixture.click("[Esc]");
+    fixture.click("Esc Close");
     CHECK_FALSE(fixture.editor.isActive());
   }
 
@@ -415,9 +466,9 @@ namespace ao::tui::test
       ftxui::Mouse{
         .button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
     CHECK(fixture.keymap.toOverrides() == before);
-    fixture.click("[a]");
+    fixture.click("a Add");
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("F12")));
-    fixture.click("[Enter]");
+    fixture.click("Enter Save");
     CHECK(fixture.keymap.toOverrides() != before);
   }
 
@@ -431,7 +482,8 @@ namespace ao::tui::test
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("tui.shell.openSettings")));
     auto const filtered = fixture.render(36, 24);
     CHECK(filtered.contains("Esc"));
-    CHECK(filtered.contains("Tab"));
+    CHECK_FALSE(filtered.contains("Esc Close"));
+    CHECK(filtered.contains("Esc Clear"));
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("F12")));
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
@@ -458,5 +510,60 @@ namespace ao::tui::test
     REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Tab));
     CHECK(fixture.editor.page() == SettingsPage::General);
     CHECK_FALSE(fixture.render().contains("no such action"));
+  }
+
+  TEST_CASE("SettingsEditor - contextual footer wraps and clears search before closing",
+            "[tui][regression][settings][mouse]")
+  {
+    for (auto const columns : {36, 80, 140})
+    {
+      INFO(columns);
+      auto fixture = SettingsFixture{};
+      fixture.editor.open();
+      fixture.page(SettingsPage::Keyboard);
+      auto const rendered = renderElement(fixture.editor.renderModal(columns, 24), columns, 24);
+      CHECK_FALSE(rendered.text.contains("tui.shell.openSettings"));
+      CHECK_FALSE(rendered.text.contains("save immediately"));
+      CHECK_FALSE(rendered.text.contains("Delete Remove"));
+      auto const optClose = findTextCells(rendered.screen, "Esc Close");
+      REQUIRE(optClose);
+      CHECK(rendered.screen.PixelAt(optClose->x_max + 1, optClose->y_min).character == " ");
+      CHECK(rendered.screen.PixelAt(optClose->x_max + 2, optClose->y_min).character == "│");
+
+      fixture.click("/ Search", columns);
+      REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Character("no such action")));
+      auto const searching = fixture.render(columns);
+      CHECK_FALSE(searching.contains("Enter Edit"));
+      CHECK_FALSE(searching.contains("Esc Close"));
+      fixture.click("Esc Clear", columns);
+      CHECK(fixture.editor.isActive());
+      CHECK_FALSE(fixture.render(columns).contains("No matches"));
+      fixture.click("Esc Close", columns);
+      CHECK_FALSE(fixture.editor.isActive());
+    }
+  }
+
+  TEST_CASE("SettingsEditor - recovery footer exposes retry discard and keep editing",
+            "[tui][regression][settings][mouse]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    auto const previous = fixture.preferences.dimBackdrop;
+    fixture.fail = true;
+    fixture.click("Change");
+    CHECK(fixture.preferences.dimBackdrop == previous);
+    fixture.click("Esc Close");
+    CHECK(fixture.render().contains("Close and discard unsaved changes?"));
+    fixture.click("Esc Keep editing");
+    CHECK(fixture.editor.isActive());
+    fixture.click("Ctrl+G Discard changes");
+    CHECK_FALSE(fixture.render().contains("Could not save"));
+    CHECK(fixture.preferences.dimBackdrop == previous);
+    fixture.click("Change");
+    fixture.click("Esc Close");
+    fixture.click("Enter Discard changes");
+    CHECK_FALSE(fixture.editor.isActive());
+    CHECK(fixture.preferences.dimBackdrop == previous);
   }
 } // namespace ao::tui::test

@@ -4,8 +4,10 @@
 #include "StatusBar.h"
 
 #include "CommandPalettePanel.h"
+#include "GoToMenu.h"
 #include "Keymap.h"
 #include "MouseBindings.h"
+#include "PanelResize.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
@@ -14,10 +16,12 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +46,18 @@ namespace ao::tui
       return elementPtr;
     }
 
+    std::string_view workspaceShortcut(KeymapPlan const& keymapPlan,
+                                       KeyAction const action,
+                                       bool const hasTrackSelection)
+    {
+      if (!hasTrackSelection && action == KeyAction::PlaySelection)
+      {
+        return {};
+      }
+
+      return keymapPlan.shortcutFor(action);
+    }
+
     ftxui::Element workspaceShortcuts(i18n::MessageCatalog const& textCatalog,
                                       StatusBarViewState const& state,
                                       KeymapPlan const& keymapPlan,
@@ -49,6 +65,7 @@ namespace ao::tui
     {
       using namespace ftxui;
       auto parts = Elements{};
+      auto contextPtr = text("");
 
       auto appendSeparator = [&]
       {
@@ -78,7 +95,12 @@ namespace ao::tui
       };
 
       auto appendActionChip = [&](KeyAction const action, std::string_view const label)
-      { appendChip(action, keymapPlan.shortcutFor(action), label); };
+      { appendChip(action, workspaceShortcut(keymapPlan, action, state.hasTrackSelection), label); };
+
+      auto const focusKey =
+        state.navigationDocked ? keymapPlan.shortcutFor(KeyAction::SwitchWorkspaceFocus) : std::string_view{};
+      auto const focusLabel = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists);
+      auto const focusColumns = focusKey.empty() ? 0 : cellWidth(focusKey) + 1 + cellWidth(focusLabel) + 3;
 
       auto const filterLabel = i18n::requiredText(textCatalog, i18n::MessageId::TuiShellFilterLabel);
       auto const filterShortcut = keymapPlan.shortcutFor(KeyAction::OpenQuickFilter);
@@ -90,6 +112,7 @@ namespace ao::tui
       }
       else
       {
+        availableColumns -= focusColumns;
         auto const clearKey = keymapPlan.shortcutFor(KeyAction::ClearFilter);
         auto const clearLabel = i18n::requiredText(textCatalog,
                                                    state.terminalColumns < kExpandedWorkspaceHintColumns
@@ -101,21 +124,50 @@ namespace ao::tui
         auto const value = state.filterInvalid ? "! " + state.filterDraft : state.filterDraft;
         appendChip(KeyAction::OpenQuickFilter, filterKey, ellipsizeToCellWidth(value, valueColumns));
         appendChip(KeyAction::ClearFilter, clearKey, clearLabel);
+
+        if (availableColumns > 0)
+        {
+          parts.push_back(text(" "));
+          --availableColumns;
+        }
+
+        contextPtr = hbox(std::move(parts));
+        parts = Elements{};
+        availableColumns += focusColumns;
       }
+
+      appendChip(KeyAction::SwitchWorkspaceFocus, focusKey, focusLabel);
 
       appendActionChip(
         KeyAction::OpenCommandPalette, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusCommand));
 
-      if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
+      appendActionChip(KeyAction::OpenGoTo, i18n::requiredText(textCatalog, i18n::MessageId::TuiGoToStatus));
+
+      if (!state.navigationDocked)
       {
         appendActionChip(KeyAction::ToggleLists, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusLists));
+      }
+
+      if (state.navigationDocked || (state.shell != nullptr && state.shell->isDetailVisible()))
+      {
+        appendActionChip(
+          KeyAction::BeginPanelResize, i18n::requiredText(textCatalog, i18n::MessageId::TuiPanelResizeStatus));
+      }
+
+      if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
+      {
         appendActionChip(
           KeyAction::TogglePresentations, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusView));
         appendActionChip(
           KeyAction::ToggleDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellStatusDetail));
+
+        if (state.shell != nullptr && state.shell->isDetailVisible())
+        {
+          appendActionChip(KeyAction::FocusDetails, i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFocus));
+        }
       }
 
-      return hbox(std::move(parts));
+      return hbox({std::move(contextPtr), filler(), hbox(std::move(parts))});
     }
 
     ftxui::Element workspaceEntryPoints(i18n::MessageCatalog const& textCatalog,
@@ -163,7 +215,8 @@ namespace ao::tui
       }
 
       auto parts = Elements{text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiLibraryVisualMode)}) |
-                            style::accent() | bold};
+                              style::accent() | bold,
+                            filler()};
       auto const keepKey = keymapPlan.shortcutFor(KeyAction::SelectVisual);
 
       if (!keepKey.empty())
@@ -185,7 +238,6 @@ namespace ao::tui
       }
 
       parts.push_back(std::move(cancelPtr));
-      parts.push_back(filler());
       return hbox(std::move(parts));
     }
 
@@ -269,11 +321,100 @@ namespace ao::tui
       }
 
       parts.push_back(text(" "));
-      parts.push_back(workspaceShortcuts(textCatalog, state, keymapPlan, workspaceColumns - activityColumns));
-      parts.push_back(filler());
+      parts.push_back(workspaceShortcuts(textCatalog, state, keymapPlan, workspaceColumns - activityColumns) | flex);
       parts.push_back(style::mutedSeparator());
       parts.push_back(std::move(entryPointsPtr));
       return hbox(std::move(parts));
+    }
+
+    ftxui::Element panelResizeStatus(i18n::MessageCatalog const& textCatalog,
+                                     StatusBarViewState const& state,
+                                     bool const hasActivity,
+                                     PanelDivider const divider)
+    {
+      using namespace ftxui;
+      auto const target =
+        i18n::requiredText(textCatalog,
+                           divider == PanelDivider::Navigation ? i18n::MessageId::TuiShellOverlayLists
+                                                               : i18n::MessageId::TuiShellStatusDetail);
+      auto const columns = std::max(
+        0, state.terminalColumns - (hasActivity ? style::kClassicStatusSlotColumns : 0) - cellWidth(target) - 2);
+      auto const fullHint = i18n::requiredText(textCatalog, i18n::MessageId::TuiPanelResizeKeys);
+      auto const hint = cellWidth(fullHint) <= columns
+                          ? fullHint
+                          : i18n::requiredText(textCatalog, i18n::MessageId::TuiPanelResizeKeysCompact);
+      return hbox({hasActivity ? activityStatusSlot(state, 0) | xflex : filler() | xflex,
+                   text(std::string{target}) | style::accent() | bold,
+                   text("  "),
+                   text(ellipsizeToCellWidth(hint, columns)) | dim});
+    }
+
+    ftxui::Element detailStatus(i18n::MessageCatalog const& textCatalog,
+                                StatusBarViewState const& state,
+                                bool const hasActivity)
+    {
+      using namespace ftxui;
+      auto const hintColumns =
+        std::max(0, state.terminalColumns - (hasActivity ? style::kClassicStatusSlotColumns : 0));
+      auto const fullHint = i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailKeys);
+      auto const hint = cellWidth(fullHint) <= hintColumns
+                          ? fullHint
+                          : i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailKeysCompact);
+      return hbox({hasActivity ? activityStatusSlot(state, 0) | xflex : filler() | xflex,
+                   text(ellipsizeToCellWidth(hint, hintColumns)) | dim});
+    }
+
+    ftxui::Element navigationStatus(i18n::MessageCatalog const& catalog,
+                                    StatusBarViewState const& state,
+                                    bool const hasActivity,
+                                    KeymapPlan const& keymap)
+    {
+      using namespace ftxui;
+      auto hints = Elements{};
+      auto const title = i18n::requiredText(catalog, i18n::MessageId::TuiShellOverlayLists);
+      auto availableColumns = std::max(
+        0, state.terminalColumns - cellWidth(title) - 2 - (hasActivity ? style::kClassicStatusSlotColumns : 0));
+
+      auto const unavailable = std::to_array({Event::ArrowLeft,
+                                              Event::ArrowRight,
+                                              Event::Return,
+                                              Event::Character("j"),
+                                              Event::Character("k"),
+                                              Event::Character("/")});
+      auto const returnKey = state.navigationSearching
+                               ? std::string_view{"Tab"}
+                               : keymap.shortcutFor(KeyAction::SwitchWorkspaceFocus, unavailable);
+
+      if (!returnKey.empty() && returnKey != "Esc")
+      {
+        auto const hint = i18n::requiredFormat(catalog, i18n::MessageId::TuiNavigationReturn, {{"key", returnKey}});
+        hints.push_back(text(hint) | dim);
+        hints.push_back(style::mutedSeparator());
+        availableColumns = std::max(0, availableColumns - cellWidth(hint) - 3);
+      }
+
+      if (!state.navigationSearching)
+      {
+        auto const searchLabel = i18n::requiredText(catalog, i18n::MessageId::TuiNavigationSearch);
+        auto searchPtr = text(std::string{searchLabel}) | dim;
+        availableColumns = std::max(0, availableColumns - cellWidth(searchLabel) - 3);
+
+        if (state.navigationSearchBox != nullptr)
+        {
+          searchPtr = std::move(searchPtr) | reflect(*state.navigationSearchBox);
+        }
+
+        hints.push_back(std::move(searchPtr));
+        hints.push_back(style::mutedSeparator());
+      }
+
+      auto const keys = i18n::requiredText(
+        catalog, state.navigationSearching ? i18n::MessageId::TuiListSearchHint : i18n::MessageId::TuiNavigationKeys);
+      hints.push_back(text(ellipsizeToCellWidth(keys, availableColumns)) | dim);
+      return hbox({hasActivity ? activityStatusSlot(state) | xflex : filler() | xflex,
+                   text(std::string{title}) | style::accent() | bold,
+                   text("  "),
+                   hbox(std::move(hints))});
     }
   } // namespace
 
@@ -372,6 +513,11 @@ namespace ao::tui
   {
     using namespace ftxui;
 
+    if (state.navigationSearchBox != nullptr)
+    {
+      *state.navigationSearchBox = kEmptyMouseBox;
+    }
+
     if (state.settingsButtonBox != nullptr)
     {
       *state.settingsButtonBox = kEmptyMouseBox;
@@ -385,6 +531,11 @@ namespace ao::tui
     if (state.cancelSelectionBox != nullptr)
     {
       *state.cancelSelectionBox = kEmptyMouseBox;
+    }
+
+    if (state.goToHitRegions != nullptr)
+    {
+      *state.goToHitRegions = {};
     }
 
     auto const hasActivity = hasVisibleActivity(state.activityStatus);
@@ -407,22 +558,34 @@ namespace ao::tui
              clear_under;
     }
 
+    if (shell.overlay() == Overlay::GoTo)
+    {
+      if (state.activityStatusBox != nullptr)
+      {
+        *state.activityStatusBox = kEmptyMouseBox;
+      }
+
+      return goToHintBar(textCatalog, state.goToState, state.terminalColumns, state.goToHitRegions);
+    }
+
     if (!hasActivity && state.activityStatusBox != nullptr)
     {
       *state.activityStatusBox = kEmptyMouseBox;
     }
 
+    if (state.optResizingDivider && !shell.isInputActive() && shell.overlay() == Overlay::None)
+    {
+      return panelResizeStatus(textCatalog, state, hasActivity, *state.optResizingDivider);
+    }
+
+    if (shell.isDetailFocused() && !shell.isInputActive() && !isModalOverlay(shell.overlay()))
+    {
+      return detailStatus(textCatalog, state, hasActivity);
+    }
+
     if (shell.isNavigationFocused() && !shell.isInputActive() && !isModalOverlay(shell.overlay()))
     {
-      return hbox(
-        {hasActivity ? activityStatusSlot(state) | xflex : filler() | xflex,
-         text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOverlayLists)}) | style::accent() |
-           bold,
-         text("  "),
-         text(std::string{i18n::requiredText(
-           textCatalog,
-           state.navigationSearching ? i18n::MessageId::TuiListSearchHint : i18n::MessageId::TuiNavigationKeys)}) |
-           dim});
+      return navigationStatus(textCatalog, state, hasActivity, keymapPlan);
     }
 
     if (state.visualSelectionActive && !isModalOverlay(shell.overlay()))

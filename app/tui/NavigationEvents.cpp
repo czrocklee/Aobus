@@ -19,12 +19,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 namespace ao::tui
 {
-  void EventController::reportNavigationVisibilityChange(bool const previous)
+  void EventController::reportNavigationPinChange(bool const previous)
   {
-    if (previous != _shell.isNavigationEnabled() && _requestLayoutCheckpoint)
+    if (previous != _shell.isNavigationPinned() && _requestLayoutCheckpoint)
     {
       _requestLayoutCheckpoint();
     }
@@ -45,8 +46,33 @@ namespace ao::tui
   {
     cancelTransientInteractions();
     _navigationScrollbarDrag = false;
-    auto const enabled = _shell.isNavigationEnabled();
     _shell.toggleNavigation(_hitRegions.navigationLayout.canDock);
+
+    if (_shell.overlay() == Overlay::ListChooser)
+    {
+      _library.revealActiveList();
+    }
+
+    _library.navigation().clearSearch();
+
+    if (_shell.isNavigationFocused())
+    {
+      _library.navigation().reveal(_library.currentListId());
+    }
+  }
+
+  void EventController::togglePinnedLists()
+  {
+    cancelTransientInteractions();
+
+    if (_shell.overlay() == Overlay::ListChooser)
+    {
+      closeOverlay();
+    }
+
+    auto const pinned = _shell.isNavigationPinned();
+    _shell.toggleNavigationPin();
+    _hitRegions.navigationDividerBox = kEmptyMouseBox;
     _library.navigation().clearSearch();
 
     if (_shell.isNavigationFocused())
@@ -54,7 +80,8 @@ namespace ao::tui
       _library.navigation().reveal(_library.currentListId());
     }
 
-    reportNavigationVisibilityChange(enabled);
+    _shell.reconcileNavigationLayout(panelGeometry().canDock);
+    reportNavigationPinChange(pinned);
   }
 
   void EventController::switchWorkspaceFocus()
@@ -94,7 +121,7 @@ namespace ao::tui
 
     cancelTransientInteractions();
 
-    if (keyboard || !_hitRegions.navigationLayout.canDock)
+    if (keyboard || !_hitRegions.navigationLayout.docked)
     {
       leaveNavigation();
     }
@@ -173,8 +200,11 @@ namespace ao::tui
 
       switch (*optAction)
       {
+        case KeyAction::BeginPanelResize:
         case KeyAction::SwitchWorkspaceFocus:
+        case KeyAction::TogglePinnedLists:
         case KeyAction::ToggleLists:
+        case KeyAction::FocusDetails:
         case KeyAction::ToggleDetails:
         case KeyAction::ToggleAudioPipeline:
         case KeyAction::ToggleOutputDevices:
@@ -183,6 +213,11 @@ namespace ao::tui
         case KeyAction::OpenCommandPalette:
         case KeyAction::ShowHelp:
         case KeyAction::OpenSettings:
+        case KeyAction::OpenGoTo:
+        case KeyAction::OpenCurrentArtist:
+        case KeyAction::OpenCurrentAlbum:
+        case KeyAction::WorkspaceBack:
+        case KeyAction::WorkspaceForward:
         case KeyAction::RevealCurrentTrack:
         case KeyAction::Quit: executeKeyAction(*optAction); break;
         default: break;
@@ -208,6 +243,143 @@ namespace ao::tui
     model.selectVisibleRow(static_cast<std::int32_t>(index));
   }
 
+  void EventController::scrollDetail(std::int32_t const delta)
+  {
+    auto const& regions = _hitRegions.detailPanel;
+    auto const lastRow = std::max(0,
+                                  regions.contentBox.y_max - regions.contentBox.y_min -
+                                    (regions.navigationBox.y_max - regions.navigationBox.y_min));
+    auto const offset = _shell.detailSections().revealSelected
+                          ? std::max(0, regions.navigationBox.y_min - regions.contentBox.y_min)
+                          : std::min(_shell.detailScroll(), lastRow);
+    _shell.resetDetailScroll();
+    _shell.scrollDetail(offset, lastRow);
+    _shell.scrollDetail(delta, lastRow);
+  }
+
+  bool EventController::tryHandleDetailEvent(ftxui::Event const& event)
+  {
+    if (!_shell.isDetailFocused() || _shell.isInputActive() || isModalOverlay(_shell.overlay()))
+    {
+      return false;
+    }
+
+    auto& sections = _shell.detailSections();
+
+    if (event == ftxui::Event::Escape)
+    {
+      _shell.focusTracks();
+      return true;
+    }
+
+    if (event == ftxui::Event::ArrowUp || event == ftxui::Event::Character('k') || event == ftxui::Event::ArrowDown ||
+        event == ftxui::Event::Character('j'))
+    {
+      sections.selected = event == ftxui::Event::ArrowUp || event == ftxui::Event::Character('k') ? 0 : 1;
+      sections.revealSelected = true;
+      return true;
+    }
+
+    if (event == ftxui::Event::Return || event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight)
+    {
+      if (_library.selectedTrackView().track != nullptr)
+      {
+        auto& expanded = sections.expanded[sections.selected];
+        expanded = event == ftxui::Event::Return ? !expanded : event == ftxui::Event::ArrowRight;
+        sections.revealSelected = true;
+      }
+
+      return true;
+    }
+
+    if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
+    {
+      scrollDetail((event == ftxui::Event::PageUp ? -1 : 1) *
+                   navigationPageRows(_hitRegions.detailPanel.navigationBox));
+      return true;
+    }
+
+    if (auto const optAction = _keymapPlan.actionFor(event); optAction)
+    {
+      switch (*optAction)
+      {
+        case KeyAction::PlaySelection:
+        case KeyAction::PreviousRow:
+        case KeyAction::NextRow:
+        case KeyAction::PreviousSection:
+        case KeyAction::NextSection:
+        case KeyAction::SelectToggle:
+        case KeyAction::SelectVisual:
+        case KeyAction::SelectAll:
+        case KeyAction::SelectClear:
+        case KeyAction::EditProperties: return true;
+        default: executeKeyAction(*optAction); break;
+      }
+    }
+
+    return true;
+  }
+
+  std::optional<bool> EventController::tryHandleDetailMouse(ftxui::Mouse const& mouse)
+  {
+    if (_shell.isInputActive() || isModalOverlay(_shell.overlay()))
+    {
+      return std::nullopt;
+    }
+
+    if (containsMouse(_hitRegions.detailToggleBox, mouse))
+    {
+      if (mouse.motion == ftxui::Mouse::Moved)
+      {
+        return tryHandleMouseMove(mouse);
+      }
+
+      if (isLeftPress(mouse))
+      {
+        toggleDetailPanel();
+      }
+
+      return true;
+    }
+
+    if (mouse.motion == ftxui::Mouse::Moved && containsMouse(_hitRegions.detailDividerBox, mouse))
+    {
+      return tryHandleMouseMove(mouse);
+    }
+
+    if (!_shell.isDetailVisible() || !containsMouse(_hitRegions.detailPanel.box, mouse))
+    {
+      return std::nullopt;
+    }
+
+    if (auto const wheel = mouseWheelDirection(mouse); wheel != 0)
+    {
+      scrollDetail(wheel * _preferences.wheelStep);
+    }
+
+    if (isLeftPress(mouse) && containsMouse(_hitRegions.detailPanel.navigationBox, mouse))
+    {
+      if (auto const* track = _library.selectedTrackView().track;
+          track != nullptr && track->id == _hitRegions.detailTrack)
+      {
+        for (std::size_t i = 0; i < _hitRegions.detailSectionBoxes.size(); ++i)
+        {
+          if (containsMouse(_hitRegions.detailSectionBoxes[i], mouse))
+          {
+            scrollDetail(0);
+            auto& sections = _shell.detailSections();
+            sections.expanded[i] = !sections.expanded[i];
+            break;
+          }
+        }
+      }
+    }
+
+    _hoveredButton = HoveredButton::None;
+    _qualityHoverVisible = false;
+    return true;
+  }
+
   std::optional<bool> EventController::tryHandleNavigationMouse(ftxui::Mouse const& mouse)
   {
     if (_shell.isInputActive() || isModalOverlay(_shell.overlay()))
@@ -216,10 +388,37 @@ namespace ao::tui
       return std::nullopt;
     }
 
+    if (_shell.isNavigationFocused() && containsMouse(_hitRegions.navigationSearchBox, mouse))
+    {
+      tryHandleMouseMove(mouse);
+
+      if (isLeftPress(mouse) && !_library.navigation().search().isActive())
+      {
+        _library.navigation().trySearchEvent(ftxui::Event::Character("/"));
+      }
+
+      return true;
+    }
+
+    if (containsMouse(_hitRegions.navigationPinBox, mouse))
+    {
+      if (mouse.motion == ftxui::Mouse::Moved)
+      {
+        return tryHandleMouseMove(mouse);
+      }
+
+      if (isLeftPress(mouse))
+      {
+        togglePinnedLists();
+      }
+
+      return true;
+    }
+
     auto const& geometry = _hitRegions.navigationLayout;
     auto const& regions = _hitRegions.navigation;
 
-    if ((!geometry.docked && !geometry.drawer) || regions.panel.box.IsEmpty())
+    if (!geometry.docked || regions.panel.box.IsEmpty())
     {
       _navigationScrollbarDrag = false;
       return std::nullopt;
@@ -245,19 +444,14 @@ namespace ao::tui
       return true;
     }
 
+    if (mouse.motion == ftxui::Mouse::Moved && containsMouse(_hitRegions.navigationDividerBox, mouse))
+    {
+      return tryHandleMouseMove(mouse);
+    }
+
     if (!containsMouse(regions.panel.box, mouse))
     {
-      if (!geometry.drawer)
-      {
-        return std::nullopt;
-      }
-
-      if (isLeftPress(mouse))
-      {
-        leaveNavigation();
-      }
-
-      return true;
+      return std::nullopt;
     }
 
     _qualityHoverVisible = false;
@@ -282,15 +476,6 @@ namespace ao::tui
   void EventController::handleNavigationPress(ftxui::Mouse const& mouse)
   {
     auto const& regions = _hitRegions.navigation;
-
-    if (containsMouse(regions.panel.closeBox, mouse))
-    {
-      auto const enabled = _shell.isNavigationEnabled();
-      leaveNavigation();
-      _shell.setNavigationEnabled(false);
-      reportNavigationVisibilityChange(enabled);
-      return;
-    }
 
     if (regions.revision != _library.navigation().revision())
     {
@@ -347,7 +532,17 @@ namespace ao::tui
         box.x_max != _lastTrackTableBox.x_max || box.y_min != _lastTrackTableBox.y_min ||
         box.y_max != _lastTrackTableBox.y_max)
     {
-      cancelWorkspaceGestures();
+      auto const* drag = std::get_if<PanelResizeInteraction>(&_workspaceGesture);
+      auto const ownReflow = drag != nullptr && drag->terminalColumns == _hitRegions.navigationLayout.terminalColumns &&
+                             drag->navigationPinned == _shell.isNavigationPinned() &&
+                             drag->detailVisible == _shell.isDetailVisible() && box.y_min == _lastTrackTableBox.y_min &&
+                             box.y_max == _lastTrackTableBox.y_max;
+
+      if (!ownReflow)
+      {
+        cancelWorkspaceGestures();
+      }
+
       _lastClickedTrack = kInvalidTrackId;
       _navigationScrollbarDrag = false;
       _lastNavigationGeometry = _hitRegions.navigationLayout;

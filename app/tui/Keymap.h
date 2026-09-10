@@ -23,7 +23,9 @@ namespace ao::tui
   {
     Quit,
     ToggleLists,
+    TogglePinnedLists,
     ToggleDetails,
+    FocusDetails,
     ToggleAudioPipeline,
     ToggleOutputDevices,
     TogglePresentations,
@@ -31,7 +33,12 @@ namespace ao::tui
     ShowHelp,
     OpenCommandPalette,
     OpenQuickFilter,
+    OpenGoTo,
     RevealCurrentTrack,
+    OpenCurrentArtist,
+    OpenCurrentAlbum,
+    WorkspaceBack,
+    WorkspaceForward,
     ClearFilter,
     Reload,
     Scan,
@@ -58,6 +65,7 @@ namespace ao::tui
     PlaybackShuffle,
     PlaybackRepeat,
     SwitchWorkspaceFocus,
+    BeginPanelResize,
     Count,
   };
 

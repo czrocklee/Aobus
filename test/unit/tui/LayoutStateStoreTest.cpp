@@ -4,6 +4,7 @@
 #include "tui/LayoutStateStore.h"
 
 #include "test/unit/TestFixtureSupport.h"
+#include "tui/PanelWidths.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
@@ -35,8 +36,9 @@ namespace ao::tui::test
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
     auto const store = LayoutStateStore{libraryPath};
 
+    auto widths = PanelWidths{};
     bool navigationEnabled = true;
-    store.load(columns, presentations, navigationEnabled);
+    store.load(columns, presentations, navigationEnabled, widths);
 
     REQUIRE(columns.size() == 1);
     CHECK(columns.contains(ListId{7}));
@@ -111,11 +113,15 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
-    REQUIRE(store.save(columnLayouts, presentations, true));
+    REQUIRE(store.save(columnLayouts, presentations, true, PanelWidths{}));
     CHECK(ao::test::readFile(runtimeSessionPath) == "workspace-sentinel\n");
 
     auto const serialized = ao::test::readFile(layoutStatePath(libraryPath));
-    CHECK(serialized == "navigation:\n"
+    CHECK(serialized == "panels:\n"
+                        "  version: 1\n"
+                        "  navigation: 0\n"
+                        "  detail: 0\n"
+                        "navigation:\n"
                         "  version: 1\n"
                         "  enabled: true\n"
                         "trackView.columnLayouts:\n"
@@ -140,8 +146,9 @@ namespace ao::tui::test
     auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPresentations = uimodel::ListPresentations::Snapshot{};
     auto const reopenedStore = LayoutStateStore{libraryPath};
+    auto widths = PanelWidths{};
     bool navigationEnabled = true;
-    reopenedStore.load(loadedColumns, loadedPresentations, navigationEnabled);
+    reopenedStore.load(loadedColumns, loadedPresentations, navigationEnabled, widths);
 
     CHECK(loadedColumns == columnLayouts);
     CHECK(loadedPresentations == presentations);
@@ -171,8 +178,9 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
+    auto widths = PanelWidths{};
     bool navigationEnabled = true;
-    store.load(columns, presentations, navigationEnabled);
+    store.load(columns, presentations, navigationEnabled, widths);
 
     REQUIRE(columns.size() == 1);
     CHECK(columns.contains(ListId{7}));
@@ -205,8 +213,9 @@ namespace ao::tui::test
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
+    auto widths = PanelWidths{};
     bool navigationEnabled = true;
-    store.load(columns, presentations, navigationEnabled);
+    store.load(columns, presentations, navigationEnabled, widths);
 
     REQUIRE(columns.size() == 1);
     REQUIRE(columns.contains(ListId{42}));
@@ -231,7 +240,7 @@ namespace ao::tui::test
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
-    REQUIRE(store.save(columns, presentations, true));
+    REQUIRE(store.save(columns, presentations, true, PanelWidths{}));
     auto const before = ao::test::readFile(configPath);
     CHECK(before.contains("future.owner:\n  value: keep-me\n"));
     CHECK(before.contains("width: 17"));
@@ -239,13 +248,13 @@ namespace ao::tui::test
 
     columns.at(ListId{10})[0] = uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 29, .weight = -1.0};
     presentations.at(ListId{10}) = "artists";
-    auto const failedSaveRes = store.save(columns, presentations, true);
+    auto const failedSaveRes = store.save(columns, presentations, true, PanelWidths{});
 
     REQUIRE_FALSE(failedSaveRes);
     CHECK(ao::test::readFile(configPath) == before);
 
     columns.at(ListId{10})[0] = uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = -1, .weight = 2.0};
-    REQUIRE(store.save(columns, presentations, true));
+    REQUIRE(store.save(columns, presentations, true, PanelWidths{}));
 
     auto const after = ao::test::readFile(configPath);
     CHECK(after.contains("future.owner:\n  value: keep-me\n"));
@@ -261,17 +270,18 @@ namespace ao::tui::test
     auto store = LayoutStateStore{directory.path()};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
-    REQUIRE(store.save(columns, presentations, false));
+    REQUIRE(store.save(columns, presentations, false, PanelWidths{}));
     auto reopened = LayoutStateStore{directory.path()};
+    auto widths = PanelWidths{};
     bool enabled = true;
     presentations.clear();
-    reopened.load(columns, presentations, enabled);
+    reopened.load(columns, presentations, enabled, widths);
     CHECK_FALSE(enabled);
     CHECK(presentations.at(ListId{7}) == "songs");
-    REQUIRE(reopened.save(columns, presentations, true));
+    REQUIRE(reopened.save(columns, presentations, true, widths));
     auto again = LayoutStateStore{directory.path()};
     enabled = false;
-    again.load(columns, presentations, enabled);
+    again.load(columns, presentations, enabled, widths);
     CHECK(enabled);
   }
 
@@ -293,14 +303,43 @@ namespace ao::tui::test
       auto store = LayoutStateStore{directory.path()};
       auto columns = uimodel::TrackColumnLayouts::Snapshot{};
       auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
+      auto widths = PanelWidths{};
       bool enabled = false;
-      store.load(columns, presentations, enabled);
+      store.load(columns, presentations, enabled, widths);
       CHECK(enabled);
       CHECK(presentations.at(ListId{7}) == "songs");
-      REQUIRE(store.save(columns, presentations, false));
+      REQUIRE(store.save(columns, presentations, false, widths));
       auto reopened = LayoutStateStore{directory.path()};
-      reopened.load(columns, presentations, enabled);
+      reopened.load(columns, presentations, enabled, widths);
       CHECK_FALSE(enabled);
+    }
+  }
+
+  TEST_CASE("LayoutStateStore - panel widths round trip and missing or malformed widths use automatic sizing",
+            "[tui][unit][config][panel-resize]")
+  {
+    auto const directory = ao::test::TempDir{};
+    auto store = LayoutStateStore{directory.path()};
+    auto columns = uimodel::TrackColumnLayouts::Snapshot{};
+    auto presentations = uimodel::ListPresentations::Snapshot{};
+    auto widths = PanelWidths{.navigation = 32, .detail = 48};
+    REQUIRE(store.save(columns, presentations, true, widths));
+    auto reopened = LayoutStateStore{directory.path()};
+    auto loaded = PanelWidths{};
+    bool enabled = false;
+    reopened.load(columns, presentations, enabled, loaded);
+    CHECK(loaded == widths);
+
+    for (auto const* document : {"navigation: {version: 1, enabled: false}\n",
+                                 "panels: {version: 2, navigation: 32, detail: 48}\n",
+                                 "panels: {version: 1, navigation: -1, detail: 48}\n",
+                                 "panels: {version: 1, navigation: 32, detail: broken}\n"})
+    {
+      std::ofstream{layoutStatePath(directory.path())} << document;
+      auto invalid = LayoutStateStore{directory.path()};
+      loaded = widths;
+      invalid.load(columns, presentations, enabled, loaded);
+      CHECK(loaded == PanelWidths{});
     }
   }
 } // namespace ao::tui::test

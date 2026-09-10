@@ -3,6 +3,7 @@
 
 #include "LayoutStateStore.h"
 
+#include "PanelWidths.h"
 #include <ao/Error.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -43,6 +44,50 @@ namespace ao::tui
 {
   namespace
   {
+    struct PanelWidthsSchema final
+    {
+      Result<> serialize(ryml::NodeRef node, PanelWidths const widths) const
+      {
+        if (widths.navigation < 0 || widths.detail < 0)
+        {
+          return makeError(Error::Code::InvalidInput, "Invalid TUI panel widths");
+        }
+
+        auto writer = yaml::MapWriter{node};
+        writer.scalar("version", 1).scalar("navigation", widths.navigation).scalar("detail", widths.detail);
+        return std::move(writer).finish();
+      }
+
+      Result<PanelWidths> deserialize(ryml::ConstNodeRef node, PanelWidths const /*seed*/) const
+      {
+        constexpr auto kKeys = std::to_array<std::string_view>({"version", "navigation", "detail"});
+        std::int32_t version = 0;
+        auto widths = PanelWidths{};
+        auto reader = yaml::MapReader{node, kKeys, "TUI panel widths"};
+        reader.requiredScalar("version", version)
+          .requiredScalar("navigation", widths.navigation)
+          .requiredScalar("detail", widths.detail);
+        auto res = std::move(reader).finish(widths);
+
+        if (!res)
+        {
+          return res;
+        }
+
+        if (version != 1)
+        {
+          return makeError(Error::Code::NotSupported, "Unsupported TUI panel widths version");
+        }
+
+        if (widths.navigation < 0 || widths.detail < 0)
+        {
+          return makeError(Error::Code::InvalidInput, "Invalid TUI panel widths");
+        }
+
+        return res;
+      }
+    };
+
     struct NavigationSchema final
     {
       Result<> serialize(ryml::NodeRef node, bool const enabled) const
@@ -190,8 +235,17 @@ namespace ao::tui
 
   void LayoutStateStore::load(uimodel::TrackColumnLayouts::Snapshot& columnLayouts,
                               uimodel::ListPresentations::Snapshot& listPresentations,
-                              bool& navigationEnabled) const
+                              bool& navigationEnabled,
+                              PanelWidths& widths) const
   {
+    widths = {};
+
+    if (auto const res = _storePtr->load("panels", widths, PanelWidthsSchema{});
+        !res && res.error().code != Error::Code::NotFound)
+    {
+      APP_LOG_WARN("TUI: failed to load panel widths: {}", res.error().message);
+    }
+
     navigationEnabled = true;
 
     if (auto const res = _storePtr->load("navigation", navigationEnabled, NavigationSchema{});
@@ -219,9 +273,11 @@ namespace ao::tui
 
   Result<> LayoutStateStore::save(uimodel::TrackColumnLayouts::Snapshot const& columnLayouts,
                                   uimodel::ListPresentations::Snapshot const& listPresentations,
-                                  bool const navigationEnabled)
+                                  bool const navigationEnabled,
+                                  PanelWidths const widths)
   {
     return _storePtr->saveTogether(
+      rt::configWrite("panels", widths, PanelWidthsSchema{}),
       rt::configWrite("navigation", navigationEnabled, NavigationSchema{}),
       rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
       rt::configWrite(
