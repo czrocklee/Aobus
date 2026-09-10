@@ -337,7 +337,7 @@ zh_Hant:table {
     gtk_library_select_export_mode { "選取匯出模式" }
     gtk_library_choose_backup_contents { "選取要包含在備份中的內容：" }
     gtk_library_export_mode_delta { "增量（同步使用者編輯、標籤、列表）" }
-    gtk_library_export_mode_metadata { "中繼資料（整理過的文字、標籤和清單）" }
+    gtk_library_export_mode_metadata { "後設資料（整理過的文字、標籤和列表）" }
     gtk_library_export_mode_full { "完整（災難復原：包含全部資料）" }
     gtk_library_export_mode_list_only { "僅列表（只同步播放清單，不變更曲目）" }
     gtk_library_include { "包含" }
@@ -449,12 +449,12 @@ zh_Hant:table {
     tui_shell_command_palette_title { "命令面板" }
     tui_shell_command_palette_no_matches { "無匹配項" }
     tui_input_history_hint { "Ctrl+P/N 歷史" }
-    tui_navigation_focus { "切換清單與曲目焦點" }
+    tui_navigation_focus { "切換列表與曲目焦點" }
     tui_navigation_return { "{key} 返回曲目" }
     tui_navigation_keys { "↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · Esc 返回曲目" }
     tui_layout_save_failed { "無法儲存工作區配置：{detail}" }
-    tui_navigation_open_failed { "無法開啟清單：{detail}" }
-    tui_navigation_sync_failed { "無法顯示目前清單：{detail}" }
+    tui_navigation_open_failed { "無法開啟列表：{detail}" }
+    tui_navigation_sync_failed { "無法顯示目前列表：{detail}" }
     tui_list_search_hint { "/ 搜尋 · Esc 清除" }
     tui_list_search_empty { "無符合項目" }
     tui_shell_command_palette_footer { "{completeKey} 補全  {runKey} 執行  {cancelKey} 取消" }
@@ -580,7 +580,7 @@ zh_Hant:table {
     tui_editor_title { "曲目屬性" }
     tui_editor_title_multiple { "編輯 {count, plural, other {# 首曲目}}" }
     tui_editor_applies_to_all { "變更將套用至全部 {count, plural, other {# 首曲目}}" }
-    tui_editor_tab_metadata { "中繼資料" }
+    tui_editor_tab_metadata { "後設資料" }
     tui_editor_tab_tags { "標籤" }
     tui_editor_tab_properties { "屬性" }
     tui_editor_tab_tracks { "曲目" }
@@ -629,7 +629,7 @@ zh_Hant:table {
     winui_library_choose_backup_contents { "選取要包含在備份中的內容：" }
     winui_library_include { "包含" }
     winui_library_export_mode_delta { "增量（同步使用者編輯、標籤、列表）" }
-    winui_library_export_mode_metadata { "中繼資料（整理過的文字、標籤和清單）" }
+    winui_library_export_mode_metadata { "後設資料（整理過的文字、標籤和列表）" }
     winui_library_export_mode_full { "完整（災難復原：包含全部資料）" }
     winui_library_export_mode_list_only { "僅列表（只同步播放清單，不變更曲目）" }
     winui_library_select_import_mode { "選取匯入模式" }
@@ -664,7 +664,7 @@ zh_Hant:table {
     winui_track_properties_cancel { "取消" }
     winui_track_properties_tags { "標籤" }
     winui_track_properties_tags_hint { "所有已選曲目共有的標籤" }
-    winui_track_properties_custom_metadata { "自訂中繼資料" }
+    winui_track_properties_custom_metadata { "自訂後設資料" }
     winui_track_properties_custom_key { "新鍵" }
     winui_track_properties_custom_value { "新值" }
     winui_track_properties_delete { "刪除" }
@@ -756,7 +756,7 @@ zh_Hant:table {
     winui_theme_load_failed { "載入 Windows 主題失敗：{detail}" }
     winui_startup_failure { "Aobus 無法啟動：\n\n{detail}" }
     track_multiple_values { "<多個值>" }
-    track_metadata_heading { "中繼資料" }
+    track_metadata_heading { "後設資料" }
     track_audio_properties_heading { "音訊屬性" }
     track_show_empty_fields { "顯示空白欄位" }
     track_hide_empty_fields { "隱藏空白欄位" }
@@ -780,11 +780,11 @@ zh_Hant:table {
     gtk_tag_add { "新增…" }
     gtk_tag_add_placeholder { "新增標籤…" }
     gtk_tag_remove { "移除標籤 {tag}" }
-    gtk_custom_metadata_title { "自訂中繼資料" }
+    gtk_custom_metadata_title { "自訂後設資料" }
     gtk_custom_metadata_key { "鍵" }
     gtk_custom_metadata_value { "值" }
-    gtk_custom_metadata_deleted { "已移除自訂中繼資料 ''{key}''" }
-    gtk_custom_metadata_delete { "刪除自訂中繼資料" }
+    gtk_custom_metadata_deleted { "已移除自訂後設資料 ''{key}''" }
+    gtk_custom_metadata_delete { "刪除自訂後設資料" }
     gtk_activity_hide_status { "隱藏狀態" }
     gtk_activity_hide_notification { "在狀態列中隱藏此通知" }
     gtk_manual_order_drag { "拖曳以調整曲目的手動排序" }

@@ -2,6 +2,8 @@
 
 Use this reference to establish the English concept before choosing an idiomatic target-language term. It is not a table of mandatory literal translations: grammar, platform convention, and established music-player vocabulary in the target language still decide the final wording.
 
+Project-specific terminology decisions take precedence over the general guidance here. For Chinese metadata copy, follow the canonical terms and scope in the [text-catalog reference](../../../../doc/reference/presentation/text-catalog.md#chinese-metadata-terminology).
+
 ## Library and organization
 
 | Concept | Meaning in Aobus | Avoid confusing it with |

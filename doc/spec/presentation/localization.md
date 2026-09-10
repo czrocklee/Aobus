@@ -36,6 +36,8 @@ metadata are derived from it. Add independent translation/fallback and native MR
 parity cases for the new locale. Generated pseudo-localization remains available
 for diagnostics and is excluded from the user-facing language choices.
 
+The [text-catalog reference](../../reference/presentation/text-catalog.md#chinese-metadata-terminology) owns the Chinese metadata terms and their authoring boundaries.
+
 ## Invariants
 
 - Each interactive composition root resolves one locale at startup. TUI may replace its catalog value from Settings on the callback executor; GTK and WinUI retain their startup selection. Copies retain immutable catalog storage, and state crossing replacement owns its display strings.
