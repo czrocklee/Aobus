@@ -175,7 +175,23 @@ Mouse modifiers must be forwarded by your terminal; some terminals reserve Shift
 
 If saved preferences are invalid or unreadable, TUI starts with defaults and shows a warning. The original preference group is retained until an explicit successful Settings save.
 
-Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser or shortcut capture only cancels that unconfirmed choice.
+Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser, shortcut capture, or title-format editor only cancels that unconfirmed choice or draft.
+
+Settings → Appearance → Terminal title format accepts the shared [format expression](../reference/query/format-language.md), for example `$artist " - " $title`.
+Enter or a value click opens a text editor with a live preview of the playing track.
+Enter saves a valid expression; Escape discards the draft.
+Invalid expressions show a diagnostic and cannot be saved.
+An empty setting leaves the terminal title alone; without a playing track the enabled title shows only Soul, or `Aobus` when Soul is disabled.
+Selecting a different track does not change it.
+Title updates are sent only when their text changes.
+Disabling the setting or exiting restores the previous title on terminals that support the xterm title stack, including Kitty; terminal tab-width limits still apply.
+
+The separate **Soul in terminal title** Appearance switch defaults on.
+Soul shares the playback button’s rotating braille arc; pausing freezes it and Reduce motion keeps it static.
+The default title is `Soul · artist - title`, without repeating the Aobus name.
+Custom expression text is preserved.
+Animation uses the existing playback refresh and does not reevaluate track metadata per frame.
+Terminal titles carry plain glyphs; colors remain controlled by the terminal.
 
 In Settings Keyboard, press `/` to find an action by its translated name or action id, then Enter to edit its shortcut. Escape clears the search first; Tab switches pages and clears it.
 

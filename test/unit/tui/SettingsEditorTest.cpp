@@ -8,6 +8,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
 #include "tui/Keymap.h"
+#include "tui/TerminalTitleFormat.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/input/KeyChord.h>
@@ -23,8 +24,11 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::tui::test
@@ -37,37 +41,52 @@ namespace ao::tui::test
       Preferences preferences;
       uimodel::KeymapModel keymap{defaultKeymap()};
       bool fail = false;
+      std::string playingTitle = "Playing track";
+      std::int32_t previewCalls = 0;
       SettingsEditor editor{
         catalog,
         preferences,
         keymap,
-        SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
-                                {
-                                  if (fail)
-                                  {
-                                    return makeError(Error::Code::InvalidInput, "save denied");
-                                  }
+        SettingsEditor::Outputs{
+          .applyPreferences = [&](Preferences const& candidate) -> Result<>
+          {
+            if (fail)
+            {
+              return makeError(Error::Code::InvalidInput, "save denied");
+            }
 
-                                  preferences = candidate;
+            preferences = candidate;
 
-                                  if (!candidate.language.empty())
-                                  {
-                                    catalog = ao::test::requireValue(i18n::MessageCatalog::create(candidate.language));
-                                  }
+            if (!candidate.language.empty())
+            {
+              catalog = ao::test::requireValue(i18n::MessageCatalog::create(candidate.language));
+            }
 
-                                  return {};
-                                },
-                                .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
-                                {
-                                  if (fail)
-                                  {
-                                    return makeError(Error::Code::InvalidInput, "save denied");
-                                  }
+            return {};
+          },
+          .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
+          {
+            if (fail)
+            {
+              return makeError(Error::Code::InvalidInput, "save denied");
+            }
 
-                                  keymap = candidate;
-                                  return {};
-                                },
-                                .coverMode = [] { return std::string{"off"}; }}};
+            keymap = candidate;
+            return {};
+          },
+          .coverMode = [] { return std::string{"off"}; },
+          .previewTerminalTitle = [&](std::string_view expression) -> Result<std::optional<std::string>>
+          {
+            ++previewCalls;
+            auto planRes = compileTerminalTitleFormat(expression);
+
+            if (!planRes)
+            {
+              return std::unexpected{planRes.error()};
+            }
+
+            return *planRes ? std::optional{playingTitle} : std::nullopt;
+          }}};
 
       SettingsFixture()
       {
@@ -101,6 +120,176 @@ namespace ao::tui::test
       }
     };
   } // namespace
+
+  TEST_CASE("SettingsEditor - title format previews drafts and rejects invalid expressions before saving",
+            "[tui][unit][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+    fixture.editor.tryHandleEvent(Event::Return);
+    CHECK(fixture.render().contains("Preview: Playing track"));
+    auto const original = fixture.preferences.terminalTitleFormat;
+    fixture.editor.tryHandleEvent(Event::Home);
+    fixture.editor.tryHandleEvent(Event::CtrlK);
+    fixture.editor.tryHandleEvent(Event::Character("$unknown"));
+    CHECK(fixture.render().contains("Invalid format:"));
+    fixture.editor.tryHandleEvent(Event::Return);
+    CHECK(fixture.preferences.terminalTitleFormat == original);
+    fixture.editor.tryHandleEvent(Event::Home);
+    fixture.editor.tryHandleEvent(Event::CtrlK);
+    fixture.editor.tryHandleEvent(Event::Character(R"("Custom title")"));
+    CHECK(fixture.render(48).contains("Preview: Playing track"));
+    CHECK(fixture.preferences.terminalTitleFormat == original);
+    fixture.editor.tryHandleEvent(Event::Return);
+    CHECK(fixture.preferences.terminalTitleFormat == R"("Custom title")");
+    fixture.editor.tryHandleEvent(Event::Return);
+    fixture.editor.tryHandleEvent(Event::Home);
+    fixture.editor.tryHandleEvent(Event::CtrlK);
+    fixture.editor.tryHandleEvent(Event::Escape);
+    CHECK(fixture.preferences.terminalTitleFormat == R"("Custom title")");
+    CHECK(fixture.editor.isActive());
+  }
+
+  TEST_CASE("SettingsEditor - drawing a title draft only reads its prepared preview", "[tui][regression][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    REQUIRE(fixture.previewCalls == 1);
+    CHECK(fixture.render().contains("Preview: Playing track"));
+    CHECK(fixture.render().contains("Preview: Playing track"));
+    CHECK(fixture.previewCalls == 1);
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Home));
+    CHECK(fixture.previewCalls == 1);
+    fixture.playingTitle = "Next track";
+    CHECK(fixture.render().contains("Preview: Playing track"));
+    CHECK(fixture.editor.tryRefreshTitlePreview());
+    CHECK(fixture.render().contains("Preview: Next track"));
+    CHECK_FALSE(fixture.editor.tryRefreshTitlePreview());
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Escape));
+    auto const calls = fixture.previewCalls;
+    CHECK_FALSE(fixture.editor.tryRefreshTitlePreview());
+    CHECK(fixture.previewCalls == calls);
+  }
+
+  TEST_CASE("SettingsEditor - invalid title drafts offer cancellation until corrected", "[tui][regression][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Home));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::CtrlK));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Character("$unknown")));
+    auto const calls = fixture.previewCalls;
+    auto const invalidFrame = fixture.render();
+    CHECK(invalidFrame.contains("Invalid format:"));
+    CHECK_FALSE(invalidFrame.contains("Enter Save"));
+    CHECK(invalidFrame.contains("Esc Cancel"));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    CHECK_FALSE(fixture.editor.tryRefreshTitlePreview());
+    CHECK(fixture.previewCalls == calls);
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Home));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::CtrlK));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Character("$title")));
+    CHECK(fixture.render().contains("Enter Save"));
+    CHECK(fixture.render().contains("Preview: Playing track"));
+  }
+
+  TEST_CASE("SettingsEditor - title editing requires activation instead of adjustment arrows", "[tui][unit][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+
+    for (auto const& event : {Event::ArrowLeft, Event::ArrowRight, Event::Character(" ")})
+    {
+      REQUIRE(fixture.editor.tryHandleEvent(event));
+      CHECK_FALSE(fixture.render().contains("Preview:"));
+    }
+
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    CHECK(fixture.render().contains("Preview: Playing track"));
+  }
+
+  TEST_CASE("SettingsEditor - constrained title editor keeps the insertion point visible",
+            "[tui][regression][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Home));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::CtrlK));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Character("$unknown")));
+
+    for (auto const& [columns, rows] : {std::pair{40, 14}, std::pair{24, 16}})
+    {
+      CAPTURE(columns, rows);
+      auto const rendered = renderElement(fixture.editor.renderModal(columns, rows), columns, rows);
+      auto const optInputBox = findTextCells(rendered.screen, "$unknown");
+      REQUIRE(optInputBox);
+      CHECK(rendered.screen.PixelAt(optInputBox->x_max + 1, optInputBox->y_min).inverted);
+      CHECK(stripAnsi(rendered.screen.ToString()).contains("Esc Cancel"));
+    }
+  }
+
+  TEST_CASE("SettingsEditor - title value click opens editing and input clicks place the caret",
+            "[tui][unit][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.preferences.terminalTitleFormat = R"("AB")";
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("…");
+    CHECK(fixture.render().contains("Preview: Playing track"));
+    auto const rendered = renderElement(fixture.editor.renderModal(80, 24), 80, 24);
+    auto const optInputBox = findTextCells(rendered.screen, R"("AB")");
+    REQUIRE(optInputBox);
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Mouse("",
+                                                       ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                                                    .motion = ftxui::Mouse::Pressed,
+                                                                    .x = optInputBox->x_min + 2,
+                                                                    .y = optInputBox->y_min})));
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Character("X")));
+    CHECK(fixture.preferences.terminalTitleFormat == R"("AB")");
+    REQUIRE(fixture.editor.tryHandleEvent(Event::Return));
+    CHECK(fixture.preferences.terminalTitleFormat == R"("AXB")");
+  }
+
+  TEST_CASE("SettingsEditor - empty title format disables after confirmation and failed saves can retry",
+            "[tui][unit][settings]")
+  {
+    using ftxui::Event;
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    fixture.click("Terminal title format");
+    fixture.editor.tryHandleEvent(Event::Return);
+    fixture.editor.tryHandleEvent(Event::Home);
+    fixture.editor.tryHandleEvent(Event::CtrlK);
+    CHECK(fixture.render().contains("Preview: Off"));
+    fixture.fail = true;
+    fixture.editor.tryHandleEvent(Event::Return);
+    CHECK_FALSE(fixture.preferences.terminalTitleFormat.empty());
+    CHECK(fixture.render().contains("save denied"));
+    fixture.fail = false;
+    fixture.editor.tryHandleEvent(Event::CtrlR);
+    CHECK(fixture.preferences.terminalTitleFormat.empty());
+  }
 
   TEST_CASE("SettingsEditor - language choice applies on confirmation and refreshes its own labels",
             "[tui][unit][settings][localization]")
@@ -565,5 +754,24 @@ namespace ao::tui::test
     fixture.click("Enter Discard changes");
     CHECK_FALSE(fixture.editor.isActive());
     CHECK(fixture.preferences.dimBackdrop == previous);
+  }
+
+  TEST_CASE("SettingsEditor - terminal Soul switch persists independently of the title format", "[tui][unit][settings]")
+  {
+    auto fixture = SettingsFixture{};
+    fixture.editor.open();
+    fixture.page(SettingsPage::Appearance);
+    auto const format = fixture.preferences.terminalTitleFormat;
+
+    for (std::int32_t index = 0; index < 6; ++index)
+    {
+      REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowDown));
+    }
+
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.preferences.terminalTitleSoul);
+    CHECK(fixture.preferences.terminalTitleFormat == format);
+    REQUIRE(fixture.editor.tryHandleEvent(ftxui::Event::ArrowRight));
+    CHECK(fixture.preferences.terminalTitleSoul);
   }
 } // namespace ao::tui::test

@@ -1053,5 +1053,10 @@ fr:table {
     tui_tag_popover_apply { "Appliquer" }
     tui_tag_popover_add_apply { "Ajouter et appliquer" }
     tui_shell_detail_edit_tags { "modifier les tags des morceaux" }
+    tui_settings_terminal_title { "Format du titre du terminal" }
+    tui_settings_terminal_soul { "Soul dans le titre du terminal" }
+    tui_settings_terminal_title_hint { "Utilise le morceau en cours, par exemple $artist \" - \" $title. Vide : désactivé." }
+    tui_settings_title_preview { "Aperçu : {title}" }
+    tui_settings_invalid_title_format { "Format invalide : {detail}" }
   }
 }

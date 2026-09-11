@@ -30,6 +30,8 @@ add_library(aobus-tui-lib STATIC
     SelectableList.cpp
     StatusBar.cpp
     Style.cpp
+    TerminalTitle.cpp
+    TerminalTitleFormat.cpp
     TerminalTrackColumnLayout.cpp
     TrackEditController.cpp
     TrackMetadataEditor.cpp
@@ -46,6 +48,7 @@ add_library(aobus-tui-lib STATIC
     TrackSection.cpp
     Preferences.cpp
     SettingsEditor.cpp
+    SettingsEditorTitle.cpp
     LayoutStateStore.cpp
     Keymap.cpp
     ShellText.cpp

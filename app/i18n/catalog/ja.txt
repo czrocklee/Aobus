@@ -1053,5 +1053,10 @@ ja:table {
     tui_tag_popover_apply { "適用" }
     tui_tag_popover_add_apply { "追加して適用" }
     tui_shell_detail_edit_tags { "曲のタグを編集" }
+    tui_settings_terminal_title { "端末タイトルの書式" }
+    tui_settings_terminal_soul { "端末タイトルの Soul" }
+    tui_settings_terminal_title_hint { "再生中の曲を使用します。例: $artist \" - \" $title。空欄で無効。" }
+    tui_settings_title_preview { "プレビュー: {title}" }
+    tui_settings_invalid_title_format { "無効な書式: {detail}" }
   }
 }

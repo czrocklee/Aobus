@@ -34,6 +34,9 @@ namespace ao::tui
     std::size_t maxLines = 0;
   };
 
+  /// Byte length of a leading C0, DEL, C1, or Unicode line/paragraph separator,
+  /// otherwise zero. Only classifies the leading bytes; callers validate full UTF-8 text.
+  std::size_t singleLineControlLength(std::string_view value) noexcept;
   std::int32_t cellWidth(std::string_view value);
   std::int32_t panelColumnsForContent(std::int32_t contentColumns, std::int32_t terminalColumns);
   std::string truncateToCellWidth(std::string_view value, std::int32_t width);

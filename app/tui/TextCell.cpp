@@ -340,6 +340,40 @@ namespace ao::tui
     }
   } // namespace
 
+  std::size_t singleLineControlLength(std::string_view const value) noexcept
+  {
+    constexpr unsigned char kFirstPrintableAscii = 0x20U;
+    constexpr unsigned char kAsciiDelete = 0x7FU;
+    constexpr unsigned char kC1LeadByte = 0xC2U;
+    constexpr unsigned char kC1FirstTrailByte = 0x80U;
+    constexpr unsigned char kC1LastTrailByte = 0x9FU;
+
+    if (value.empty())
+    {
+      return 0;
+    }
+
+    auto const byte = static_cast<unsigned char>(value.front());
+
+    if (byte < kFirstPrintableAscii || byte == kAsciiDelete)
+    {
+      return 1;
+    }
+
+    if (byte == kC1LeadByte && value.size() > 1 && static_cast<unsigned char>(value[1]) >= kC1FirstTrailByte &&
+        static_cast<unsigned char>(value[1]) <= kC1LastTrailByte)
+    {
+      return 2;
+    }
+
+    if (value.starts_with("\u2028") || value.starts_with("\u2029"))
+    {
+      return 3;
+    }
+
+    return 0;
+  }
+
   std::int32_t cellWidth(std::string_view const value)
   {
     return static_cast<std::int32_t>(ftxui::string_width(std::string{value}));

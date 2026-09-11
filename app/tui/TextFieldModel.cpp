@@ -18,53 +18,13 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr unsigned char kFirstPrintableAscii = 0x20U;
-    constexpr unsigned char kAsciiDelete = 0x7FU;
-    constexpr unsigned char kC1LeadByte = 0xC2U;
-    constexpr unsigned char kC1LastTrailByte = 0x9FU;
-    // U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR share their first
-    // two UTF-8 bytes and differ only in the third.
-    constexpr unsigned char kSeparatorLeadByte = 0xE2U;
-    constexpr unsigned char kSeparatorSecondByte = 0x80U;
-    constexpr unsigned char kLineSeparatorFinalByte = 0xA8U;
-    constexpr unsigned char kParagraphSeparatorFinalByte = 0xA9U;
-
-    /**
-     * @brief Whether @p text carries a control character or a Unicode line break.
-     *
-     * A terminal delivers a paste as ordinary text, so an escape sequence or a
-     * newline inside it would otherwise become part of a metadata value and be
-     * replayed by every later render. U+2028 and U+2029 break a line as surely
-     * as U+000A does, so a single-line value refuses them on the same grounds.
-     * The scan assumes valid UTF-8: C0 and DEL are single bytes, and the C1
-     * block is the only two-byte sequence that starts with @ref kC1LeadByte.
-     */
     bool containsControlCharacter(std::string_view const text) noexcept
     {
       for (std::size_t index = 0; index < text.size(); ++index)
       {
-        auto const byte = static_cast<unsigned char>(text[index]);
-
-        if (byte < kFirstPrintableAscii || byte == kAsciiDelete)
+        if (singleLineControlLength(text.substr(index)) != 0)
         {
           return true;
-        }
-
-        if (byte == kC1LeadByte && index + 1 < text.size() &&
-            static_cast<unsigned char>(text[index + 1]) <= kC1LastTrailByte)
-        {
-          return true;
-        }
-
-        if (byte == kSeparatorLeadByte && index + 2 < text.size() &&
-            static_cast<unsigned char>(text[index + 1]) == kSeparatorSecondByte)
-        {
-          auto const finalByte = static_cast<unsigned char>(text[index + 2]);
-
-          if (finalByte == kLineSeparatorFinalByte || finalByte == kParagraphSeparatorFinalByte)
-          {
-            return true;
-          }
         }
       }
 
@@ -95,7 +55,7 @@ namespace ao::tui
 
   bool TextFieldModel::tryInsert(std::string_view const text)
   {
-    if (text.empty() || containsControlCharacter(text) || !utility::validateUtf8(text))
+    if (text.empty() || !utility::validateUtf8(text) || containsControlCharacter(text))
     {
       return false;
     }
@@ -128,7 +88,7 @@ namespace ao::tui
       return false;
     }
 
-    if (containsControlCharacter(text) || !utility::validateUtf8(text))
+    if (!utility::validateUtf8(text) || containsControlCharacter(text))
     {
       return false;
     }

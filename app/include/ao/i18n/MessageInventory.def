@@ -1064,3 +1064,9 @@ AO_I18N_MESSAGE(TuiShellDetailEditTags, "tui_shell_detail_edit_tags")
 
 AO_I18N_MESSAGE(TuiShellTags, "tui_shell_tags")
 AO_I18N_MESSAGE(TuiTagPopoverCancel, "tui_tag_popover_cancel")
+
+AO_I18N_MESSAGE(TuiSettingsTerminalTitle, "tui_settings_terminal_title")
+AO_I18N_MESSAGE(TuiSettingsTerminalTitleHint, "tui_settings_terminal_title_hint")
+AO_I18N_MESSAGE(TuiSettingsTitlePreview, "tui_settings_title_preview")
+AO_I18N_MESSAGE(TuiSettingsInvalidTitleFormat, "tui_settings_invalid_title_format")
+AO_I18N_MESSAGE(TuiSettingsTerminalSoul, "tui_settings_terminal_soul")

@@ -1053,5 +1053,10 @@ zh_Hant:table {
     tui_tag_popover_apply { "套用" }
     tui_tag_popover_add_apply { "新增並套用" }
     tui_shell_detail_edit_tags { "編輯曲目標籤" }
+    tui_settings_terminal_title { "終端標題格式" }
+    tui_settings_terminal_soul { "終端標題 Soul 動畫" }
+    tui_settings_terminal_title_hint { "使用正在播放的曲目，例如 $artist \" - \" $title。留空停用標題更新。" }
+    tui_settings_title_preview { "預覽：{title}" }
+    tui_settings_invalid_title_format { "格式無效：{detail}" }
   }
 }

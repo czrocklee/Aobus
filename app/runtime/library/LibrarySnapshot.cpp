@@ -15,6 +15,8 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/query/Field.h>
+#include <ao/query/FormatExpression.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -265,6 +267,24 @@ namespace ao::rt
     }
 
     return rowDataFromView(id, library, *optView, transaction);
+  }
+
+  std::optional<std::string> LibrarySnapshot::formatTrack(TrackId const id, query::FormatPlan const& plan) const
+  {
+    auto const& library = _implPtr->library;
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView || !query::hasRequiredTrackData(plan.accessProfile, *optView))
+    {
+      return std::nullopt;
+    }
+
+    auto context = library::DictionaryReadContext{library.dictionary()};
+    auto binding = query::FormatBinding{plan, context};
+    auto output = std::string{};
+    query::FormatEvaluator{}.evaluate(binding, *optView, output);
+    return output;
   }
 
   bool LibrarySnapshot::containsTrack(TrackId const id) const

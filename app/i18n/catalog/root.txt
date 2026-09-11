@@ -1055,5 +1055,10 @@ root:table {
     tui_tag_popover_apply { "Apply" }
     tui_tag_popover_add_apply { "Add & apply" }
     tui_shell_detail_edit_tags { "edit track tags" }
+    tui_settings_terminal_title { "Terminal title format" }
+    tui_settings_terminal_soul { "Soul in terminal title" }
+    tui_settings_terminal_title_hint { "Format the playing track, e.g. $artist \" - \" $title. Empty disables title updates." }
+    tui_settings_title_preview { "Preview: {title}" }
+    tui_settings_invalid_title_format { "Invalid format: {detail}" }
   }
 }

@@ -114,4 +114,21 @@ namespace ao::tui::test
 
     CHECK_FALSE(coreRight.PixelAt(2, 0).foreground_color == coreRight.PixelAt(1, 0).foreground_color);
   }
+
+  TEST_CASE("SoulButton - title shares transport glyphs and keeps a fixed blank canvas", "[tui][unit][soul]")
+  {
+    CHECK(soulTitleText(audio::Transport::Playing,
+                        uimodel::aobusSoulMotionAt(std::chrono::milliseconds{0}),
+                        std::chrono::milliseconds{0}) == "⠀⠀⡷");
+    CHECK(soulTitleText(audio::Transport::Playing,
+                        uimodel::aobusSoulMotionAt(std::chrono::milliseconds{3460}),
+                        std::chrono::milliseconds{0}) == "⠞⠀⠀");
+    auto const motion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080});
+    CHECK(soulTitleText(audio::Transport::Playing, motion, std::chrono::milliseconds{0}) == "⠚⠉⠓");
+    CHECK(soulTitleText(audio::Transport::Paused, motion, std::chrono::milliseconds{9000}) == "⠚⠉⠓");
+    CHECK(soulTitleText(audio::Transport::Idle, motion, std::chrono::milliseconds{0}) == "⠀⠂⠀");
+    CHECK(soulTitleText(audio::Transport::Error, motion, std::chrono::milliseconds{0}) == "!!!");
+    CHECK(soulTitleText(audio::Transport::Buffering, motion, std::chrono::milliseconds{0}) !=
+          soulTitleText(audio::Transport::Buffering, motion, std::chrono::milliseconds{700}));
+  }
 } // namespace ao::tui::test

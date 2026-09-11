@@ -25,6 +25,36 @@ Preference and keymap candidates save before live publication. A failed candidat
 
 A language change constructs the new catalog and ICU ordering policy, saves the preference, then publishes on the callback executor. Cached navigation, row labels, output labels, and activity projections refresh before the next frame. Browsing projections rebuild sort keys and completion materializations invalidate. Existing transient playback projections retain shared ownership of their previous policy and order; new projections use the new policy. Playback, workspace identity, focus, marks, and tasks remain alive.
 
+### Terminal title
+
+The terminal-title preference uses the existing scalar format language.
+Settings requests one compilation and preview as the draft changes, using the current playing track; draft changes never publish a terminal title.
+The main loop refreshes an active valid preview after runtime publication, while rendering only reads prepared text and never compiles or opens a snapshot.
+The title row opens with Enter or its mouse value control, and an invalid draft shows its diagnostic without offering Save.
+Enter persists a valid draft, Escape cancels, and persistence failures retain the existing retry/discard flow.
+An empty expression disables ownership.
+No active or readable playing track, or an empty formatted result, falls back to Soul alone when enabled, otherwise `Aobus`.
+
+The terminal title and Settings draft preview each own a `TerminalTitleFormatter`, which caches the compiled plan and the playing track text.
+Each formatter subscribes to applied library changes on the callback executor and invalidates its cached text when a change is published.
+Unchanged playback ticks do not open database snapshots, reload track data, or evaluate either plan, including while the Settings preview is open.
+Idle formatting does not open a snapshot, including after a library publication.
+The runtime snapshot reads a single track, including dictionary-backed and custom fields, independent of list selection and size.
+Only changed output produces OSC 2.
+The title payload replaces terminal control characters and line breaks with spaces and limits output to 512 terminal cells without splitting Unicode text.
+The first update pushes the window title using the xterm title stack; disabling and normal or handled-signal exit pop it exactly once.
+Restoration is best effort when the output sink fails; teardown retires ownership without retrying a potentially delivered pop.
+A sink reports terminal I/O failure as `false` or `std::system_error`; the title owner attempts restoration once and disables further output without throwing that I/O failure through the application loop or skipping its session checkpoints.
+Other callback exceptions remain programming failures and are not classified as optional output rejection.
+Terminals without title-stack support may retain the last application title until the shell replaces it.
+
+The optional Soul prefix shares glyph selection and motion samples with the playback button.
+The title owner caches the formatted track text separately from the composed title, so glyph changes never cause format reevaluation.
+Unchanged track text and Soul input reuse the composed title without sanitizing or measuring it again.
+New Soul input is sanitized independently, then composition enforces the total cell budget; malformed Soul input does not discard valid track text.
+Braille blank characters preserve the three-cell canvas when terminals trim leading or trailing ASCII spaces.
+The prefix respects paused and reduced-motion state, uses the existing playback refresh, and does not add timers or terminal-specific configuration.
+
 ## Code boundary
 
 TUI code under `app/tui/` owns FTXUI elements, terminal geometry, hit regions, input dispatch, frame timing, terminal cover rendering, and TUI-local shell state.
@@ -415,6 +445,7 @@ The notification center can be opened explicitly even when compact status is not
 
 ## Implementation map
 
+- [`TerminalTitle.cpp`](../../../app/tui/TerminalTitle.cpp) owns the cached playing-track title and balanced terminal title stack; the runtime `LibrarySnapshot::formatTrack` boundary evaluates one track. [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) supplies the shared glyph frames for the dock and title.
 - [`TrackPropertiesEditorTagPopover.cpp`](../../../app/tui/TrackPropertiesEditorTagPopover.cpp) owns quick tag rendering and local input; [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) shares the captured authoring session and submission lifecycle with the full editor.
 
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
@@ -439,6 +470,7 @@ The notification center can be opened explicitly even when compact status is not
 
 ## Test map
 
+- [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) protects expression compilation, metadata invalidation, title ownership, Soul composition, and control-safe output. [`SoulButtonTest.cpp`](../../../test/unit/tui/SoulButtonTest.cpp) protects shared playback-state glyphs.
 - [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, mouse dismissal, localized narrow layouts, and submission/recovery controls.
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, and overlay state.

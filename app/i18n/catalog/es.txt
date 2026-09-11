@@ -1053,5 +1053,10 @@ es:table {
     tui_tag_popover_apply { "Aplicar" }
     tui_tag_popover_add_apply { "Añadir y aplicar" }
     tui_shell_detail_edit_tags { "editar etiquetas de pistas" }
+    tui_settings_terminal_title { "Formato del título del terminal" }
+    tui_settings_terminal_soul { "Soul en el título del terminal" }
+    tui_settings_terminal_title_hint { "Usa la pista en reproducción, p. ej. $artist \" - \" $title. Vacío desactiva la función." }
+    tui_settings_title_preview { "Vista previa: {title}" }
+    tui_settings_invalid_title_format { "Formato no válido: {detail}" }
   }
 }

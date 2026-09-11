@@ -27,6 +27,8 @@ namespace ao::tui
     std::string language{};
     std::string coverArtMode = "auto";
     std::string panelSeparator = "single";
+    std::string terminalTitleFormat = R"($artist " - " $title)";
+    bool terminalTitleSoul = true;
     bool revealIndicatorsOnHover = false;
     bool dimBackdrop = true;
     bool reducedMotion = false;

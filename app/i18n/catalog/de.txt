@@ -1053,5 +1053,10 @@ de:table {
     tui_tag_popover_apply { "Anwenden" }
     tui_tag_popover_add_apply { "Hinzufügen & anwenden" }
     tui_shell_detail_edit_tags { "Tags der Titel bearbeiten" }
+    tui_settings_terminal_title { "Format des Terminaltitels" }
+    tui_settings_terminal_soul { "Soul im Terminaltitel" }
+    tui_settings_terminal_title_hint { "Verwendet den laufenden Titel, z. B. $artist \" - \" $title. Leer deaktiviert die Funktion." }
+    tui_settings_title_preview { "Vorschau: {title}" }
+    tui_settings_invalid_title_format { "Ungültiges Format: {detail}" }
   }
 }
