@@ -4,16 +4,21 @@
 #pragma once
 
 #include "CommandPalettePanel.h"
+#include "GoToMenu.h"
+#include "LibraryChooser.h"
 #include "MouseBindings.h"
 #include "NavigationPanel.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDevicePanel.h"
+#include "PlaybackPanel.h"
 #include "PresentationPanel.h"
 #include "StatusBar.h"
 #include "TrackTable.h"
+#include <ao/CoreIds.h>
 
 #include <ftxui/screen/box.hpp>
 
+#include <array>
 #include <cstdint>
 #include <list>
 #include <vector>
@@ -25,8 +30,10 @@ namespace ao::tui
   enum class HoveredButton : std::uint8_t
   {
     None,
-    OutputDevice,
     Library,
+    NavigationToggle,
+    DetailToggle,
+    OutputDevice,
     Soul,
     Presentation,
     ActivityStatus,
@@ -51,9 +58,10 @@ namespace ao::tui
   struct HitRegions final
   {
     ftxui::Box coverBox{};
-    ftxui::Box libraryButtonBox{};
+    ftxui::Box qualityHoverBox = kEmptyMouseBox;
     ftxui::Box soulButtonBox{};
     ftxui::Box outputDeviceButtonBox{};
+    ftxui::Box libraryButtonBox = kEmptyMouseBox;
     ftxui::Box presentationButtonBox{};
     ftxui::Box activityStatusBox{};
     ftxui::Box settingsButtonBox{};
@@ -62,8 +70,19 @@ namespace ao::tui
     ftxui::Box volumeBox{};
     ftxui::Box shuffleBox = kEmptyMouseBox;
     ftxui::Box repeatBox = kEmptyMouseBox;
+    PlaybackMetadataHitRegions playbackMetadata{};
+    GoToMenuHitRegions goToMenu{};
+    GoToMenuHitRegions goToStatus{};
+    ftxui::Box navigationPinBox = kEmptyMouseBox;
+    ftxui::Box navigationDividerBox = kEmptyMouseBox;
+    ftxui::Box navigationSearchBox = kEmptyMouseBox;
     NavigationGeometry navigationLayout{};
     NavigationHitRegions navigation{};
+    PanelMouseRegions detailPanel{};
+    TrackId detailTrack = kInvalidTrackId;
+    std::array<ftxui::Box, 2> detailSectionBoxes{kEmptyMouseBox, kEmptyMouseBox};
+    ftxui::Box detailToggleBox = kEmptyMouseBox;
+    ftxui::Box detailDividerBox = kEmptyMouseBox;
     PanelMouseRegions overlayPanel{};
     PanelMouseRegions inputPanel{};
     CompletionHitRegions completion{};
@@ -74,6 +93,7 @@ namespace ao::tui
     std::list<StatusActionHitRegion> statusActions{};
     std::vector<TrackRowHitRegion> trackRows{};
     std::vector<OutputDeviceRowHitRegion> outputDeviceRows{};
+    std::vector<LibraryRowHitRegion> libraryRows{};
     std::vector<PresentationRowHitRegion> presentationRows{};
     std::vector<NotificationDetailRowHitRegion> notificationDetailRows{};
     std::vector<TrackColumnResizeHandle> trackColumnResizeHandles{};

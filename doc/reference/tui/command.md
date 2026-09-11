@@ -67,7 +67,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 
 | Aliases | Action |
 | --- | --- |
-| `lists` | enable/focus Lists or disable its visible pane |
+| `lists` | focus pinned Lists, or toggle the Lists popup when no pinned pane is visible |
+| `sidebar` | toggle the pinned Lists preference |
 | `detail`, `details` | open/toggle detail |
 | `quality`, `audio`, `pipeline` | open/toggle quality pipeline |
 | `output`, `outputs`, `device`, `devices` | open/toggle output devices |
@@ -75,7 +76,10 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `notifications`, `notification` | open/toggle notification center |
 | `close`, `hide`, `esc` | close overlay |
 | `help` | help |
+| `goto` | open the Go to navigation menu |
 | `current`, `now`, `reveal` | reveal current track |
+| `artist` | open an All Tracks view filtered by the current track's exact artist metadata |
+| `album` | open All Tracks with the `albums` presentation and reveal the current track |
 | `clear` | clear filter |
 | `reload`, `refresh` | reload active list |
 | `scan`, `rescan` | start an eager library scan |
@@ -115,14 +119,20 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `Left` / `Right`, `[` / `]` | seek -/+ 5 seconds | configurable |
 | `{` / `}` | previous/next presentation group | configurable |
 | `-` / `+` / `=` | volume -/+ 5 percentage points | configurable |
-| `l` | enable/focus Lists or disable its visible pane | configurable |
-| `d`, `a`, `o`, `p`, `n` | toggle corresponding panel | configurable |
+| `l` | focus docked Lists, or toggle the button-anchored chooser when undocked | configurable |
+| `L` | toggle pinned Lists; pinning the chooser promotes it into the sidebar | configurable |
+| `d` | toggle the persistent Detail sidebar | configurable |
+| `D` | show and focus Detail | configurable |
+| `g` | open the Go to menu for current track, artist, album, or workspace history | configurable |
+| `Ctrl+W` | begin keyboard panel resizing; Tab selects a divider, Left/Right moves it, Enter commits, Esc cancels | configurable entry; fixed protocol inside resize mode |
+| `Shift+Left` / `Shift+Right` | resize the focused Lists or Detail sidebar | fixed protocol |
+| `a`, `o`, `p`, `n` | toggle the corresponding popover | configurable |
 | `,` | open Settings | configurable at root |
 | `?`, `F1` | open/close help | configurable |
 | `c` | reveal current track | configurable |
 | `C` | clear filter | configurable |
 | `R` | reload active list | configurable |
-| `Tab`, `Shift+Tab` | switch Lists/Tracks focus when docked; return to Tracks from Lists | configurable |
+| `Tab`, `Shift+Tab` | switch Lists/Tracks focus when docked; return to Tracks from Detail | configurable |
 | `m` | mark or unmark the focused track | configurable |
 | `v` | start a visual selection at the focus, or confirm the running one | configurable |
 | `Shift+A` | mark every track in the current view | configurable |
@@ -220,13 +230,13 @@ Pickers and read-only modal pages accept Up/Down or j/k, viewport-sized PageUp/P
 
 Press `/` inside Lists, Views, or Settings Keyboard to search within that panel. Up/Down and page keys navigate matches; Return activates one. Escape clears the query before closing the panel. Empty results cannot activate the previously selected row. Settings searches localized labels and stable action ids. Queries do not alter the workspace filter. Views and Settings clear their query on panel/page changes; Lists retains search while a stronger surface suspends it. Lists searches names and ancestor paths, displays context-only ancestors without activation, and uses Left/Right for tree navigation outside search. Tab/Shift-Tab is a fixed search-local exit to Tracks; a printable custom focus binding remains text during search.
 
-Lists is a workspace pane, docked when its 26 columns leave at least 72 track-content columns after Detail. Otherwise it appears as a drawer only while Lists has focus. `l` / `:lists` enables and focuses it, opens a hidden drawer, or disables a visible pane. Escape and the focus action return to Tracks without disabling it; the close button disables it. `tui.workspace.switchFocus` defaults to Tab/Shift-Tab and cannot open a hidden drawer from Tracks. Enter returns to Tracks after navigation; a docked row click keeps Lists focused. Clicking the active List preserves its current filtered view and marks. Outside drawer clicks dismiss and consume; docked Tracks clicks operate immediately.
+Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked, otherwise it toggles the separate chooser popup above the track frame's List/current-list button. The button is hidden only while the pane is docked. `L` / `:sidebar` toggles pinning independently, and closes an open chooser before showing the tree. The tree docks when its requested width (26 columns in automatic mode) leaves at least 72 track-content columns after Detail. At narrower widths, the pin preference is retained and the chooser remains available. Tab/Shift-Tab switches between docked Lists and Tracks; Escape returns to Tracks without unpinning. Enter returns to Tracks after navigation; a docked row click keeps Lists focused, while a chooser row click closes the popup. Clicking the active List preserves its current filtered view and marks. Outside chooser clicks dismiss and consume; docked Tracks clicks operate immediately.
 
 ### Overlay-specific keys
 
 | Overlay | Keys |
 | --- | --- |
-| Detail | effective toggle (default `d`), `Esc` close; every workspace key and mouse gesture below stays available while it is open |
+| Detail sidebar | effective toggle (default `d`) or its divider arrow shows/hides it; Escape and temporary popovers leave it visible, and workspace gestures stay available |
 | Pipeline | effective toggle (default `a`), `Esc` close |
 | Output | effective toggle (default `o`), `Return` select, `Esc` close |
 | Views | effective toggle (default `p`), `Return` select, `Esc` close |
@@ -235,7 +245,7 @@ Lists is a workspace pane, docked when its 26 columns leave at least 72 track-co
 
 ### Mouse targets
 
-All track-table gestures below remain available while the detail inspector is open and are blocked by every other overlay. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail side panel and editor dialogs use their close controls.
+All track-table gestures below remain available while the detail inspector is open and are blocked by modal overlays. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail sidebar uses its divider arrow or `d`; editor dialogs use their close controls.
 
 | Target/gesture | Action |
 | --- | --- |
@@ -248,6 +258,9 @@ All track-table gestures below remain available while the detail inspector is op
 | repeat indicator click | cycle repeat off → all → one → off |
 | Soul button click | toggle playback |
 | Soul button hover | show quality hover panel |
+| playback title click | reveal the current track |
+| playback artist click | open an All Tracks view filtered by the complete artist metadata value |
+| playback album click | open All Tracks with the `albums` presentation and reveal the current track |
 | library/view/status/quality/output indicators | open corresponding panel |
 | list/view/output row click | select/activate according to panel |
 

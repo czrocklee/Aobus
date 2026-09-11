@@ -25,9 +25,9 @@ namespace ao::tui
       if ((!value.language.empty() &&
            !std::ranges::contains(i18n::availableCatalogLocales(), value.language, &i18n::CatalogLocale::tag)) ||
           !std::ranges::contains(kCoverArtModes, value.coverArtMode, &CoverArtModeDescriptor::name) ||
-          value.wheelStep < 1 || value.wheelStep > kMaximumWheelStep || value.seekSeconds < 1 ||
-          value.seekSeconds > kMaximumSeekSeconds || value.volumePercent < 1 ||
-          value.volumePercent > kMaximumVolumePercent)
+          (value.panelSeparator != "single" && value.panelSeparator != "double") || value.wheelStep < 1 ||
+          value.wheelStep > kMaximumWheelStep || value.seekSeconds < 1 || value.seekSeconds > kMaximumSeekSeconds ||
+          value.volumePercent < 1 || value.volumePercent > kMaximumVolumePercent)
       {
         return makeError(Error::Code::InvalidInput, "Invalid TUI preference value");
       }
@@ -48,6 +48,8 @@ namespace ao::tui
         writer.scalar("version", 1)
           .scalar("language", value.language)
           .scalar("coverArtMode", value.coverArtMode)
+          .scalar("panelSeparator", value.panelSeparator)
+          .scalar("revealIndicatorsOnHover", value.revealIndicatorsOnHover)
           .scalar("dimBackdrop", value.dimBackdrop)
           .scalar("reducedMotion", value.reducedMotion)
           .scalar("mouseEnabled", value.mouseEnabled)
@@ -63,6 +65,8 @@ namespace ao::tui
         constexpr auto kKeys = std::to_array<std::string_view>({"version",
                                                                 "language",
                                                                 "coverArtMode",
+                                                                "panelSeparator",
+                                                                "revealIndicatorsOnHover",
                                                                 "dimBackdrop",
                                                                 "reducedMotion",
                                                                 "mouseEnabled",
@@ -76,6 +80,8 @@ namespace ao::tui
         reader.requiredScalar("version", version)
           .optionalScalar("language", value.language)
           .optionalScalar("coverArtMode", value.coverArtMode)
+          .optionalScalar("panelSeparator", value.panelSeparator)
+          .optionalScalar("revealIndicatorsOnHover", value.revealIndicatorsOnHover)
           .optionalScalar("dimBackdrop", value.dimBackdrop)
           .optionalScalar("reducedMotion", value.reducedMotion)
           .optionalScalar("mouseEnabled", value.mouseEnabled)

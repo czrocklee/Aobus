@@ -20,7 +20,7 @@ namespace ao::tui
   inline constexpr std::int32_t kTrackTablePlayingColumns = 2;
   inline constexpr std::string_view kTrackTableLeadingColumnSeparator = "  ";
   inline constexpr std::string_view kTrackTableInterColumnSeparator = "| ";
-  inline constexpr std::string_view kTrackTableTrailingColumnSeparator = "|";
+  inline constexpr std::string_view kTrackTableTrailingColumnSeparator = " ";
   inline constexpr std::int32_t kTrackTableScrollIndicatorColumns = 1;
 
   constexpr std::int32_t trackTableChromeColumns(std::size_t const columnCount) noexcept

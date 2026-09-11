@@ -96,13 +96,12 @@ namespace ao::tui
 
     if (scrollRow >= 0)
     {
-      panelPtr = std::move(panelPtr) | reflectLayout(regions.contentBox) | focusPosition(0, scrollRow) | yframe;
+      // Let spare virtual rows belong to the filler, keeping the bottom border inside the viewport.
+      panelPtr = vbox({std::move(panelPtr) | reflectLayout(regions.contentBox) | notflex | yflex_shrink, filler()}) |
+                 notflex | yflex_shrink | focusPosition(0, scrollRow) | yframe;
     }
 
-    return dbox(
-             {std::move(panelPtr),
-              vbox({hbox({filler(), text(" × ") | bold | ftxui::reflect(regions.closeBox), text(" ")}), filler()})}) |
-           ftxui::reflect(regions.box);
+    return std::move(panelPtr) | ftxui::reflect(regions.box);
   }
 
   void MouseBindings::clear()

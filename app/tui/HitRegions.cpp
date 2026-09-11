@@ -4,6 +4,7 @@
 #include "HitRegions.h"
 
 #include "MouseBindings.h"
+#include <ao/CoreIds.h>
 
 #include <ftxui/screen/box.hpp>
 
@@ -33,6 +34,18 @@ namespace ao::tui
   void HitRegions::clearFrameLocalRows()
   {
     navigation = {};
+    libraryButtonBox = kEmptyMouseBox;
+    presentationButtonBox = kEmptyMouseBox;
+    libraryRows.clear();
+    navigationPinBox = kEmptyMouseBox;
+    navigationDividerBox = kEmptyMouseBox;
+    navigationSearchBox = kEmptyMouseBox;
+    qualityHoverBox = kEmptyMouseBox;
+    detailPanel = {};
+    detailSectionBoxes.fill(kEmptyMouseBox);
+    detailTrack = kInvalidTrackId;
+    detailToggleBox = kEmptyMouseBox;
+    detailDividerBox = kEmptyMouseBox;
     overlayPanel = {};
     inputPanel = {};
     completion = {};
@@ -40,6 +53,9 @@ namespace ao::tui
     cancelSelectionBox = kEmptyMouseBox;
     shuffleBox = kEmptyMouseBox;
     repeatBox = kEmptyMouseBox;
+    playbackMetadata = {};
+    goToMenu = {};
+    goToStatus = {};
     trackTableRevision = 0;
     trackRows.clear();
     outputDeviceRows.clear();
@@ -59,6 +75,21 @@ namespace ao::tui
     }
 
     auto result = ButtonHitTestResult{};
+
+    if (!context.isOverlayActive)
+    {
+      if (contains(navigationPinBox, column, row) || contains(navigationDividerBox, column, row))
+      {
+        result.hoveredButton = HoveredButton::NavigationToggle;
+        return result;
+      }
+
+      if (contains(detailToggleBox, column, row) || contains(detailDividerBox, column, row))
+      {
+        result.hoveredButton = HoveredButton::DetailToggle;
+        return result;
+      }
+    }
 
     if (contains(outputDeviceButtonBox, column, row))
     {

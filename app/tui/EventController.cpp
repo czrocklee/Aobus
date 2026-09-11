@@ -4,9 +4,12 @@
 #include "EventController.h"
 
 #include "Command.h"
+#include "GoToMenu.h"
 #include "HitRegions.h"
 #include "Keymap.h"
+#include "LibraryChooser.h"
 #include "LibraryController.h"
+#include "LibraryNavigation.h"
 #include "LibraryScanController.h"
 #include "MouseBindings.h"
 #include "NotificationCenterPanel.h"
@@ -74,9 +77,10 @@ namespace ao::tui
         case Overlay::OutputDevices:
         case Overlay::PresentationPanel:
         case Overlay::Notifications:
-        case Overlay::Help: return true;
-        case Overlay::None:
-        case Overlay::DetailPanel: return false;
+        case Overlay::Help:
+        case Overlay::ListChooser:
+        case Overlay::GoTo: return true;
+        case Overlay::None: return false;
       }
 
       return false;
@@ -139,13 +143,7 @@ namespace ao::tui
       return trackIndexForVisualRow(static_cast<std::int32_t>(visualRow), trackCount, sections);
     }
 
-    /**
-     * @brief Whether any overlay currently occupies the screen.
-     *
-     * Visibility, not modality: a visible overlay owns its own keys and its own
-     * share of the layout even when the workspace beneath it stays live. Use
-     * @ref isModalOverlay to ask whether the workspace may still be driven.
-     */
+    /// Whether a temporary popover occupies the screen.
     bool isOverlayActive(Overlay const overlay) noexcept
     {
       return overlay != Overlay::None;
@@ -203,9 +201,22 @@ namespace ao::tui
       });
   }
 
+  GoToMenuState EventController::goToMenuState() const
+  {
+    return {.nowPlaying = _playback.snapshot().transport.nowPlaying,
+            .canGoBack = _library.canNavigateBack(),
+            .canGoForward = _library.canNavigateForward()};
+  }
+
   bool EventController::tryHandleEvent(ftxui::Event const& event)
   {
     syncWorkspaceGeometry();
+
+    if (hasWorkspaceGesture() &&
+        (_settings.isActive() || _trackEdit.isActive() || _shell.isInputActive() || isModalOverlay(_shell.overlay())))
+    {
+      cancelWorkspaceGestures();
+    }
 
     if (event == ftxui::Event::CtrlC)
     {
@@ -242,6 +253,11 @@ namespace ao::tui
       return true;
     }
 
+    if (tryHandleKeyboardPanelResize(event))
+    {
+      return true;
+    }
+
     if (event.is_mouse())
     {
       auto mouseEvent = event;
@@ -259,12 +275,29 @@ namespace ao::tui
       return tryHandleCommandEvent(event);
     }
 
+    if (std::holds_alternative<PanelResizeInteraction>(_workspaceGesture))
+    {
+      // Pointer resize owns motion/release; ordinary keys act after rollback.
+      // Escape only cancels, so it cannot also clear the workspace selection.
+      cancelWorkspaceGestures();
+
+      if (event == ftxui::Event::Escape)
+      {
+        return true;
+      }
+    }
+
+    if (tryHandlePanelResizeKey(event))
+    {
+      return true;
+    }
+
     if (tryHandleListSearchEvent(event))
     {
       return true;
     }
 
-    if (tryHandleNavigationEvent(event))
+    if (tryHandleDetailEvent(event) || tryHandleNavigationEvent(event))
     {
       return true;
     }
@@ -298,6 +331,11 @@ namespace ao::tui
 
   void EventController::cancelTransientInteractions()
   {
+    if (_shell.overlay() == Overlay::GoTo)
+    {
+      _shell.closeOverlay();
+    }
+
     _lastClickedTrack = kInvalidTrackId;
     _navigationScrollbarDrag = false;
     cancelFilterDebounce();
@@ -336,18 +374,14 @@ namespace ao::tui
 
   void EventController::toggleDetailPanel()
   {
-    if (_shell.overlay() == Overlay::DetailPanel)
-    {
-      closeOverlay();
-      postActivityNotification(
-        rt::NotificationSeverity::Info,
-        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiDetailClosed)});
-      return;
-    }
-
-    openOverlay(Overlay::DetailPanel);
-    postActivityNotification(rt::NotificationSeverity::Info,
-                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiDetailOpened)});
+    cancelWorkspaceGestures();
+    _lastClickedTrack = kInvalidTrackId;
+    _qualityHoverVisible = false;
+    _shell.toggleDetail();
+    _hoveredButton = HoveredButton::None;
+    _hitRegions.detailToggleBox = kEmptyMouseBox;
+    _hitRegions.detailDividerBox = kEmptyMouseBox;
+    _hitRegions.detailPanel = {};
   }
 
   void EventController::toggleQualityPanel()
@@ -458,6 +492,70 @@ namespace ao::tui
     _playback.commands().revealPlayingTrack();
   }
 
+  void EventController::activateGoTo(CommandAction const action)
+  {
+    if (!canActivateGoTo(goToMenuState(), action))
+    {
+      return;
+    }
+
+    closeOverlay();
+    runCommand({.action = action});
+  }
+
+  bool EventController::tryHandleGoToEvent(ftxui::Event const& event)
+  {
+    auto const commands = goToCommands();
+
+    for (auto const& command : commands)
+    {
+      if (event == ftxui::Event::Character(std::string{command.goToKey}))
+      {
+        activateGoTo(command.action);
+        return true;
+      }
+    }
+
+    if (auto const optDelta = listNavigationDelta(event, static_cast<std::int32_t>(commands.size()), true); optDelta)
+    {
+      _shell.scrollOverlay(*optDelta, static_cast<std::int32_t>(commands.size()) - 1);
+    }
+    else if (event == ftxui::Event::Return)
+    {
+      activateGoTo(commands[_shell.overlayScroll()].action);
+    }
+    else
+    {
+      // An unmatched suffix cancels this menu without becoming a workspace key.
+      closeOverlay();
+    }
+
+    return true;
+  }
+
+  void EventController::navigateCurrentMetadata(bool const album)
+  {
+    auto const& track = _playback.snapshot().transport.nowPlaying;
+
+    if (track.trackId == kInvalidTrackId || (!album && track.artist.empty()))
+    {
+      return;
+    }
+
+    auto const res = album ? _library.revealAlbum(track.trackId) : _library.navigateToArtist(track.artist);
+
+    if (!res)
+    {
+      APP_LOG_ERROR("Failed to navigate TUI playback metadata: {}", res.error().message);
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiLibraryCurrentTrackNotInView)});
+      return;
+    }
+
+    leaveNavigation();
+  }
+
   void EventController::playSelectedTrack()
   {
     if (!tryPlaySelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
@@ -514,7 +612,13 @@ namespace ao::tui
 
     switch (action)
     {
+      case BeginPanelResize: beginKeyboardPanelResize(); break;
       case SwitchWorkspaceFocus: switchWorkspaceFocus(); break;
+      case FocusDetails:
+        leaveNavigation();
+        cancelTransientInteractions();
+        _shell.focusDetail();
+        break;
       case OpenCommandPalette:
       case OpenQuickFilter:
         if (action == OpenQuickFilter)
@@ -523,6 +627,7 @@ namespace ao::tui
         }
 
         cancelWorkspaceGestures();
+        _hoveredButton = HoveredButton::None;
         _shell.beginInput(action == OpenQuickFilter ? ShellInputMode::QuickFilter : ShellInputMode::Command);
         refreshCommandCompletion();
         break;
@@ -535,6 +640,7 @@ namespace ao::tui
       case VolumeDown: _volumeViewModel.adjustVolume(-static_cast<float>(_preferences.volumePercent) / 100.0F); break;
       case VolumeUp: _volumeViewModel.adjustVolume(static_cast<float>(_preferences.volumePercent) / 100.0F); break;
       case Quit:
+      case TogglePinnedLists:
       case ToggleLists:
       case ToggleDetails:
       case ToggleAudioPipeline:
@@ -542,6 +648,11 @@ namespace ao::tui
       case TogglePresentations:
       case ToggleNotifications:
       case ShowHelp:
+      case OpenGoTo:
+      case OpenCurrentArtist:
+      case OpenCurrentAlbum:
+      case WorkspaceBack:
+      case WorkspaceForward:
       case RevealCurrentTrack:
       case ClearFilter:
       case Reload:
@@ -573,6 +684,7 @@ namespace ao::tui
         _library.setFilterDraft(command.argument);
         applyFilter();
         break;
+      case CommandAction::TogglePinnedLists: togglePinnedLists(); break;
       case CommandAction::OpenLists: toggleLists(); break;
       case CommandAction::OpenDetail: toggleDetailPanel(); break;
       case CommandAction::OpenQuality: toggleQualityPanel(); break;
@@ -595,7 +707,10 @@ namespace ao::tui
           rt::NotificationSeverity::Info,
           std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiHelpOpened)});
         break;
+      case CommandAction::OpenGoTo: openOverlay(Overlay::GoTo); break;
       case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
+      case CommandAction::OpenCurrentArtist: navigateCurrentMetadata(false); break;
+      case CommandAction::OpenCurrentAlbum: navigateCurrentMetadata(true); break;
       case CommandAction::SetPresentation: _library.setPresentation(command.argument); break;
       case CommandAction::ClearFilter:
         _library.clearFilterDraft();
@@ -749,19 +864,23 @@ namespace ao::tui
       return tryHandleInputMouse(mouse);
     }
 
-    if (isLeftPress(mouse) && containsMouse(_hitRegions.overlayPanel.closeBox, mouse))
-    {
-      closeOverlay();
-      return true;
-    }
-
     // An admitted gesture owns pointer motion and release across workspace panes.
     if (auto const optHandled = handleActiveMouseDrag(mouse); optHandled)
     {
       return *optHandled;
     }
 
+    if (tryBeginPanelResize(mouse))
+    {
+      return true;
+    }
+
     if (auto const optHandled = tryHandleNavigationMouse(mouse); optHandled)
+    {
+      return *optHandled;
+    }
+
+    if (auto const optHandled = tryHandleDetailMouse(mouse); optHandled)
     {
       return *optHandled;
     }
@@ -779,6 +898,11 @@ namespace ao::tui
     if (mouse.button != ftxui::Mouse::Left || mouse.motion != ftxui::Mouse::Pressed)
     {
       return false;
+    }
+
+    if (_shell.overlay() == Overlay::GoTo && tryHandleGoToPress(mouse, _hitRegions.goToStatus))
+    {
+      return true;
     }
 
     if (isOverlayActive(_shell.overlay()) && containsMouse(_hitRegions.overlayPanel.box, mouse))
@@ -804,6 +928,7 @@ namespace ao::tui
     if (isLeftPress(mouse) && containsMouse(_hitRegions.trackTableBox, mouse))
     {
       leaveNavigation();
+      _shell.focusTracks();
     }
 
     if (auto const optHandled = handleColumnResizePress(mouse); optHandled)
@@ -843,11 +968,6 @@ namespace ao::tui
     if (mouse.motion == ftxui::Mouse::Moved)
     {
       return tryHandleMouseMove(mouse);
-    }
-
-    if (isLeftPress(mouse) && containsMouse(_hitRegions.inputPanel.closeBox, mouse))
-    {
-      return tryHandleCommandEvent(ftxui::Event::Escape);
     }
 
     if (auto const& inputHit = _hitRegions.completion; isLeftPress(mouse) && containsMouse(inputHit.inputBox, mouse))
@@ -966,6 +1086,11 @@ namespace ao::tui
 
   std::optional<bool> EventController::handleActiveMouseDrag(ftxui::Mouse const& mouse)
   {
+    if (std::holds_alternative<PanelResizeInteraction>(_workspaceGesture))
+    {
+      return tryHandlePanelResizeDrag(mouse);
+    }
+
     if (std::holds_alternative<SeekRailDrag>(_workspaceGesture))
     {
       if (mouse.motion == ftxui::Mouse::Moved || mouse.motion == ftxui::Mouse::Released)
@@ -1069,9 +1194,10 @@ namespace ao::tui
     {
       switch (_shell.overlay())
       {
+        case Overlay::GoTo: _shell.scrollOverlay(wheel, static_cast<std::int32_t>(goToCommands().size()) - 1); break;
+        case Overlay::ListChooser:
         case Overlay::PresentationPanel: tryMoveOverlaySelection(wheel); break;
         case Overlay::OutputDevices: _outputDevices.tryMoveSelection(wheel); break;
-        case Overlay::DetailPanel:
         case Overlay::QualityPanel:
         case Overlay::Help:
         case Overlay::Notifications:
@@ -1228,10 +1354,42 @@ namespace ao::tui
     return true;
   }
 
+  bool EventController::tryHandlePlaybackMetadataPress(ftxui::Mouse const& mouse)
+  {
+    auto const& metadata = _hitRegions.playbackMetadata;
+    auto const titleHit = containsMouse(metadata.title, mouse);
+    auto const artistHit = containsMouse(metadata.artist, mouse);
+
+    if (auto const albumHit = containsMouse(metadata.album, mouse); titleHit || artistHit || albumHit)
+    {
+      // A playback update must repaint before its new subject owns these cells.
+      if (metadata.nowPlaying == _playback.snapshot().transport.nowPlaying)
+      {
+        if (titleHit)
+        {
+          revealCurrentTrack();
+        }
+        else
+        {
+          navigateCurrentMetadata(albumHit);
+        }
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
   std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
   {
     if (!isModalOverlay(_shell.overlay()))
     {
+      if (tryHandlePlaybackMetadataPress(mouse))
+      {
+        return true;
+      }
+
       if (_library.isVisualSelectionActive() && containsMouse(_hitRegions.cancelSelectionBox, mouse))
       {
         _library.cancelVisualSelection();
@@ -1318,6 +1476,57 @@ namespace ao::tui
     return std::nullopt;
   }
 
+  bool EventController::tryHandleLibraryPress(ftxui::Mouse const& mouse)
+  {
+    auto const hit = std::ranges::find_if(
+      _hitRegions.libraryRows, [&](LibraryRowHitRegion const& row) { return containsMouse(row.box, mouse); });
+
+    if (hit == _hitRegions.libraryRows.end())
+    {
+      return false;
+    }
+
+    auto const& entries = _library.libraryEntries();
+    auto const entry = std::ranges::find(entries, hit->id, &LibraryNavEntry::id);
+
+    if (entry == entries.end())
+    {
+      return true;
+    }
+
+    auto const index = static_cast<std::int32_t>(entry - entries.begin());
+
+    if (_shell.listSearch().matches(_library.libraryLabels()[index]))
+    {
+      _library.selectListRow(index);
+      selectLibraryList();
+    }
+
+    return true;
+  }
+
+  void EventController::selectLibraryList()
+  {
+    auto const& entries = _library.libraryEntries();
+
+    if (entries.empty())
+    {
+      return;
+    }
+
+    if (auto const res = _library.openList(entries[_library.selectedList()].id); !res)
+    {
+      postActivityNotification(
+        rt::NotificationSeverity::Warning,
+        i18n::requiredFormat(
+          _library.textCatalog(), i18n::MessageId::TuiNavigationOpenFailed, {{"detail", res.error().message}}));
+      return;
+    }
+
+    closeOverlay();
+    _shell.focusTracks();
+  }
+
   bool EventController::tryHandlePresentationPress(ftxui::Mouse const& mouse)
   {
     auto const hit =
@@ -1350,8 +1559,42 @@ namespace ao::tui
     return true;
   }
 
+  bool EventController::tryHandleGoToPress(ftxui::Mouse const& mouse, GoToMenuHitRegions const& hitRegions)
+  {
+    if (containsMouse(hitRegions.cancelBox, mouse))
+    {
+      closeOverlay();
+      return true;
+    }
+
+    auto const hit = std::ranges::find_if(
+      hitRegions.rows, [&](GoToMenuRowHitRegion const& row) { return containsMouse(row.box, mouse); });
+
+    if (hit == hitRegions.rows.end())
+    {
+      return false;
+    }
+
+    if (hitRegions.state == goToMenuState())
+    {
+      activateGoTo(hit->action);
+    }
+
+    return true;
+  }
+
   bool EventController::tryHandleOverlayPress(ftxui::Mouse const& mouse)
   {
+    if (_shell.overlay() == Overlay::GoTo)
+    {
+      return tryHandleGoToPress(mouse, _hitRegions.goToMenu);
+    }
+
+    if (_shell.overlay() == Overlay::ListChooser)
+    {
+      return tryHandleLibraryPress(mouse);
+    }
+
     if (_shell.overlay() == Overlay::PresentationPanel)
     {
       return tryHandlePresentationPress(mouse);
@@ -1538,7 +1781,8 @@ namespace ao::tui
 
   bool EventController::tryHandleListSearchEvent(ftxui::Event const& event)
   {
-    if (_shell.isInputActive() || _shell.overlay() != Overlay::PresentationPanel)
+    if (_shell.isInputActive() ||
+        (_shell.overlay() != Overlay::PresentationPanel && _shell.overlay() != Overlay::ListChooser))
     {
       return false;
     }
@@ -1554,6 +1798,19 @@ namespace ao::tui
 
   bool EventController::tryMoveOverlaySelection(std::int32_t const delta)
   {
+    if (_shell.overlay() == Overlay::ListChooser)
+    {
+      auto const optTarget = _shell.listSearch().selection(_library.libraryLabels(), _library.selectedList(), delta);
+
+      if (!optTarget)
+      {
+        return false;
+      }
+
+      _library.selectListRow(*optTarget);
+      return true;
+    }
+
     auto labels = std::vector<std::string>{};
 
     for (auto const& entry : _library.presentationEntries())
@@ -1583,7 +1840,8 @@ namespace ao::tui
       return false;
     }
 
-    auto const picker = overlay == Overlay::PresentationPanel || overlay == Overlay::OutputDevices;
+    auto const picker =
+      overlay == Overlay::ListChooser || overlay == Overlay::PresentationPanel || overlay == Overlay::OutputDevices;
     auto pageRows = navigationPageRows(picker || overlay == Overlay::Help ? _hitRegions.overlayPanel.navigationBox
                                                                           : _hitRegions.overlayPanel.box);
 
@@ -1607,6 +1865,7 @@ namespace ao::tui
 
     switch (overlay)
     {
+      case Overlay::ListChooser:
       case Overlay::PresentationPanel: tryMoveOverlaySelection(*optDelta); break;
       case Overlay::OutputDevices: _outputDevices.tryMoveSelection(*optDelta); break;
       case Overlay::Help:
@@ -1615,8 +1874,8 @@ namespace ao::tui
         _shell.scrollOverlay(
           *optDelta, _hitRegions.overlayPanel.contentBox.y_max - _hitRegions.overlayPanel.contentBox.y_min);
         break;
-      case Overlay::None:
-      case Overlay::DetailPanel: return false;
+      case Overlay::GoTo:
+      case Overlay::None: return false;
     }
 
     return true;
@@ -1628,6 +1887,13 @@ namespace ao::tui
     {
       switch (_shell.overlay())
       {
+        case Overlay::ListChooser:
+          if (tryMoveOverlaySelection(0))
+          {
+            selectLibraryList();
+          }
+
+          return true;
         case Overlay::PresentationPanel:
           if (tryMoveOverlaySelection(0))
           {
@@ -1655,10 +1921,15 @@ namespace ao::tui
 
   bool EventController::tryHandleOverlayEvent(ftxui::Event const& event)
   {
-    // Detail follows the table focus and leaves the workspace drivable.
+    // Workspace sidebars leave the keys to the track table.
     if (!isModalOverlay(_shell.overlay()))
     {
       return false;
+    }
+
+    if (_shell.overlay() == Overlay::GoTo)
+    {
+      return tryHandleGoToEvent(event);
     }
 
     if (tryHandleOverlayNavigation(event) || tryHandleOverlayActivation(event))
@@ -1670,6 +1941,17 @@ namespace ao::tui
 
     switch (_shell.overlay())
     {
+      case Overlay::ListChooser:
+        if (optAction == KeyAction::ToggleLists)
+        {
+          toggleLists();
+        }
+        else if (optAction == KeyAction::TogglePinnedLists)
+        {
+          togglePinnedLists();
+        }
+
+        break;
       case Overlay::QualityPanel:
         if (optAction == KeyAction::ToggleAudioPipeline)
         {
@@ -1705,8 +1987,8 @@ namespace ao::tui
         }
 
         break;
-      case Overlay::None:
-      case Overlay::DetailPanel: break;
+      case Overlay::GoTo:
+      case Overlay::None: break;
     }
 
     if (optAction && isPlaybackControl(*optAction))
@@ -1818,6 +2100,11 @@ namespace ao::tui
       _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
     }
 
+    if (std::holds_alternative<PanelResizeInteraction>(_workspaceGesture))
+    {
+      _hoveredButton = HoveredButton::None;
+    }
+
     _seekSlider.reset();
     _workspaceGesture = std::monostate{};
     _trackColumnResizePreview = {};
@@ -1827,6 +2114,7 @@ namespace ao::tui
   {
     cancelWorkspaceGestures();
     _lastClickedTrack = kInvalidTrackId;
+    _hoveredButton = HoveredButton::None;
     _shell.openOverlay(overlay);
   }
 
@@ -1834,6 +2122,7 @@ namespace ao::tui
   {
     cancelWorkspaceGestures();
     _qualityHoverVisible = false;
+    _hoveredButton = HoveredButton::None;
     _shell.closeOverlay();
   }
 } // namespace ao::tui

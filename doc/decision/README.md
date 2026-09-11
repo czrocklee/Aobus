@@ -34,6 +34,7 @@ Use the [decision template](../template/decision.md).
 - [Decision 0015: sequence live-runtime library writes](0015-sequence-live-runtime-library-writes.md)
 - [Decision 0016: compose the interactive runtime](0016-compose-interactive-runtime.md)
 - [Decision 0017: evaluate concept metrics as a vector](0017-evaluate-concept-metrics-as-a-vector.md)
+- [Decision 0018: choose consistent Chinese metadata terminology](0018-chinese-metadata-terminology.md)
 
 ## Superseded decisions
 

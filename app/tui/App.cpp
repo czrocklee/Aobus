@@ -12,9 +12,11 @@
 #include "Executor.h"
 #include "ExitController.h"
 #include "FrameTimer.h"
+#include "GoToMenu.h"
 #include "HitRegions.h"
 #include "Keymap.h"
 #include "LayoutStateStore.h"
+#include "LibraryChooser.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
 #include "MouseBindings.h"
@@ -22,6 +24,7 @@
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
 #include "OutputDevicePanel.h"
+#include "PanelWidths.h"
 #include "PlaybackPanel.h"
 #include "PlaybackStatusFormatter.h"
 #include "Preferences.h"
@@ -36,7 +39,9 @@
 #include "StatusBar.h"
 #include "Style.h"
 #include "TerminalTrackColumnLayout.h"
+#include "TextCell.h"
 #include "TrackEditController.h"
+#include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
 #include <ao/Contract.h>
@@ -165,14 +170,53 @@ namespace ao::tui
         AnchoredOverlayOptions{.fallbackToBottom = true});
     }
 
-    ftxui::Element presentationPopover(i18n::MessageCatalog const& textCatalog,
-                                       ShellInteractionModel const& shell,
-                                       KeymapPlan const& keymapPlan,
-                                       LibraryController const& library,
-                                       ftxui::Box const& presentationButtonBox,
-                                       std::int32_t const terminalColumns,
-                                       HitRegions& hitRegions)
+    ftxui::Element libraryPopover(i18n::MessageCatalog const& textCatalog,
+                                  ShellInteractionModel const& shell,
+                                  KeymapPlan const& keymapPlan,
+                                  LibraryController const& library,
+                                  std::int32_t const terminalColumns,
+                                  std::int32_t const terminalRows,
+                                  HitRegions& hitRegions)
     {
+      if (shell.overlay() != Overlay::ListChooser)
+      {
+        return {};
+      }
+
+      auto const columns = libraryChooserPaneColumns(textCatalog, library.libraryLabels(), keymapPlan, terminalColumns);
+      auto const rows =
+        std::min(kLibraryChooserRows, std::max(1, static_cast<std::int32_t>(library.libraryEntries().size())) + 5);
+      return followingAnchoredOverlay(mousePanel(libraryChooserPane(textCatalog,
+                                                                    library.libraryLabels(),
+                                                                    library.libraryEntries(),
+                                                                    library.selectedList(),
+                                                                    keymapPlan,
+                                                                    columns,
+                                                                    shell.listSearch(),
+                                                                    hitRegions.libraryRows,
+                                                                    hitRegions.overlayPanel.navigationBox),
+                                                 hitRegions.overlayPanel),
+                                      hitRegions.libraryButtonBox,
+                                      AnchoredOverlayPlacement::Above,
+                                      AnchoredOverlaySize{.columns = columns, .rows = rows},
+                                      AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+                                      AnchoredOverlayOptions{.fallbackToBottom = true});
+    }
+
+    ftxui::Element pickerPopover(i18n::MessageCatalog const& textCatalog,
+                                 ShellInteractionModel const& shell,
+                                 KeymapPlan const& keymapPlan,
+                                 LibraryController const& library,
+                                 ftxui::Box const& presentationButtonBox,
+                                 std::int32_t const terminalColumns,
+                                 std::int32_t const terminalRows,
+                                 HitRegions& hitRegions)
+    {
+      if (shell.overlay() == Overlay::ListChooser)
+      {
+        return libraryPopover(textCatalog, shell, keymapPlan, library, terminalColumns, terminalRows, hitRegions);
+      }
+
       if (shell.overlay() != Overlay::PresentationPanel)
       {
         return {};
@@ -182,26 +226,25 @@ namespace ao::tui
       auto const panelColumns = presentationPanelColumns(
         textCatalog, library.presentationEntries(), activePresentationId, keymapPlan, terminalColumns);
 
-      return anchoredOverlay(mousePanel(presentationPanel(textCatalog,
-                                                          library.presentationEntries(),
-                                                          activePresentationId,
-                                                          library.selectedPresentation(),
-                                                          keymapPlan,
-                                                          &hitRegions.presentationRows,
-                                                          panelColumns,
-                                                          &shell.listSearch(),
-                                                          &hitRegions.overlayPanel.navigationBox),
-                                        hitRegions.overlayPanel) |
-                               ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
-                             presentationButtonBox,
-                             AnchoredOverlayPlacement::Above,
-                             AnchoredOverlaySize{.columns = panelColumns, .rows = kPresentationPanelRows},
-                             AnchoredOverlayTerminal{.columns = terminalColumns});
+      return followingAnchoredOverlay(mousePanel(presentationPanel(textCatalog,
+                                                                   library.presentationEntries(),
+                                                                   activePresentationId,
+                                                                   library.selectedPresentation(),
+                                                                   keymapPlan,
+                                                                   &hitRegions.presentationRows,
+                                                                   panelColumns,
+                                                                   &shell.listSearch(),
+                                                                   &hitRegions.overlayPanel.navigationBox),
+                                                 hitRegions.overlayPanel) |
+                                        ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kPresentationPanelRows),
+                                      presentationButtonBox,
+                                      AnchoredOverlayPlacement::Above,
+                                      AnchoredOverlaySize{.columns = panelColumns, .rows = kPresentationPanelRows},
+                                      AnchoredOverlayTerminal{.columns = terminalColumns});
     }
 
     ftxui::Element notificationPopover(i18n::MessageCatalog const& textCatalog,
                                        ShellInteractionModel const& shell,
-                                       KeymapPlan const& keymapPlan,
                                        uimodel::ActivityStatusViewState const& state,
                                        ftxui::Box const& activityStatusBox,
                                        std::int32_t const terminalColumns,
@@ -213,13 +256,12 @@ namespace ao::tui
         return {};
       }
 
-      auto const panelColumns = notificationCenterPanelColumns(textCatalog, state, keymapPlan, terminalColumns);
+      auto const panelColumns = notificationCenterPanelColumns(textCatalog, state, terminalColumns);
 
-      return anchoredOverlay(
-        mousePanel(
-          notificationCenterPanel(textCatalog, state, keymapPlan, &hitRegions.notificationDetailRows, panelColumns),
-          hitRegions.overlayPanel,
-          shell.overlayScroll()) |
+      return followingAnchoredOverlay(
+        mousePanel(notificationCenterPanel(textCatalog, state, &hitRegions.notificationDetailRows, panelColumns),
+                   hitRegions.overlayPanel,
+                   shell.overlayScroll()) |
           ftxui::size(ftxui::WIDTH, ftxui::EQUAL, panelColumns) |
           ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, kNotificationCenterPanelRows),
         activityStatusBox,
@@ -434,6 +476,7 @@ namespace ao::tui
                           uimodel::TrackColumnLayouts const& columns,
                           uimodel::ListPresentations const& presentations,
                           bool navigationEnabled,
+                          PanelWidths const widths,
                           rt::NotificationService& notifications,
                           i18n::MessageCatalog const& textCatalog,
                           bool& reportedFailure,
@@ -444,7 +487,7 @@ namespace ao::tui
         return;
       }
 
-      if (auto const res = store.save(columns.snapshot(), presentations.snapshot(), navigationEnabled); !res)
+      if (auto const res = store.save(columns.snapshot(), presentations.snapshot(), navigationEnabled, widths); !res)
       {
         APP_LOG_WARN("TUI: failed to persist layout state: {}", res.error().message);
 
@@ -546,6 +589,7 @@ namespace ao::tui
       uimodel::AobusSoulAnimationState soulAnimation{};
       std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
       ListId observedList = kInvalidListId;
+      TrackId observedDetailTrack = kInvalidTrackId;
 
       ftxui::Element activeModal(std::int32_t columns, std::int32_t rows) const
       {
@@ -579,32 +623,163 @@ namespace ao::tui
         }
       }
 
-      void addNavigationPane(ftxui::Element& mainContentPtr,
-                             ftxui::Element& popoverElementPtr,
-                             bool const navigationSuspended)
+      void addDetailPane(ftxui::Element& mainContentPtr,
+                         TrackListEntry const* const track,
+                         ftxui::Element coverPtr,
+                         std::int32_t const columns,
+                         bool const suspended)
       {
-        using namespace ftxui;
+        auto const trackId = track == nullptr ? kInvalidTrackId : track->id;
 
-        if (auto const& navigationLayout = hitRegions.navigationLayout;
-            navigationLayout.docked || navigationLayout.drawer)
+        if (trackId != observedDetailTrack)
+        {
+          observedDetailTrack = trackId;
+          shell.resetDetailScroll();
+          shell.detailSections().selected = 0;
+        }
+
+        if (shell.isDetailVisible())
+        {
+          hitRegions.detailTrack = trackId;
+          mainContentPtr = dockDetailPane(std::move(mainContentPtr),
+                                          detailPane(textCatalog,
+                                                     track,
+                                                     std::move(coverPtr),
+                                                     columns,
+                                                     &hitRegions.detailPanel,
+                                                     shell.detailScroll(),
+                                                     {.sections = shell.detailSections(),
+                                                      .headerBoxes = &hitRegions.detailSectionBoxes,
+                                                      .focused = shell.isDetailFocused() && !suspended}),
+                                          columns,
+                                          suspended ? nullptr : &hitRegions.detailToggleBox,
+                                          events.hoveredButton() == HoveredButton::DetailToggle ||
+                                            events.isPanelResizing(HoveredButton::DetailToggle),
+                                          {.separateBorders = preferences.panelSeparator == "double",
+                                           .hoverBox = suspended ? nullptr : &hitRegions.detailDividerBox,
+                                           .revealOnHover = preferences.revealIndicatorsOnHover,
+                                           .dragging = events.isPanelResizing(HoveredButton::DetailToggle)});
+        }
+        else if (!suspended)
+        {
+          mainContentPtr =
+            collapsedDetailPane(std::move(mainContentPtr),
+                                hitRegions.detailToggleBox,
+                                events.hoveredButton() == HoveredButton::DetailToggle,
+                                preferences.revealIndicatorsOnHover,
+                                preferences.revealIndicatorsOnHover ? &hitRegions.detailDividerBox : nullptr);
+        }
+      }
+
+      void addNavigationPane(ftxui::Element& mainContentPtr, bool const navigationSuspended)
+      {
+        if (auto const& layout = hitRegions.navigationLayout; layout.docked)
         {
           auto navigationPtr = navigationPanel(textCatalog,
                                                library.navigation(),
                                                library.currentListId(),
-                                               keymapPlan,
-                                               {.columns = navigationLayout.columns,
+                                               {.columns = layout.columns,
                                                 .focused = shell.isNavigationFocused() && !navigationSuspended,
                                                 .regions = navigationSuspended ? nullptr : &hitRegions.navigation});
-
-          if (navigationLayout.docked)
-          {
-            mainContentPtr = hbox({std::move(navigationPtr), std::move(mainContentPtr)});
-          }
-          else
-          {
-            popoverElementPtr = hbox({std::move(navigationPtr) | clear_under, filler()});
-          }
+          mainContentPtr =
+            dockNavigationPanel(std::move(navigationPtr),
+                                std::move(mainContentPtr),
+                                layout.columns,
+                                navigationSuspended ? nullptr : &hitRegions.navigationPinBox,
+                                events.hoveredButton() == HoveredButton::NavigationToggle ||
+                                  events.isPanelResizing(HoveredButton::NavigationToggle),
+                                {.separateBorders = preferences.panelSeparator == "double",
+                                 .hoverBox = navigationSuspended ? nullptr : &hitRegions.navigationDividerBox,
+                                 .revealOnHover = preferences.revealIndicatorsOnHover,
+                                 .dragging = events.isPanelResizing(HoveredButton::NavigationToggle)});
         }
+        else if (layout.canDock && !navigationSuspended)
+        {
+          mainContentPtr =
+            collapsedNavigationPanel(std::move(mainContentPtr),
+                                     hitRegions.navigationPinBox,
+                                     events.hoveredButton() == HoveredButton::NavigationToggle,
+                                     preferences.revealIndicatorsOnHover,
+                                     preferences.revealIndicatorsOnHover ? &hitRegions.navigationDividerBox : nullptr);
+        }
+      }
+
+      ftxui::Element workspacePanel(ftxui::Element tableElementPtr,
+                                    std::string_view const presentationTitle,
+                                    HoveredButton const hoveredButton)
+      {
+        tableElementPtr = style::scrollablePanelBody(std::move(tableElementPtr));
+        auto listTitle = library.currentListTitle();
+        auto viewTitle = std::string{presentationTitle};
+        auto const listLabel = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceList);
+        auto const viewLabel = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceView);
+        auto summary = selectionSummary(textCatalog,
+                                        library.tracks().size(),
+                                        library.selectedTrack(),
+                                        library.markedIds().size(),
+                                        library.isVisualSelectionActive());
+        auto const showList = !hitRegions.navigationLayout.docked;
+        auto const fixedColumns = 11 + cellWidth(viewLabel) + (showList ? cellWidth(listLabel) + 4 : 0);
+        auto const panelColumns = hitRegions.navigationLayout.trackColumns + 2 + style::kPanelBodyPaddingColumns;
+
+        if (panelColumns < fixedColumns)
+        {
+          return style::titledPanel("", std::move(tableElementPtr)) | ftxui::flex;
+        }
+
+        auto const valueColumns = std::max(0, panelColumns - fixedColumns);
+        summary = ellipsizeToCellWidth(summary, std::max(0, valueColumns - 4));
+        auto const titleColumns = std::max(0, valueColumns - cellWidth(summary));
+        auto const listColumns = showList ? std::min(cellWidth(listTitle), titleColumns / 2) : 0;
+        listTitle = ellipsizeToCellWidth(listTitle, listColumns);
+        viewTitle = ellipsizeToCellWidth(viewTitle, titleColumns - listColumns);
+        auto panelOptions =
+          style::PanelOptions{.leftFooter = {.label = viewLabel,
+                                             .value = viewTitle,
+                                             .box = &hitRegions.presentationButtonBox,
+                                             .hovered = hoveredButton == HoveredButton::Presentation}};
+
+        if (!hitRegions.navigationLayout.docked)
+        {
+          panelOptions.leftFooterRight = panelOptions.leftFooter;
+          panelOptions.leftFooter = {.label = listLabel,
+                                     .value = listTitle,
+                                     .box = &hitRegions.libraryButtonBox,
+                                     .hovered = hoveredButton == HoveredButton::Library};
+        }
+
+        panelOptions.rightFooter = summary;
+        return style::titledPanel("", std::move(tableElementPtr), panelOptions) | ftxui::flex;
+      }
+
+      ftxui::Element renderStatusBar(std::int32_t const terminalColumns, HoveredButton const hoveredButton)
+      {
+        using namespace ftxui;
+        return exitController.isWaitingForSubmittedWrite()
+                 ? text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiEditorExitWaiting)}) | bold |
+                     style::warning()
+                 : statusBar(textCatalog,
+                             StatusBarViewState{.activityStatus = &activityStatusViewModel.viewState(),
+                                                .terminalColumns = terminalColumns,
+                                                .filterDraft = library.filterDraft(),
+                                                .filterInvalid = !library.filterError().empty(),
+                                                .hasTrackSelection = !library.tracks().empty(),
+                                                .visualSelectionActive = library.isVisualSelectionActive(),
+                                                .navigationSearching = library.navigation().search().isActive(),
+                                                .navigationDocked = hitRegions.navigationLayout.docked,
+                                                .optResizingDivider = events.keyboardResizeDivider(),
+                                                .shell = &shell,
+                                                .activityStatusBox = &hitRegions.activityStatusBox,
+                                                .cancelSelectionBox = &hitRegions.cancelSelectionBox,
+                                                .navigationSearchBox = &hitRegions.navigationSearchBox,
+                                                .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus,
+                                                .settingsButtonBox = &hitRegions.settingsButtonBox,
+                                                .settingsHovered = hoveredButton == HoveredButton::Settings,
+                                                .actionHitRegions = &hitRegions.statusActions,
+                                                .inputHitRegions = &hitRegions.completion,
+                                                .goToState = events.goToMenuState(),
+                                                .goToHitRegions = &hitRegions.goToStatus},
+                             keymapPlan);
       }
 
       ftxui::Element operator()()
@@ -619,7 +794,7 @@ namespace ao::tui
         auto const terminalRows = terminalSize.dimy;
         auto const playbackRows = playbackBarRows(terminalRows);
         auto const mainContentRows = terminalRows - playbackRows - kStatusBarRows;
-        auto const detailVisible = shell.overlay() == Overlay::DetailPanel;
+        auto const detailVisible = shell.isDetailVisible();
         auto const coverArtVisible =
           detailVisible && selectedTrackView.track != nullptr && isDetailPaneShowingCoverArt(mainContentRows);
 
@@ -640,7 +815,6 @@ namespace ao::tui
                                               coverArt.kittyPng(),
                                               coverColumns,
                                               &hitRegions.coverBox);
-        auto const currentListTitle = library.currentListTitle();
         auto const& state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
         library.navigation().search().invalidateMouseRegions();
@@ -670,16 +844,17 @@ namespace ao::tui
             : std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
         auto const& presentation = library.activePresentation();
         auto const sidePanelLimit = sidePanelColumnsLimit(terminalColumns);
-        auto const detailPanelColumns =
-          detailVisible ? detailPaneColumns(textCatalog, sidePanelLimit, coverColumns) : 0;
-        auto const navigationSuspended = settings.isActive() || trackEdit.isActive() || shell.isInputActive() ||
-                                         isModalOverlay(shell.overlay()) || exitController.isWaitingForSubmittedWrite();
+        auto detailPanelColumns = detailVisible ? detailPaneColumns(textCatalog, sidePanelLimit, coverColumns) : 0;
         hitRegions.navigationLayout = navigationGeometry(terminalColumns,
                                                          detailPanelColumns,
-                                                         shell.isNavigationEnabled(),
-                                                         shell.isNavigationFocused(),
-                                                         navigationSuspended);
+                                                         shell.isNavigationPinned(),
+                                                         preferences.panelSeparator == "double",
+                                                         events.panelWidths());
+        detailPanelColumns = hitRegions.navigationLayout.detailColumns;
         auto const& navigationLayout = hitRegions.navigationLayout;
+        shell.reconcileNavigationLayout(navigationLayout.canDock);
+        auto const navigationSuspended = settings.isActive() || trackEdit.isActive() || shell.isInputActive() ||
+                                         isModalOverlay(shell.overlay()) || exitController.isWaitingForSubmittedWrite();
         auto const availableTrackColumns = navigationLayout.trackColumns;
 
         syncNavigationList();
@@ -706,29 +881,9 @@ namespace ao::tui
                                                .viewportRows = terminalRows,
                                                .markedTrackIds = &library.markedIds(),
                                                .emptyText = library.emptyStateText(),
-                                               .focused = !shell.isNavigationFocused()});
+                                               .focused = shell.isTracksFocused()});
         auto const presentationTitle = trackPresentationDisplayId(textCatalog, presentation.id);
-        auto workspaceElementPtr =
-          style::titledPanel(
-            "",
-            std::move(tableElementPtr),
-            style::PanelOptions{
-              .leftFooter =
-                style::PanelEdgeButton{.label = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceList),
-                                       .value = currentListTitle,
-                                       .box = &hitRegions.libraryButtonBox,
-                                       .hovered = hoveredButton == HoveredButton::Library},
-              .leftFooterRight =
-                style::PanelEdgeButton{.label = chromeText(textCatalog, i18n::MessageId::TuiShellWorkspaceView),
-                                       .value = presentationTitle,
-                                       .box = &hitRegions.presentationButtonBox,
-                                       .hovered = hoveredButton == HoveredButton::Presentation},
-              .rightFooter = selectionSummary(textCatalog,
-                                              library.tracks().size(),
-                                              library.selectedTrack(),
-                                              library.markedIds().size(),
-                                              library.isVisualSelectionActive())}) |
-          flex;
+        auto workspaceElementPtr = workspacePanel(std::move(tableElementPtr), presentationTitle, hoveredButton);
         auto mainContentPtr = workspaceElementPtr;
         auto popoverElementPtr = ftxui::Element{};
         auto mainLayerPopover = [&](ftxui::Box const& rootAnchor,
@@ -737,28 +892,20 @@ namespace ao::tui
                                     std::int32_t const rows,
                                     ftxui::Element contentPtr)
         {
-          return anchoredOverlay(std::move(contentPtr),
-                                 rootAnchor,
-                                 placement,
-                                 AnchoredOverlaySize{.columns = columns, .rows = rows},
-                                 AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
-                                 AnchoredOverlayOptions{.overlayLayerTopRows = playbackRows});
+          return followingAnchoredOverlay(std::move(contentPtr),
+                                          rootAnchor,
+                                          placement,
+                                          AnchoredOverlaySize{.columns = columns, .rows = rows},
+                                          AnchoredOverlayTerminal{.columns = terminalColumns, .rows = terminalRows},
+                                          AnchoredOverlayOptions{.overlayLayerTopRows = playbackRows});
         };
+
+        addDetailPane(
+          mainContentPtr, selectedTrackView.track, std::move(coverElementPtr), detailPanelColumns, navigationSuspended);
 
         switch (shell.overlay())
         {
           case Overlay::None: break;
-          case Overlay::DetailPanel:
-          {
-            mainContentPtr = hbox({
-              workspaceElementPtr,
-              mousePanel(
-                detailPane(textCatalog, selectedTrackView.track, std::move(coverElementPtr), detailPanelColumns),
-                hitRegions.overlayPanel,
-                shell.overlayScroll()),
-            });
-            break;
-          }
           case Overlay::QualityPanel:
           {
             auto const panelColumns = qualityPanelColumns(textCatalog, state, keymapPlan, terminalColumns);
@@ -789,28 +936,32 @@ namespace ao::tui
                                                             hitRegions.overlayPanel));
             break;
           }
+          case Overlay::ListChooser:
           case Overlay::PresentationPanel:
           case Overlay::Notifications:
-          case Overlay::Help: break;
+          case Overlay::Help:
+          case Overlay::GoTo: break;
         }
 
-        addNavigationPane(mainContentPtr, popoverElementPtr, navigationSuspended);
+        addNavigationPane(mainContentPtr, navigationSuspended);
 
         if (!shell.isInputActive() && shell.overlay() == Overlay::None && popoverElementPtr == nullptr &&
             !shell.isNavigationFocused() && events.isQualityHoverVisible())
         {
           auto const panelColumns = qualityPanelColumns(textCatalog, state, keymapPlan, terminalColumns);
-          popoverElementPtr = mainLayerPopover(hitRegions.soulButtonBox,
-                                               AnchoredOverlayPlacement::Below,
-                                               panelColumns,
-                                               0,
-                                               qualityPanel(textCatalog, state, keymapPlan, panelColumns));
+          popoverElementPtr = mainLayerPopover(
+            hitRegions.soulButtonBox,
+            AnchoredOverlayPlacement::Below,
+            panelColumns,
+            0,
+            qualityPanel(textCatalog, state, keymapPlan, panelColumns) | reflect(hitRegions.qualityHoverBox));
         }
 
         // Anchored menus over live content, so they take the same composition
         // as the root layer and the backdrop rule's Live default.
         auto composedMainPtr = composeOverlay(mainContentPtr, std::move(popoverElementPtr));
         auto mainLayerPtr = composedMainPtr != nullptr ? std::move(composedMainPtr) : std::move(mainContentPtr);
+        auto statusPtr = renderStatusBar(terminalColumns, hoveredButton);
         auto rootPtr = vbox({
           playbackBar(textCatalog,
                       PlaybackBarViewState{.playbackState = &state,
@@ -825,28 +976,11 @@ namespace ao::tui
                                            .volumeBox = &hitRegions.volumeBox,
                                            .shuffleBox = &hitRegions.shuffleBox,
                                            .repeatBox = &hitRegions.repeatBox,
+                                           .metadataHitRegions = &hitRegions.playbackMetadata,
                                            .outputDeviceHovered = hoveredButton == HoveredButton::OutputDevice,
                                            .terminalColumns = terminalColumns}),
           std::move(mainLayerPtr) | flex,
-          exitController.isWaitingForSubmittedWrite()
-            ? text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiEditorExitWaiting)}) | bold |
-                style::warning()
-            : statusBar(textCatalog,
-                        StatusBarViewState{.activityStatus = &activityStatusViewModel.viewState(),
-                                           .terminalColumns = terminalColumns,
-                                           .filterDraft = library.filterDraft(),
-                                           .filterInvalid = !library.filterError().empty(),
-                                           .visualSelectionActive = library.isVisualSelectionActive(),
-                                           .navigationSearching = library.navigation().search().isActive(),
-                                           .shell = &shell,
-                                           .activityStatusBox = &hitRegions.activityStatusBox,
-                                           .cancelSelectionBox = &hitRegions.cancelSelectionBox,
-                                           .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus,
-                                           .settingsButtonBox = &hitRegions.settingsButtonBox,
-                                           .settingsHovered = hoveredButton == HoveredButton::Settings,
-                                           .actionHitRegions = &hitRegions.statusActions,
-                                           .inputHitRegions = &hitRegions.completion},
-                        keymapPlan),
+          shell.overlay() == Overlay::GoTo ? text("") : statusPtr,
         });
 
         auto const modalBackdrop = preferences.dimBackdrop ? OverlayBackdrop::Dimmed : OverlayBackdrop::Live;
@@ -887,6 +1021,23 @@ namespace ao::tui
           return composedPtr;
         }
 
+        if (shell.overlay() == Overlay::GoTo)
+        {
+          auto const columns = std::clamp(terminalColumns - 4, 1, 60);
+          auto const rows = std::max(1, terminalRows - 4);
+          return composeOverlay(
+            rootPtr,
+            vbox(
+              {centerPopover(
+                 mousePanel(
+                   goToMenu(textCatalog, events.goToMenuState(), shell.overlayScroll(), columns, &hitRegions.goToMenu),
+                   hitRegions.overlayPanel) |
+                 size(HEIGHT, LESS_THAN, rows)) |
+                 flex,
+               std::move(statusPtr)}),
+            modalBackdrop);
+        }
+
         if (shell.overlay() == Overlay::Help)
         {
           auto const columns = std::clamp(terminalColumns - 4, 1, 88);
@@ -899,13 +1050,14 @@ namespace ao::tui
         }
 
         if (auto composedPtr = composeOverlay(rootPtr,
-                                              presentationPopover(textCatalog,
-                                                                  shell,
-                                                                  keymapPlan,
-                                                                  library,
-                                                                  hitRegions.presentationButtonBox,
-                                                                  terminalColumns,
-                                                                  hitRegions));
+                                              pickerPopover(textCatalog,
+                                                            shell,
+                                                            keymapPlan,
+                                                            library,
+                                                            hitRegions.presentationButtonBox,
+                                                            terminalColumns,
+                                                            terminalRows,
+                                                            hitRegions));
             composedPtr != nullptr)
         {
           return composedPtr;
@@ -914,7 +1066,6 @@ namespace ao::tui
         if (auto composedPtr = composeOverlay(rootPtr,
                                               notificationPopover(textCatalog,
                                                                   shell,
-                                                                  keymapPlan,
                                                                   activityStatusViewModel.viewState(),
                                                                   hitRegions.activityStatusBox,
                                                                   terminalColumns,
@@ -1041,8 +1192,8 @@ namespace ao::tui
     bool isCoverObstructed(HitRegions const& regions, ShellInteractionModel const& shell)
     {
       return hasCoverIntersection(regions.coverBox, regions.inputPanel.box) ||
-             (isModalOverlay(shell.overlay()) && hasCoverIntersection(regions.coverBox, regions.overlayPanel.box)) ||
-             (regions.navigationLayout.drawer && hasCoverIntersection(regions.coverBox, regions.navigation.panel.box));
+             hasCoverIntersection(regions.coverBox, regions.qualityHoverBox) ||
+             (isModalOverlay(shell.overlay()) && hasCoverIntersection(regions.coverBox, regions.overlayPanel.box));
     }
 
     void syncKittyCoverArt(KittyPaintState& paintState,
@@ -1157,8 +1308,11 @@ namespace ao::tui
     auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
     auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
     bool restoredNavigationEnabled = true;
-    layoutStateStore.load(restoredColumnLayouts, restoredListPresentations, restoredNavigationEnabled);
-    shell.setNavigationEnabled(restoredNavigationEnabled);
+    auto restoredPanelWidths = PanelWidths{};
+    layoutStateStore.load(
+      restoredColumnLayouts, restoredListPresentations, restoredNavigationEnabled, restoredPanelWidths);
+    shell.setPanelWidths(restoredPanelWidths);
+    shell.setNavigationPinned(restoredNavigationEnabled);
 
     auto const knownListIds =
       runtime.library().snapshot().lists() | std::views::transform(&rt::ListNode::id) | std::ranges::to<std::vector>();
@@ -1179,7 +1333,8 @@ namespace ao::tui
       checkpointLayout(layoutStateStore,
                        trackColumnLayouts,
                        listPresentations,
-                       shell.isNavigationEnabled(),
+                       shell.isNavigationPinned(),
+                       shell.panelWidths(),
                        runtime.notifications(),
                        textCatalog,
                        layoutFailureReported,

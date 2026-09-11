@@ -6,7 +6,9 @@
 #include "CommandCompletionState.h"
 #include "Keymap.h"
 #include "ListSearch.h"
+#include "PanelWidths.h"
 #include "TextFieldModel.h"
+#include "TrackDetailLines.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/completion/CompletionResult.h>
 
@@ -24,18 +26,20 @@ namespace ao::tui
   enum class Overlay : std::uint8_t
   {
     None,
-    DetailPanel,
     QualityPanel,
     OutputDevices,
     PresentationPanel,
     Notifications,
     Help,
+    GoTo,
+    ListChooser,
   };
 
   enum class WorkspaceFocus : std::uint8_t
   {
     Tracks,
     Lists,
+    Detail,
   };
 
   enum class ShellInputMode : std::uint8_t
@@ -45,30 +49,34 @@ namespace ao::tui
     Command,
   };
 
-  /**
-   * @brief Whether @p overlay blocks interaction with the workspace beneath it.
-   *
-   * Separate from whether an overlay is on screen: Detail is a live inspector
-   * that follows the track table while the user keeps browsing it, so it is
-   * visible without being modal. Ask this when the question is "may the
-   * workspace still be driven"; ask @ref ShellInteractionModel::overlay when
-   * the question is "is another surface open".
-   */
+  /// Whether a popover blocks interaction with the workspace beneath it.
   bool isModalOverlay(Overlay overlay) noexcept;
   std::string_view overlayLabel(i18n::MessageCatalog const& textCatalog, Overlay overlay);
-  /// The first binding that reaches an overlay's toggle after its fixed local protocol handles input.
-  std::string_view overlayToggleShortcut(KeymapPlan const& keymapPlan, Overlay overlay);
   std::string overlayHint(i18n::MessageCatalog const& textCatalog, KeymapPlan const& keymapPlan, Overlay overlay);
 
   class ShellInteractionModel final
   {
   public:
-    bool isNavigationEnabled() const noexcept { return _navigationEnabled; }
+    PanelWidths panelWidths() const noexcept { return _panelWidths; }
+    void setPanelWidths(PanelWidths widths) noexcept { _panelWidths = widths; }
+    bool isDetailVisible() const noexcept { return _detailVisible; }
+    void toggleDetail() noexcept;
+    bool isTracksFocused() const noexcept { return _workspaceFocus == WorkspaceFocus::Tracks; }
+    bool isDetailFocused() const noexcept { return _workspaceFocus == WorkspaceFocus::Detail; }
+    void focusDetail() noexcept;
+    DetailSectionState& detailSections() noexcept { return _detailSections; }
+    DetailSectionState const& detailSections() const noexcept { return _detailSections; }
+    std::int32_t detailScroll() const noexcept { return _detailScroll; }
+    void resetDetailScroll() noexcept;
+    void scrollDetail(std::int32_t delta, std::int32_t lastRow);
+    bool isNavigationPinned() const noexcept { return _navigationPinned; }
     bool isNavigationFocused() const noexcept { return _workspaceFocus == WorkspaceFocus::Lists; }
-    void setNavigationEnabled(bool enabled) noexcept;
+    void setNavigationPinned(bool pinned) noexcept;
     void focusNavigation() noexcept;
     void focusTracks() noexcept { _workspaceFocus = WorkspaceFocus::Tracks; }
+    void reconcileNavigationLayout(bool canDock) noexcept;
     void toggleNavigation(bool canDock) noexcept;
+    void toggleNavigationPin() noexcept;
     void switchWorkspaceFocus(bool canDock) noexcept;
     bool isInputActive() const noexcept;
     ShellInputMode inputMode() const noexcept;
@@ -102,7 +110,11 @@ namespace ao::tui
     void closeOverlay() noexcept;
 
   private:
-    bool _navigationEnabled = true;
+    PanelWidths _panelWidths{};
+    bool _detailVisible = false;
+    DetailSectionState _detailSections{};
+    std::int32_t _detailScroll = 0;
+    bool _navigationPinned = true;
     WorkspaceFocus _workspaceFocus = WorkspaceFocus::Tracks;
     ShellInputMode _inputMode = ShellInputMode::None;
     TextFieldModel _input{};

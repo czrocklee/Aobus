@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include "GoToMenu.h"
 #include "Keymap.h"
 #include "MouseBindings.h"
+#include "PanelResize.h"
 #include "ShellInteractionModel.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -15,6 +17,7 @@
 
 #include <cstdint>
 #include <list>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -38,16 +41,22 @@ namespace ao::tui
     std::int32_t terminalColumns = kDefaultStatusBarColumns;
     std::string filterDraft{};
     bool filterInvalid = false;
+    bool hasTrackSelection = false;
     bool visualSelectionActive = false;
     bool navigationSearching = false;
+    bool navigationDocked = false;
+    std::optional<PanelDivider> optResizingDivider{};
     ShellInteractionModel const* shell = nullptr;
     ftxui::Box* activityStatusBox = nullptr;
     ftxui::Box* cancelSelectionBox = nullptr;
+    ftxui::Box* navigationSearchBox = nullptr;
     bool activityStatusHovered = false;
     ftxui::Box* settingsButtonBox = nullptr;
     bool settingsHovered = false;
     std::list<StatusActionHitRegion>* actionHitRegions = nullptr;
     CompletionHitRegions* inputHitRegions = nullptr;
+    GoToMenuState goToState{};
+    GoToMenuHitRegions* goToHitRegions = nullptr;
   };
 
   std::string_view activityKindLabel(uimodel::ActivityStatusKind kind);

@@ -42,43 +42,40 @@ namespace ao::tui
     }
   }
 
-  std::string notificationFooter(MessageCatalog const& catalog, std::string_view const toggleKey)
+  std::string notificationFooter(MessageCatalog const& catalog)
   {
-    auto const toggleState = toggleKey.empty() ? std::string_view{"unbound"} : std::string_view{"bound"};
     return requiredFormat(catalog,
                           MessageId::TuiShellNotificationFooter,
-                          {MessageArgument{"toggleState", toggleState},
-                           MessageArgument{"toggleKey", toggleKey},
+                          {MessageArgument{"toggleState", "unbound"},
+                           MessageArgument{"toggleKey", ""},
                            MessageArgument{"hideKey", "x"},
                            MessageArgument{"closeKey", "Esc"}});
   }
 
-  std::string overlayHintText(MessageCatalog const& catalog, MessageId const id, std::string_view const toggleKey)
+  std::string overlayHintText(MessageCatalog const& catalog, MessageId const id)
   {
-    auto const toggleState = toggleKey.empty() ? std::string_view{"unbound"} : std::string_view{"bound"};
-
     switch (id)
     {
       case MessageId::TuiShellHintDetail:
       case MessageId::TuiShellHintPipeline:
         return requiredFormat(catalog,
                               id,
-                              {MessageArgument{"toggleState", toggleState},
-                               MessageArgument{"toggleKey", toggleKey},
+                              {MessageArgument{"toggleState", "unbound"},
+                               MessageArgument{"toggleKey", ""},
                                MessageArgument{"closeKey", "Esc"}});
       case MessageId::TuiShellHintOutput:
       case MessageId::TuiShellHintViews:
         return requiredFormat(catalog,
                               id,
-                              {MessageArgument{"toggleState", toggleState},
-                               MessageArgument{"toggleKey", toggleKey},
+                              {MessageArgument{"toggleState", "unbound"},
+                               MessageArgument{"toggleKey", ""},
                                MessageArgument{"selectKey", "Enter"},
                                MessageArgument{"closeKey", "Esc"}});
       case MessageId::TuiShellHintNotifications:
         return requiredFormat(catalog,
                               id,
-                              {MessageArgument{"toggleState", toggleState},
-                               MessageArgument{"toggleKey", toggleKey},
+                              {MessageArgument{"toggleState", "unbound"},
+                               MessageArgument{"toggleKey", ""},
                                MessageArgument{"hideKey", "x"},
                                MessageArgument{"closeKey", "Esc"}});
       case MessageId::TuiShellHintHelp: return requiredFormat(catalog, id, {MessageArgument{"closeKey", "Esc"}});

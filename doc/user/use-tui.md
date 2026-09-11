@@ -44,7 +44,7 @@ Initialize the root with the GTK application or `aobus -C /music init` first. Af
    `:scan` and `:rescan` start an eager library scan; `:scan cancel` requests cooperative cancellation.
    A scan already in progress, or a cancellation still settling, posts a short notice instead of starting a second flight.
    Progress uses the existing status line; the finished scan uses the same outcome sentence as the other shells.
-   `m` marks or unmarks the focused track without moving the cursor. `v` starts a vim-style visual selection at the cursor: move with `j`/`k` or the arrow keys and the range grows as you go, `v` again keeps it, Escape throws it away and restores the marks you had before. While the selection runs the status line shows `VISUAL` in front of the counts, and Escape cancels it even with the detail pane open, which stays open. `Shift+A` marks every track in the current view, including rows off screen. `u` clears marks so the effective selection falls back to the focused track.
+   `m` marks or unmarks the focused track without moving the cursor. `v` starts a vim-style visual selection at the cursor: move with `j`/`k` or the arrow keys and the range grows as you go, `v` again keeps it, Escape throws it away and restores the marks you had before. While the selection runs the status line shows `VISUAL` in front of the counts, and with Tracks focused, Escape cancels it even with the detail pane open, which stays open. If Detail has focus, the first Escape returns to Tracks and preserves the range. `Shift+A` marks every track in the current view, including rows off screen. `u` clears marks so the effective selection falls back to the focused track.
    A marked row reverses its own foreground and background, so it follows your terminal color scheme instead of a fixed color; the cursor row reverses its yellow highlight the same way when it is marked.
    Playback, Detail, and cover art still follow the cursor. Enter plays the focused track even when other rows are marked. When marks exist, the status line shows how many tracks are marked.
    Opening a different List or applying a new filter clears marks and returns the cursor to the top; confirming the current List or reloading keeps both the marked ids that are still in the view and the cursor.
@@ -67,15 +67,21 @@ Initialize the root with the GTK application or `aobus -C /music init` first. Af
    Press Escape to close or Ctrl+R to re-read the tracks and start fresh; if changes were made, both prompt for confirmation (Enter confirms, Escape cancels).
    Any library change while the editor is open marks the draft stale and disables Ctrl+S; your draft is preserved so you can press Ctrl+R to reload or Escape to leave.
    Applying closes the editor and reports the number of deduplicated changed tracks. Tracks that already matched the submitted values are not counted, and a save requiring no change reports "No changes were needed".
-7. Use `l` for Lists and toggle panels with `d` for detail, `a` for the quality pipeline, `o` for output devices, `p` for presentations, and `n` for notifications.
+7. Click the title, artist, or album in the playback bar to browse from the playing track. The title locates the track, the artist opens matching tracks across the library, and the album locates the track in album groups. Playback continues while you browse.
+   Press `g` to open Go to: `t` locates the playing track, `a` opens its artist, and `b` opens its album. `g [` goes back through views and filters; `g ]` goes forward. Plain `[`/`]` still seeks playback, while `{`/`}` moves between groups. The `g` prefix gives navigation a shared entry point, and paired brackets express direction.
+   After `g`, the bottom bar switches to these suffixes and Escape to cancel. Its targets are clickable, unavailable destinations are dimmed, and narrow terminals shorten labels while retaining the keys. The menu also accepts arrows or j/k and Enter; it waits without a timeout. Escape or an unrelated key closes it without running a workspace action. Executing or cancelling restores the ordinary status hints.
+   `c` remains a direct shortcut to the playing track. `:current`, `:artist`, `:album`, `:back`, and `:forward` offer the same destinations; `:goto` opens the menu.
+   Use `l` to access Lists and `L` to toggle the pinned Lists pane; toggle panels with `d` for detail, `a` for the quality pipeline, `o` for output devices, `p` for presentations, and `n` for notifications.
 8. Press `d` and keep browsing: the detail pane stays open beside the track table and follows the cursor, so arrows, pages, wheel, scrollbar, group jumps, playback, and filtering all keep working while you read it.
-   Press `d` again or Escape to close it.
+   Press `d` again or click `›` in the divider to hide it; click `‹` on the right edge to show it again. The pane has one-cell inner padding and remains open when you use popovers or editors. Escape closes those temporary surfaces without hiding Detail.
 9. With mouse tracking enabled, drag a track-header column edge to preview a new width and release to keep it for that list.
    Opening a panel, entering text input, changing lists, or quitting before release cancels the preview.
-10. Press `?` or F1 for centered Help. Its body scrolls while the title and close controls stay visible. Press the Help shortcut again or click outside to close it without changing the underlying workspace. Press Escape to close the current overlay or cancel active text input, and Shift+Q (uppercase `Q`) or Ctrl+C to quit normally.
+10. Press `?` or F1 for centered Help. Its body scrolls while the title and footer stay visible. Press the Help shortcut again or click outside to close it without changing the underlying workspace. Press Escape to close the current overlay or cancel active text input, and Shift+Q (uppercase `Q`) or Ctrl+C to quit normally.
    Plain `q` has no default action, reducing accidental exits; explicit custom quit bindings remain effective.
    Shift+Q, `:quit`, terminal Ctrl+C, and handleable platform signals share one graceful exit path: they retire scan and editor presentation and unfinished input, then leave the loop.
    Quitting while a save is still in flight waits for that write instead of leaving immediately: the status row says the save is finishing, other keys do nothing, and Ctrl+C stops waiting.
+
+Help groups shortcuts by navigation, browsing, playback, selection and editing, panels, and application actions.
 
 These are the shipped shortcuts.
 The TUI loads global overrides from the `shortcuts` group in `<config>/tui.yaml`; supported changes update both behavior and the key shown in status chips, panels, Help, and the Command Palette.
@@ -89,9 +95,9 @@ A restored playback subject remains idle until you press Space or otherwise star
 When several filtered views use the same list, the previously active one is restored exactly.
 
 Ctrl+S in the Track Properties editor is not a preference save: it writes track metadata and tags into the library for every captured target, and nothing about it is deferred to quit.
-List panel visibility, plus per-List column widths and preferred presentations, are kept in the layout file below and written when you release a drag or when the shell checkpoints its state.
+List panel visibility and sidebar widths, plus per-List column widths and preferred presentations, are kept in the layout file below and written when you release a drag or when the shell checkpoints its state.
 
-List panel visibility, plus per-List column layouts and preferred presentations, are stored separately in `<root>/.aobus/tui_layout.yaml`.
+List panel visibility and sidebar widths, plus per-List column layouts and preferred presentations, are stored separately in `<root>/.aobus/tui_layout.yaml`.
 Column widths in that file are terminal cells; fixed widths are projected within the supported 8-through-160-cell range, while flexible columns reflow when the terminal size changes. The TUI does not reuse GTK desktop widths.
 Opening a list uses its remembered presentation, while startup still keeps the exact presentation of the restored active view.
 
@@ -105,17 +111,35 @@ An empty track table explains whether the current List is empty, a filter has no
 
 The bottom bar advertises play and filter actions when space permits. While a filter is present, its text and clear control take priority over secondary shortcuts. Long filters end in an ellipsis; click the filter or use its shortcut to enter Quick Filter, and use Ctrl+P to recall a previous entry. A `!` before the filter text marks an invalid draft: edit it or clear it to recover.
 
-Quick Filter explains the current Enter/Escape transitions: an empty draft offers clearing or preserving the filter; literal text without suggestions can still be applied. At narrow widths, these instructions take priority over the history reminder. During a visual range, the bottom bar instead offers keeping the marks or cancelling the range, including while Detail is open. Both controls are clickable.
+Quick Filter explains the current Enter/Escape transitions: an empty draft offers clearing or preserving the filter; literal text without suggestions can still be applied. At narrow widths, these instructions take priority over the history reminder. During a visual range, the bottom bar instead offers keeping the marks or cancelling the range, including while Detail is open with Tracks focused. With Detail focused, the first Escape returns to Tracks and preserves the range. Both controls are clickable.
 
 In a narrow filtered workspace, informational notices yield their space to the filter. Warnings and errors retain a clickable `!`; running work retains `…`. Click that indicator or open Notifications to read the message. The playback bar shortens its seek rail before sacrificing the track title, elapsed time, or complete volume value.
 
-Lists have a persistent left pane when the terminal is wide enough. Press Tab or Shift+Tab to move between Lists and Tracks. On a narrow terminal, press `l` to open Lists as a drawer. Up/Down or j/k moves its cursor; Left/Right expands or collapses the tree. Enter opens a List and returns to Tracks. `/` searches List names and their ancestor paths, keeping enough parent context to distinguish duplicate names.
+Lists has a pinned tree pane and a separate list chooser popup. Press `l` to focus the pinned pane; when it is absent, `l` opens or closes the popup. Press `L` or use `:sidebar` to toggle pinning independently. In the chooser, `L` closes the popup and shows the pinned tree when enough width is available. Tab or Shift+Tab switches between pinned Lists and Tracks.
 
-Escape clears List search first, then returns to Tracks. Tab also ends search and returns to Tracks. These focus changes keep the pane enabled; `l` while it is visible, or its `×` button, disables it. Your visibility choice survives restarting, while focus, expansion, and search do not. Resizing automatically chooses a docked pane or drawer. Clicking a docked List opens it and keeps Lists focused for browsing; clicking outside a drawer dismisses it without acting on the track underneath. Clicking the active List preserves its current filter and selection.
+The divider has a centered `‹` control to unpin Lists. When there is room to pin them again, the track panel's left border shows `›` to restore the pane. The track panel's bottom border shows a **List · current list** button whenever the pinned pane is absent. Clicking it opens the chooser immediately above the button. The button is hidden while the tree is docked and returns when unpinned or when the terminal becomes too narrow. Pinning is remembered across restarts. Opening or dismissing a popup never changes that preference. The pinned pane shows the selected list's filter expression as dim text at the bottom, without a heading or separator. It wraps into at most two lines and marks truncation with an ellipsis; lists without an expression reclaim that space. Selection, not mouse hover, chooses the expression. Focus-switch hints appear in the global status bar in both directions: Tracks shows `Tab lists` while the pane is docked, and Lists shows `Tab tracks`. They follow custom key bindings.
+
+Drag either sidebar divider away from its centered arrow to resize that pane. The divider highlights while dragging; release to save, or press Escape to cancel. Both single and double borders support this. For quick keyboard resizing, focus Lists with `l` or Detail with `D`, then press Shift+Left/Right to move that divider one terminal cell in the indicated screen direction. For Detail, moving left makes it wider. The status bar shows these keys while the sidebar has focus. Width changes retain room for Tracks; narrowing the terminal clamps the displayed widths without overwriting your preferences, which return when space permits.
+
+Press `Ctrl+W` from Tracks, Lists, or Detail to adjust the layout without changing workspace focus. The active divider is highlighted: Lists starts at its right edge, Detail at its left edge, and Tracks starts at the left divider (or the right one if it is the only visible divider). Tab or Shift+Tab switches between visible dividers. Left/Right or `h/l` moves the selected divider one cell in screen direction. Enter or the resize shortcut again saves all previewed widths together; Escape cancels the whole adjustment. A mouse click cancels and is consumed; terminal size changes also cancel. With no visible dividers the shortcut does nothing. The bottom bar shows the target and current controls, and the entry shortcut can be changed under Settings → Keyboard. Text inputs retain Ctrl+W word deletion.
+
+Up/Down or j/k moves the List cursor. In the pinned pane, Left/Right expands or collapses the tree. Enter opens a List and returns to Tracks. The pinned tree shows its search row only after pressing `/` or clicking `/ Search` in the bottom bar while Lists has focus. Escape clears the search and removes the row. Search matches names and ancestor paths in the pinned tree, or the displayed list labels and expressions in the chooser. Escape clears search first, then returns to Tracks; in a popup it also dismisses the surface. In the pinned pane, Tab ends search and returns to Tracks. Clicking a pinned List keeps Lists focused; clicking a popup row opens it and dismisses the popup. Clicking outside a popup dismisses it without acting on the track underneath. Clicking the active List preserves its filter and selection.
 
 Use `c` to return to the currently playing track, even after filtering it out or browsing another List. The previous view remains available through `:back`; `:forward` returns to the reveal destination. Use uppercase `C` to clear the current filter.
 
 `<` and `>` change the playing track; Up/Down and `j/k` move the table focus. Left/Right seek, Space pauses/resumes, `S` toggles shuffle, `r` cycles repeat, and `R` reloads the List. The playback bar shows `⇄` for shuffle and `↻` / `↻1` for repeat-all / repeat-one; dim indicators mean off. Playback controls remain available while browsing panels, except while typing or editing.
+
+### Operate detail sections
+
+`d` shows or hides Detail while you continue choosing tracks. Press `D` to open and focus its sections explicitly; Detail stays outside the ordinary Lists/Tracks Tab cycle.
+
+Settings → Appearance → **Reveal indicators on hover** hides the Lists and Detail arrows until the pointer enters their divider or collapsed side border. Moving away restores a continuous border. This is off by default; turning it on keeps the same click targets and keyboard controls.
+
+Within Detail, `j/k` or Up/Down select a section, Enter toggles it, Left/Right collapse or expand it, and PageUp/PageDown scroll long contents. Escape returns to Tracks without hiding the sidebar. Space still controls playback. The bottom bar shows these controls while Detail has focus.
+
+Metadata starts expanded; Audio Properties starts collapsed with a compact summary. Their expansion states survive changing tracks during the session. Clicking a section header toggles it without taking keyboard focus from Lists or Tracks. Tags remain read-only.
+
+Fields use aligned label and value columns, including title, artist, album, year, track number, duration, and audio properties. Long values continue in the value column; missing fields are omitted.
 
 ## Mouse controls
 
@@ -133,9 +157,10 @@ Enable Mouse control under Settings → Interaction. With it enabled:
 | Settings | Click tabs and rows. Click `<` or the value/`>` to adjust; choose a language to save it. Wheel navigates without changing values. Click a shortcut chord to replace it; the footer offers add, remove, restore, and confirmation controls. |
 | Track Properties | Click tabs, fields, suggestions, and tags. Click within an editable value to place the cursor. Wheel navigates rows; footer controls apply, reload, clear, restore, or close using the same confirmation rules as the keyboard. |
 | Detail, Quality, Help, Notifications | Wheel scrolls the panel. Click a dismissible notification to hide it locally. |
-| Panels and editors | Click `×` to use their Escape/close behavior, including unsaved-change confirmation. |
+| Popovers | Click outside or press `Esc` to close; the outside click does not activate the workspace beneath. |
+| Settings and full Track Properties | Click `×` to use their Escape/close behavior, including unsaved-change confirmation. |
 
-Click outside a floating Lists drawer or a Presentation, Output, Quality, Notifications, or Help panel to close it. That click is consumed, so it cannot also play a track or activate a background control. Clicking outside the Command Palette cancels its draft; clicking outside Quick Filter keeps your typed text, just like Escape. The Detail side panel and editor dialogs use their close controls.
+Click outside the Lists chooser or a Presentation, Output, Quality, Notifications, or Help panel to close it. That click is consumed, so it cannot also play a track or activate a background control. Clicking outside the Command Palette cancels its draft; clicking outside Quick Filter keeps your typed text, just like Escape. The Detail sidebar uses its divider arrow or `d`; editor dialogs use their close controls.
 
 Mouse modifiers must be forwarded by your terminal; some terminals reserve Shift for selecting terminal text. Disabling Mouse control also disables clicks inside Settings, so use the keyboard to re-enable it.
 
@@ -149,7 +174,7 @@ In Settings Keyboard, press `/` to find an action by its translated name or acti
 
 General includes system language, English, Deutsch, Español, Français, 日本語, 简体中文, and 繁體中文. Confirming a language updates the open Settings dialog and workspace immediately, including localized headings and browsing/completion ordering. Focus and marks remain on the same tracks; playback and its captured sequence continue. Existing literal notification messages retain their original wording; structured notifications and new scan results use the selected language. Close Track Properties before opening Settings.
 
-Appearance controls the dimmed modal backdrop, reduced motion, and cover renderer. Dimming uses your terminal's dim attribute, so its strength depends on the terminal theme. Reduced motion uses a static frame for time-driven decoration and pauses the soul animation; the playhead keeps moving. A command-line cover-mode override stays effective for this session and is shown beside the preference. Editing that preference still saves the renderer for future launches without the override.
+Appearance controls the dimmed modal backdrop, reduced motion, cover renderer, and panel separation. Choose **Single │** for a shared border or **Double ││** for adjacent panel borders; this applies to pinned Lists and Detail immediately and is remembered across launches. Each pane retains its inner padding. Hovering a divider highlights its lines and centered arrow; only clicking the arrow collapses the pane. Dimming uses your terminal's dim attribute, so its strength depends on the terminal theme. Reduced motion uses a static frame for time-driven decoration and pauses the soul animation; the playhead keeps moving. A command-line cover-mode override stays effective for this session and is shown beside the preference. Editing that preference still saves the renderer for future launches without the override.
 
 Interaction controls mouse input, wheel movement (1–10 tracks), keyboard seek (1–60 seconds), volume steps for keyboard and wheel (1–10 percentage points), and the quality hover popup. Preference and shortcut changes save immediately. On failure the applied setting stays unchanged; the dialog keeps the attempted value visible and offers Ctrl+R to retry or Ctrl+G to discard.
 

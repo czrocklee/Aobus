@@ -3,6 +3,7 @@
 
 #include "Style.h"
 
+#include "MouseBindings.h"
 #include "TextCell.h"
 
 #include <ftxui/dom/elements.hpp>
@@ -39,7 +40,7 @@ namespace ao::tui::style
 
     PanelOptions popupPanelOptions(PanelOptions options)
     {
-      options.bodyPaddingColumns = kPopupPanelBodyPaddingColumns;
+      options.bodyPaddingColumns = kPanelBodyPaddingColumns;
       return options;
     }
 
@@ -73,7 +74,7 @@ namespace ao::tui::style
 
       if (button.box != nullptr)
       {
-        elementPtr = std::move(elementPtr) | ftxui::reflect(*button.box);
+        elementPtr = std::move(elementPtr) | reflectLayout(*button.box);
       }
 
       return elementPtr;
@@ -125,6 +126,11 @@ namespace ao::tui::style
              ftxui::bold;
     }
   } // namespace
+
+  ftxui::Element popoverClearHalo(ftxui::Element popoverPtr)
+  {
+    return std::move(popoverPtr) | ftxui::borderEmpty | ftxui::clear_under;
+  }
 
   ftxui::Decorator muted()
   {
@@ -202,6 +208,62 @@ namespace ao::tui::style
            ftxui::size(ftxui::WIDTH, ftxui::GREATER_THAN, minColumns) | ftxui::clear_under;
   }
 
+  ftxui::Element panelIndicator(std::string_view const arrow,
+                                ftxui::Box& box,
+                                bool const hovered,
+                                bool const onHoverOnly)
+  {
+    using namespace ftxui;
+    auto const concealed = onHoverOnly && !hovered;
+    auto indicatorPtr = text(concealed ? "│" : std::string{arrow}) | reflect(box);
+
+    if (concealed)
+    {
+      return indicatorPtr;
+    }
+
+    return std::move(indicatorPtr) | (hovered ? buttonHover() : dim);
+  }
+
+  ftxui::Element panelDivider(std::string_view const arrow,
+                              ftxui::Box* const toggleBox,
+                              bool const hovered,
+                              PanelDividerOptions const options)
+  {
+    using namespace ftxui;
+    auto linesPtr =
+      options.separateBorders ? hbox({separatorCharacter("│"), separatorCharacter("│")}) : separatorCharacter("│");
+    auto dividerPtr = vbox({text(options.separateBorders ? "╮╭" : "┬"),
+                            std::move(linesPtr) | flex,
+                            text(options.separateBorders ? "╯╰" : "┴")});
+    dividerPtr = std::move(dividerPtr) | (hovered ? accent() : nothing);
+
+    if (toggleBox != nullptr)
+    {
+      auto buttonPtr = panelIndicator(arrow, *toggleBox, hovered, options.revealOnHover);
+
+      if (options.separateBorders)
+      {
+        buttonPtr = arrow == "‹" ? hbox({std::move(buttonPtr), text("│") | (hovered ? accent() : nothing)})
+                                 : hbox({text("│") | (hovered ? accent() : nothing), std::move(buttonPtr)});
+      }
+
+      dividerPtr = dbox({std::move(dividerPtr), vbox({filler(), std::move(buttonPtr), filler()})});
+    }
+
+    if (options.dragging)
+    {
+      dividerPtr = std::move(dividerPtr) | buttonHover();
+    }
+
+    if (options.hoverBox != nullptr)
+    {
+      dividerPtr = std::move(dividerPtr) | reflect(*options.hoverBox);
+    }
+
+    return dividerPtr;
+  }
+
   std::int32_t titledPanelColumnsForContent(std::int32_t const contentColumns,
                                             std::int32_t const terminalColumns,
                                             PanelOptions const options)
@@ -222,6 +284,18 @@ namespace ao::tui::style
   std::int32_t popupPanelBodyColumns(std::int32_t const panelColumns)
   {
     return titledPanelBodyColumns(panelColumns, popupPanelOptions(PanelOptions{}));
+  }
+
+  ftxui::Element panelBody(ftxui::Element bodyPtr)
+  {
+    return bodyWithHorizontalPadding(std::move(bodyPtr), kPanelBodyPaddingColumns);
+  }
+
+  ftxui::Element scrollablePanelBody(ftxui::Element bodyPtr)
+  {
+    return ftxui::hbox({ftxui::text(std::string(static_cast<std::size_t>(kPanelBodyPaddingColumns), ' ')),
+                        std::move(bodyPtr) | ftxui::xflex}) |
+           ftxui::flex;
   }
 
   ftxui::Element titledPanel(std::string_view const title, ftxui::Element bodyPtr, PanelOptions const options)

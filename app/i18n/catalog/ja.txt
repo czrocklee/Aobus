@@ -3,6 +3,24 @@
 
 ja:table {
   messages:table {
+    tui_go_to_back { "戻る" }
+    tui_go_to_forward { "進む" }
+    tui_go_to_cancel { "キャンセル" }
+    tui_navigation_pin { "固定リストの表示を切り替え" }
+    tui_go_to_title { "移動" }
+    tui_go_to_status { "移動" }
+    tui_go_to_now_playing { "再生中" }
+    tui_go_to_history { "表示履歴" }
+    tui_go_to_hint { "↑/↓ 選択 · Enter 開く · Esc キャンセル" }
+    tui_go_to_artist { "再生中のアーティストへ移動" }
+    tui_go_to_album { "再生中のアルバムへ移動" }
+    tui_key_group_navigation { "移動" }
+    tui_key_group_browse { "閲覧" }
+    tui_key_group_playback { "再生" }
+    tui_key_group_selection { "選択と編集" }
+    tui_key_group_panels { "パネル" }
+    tui_key_group_application { "アプリケーション" }
+
     tui_workspace_back { "前のビュー" }
     tui_workspace_forward { "次のビュー" }
     tui_workspace_history_unavailable { "この方向に移動できるビューはありません。" }
@@ -22,6 +40,10 @@ ja:table {
     tui_settings_dim { "ダイアログの背景を暗くする" }
     tui_settings_motion { "動きを減らす" }
     tui_settings_cover { "カバーの表示方式" }
+    tui_settings_separator { "パネルの区切り" }
+    tui_settings_separator_single { "単線 │" }
+    tui_settings_separator_double { "二重線 ││" }
+    tui_settings_reveal_indicators_on_hover { "ホバー時にパネルインジケーターを表示" }
     tui_settings_mouse { "マウス操作" }
     tui_settings_wheel { "ホイールの移動量" }
     tui_settings_seek { "キー操作のシーク幅" }
@@ -30,9 +52,25 @@ ja:table {
     tui_settings_on { "オン" }
     tui_settings_off { "オフ" }
     tui_settings_unbound { "未割り当て" }
-    tui_settings_immediate { "確定した変更はすぐに保存されます。" }
     tui_settings_language_hint { "言語と文字の並び順はすぐに変わります。再生は続きます。" }
     tui_settings_invalid_chord { "有効なキーの組み合わせを入力してください（例：{example}）。" }
+    tui_settings_action_change { "変更" }
+    tui_settings_action_choose { "選択" }
+    tui_settings_action_apply { "適用" }
+    tui_settings_action_save { "保存" }
+    tui_settings_action_cancel { "キャンセル" }
+    tui_settings_action_pages { "ページ切替" }
+    tui_settings_action_close { "閉じる" }
+    tui_settings_action_edit { "編集" }
+    tui_settings_action_add { "追加" }
+    tui_settings_action_remove { "削除" }
+    tui_settings_action_reset { "リセット" }
+    tui_settings_action_search { "検索" }
+    tui_settings_action_clear { "クリア" }
+    tui_settings_action_retry { "保存を再試行" }
+    tui_settings_action_discard { "変更を破棄" }
+    tui_settings_action_keep_editing { "編集を続ける" }
+    tui_settings_action_binding { "割り当て選択" }
     tui_settings_close_prompt { "未保存の変更を破棄して閉じますか？" }
     tui_settings_palette { "コマンドパレット" }
     tui_settings_previous_row { "前の行" }
@@ -49,13 +87,6 @@ ja:table {
     tui_settings_conflict { "{detail} に割り当て済みです。先にその割り当てを解除してください。" }
     tui_settings_unsupported { "使用できない、または予約済みのキー：{detail}" }
     tui_settings_stored_issue { "保存済みの割り当てを確認してください：{detail}" }
-    tui_settings_page_keys { "{pages} ページ · {close} 閉じる" }
-    tui_settings_preference_keys { "{change} 値を変更" }
-    tui_settings_language_keys { "{move} 選択 · {apply} 適用 · {close} キャンセル" }
-    tui_settings_chord_keys { "{apply} キーを保存 · {close} キャンセル" }
-    tui_settings_confirm_keys { "{apply} 確認 · {retry} 再保存 · {close} 編集を続ける" }
-    tui_settings_retry_keys { "{retry} 再試行 · {discard} 変更を破棄 · {close} 閉じる" }
-    tui_settings_keyboard_keys { "{choose} キー選択 · {edit} 置換 · {add} 追加 · {remove} 削除 · {reset} 動作をリセット" }
 
     pilot_library_title { "音楽ライブラリ" }
     pilot_greeting { "ようこそ、{name}" }
@@ -451,7 +482,8 @@ ja:table {
     tui_input_history_hint { "Ctrl+P/N 履歴" }
     tui_navigation_focus { "リストと曲のフォーカスを切り替え" }
     tui_navigation_return { "{key} 曲へ" }
-    tui_navigation_keys { "↑↓ 移動 · ←→ ツリー · Enter 開く · Esc 曲へ" }
+    tui_navigation_search { "/ 検索" }
+    tui_navigation_keys { "Shift+←/→ 幅を調整 · ↑↓ 移動 · ←→ ツリー · Enter 開く · Esc 曲へ" }
     tui_layout_save_failed { "ワークスペースのレイアウトを保存できませんでした: {detail}" }
     tui_navigation_open_failed { "リストを開けませんでした: {detail}" }
     tui_navigation_sync_failed { "アクティブなリストを表示できませんでした: {detail}" }
@@ -470,6 +502,8 @@ ja:table {
     tui_shell_overlay_views { "表示" }
     tui_shell_overlay_notifications { "通知" }
     tui_shell_overlay_help { "ヘルプ" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{pinState, select, bound {{pinKey} 固定  } other {}}{openKey} 開く  {closeKey} 閉じる" }
+    tui_library_no_lists_found { "リストが見つかりません" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{closeKey} 閉じる" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切り替え  } other {}}{selectKey} 選択  {closeKey} 閉じる" }
@@ -990,8 +1024,6 @@ ja:table {
     gtk_layout_value_center { "中央" }
     tui_untitled_section { "無題のセクション" }
     tui_notification_none { "通知なし" }
-    tui_detail_closed { "詳細が閉じられました" }
-    tui_detail_opened { "詳細パネル" }
     tui_pipeline_closed { "パイプラインが閉じられました" }
     tui_pipeline_opened { "オーディオパイプライン" }
     tui_output_closed { "出力デバイスが閉じられました" }
@@ -1007,5 +1039,13 @@ ja:table {
     tui_section_unavailable { "セクションは利用できなくなりました" }
     tui_unknown_command { "不明なコマンド: {command}" }
     tui_filter_failed { "フィルター失敗: {detail}" }
+    tui_begin_panel_resize { "パネルの幅を調整" }
+    tui_panel_resize_status { "幅調整" }
+    tui_panel_resize_keys { "Tab 区切り · ←/→ または h/l 移動 · Enter 適用 · Esc 取消" }
+    tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
+    tui_panel_resize { "フォーカス中のサイドバーの区切りを移動" }
+    tui_detail_focus { "曲の詳細を操作" }
+    tui_detail_keys { "Shift+←/→ 幅を調整 · j/k セクション · Enter 開閉 · ←/→ 閉じる/開く · PgUp/PgDn スクロール · Esc 曲一覧" }
+    tui_detail_keys_compact { "Shift+←/→ 幅を調整 · Enter 開閉 · Esc 曲一覧" }
   }
 }

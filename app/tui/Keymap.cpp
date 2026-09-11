@@ -29,10 +29,13 @@ namespace ao::tui
     using uimodel::KeyModifier;
 
     constexpr auto kNoDefaults = std::array<std::string_view, 0>{};
+    constexpr auto kBeginPanelResizeDefaults = std::to_array<std::string_view>({"Ctrl+W"});
     constexpr auto kOpenSettingsDefaults = std::to_array<std::string_view>({","});
     constexpr auto kQuitDefaults = std::to_array<std::string_view>({"Shift+Q"});
     constexpr auto kSwitchWorkspaceFocusDefaults = std::to_array<std::string_view>({"Tab", "Shift+Tab"});
+    constexpr auto kTogglePinnedListsDefaults = std::to_array<std::string_view>({"Shift+L"});
     constexpr auto kToggleListsDefaults = std::to_array<std::string_view>({"L"});
+    constexpr auto kFocusDetailsDefaults = std::to_array<std::string_view>({"Shift+D"});
     constexpr auto kToggleDetailsDefaults = std::to_array<std::string_view>({"D"});
     constexpr auto kToggleAudioPipelineDefaults = std::to_array<std::string_view>({"A"});
     constexpr auto kToggleOutputDevicesDefaults = std::to_array<std::string_view>({"O"});
@@ -41,6 +44,7 @@ namespace ao::tui
     constexpr auto kShowHelpDefaults = std::to_array<std::string_view>({"?", "F1"});
     constexpr auto kOpenCommandPaletteDefaults = std::to_array<std::string_view>({":"});
     constexpr auto kOpenQuickFilterDefaults = std::to_array<std::string_view>({"/"});
+    constexpr auto kGoToDefaults = std::to_array<std::string_view>({"G"});
     constexpr auto kRevealDefaults = std::to_array<std::string_view>({"C"});
     constexpr auto kClearFilterDefaults = std::to_array<std::string_view>({"Shift+C"});
     constexpr auto kReloadDefaults = std::to_array<std::string_view>({"Shift+R"});
@@ -161,9 +165,25 @@ namespace ao::tui
         {.actionId = uimodel::playbackCommandActionId(CycleRepeat),
          .action = KeyAction::PlaybackRepeat,
          .defaultChords = kRepeatDefaults},
+        {.actionId = "tui.detail.focus", .action = KeyAction::FocusDetails, .defaultChords = kFocusDetailsDefaults},
         {.actionId = "tui.workspace.switchFocus",
          .action = KeyAction::SwitchWorkspaceFocus,
          .defaultChords = kSwitchWorkspaceFocusDefaults},
+        {.actionId = "tui.navigation.openGoTo", .action = KeyAction::OpenGoTo, .defaultChords = kGoToDefaults},
+        {.actionId = "tui.navigation.currentArtist",
+         .action = KeyAction::OpenCurrentArtist,
+         .defaultChords = kNoDefaults},
+        {.actionId = "tui.navigation.currentAlbum",
+         .action = KeyAction::OpenCurrentAlbum,
+         .defaultChords = kNoDefaults},
+        {.actionId = "tui.navigation.back", .action = KeyAction::WorkspaceBack, .defaultChords = kNoDefaults},
+        {.actionId = "tui.navigation.forward", .action = KeyAction::WorkspaceForward, .defaultChords = kNoDefaults},
+        {.actionId = "tui.workspace.beginPanelResize",
+         .action = KeyAction::BeginPanelResize,
+         .defaultChords = kBeginPanelResizeDefaults},
+        {.actionId = "tui.workspace.togglePinnedLists",
+         .action = KeyAction::TogglePinnedLists,
+         .defaultChords = kTogglePinnedListsDefaults},
       };
     }
 

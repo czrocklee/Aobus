@@ -43,7 +43,7 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`, `preferences`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
-| TUI library presentation | One per-library TUI file. | `LayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts`, `trackView.presentations`, and `navigation`. |
+| TUI library presentation | One per-library TUI file. | `LayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts`, `trackView.presentations`, `navigation`, and `panels`. |
 | Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop` and `shortcuts`. |
 | WinUI library presentation | One per-library WinUI file. | `LibrarySession` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
@@ -142,6 +142,8 @@ The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and i
 |---|---|---|
 | `language` | empty string | System (empty), `en`, `de`, `es`, `fr`, `ja`, `zh-Hans`, `zh-Hant` |
 | `coverArtMode` | `auto` | `auto`, `kitty`, `blocks`, `off` |
+| `panelSeparator` | `single` | `single` (shared border), `double` (adjacent panel borders) |
+| `revealIndicatorsOnHover` | `false` | Show panel arrows only while hovering their divider or collapsed edge |
 | `dimBackdrop` | `true` | Boolean |
 | `reducedMotion` | `false` | Boolean |
 | `mouseEnabled` | `true` | Boolean |
@@ -179,9 +181,13 @@ Chord values use the canonical `KeyChord::toString()` representation; the exact 
 The schema rejects an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.
 After structural acceptance, `KeymapModel` treats an unparseable chord string as an invalid semantic entry and continues with other usable chords.
 
+### TUI sidebar widths
+
+The `panels` group in `<root>/.aobus/tui_layout.yaml` stores required `version: 1`, `navigation`, and `detail` fields. Widths are nonnegative integers in terminal cells including the pane borders; zero selects automatic sizing. Missing or invalid groups use automatic sizing without discarding other layout groups. `PanelWidthsSchema` in `LayoutStateStore.cpp` owns this payload. Immediate keyboard steps, confirmed keyboard layout adjustments, and completed divider drags checkpoint widths atomically with the other layout groups. Keyboard-mode and drag previews, as well as terminal-size clamps, never overwrite these preferences.
+
 ### TUI List navigation
 
-`<root>/.aobus/tui_layout.yaml` also contains `navigation: {version: 1, enabled: true}`. Both fields are required when the group exists. Missing, malformed, or unsupported state defaults to enabled; other valid layout groups remain independent. The same writer saves visibility, columns, and presentations atomically while preserving unrelated groups. Only explicit enable/disable changes request a visibility checkpoint; focus, search, expansion, resizing, and drawer dismissal are not persistent. A failed save retains live/dirty state and reports a coalesced warning, with retry at the next checkpoint or normal exit.
+`<root>/.aobus/tui_layout.yaml` also contains `navigation: {version: 1, enabled: true}`. Both fields are required when the group exists. Missing, malformed, or unsupported state defaults to enabled; other valid layout groups remain independent. The same writer saves visibility, columns, and presentations atomically while preserving unrelated groups. Only explicit enable/disable changes request a visibility checkpoint; focus, search, expansion, terminal-size clamping, and chooser dismissal are not persistent. A failed save retains live/dirty state and reports a coalesced warning, with retry at the next checkpoint or normal exit.
 
 ### Delegated payload schemas
 

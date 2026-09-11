@@ -20,8 +20,10 @@
 #include <ftxui/dom/node.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -60,6 +62,82 @@ namespace ao::tui
       }
 
       return result;
+    }
+
+    ftxui::Element playbackMetadata(i18n::MessageCatalog const& textCatalog,
+                                    rt::NowPlayingInfo const& track,
+                                    std::int32_t const columns,
+                                    PlaybackMetadataHitRegions* const hitRegions)
+    {
+      using namespace ftxui;
+
+      if (hitRegions != nullptr)
+      {
+        *hitRegions = {.nowPlaying = track};
+      }
+
+      auto const values = std::array{playbackTitle(textCatalog, track), track.artist, track.album};
+
+      auto widths = std::array<std::int32_t, 3>{};
+      std::int32_t count = 0;
+      std::int32_t total = 0;
+
+      for (std::size_t index = 0; index < values.size(); ++index)
+      {
+        if (values[index].empty())
+        {
+          continue;
+        }
+
+        // Keep at least four cells per visible field before admitting another.
+        if (columns >= 0 && count > 0 && columns < ((count + 1) * 4) + (count * 3))
+        {
+          break;
+        }
+
+        widths[index] = columns < 0 ? cellWidth(values[index]) : std::min(cellWidth(values[index]), columns);
+        total += widths[index] + (count > 0 ? 3 : 0);
+        ++count;
+      }
+
+      while (columns >= 0 && total > columns)
+      {
+        --*std::ranges::max_element(widths);
+        --total;
+      }
+
+      auto elements = Elements{};
+
+      for (std::size_t index = 0; index < values.size(); ++index)
+      {
+        if (widths[index] <= 0)
+        {
+          continue;
+        }
+
+        if (!elements.empty())
+        {
+          elements.push_back(text(" — ") | dim);
+        }
+
+        auto valuePtr = text(ellipsizeToCellWidth(values[index], widths[index]));
+
+        if (track.trackId != kInvalidTrackId)
+        {
+          valuePtr = std::move(valuePtr) | style::accent();
+
+          if (hitRegions != nullptr)
+          {
+            auto const boxes = std::array{&hitRegions->title, &hitRegions->artist, &hitRegions->album};
+            valuePtr = std::move(valuePtr) | reflect(*boxes[index]);
+          }
+        }
+
+        elements.push_back(std::move(valuePtr));
+      }
+
+      elements.push_back(filler());
+      return hbox(std::move(elements));
     }
 
     std::chrono::milliseconds clampedElapsed(std::chrono::milliseconds const elapsed,
@@ -152,16 +230,6 @@ namespace ao::tui
 
     auto modesPtr = hbox({std::move(shufflePtr), text(" "), std::move(repeatPtr), text(" ")});
     modesPtr->ComputeRequirement();
-    auto const title = playbackTitle(textCatalog, state.nowPlaying);
-    auto const artist = state.nowPlaying.artist;
-    auto titleLine = title;
-
-    if (!artist.empty())
-    {
-      titleLine.append(" — ");
-      titleLine.append(artist);
-    }
-
     auto const effectiveElapsed = clampedElapsed(view.displayElapsed, state.duration);
     auto const elapsed = formatDuration(effectiveElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
@@ -179,16 +247,22 @@ namespace ao::tui
                               cellWidth(elapsed) + cellWidth(duration) + cellWidth(volume) + 5 +
                               modesPtr->requirement().min_x;
     auto const freeColumns = std::max(0, view.terminalColumns - fixedColumns);
-    auto const railColumns =
-      view.terminalColumns <= 0
-        ? seekRailColumns(0)
-        : std::min(seekRailColumns(view.terminalColumns), freeColumns - std::min(12, std::max(0, freeColumns - 1)));
+    // Keep readable metadata fragments before assigning the remaining space to the seek rail.
+    constexpr std::int32_t kTitleReadabilityColumns = 12;
+    constexpr std::int32_t kLinkedFieldReadabilityColumns = 9;
+    auto const metadataColumns = kTitleReadabilityColumns +
+                                 (state.nowPlaying.artist.empty() ? 0 : kLinkedFieldReadabilityColumns) +
+                                 (state.nowPlaying.album.empty() ? 0 : kLinkedFieldReadabilityColumns);
+    auto const railColumns = view.terminalColumns <= 0
+                               ? seekRailColumns(0)
+                               : std::min(seekRailColumns(view.terminalColumns),
+                                          freeColumns - std::min(metadataColumns, std::max(0, freeColumns - 1)));
     auto seekRailElementPtr = railColumns > 0 ? seekRail(effectiveElapsed, state.duration, railColumns) : text("");
 
-    if (view.terminalColumns > 0)
-    {
-      titleLine = ellipsizeToCellWidth(titleLine, freeColumns - railColumns);
-    }
+    auto metadataPtr = playbackMetadata(textCatalog,
+                                        state.nowPlaying,
+                                        view.terminalColumns > 0 ? freeColumns - railColumns : -1,
+                                        view.metadataHitRegions);
 
     if (view.outputDeviceBox != nullptr)
     {
@@ -215,7 +289,7 @@ namespace ao::tui
     return hbox({
       std::move(soulButtonElementPtr),
       text(" "),
-      text(std::move(titleLine)) | bold | flex,
+      std::move(metadataPtr) | bold | flex,
       text(" "),
       std::move(modesPtr),
       std::move(outputElementPtr),

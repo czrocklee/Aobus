@@ -11,6 +11,7 @@
 #include "tui/HitRegions.h"
 #include "tui/Keymap.h"
 #include "tui/MouseBindings.h"
+#include "tui/NavigationPanel.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDevicePanel.h"
 #include "tui/PresentationPanel.h"
@@ -154,7 +155,7 @@ namespace ao::tui::test
         widest = std::max(widest, cellWidth(uimodel::trackFieldLabel(textCatalog, field)));
       }
 
-      return std::min(widest, kDetailLabelColumns) + cellWidth(": ");
+      return std::min(widest, kDetailLabelColumns) + 2;
     }
 
     rt::TrackRow sparseRow()
@@ -217,8 +218,7 @@ namespace ao::tui::test
                                            std::vector<NotificationDetailRowHitRegion>* const rowHitRegions = nullptr,
                                            std::int32_t const columns = 0)
     {
-      return ao::tui::notificationCenterPanel(
-        ao::test::englishMessageCatalog(), state, defaultKeymapPlan(), rowHitRegions, columns);
+      return ao::tui::notificationCenterPanel(ao::test::englishMessageCatalog(), state, rowHitRegions, columns);
     }
 
     ftxui::Element presentationPanel(std::vector<TrackPresentationNavEntry> const& items,
@@ -259,7 +259,7 @@ namespace ao::tui::test
     auto const pseudo = ao::test::messageCatalog("qps-ploc");
     CHECK(chromeText(pseudo, i18n::MessageId::TuiShellCommandPaletteTitle) != "Command Palette");
     CHECK(chromeText(pseudo, i18n::MessageId::TuiShellQuickFilterTitle) != "Quick Filter");
-    CHECK(overlayHintText(pseudo, i18n::MessageId::TuiShellHintViews, "v").contains("Enter"));
+    CHECK(overlayHintText(pseudo, i18n::MessageId::TuiShellHintViews).contains("Enter"));
     CHECK(chromeText(pseudo, i18n::MessageId::TuiLibraryNoTracksFound) !=
           "This List has no tracks. Choose another List to browse.");
 
@@ -273,7 +273,7 @@ namespace ao::tui::test
   TEST_CASE("Render - help pane pairs effective shortcuts with actions and retains command-only entries",
             "[tui][unit][render]")
   {
-    auto const text = renderText(helpPane());
+    auto const text = renderElement(helpPane(), 120, 80).text;
 
     CHECK(text.contains("reveal current track"));
     CHECK(text.contains(":view <id>"));
@@ -289,7 +289,7 @@ namespace ao::tui::test
   {
     auto checkAligned = [](i18n::MessageCatalog const& textCatalog, std::array<std::string_view, 5> const descriptions)
     {
-      auto const rendered = renderElement(helpPane(textCatalog, defaultKeymapPlan(), 120), 120, 40).text;
+      auto const rendered = renderElement(helpPane(textCatalog, defaultKeymapPlan(), 120), 120, 80).text;
       auto const optExpectedColumn = textColumn(rendered, descriptions.front());
       REQUIRE(optExpectedColumn);
 
@@ -302,12 +302,12 @@ namespace ao::tui::test
     checkAligned(
       ao::test::englishMessageCatalog(), {"quick filter", "choose list", "reveal current track", "playback", "exit"});
     checkAligned(ao::test::messageCatalog("de-DE"),
-                 {"Schnellfilter", "Liste wählen", "Aktuellen Titel zeigen", "Wiedergabe", "Beenden"});
+                 {"Schnellfilter", "Liste wählen", "Aktuellen Titel zeigen", "Ausgabegerät wählen", "Beenden"});
     checkAligned(ao::test::messageCatalog("zh-CN"), {"快速筛选", "选择列表", "定位当前曲目", "播放控制", "退出"});
 
     for (auto const panelColumns : {40, 60})
     {
-      auto const rendered = renderText(helpPane(panelColumns), panelColumns);
+      auto const rendered = renderElement(helpPane(panelColumns), panelColumns, 80).text;
       CHECK(rendered.contains("quick filter"));
       CHECK(rendered.contains("choose list"));
       CHECK(rendered.contains("playback"));
@@ -341,7 +341,6 @@ namespace ao::tui::test
         };
         auto const top = renderHelp(0);
         auto const originalBox = regions.box;
-        auto const originalCloseBox = regions.closeBox;
         REQUIRE(!originalBox.IsEmpty());
         CHECK(workspaceBox.x_min == 0);
         CHECK(workspaceBox.x_max == columns - 1);
@@ -357,9 +356,98 @@ namespace ao::tui::test
         CHECK(bottom.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellHelpQuit)));
         CHECK(bottom.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiShellOverlayHelp)));
         CHECK(regions.box == originalBox);
-        CHECK(regions.closeBox == originalCloseBox);
         CHECK(regions.contentBox.y_max - regions.contentBox.y_min >
               regions.navigationBox.y_max - regions.navigationBox.y_min);
+      }
+    }
+  }
+
+  TEST_CASE("Render - sidebar arrow hover highlights without shifting its click target", "[tui][regression][render]")
+  {
+    using namespace ftxui;
+
+    for (bool const hovered : {false, true})
+    {
+      auto left = Box{};
+      auto right = Box{};
+      auto workspace = [] { return style::titledPanel("", text("Tracks") | flex); };
+      auto side = [] { return style::popupPanel("", text("Side")) | size(WIDTH, EQUAL, 26); };
+      auto dockedPtr = dockDetailPane(workspace(), side(), 26, &right, hovered);
+      dockedPtr = dockNavigationPanel(side(), std::move(dockedPtr), 26, &left, hovered);
+      auto const rendered = renderElement(std::move(dockedPtr), 140, 16);
+
+      for (auto const& box : {left, right})
+      {
+        CHECK(box.x_min == box.x_max);
+        CHECK(box.y_min == box.y_max);
+        auto const& pixel = rendered.screen.PixelAt(box.x_min, box.y_min);
+        CHECK(pixel.background_color == (hovered ? Color{Color::Yellow} : Color{Color::Default}));
+        CHECK(pixel.dim == !hovered);
+      }
+
+      CHECK(left.x_min == 25);
+      CHECK(right.x_min == 114);
+      auto collapsedPtr = collapsedDetailPane(workspace(), right, hovered);
+      collapsedPtr = collapsedNavigationPanel(std::move(collapsedPtr), left, hovered);
+      auto const hidden = renderElement(std::move(collapsedPtr), 140, 16);
+      CHECK(left.x_min == 0);
+      CHECK(right.x_min == 139);
+      CHECK(hidden.screen.PixelAt(left.x_min, left.y_min).background_color ==
+            (hovered ? Color{Color::Yellow} : Color{Color::Default}));
+      CHECK(hidden.screen.PixelAt(right.x_min, right.y_min).background_color ==
+            (hovered ? Color{Color::Yellow} : Color{Color::Default}));
+    }
+  }
+
+  TEST_CASE("Render - detail sidebar shares its border and keeps controls outside its padding",
+            "[tui][regression][render][detail]")
+  {
+    using namespace ftxui;
+    auto track = englishTrackListEntry(rt::TrackRow{.id = TrackId{1}, .title = "Example"});
+
+    for (std::int32_t const columns : {80, 140})
+    {
+      for (bool const listsVisible : {false, true})
+      {
+        auto detailRegions = PanelMouseRegions{};
+        auto toggleBox = Box{};
+        auto trackBox = Box{};
+        auto workspacePtr =
+          style::titledPanel(
+            "", text("Tracks") | flex | style::selected(), {.bodyPaddingColumns = style::kPanelBodyPaddingColumns}) |
+          reflect(trackBox);
+        auto rootPtr = dockDetailPane(std::move(workspacePtr),
+                                      detailPane(ao::test::englishMessageCatalog(), &track, {}, 30, &detailRegions),
+                                      30,
+                                      &toggleBox);
+
+        if (listsVisible)
+        {
+          rootPtr =
+            dockNavigationPanel(style::popupPanel("", text("Lists")) | size(WIDTH, EQUAL, 26), std::move(rootPtr), 26);
+        }
+
+        auto const rendered = renderElement(std::move(rootPtr), columns, 16);
+        auto const divider = columns - 30;
+        CHECK(trackBox.x_max == divider);
+        CHECK(detailRegions.box.x_min == divider);
+        CHECK(detailRegions.box.x_max == columns - 1);
+        CHECK(toggleBox.x_min == divider);
+        CHECK(rendered.screen.PixelAt(divider, 0).character == "┬");
+        CHECK(rendered.screen.PixelAt(divider, 15).character == "┴");
+        CHECK(rendered.screen.PixelAt(divider, toggleBox.y_min).character == "›");
+        CHECK(rendered.screen.PixelAt(divider + 1, 1).character == " ");
+        CHECK(rendered.screen.PixelAt(divider - 1, 1).character == " ");
+        checkDefaultSurface(rendered.screen.PixelAt(divider - 1, 1));
+        checkInteractiveSurface(rendered.screen.PixelAt(divider - 2, 1));
+        CHECK(rendered.screen.PixelAt(columns - 2, 1).character == " ");
+        CHECK_FALSE(rendered.text.contains("×"));
+        auto const optTitle = findTextCells(rendered.screen, "Example");
+        REQUIRE(optTitle);
+        CHECK(optTitle->x_min > divider + 2);
+        auto const optLabel = findTextCells(rendered.screen, "Title");
+        REQUIRE(optLabel);
+        CHECK(optLabel->x_min == divider + 2);
       }
     }
   }
@@ -399,13 +487,12 @@ namespace ao::tui::test
     auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, {}, columns), paneBox);
 
     // English labels fit the cap, so they are spelled out in full.
-    CHECK(
-      rendered.text.contains(std::string{uimodel::trackFieldLabel(textCatalog, rt::TrackField::AlbumArtist)} + ": "));
-    CHECK(labelColumns <= kDetailLabelColumns + cellWidth(": "));
+    CHECK(rendered.text.contains(uimodel::trackFieldLabel(textCatalog, rt::TrackField::AlbumArtist)));
+    CHECK(labelColumns <= kDetailLabelColumns + 2);
     CHECK(labelColumns * 100 <= bodyColumns * kDetailLabelPercent);
     CHECK(bodyColumns - labelColumns >= kMinimumDetailValueColumns);
-    // A value too long for its column says where it stopped.
-    CHECK(rendered.text.contains("…"));
+    CHECK_FALSE(rendered.text.contains("Title:"));
+    CHECK(rendered.text.contains("Title"));
   }
 
   TEST_CASE("Render - narrow detail keeps a readable value column", "[tui][unit][render][detail]")
@@ -422,7 +509,7 @@ namespace ao::tui::test
     CHECK(columns == kMinimumTerminalColumns / 2);
     CHECK(boxColumns(paneBox) == columns);
     CHECK(bodyColumns - (bodyColumns * kDetailLabelPercent / 100) >= kMinimumDetailValueColumns);
-    CHECK(rendered.text.contains("…"));
+    CHECK_FALSE(rendered.text.contains("Title:"));
   }
 
   TEST_CASE("Render - detail omits optional rows a track does not carry", "[tui][unit][render][detail]")
@@ -432,10 +519,60 @@ namespace ao::tui::test
     auto paneBox = ftxui::Box{};
     auto const rendered = renderBesideWorkspace(englishDetailPane(&sparse, {}, columns), paneBox);
 
-    CHECK(rendered.text.contains("Title"));
-    CHECK(rendered.text.contains("Duration"));
+    CHECK(rendered.text.contains(sparse.row.title));
+    CHECK_FALSE(rendered.text.contains("Title:"));
+    CHECK_FALSE(rendered.text.contains("Duration:"));
     CHECK_FALSE(rendered.text.contains("Composer"));
     CHECK_FALSE(rendered.text.contains("Sample Rate"));
+  }
+
+  TEST_CASE("Render - detail wraps complete identity and scrolls text independently of artwork",
+            "[tui][regression][render][detail]")
+  {
+    using namespace ftxui;
+    auto row = fullyPopulatedRow();
+    row.title = "第一楽章 夜空の旋律 夜空の旋律 é 👩‍👩‍👧‍👦 終曲";
+    row.work = "Concerto for Harpsichord and Strings in G minor";
+    row.movement = "Allegro, con brio";
+    row.tags = "Final tag";
+    auto const track = englishTrackListEntry(row);
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const full = renderElement(detailPane(catalog, &track, {}, 24), 24, 60);
+    CHECK(full.text.contains("第一楽章"));
+    CHECK(full.text.contains("終曲"));
+    CHECK(full.text.contains("é"));
+    CHECK(full.text.contains("👩‍👩‍👧‍👦"));
+    auto const optFirst = findTextCells(full.screen, "第一楽章");
+    REQUIRE(optFirst);
+    CHECK(optFirst->x_min > 2);
+    CHECK(full.screen.PixelAt(optFirst->x_min, optFirst->y_min).bold);
+
+    auto regions = PanelMouseRegions{};
+    auto artwork = Box{};
+    auto render = [&](std::int32_t scroll)
+    {
+      auto coverPtr = text("ART") | size(WIDTH, EQUAL, 20) | size(HEIGHT, EQUAL, 5) | reflect(artwork);
+      return renderElement(detailPane(catalog, &track, std::move(coverPtr), 40, &regions, scroll), 40, 12);
+    };
+    auto const top = render(0);
+    auto const coverTop = artwork;
+    CHECK(top.text.contains("第一楽章"));
+    CHECK(regions.contentBox.y_max - regions.contentBox.y_min >
+          regions.navigationBox.y_max - regions.navigationBox.y_min);
+    auto const lastOffset = boxRows(regions.contentBox) - boxRows(regions.navigationBox);
+    auto const next = render(1);
+    CHECK(regions.navigationBox.y_min - regions.contentBox.y_min == 1);
+    CHECK(next.text.contains("ART"));
+    auto const bottom = render(lastOffset);
+    CHECK(bottom.text.contains("Final tag"));
+    CHECK(regions.contentBox.y_max == regions.navigationBox.y_max);
+    CHECK(artwork.x_min == coverTop.x_min);
+    CHECK(artwork.y_min == coverTop.y_min);
+    CHECK(artwork.y_max == coverTop.y_max);
+    CHECK(bottom.text.contains("ART"));
+    auto const shortTrack = englishTrackListEntry(sparseRow());
+    auto const shortView = renderElement(detailPane(catalog, &shortTrack, {}, 40, &regions, 999), 40, 12);
+    CHECK(shortView.text.contains("Untagged"));
   }
 
   TEST_CASE("Render - detail artwork carries no frame of its own", "[tui][unit][render][cover-art]")
@@ -456,7 +593,7 @@ namespace ao::tui::test
 
     auto const rendered = renderBesideWorkspace(englishDetailPane(&populated, std::move(coverPtr), columns), paneBox);
 
-    CHECK(rendered.text.contains("Track Detail"));
+    CHECK_FALSE(rendered.text.contains("Track Detail"));
     CHECK_FALSE(rendered.text.contains("Cover Art"));
     CHECK(boxColumns(artworkBox) == kCoverArtDefaultColumns);
     CHECK(boxRows(artworkBox) == kCoverArtRows);
@@ -521,12 +658,10 @@ namespace ao::tui::test
     CHECK(artworkBox.x_max <= artworkBox.x_min);
   }
 
-  TEST_CASE("Render - artwork waits for a terminal that fits every field", "[tui][unit][render][cover-art]")
+  TEST_CASE("Render - artwork reserves a stable first page of metadata", "[tui][unit][render][cover-art]")
   {
-    auto const worstCaseRows = static_cast<std::int32_t>(trackDetailFields().size());
-
-    CHECK_FALSE(isDetailPaneShowingCoverArt(kCoverArtRows + worstCaseRows));
-    CHECK(isDetailPaneShowingCoverArt(kCoverArtRows + worstCaseRows + 3));
+    CHECK_FALSE(isDetailPaneShowingCoverArt(24));
+    CHECK(isDetailPaneShowingCoverArt(25));
     // An 80x24 terminal spends its rows on metadata.
     CHECK_FALSE(isDetailPaneShowingCoverArt(24 - 2));
   }
@@ -861,7 +996,7 @@ namespace ao::tui::test
     CHECK(lineIndexContaining(rendered.text, "/ Filter") == 0);
     CHECK(rendered.text.contains(": command"));
     CHECK(rendered.text.contains("? help"));
-    CHECK_FALSE(rendered.text.contains("l lists"));
+    CHECK(rendered.text.contains("l lists"));
     CHECK_FALSE(rendered.text.contains("v view"));
     CHECK_FALSE(rendered.text.contains("d detail"));
     CHECK_FALSE(rendered.text.contains("Q quit"));
@@ -908,7 +1043,7 @@ namespace ao::tui::test
     auto state = StatusBarViewState{.terminalColumns = 80, .shell = &shell, .settingsButtonBox = &box};
     auto rendered = renderElement(statusBar(state, plan), 80, 1);
     CHECK(rendered.text.contains("F12 Settings"));
-    auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
+    auto const help = renderElement(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120, 80).text;
     CHECK(help.contains("F12"));
     CHECK_FALSE(help.contains(":settings"));
     CHECK(help.contains("Settings"));
@@ -950,7 +1085,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("/ Aimer"));
   }
 
-  TEST_CASE("Render - status bar uses overlay-specific help for every overlay", "[tui][unit][render]")
+  TEST_CASE("Render - status bar uses title and local help for browse overlays", "[tui][unit][render]")
   {
     struct Case final
     {
@@ -960,12 +1095,12 @@ namespace ao::tui::test
     };
 
     auto const cases = std::vector<Case>{
-      {.overlay = Overlay::DetailPanel, .label = "Detail", .hint = "d toggle  Esc close"},
-      {.overlay = Overlay::QualityPanel, .label = "Pipeline", .hint = "a toggle  Esc close"},
-      {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "o toggle  Enter select  Esc close"},
-      {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "p toggle  Enter select  Esc close"},
-      {.overlay = Overlay::Notifications, .label = "Notifications", .hint = "n toggle  x hide compact  Esc close"},
+      {.overlay = Overlay::QualityPanel, .label = "Pipeline", .hint = "Esc close"},
+      {.overlay = Overlay::OutputDevices, .label = "Output", .hint = "Enter select  Esc close"},
+      {.overlay = Overlay::PresentationPanel, .label = "Views", .hint = "Enter select  Esc close"},
+      {.overlay = Overlay::Notifications, .label = "Notifications", .hint = "x hide compact  Esc close"},
       {.overlay = Overlay::Help, .label = "Help", .hint = "Esc close"},
+      {.overlay = Overlay::ListChooser, .label = "Lists", .hint = "L sidebar  Enter open  Esc close"},
     };
 
     for (auto const& item : cases)
@@ -1012,9 +1147,10 @@ namespace ao::tui::test
     CHECK(listStatus.contains("Esc tracks"));
     shell.focusTracks();
 
-    shell.openOverlay(Overlay::DetailPanel);
+    shell.toggleDetail();
     auto const detailStatus = renderText(statusBar(StatusBarViewState{.shell = &shell}, keymapPlan), 140);
-    CHECK(detailStatus.contains("Esc close"));
+    CHECK_FALSE(detailStatus.contains("Esc close"));
+    CHECK(detailStatus.contains("F3 Filter"));
     CHECK_FALSE(detailStatus.contains("toggle"));
 
     shell.beginInput(ShellInputMode::Command);
@@ -1034,7 +1170,7 @@ namespace ao::tui::test
     CHECK(palette.contains("track detail"));
     CHECK_FALSE(palette.contains(" d "));
 
-    auto const help = renderText(helpPane(ao::test::englishMessageCatalog(), keymapPlan, 120), 120);
+    auto const help = renderElement(helpPane(ao::test::englishMessageCatalog(), keymapPlan, 120), 120, 80).text;
     CHECK(help.contains("F2"));
     CHECK(help.contains("choose list"));
     CHECK(help.contains("F3"));
@@ -1050,22 +1186,15 @@ namespace ao::tui::test
     auto const output =
       renderText(outputDevicePanel(textCatalog, uimodel::OutputDeviceViewState{}, -1, keymapPlan, nullptr, 100), 100);
     auto const presentation = renderText(presentationPanel(textCatalog, {}, "", 0, keymapPlan, nullptr, 100), 100);
-    auto const notification = renderText(
-      notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, keymapPlan, nullptr, 100), 100);
+    auto const notification =
+      renderText(notificationCenterPanel(uimodel::ActivityStatusViewState{}, nullptr, 100), 100);
 
-    CHECK(quality.contains("F5 toggle"));
-    CHECK(output.contains("F6 toggle"));
-    CHECK(presentation.contains("F7 toggle"));
-    CHECK(notification.contains("F8 toggle"));
+    CHECK_FALSE(quality.contains("toggle"));
+    CHECK_FALSE(output.contains("toggle"));
+    CHECK_FALSE(presentation.contains("toggle"));
+    CHECK_FALSE(notification.contains("toggle"));
     CHECK(notification.contains("x hide compact"));
     CHECK(notification.contains("click clearable row"));
-
-    model.applyOverrides({{"tui.shell.toggleNotifications", {}}});
-    auto const unboundPlan = KeymapPlan{model};
-    auto const unboundNotification = renderText(
-      notificationCenterPanel(textCatalog, uimodel::ActivityStatusViewState{}, unboundPlan, nullptr, 100), 100);
-    CHECK_FALSE(unboundNotification.contains("toggle"));
-    CHECK(unboundNotification.contains("x hide compact"));
   }
 
   TEST_CASE("Render - combined help rows omit ambiguous partial shortcut sets", "[tui][unit][keymap]")
@@ -1076,7 +1205,7 @@ namespace ao::tui::test
       {"tui.library.playSelection", {}},
     });
     auto const plan = KeymapPlan{model};
-    auto const rendered = renderText(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120);
+    auto const rendered = renderElement(helpPane(ao::test::englishMessageCatalog(), plan, 120), 120, 80).text;
 
     CHECK(rendered.contains("previous / next group"));
     CHECK_FALSE(rendered.contains("{ / }"));
@@ -1195,7 +1324,6 @@ namespace ao::tui::test
   TEST_CASE("Render - notification center width includes complete row chrome", "[tui][unit][render]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto const& keymapPlan = defaultKeymapPlan();
 
     SECTION("library task progress rail")
     {
@@ -1208,7 +1336,7 @@ namespace ao::tui::test
       };
       auto const contentColumns = cellWidth(message) + cellWidth(" ") + cellWidth(activityProgressRail(0.5, 10));
 
-      CHECK(notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) ==
+      CHECK(notificationCenterPanelColumns(textCatalog, state, 0) ==
             style::popupPanelColumnsForContent(contentColumns, 0));
     }
 
@@ -1224,7 +1352,7 @@ namespace ao::tui::test
       };
       auto const contentColumns = cellWidth("error") + cellWidth(" ") + cellWidth(message) + cellWidth(" x");
 
-      CHECK(notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) ==
+      CHECK(notificationCenterPanelColumns(textCatalog, state, 0) ==
             style::popupPanelColumnsForContent(contentColumns, 0));
     }
   }
@@ -1429,6 +1557,10 @@ namespace ao::tui::test
     REQUIRE(optSelected);
     CHECK_FALSE(rendered.screen.PixelAt(optSelected->x_min, optSelected->y_min).inverted);
     checkInteractiveSurface(rendered.screen.PixelAt(optSelected->x_min, optSelected->y_min));
+    CHECK(rendered.screen.PixelAt(1, optSelected->y_min).background_color == ftxui::Color::Default);
+    checkInteractiveSurface(rendered.screen.PixelAt(2, optSelected->y_min));
+    checkInteractiveSurface(rendered.screen.PixelAt(45, optSelected->y_min));
+    CHECK(rendered.screen.PixelAt(46, optSelected->y_min).background_color == ftxui::Color::Default);
   }
 
   TEST_CASE("Render - command palette does not infer metadata for non-command items", "[tui][unit][render]")
@@ -1491,6 +1623,12 @@ namespace ao::tui::test
     auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
 
     CHECK(rendered.text.contains("Detailed description"));
+    auto rows = std::vector<PresentationRowHitRegion>{};
+    auto const narrow = renderElement(presentationPanel(items, "wide", 0, &rows, 60), 60, 16);
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().box.x_min == 2);
+    CHECK(rows.front().box.x_max == 57);
+    CHECK(narrow.screen.PixelAt(58, rows.front().box.y_min).background_color == ftxui::Color::Default);
   }
 
   TEST_CASE("Render - presentation panel handles empty and out-of-range selection", "[tui][unit][render]")

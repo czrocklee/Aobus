@@ -26,6 +26,8 @@ namespace ao::tui
     // Empty means follow the system, rather than pinning its current locale.
     std::string language{};
     std::string coverArtMode = "auto";
+    std::string panelSeparator = "single";
+    bool revealIndicatorsOnHover = false;
     bool dimBackdrop = true;
     bool reducedMotion = false;
     bool mouseEnabled = true;

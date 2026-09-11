@@ -47,7 +47,7 @@ namespace ao::tui
     struct CommandPaletteEntryDescriptor final
     {
       std::string_view category{};
-      std::string_view shortcut{};
+      std::string shortcut{};
     };
 
     ftxui::Element fixedText(std::string_view const value,
@@ -67,7 +67,8 @@ namespace ao::tui
         {
           return CommandPaletteEntryDescriptor{
             .category = i18n::requiredText(textCatalog, spec.category),
-            .shortcut = spec.optShortcutAction ? keymapPlan.shortcutFor(*spec.optShortcutAction) : std::string_view{},
+            .shortcut =
+              spec.optShortcutAction ? std::string{keymapPlan.shortcutFor(*spec.optShortcutAction)} : std::string{},
           };
         }
       }
@@ -76,10 +77,8 @@ namespace ao::tui
       {
         if (item.insertText == spec.alias && item.displayText == chromeText(textCatalog, spec.detail))
         {
-          auto const optAction = shortcutActionForCommand(spec.action);
-          return CommandPaletteEntryDescriptor{
-            .category = i18n::requiredText(textCatalog, spec.category),
-            .shortcut = optAction ? keymapPlan.shortcutFor(*optAction) : std::string_view{}};
+          return CommandPaletteEntryDescriptor{.category = i18n::requiredText(textCatalog, spec.category),
+                                               .shortcut = commandShortcut(keymapPlan, spec.action)};
         }
       }
 
@@ -122,8 +121,12 @@ namespace ao::tui
           std::max(trailingColumns, cellWidth(commandPaletteTrailingText(textCatalog, item, keymapPlan)));
       }
 
-      categoryColumns = std::min(categoryColumns, contentColumns);
-      trailingColumns = std::min(trailingColumns, contentColumns);
+      // Keep the completion label readable when category or detail text is long.
+      categoryColumns = std::min(categoryColumns, std::max(0, (contentColumns / 4) - 2));
+      trailingColumns = std::min(trailingColumns, std::max(0, (contentColumns / 3) - 2));
+      auto const labelColumns = std::max(0,
+                                         contentColumns - 2 - (categoryColumns > 0 ? categoryColumns + 2 : 0) -
+                                           (trailingColumns > 0 ? trailingColumns + 2 : 0));
 
       auto rows = std::vector<SelectableListRow>{};
       rows.reserve(completion.items.size());
@@ -159,7 +162,7 @@ namespace ao::tui
           cells.push_back(text("  "));
         }
 
-        cells.push_back(text(item.displayText) | flex);
+        cells.push_back(fixedText(item.displayText, labelColumns) | flex);
 
         if (trailingColumns > 0)
         {
@@ -192,26 +195,29 @@ namespace ao::tui
 
       if (auto const& optCompletion = shell.commandCompletion(); optCompletion && !optCompletion->items.empty())
       {
-        return selectableList(
+        return style::scrollablePanelBody(selectableList(
           commandCompletionRows(
             *optCompletion, textCatalog, keymapPlan, shell.commandCompletionSelection(), contentColumns, hitRegions),
           SelectableListOptions{.focusRow = shell.commandCompletionSelection(),
+                                .horizontalScroll = false,
                                 .flex = true,
-                                .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr});
+                                .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr}));
       }
 
       if (shell.inputMode() == ShellInputMode::QuickFilter)
       {
-        return ftxui::paragraph(chromeText(textCatalog, i18n::MessageId::TuiQuickFilterNoSuggestions)) | ftxui::dim |
-               ftxui::flex;
+        return style::panelBody(
+          ftxui::paragraph(chromeText(textCatalog, i18n::MessageId::TuiQuickFilterNoSuggestions)) | ftxui::dim |
+          ftxui::flex);
       }
 
-      return selectableList(
+      return style::scrollablePanelBody(selectableList(
         {},
         SelectableListOptions{.emptyText = chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteNoMatches),
+                              .horizontalScroll = false,
                               .flex = true,
                               .centerEmpty = true,
-                              .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr});
+                              .viewportBox = (hitRegions != nullptr) ? &hitRegions->listBox : nullptr}));
     }
   } // namespace
 
@@ -273,22 +279,24 @@ namespace ao::tui
     }
 
     auto rows = Elements{};
-    rows.push_back(hbox({
+    rows.push_back(style::panelBody(hbox({
       text("> ") | style::accent() | bold,
       text(":") | style::accent() | bold,
       textFieldValue(shell.inputField(), hitRegions == nullptr ? nullptr : &hitRegions->inputOrigin) | bold | flex |
         (hitRegions == nullptr ? nothing : reflect(hitRegions->inputBox)),
-    }));
-    rows.push_back(separator());
+    })));
+    rows.push_back(style::panelBody(separator()));
 
     auto const contentColumns = style::popupPanelBodyColumns(columns);
     rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns, hitRegions));
 
-    rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteFooter)));
-    rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint)));
+    rows.push_back(style::panelBody(separator()));
+    rows.push_back(
+      style::panelBody(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteFooter))));
+    rows.push_back(
+      style::panelBody(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint))));
 
-    return style::popupPanel(
+    return style::titledPanel(
              chromeText(textCatalog, i18n::MessageId::TuiShellCommandPaletteTitle), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, columns);
   }
@@ -312,12 +320,12 @@ namespace ao::tui
 
     if (!filterError.empty())
     {
-      rows.push_back(fixedText(filterError, contentColumns) | style::danger());
-      rows.push_back(separator());
+      rows.push_back(style::panelBody(fixedText(filterError, contentColumns) | style::danger()));
+      rows.push_back(style::panelBody(separator()));
     }
 
     rows.push_back(commandCompletionList(textCatalog, shell, keymapPlan, contentColumns, hitRegions));
-    rows.push_back(separator());
+    rows.push_back(style::panelBody(separator()));
     auto footer = i18n::MessageId::TuiQuickFilterLiteralFooter;
 
     if (shell.inputDraft().empty())
@@ -329,16 +337,17 @@ namespace ao::tui
       footer = i18n::MessageId::TuiShellQuickFilterFooter;
     }
 
-    rows.push_back(paragraph(chromeText(textCatalog, footer)) | dim);
+    rows.push_back(style::panelBody(paragraph(chromeText(textCatalog, footer)) | dim));
 
     constexpr std::int32_t kHistoryHintColumns = 80;
 
     if (columns >= kHistoryHintColumns)
     {
-      rows.push_back(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint)));
+      rows.push_back(
+        style::panelBody(style::panelFooterHint(chromeText(textCatalog, i18n::MessageId::TuiInputHistoryHint))));
     }
 
-    return style::popupPanel(
+    return style::titledPanel(
              chromeText(textCatalog, i18n::MessageId::TuiShellQuickFilterTitle), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, columns);
   }

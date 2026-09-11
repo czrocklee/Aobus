@@ -548,7 +548,7 @@ namespace ao::tui
 
     if (tracks.empty())
     {
-      listElementPtr = emptyTrackTable(textCatalog, options.emptyText);
+      listElementPtr = emptyTrackTable(textCatalog, options.emptyText) | vscroll_indicator;
     }
     else
     {
@@ -626,7 +626,7 @@ namespace ao::tui
       }
 
       listElementPtr =
-        vbox(std::move(rows)) | focusPosition(0, std::max(0, selectedVisualRow)) | vscroll_indicator | frame | flex;
+        vbox(std::move(rows)) | focusPosition(0, std::max(0, selectedVisualRow)) | vscroll_indicator | yframe | flex;
     }
 
     auto tablePtr = vbox({

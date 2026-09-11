@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/screen/box.hpp>
@@ -31,6 +32,14 @@ namespace ao::uimodel
 
 namespace ao::tui
 {
+  struct PlaybackMetadataHitRegions final
+  {
+    rt::NowPlayingInfo nowPlaying{};
+    ftxui::Box title = {.x_max = -1, .y_max = -1};
+    ftxui::Box artist = {.x_max = -1, .y_max = -1};
+    ftxui::Box album = {.x_max = -1, .y_max = -1};
+  };
+
   struct PlaybackBarViewState final
   {
     rt::PlaybackTransportSnapshot const* playbackState = nullptr;
@@ -45,6 +54,7 @@ namespace ao::tui
     ftxui::Box* volumeBox = nullptr;
     ftxui::Box* shuffleBox = nullptr;
     ftxui::Box* repeatBox = nullptr;
+    PlaybackMetadataHitRegions* metadataHitRegions = nullptr;
     bool outputDeviceHovered = false;
     std::int32_t terminalColumns = 0;
   };

@@ -15,10 +15,14 @@
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
+#include <ftxui/screen/screen.hpp>
 
 #include <algorithm>
 #include <array>
@@ -26,6 +30,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <memory>
 #include <optional>
 #include <print>
 #include <span>
@@ -38,6 +43,58 @@ namespace ao::tui
 {
   namespace
   {
+    /// Scroll read-only metadata by its first visible row, without centering a focus target.
+    class DetailScrollNode final : public ftxui::Node
+    {
+    public:
+      DetailScrollNode(ftxui::Element contentPtr, std::int32_t const scrollRow, ftxui::Box const* const revealBox)
+        : Node{{std::move(contentPtr)}}, _scrollRow{scrollRow}, _revealBox{revealBox}
+      {
+      }
+
+      void ComputeRequirement() override
+      {
+        Node::ComputeRequirement();
+        requirement_ = children_.front()->requirement();
+        requirement_.min_y = 0;
+        requirement_.flex_grow_y = 1;
+        requirement_.flex_shrink_y = 1;
+      }
+
+      void SetBox(ftxui::Box const box) override
+      {
+        Node::SetBox(box);
+        auto const visibleRows = std::max(0, box.y_max - box.y_min + 1);
+        auto const contentRows = std::max(visibleRows, children_.front()->requirement().min_y);
+        auto contentBox = box;
+        contentBox.y_min -= std::clamp(_scrollRow, 0, contentRows - visibleRows);
+        contentBox.y_max = contentBox.y_min + contentRows - 1;
+        children_.front()->SetBox(contentBox);
+
+        if (_revealBox != nullptr && !_revealBox->IsEmpty() && visibleRows > 0)
+        {
+          auto const delta =
+            _revealBox->y_min < box.y_min ? _revealBox->y_min - box.y_min : std::max(0, _revealBox->y_max - box.y_max);
+          auto const offset = std::clamp(box.y_min - contentBox.y_min + delta, 0, contentRows - visibleRows);
+          contentBox.y_min = box.y_min - offset;
+          contentBox.y_max = contentBox.y_min + contentRows - 1;
+          children_.front()->SetBox(contentBox);
+        }
+      }
+
+      void Render(ftxui::Screen& screen) override
+      {
+        auto const stencil = screen.stencil;
+        screen.stencil = ftxui::Box::Intersection(stencil, box_);
+        Node::Render(screen);
+        screen.stencil = stencil;
+      }
+
+    private:
+      std::int32_t _scrollRow;
+      ftxui::Box const* _revealBox;
+    };
+
     /**
      * @brief The cells a field label may claim before it is shortened.
      *
@@ -52,35 +109,37 @@ namespace ao::tui
     constexpr std::int32_t kMinimumDetailValueColumns = 12;
     /// The share of the body labels may claim before values start paying.
     constexpr std::int32_t kDetailLabelPercent = 40;
-    constexpr std::string_view kDetailLabelDelimiter = ": ";
+    constexpr std::int32_t kDetailColumnGap = 2;
     /// Frame edges and the artwork separator: the rows Detail spends on chrome.
     constexpr std::int32_t kDetailChromeRows = 3;
 
     struct HelpPaneRowSpec final
     {
+      i18n::MessageId groupId = i18n::MessageId::Count;
       i18n::MessageId descriptionId = i18n::MessageId::Count;
       std::string_view command{};
     };
 
     constexpr auto kHelpPaneRowSpecs = std::to_array<HelpPaneRowSpec>({
-      {.descriptionId = i18n::MessageId::TuiSettingsTitle, .command = ":settings"},
-      {.descriptionId = i18n::MessageId::TuiNavigationFocus},
-      {.descriptionId = i18n::MessageId::TuiShellHelpQuickFilter, .command = ":filter <text>"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpChooseList, .command = ":lists"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpAudioPipeline, .command = ":pipeline"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpOutputDevice, .command = ":output"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpChooseView, .command = ":views"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpNotifications, .command = ":notifications"},
+      {.groupId = i18n::MessageId::TuiKeyGroupNavigation,
+       .descriptionId = i18n::MessageId::TuiGoToTitle,
+       .command = ":goto"},
       {.descriptionId = i18n::MessageId::TuiShellHelpCurrentTrack, .command = ":current"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpSwitchPresentation, .command = ":view <id>"},
+      {.descriptionId = i18n::MessageId::TuiGoToArtist, .command = ":artist"},
+      {.descriptionId = i18n::MessageId::TuiGoToAlbum, .command = ":album"},
+      {.descriptionId = i18n::MessageId::TuiWorkspaceBack, .command = ":back"},
+      {.descriptionId = i18n::MessageId::TuiWorkspaceForward, .command = ":forward"},
+      {.groupId = i18n::MessageId::TuiKeyGroupBrowse, .descriptionId = i18n::MessageId::TuiNavigationFocus},
+      {.descriptionId = i18n::MessageId::TuiSettingsPreviousRow},
+      {.descriptionId = i18n::MessageId::TuiSettingsNextRow},
       {.descriptionId = i18n::MessageId::TuiShellHelpPreviousNextGroup},
+      {.descriptionId = i18n::MessageId::TuiShellHelpQuickFilter, .command = ":filter <text>"},
       {.descriptionId = i18n::MessageId::TuiShellHelpClearFilter, .command = ":clear"},
       {.descriptionId = i18n::MessageId::TuiShellHelpReloadList, .command = ":reload"},
       {.descriptionId = i18n::MessageId::TuiShellHelpScan, .command = ":scan / :scan cancel"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpSelect,
-       .command = ":select toggle / :select visual / :select all / :select clear"},
-      {.descriptionId = i18n::MessageId::TuiShellHelpPlayback, .command = ":play :pause :stop"},
+      {.groupId = i18n::MessageId::TuiKeyGroupPlayback,
+       .descriptionId = i18n::MessageId::TuiShellHelpPlayback,
+       .command = ":play :pause :stop"},
       {.descriptionId = i18n::MessageId::PlaybackControlPreviousTrack, .command = ":previous"},
       {.descriptionId = i18n::MessageId::PlaybackControlNextTrack, .command = ":next"},
       {.descriptionId = i18n::MessageId::PlaybackActionToggleShuffle, .command = ":shuffle"},
@@ -89,14 +148,33 @@ namespace ao::tui
       {.descriptionId = i18n::MessageId::TuiSettingsSeekForward},
       {.descriptionId = i18n::MessageId::TuiSettingsVolumeDown},
       {.descriptionId = i18n::MessageId::TuiSettingsVolumeUp},
-      {.descriptionId = i18n::MessageId::TuiWorkspaceBack, .command = ":back"},
-      {.descriptionId = i18n::MessageId::TuiWorkspaceForward, .command = ":forward"},
+      {.groupId = i18n::MessageId::TuiKeyGroupSelection,
+       .descriptionId = i18n::MessageId::TuiShellHelpSelect,
+       .command = ":select toggle / :select visual / :select all / :select clear"},
+      {.descriptionId = i18n::MessageId::TuiShellDetailEditProperties, .command = ":edit"},
+      {.groupId = i18n::MessageId::TuiKeyGroupPanels,
+       .descriptionId = i18n::MessageId::TuiShellHelpChooseList,
+       .command = ":lists"},
+      {.descriptionId = i18n::MessageId::TuiNavigationPin, .command = ":sidebar"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail"},
+      {.descriptionId = i18n::MessageId::TuiDetailFocus},
+      {.descriptionId = i18n::MessageId::TuiPanelResize},
+      {.descriptionId = i18n::MessageId::TuiBeginPanelResize},
+      {.descriptionId = i18n::MessageId::TuiShellHelpAudioPipeline, .command = ":pipeline"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpOutputDevice, .command = ":output"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpChooseView, .command = ":views"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpNotifications, .command = ":notifications"},
+      {.descriptionId = i18n::MessageId::TuiShellHelpSwitchPresentation, .command = ":view <id>"},
+      {.groupId = i18n::MessageId::TuiKeyGroupApplication,
+       .descriptionId = i18n::MessageId::TuiSettingsTitle,
+       .command = ":settings"},
       {.descriptionId = i18n::MessageId::TuiShellHelpQuit, .command = ":quit"},
     });
     constexpr std::int32_t kHelpPaneColumnGap = 2;
 
     struct ResolvedHelpPaneRow final
     {
+      std::string group{};
       std::string shortcut{};
       std::string description{};
     };
@@ -144,14 +222,21 @@ namespace ao::tui
 
       if (auto const optCommand = parseCommand(spec.command); optCommand)
       {
-        if (auto const optAction = shortcutActionForCommand(optCommand->action); optAction)
+        if (auto shortcut = commandShortcut(keymapPlan, optCommand->action); !shortcut.empty())
         {
-          return std::string{keymapPlan.shortcutFor(*optAction)};
+          return shortcut;
         }
       }
 
       switch (spec.descriptionId)
       {
+        case i18n::MessageId::TuiSettingsPreviousRow:
+          return std::string{keymapPlan.shortcutFor(KeyAction::PreviousRow)};
+        case i18n::MessageId::TuiSettingsNextRow: return std::string{keymapPlan.shortcutFor(KeyAction::NextRow)};
+        case i18n::MessageId::TuiBeginPanelResize:
+          return std::string{keymapPlan.shortcutFor(KeyAction::BeginPanelResize)};
+        case i18n::MessageId::TuiPanelResize: return "Shift+← / →";
+        case i18n::MessageId::TuiDetailFocus: return std::string{keymapPlan.shortcutFor(KeyAction::FocusDetails)};
         case i18n::MessageId::TuiNavigationFocus:
           return std::string{keymapPlan.shortcutFor(KeyAction::SwitchWorkspaceFocus)};
         case i18n::MessageId::TuiShellHelpQuickFilter:
@@ -191,6 +276,12 @@ namespace ao::tui
       {
         auto const& spec = kHelpPaneRowSpecs[index];
         auto& row = result.rows[index];
+
+        if (spec.groupId != i18n::MessageId::Count)
+        {
+          row.group = i18n::requiredText(textCatalog, spec.groupId);
+        }
+
         row.shortcut = helpShortcut(keymapPlan, spec);
 
         if (row.shortcut.empty())
@@ -247,11 +338,6 @@ namespace ao::tui
       return ftxui::hbox(std::move(cells));
     }
 
-    ftxui::Element popoverClearHalo(ftxui::Element popoverPtr)
-    {
-      return std::move(popoverPtr) | ftxui::borderEmpty | ftxui::clear_under;
-    }
-
     /**
      * @brief DEC private mode 2026, which holds the terminal's rendering until
      *        the end escape arrives.
@@ -273,7 +359,7 @@ namespace ao::tui
       return text("") | size(WIDTH, EQUAL, columns) | size(HEIGHT, EQUAL, kCoverArtRows);
     }
 
-    /// The label column this locale asks for, capped and delimiter included.
+    /// The label column this locale asks for, capped and including the column gap.
     std::int32_t detailLabelContentColumns(i18n::MessageCatalog const& textCatalog)
     {
       std::int32_t labelColumns = 0;
@@ -283,7 +369,7 @@ namespace ao::tui
         labelColumns = std::max(labelColumns, cellWidth(uimodel::trackFieldLabel(textCatalog, field)));
       }
 
-      return std::min(labelColumns, kDetailLabelColumns) + cellWidth(kDetailLabelDelimiter);
+      return std::min(labelColumns, kDetailLabelColumns) + kDetailColumnGap;
     }
 
     struct DetailBodySplit final
@@ -310,16 +396,94 @@ namespace ao::tui
 
     std::string detailLabelText(std::string_view const label, std::int32_t const labelColumns)
     {
-      auto const delimiterColumns = cellWidth(kDetailLabelDelimiter);
+      return ellipsizeToCellWidth(label, std::max(0, labelColumns - kDetailColumnGap));
+    }
 
-      if (labelColumns <= delimiterColumns)
+    ftxui::Element wrappedDetailText(std::string_view const value, std::int32_t const columns)
+    {
+      using namespace ftxui;
+      auto rows = Elements{};
+
+      for (auto& line : wrapCellText(value, columns))
       {
-        return ellipsizeToCellWidth(label, labelColumns);
+        rows.push_back(text(std::move(line)));
       }
 
-      auto labelText = ellipsizeToCellWidth(label, labelColumns - delimiterColumns);
-      labelText.append(kDetailLabelDelimiter);
-      return labelText;
+      return vbox(std::move(rows));
+    }
+
+    ftxui::Element detailField(TrackDetailLine const& line, DetailBodySplit const split)
+    {
+      using namespace ftxui;
+      using Kind = TrackDetailLine::Kind;
+      auto valuePtr = wrappedDetailText(line.value, split.valueColumns);
+
+      if (line.kind == Kind::Title)
+      {
+        valuePtr = std::move(valuePtr) | bold | style::accent();
+      }
+
+      return hbox({text(fitCellText(detailLabelText(line.label, split.labelColumns), split.labelColumns)) | dim,
+                   std::move(valuePtr) | xflex});
+    }
+
+    ftxui::Element detailMetadata(i18n::MessageCatalog const& textCatalog,
+                                  rt::TrackRow const& row,
+                                  std::int32_t const bodyColumns,
+                                  DetailPaneOptions const& options)
+    {
+      using namespace ftxui;
+      auto const split = detailBodySplit(textCatalog, bodyColumns);
+      auto elements = Elements{};
+      auto const lines = trackDetailLines(textCatalog, row);
+      auto const technicalSummary =
+        uimodel::formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate);
+
+      auto header = [&](std::size_t const index, std::string label)
+      {
+        auto headerPtr = text(fitCellText(
+          ellipsizeToCellWidth(std::string{options.sections.expanded[index] ? "▾ " : "▸ "} + label, bodyColumns),
+          bodyColumns));
+        headerPtr = std::move(headerPtr) |
+                    (options.focused && options.sections.selected == index ? style::selected() : style::accent());
+
+        if (options.headerBoxes != nullptr)
+        {
+          headerPtr = std::move(headerPtr) | reflectLayout((*options.headerBoxes)[index]);
+        }
+
+        elements.push_back(std::move(headerPtr));
+      };
+      auto const metadataSummary = uimodel::formatMetadataHeader(trackDisplayTitle(textCatalog, row), row.artist);
+
+      header(0,
+             options.sections.expanded[0]
+               ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackMetadataHeading)}
+               : metadataSummary);
+
+      if (options.sections.expanded[0])
+      {
+        for (auto const& line : lines)
+        {
+          elements.push_back(detailField(line, split));
+        }
+      }
+
+      elements.push_back(text(""));
+      header(1,
+             options.sections.expanded[1] || technicalSummary.empty()
+               ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackAudioPropertiesHeading)}
+               : technicalSummary);
+
+      if (options.sections.expanded[1])
+      {
+        for (auto const& line : trackDetailTechnicalLines(textCatalog, row))
+        {
+          elements.push_back(detailField(line, split));
+        }
+      }
+
+      return vbox(std::move(elements));
     }
   } // namespace
 
@@ -392,9 +556,9 @@ namespace ao::tui
 
   bool isDetailPaneShowingCoverArt(std::int32_t const availableRows)
   {
-    auto const worstCaseMetadataRows = static_cast<std::int32_t>(trackDetailFields().size());
-
-    return availableRows >= kCoverArtRows + kDetailChromeRows + worstCaseMetadataRows;
+    // Reserve a useful first page of metadata regardless of the selected track's length.
+    constexpr std::int32_t kMinimumMetadataRows = 10;
+    return availableRows >= kCoverArtRows + kDetailChromeRows + kMinimumMetadataRows;
   }
 
   std::string kittyCoverArtPaintEscape(ftxui::Box const& coverBox, std::vector<std::byte> const& png)
@@ -467,7 +631,7 @@ namespace ao::tui
       filler(),
       hbox({
         filler(),
-        popoverClearHalo(std::move(popoverPtr)),
+        style::popoverClearHalo(std::move(popoverPtr)),
         filler(),
       }),
       filler(),
@@ -481,56 +645,99 @@ namespace ao::tui
     auto const labelColumns = detailLabelContentColumns(textCatalog);
     auto contentColumns = std::max(coverColumns, labelColumns + kDetailValueColumns);
     contentColumns =
-      std::max(contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackDetailTitle)));
-    contentColumns =
       std::max(contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackNoSelection)));
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
+  ftxui::Element dockDetailPane(ftxui::Element workspacePtr,
+                                ftxui::Element detailPtr,
+                                std::int32_t const columns,
+                                ftxui::Box* const toggleBox,
+                                bool const hovered,
+                                style::PanelDividerOptions const options)
+  {
+    using namespace ftxui;
+    auto const workspaceOffset = std::max(0, columns - (options.separateBorders ? 0 : 1));
+    auto offset = [](std::int32_t width) { return filler() | size(WIDTH, EQUAL, width); };
+
+    return dbox(
+      {hbox({std::move(workspacePtr) | flex, offset(workspaceOffset)}),
+       hbox({filler(), std::move(detailPtr)}),
+       hbox({filler(), style::panelDivider("›", toggleBox, hovered, options), offset(std::max(0, columns - 1))})});
+  }
+
+  ftxui::Element collapsedDetailPane(ftxui::Element workspacePtr,
+                                     ftxui::Box& toggleBox,
+                                     bool const hovered,
+                                     bool const revealOnHover,
+                                     ftxui::Box* const hoverBox)
+  {
+    using namespace ftxui;
+    auto edgePtr = vbox({filler(), style::panelIndicator("‹", toggleBox, hovered, revealOnHover), filler()});
+
+    if (hoverBox != nullptr)
+    {
+      edgePtr = std::move(edgePtr) | reflect(*hoverBox);
+    }
+
+    return dbox({std::move(workspacePtr), hbox({filler(), std::move(edgePtr)})});
+  }
+
   ftxui::Element detailPane(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const* selectedTrack,
                             ftxui::Element coverElementPtr,
-                            std::int32_t const columns)
+                            std::int32_t const columns,
+                            PanelMouseRegions* const regions,
+                            std::int32_t const scrollRow,
+                            DetailPaneOptions const options)
   {
     using namespace ftxui;
 
-    auto const bodyColumns = style::popupPanelBodyColumns(columns);
-    auto const split = detailBodySplit(textCatalog, bodyColumns);
-    auto detailElements = Elements{};
-
-    if (selectedTrack == nullptr)
+    if (options.headerBoxes != nullptr)
     {
-      detailElements.push_back(
-        text(ellipsizeToCellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackNoSelection), bodyColumns)) |
-        dim);
+      options.headerBoxes->fill(kEmptyMouseBox);
     }
-    else
+
+    auto const bodyColumns = style::popupPanelBodyColumns(columns);
+    auto metadataPtr =
+      selectedTrack == nullptr
+        ? wrappedDetailText(i18n::requiredText(textCatalog, i18n::MessageId::TrackNoSelection), bodyColumns) | dim
+        : detailMetadata(textCatalog, selectedTrack->row, bodyColumns, options);
+
+    if (regions != nullptr)
     {
-      for (auto const& line : trackDetailLines(textCatalog, selectedTrack->row))
-      {
-        detailElements.push_back(hbox({
-          text(fitCellText(detailLabelText(line.label, split.labelColumns), split.labelColumns)) | dim,
-          text(ellipsizeToCellWidth(line.value, split.valueColumns)),
-        }));
-      }
+      *regions = {};
+      metadataPtr = std::move(metadataPtr) | reflectLayout(regions->contentBox);
+    }
+
+    metadataPtr = std::make_shared<DetailScrollNode>(std::move(metadataPtr),
+                                                     scrollRow,
+                                                     options.headerBoxes != nullptr && options.focused &&
+                                                         options.sections.revealSelected &&
+                                                         options.sections.selected < options.headerBoxes->size()
+                                                       ? &(*options.headerBoxes)[options.sections.selected]
+                                                       : nullptr) |
+                  flex;
+
+    if (regions != nullptr)
+    {
+      metadataPtr = std::move(metadataPtr) | reflect(regions->navigationBox);
     }
 
     auto bodyElements = Elements{};
 
-    // A selection without artwork is the pane's only content, so the separator
-    // belongs to the artwork rather than standing on its own above metadata.
     if (selectedTrack != nullptr && coverElementPtr != nullptr)
     {
       bodyElements.push_back(std::move(coverElementPtr));
-      bodyElements.push_back(separator());
+      bodyElements.push_back(text(""));
     }
 
-    bodyElements.push_back(vbox(std::move(detailElements)) | frame | flex);
+    bodyElements.push_back(std::move(metadataPtr));
+    auto bodyPtr = vbox(std::move(bodyElements));
 
-    return style::popupPanel(
-             i18n::requiredText(textCatalog, i18n::MessageId::TrackDetailTitle), vbox(std::move(bodyElements))) |
-           size(WIDTH, EQUAL, columns);
+    auto panelPtr = style::popupPanel("", std::move(bodyPtr)) | size(WIDTH, EQUAL, columns);
+    return regions == nullptr ? panelPtr : std::move(panelPtr) | reflect(regions->box);
   }
 
   ftxui::Element helpPane(i18n::MessageCatalog const& textCatalog,
@@ -544,13 +751,24 @@ namespace ao::tui
     auto help = resolveHelpPane(textCatalog, keymapPlan);
     auto const title = std::string{overlayLabel(textCatalog, Overlay::Help)};
     auto const columns = resolvedHelpPaneColumns(help, title, terminalColumns);
-    auto const widths = helpPaneColumnWidths(help, columns - (mouseRegions != nullptr ? 1 : 0));
+    auto const widths = helpPaneColumnWidths(help, columns);
 
     auto rows = Elements{};
     rows.reserve(kHelpPaneRowSpecs.size());
 
     for (auto const& row : help.rows)
     {
+      if (!row.group.empty())
+      {
+        if (!rows.empty())
+        {
+          rows.push_back(separator());
+        }
+
+        rows.push_back(text(ellipsizeToCellWidth(row.group, style::popupPanelBodyColumns(columns))) | bold |
+                       style::accent());
+      }
+
       rows.push_back(helpPaneRow(row, widths));
     }
 
@@ -563,10 +781,12 @@ namespace ao::tui
     }
 
     auto panelPtr =
-      style::popupPanel(title,
-                        vbox({std::move(bodyPtr),
-                              separator(),
-                              text(ellipsizeToCellWidth(help.footer, style::popupPanelBodyColumns(columns))) | dim})) |
+      style::titledPanel(
+        title,
+        vbox(
+          {(mouseRegions != nullptr ? style::scrollablePanelBody : style::panelBody)(std::move(bodyPtr)),
+           style::panelBody(separator()),
+           style::panelBody(text(ellipsizeToCellWidth(help.footer, style::popupPanelBodyColumns(columns))) | dim)})) |
       size(WIDTH, EQUAL, columns);
     return mouseRegions != nullptr ? mousePanel(std::move(panelPtr), *mouseRegions) : std::move(panelPtr);
   }

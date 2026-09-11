@@ -67,7 +67,20 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("MouseBindings - panel close stays in the visible viewport while content scrolls",
+  TEST_CASE("MouseBindings - fitting scroll panel keeps all four border corners", "[tui][regression][mouse][render]")
+  {
+    using namespace ftxui;
+    auto regions = PanelMouseRegions{};
+    auto const rendered = renderElement(mousePanel(text("Body") | border, regions, 0), 20, 3);
+    CHECK(rendered.text.contains("╭"));
+    CHECK(rendered.text.contains("╮"));
+    CHECK(rendered.text.contains("╰"));
+    CHECK(rendered.text.contains("╯"));
+    CHECK(regions.contentBox.y_min == regions.box.y_min);
+    CHECK(regions.contentBox.y_max == regions.box.y_max);
+  }
+
+  TEST_CASE("MouseBindings - scrolling panel keeps its hit region in the visible viewport",
             "[tui][unit][mouse][render]")
   {
     using namespace ftxui;
@@ -81,9 +94,9 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(mousePanel(vbox(std::move(rows)) | border, regions, 29), 20, 5);
     CHECK(rendered.text.contains("29"));
-    CHECK(regions.closeBox.y_min == 0);
-    CHECK(regions.closeBox.x_min >= 0);
-    CHECK(regions.closeBox.x_max < 20);
+    CHECK_FALSE(rendered.text.contains("×"));
+    CHECK(regions.box.y_min == 0);
+    CHECK(regions.box.y_max == 4);
     CHECK(regions.contentBox.y_max - regions.contentBox.y_min > 5);
   }
 } // namespace ao::tui::test

@@ -25,7 +25,6 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kOutputDeviceRows = 14;
-    constexpr std::int32_t kPanelScrollIndicatorColumns = 1;
 
     std::string outputDeviceSummary(uimodel::OutputDeviceViewState const* const outputView)
     {
@@ -92,26 +91,23 @@ namespace ao::tui
 
     if (view.rows.empty())
     {
-      contentColumns =
-        std::max(contentColumns,
-                 cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)) +
-                   kPanelScrollIndicatorColumns);
+      contentColumns = std::max(
+        contentColumns, cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)));
     }
 
     for (auto const& row : view.rows)
     {
       if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
       {
-        contentColumns = std::max(contentColumns, cellWidth(row.title) + kPanelScrollIndicatorColumns);
+        contentColumns = std::max(contentColumns, cellWidth(row.title));
         continue;
       }
 
-      contentColumns = std::max(contentColumns, cellWidth(row.title) + cellWidth("* ") + kPanelScrollIndicatorColumns);
+      contentColumns = std::max(contentColumns, cellWidth(row.title) + cellWidth("* "));
 
       if (!row.description.empty())
       {
-        contentColumns =
-          std::max(contentColumns, cellWidth(row.description) + cellWidth("  ") + kPanelScrollIndicatorColumns);
+        contentColumns = std::max(contentColumns, cellWidth(row.description) + cellWidth("  "));
       }
     }
 
@@ -134,7 +130,7 @@ namespace ao::tui
     }
 
     auto const bodyColumns = style::popupPanelBodyColumns(columns);
-    auto const listTextColumns = std::max(0, bodyColumns - kPanelScrollIndicatorColumns);
+    auto const listTextColumns = bodyColumns;
     auto const footerTextColumns = bodyColumns;
     auto rows = Elements{};
     auto listRows = std::vector<SelectableListRow>{};
@@ -188,21 +184,23 @@ namespace ao::tui
       }
     }
 
-    rows.push_back(selectableList(
+    rows.push_back(style::scrollablePanelBody(selectableList(
       std::move(listRows),
       SelectableListOptions{
         .focusRow = focusRow,
         .height = kOutputDeviceRows,
         .emptyText = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiPlaybackNoOutputDevicesFound)},
-        .viewportBox = viewportBox}));
-    rows.push_back(separator());
-    rows.push_back(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true));
-    rows.push_back(outputText(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), footerTextColumns, true));
+        .horizontalScroll = false,
+        .viewportBox = viewportBox})));
+    rows.push_back(style::panelBody(separator()));
+    rows.push_back(style::panelBody(outputText(outputDeviceFooter(textCatalog, view), footerTextColumns, true)));
+    rows.push_back(style::panelBody(
+      outputText(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices), footerTextColumns, true)));
 
     auto const summary = outputDeviceSummary(&view);
-    return style::popupPanel(i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle),
-                             vbox(std::move(rows)),
-                             style::PanelOptions{.rightTitle = summary}) |
+    return style::titledPanel(i18n::requiredText(textCatalog, i18n::MessageId::TuiShellOutputDevicesTitle),
+                              vbox(std::move(rows)),
+                              style::PanelOptions{.rightTitle = summary}) |
            size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui

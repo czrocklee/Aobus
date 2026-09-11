@@ -29,10 +29,9 @@ namespace ao::tui
 
   std::int32_t notificationCenterPanelColumns(i18n::MessageCatalog const& textCatalog,
                                               uimodel::ActivityStatusViewState const& state,
-                                              KeymapPlan const& keymapPlan,
                                               std::int32_t const terminalColumns)
   {
-    auto const footer = notificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications));
+    auto const footer = notificationFooter(textCatalog);
     auto contentColumns = std::max(cellWidth(overlayLabel(textCatalog, Overlay::Notifications)), cellWidth(footer));
 
     if (state.compact.kind != uimodel::ActivityStatusKind::Idle)
@@ -66,14 +65,12 @@ namespace ao::tui
 
   ftxui::Element notificationCenterPanel(i18n::MessageCatalog const& textCatalog,
                                          uimodel::ActivityStatusViewState const& state,
-                                         KeymapPlan const& keymapPlan,
                                          std::vector<NotificationDetailRowHitRegion>* const rowHitRegions,
                                          std::int32_t const columns)
   {
     using namespace ftxui;
 
-    auto const panelColumns =
-      columns <= 0 ? notificationCenterPanelColumns(textCatalog, state, keymapPlan, 0) : columns;
+    auto const panelColumns = columns <= 0 ? notificationCenterPanelColumns(textCatalog, state, 0) : columns;
 
     if (rowHitRegions != nullptr)
     {
@@ -130,8 +127,7 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(
-      notificationFooter(textCatalog, overlayToggleShortcut(keymapPlan, Overlay::Notifications))));
+    rows.push_back(style::panelFooterHint(notificationFooter(textCatalog)));
 
     return style::popupPanel(overlayLabel(textCatalog, Overlay::Notifications), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, panelColumns);

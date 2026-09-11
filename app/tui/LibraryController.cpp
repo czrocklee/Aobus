@@ -3,6 +3,7 @@
 
 #include "LibraryController.h"
 
+#include "LibraryNavigation.h"
 #include "SelectionNavigation.h"
 #include "ShellText.h"
 #include "TrackListEntry.h"
@@ -12,6 +13,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -44,6 +47,22 @@
 
 namespace ao::tui
 {
+  namespace
+  {
+    void normalizeListTreeNames(i18n::MessageCatalog const& textCatalog, uimodel::ListTreeProjection& tree)
+    {
+      for (auto& [id, row] : tree.rowsById)
+      {
+        std::ignore = id;
+
+        if (row.name.empty())
+        {
+          row.name = i18n::requiredText(textCatalog, i18n::MessageId::LibraryUnnamedList);
+        }
+      }
+    }
+  } // namespace
+
   LibraryController::LibraryController(rt::Library& library,
                                        rt::ViewService& views,
                                        rt::WorkspaceService& workspace,
@@ -692,6 +711,16 @@ namespace ao::tui
     return chromeText(_textCatalog, i18n::MessageId::TuiLibraryCurrentTrackNotInView);
   }
 
+  bool LibraryController::canNavigateBack() const
+  {
+    return _workspace.canGoBack();
+  }
+
+  bool LibraryController::canNavigateForward() const
+  {
+    return _workspace.canGoForward();
+  }
+
   Result<> LibraryController::navigateHistory(bool const forward)
   {
     auto res = forward ? _workspace.goForward() : _workspace.goBack();
@@ -710,6 +739,59 @@ namespace ao::tui
     }
 
     return attachedRes;
+  }
+
+  Result<> LibraryController::navigateToArtist(std::string_view const artist)
+  {
+    if (artist.empty())
+    {
+      return makeError(Error::Code::InvalidInput, "Cannot navigate to an empty artist");
+    }
+
+    return navigateFromActiveView({
+      .target =
+        rt::FilteredListTarget{
+          .listId = rt::kAllTracksListId,
+          .filterExpression = "$artist = " + query::serialize(query::ConstantExpression{std::string{artist}}),
+        },
+    });
+  }
+
+  Result<> LibraryController::revealAlbum(TrackId const trackId)
+  {
+    if (trackId == kInvalidTrackId || !_library.snapshot().containsTrack(trackId))
+    {
+      return makeError(Error::Code::NotFound, "Cannot reveal an unavailable track's album");
+    }
+
+    auto const* albums = rt::builtinTrackPresentationPreset("albums");
+
+    if (albums == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
+    }
+
+    auto res = navigateFromActiveView({
+      .target = rt::GlobalViewKind::AllTracks,
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::Override,
+          .spec = albums->spec,
+        },
+    });
+
+    if (!res)
+    {
+      return res;
+    }
+
+    if (!trySetSelectedTrackById(trackId))
+    {
+      return makeError(Error::Code::NotFound, "Cannot locate the track in the albums view");
+    }
+
+    afterFocusMove();
+    return {};
   }
 
   std::string LibraryController::setPresentation(std::string_view const presentationId)
@@ -769,21 +851,29 @@ namespace ao::tui
     return setPresentation(_presentationEntries[selectedIndex].id);
   }
 
+  void LibraryController::selectListRow(std::int32_t const index)
+  {
+    _selectedList = std::clamp(index, 0, std::max(0, static_cast<std::int32_t>(_libraryEntries.size()) - 1));
+  }
+
+  void LibraryController::revealActiveList()
+  {
+    auto const selected = std::ranges::find(_libraryEntries, _currentListId, &LibraryNavEntry::id);
+    _selectedList =
+      selected == _libraryEntries.end() ? 0 : static_cast<std::int32_t>(selected - _libraryEntries.begin());
+  }
+
   void LibraryController::refreshNavigationTree()
   {
     auto const snapshot = _library.snapshot();
+    auto const selectedId = _libraryEntries.empty() ? _currentListId : _libraryEntries[_selectedList].id;
     auto tree = uimodel::buildListTreeProjection(_textCatalog, snapshot.lists());
-
-    for (auto& [id, row] : tree.rowsById)
-    {
-      std::ignore = id;
-
-      if (row.name.empty())
-      {
-        row.name = i18n::requiredText(_textCatalog, i18n::MessageId::LibraryUnnamedList);
-      }
-    }
-
+    normalizeListTreeNames(_textCatalog, tree);
+    _libraryEntries = makeLibraryNavigation(_textCatalog, tree);
+    _libraryLabels = libraryNavigationLabels(_libraryEntries);
+    auto const selected = std::ranges::find(_libraryEntries, selectedId, &LibraryNavEntry::id);
+    _selectedList =
+      selected == _libraryEntries.end() ? 0 : static_cast<std::int32_t>(selected - _libraryEntries.begin());
     _navigation.setTree(std::move(tree), _currentListId);
   }
 
@@ -1221,5 +1311,38 @@ namespace ao::tui
     }
 
     return {};
+  }
+
+  Result<> LibraryController::navigateFromActiveView(rt::NavigationRequest const& request)
+  {
+    auto const stateRes = _views.findTrackListState(_activeViewId);
+
+    if (!stateRes)
+    {
+      return std::unexpected{stateRes.error()};
+    }
+
+    // Quick Filter edits the live view; save its state in history before leaving.
+    if (auto const res = _workspace.setActivePresentation(stateRes->presentation); !res)
+    {
+      return res;
+    }
+
+    auto const navigationRes = _workspace.navigate(request);
+
+    if (!navigationRes)
+    {
+      return std::unexpected{navigationRes.error()};
+    }
+
+    commitVisualSelection();
+    auto const attachedRes = attachView(*navigationRes);
+
+    if (attachedRes)
+    {
+      publishSelection();
+    }
+
+    return attachedRes;
   }
 } // namespace ao::tui

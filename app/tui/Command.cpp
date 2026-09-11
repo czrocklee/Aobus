@@ -40,6 +40,10 @@ namespace ao::tui
     });
 
     constexpr auto kAliasCommands = std::to_array<CommandAliasSpec>({
+      {.alias = "sidebar",
+       .action = CommandAction::TogglePinnedLists,
+       .detail = i18n::MessageId::TuiNavigationPin,
+       .category = i18n::MessageId::TuiShellCategoryLibrary},
       {.alias = "lists",
        .action = CommandAction::OpenLists,
        .detail = i18n::MessageId::TuiShellDetailChooseList,
@@ -108,9 +112,24 @@ namespace ao::tui
        .action = CommandAction::ShowHelp,
        .detail = i18n::MessageId::TuiShellDetailHelp,
        .category = i18n::MessageId::TuiShellCategoryUi},
+      {.alias = "goto",
+       .action = CommandAction::OpenGoTo,
+       .detail = i18n::MessageId::TuiGoToTitle,
+       .category = i18n::MessageId::TuiKeyGroupNavigation},
       {.alias = "current",
+       .goToKey = "t",
        .action = CommandAction::RevealCurrentTrack,
        .detail = i18n::MessageId::TuiShellDetailNowPlaying,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
+      {.alias = "artist",
+       .goToKey = "a",
+       .action = CommandAction::OpenCurrentArtist,
+       .detail = i18n::MessageId::TuiGoToArtist,
+       .category = i18n::MessageId::TuiShellCategoryPlayback},
+      {.alias = "album",
+       .goToKey = "b",
+       .action = CommandAction::OpenCurrentAlbum,
+       .detail = i18n::MessageId::TuiGoToAlbum,
        .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "now",
        .action = CommandAction::RevealCurrentTrack,
@@ -213,10 +232,12 @@ namespace ao::tui
        .detail = i18n::MessageId::PlaybackActionCycleRepeat,
        .category = i18n::MessageId::TuiShellCategoryPlayback},
       {.alias = "back",
+       .goToKey = "[",
        .action = CommandAction::Back,
        .detail = i18n::MessageId::TuiWorkspaceBack,
        .category = i18n::MessageId::TuiShellCategoryUi},
       {.alias = "forward",
+       .goToKey = "]",
        .action = CommandAction::Forward,
        .detail = i18n::MessageId::TuiWorkspaceForward,
        .category = i18n::MessageId::TuiShellCategoryUi},
@@ -234,12 +255,18 @@ namespace ao::tui
 
     constexpr auto kCommandKeyActions = std::to_array<CommandKeyAction>({
       {.command = CommandAction::OpenLists, .key = KeyAction::ToggleLists},
+      {.command = CommandAction::TogglePinnedLists, .key = KeyAction::TogglePinnedLists},
       {.command = CommandAction::OpenDetail, .key = KeyAction::ToggleDetails},
       {.command = CommandAction::OpenQuality, .key = KeyAction::ToggleAudioPipeline},
       {.command = CommandAction::OpenOutputDevices, .key = KeyAction::ToggleOutputDevices},
       {.command = CommandAction::OpenPresentationPanel, .key = KeyAction::TogglePresentations},
       {.command = CommandAction::OpenNotifications, .key = KeyAction::ToggleNotifications},
       {.command = CommandAction::ShowHelp, .key = KeyAction::ShowHelp},
+      {.command = CommandAction::OpenGoTo, .key = KeyAction::OpenGoTo},
+      {.command = CommandAction::OpenCurrentArtist, .key = KeyAction::OpenCurrentArtist},
+      {.command = CommandAction::OpenCurrentAlbum, .key = KeyAction::OpenCurrentAlbum},
+      {.command = CommandAction::Back, .key = KeyAction::WorkspaceBack},
+      {.command = CommandAction::Forward, .key = KeyAction::WorkspaceForward},
       {.command = CommandAction::RevealCurrentTrack, .key = KeyAction::RevealCurrentTrack},
       {.command = CommandAction::ClearFilter, .key = KeyAction::ClearFilter},
       {.command = CommandAction::Reload, .key = KeyAction::Reload},
@@ -302,6 +329,32 @@ namespace ao::tui
     }
 
     return std::nullopt;
+  }
+
+  std::string commandShortcut(KeymapPlan const& keymapPlan, CommandAction const action)
+  {
+    if (auto const optAction = shortcutActionForCommand(action); optAction)
+    {
+      if (auto const direct = keymapPlan.shortcutFor(*optAction); !direct.empty())
+      {
+        return std::string{direct};
+      }
+    }
+
+    auto const prefix = keymapPlan.shortcutFor(KeyAction::OpenGoTo);
+
+    if (!prefix.empty())
+    {
+      for (auto const& spec : commandAliasSpecs())
+      {
+        if (spec.action == action && !spec.goToKey.empty())
+        {
+          return std::string{prefix} + " " + std::string{spec.goToKey};
+        }
+      }
+    }
+
+    return {};
   }
 
   std::optional<Command> parseCommand(std::string_view input)

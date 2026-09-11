@@ -5,6 +5,7 @@
 #include "test/unit/tui/KeymapTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
 #include "tui/CommandPalettePanel.h"
+#include "tui/Keymap.h"
 #include "tui/PlaybackPanel.h"
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
@@ -19,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/screen/box.hpp>
 
+#include <algorithm>
 #include <list>
 #include <string>
 
@@ -151,10 +153,11 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("aobus init"));
   }
 
-  TEST_CASE("StatusBar - visual range explains Escape before the detail pane close hint", "[tui][unit][usability]")
+  TEST_CASE("StatusBar - visual range explains Escape while the detail sidebar remains visible",
+            "[tui][unit][usability]")
   {
     auto shell = ShellInteractionModel{};
-    shell.openOverlay(Overlay::DetailPanel);
+    shell.toggleDetail();
     auto const rendered = renderText(statusBar(ao::test::englishMessageCatalog(),
                                                {.terminalColumns = 48, .visualSelectionActive = true, .shell = &shell},
                                                defaultKeymapPlan()),
@@ -188,5 +191,25 @@ namespace ao::tui::test
       renderText(playbackBar(ao::test::englishMessageCatalog(), {.playbackState = &state, .terminalColumns = 80}), 80);
     CHECK(rendered.contains("Track 42"));
     CHECK_FALSE(rendered.contains("No active track"));
+  }
+
+  TEST_CASE("StatusBar - empty track selections retire play action hints and mouse targets",
+            "[tui][regression][usability]")
+  {
+    auto actions = std::list<StatusActionHitRegion>{};
+
+    for (bool const hasSelection : {true, false})
+    {
+      auto const rendered = renderElement(
+        statusBar(ao::test::englishMessageCatalog(),
+                  {.terminalColumns = 200, .hasTrackSelection = hasSelection, .actionHitRegions = &actions},
+                  defaultKeymapPlan()),
+        200,
+        1);
+      CHECK(std::ranges::any_of(actions,
+                                [](StatusActionHitRegion const& region)
+                                { return region.action == KeyAction::PlaySelection && !region.box.IsEmpty(); }) ==
+            hasSelection);
+    }
   }
 } // namespace ao::tui::test

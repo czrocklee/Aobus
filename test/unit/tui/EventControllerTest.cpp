@@ -4,14 +4,13 @@
 #include "tui/EventController.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include "test/unit/TestFixtureSupport.h"
-#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/tui/EventControllerTestSupport.h"
 #include "test/unit/tui/KeymapTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
 #include "tui/CommandPalettePanel.h"
@@ -38,7 +37,6 @@
 #include "tui/TrackSection.h"
 #include "tui/TrackTable.h"
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
@@ -54,13 +52,11 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -83,169 +79,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::tui::test
 {
   namespace
   {
-    std::unique_ptr<async::Executor> makeQueuedExecutor(rt::test::QueuedExecutor*& executor)
-    {
-      auto ownerPtr = std::make_unique<rt::test::QueuedExecutor>();
-      executor = ownerPtr.get();
-      return ownerPtr;
-    }
-
-    struct EventControllerFixture final
-    {
-      ao::test::TempDir tempDir{};
-      std::unique_ptr<rt::test::ControlledSleeper> sleeperPtr{};
-      rt::test::QueuedExecutor* executor = nullptr;
-      std::unique_ptr<rt::AppRuntime> runtimePtr;
-      uimodel::TrackPresentationCatalog presentationCatalog{runtimePtr->workspace(), ao::test::englishMessageCatalog()};
-      uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
-      ShellInteractionModel shell{};
-      HitRegions hitRegions{};
-      std::int32_t layoutCheckpointCount = 0;
-      uimodel::TrackColumnLayouts trackColumnLayouts{runtimePtr->library().changes()};
-      TrackColumnResizePreview trackColumnResizePreview{};
-      OutputDeviceController outputDevices{runtimePtr->playback(),
-                                           ao::test::englishMessageCatalog(),
-                                           uimodel::OutputDeviceIntent::discarded()};
-      uimodel::ActivityStatusViewModel activityStatusViewModel{runtimePtr->notifications(),
-                                                               ao::test::englishMessageCatalog(),
-                                                               [](uimodel::ActivityStatusViewState const&) {}};
-      std::unique_ptr<LibraryScanController> libraryScanPtr{};
-      std::unique_ptr<TrackEditController> trackEditPtr{};
-      Preferences preferences{};
-      uimodel::KeymapModel settingsKeymap{defaultKeymap()};
-      std::unique_ptr<SettingsEditor> settingsPtr;
-      std::size_t exitRequestCount = 0;
-      bool exitWaiting = false;
-
-      explicit EventControllerFixture(bool const useControlledSleeper = false)
-        : sleeperPtr{useControlledSleeper ? std::make_unique<rt::test::ControlledSleeper>() : nullptr}
-        , runtimePtr{rt::test::makeRuntime(tempDir,
-                                           makeQueuedExecutor(executor),
-                                           nullptr,
-                                           sleeperPtr == nullptr ? nullptr : sleeperPtr.get())}
-      {
-        auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-        addTrack(library::test::TrackSpec{.title = "First", .uri = fixturePath});
-        addTrack(library::test::TrackSpec{.title = "Second", .uri = fixturePath});
-      }
-
-      LibraryController makeLibrary()
-      {
-        return LibraryController{runtimePtr->library(),
-                                 runtimePtr->views(),
-                                 runtimePtr->workspace(),
-                                 ao::test::englishMessageCatalog(),
-                                 listPresentations};
-      }
-
-      /// Every collaborator an EventController requires, all owned by this fixture.
-      EventController makeEvents(LibraryController& library,
-                                 KeymapPlan const& keymapPlan = defaultKeymapPlan(),
-                                 InputCompletionCallback commandCompletion = {},
-                                 InputCompletionCallback filterCompletion = {})
-      {
-        if (libraryScanPtr == nullptr)
-        {
-          libraryScanPtr = std::make_unique<LibraryScanController>(runtimePtr->async(),
-                                                                   runtimePtr->library().jobs(),
-                                                                   runtimePtr->notifications(),
-                                                                   ao::test::englishMessageCatalog());
-        }
-
-        if (trackEditPtr == nullptr)
-        {
-          trackEditPtr = std::make_unique<TrackEditController>(runtimePtr->async(),
-                                                               runtimePtr->library(),
-                                                               runtimePtr->notifications(),
-                                                               ao::test::englishMessageCatalog(),
-                                                               TrackEditController::Outputs{},
-                                                               runtimePtr->completion(),
-                                                               runtimePtr->textOrderingPolicy());
-        }
-
-        settingsPtr = std::make_unique<SettingsEditor>(
-          ao::test::englishMessageCatalog(),
-          preferences,
-          settingsKeymap,
-          SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
-                                  {
-                                    preferences = candidate;
-                                    return {};
-                                  },
-                                  .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
-                                  {
-                                    settingsKeymap = candidate;
-                                    return {};
-                                  },
-                                  .coverMode = [] { return std::string{"off"}; }});
-        hitRegions.trackTableRevision = library.trackRowsRevision();
-        return EventController{shell,
-                               library,
-                               runtimePtr->async(),
-                               runtimePtr->playback(),
-                               keymapPlan,
-                               EventControllerBindings{
-                                 .outputDevices = outputDevices,
-                                 .hitRegions = hitRegions,
-                                 .trackColumnLayouts = trackColumnLayouts,
-                                 .trackColumnResizePreview = trackColumnResizePreview,
-                                 .activityStatusViewModel = activityStatusViewModel,
-                                 .notifications = runtimePtr->notifications(),
-                                 .libraryScan = *libraryScanPtr,
-                                 .trackEdit = *trackEditPtr,
-                                 .settings = *settingsPtr,
-                                 .preferences = preferences,
-                                 .requestExit = [this] { ++exitRequestCount; },
-                                 .isExitWaiting = [this] { return exitWaiting; },
-                                 .commandCompletionCallback = std::move(commandCompletion),
-                                 .filterCompletionCallback = std::move(filterCompletion),
-                                 .requestLayoutCheckpoint = [this] { ++layoutCheckpointCount; },
-                               }};
-      }
-
-      TrackId addTrack(library::test::TrackSpec const& spec) const
-      {
-        return rt::test::addRuntimeTrack(*runtimePtr, spec, [this] { executor->drain(); });
-      }
-
-      ListId addList(std::string name) const
-      {
-        return ao::test::requireValue(rt::test::runRuntimeTask(
-          *runtimePtr, runtimePtr->library().commands().createListAsync(rt::ListDraft{.name = std::move(name)})));
-      }
-
-      void addReadyAudioProvider() const
-      {
-        rt::test::addReadyAudioProvider(*runtimePtr);
-        executor->drain();
-      }
-
-      void addReadyAudioProvider(audio::BackendProvider::Status status) const
-      {
-        rt::test::addReadyAudioProvider(*runtimePtr, std::move(status));
-        executor->drain();
-      }
-
-      bool tryWaitForPlayback(TrackId const trackId)
-      {
-        auto const settled = rt::test::tryWaitForPlaybackSettlement(
-          *executor,
-          observedPositionRevision,
-          [this] { return runtimePtr->playback().snapshot().transport.positionRevision; });
-        observedPositionRevision = runtimePtr->playback().snapshot().transport.positionRevision;
-        return settled && runtimePtr->playback().snapshot().transport.nowPlaying.trackId == trackId;
-      }
-
-      rt::PlaybackPositionRevision observedPositionRevision{};
-    };
-
     rt::PlaybackSnapshot currentPlayback(EventControllerFixture& fixture)
     {
       return fixture.runtimePtr->playback().snapshot();
@@ -457,7 +296,7 @@ namespace ao::tui::test
     SECTION("the detail panel leaves the keys to the workspace, so the selection is cancelled first")
     {
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
-      REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+      REQUIRE(fixture.shell.isDetailVisible());
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("v")));
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("j")));
       REQUIRE(library.isVisualSelectionActive());
@@ -465,9 +304,9 @@ namespace ao::tui::test
       CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
       CHECK_FALSE(library.isVisualSelectionActive());
       CHECK(library.markedIds().empty());
-      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(fixture.shell.isDetailVisible());
 
-      CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+      controller.tryHandleEvent(ftxui::Event::Escape);
       CHECK(fixture.shell.overlay() == Overlay::None);
     }
 
@@ -477,7 +316,7 @@ namespace ao::tui::test
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("j")));
       REQUIRE(library.isVisualSelectionActive());
       CHECK(controller.tryHandleEvent(ftxui::Event::Character("l")));
-      REQUIRE(fixture.shell.isNavigationFocused());
+      REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
 
       CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
       CHECK(fixture.shell.overlay() == Overlay::None);
@@ -881,7 +720,7 @@ namespace ao::tui::test
 
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
       CHECK_FALSE(fixture.shell.isInputActive());
-      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(fixture.shell.isDetailVisible());
     }
 
     SECTION("Return activates the selected action for an incomplete command")
@@ -889,7 +728,7 @@ namespace ao::tui::test
       CHECK(controller.tryHandleEvent(ftxui::Event::Return));
       CHECK_FALSE(fixture.shell.isInputActive());
       CHECK(library.filterDraft().empty());
-      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(fixture.shell.isDetailVisible());
     }
 
     SECTION("Page keys move by the bounded list page")
@@ -931,17 +770,17 @@ namespace ao::tui::test
     CHECK(fixture.shell.inputDraft().empty());
   }
 
-  TEST_CASE("EventController - detail shortcut toggles the detail overlay", "[tui][unit][event]")
+  TEST_CASE("EventController - detail shortcut toggles the persistent sidebar", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - effective plan replaces old root keys instead of adding bypasses", "[tui][unit][keymap]")
@@ -959,15 +798,15 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character("l")));
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::F2));
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
     CHECK(controller.tryHandleEvent(ftxui::Event::F2));
-    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.shell.isDetailVisible());
 
     enterCommand(controller, "lists");
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
   }
 
   TEST_CASE("EventController - scoped protocol wins over conflicting root bindings", "[tui][unit][keymap]")
@@ -989,12 +828,12 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
-    REQUIRE(fixture.shell.isNavigationFocused());
+    REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
-    REQUIRE(fixture.shell.isNavigationFocused());
+    REQUIRE(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
@@ -1014,12 +853,12 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(fixture.shell.isDetailVisible());
     REQUIRE(library.selectedTrack() == 0);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::ArrowDown));
     CHECK(library.selectedTrack() == 1);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Home));
     CHECK(library.selectedTrack() == 0);
@@ -1029,7 +868,7 @@ namespace ao::tui::test
 
     CHECK(controller.tryHandleEvent(ftxui::Event::PageUp));
     CHECK(library.selectedTrack() == 0);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - detail leaves workspace commands to the workspace", "[tui][unit][event][detail]")
@@ -1044,11 +883,11 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("}")));
     CHECK(library.selectedTrack() == static_cast<std::int32_t>(secondSection.rowBegin));
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("{")));
     CHECK(library.selectedTrack() == 0);
@@ -1057,11 +896,11 @@ namespace ao::tui::test
     // inspector, so Escape leaves Detail exactly as it was.
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("/")));
     CHECK(fixture.shell.isInputActive());
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK_FALSE(fixture.shell.isInputActive());
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - detail leaves transport keys reaching playback", "[tui][unit][event][detail]")
@@ -1075,7 +914,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(fixture.shell.isDetailVisible());
 
     // Enter starts the selection the inspector is describing.
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
@@ -1084,7 +923,7 @@ namespace ao::tui::test
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character(" ")));
     CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - closing detail ends a scrollbar drag it admitted", "[tui][regression][event][detail]")
@@ -1106,9 +945,9 @@ namespace ao::tui::test
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", press)));
     auto const draggedSelection = library.selectedTrack();
 
-    // Escape takes the pane away, so the drag has nothing left to aim at.
-    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
-    REQUIRE(fixture.shell.overlay() == Overlay::None);
+    // Hiding the sidebar changes the table geometry and retires its drag.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
+    REQUIRE_FALSE(fixture.shell.isDetailVisible());
 
     auto drag = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 40, .y = 11};
     controller.tryHandleEvent(ftxui::Event::Mouse("", drag));
@@ -1137,7 +976,7 @@ namespace ao::tui::test
     REQUIRE_FALSE(resizePreview.layout.empty());
     CHECK(columnLayouts.snapshot().empty());
 
-    // Help replaces Detail and blocks the workspace, so the preview rolls back.
+    // Help covers the workspace, so the column resize preview rolls back.
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("?")));
     REQUIRE(fixture.shell.overlay() == Overlay::Help);
     CHECK(resizePreview.layout.empty());
@@ -1147,25 +986,24 @@ namespace ao::tui::test
     CHECK(columnLayouts.snapshot().empty());
   }
 
-  TEST_CASE("EventController - another overlay replaces detail", "[tui][unit][event][detail]")
+  TEST_CASE("EventController - detail remains visible while popovers open and close", "[tui][unit][event][detail]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
-
+    REQUIRE(fixture.shell.isDetailVisible());
+    CHECK(fixture.activityStatusViewModel.viewState().compact.text.empty());
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("?")));
     CHECK(fixture.shell.overlay() == Overlay::Help);
-
+    CHECK(fixture.shell.isDetailVisible());
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.shell.overlay() == Overlay::None);
-
+    CHECK(fixture.shell.isDetailVisible());
+    controller.tryHandleEvent(ftxui::Event::Escape);
+    CHECK(fixture.shell.isDetailVisible());
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
-    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
-    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - detail leaves table mouse gestures available", "[tui][unit][event][detail]")
@@ -1183,13 +1021,13 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
-    REQUIRE(fixture.shell.overlay() == Overlay::DetailPanel);
+    REQUIRE(fixture.shell.isDetailVisible());
     REQUIRE(library.selectedTrack() == 0);
 
     auto wheel = ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 5};
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", wheel)));
     CHECK(library.selectedTrack() > 0);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - overlay shortcuts update visible shell state", "[tui][unit][event]")
@@ -1199,7 +1037,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("l")));
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.shell.overlay() == Overlay::None);
@@ -1440,12 +1278,14 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
 
     enterCommand(controller, "lists");
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
 
     enterCommand(controller, "detail");
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.shell.isDetailVisible());
+    CHECK(fixture.shell.overlay() == Overlay::None);
 
     enterCommand(controller, "quality");
     CHECK(fixture.shell.overlay() == Overlay::QualityPanel);
@@ -1673,7 +1513,6 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
-    hitRegions.libraryButtonBox = ftxui::Box{.x_min = 2, .x_max = 12, .y_min = 23, .y_max = 23};
     hitRegions.presentationButtonBox = ftxui::Box{.x_min = 15, .x_max = 24, .y_min = 23, .y_max = 23};
     hitRegions.activityStatusBox = ftxui::Box{.x_min = 28, .x_max = 48, .y_min = 23, .y_max = 23};
     auto controller = fixture.makeEvents(library);
@@ -1682,9 +1521,9 @@ namespace ao::tui::test
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", moveOutput)));
     CHECK(controller.hoveredButton() == HoveredButton::OutputDevice);
 
-    auto moveLibrary = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 3, .y = 23};
-    CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", moveLibrary)));
-    CHECK(controller.hoveredButton() == HoveredButton::Library);
+    auto moveEmptyFooter = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 3, .y = 23};
+    CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", moveEmptyFooter)));
+    CHECK(controller.hoveredButton() == HoveredButton::None);
 
     auto movePresentation = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 16, .y = 23};
     CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", movePresentation)));
@@ -1695,7 +1534,8 @@ namespace ao::tui::test
     CHECK(controller.hoveredButton() == HoveredButton::ActivityStatus);
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("/")));
-    CHECK(controller.tryHandleEvent(ftxui::Event::Mouse("", moveActivity)));
+    CHECK(controller.hoveredButton() == HoveredButton::None);
+    CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Mouse("", moveActivity)));
     CHECK(controller.hoveredButton() == HoveredButton::None);
   }
 
@@ -1835,22 +1675,17 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - panel actions use transient activity notifications when available", "[tui][unit][event]")
+  TEST_CASE("EventController - detail visibility changes do not publish activity notifications", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto& activityStatusViewModel = fixture.activityStatusViewModel;
     auto controller = fixture.makeEvents(library);
-
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
-
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
-    CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Info);
-    CHECK(activityStatusViewModel.viewState().compact.text == "Detail panel");
-    CHECK_FALSE(activityStatusViewModel.viewState().compact.optAutoDismissTimeout);
-    auto const feed = fixture.runtimePtr->notifications().feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().lifetime == rt::NotificationLifetime::transient());
+    CHECK(fixture.shell.isDetailVisible());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("d")));
+    CHECK_FALSE(fixture.shell.isDetailVisible());
+    CHECK(fixture.activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Idle);
+    CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
   TEST_CASE("EventController - root Escape is a silent no-op without an overlay", "[tui][regression][event]")
@@ -2498,7 +2333,7 @@ namespace ao::tui::test
     auto& playback = fixture.runtimePtr->playback();
     playback.commands().pause();
     auto const before = playback.snapshot().transport;
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     fixture.hitRegions.navigation.panel.box = {.x_min = 0, .x_max = 25, .y_min = 2, .y_max = 15};
     fixture.hitRegions.seekRailBox = {.x_min = 30, .x_max = 50, .y_min = 18, .y_max = 18};
     auto previews = std::vector<std::chrono::milliseconds>{};
@@ -2777,12 +2612,11 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
     fixture.shell.focusNavigation();
-    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, true, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     auto const rendered =
       renderElement(navigationPanel(ao::test::englishMessageCatalog(),
                                     library.navigation(),
                                     library.currentListId(),
-                                    defaultKeymapPlan(),
                                     {.columns = 26, .focused = true, .regions = &fixture.hitRegions.navigation}),
                     26,
                     15);
@@ -2816,7 +2650,7 @@ namespace ao::tui::test
       "",
       ftxui::Mouse{
         .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optBox->x_min, .y = optBox->y_min})));
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
     auto const optHelp = findTextCells(rendered.screen, "help");
     REQUIRE(optHelp);
@@ -2963,11 +2797,11 @@ namespace ao::tui::test
       checkModesUnchanged();
       mouse.motion = ftxui::Mouse::Pressed;
 
-      fixture.shell.openOverlay(Overlay::DetailPanel);
-      fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
+      fixture.shell.toggleDetail();
+      fixture.hitRegions.detailPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
       checkModesUnchanged();
-      REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
+      REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("d")));
       fixture.shell.openOverlay(Overlay::Help);
       fixture.hitRegions.overlayPanel.box = {.x_min = 10, .x_max = 60, .y_min = 2, .y_max = 10};
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
@@ -3006,15 +2840,26 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto controller = fixture.makeEvents(library);
-    fixture.shell.openOverlay(Overlay::DetailPanel);
-    fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
-    fixture.hitRegions.overlayPanel.contentBox = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 40};
-    fixture.hitRegions.overlayPanel.closeBox = {.x_min = 78, .x_max = 78, .y_min = 0, .y_max = 0};
+    fixture.shell.toggleDetail();
+    fixture.hitRegions.detailPanel.box = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 10};
+    fixture.hitRegions.detailPanel.contentBox = {.x_min = 0, .x_max = 79, .y_min = 0, .y_max = 40};
+    fixture.hitRegions.detailPanel.navigationBox = {.x_min = 0, .x_max = 79, .y_min = 1, .y_max = 9};
+    fixture.hitRegions.detailToggleBox = {.x_min = 78, .x_max = 78, .y_min = 0, .y_max = 0};
     fixture.hitRegions.volumeBox = {.x_min = 70, .x_max = 75, .y_min = 0, .y_max = 0};
     auto mouse = ftxui::Mouse{.button = ftxui::Mouse::WheelDown, .motion = ftxui::Mouse::Pressed, .x = 72, .y = 0};
     auto const volume = currentPlayback(fixture).transport.volume.level;
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
-    CHECK(fixture.shell.overlayScroll() == fixture.preferences.wheelStep);
+    CHECK(fixture.shell.detailScroll() == fixture.preferences.wheelStep);
+
+    for (std::int32_t index = 0; index < 30; ++index)
+    {
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+    }
+
+    CHECK(fixture.shell.detailScroll() == 32);
+    mouse.button = ftxui::Mouse::WheelUp;
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    CHECK(fixture.shell.detailScroll() == 32 - fixture.preferences.wheelStep);
     CHECK(library.selectedTrack() == 0);
     CHECK(currentPlayback(fixture).transport.volume.level == volume);
     mouse.button = ftxui::Mouse::Left;
@@ -3023,7 +2868,7 @@ namespace ao::tui::test
     CHECK_FALSE(currentPlayback(fixture).transport.volume.muted);
     mouse.x = 78;
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
-    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK_FALSE(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - disabled mouse input also protects an open Settings editor",
@@ -3068,7 +2913,7 @@ namespace ao::tui::test
     SECTION("A literal alias is authoritative")
     {
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
-      CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+      CHECK(fixture.shell.isDetailVisible());
     }
 
     SECTION("Deliberate candidate navigation activates the candidate")
@@ -3091,10 +2936,10 @@ namespace ao::tui::test
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("missing")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(library.currentListId() == rt::kAllTracksListId);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
-    CHECK(fixture.shell.isNavigationFocused());
+    CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK_FALSE(fixture.shell.listSearch().isActive());
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("jazz")));
@@ -3216,7 +3061,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.shell.toggleDetail();
     fixture.shell.beginInput(ShellInputMode::Command, "settings");
     fixture.hitRegions.inputPanel.box = {.x_min = 20, .x_max = 60, .y_min = 5, .y_max = 15};
     fixture.hitRegions.settingsButtonBox = {.x_min = 0, .x_max = 10, .y_min = 0, .y_max = 0};
@@ -3224,7 +3069,7 @@ namespace ao::tui::test
       "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 5, .y = 0})));
     CHECK_FALSE(fixture.shell.isInputActive());
     CHECK_FALSE(fixture.settingsPtr->isActive());
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - Quick Filter outside clicks keep literal text and cancel pending completion",
@@ -3278,9 +3123,9 @@ namespace ao::tui::test
     auto const click = ftxui::Event::Mouse(
       "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 0, .y = 0});
 
-    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.shell.toggleDetail();
     controller.tryHandleEvent(click);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
 
     fixture.shell.openOverlay(Overlay::OutputDevices);
     fixture.preferences.mouseEnabled = false;
@@ -3298,13 +3143,13 @@ namespace ao::tui::test
     auto const originalMarks = library.markedIds();
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("v")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
-    fixture.shell.openOverlay(Overlay::DetailPanel);
+    fixture.shell.toggleDetail();
     fixture.hitRegions.cancelSelectionBox = {.x_min = 20, .x_max = 40, .y_min = 23, .y_max = 23};
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse(
       "", ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 25, .y = 23})));
     CHECK_FALSE(library.isVisualSelectionActive());
     CHECK(library.markedIds() == originalMarks);
-    CHECK(fixture.shell.overlay() == Overlay::DetailPanel);
+    CHECK(fixture.shell.isDetailVisible());
   }
 
   TEST_CASE("EventController - browse overlays admit transport while retaining navigation and activation",
@@ -3409,7 +3254,7 @@ namespace ao::tui::test
     keymap.applyOverrides({{"tui.workspace.switchFocus", {"Z"}}});
     auto const plan = KeymapPlan{keymap};
     auto controller = fixture.makeEvents(library, plan);
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     library.toggleVisualSelection();
     library.moveTrackSelection(1);
     auto const marked = library.selectedTrackIds();
@@ -3437,7 +3282,7 @@ namespace ao::tui::test
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Return));
     CHECK(library.currentListId() == target);
     CHECK_FALSE(fixture.shell.isNavigationFocused());
-    CHECK(fixture.shell.isNavigationEnabled());
+    CHECK(fixture.shell.isNavigationPinned());
   }
 
   TEST_CASE("EventController - stronger surfaces suspend and restore Lists search", "[tui][unit][navigation]")
@@ -3461,18 +3306,18 @@ namespace ao::tui::test
     CHECK_FALSE(library.navigation().search().isActive());
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK_FALSE(fixture.shell.isNavigationFocused());
-    CHECK(fixture.shell.isNavigationEnabled());
+    CHECK(fixture.shell.isNavigationPinned());
   }
 
-  TEST_CASE("EventController - drawer outside press consumes Tracks while docked press operates Tracks",
+  TEST_CASE("EventController - chooser outside press consumes Tracks while docked press operates Tracks",
             "[tui][regression][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    fixture.shell.focusNavigation();
-    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, true, false);
-    fixture.hitRegions.navigation.panel.box = {.x_min = 0, .x_max = 25, .y_min = 2, .y_max = 20};
+    fixture.shell.openOverlay(Overlay::ListChooser);
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true);
+    fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 25, .y_min = 2, .y_max = 20};
     fixture.hitRegions.trackTableBox = {.x_min = 0, .x_max = 79, .y_min = 2, .y_max = 20};
     fixture.hitRegions.trackRows = {
       {.id = library.tracks()[1].id, .rowIndex = 1, .box = {.x_min = 26, .x_max = 70, .y_min = 5, .y_max = 5}}};
@@ -3480,28 +3325,27 @@ namespace ao::tui::test
       ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 40, .y = 5});
     REQUIRE(controller.tryHandleEvent(click));
     CHECK_FALSE(fixture.shell.isNavigationFocused());
-    CHECK(fixture.shell.isNavigationEnabled());
+    CHECK(fixture.shell.isNavigationPinned());
     CHECK(library.selectedTrack() == 0);
     fixture.shell.focusNavigation();
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     REQUIRE(controller.tryHandleEvent(click));
     CHECK_FALSE(fixture.shell.isNavigationFocused());
     CHECK(library.selectedTrack() == 1);
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("EventController - docked List wheel and disclosure never navigate or steal focus",
+  TEST_CASE("EventController - docked List wheel never navigates or steals focus",
             "[tui][regression][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addList("Wheel target");
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     auto const rendered = renderElement(navigationPanel(ao::test::englishMessageCatalog(),
                                                         library.navigation(),
                                                         library.currentListId(),
-                                                        defaultKeymapPlan(),
                                                         {.columns = 26, .regions = &fixture.hitRegions.navigation}),
                                         26,
                                         15);
@@ -3524,7 +3368,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     fixture.hitRegions.trackTableBox = {.x_min = 26, .x_max = 119, .y_min = 2, .y_max = 20};
     fixture.shell.focusNavigation();
     REQUIRE(controller.tryHandleEvent(
@@ -3541,7 +3385,7 @@ namespace ao::tui::test
     REQUIRE(controller.tryHandleEvent(
       ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 61, .y = 2})));
     CHECK(fixture.trackColumnResizePreview.listId == library.currentListId());
-    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, false, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true);
     controller.syncWorkspaceGeometry();
     CHECK(fixture.trackColumnResizePreview.listId == kInvalidListId);
   }
@@ -3551,21 +3395,21 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
-    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true, false, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(80, 0, true);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
     CHECK(fixture.layoutCheckpointCount == 0);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Escape));
     CHECK(fixture.layoutCheckpointCount == 0);
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, false, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Tab));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::ArrowDown));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::TabReverse));
     CHECK(fixture.layoutCheckpointCount == 0);
-    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
-    CHECK_FALSE(fixture.shell.isNavigationEnabled());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("L")));
+    CHECK_FALSE(fixture.shell.isNavigationPinned());
     CHECK(fixture.layoutCheckpointCount == 1);
-    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("l")));
-    CHECK(fixture.shell.isNavigationEnabled());
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("L")));
+    CHECK(fixture.shell.isNavigationPinned());
     CHECK(fixture.layoutCheckpointCount == 2);
   }
 
@@ -3585,7 +3429,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
     fixture.shell.focusNavigation();
-    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true, true, false);
+    fixture.hitRegions.navigationLayout = navigationGeometry(120, 0, true);
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("/")));
     REQUIRE(controller.tryHandleEvent(ftxui::Event::Character("Needle")));
     auto& model = library.navigation();

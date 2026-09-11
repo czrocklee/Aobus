@@ -108,7 +108,15 @@ namespace ao::tui::test
       {KeyAction::PlaybackNext, "playback.next"},
       {KeyAction::PlaybackShuffle, "playback.toggleShuffle"},
       {KeyAction::PlaybackRepeat, "playback.cycleRepeat"},
+      {KeyAction::FocusDetails, "tui.detail.focus"},
       {KeyAction::SwitchWorkspaceFocus, "tui.workspace.switchFocus"},
+      {KeyAction::OpenGoTo, "tui.navigation.openGoTo"},
+      {KeyAction::OpenCurrentArtist, "tui.navigation.currentArtist"},
+      {KeyAction::OpenCurrentAlbum, "tui.navigation.currentAlbum"},
+      {KeyAction::WorkspaceBack, "tui.navigation.back"},
+      {KeyAction::WorkspaceForward, "tui.navigation.forward"},
+      {KeyAction::BeginPanelResize, "tui.workspace.beginPanelResize"},
+      {KeyAction::TogglePinnedLists, "tui.workspace.togglePinnedLists"},
     });
     auto ids = std::set<std::string_view>{};
     auto actions = std::set<KeyAction>{};
@@ -192,6 +200,7 @@ namespace ao::tui::test
     CHECK(plan.actionFor(ftxui::Event::Character(" ")) == KeyAction::PlaybackPlayPause);
     CHECK_FALSE(plan.actionFor(ftxui::Event::CtrlP));
     CHECK_FALSE(plan.actionFor(ftxui::Event::CtrlL));
+    CHECK(plan.actionFor(ftxui::Event::Special("\x17")) == KeyAction::BeginPanelResize);
     CHECK(plan.actionFor(ftxui::Event::Character("c")) == KeyAction::RevealCurrentTrack);
     CHECK(plan.actionFor(ftxui::Event::Character("C")) == KeyAction::ClearFilter);
     CHECK(plan.actionFor(ftxui::Event::Character("r")) == KeyAction::PlaybackRepeat);

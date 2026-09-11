@@ -29,12 +29,11 @@ namespace ao::tui
   struct PanelMouseRegions final
   {
     ftxui::Box box = kEmptyMouseBox;
-    ftxui::Box closeBox = kEmptyMouseBox;
     ftxui::Box contentBox = kEmptyMouseBox;
     ftxui::Box navigationBox = kEmptyMouseBox;
   };
 
-  /// Adds a fixed close target. Nonnegative scrollRow also scrolls the whole panel;
+  /// Records the panel hit region. Nonnegative scrollRow also scrolls the whole panel;
   /// otherwise the caller may own a separately measured, scrolling body.
   ftxui::Element mousePanel(ftxui::Element panelPtr, PanelMouseRegions& regions, std::int32_t scrollRow = -1);
 

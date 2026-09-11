@@ -4,12 +4,15 @@
 #pragma once
 
 #include "Command.h"
+#include "GoToMenu.h"
 #include "HitRegions.h"
 #include "Keymap.h"
 #include "LibraryController.h"
 #include "MouseBindings.h"
 #include "NavigationPanel.h"
 #include "OutputDeviceController.h"
+#include "PanelResize.h"
+#include "PanelWidths.h"
 #include "Preferences.h"
 #include "ShellInteractionModel.h"
 #include <ao/CoreIds.h>
@@ -99,24 +102,32 @@ namespace ao::tui
                     EventControllerBindings bindings);
 
     bool isQualityHoverVisible() const noexcept { return _preferences.qualityHover && _qualityHoverVisible; }
+    PanelWidths panelWidths() const noexcept;
+    bool isPanelResizing(HoveredButton panel) const noexcept;
+    std::optional<PanelDivider> keyboardResizeDivider() const noexcept;
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
+    GoToMenuState goToMenuState() const;
     bool tryHandleEvent(ftxui::Event const& event);
     void cancelTransientInteractions();
     void syncWorkspaceGeometry();
 
   private:
+    bool tryHandleDetailEvent(ftxui::Event const& event);
+    void scrollDetail(std::int32_t delta);
     bool tryHandleNavigationEvent(ftxui::Event const& event);
     std::optional<bool> tryHandleNavigationMouse(ftxui::Mouse const& mouse);
     void activateNavigation(bool keyboard);
     void handleNavigationPress(ftxui::Mouse const& mouse);
     void leaveNavigation();
     void switchWorkspaceFocus();
-    void reportNavigationVisibilityChange(bool previous);
+    void reportNavigationPinChange(bool previous);
     void selectNavigationFromScrollbar(std::int32_t row);
     void reloadActiveList();
     void applyFilter(bool reportError = true);
     void toggleLists();
+    void togglePinnedLists();
     void toggleDetailPanel();
+    std::optional<bool> tryHandleDetailMouse(ftxui::Mouse const& mouse);
     void toggleQualityPanel();
     void toggleOutputDevices();
     void togglePresentationPanel();
@@ -125,6 +136,9 @@ namespace ao::tui
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();
+    void activateGoTo(CommandAction action);
+    bool tryHandleGoToEvent(ftxui::Event const& event);
+    void navigateCurrentMetadata(bool album);
     void playSelectedTrack();
     void executePlaybackCommand(uimodel::PlaybackCommand command);
     void executeKeyAction(KeyAction action);
@@ -150,8 +164,12 @@ namespace ao::tui
     std::optional<bool> handleColumnResizePress(ftxui::Mouse const& mouse);
     std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
+    bool tryHandlePlaybackMetadataPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleButtonPress(ftxui::Mouse const& mouse);
+    bool tryHandleLibraryPress(ftxui::Mouse const& mouse);
+    void selectLibraryList();
     bool tryHandlePresentationPress(ftxui::Mouse const& mouse);
+    bool tryHandleGoToPress(ftxui::Mouse const& mouse, GoToMenuHitRegions const& hitRegions);
     bool tryHandleOverlayPress(ftxui::Mouse const& mouse);
     void submitCommandInput();
     bool tryHandleCommandEvent(ftxui::Event const& event);
@@ -181,6 +199,25 @@ namespace ao::tui
     /// Closes the active overlay, retiring gestures the change invalidates.
     void closeOverlay();
 
+    NavigationGeometry panelGeometry() const;
+    void beginKeyboardPanelResize();
+    bool tryHandleKeyboardPanelResize(ftxui::Event const& event);
+    void finishPanelResize(bool apply);
+    bool tryBeginPanelResize(ftxui::Mouse const& mouse);
+    bool tryHandlePanelResizeKey(ftxui::Event const& event);
+    bool tryHandlePanelResizeDrag(ftxui::Mouse const& mouse);
+    void commitPanelWidths(PanelWidths widths);
+
+    struct PanelResizeInteraction final
+    {
+      PanelResize resize;
+      std::optional<std::int32_t> optPointerStartX{};
+      std::int32_t terminalColumns = 0;
+      bool navigationPinned = false;
+      bool detailVisible = false;
+      PanelWidths preview{};
+    };
+
     struct TrackColumnResizeDrag final
     {
       rt::TrackField field = rt::TrackField::Title;
@@ -208,7 +245,8 @@ namespace ao::tui
     HitRegions& _hitRegions;
     uimodel::TrackColumnLayouts& _trackColumnLayouts;
     TrackColumnResizePreview& _trackColumnResizePreview;
-    std::variant<std::monostate, TrackColumnResizeDrag, TrackScrollbarDrag, SeekRailDrag> _workspaceGesture{};
+    std::variant<std::monostate, TrackColumnResizeDrag, TrackScrollbarDrag, SeekRailDrag, PanelResizeInteraction>
+      _workspaceGesture{};
     uimodel::SeekInteraction _seekSlider{};
     uimodel::ActivityStatusViewModel& _activityStatusViewModel;
     rt::NotificationService& _notifications;

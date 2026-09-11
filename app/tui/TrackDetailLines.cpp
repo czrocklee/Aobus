@@ -4,7 +4,7 @@
 #include "TrackDetailLines.h"
 
 #include "PlaybackStatusFormatter.h"
-#include "TrackListEntry.h"
+#include <ao/AudioCodec.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
@@ -12,11 +12,9 @@
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <array>
-#include <cstdint>
 #include <format>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,31 +22,14 @@ namespace ao::tui
 {
   namespace
   {
-    constexpr std::string_view kAbsentCoreValue = "-";
-
     constexpr auto kTrackDetailFields = std::to_array<rt::TrackField>({
-      rt::TrackField::Title,
-      rt::TrackField::Artist,
-      rt::TrackField::Album,
-      rt::TrackField::AlbumArtist,
-      rt::TrackField::Composer,
-      rt::TrackField::Conductor,
-      rt::TrackField::Ensemble,
-      rt::TrackField::Soloist,
-      rt::TrackField::Genre,
-      rt::TrackField::Year,
-      rt::TrackField::DisplayTrackNumber,
-      rt::TrackField::Duration,
-      rt::TrackField::Codec,
-      rt::TrackField::SampleRate,
-      rt::TrackField::BitDepth,
-      rt::TrackField::Tags,
+      rt::TrackField::Title,       rt::TrackField::Artist,   rt::TrackField::Album,       rt::TrackField::Year,
+      rt::TrackField::TrackNumber, rt::TrackField::Duration, rt::TrackField::AlbumArtist, rt::TrackField::Composer,
+      rt::TrackField::Conductor,   rt::TrackField::Ensemble, rt::TrackField::Soloist,     rt::TrackField::Work,
+      rt::TrackField::Movement,    rt::TrackField::Genre,    rt::TrackField::Tags,        rt::TrackField::Codec,
+      rt::TrackField::SampleRate,  rt::TrackField::BitDepth, rt::TrackField::Channels,    rt::TrackField::Bitrate,
+      rt::TrackField::FileSize,
     });
-
-    std::string numberText(std::uint32_t const value)
-    {
-      return value == 0 ? std::string{} : std::format("{}", value);
-    }
   } // namespace
 
   std::span<rt::TrackField const> trackDetailFields()
@@ -56,43 +37,107 @@ namespace ao::tui
     return kTrackDetailFields;
   }
 
-  std::vector<TrackDetailLine> trackDetailLines(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
+  std::vector<TrackDetailLine> trackDetailTechnicalLines(i18n::MessageCatalog const& textCatalog,
+                                                         rt::TrackRow const& row)
   {
     auto lines = std::vector<TrackDetailLine>{};
-    lines.reserve(kTrackDetailFields.size());
-
-    auto appendCore = [&](rt::TrackField const field, std::string value)
+    auto append = [&](rt::TrackField const field, std::string value)
     {
-      lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)},
-                       .value = value.empty() ? std::string{kAbsentCoreValue} : std::move(value)});
-    };
-    auto appendOptional = [&](rt::TrackField const field, std::string value)
-    {
-      if (value.empty())
+      if (!value.empty())
       {
-        return;
+        lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)},
+                         .value = std::move(value),
+                         .kind = TrackDetailLine::Kind::Technical});
+      }
+    };
+
+    if (row.codec != AudioCodec::Unknown)
+    {
+      append(rt::TrackField::Codec, uimodel::formatCodec(row.codec));
+    }
+
+    if (row.sampleRate != 0)
+    {
+      append(rt::TrackField::SampleRate, uimodel::formatSampleRate(row.sampleRate));
+    }
+
+    if (row.bitDepth != 0)
+    {
+      append(rt::TrackField::BitDepth, uimodel::formatBitDepth(row.bitDepth));
+    }
+
+    if (row.channels != 0)
+    {
+      append(rt::TrackField::Channels, uimodel::formatChannels(textCatalog, row.channels));
+    }
+
+    if (row.bitrate != 0)
+    {
+      append(rt::TrackField::Bitrate, uimodel::formatBitrate(row.bitrate));
+    }
+
+    if (row.fileSize != 0)
+    {
+      append(rt::TrackField::FileSize, uimodel::formatFileSize(row.fileSize));
+    }
+
+    return lines;
+  }
+
+  std::vector<TrackDetailLine> trackDetailLines(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
+  {
+    using Kind = TrackDetailLine::Kind;
+    auto lines = std::vector<TrackDetailLine>{};
+    auto append = [&](rt::TrackField const field, std::string value, Kind const kind = Kind::Metadata)
+    {
+      if (!value.empty())
+      {
+        lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)},
+                         .value = std::move(value),
+                         .kind = kind});
+      }
+    };
+
+    append(rt::TrackField::Title, row.title, Kind::Title);
+    append(rt::TrackField::Artist, row.artist);
+    append(rt::TrackField::Album, row.album);
+
+    if (row.year != 0)
+    {
+      append(rt::TrackField::Year, std::format("{}", row.year));
+    }
+
+    if (row.trackNumber != 0)
+    {
+      auto number = uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber);
+
+      if (row.trackTotal != 0)
+      {
+        number += std::format(" / {}", row.trackTotal);
       }
 
-      lines.push_back({.label = std::string{uimodel::trackFieldLabel(textCatalog, field)}, .value = std::move(value)});
-    };
+      append(rt::TrackField::TrackNumber, std::move(number));
+    }
 
-    appendCore(rt::TrackField::Title, trackDisplayTitle(textCatalog, row));
-    appendCore(rt::TrackField::Artist, row.artist);
-    appendCore(rt::TrackField::Album, row.album);
-    appendOptional(rt::TrackField::AlbumArtist, row.albumArtist);
-    appendOptional(rt::TrackField::Composer, row.composer);
-    appendOptional(rt::TrackField::Conductor, row.conductor);
-    appendOptional(rt::TrackField::Ensemble, row.ensemble);
-    appendOptional(rt::TrackField::Soloist, row.soloist);
-    appendOptional(rt::TrackField::Genre, row.genre);
-    appendOptional(rt::TrackField::Year, numberText(row.year));
-    appendCore(rt::TrackField::DisplayTrackNumber,
-               uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
-    appendCore(rt::TrackField::Duration, row.duration.count() > 0 ? formatDuration(row.duration) : std::string{});
-    appendOptional(rt::TrackField::Codec, uimodel::formatCodec(row.codec));
-    appendOptional(rt::TrackField::SampleRate, uimodel::formatSampleRate(row.sampleRate));
-    appendOptional(rt::TrackField::BitDepth, uimodel::formatBitDepth(row.bitDepth));
-    appendOptional(rt::TrackField::Tags, row.tags);
+    if (row.duration.count() > 0)
+    {
+      append(rt::TrackField::Duration, formatDuration(row.duration));
+    }
+
+    if (row.albumArtist != row.artist)
+    {
+      append(rt::TrackField::AlbumArtist, row.albumArtist);
+    }
+
+    append(rt::TrackField::Composer, row.composer);
+    append(rt::TrackField::Conductor, row.conductor);
+    append(rt::TrackField::Ensemble, row.ensemble);
+    append(rt::TrackField::Soloist, row.soloist);
+    append(rt::TrackField::Work, row.work);
+    append(rt::TrackField::Movement, row.movement);
+    append(rt::TrackField::Genre, row.genre);
+    append(rt::TrackField::Tags, row.tags, Kind::Tags);
+
     return lines;
   }
 } // namespace ao::tui

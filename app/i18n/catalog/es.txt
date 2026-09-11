@@ -3,6 +3,24 @@
 
 es:table {
   messages:table {
+    tui_go_to_back { "Atrás" }
+    tui_go_to_forward { "Adelante" }
+    tui_go_to_cancel { "Cancelar" }
+    tui_navigation_pin { "Mostrar u ocultar listas fijas" }
+    tui_go_to_title { "Ir a" }
+    tui_go_to_status { "Ir a" }
+    tui_go_to_now_playing { "En reproducción" }
+    tui_go_to_history { "Historial de vistas" }
+    tui_go_to_hint { "↑/↓ elegir · Enter abrir · Esc cancelar" }
+    tui_go_to_artist { "Ir al artista en reproducción" }
+    tui_go_to_album { "Ir al álbum en reproducción" }
+    tui_key_group_navigation { "Navegación" }
+    tui_key_group_browse { "Exploración" }
+    tui_key_group_playback { "Reproducción" }
+    tui_key_group_selection { "Selección y edición" }
+    tui_key_group_panels { "Paneles" }
+    tui_key_group_application { "Aplicación" }
+
     tui_workspace_back { "Vista anterior" }
     tui_workspace_forward { "Vista siguiente" }
     tui_workspace_history_unavailable { "No hay ninguna vista en esa dirección." }
@@ -22,6 +40,10 @@ es:table {
     tui_settings_dim { "Atenuar el fondo del diálogo" }
     tui_settings_motion { "Reducir animaciones" }
     tui_settings_cover { "Modo de carátula" }
+    tui_settings_separator { "Separación de paneles" }
+    tui_settings_separator_single { "Simple │" }
+    tui_settings_separator_double { "Doble ││" }
+    tui_settings_reveal_indicators_on_hover { "Mostrar indicadores al pasar el ratón" }
     tui_settings_mouse { "Control con ratón" }
     tui_settings_wheel { "Paso de la rueda" }
     tui_settings_seek { "Paso de búsqueda con teclado" }
@@ -30,9 +52,25 @@ es:table {
     tui_settings_on { "Activado" }
     tui_settings_off { "Desactivado" }
     tui_settings_unbound { "Sin asignar" }
-    tui_settings_immediate { "Los cambios aceptados se guardan de inmediato." }
     tui_settings_language_hint { "El idioma y la ordenación cambian al instante. La reproducción continúa." }
     tui_settings_invalid_chord { "Introduce una combinación válida, por ejemplo {example}." }
+    tui_settings_action_change { "Cambiar" }
+    tui_settings_action_choose { "Elegir" }
+    tui_settings_action_apply { "Aplicar" }
+    tui_settings_action_save { "Guardar" }
+    tui_settings_action_cancel { "Cancelar" }
+    tui_settings_action_pages { "Páginas" }
+    tui_settings_action_close { "Cerrar" }
+    tui_settings_action_edit { "Editar" }
+    tui_settings_action_add { "Añadir" }
+    tui_settings_action_remove { "Quitar" }
+    tui_settings_action_reset { "Restablecer" }
+    tui_settings_action_search { "Buscar" }
+    tui_settings_action_clear { "Limpiar" }
+    tui_settings_action_retry { "Reintentar guardado" }
+    tui_settings_action_discard { "Descartar cambios" }
+    tui_settings_action_keep_editing { "Seguir editando" }
+    tui_settings_action_binding { "Asignación" }
     tui_settings_close_prompt { "¿Cerrar y descartar los cambios sin guardar?" }
     tui_settings_palette { "Paleta de comandos" }
     tui_settings_previous_row { "Fila anterior" }
@@ -49,13 +87,6 @@ es:table {
     tui_settings_conflict { "Ya asignado a {detail}; elimina esa asignación primero." }
     tui_settings_unsupported { "Tecla no disponible o reservada: {detail}" }
     tui_settings_stored_issue { "Revisa la asignación guardada: {detail}" }
-    tui_settings_page_keys { "{pages} Páginas · {close} Cerrar" }
-    tui_settings_preference_keys { "{change} Cambiar valor" }
-    tui_settings_language_keys { "{move} Elegir · {apply} Aplicar · {close} Cancelar" }
-    tui_settings_chord_keys { "{apply} Guardar tecla · {close} Cancelar" }
-    tui_settings_confirm_keys { "{apply} Confirmar · {retry} Reintentar · {close} Seguir editando" }
-    tui_settings_retry_keys { "{retry} Reintentar · {discard} Descartar · {close} Cerrar" }
-    tui_settings_keyboard_keys { "{choose} Asignación · {edit} Cambiar · {add} Añadir · {remove} Quitar · {reset} Restablecer" }
 
     pilot_library_title { "Biblioteca de música" }
     pilot_greeting { "Bienvenido/a, {name}" }
@@ -451,7 +482,8 @@ es:table {
     tui_input_history_hint { "Ctrl+P/N historial" }
     tui_navigation_focus { "Cambiar foco entre listas y pistas" }
     tui_navigation_return { "{key} pistas" }
-    tui_navigation_keys { "↑↓ mover · ←→ árbol · Enter abrir · Esc pistas" }
+    tui_navigation_search { "/ buscar" }
+    tui_navigation_keys { "Shift+←/→ ancho · ↑↓ mover · ←→ árbol · Enter abrir · Esc pistas" }
     tui_layout_save_failed { "No se pudo guardar la disposición: {detail}" }
     tui_navigation_open_failed { "No se pudo abrir la lista: {detail}" }
     tui_navigation_sync_failed { "No se pudo mostrar la lista activa: {detail}" }
@@ -470,6 +502,8 @@ es:table {
     tui_shell_overlay_views { "Vistas" }
     tui_shell_overlay_notifications { "Notificaciones" }
     tui_shell_overlay_help { "Ayuda" }
+    tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{pinState, select, bound {{pinKey} Panel fijo  } other {}}{openKey} abrir  {closeKey} cerrar" }
+    tui_library_no_lists_found { "No se encontraron listas" }
     tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{closeKey} cerrar" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{closeKey} cerrar" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} alternar  } other {}}{selectKey} seleccionar  {closeKey} cerrar" }
@@ -990,8 +1024,6 @@ es:table {
     gtk_layout_value_center { "Centro" }
     tui_untitled_section { "Sección sin título" }
     tui_notification_none { "Sin notificaciones" }
-    tui_detail_closed { "Detalle cerrado" }
-    tui_detail_opened { "Panel de detalle" }
     tui_pipeline_closed { "Cadena de audio cerrada" }
     tui_pipeline_opened { "Cadena de audio" }
     tui_output_closed { "Dispositivos de salida cerrados" }
@@ -1007,5 +1039,13 @@ es:table {
     tui_section_unavailable { "La sección ya no está disponible" }
     tui_unknown_command { "Comando desconocido: {command}" }
     tui_filter_failed { "Error de filtro: {detail}" }
+    tui_begin_panel_resize { "Ajustar el ancho de los paneles" }
+    tui_panel_resize_status { "Ancho" }
+    tui_panel_resize_keys { "Tab separador · ←/→ o h/l mover · Enter aplicar · Esc cancelar" }
+    tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
+    tui_panel_resize { "Mover el separador del panel enfocado" }
+    tui_detail_focus { "Acceder a los detalles de la pista" }
+    tui_detail_keys { "Shift+←/→ ancho · j/k secciones · Enter alternar · ←/→ plegar/desplegar · PgUp/PgDn desplazar · Esc pistas" }
+    tui_detail_keys_compact { "Shift+←/→ ancho · Enter alternar · Esc pistas" }
   }
 }

@@ -46,4 +46,18 @@ namespace ao::tui
                                  AnchoredOverlaySize overlaySize,
                                  AnchoredOverlayTerminal terminal,
                                  AnchoredOverlayOptions options = {});
+  /// Reads a frame button's anchor during layout, after the background placed it.
+  /// The anchor must outlive the returned element and be reflected during layout.
+  ftxui::Element followingAnchoredOverlay(ftxui::Element overlayPtr,
+                                          ftxui::Box const& rootAnchor,
+                                          AnchoredOverlayPlacement placement,
+                                          AnchoredOverlaySize overlaySize,
+                                          AnchoredOverlayTerminal terminal,
+                                          AnchoredOverlayOptions options = {});
+  ftxui::Element followingAnchoredOverlay(ftxui::Element overlayPtr,
+                                          ftxui::Box const&& rootAnchor,
+                                          AnchoredOverlayPlacement placement,
+                                          AnchoredOverlaySize overlaySize,
+                                          AnchoredOverlayTerminal terminal,
+                                          AnchoredOverlayOptions options = {}) = delete;
 } // namespace ao::tui

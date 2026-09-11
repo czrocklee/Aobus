@@ -79,13 +79,6 @@ namespace ao::tui::test
       return screen.ToString();
     }
 
-    std::string renderPlaybackText(ftxui::Element elementPtr, std::int32_t const width, std::int32_t const height)
-    {
-      auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(width), ftxui::Dimension::Fixed(height));
-      ftxui::Render(screen, elementPtr);
-      return screen.ToString();
-    }
-
     bool isBrailleGlyph(std::string const& character)
     {
       return character.size() == 3 && static_cast<unsigned char>(character[0]) == 0xE2 &&
@@ -412,7 +405,7 @@ namespace ao::tui::test
     CHECK_FALSE(text.contains("Quality"));
     CHECK_FALSE(text.contains("Audio Pipeline"));
     CHECK(text.contains("No audio pipeline yet"));
-    CHECK(text.contains("a toggle"));
+    CHECK_FALSE(text.contains("toggle"));
     CHECK(text.contains("Esc close"));
   }
 
@@ -659,10 +652,19 @@ namespace ao::tui::test
       .hasActiveOutputDevice = true,
     };
 
-    auto const text = renderPlaybackText(englishOutputDevicePanel(view, 1), 48, 24);
+    auto regions = std::vector<OutputDeviceRowHitRegion>{};
+    auto const rendered = renderElement(englishOutputDevicePanel(view, 1, &regions, 48), 48, 24);
 
-    CHECK_FALSE(text.contains("very_long_identifier"));
-    CHECK(text.contains("o toggle"));
+    CHECK_FALSE(rendered.text.contains("very_long_identifier"));
+    CHECK_FALSE(rendered.text.contains("toggle"));
+    REQUIRE_FALSE(regions.empty());
+    auto const selectedRow = regions.front().box;
+    CHECK(selectedRow.x_min == 2);
+    CHECK(selectedRow.x_max == 45);
+    CHECK(rendered.screen.PixelAt(1, selectedRow.y_min).background_color == ftxui::Color::Default);
+    CHECK(rendered.screen.PixelAt(2, selectedRow.y_min).background_color == ftxui::Color::Yellow);
+    CHECK(rendered.screen.PixelAt(45, selectedRow.y_min).background_color == ftxui::Color::Yellow);
+    CHECK(rendered.screen.PixelAt(46, selectedRow.y_min).background_color == ftxui::Color::Default);
   }
 
   TEST_CASE("QualityPanel - indicators use the Soul quality colors", "[tui][unit][quality]")

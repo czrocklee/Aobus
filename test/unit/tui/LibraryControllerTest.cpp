@@ -8,6 +8,8 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "tui/LibraryNavigation.h"
+#include "tui/ListNavigationModel.h"
 #include "tui/TrackPresentationNavigation.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
@@ -401,6 +403,68 @@ namespace ao::tui::test
     CHECK(controller.currentListId() == rt::kAllTracksListId);
     CHECK(controller.activePresentationId() == activePresentationId);
     CHECK(controller.tracks().size() == 2);
+  }
+
+  TEST_CASE("LibraryController - navigation refresh localizes unnamed Lists for both consumers",
+            "[tui][unit][library][localization]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const unnamedId = fixture.addList("");
+
+    auto controller = LibraryController{fixture.runtimePtr->library(),
+                                        fixture.runtimePtr->views(),
+                                        fixture.runtimePtr->workspace(),
+                                        ao::test::messageCatalog("de"),
+                                        fixture.listPresentations};
+
+    auto const chooserEntry = std::ranges::find(controller.libraryEntries(), unnamedId, &LibraryNavEntry::id);
+    REQUIRE(chooserEntry != controller.libraryEntries().end());
+    CHECK(chooserEntry->label == "[L] <Unbenannte Liste>");
+
+    auto const treeRow = std::ranges::find(controller.navigation().rows(), unnamedId, &ListNavigationRow::id);
+    REQUIRE(treeRow != controller.navigation().rows().end());
+    CHECK(treeRow->name == "<Unbenannte Liste>");
+  }
+
+  TEST_CASE("LibraryController - chooser selection clamps and can reveal the active List",
+            "[tui][unit][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const firstId = fixture.addList("First");
+    auto const lastId = fixture.addList("Last");
+    auto controller = fixture.makeController();
+
+    controller.selectListRow(-10);
+    CHECK(controller.selectedList() == 0);
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == rt::kAllTracksListId);
+    controller.selectListRow(100);
+    CHECK(controller.selectedList() == static_cast<std::int32_t>(controller.libraryEntries().size()) - 1);
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == lastId);
+
+    REQUIRE(controller.openList(firstId));
+    controller.selectListRow(100);
+    controller.revealActiveList();
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == firstId);
+  }
+
+  TEST_CASE("LibraryController - chooser refresh retains the selected List identity when rows shift",
+            "[tui][regression][library][selection]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    auto const removedId = fixture.addList("Removed before selection");
+    auto const selectedId = fixture.addList("Retained selection");
+    auto controller = fixture.makeController();
+    auto const selected = std::ranges::find(controller.libraryEntries(), selectedId, &LibraryNavEntry::id);
+    REQUIRE(selected != controller.libraryEntries().end());
+    controller.selectListRow(static_cast<std::int32_t>(selected - controller.libraryEntries().begin()));
+    REQUIRE(controller.libraryEntries()[controller.selectedList()].id == selectedId);
+
+    REQUIRE(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(removedId)));
+    rt::test::settleRuntimeCallbacks(*fixture.runtimePtr);
+
+    CHECK(controller.libraryEntries()[controller.selectedList()].id == selectedId);
+    CHECK(controller.selectedList() == 1);
   }
 
   TEST_CASE("LibraryController - reload falls back when the active view disappeared",

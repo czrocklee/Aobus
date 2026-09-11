@@ -11,6 +11,8 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 namespace ao::tui
 {
@@ -115,6 +117,226 @@ namespace ao::tui
       auto const isTagCharacter = codePoint >= kTagCharacterFirst && codePoint <= kTagCharacterLast;
 
       return isVariationSelector || isSkinToneModifier || isTagCharacter || codePoint == kCombiningKeycap;
+    }
+
+    struct CellCluster final
+    {
+      std::string text;
+      std::int32_t columns = 0;
+      bool lineBreak = false;
+    };
+
+    std::string normalizeLineBreaks(std::string_view const value, CellLineBreaks const lineBreaks)
+    {
+      auto normalized = std::string{};
+      normalized.reserve(value.size());
+
+      for (std::size_t index = 0; index < value.size(); ++index)
+      {
+        if (auto const ch = value[index]; ch == '\r')
+        {
+          if (index + 1 < value.size() && value[index + 1] == '\n')
+          {
+            ++index;
+            normalized.push_back(lineBreaks == CellLineBreaks::Preserve ? '\n' : ' ');
+          }
+          else if (lineBreaks == CellLineBreaks::Flatten)
+          {
+            normalized.push_back(' ');
+          }
+        }
+        else if (ch == '\n')
+        {
+          normalized.push_back(lineBreaks == CellLineBreaks::Preserve ? '\n' : ' ');
+        }
+        else if (ch == '\t' && lineBreaks == CellLineBreaks::Flatten)
+        {
+          normalized.push_back(' ');
+        }
+        else
+        {
+          normalized.push_back(ch);
+        }
+      }
+
+      return normalized;
+    }
+
+    std::vector<CellCluster> cellClusters(std::string_view const value)
+    {
+      auto clusters = std::vector<CellCluster>{};
+      auto cluster = CellCluster{};
+      std::size_t clusterGlyphs = 0;
+      bool joinsNextGlyph = false;
+      bool opensRegionalPair = false;
+
+      auto commitCluster = [&]
+      {
+        if (clusterGlyphs == 0)
+        {
+          return;
+        }
+
+        clusters.push_back(std::move(cluster));
+        cluster = {};
+        clusterGlyphs = 0;
+        joinsNextGlyph = false;
+        opensRegionalPair = false;
+      };
+
+      auto appendSegment = [&](std::string_view const segment)
+      {
+        for (auto const& glyph : ftxui::Utf8ToGlyphs(std::string{segment}))
+        {
+          auto const codePoint = leadCodePoint(glyph);
+          auto const glyphColumns = static_cast<std::int32_t>(ftxui::string_width(glyph));
+          auto const continuesCluster =
+            clusterGlyphs > 0 &&
+            (joinsNextGlyph || isZeroWidthJoiner(codePoint) || isClusterExtender(codePoint) || glyphColumns == 0 ||
+             (clusterGlyphs == 1 && opensRegionalPair && isRegionalIndicator(codePoint)));
+
+          if (!continuesCluster)
+          {
+            commitCluster();
+          }
+
+          if (clusterGlyphs == 0)
+          {
+            opensRegionalPair = isRegionalIndicator(codePoint);
+          }
+
+          cluster.text += glyph;
+          cluster.columns += glyphColumns;
+          ++clusterGlyphs;
+          joinsNextGlyph = isZeroWidthJoiner(codePoint);
+        }
+
+        commitCluster();
+      };
+      std::size_t segmentBegin = 0;
+
+      // FTXUI can attach a leading combining mark to an LF glyph. Split first
+      // so LF remains structural and each new row applies FTXUI's leading-mark policy.
+      while (segmentBegin <= value.size())
+      {
+        auto const lineBreak = value.find('\n', segmentBegin);
+
+        if (lineBreak == std::string_view::npos)
+        {
+          appendSegment(value.substr(segmentBegin));
+          break;
+        }
+
+        appendSegment(value.substr(segmentBegin, lineBreak - segmentBegin));
+        clusters.push_back({.text = "\n", .lineBreak = true});
+        segmentBegin = lineBreak + 1;
+      }
+
+      return clusters;
+    }
+
+    std::string clusterText(std::vector<CellCluster> const& clusters, std::size_t const begin, std::size_t const end)
+    {
+      auto result = std::string{};
+
+      for (std::size_t index = begin; index < end; ++index)
+      {
+        result += clusters[index].text;
+      }
+
+      return result;
+    }
+
+    std::string ellipsizeClusters(std::vector<CellCluster> const& clusters,
+                                  std::size_t const begin,
+                                  std::size_t const end,
+                                  std::int32_t const width)
+    {
+      std::int32_t totalColumns = 0;
+      auto lineEnd = begin;
+
+      while (lineEnd < end && !clusters[lineEnd].lineBreak)
+      {
+        totalColumns += clusters[lineEnd].columns;
+        ++lineEnd;
+      }
+
+      auto const hasFollowingLine = lineEnd < end && lineEnd + 1 < end;
+
+      if (totalColumns <= width && !hasFollowingLine)
+      {
+        return clusterText(clusters, begin, lineEnd);
+      }
+
+      auto const ellipsisColumns = cellWidth(kCellEllipsis);
+      auto const contentColumns = width < ellipsisColumns ? width : width - ellipsisColumns;
+      std::int32_t usedColumns = 0;
+      auto index = begin;
+
+      while (index < lineEnd && usedColumns + clusters[index].columns <= contentColumns)
+      {
+        usedColumns += clusters[index].columns;
+        ++index;
+      }
+
+      auto result = clusterText(clusters, begin, index);
+
+      if (width >= ellipsisColumns)
+      {
+        result.append(kCellEllipsis);
+      }
+
+      return result;
+    }
+
+    std::string nextClusterRow(std::vector<CellCluster> const& clusters, std::size_t& cursor, std::int32_t const width)
+    {
+      auto const lineBegin = cursor;
+      auto lastSpace = clusters.size();
+      std::int32_t usedColumns = 0;
+
+      while (cursor < clusters.size())
+      {
+        auto const& cluster = clusters[cursor];
+
+        if (cluster.lineBreak)
+        {
+          auto row = clusterText(clusters, lineBegin, cursor);
+          ++cursor;
+          return row;
+        }
+
+        if (usedColumns + cluster.columns > width)
+        {
+          if (cursor == lineBegin)
+          {
+            auto row = ellipsizeClusters(clusters, cursor, clusters.size(), width);
+            cursor = clusters.size();
+            return row;
+          }
+
+          auto lineEnd = cursor;
+
+          if (lastSpace != clusters.size() && lastSpace > lineBegin)
+          {
+            lineEnd = lastSpace;
+            cursor = lastSpace + 1;
+          }
+
+          return clusterText(clusters, lineBegin, lineEnd);
+        }
+
+        usedColumns += cluster.columns;
+
+        if (cluster.text == " ")
+        {
+          lastSpace = cursor;
+        }
+
+        ++cursor;
+      }
+
+      return clusterText(clusters, lineBegin, clusters.size());
     }
   } // namespace
 
@@ -225,6 +447,42 @@ namespace ao::tui
     auto result = truncateToCellWidth(value, width - ellipsisColumns);
     result.append(kCellEllipsis);
     return result;
+  }
+
+  std::vector<std::string> wrapCellText(std::string_view const value,
+                                        std::int32_t const width,
+                                        CellWrapOptions const options)
+  {
+    auto rows = std::vector<std::string>{};
+
+    if (value.empty() || width <= 0)
+    {
+      return rows;
+    }
+
+    auto const normalized = normalizeLineBreaks(value, options.lineBreaks);
+    auto const clusters = cellClusters(normalized);
+    std::size_t cursor = 0;
+
+    while (cursor < clusters.size() && (options.maxLines == 0 || rows.size() < options.maxLines))
+    {
+      auto const isLastRow = options.maxLines > 0 && rows.size() + 1 == options.maxLines;
+
+      if (isLastRow)
+      {
+        rows.push_back(ellipsizeClusters(clusters, cursor, clusters.size(), width));
+        break;
+      }
+
+      rows.push_back(nextClusterRow(clusters, cursor, width));
+
+      while (cursor < clusters.size() && clusters[cursor].text == " ")
+      {
+        ++cursor;
+      }
+    }
+
+    return rows;
   }
 
   std::string fitCellText(std::string_view const value, std::int32_t const width, CellAlignment const alignment)

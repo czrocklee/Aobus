@@ -141,6 +141,28 @@ Layout action labels and categories are display text selected from the catalog; 
 GTK Layout Editor component/property/enum labels follow the same rule: the serialized token remains the combo-row id, known built-ins receive localized display text, and unknown extension values display unchanged.
 WinUI-generated resources normally retain the canonical catalog key. Single-argument native wrappers replace the governed named placeholder with `{0}` under that same key, while XAML-only property resources add the required `.Text` alias.
 
+### Chinese metadata terminology
+
+Aobus uses the following terms consistently in its maintained Chinese catalogs:
+
+| English concept | `zh_Hans` | `zh_Hant` |
+|---|---|---|
+| Metadata | 元数据 | 後設資料 |
+| Custom Metadata | 自定义元数据 | 自訂後設資料 |
+
+The shared `zh_Hant` catalog also serves regional requests such as `zh-TW` and `zh-HK`; it does not promise each region's preferred terminology.
+[Decision 0018](../../decision/0018-chinese-metadata-terminology.md) records the terminology sources, choice, and alternatives.
+
+Apply the same term to `TrackMetadataHeading`, `TuiEditorTabMetadata`, `GtkLibraryExportModeMetadata`, `WinUiLibraryExportModeMetadata`, `WinUiTrackPropertiesCustomMetadata`, `GtkCustomMetadataTitle`, `GtkCustomMetadataDeleted`, and `GtkCustomMetadataDelete`, including future messages for the same concept.
+Sentence grammar may vary; the concept name must remain consistent across frontends.
+
+Do not substitute the broader Track Detail or Properties labels for Metadata, or rename Audio Properties to match it.
+Tags are a classification feature, not an interchangeable name for metadata.
+Keep the export mode's scope qualifier: its [transfer contract](../../spec/library/runtime/yaml-transfer.md) includes curated text, custom metadata, Tags, and Lists, rather than only the fields in a track's detail section.
+In `zh_Hant`, the domain concept List uses 列表; 播放清單 names the narrower Playlist concept.
+Use 列表 consistently in export-mode descriptions, navigation labels, and List error messages.
+This wording policy changes neither message identities, serialized keys, nor user-supplied metadata names and values.
+
 ## Surface
 
 Required lookup and semantic mappings:
