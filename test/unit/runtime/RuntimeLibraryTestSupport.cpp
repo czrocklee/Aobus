@@ -56,6 +56,9 @@ namespace ao::rt::test
 {
   namespace
   {
+    // These fixtures exercise concurrency without creating a machine-sized pool per test shard.
+    constexpr std::size_t kFixtureWorkerCount = 2;
+
     async::LoopExecutor& stateOnlyLibraryExecutorInstance()
     {
       static thread_local auto executor = async::LoopExecutor{};
@@ -328,7 +331,7 @@ namespace ao::rt::test
                                    bool const libraryReset,
                                    async::Executor& executor)
     {
-      auto asyncRuntime = async::Runtime{executor};
+      auto asyncRuntime = async::Runtime{executor, kFixtureWorkerCount};
       auto writeLane =
         LibraryWriteLane{asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(storage), changes};
       auto task = executeInteractiveMutationAsync(
@@ -367,15 +370,23 @@ namespace ao::rt::test
   struct LibraryCommandsFixture::Impl final
   {
     Impl(library::MusicLibrary& storageValue, LibraryChanges& changesValue, async::Executor& executorValue)
-      : executor{executorValue}, asyncRuntime{executor}, storage{storageValue}, changes{changesValue}
+      : executor{executorValue}
+      , asyncRuntime{executor, kFixtureWorkerCount}
+      , storage{storageValue}
+      , changes{changesValue}
     {
     }
 
     ~Impl()
     {
-      optLibrary.reset();
+      if (optLibrary)
+      {
+        optLibrary->beginClosing();
+      }
+
       asyncRuntime.requestStop();
       asyncRuntime.join();
+      optLibrary.reset();
     }
 
     Impl(Impl const&) = delete;

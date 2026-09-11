@@ -72,10 +72,15 @@ namespace ao::rt::test
 
       ~AuthoringFixture()
       {
-        _optLibrary.reset();
-        _changesPtr.reset();
+        if (_optLibrary)
+        {
+          _optLibrary->beginClosing();
+        }
+
         _asyncRuntime.requestStop();
         _asyncRuntime.join();
+        _optLibrary.reset();
+        _changesPtr.reset();
       }
 
       AuthoringFixture(AuthoringFixture const&) = delete;
@@ -121,12 +126,27 @@ namespace ao::rt::test
                                           : kInvalidTrackId}
         , _asyncRuntime{_executor}
         , _changes{_executor, currentRevision(_musicLibrary), "test-library"}
-        , _writeLane{_asyncRuntime.callbackExecutor(),
-                     ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)),
-                     _changes,
-                     std::move(writeTransactionFactory)}
+        , _optWriteLane{std::in_place,
+                        _asyncRuntime.callbackExecutor(),
+                        ao::test::requireValue(library::WritableMusicLibrary::acquire(_musicLibrary)),
+                        _changes,
+                        std::move(writeTransactionFactory)}
       {
       }
+
+      ~WriteLaneFixture()
+      {
+        // Lane destruction closes admission and waits for its active owner leases.
+        // Keep the change bus and storage alive through the remaining runtime teardown.
+        _optWriteLane.reset();
+        _asyncRuntime.requestStop();
+        _asyncRuntime.join();
+      }
+
+      WriteLaneFixture(WriteLaneFixture const&) = delete;
+      WriteLaneFixture& operator=(WriteLaneFixture const&) = delete;
+      WriteLaneFixture(WriteLaneFixture&&) = delete;
+      WriteLaneFixture& operator=(WriteLaneFixture&&) = delete;
 
       template<typename T>
       T run(async::Task<T> task)
@@ -137,7 +157,7 @@ namespace ao::rt::test
       library::MusicLibrary& musicLibrary() noexcept { return _musicLibrary; }
       TrackId initialTrackId() const noexcept { return _initialTrackId; }
       async::Runtime& asyncRuntime() noexcept { return _asyncRuntime; }
-      LibraryWriteLane& writeLane() noexcept { return _writeLane; }
+      LibraryWriteLane& writeLane() noexcept { return *_optWriteLane; }
 
     private:
       static std::uint64_t currentRevision(library::MusicLibrary& musicLibrary)
@@ -152,7 +172,7 @@ namespace ao::rt::test
       async::LoopExecutor _executor;
       async::Runtime _asyncRuntime;
       LibraryChanges _changes;
-      LibraryWriteLane _writeLane;
+      std::optional<LibraryWriteLane> _optWriteLane;
     };
 
     template<typename Operation,
@@ -604,6 +624,7 @@ namespace ao::rt::test
 
     REQUIRE(entered);
 
+    // Destruction is the Closing action under test and waits for active lane owner leases.
     writeLanePtr.reset();
 
     CHECK(closingStopObserved.load() == 1);
