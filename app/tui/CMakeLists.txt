@@ -35,6 +35,7 @@ add_library(aobus-tui-lib STATIC
     TrackMetadataEditor.cpp
     TrackTagEditor.cpp
     TrackPropertiesEditor.cpp
+    TrackPropertiesEditorTagPopover.cpp
     TrackTable.cpp
     HitRegions.cpp
     PlaybackStatusFormatter.cpp

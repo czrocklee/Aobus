@@ -1047,5 +1047,11 @@ de:table {
     tui_detail_focus { "Titeldetails fokussieren" }
     tui_detail_keys { "Shift+←/→ Breite · j/k Abschnitte · Enter umschalten · ←/→ zu/auf · PgUp/PgDn scrollen · Esc Titel" }
     tui_detail_keys_compact { "Shift+←/→ Breite · Enter auf/zu · Esc Titel" }
+    tui_shell_tags { "Tags" }
+    tui_tag_popover_cancel { "Abbrechen" }
+    tui_tag_popover_title { "Tags · {count, plural, one {# Titel} other {# Titel}}" }
+    tui_tag_popover_apply { "Anwenden" }
+    tui_tag_popover_add_apply { "Hinzufügen & anwenden" }
+    tui_shell_detail_edit_tags { "Tags der Titel bearbeiten" }
   }
 }

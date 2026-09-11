@@ -197,7 +197,8 @@ namespace ao::tui
       rt::Library& library,
       i18n::MessageCatalog const& textCatalog,
       std::vector<TrackId> const& targetIds,
-      rt::TextOrderingPolicy const* const textOrderingPolicy)
+      rt::TextOrderingPolicy const* const textOrderingPolicy,
+      TrackEditorMode const mode)
     {
       auto sessionRes = uimodel::TrackAuthoringSession::begin(library, targetIds);
 
@@ -219,7 +220,9 @@ namespace ao::tui
         return std::unexpected{PreparationError{.messageId = MessageId::TuiEditorOpenUnavailable}};
       }
 
-      auto const spec = uimodel::buildTrackPropertiesFormSpec(textCatalog);
+      // Tags need identities and membership, not per-field metadata aggregation.
+      auto const spec = mode == TrackEditorMode::Properties ? uimodel::buildTrackPropertiesFormSpec(textCatalog)
+                                                            : uimodel::TrackPropertiesFormSpec{};
       auto baseline = uimodel::TrackPropertiesFormModel{textCatalog};
 
       for (auto const& row : spec.metadataRows)
@@ -343,7 +346,7 @@ namespace ao::tui
     }
 
     /// Installs a prepared editor, reporting false when its session was already gone.
-    bool tryInstall(PreparedEditor prepared)
+    bool tryInstall(PreparedEditor prepared, TrackEditorMode mode)
     {
       auto session = std::move(prepared.session);
       // The observer is attached before the currency recheck, so a session
@@ -363,7 +366,7 @@ namespace ao::tui
       // The previous observer goes before the session it watches does.
       invalidatedSubscription.reset();
       optSession.emplace(std::move(session));
-      optEditor.emplace(textCatalog, std::move(prepared.preparation), std::move(completionProvider));
+      optEditor.emplace(textCatalog, std::move(prepared.preparation), std::move(completionProvider), mode);
       invalidatedSubscription = std::move(subscription);
       return true;
     }
@@ -557,7 +560,7 @@ namespace ao::tui
     _statePtr->outputs = Outputs{};
   }
 
-  bool TrackEditController::tryOpen(std::vector<TrackId> targetIds)
+  bool TrackEditController::tryOpen(std::vector<TrackId> targetIds, TrackEditorMode const mode)
   {
     auto& state = *_statePtr;
     state.expectCallbackExecutor();
@@ -576,7 +579,7 @@ namespace ao::tui
       return false;
     }
 
-    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy);
+    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
 
     if (!preparedRes)
     {
@@ -584,7 +587,7 @@ namespace ao::tui
       return false;
     }
 
-    if (!state.tryInstall(std::move(*preparedRes)))
+    if (!state.tryInstall(std::move(*preparedRes), mode))
     {
       state.postText(rt::NotificationSeverity::Warning, MessageId::TuiEditorOpenUnavailable);
       return false;
@@ -698,10 +701,12 @@ namespace ao::tui
       targetIds.push_back(target.id);
     }
 
+    auto const mode = state.optEditor->mode();
+
     // A successful install replaces the editor in place, so no reference is
     // held across one: every report below reads back whichever editor is open
     // at the moment it is made.
-    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy);
+    auto preparedRes = prepareEditor(state.library, state.textCatalog, targetIds, state.textOrderingPolicy, mode);
 
     if (!preparedRes)
     {
@@ -717,7 +722,7 @@ namespace ao::tui
 
     // A refused install replaced nothing, so the editor still open is the one
     // that lost its binding.
-    if (!state.tryInstall(std::move(*preparedRes)) && state.optEditor)
+    if (!state.tryInstall(std::move(*preparedRes), mode) && state.optEditor)
     {
       state.optEditor->setStatus(TrackEditorStatus::Stale);
     }

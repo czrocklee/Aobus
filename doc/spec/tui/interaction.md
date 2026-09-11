@@ -188,7 +188,7 @@ A track-row click focuses that track; two consecutive unmodified clicks on the s
 
 The quality, output, presentation, and notification popovers use their effective toggle shortcut to reopen or close that popover.
 Help is a centered, scrollable popover, up to 88 columns wide, over the full-width workspace. Its two-column body pairs effective shortcuts with action descriptions; actions without a shortcut retain a command entry. The Command Palette provides the full command inventory. The title and footer remain visible while the body scrolls. Escape and the effective Help shortcuts close it. Opening and closing Help preserve the underlying filter, focused track, and table layout.
-Return or a row click activates a List, presentation, or output row. Wheel input over those panels moves their selection; over Detail, Quality, Help, or Notifications it scrolls panel content. Centered and anchored popovers share a one-cell clear outer halo, outside their mouse hit regions. Popovers use Escape or outside-click dismissal without a redundant `×` button. Foreground panel regions consume clicks before workspace controls beneath them. A left-button press outside a rendered Lists, Quality, Output, Presentations, Notifications, or Help popover closes it and consumes that press, including clicks on another trigger; background controls require a subsequent click. Closing also retires a stale quality hover. The Detail side panel, Settings, and the full Track Properties editor do not use outside-click dismissal. Settings and the full editor retain an explicit close button for their unsaved-change flow.
+Return or a row click activates a List, presentation, or output row. Wheel input over those panels moves their selection; over Detail, Quality, Help, or Notifications it scrolls panel content. Centered and anchored popovers share a one-cell clear outer halo, outside their mouse hit regions. Popovers use Escape or outside-click dismissal without a redundant `×` button. Foreground panel regions consume clicks before workspace controls beneath them. A left-button press outside a rendered Lists, Quality, Output, Presentations, Notifications, or Help popover closes it and consumes that press, including clicks on another trigger; background controls require a subsequent click. Closing also retires a stale quality hover. The Detail side panel, Settings, and the full Track Properties editor do not use outside-click dismissal. Settings and the full editor retain an explicit close button for their unsaved-change flow; the quick tag popover dismisses on an outside press.
 Presentation and output pickers accept Up/Down and j/k, PageUp/PageDown, and Home/End. Help, Quality, Notifications, and the editor's read-only pages use the same keys to scroll. Unfocused Detail leaves keyboard navigation with the workspace it inspects; explicitly focused Detail uses the section controls above. Page movement uses the current rendered viewport rather than a fixed row count.
 Settings has one right-aligned, clickable footer of actions for its current state. It wraps between actions on narrow terminals. Language and renderer explanations sit beside their settings; internal action ids remain searchable without occupying the footer. Keyboard search appears on demand through `/` or its footer action. While searching, Escape is labeled Clear and does not also advertise Close; empty results offer no edit action. Chord editing and failed-save recovery replace the ordinary actions with their own save, cancel, retry, and discard controls.
 
@@ -310,6 +310,19 @@ The header × control follows the same `Esc` protocol: it dismisses active compl
 A dimmed Apply control consumes a click without requesting submission.
 The read-only Properties and Tracks bodies support wheel scrolling, without row click actions; their tabs and footer controls remain clickable.
 
+The quick tag entry (`t` / `:tags`) uses a tags-only mode of the same editor and controller, with the same captured targets, invalidation, and submission lifecycle.
+It presents a compact centered popover without the full editor's page strip.
+When its height is below 12 rows, it omits the single-track subtitle and navigation hints to preserve the query and submission/recovery controls.
+Space toggles a focused result, while spaces typed in the query remain text.
+Arrow navigation returns focus to results.
+Enter applies the pending tag patch; with query focus it first adds an offered new name even alongside partial matches, while result focus creates only from the selected creation row.
+An exact search match alone never changes an existing tag.
+Escape, the Cancel footer, or an outside press cancels the draft directly, without the full editor's discard prompt.
+Ctrl+R reloads the same targets and retains the tags-only mode only in Failed or Stale state, where the footer advertises recovery; while Ready it preserves the draft.
+During submission, all dismissal and editing inputs remain blocked.
+Metadata is excluded from the patch in this mode.
+Narrow tag rows prioritize the name and intent checkbox over the count and status text, keeping names readable before and after intent changes.
+
 The editor organizes authoring into pages: `Metadata`, `Tags`, read-only `Properties`, and (for multi-track selections) `Tracks`.
 `Tab` and `Shift-Tab` cycle forward and backward through available pages from any control, search input, or completion popup.
 Inside the Metadata page, editing uses direct keyboard input without checkboxes.
@@ -402,6 +415,8 @@ The notification center can be opened explicitly even when compact status is not
 
 ## Implementation map
 
+- [`TrackPropertiesEditorTagPopover.cpp`](../../../app/tui/TrackPropertiesEditorTagPopover.cpp) owns quick tag rendering and local input; [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) shares the captured authoring session and submission lifecycle with the full editor.
+
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input and overlay state.
@@ -423,6 +438,8 @@ The notification center can be opened explicitly even when compact status is not
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
 
 ## Test map
+
+- [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, mouse dismissal, localized narrow layouts, and submission/recovery controls.
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, and overlay state.
 - [`ShellInputTest.cpp`](../../../test/unit/tui/ShellInputTest.cpp) protects caret editing, history, cursor-aware replacement, and localized action discovery. [`ListSearchTest.cpp`](../../../test/unit/tui/ListSearchTest.cpp) protects local query ownership and filtered selection.

@@ -56,6 +56,7 @@ namespace ao::tui
   class LibraryScanController;
   class SettingsEditor;
   class TrackEditController;
+  enum class TrackEditorMode : std::uint8_t;
 
   using InputCompletionCallback =
     std::function<std::optional<rt::CompletionResult>(std::string_view draft, std::size_t cursor)>;
@@ -132,7 +133,7 @@ namespace ao::tui
     void toggleOutputDevices();
     void togglePresentationPanel();
     void toggleNotificationCenter();
-    void editSelectedTrackProperties();
+    void editSelectedTrackProperties(TrackEditorMode mode);
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();

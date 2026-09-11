@@ -193,7 +193,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("No active track"));
   }
 
-  TEST_CASE("StatusBar - empty track selections retire play action hints and mouse targets",
+  TEST_CASE("StatusBar - empty track selections retire play and tag action hints and mouse targets",
             "[tui][regression][usability]")
   {
     auto actions = std::list<StatusActionHitRegion>{};
@@ -206,6 +206,11 @@ namespace ao::tui::test
                   defaultKeymapPlan()),
         200,
         1);
+      CHECK(rendered.text.contains("Tags") == hasSelection);
+      CHECK(std::ranges::any_of(actions,
+                                [](StatusActionHitRegion const& region)
+                                { return region.action == KeyAction::EditTags && !region.box.IsEmpty(); }) ==
+            hasSelection);
       CHECK(std::ranges::any_of(actions,
                                 [](StatusActionHitRegion const& region)
                                 { return region.action == KeyAction::PlaySelection && !region.box.IsEmpty(); }) ==

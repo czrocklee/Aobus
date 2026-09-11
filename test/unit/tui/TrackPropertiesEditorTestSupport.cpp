@@ -111,12 +111,14 @@ namespace ao::tui::test
                                    TrackPropertiesEditor::CompletionProvider completionProvider,
                                    std::vector<std::pair<std::string, std::size_t>> tagCounts,
                                    std::vector<std::string> tagSuggestions,
-                                   std::string_view const locale)
+                                   std::string_view const locale,
+                                   TrackEditorMode const mode)
   {
     auto const textCatalog = ao::test::messageCatalog(locale);
     return TrackPropertiesEditor{textCatalog,
                                  makePreparation(tracks, std::move(tagCounts), std::move(tagSuggestions), textCatalog),
-                                 std::move(completionProvider)};
+                                 std::move(completionProvider),
+                                 mode};
   }
 
   std::string frame(TrackPropertiesEditor const& editor)

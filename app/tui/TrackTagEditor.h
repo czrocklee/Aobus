@@ -8,6 +8,7 @@
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 
@@ -36,8 +37,15 @@ namespace ao::tui
     bool tryDismissQuery(ftxui::Event const& event);
     void clearQuery();
     bool isCreatingTag() const noexcept { return _offersNewTag && _focusedTagRow >= _visibleTags.size(); }
+    /// Cycle the focused existing tag, or add the focused new-tag row to the draft.
+    void activateFocusedTag();
+    bool hasNewTagOffer() const noexcept { return _offersNewTag; }
+    /// Add the queried new tag even when existing tags also match the query.
+    void createTagFromQuery();
     void handleEvent(ftxui::Event const& event);
-    ftxui::Element render() const;
+    bool isQueryHit(ftxui::Mouse const& mouse) const;
+    std::int32_t visibleRowCount() const noexcept;
+    ftxui::Element render(bool queryFocused = true, std::optional<std::int32_t> optColumns = std::nullopt) const;
 
   private:
     enum class TagIntent : std::uint8_t
@@ -62,10 +70,9 @@ namespace ao::tui
     void refreshVisibleTags();
     void focusTag(std::size_t tagIndex);
     void cycleTagIntent(TagRow& tag) const noexcept;
-    void commitFocusedTag();
     ftxui::Element renderTagCheckbox(TagRow const& tag) const;
     ftxui::Element renderTagStatus(TagRow const& tag, std::size_t total) const;
-    ftxui::Element renderTagsList() const;
+    ftxui::Element renderTagsList(std::optional<std::int32_t> optColumns) const;
 
     i18n::MessageCatalog _textCatalog;
     std::size_t _targetCount;

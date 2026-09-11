@@ -1056,3 +1056,11 @@ AO_I18N_MESSAGE(TuiPanelResize, "tui_panel_resize")
 AO_I18N_MESSAGE(TuiDetailFocus, "tui_detail_focus")
 AO_I18N_MESSAGE(TuiDetailKeys, "tui_detail_keys")
 AO_I18N_MESSAGE(TuiDetailKeysCompact, "tui_detail_keys_compact")
+
+AO_I18N_MESSAGE(TuiTagPopoverTitle, "tui_tag_popover_title")
+AO_I18N_MESSAGE(TuiTagPopoverApply, "tui_tag_popover_apply")
+AO_I18N_MESSAGE(TuiTagPopoverAddApply, "tui_tag_popover_add_apply")
+AO_I18N_MESSAGE(TuiShellDetailEditTags, "tui_shell_detail_edit_tags")
+
+AO_I18N_MESSAGE(TuiShellTags, "tui_shell_tags")
+AO_I18N_MESSAGE(TuiTagPopoverCancel, "tui_tag_popover_cancel")

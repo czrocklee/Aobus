@@ -89,6 +89,7 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `select all` | mark every track in the current view |
 | `select clear` | clear marked tracks |
 | `edit`, `properties` | open the Track Properties editor over the current selection |
+| `tags` | open the quick tag popover over the current selection |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop` | stop playback |
@@ -138,6 +139,7 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `Shift+A` | mark every track in the current view | configurable |
 | `u` | clear marked tracks | configurable |
 | `e` | open the Track Properties editor over the current selection | configurable |
+| `t` | open the quick tag popover over the current selection | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
 | `:` | open an empty Command Palette input | configurable |
 | `Q` (Shift+Q) | request normal exit | configurable |
@@ -189,6 +191,26 @@ Quick Filter edits are live, so Return accepts the highlighted value and Escape 
 | `Tab` | apply selected completion and keep editing |
 | `Return` | run a complete typed command; otherwise activate the highlighted candidate. Explicit candidate navigation takes priority; argument prefixes remain open |
 | `Esc` | discard the command draft and close |
+
+### Quick tag popover keys
+
+`t` or `:tags` opens a centered tag editor over the marked tracks, or the focused track when nothing is marked.
+Its title shows the captured target count.
+
+| Input | Action |
+| --- | --- |
+| Type | search existing tags or name a new tag; spaces remain text while editing the query |
+| Up/Down, PageUp/PageDown | focus and navigate tag results |
+| Space with results focused, or click a tag | cycle that tag's pending state |
+| Tab / Shift+Tab | switch between query and results |
+| Enter | apply pending changes and close; while querying, add the offered new name first, even alongside partial matches; with results focused, create only when the new-tag row is selected |
+| Ctrl+G | restore the focused tag's original state |
+| Esc, Cancel footer, outside click | cancel the draft and close |
+| Ctrl+R | in failed or stale state, reload captured targets and discard the draft; ignored while ready |
+
+Only tag changes are submitted.
+Saving uses the same captured authoring session and recovery behavior as the full editor.
+Input is blocked during submission; failed or stale submissions keep the popover open for reload or cancellation.
 
 ### Track Properties editor keys
 

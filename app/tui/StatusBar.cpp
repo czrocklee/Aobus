@@ -50,7 +50,7 @@ namespace ao::tui
                                        KeyAction const action,
                                        bool const hasTrackSelection)
     {
-      if (!hasTrackSelection && action == KeyAction::PlaySelection)
+      if (!hasTrackSelection && (action == KeyAction::PlaySelection || action == KeyAction::EditTags))
       {
         return {};
       }
@@ -153,6 +153,8 @@ namespace ao::tui
         appendActionChip(
           KeyAction::BeginPanelResize, i18n::requiredText(textCatalog, i18n::MessageId::TuiPanelResizeStatus));
       }
+
+      appendActionChip(KeyAction::EditTags, i18n::requiredText(textCatalog, i18n::MessageId::TuiShellTags));
 
       if (state.terminalColumns >= kExpandedWorkspaceHintColumns)
       {

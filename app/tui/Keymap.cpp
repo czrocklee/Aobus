@@ -52,6 +52,7 @@ namespace ao::tui
     constexpr auto kSelectVisualDefaults = std::to_array<std::string_view>({"V"});
     constexpr auto kSelectAllDefaults = std::to_array<std::string_view>({"Shift+A"});
     constexpr auto kSelectClearDefaults = std::to_array<std::string_view>({"U"});
+    constexpr auto kEditTagsDefaults = std::to_array<std::string_view>({"T"});
     constexpr auto kEditPropertiesDefaults = std::to_array<std::string_view>({"E"});
     constexpr auto kPlaySelectionDefaults = std::to_array<std::string_view>({"Enter"});
     constexpr auto kPreviousTrackDefaults = std::to_array<std::string_view>({"K"});
@@ -126,6 +127,7 @@ namespace ao::tui
         {.actionId = "tui.library.editProperties",
          .action = KeyAction::EditProperties,
          .defaultChords = kEditPropertiesDefaults},
+        {.actionId = "tui.library.editTags", .action = KeyAction::EditTags, .defaultChords = kEditTagsDefaults},
         {.actionId = "tui.library.playSelection",
          .action = KeyAction::PlaySelection,
          .defaultChords = kPlaySelectionDefaults},

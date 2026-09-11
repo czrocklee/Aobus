@@ -3448,4 +3448,31 @@ namespace ao::tui::test
     CHECK(model.selectedIndex() == 5);
     CHECK(library.currentListId() == rt::kAllTracksListId);
   }
+
+  TEST_CASE("EventController - quick tag key captures marks while go-to and input retain t",
+            "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    controller.tryHandleEvent(ftxui::Event::Character('g'));
+    controller.tryHandleEvent(ftxui::Event::Character('t'));
+    CHECK_FALSE(fixture.trackEditPtr->isActive());
+    controller.tryHandleEvent(ftxui::Event::Escape);
+    enterCommand(controller, "select all");
+    controller.tryHandleEvent(ftxui::Event::Character('t'));
+    REQUIRE(fixture.trackEditPtr->isActive());
+    CHECK(fixture.trackEditPtr->activeEditor()->mode() == TrackEditorMode::Tags);
+    CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == library.tracks().size());
+    controller.tryHandleEvent(ftxui::Event::Escape);
+    CHECK_FALSE(fixture.trackEditPtr->isActive());
+    enterCommand(controller, "select clear");
+    enterCommand(controller, "tags");
+    REQUIRE(fixture.trackEditPtr->isActive());
+    CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == 1);
+    controller.tryHandleEvent(ftxui::Event::Escape);
+    controller.tryHandleEvent(ftxui::Event::Character('/'));
+    controller.tryHandleEvent(ftxui::Event::Character('t'));
+    CHECK_FALSE(fixture.trackEditPtr->isActive());
+  }
 } // namespace ao::tui::test

@@ -83,7 +83,7 @@ namespace ao::tui
      * changes cannot shrink or grow what the editor writes. A refusal reports
      * itself through the notification feed and changes nothing else.
      */
-    bool tryOpen(std::vector<TrackId> targetIds);
+    bool tryOpen(std::vector<TrackId> targetIds, TrackEditorMode mode = TrackEditorMode::Properties);
 
     /// The editor to render and route input to, or null when none is tryOpen.
     TrackPropertiesEditor const* activeEditor() const noexcept;

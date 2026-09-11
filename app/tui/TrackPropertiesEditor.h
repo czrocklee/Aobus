@@ -48,12 +48,18 @@ namespace ao::tui
   struct TrackEditorPreparation final
   {
     std::vector<TrackEditorTarget> targets{};
-    /// The aggregate baseline: common values, mixed markers, and read-only rows.
+    /// The aggregate baseline: common values, mixed markers, and read-only rows; empty in tags-only preparation.
     uimodel::TrackPropertiesFormModel baseline;
     /// Per-tag counts on the captured tracks: tag and how many tracks carry it.
     std::vector<std::pair<std::string, std::size_t>> tagCounts{};
     /// Tags the library knows that no captured track carries, most frequent first.
     std::vector<std::string> tagSuggestions{};
+  };
+
+  enum class TrackEditorMode : std::uint8_t
+  {
+    Properties,
+    Tags,
   };
 
   enum class TrackEditorTab : std::uint8_t
@@ -107,11 +113,13 @@ namespace ao::tui
 
     TrackPropertiesEditor(i18n::MessageCatalog textCatalog,
                           TrackEditorPreparation preparation,
-                          CompletionProvider completionProvider = {});
+                          CompletionProvider completionProvider = {},
+                          TrackEditorMode mode = TrackEditorMode::Properties);
 
     std::size_t targetCount() const noexcept { return _targets.size(); }
     /// The captured targets, in the order they will be written.
     std::vector<TrackEditorTarget> const& targets() const noexcept { return _targets; }
+    TrackEditorMode mode() const noexcept { return _mode; }
     TrackEditorTab tab() const noexcept { return _tab; }
     /// Whether any field or tag carries intent to write.
     bool isDirty() const noexcept;
@@ -131,7 +139,7 @@ namespace ao::tui
     bool canApply() const noexcept;
     /// What the included fields and tag edits would write, for the footer's save summary.
     TrackEditorPatchSummary patchSummary() const noexcept;
-    /// The combined metadata-and-tags patch.
+    /// Tag additions/removals in both modes, plus metadata edits in Properties mode.
     rt::TrackPropertiesPatch buildPatch() const;
 
     /// Consumes @p event; an active editor answers for every key the terminal delivers.
@@ -140,6 +148,14 @@ namespace ao::tui
     ftxui::Element renderModal(std::int32_t terminalColumns, std::int32_t terminalRows) const;
 
   private:
+    static constexpr std::int32_t kTagPopoverColumns = 64;
+    static constexpr std::int32_t kTagPopoverRows = 20;
+    static constexpr std::int32_t kTagPopoverNavigationRows = 12;
+
+    bool tryHandleTagPopoverEvent(ftxui::Event const& event);
+    void handleTagPopoverMouse(ftxui::Mouse const& mouse);
+    ftxui::Element renderTagPopover(std::int32_t columns, std::int32_t availableRows) const;
+    ftxui::Element renderTagPopoverFooter(std::int32_t columns, bool showNavigation) const;
     void handleMouse(ftxui::Mouse const& mouse);
     void handleTargetEvent(ftxui::Event const& event);
     void scrollTargets(std::int32_t delta);
@@ -157,6 +173,9 @@ namespace ao::tui
     std::vector<TrackEditorTarget> _targets{};
     TrackMetadataEditor _metadataEditor;
     TrackTagEditor _tagEditor;
+    TrackEditorMode _mode = TrackEditorMode::Properties;
+    bool _tagQueryFocused = false;
+    mutable ftxui::Box _tagPopoverBox = kEmptyMouseBox;
     TrackEditorTab _tab = TrackEditorTab::Metadata;
     std::size_t _tracksRow = 0;
     mutable ftxui::Box _targetViewport = kEmptyMouseBox;

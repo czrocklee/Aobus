@@ -152,6 +152,7 @@ namespace ao::tui
        .descriptionId = i18n::MessageId::TuiShellHelpSelect,
        .command = ":select toggle / :select visual / :select all / :select clear"},
       {.descriptionId = i18n::MessageId::TuiShellDetailEditProperties, .command = ":edit"},
+      {.descriptionId = i18n::MessageId::TuiShellDetailEditTags, .command = ":tags"},
       {.groupId = i18n::MessageId::TuiKeyGroupPanels,
        .descriptionId = i18n::MessageId::TuiShellHelpChooseList,
        .command = ":lists"},
