@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, winui
+from ..core import builddir, buildlock, compiler_cache, winui
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -142,6 +142,16 @@ def _winui_build_environment(jobs: int) -> dict[str, str]:
     }
 
 
+def sync_compiler_cache(build_dir: Path) -> None:
+    """Reconfigure an existing tree only when its managed launchers changed."""
+    arguments = compiler_cache.cmake_launcher_arguments(build_dir=build_dir)
+    if not arguments:
+        return
+    print(f"Updating compiler-cache launchers in {build_dir}...")
+    if run(["cmake", "-S", str(PROJECT_ROOT), "-B", str(build_dir), *arguments]) != 0:
+        raise die("compiler-cache launcher configure failed.")
+
+
 def validate_build_tree(
     args: argparse.Namespace, build_dir: Path, *, compiler_only: bool = False, expected_build_type: str | None = None
 ) -> str:
@@ -253,6 +263,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_ASAN={'ON' if args.asan else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_TSAN={'ON' if args.tsan else 'OFF'}")
+        configure.extend(compiler_cache.cmake_launcher_arguments(build_dir=build_dir))
         if args.asan:
             sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
             print(f"{sanitizer_name} enabled for this build.")

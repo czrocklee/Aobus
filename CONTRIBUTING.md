@@ -13,6 +13,7 @@ page hard to scan.
 | `doc/development/naming-convention.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
 | `doc/development/commit-message.md` | Commit message format, scopes, subject/body guidance, and examples |
 | `doc/development/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
+| `doc/development/compiler-cache.md` | Compiler-cache setup, shared host state, capacity, overrides, and CI integration |
 | `doc/development/macos.md` | Native macOS prerequisites, portal bootstrap, local state, supported commands, and current limitations |
 | `doc/development/windows.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
 | `doc/architecture/failure-and-reporting.md` | Failure ownership, recovery, reporting, and presentation boundaries |
@@ -28,6 +29,11 @@ overriding platform state locations.
 
 Select completion checks by the changed behavior using
 [validation and review](doc/development/test/validation-and-review.md).
+
+To enable the shared compiler cache, run `./ao setup compiler-cache` once for each native host user (`ao.bat setup compiler-cache` on Windows).
+Builds also work without compiler caching.
+Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` exports override the shared-store and capacity defaults, including values inherited from an older shell session.
+See [compiler-cache setup and migration](doc/development/compiler-cache.md) before adopting the managed defaults.
 
 Install the repository's commit hooks explicitly with `./ao setup git-hooks`
 (`ao.bat setup git-hooks` on Windows).

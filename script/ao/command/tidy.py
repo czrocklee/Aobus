@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -739,10 +738,9 @@ def apply_fixes(tmpdir: Path, clang_apply_replacements: str = "clang-apply-repla
     return True
 
 
-def requires_build_environment(arguments: Sequence[str]) -> bool:
+def requires_build_environment(args: argparse.Namespace) -> bool:
     from ..core import buildenv
 
-    args = buildenv.parse_command_arguments(NAME, arguments)
     if args.no_build:
         return False
     files, _ = tidyengine.resolve_scope(args, ALL_FOLDERS, "Checking", suffixes=gitfiles.SOURCE_SUFFIXES)

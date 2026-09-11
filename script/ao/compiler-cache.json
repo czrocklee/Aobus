@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "defaultCacheSize": "20G",
+  "local": {
+    "provider": "ccache",
+    "minimumVersion": "4.13.6",
+    "linuxVersion": "4.13.6",
+    "macosFormula": "ccache",
+    "windows": {
+      "version": "4.13.6",
+      "archiveUrl": "https://github.com/ccache/ccache/releases/download/v4.13.6/ccache-4.13.6-windows-x86_64.zip",
+      "archiveSha256": "3d7cebb05850ad704e197b3f1d3f0f924ab6c9fdfc561578e146184fe9d89380",
+      "archiveMember": "ccache-4.13.6-windows-x86_64/ccache.exe"
+    }
+  },
+  "ci": {
+    "provider": "sccache",
+    "version": "v0.17.0",
+    "action": "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
+  }
+}

@@ -29,18 +29,6 @@ aobus_macos_default_state_root() {
     printf '%s\n' "$home_directory/Library/Caches/Aobus"
 }
 
-aobus_macos_prepare_ccache_environment() {
-    local project_root="$1"
-    local state_root="$2"
-
-    export CCACHE_DIR="$state_root/ccache"
-    export CCACHE_BASEDIR="$project_root"
-    export CCACHE_MAXSIZE="10G"
-    export CCACHE_COMPRESS=1
-    export CCACHE_SLOPPINESS="time_macros"
-    mkdir -p "$CCACHE_DIR"
-}
-
 aobus_macos_triplet() {
     case "${1:-}" in
         x86_64)
@@ -348,8 +336,6 @@ aobus_macos_prepare_build_environment() {
         return 1
     fi
     export AOBUS_STATE_ROOT="$state_root"
-    aobus_macos_prepare_ccache_environment "$project_root" "$state_root"
-
     if ! llvm_root="$(aobus_macos_formula_prefix "$AOBUS_HOMEBREW" "$AOBUS_MACOS_LLVM_FORMULA")"; then
         return 1
     fi

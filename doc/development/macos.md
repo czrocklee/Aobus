@@ -108,17 +108,17 @@ Managed tool and package state defaults to `$HOME/Library/Caches/Aobus`:
 - `tools/vcpkg/<revision>` contains the bootstrapped pinned checkout;
 - `cache/vcpkg/downloads` contains verified source downloads;
 - `cache/vcpkg/binaries` contains reusable built packages;
-- `ccache` contains compiler-cache state when the optional tool is installed;
+- `ccache` contains the shared compiler-cache state after explicit setup;
 - `tools/libcxx-expected-shim/<llvm-version>` contains the generated libc++
   compatibility header.
 - `tools/venvs/<checkout>/<fingerprint>` contains the managed Ruff/mypy
   environment when a Python-check command needs it.
 
-`AOBUS_STATE_ROOT` replaces that base. An explicit `VCPKG_ROOT` may select a
-pre-bootstrapped checkout for diagnosis, but the registry and manifest locks
-still apply. `ccache` is optional; install it with Homebrew if desired.
-When present, it uses `$AOBUS_STATE_ROOT/ccache`, a 10 GiB maximum, compression,
-and the same time-macro policy as the Linux development environment.
+`AOBUS_STATE_ROOT` replaces that base.
+An explicit `VCPKG_ROOT` may select a pre-bootstrapped checkout for diagnosis, but the registry and manifest locks still apply.
+Run `./ao setup compiler-cache` to install the governed Homebrew ccache formula, verify its minimum compatible version, and enable it for portal builds.
+The shared store defaults to 20 GB.
+See [Compiler cache](compiler-cache.md) for capacity and override precedence.
 
 The project validation VM sees the authoritative Linux checkout through SMB:
 

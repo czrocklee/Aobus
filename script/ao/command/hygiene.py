@@ -10,7 +10,7 @@ be invalidated by formatting. Every stage uses the same resolved source scope.
 
 import argparse
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 
 from ..core import buildenv, gitfiles, tidyengine
 from . import format as format_command
@@ -88,8 +88,7 @@ def _name_audit_args(paths: list[str]) -> argparse.Namespace:
     return _subcommand_defaults(name_audit.register, "name-audit", paths=paths, fail_on_issue=True)
 
 
-def requires_build_environment(arguments: Sequence[str]) -> bool:
-    args = buildenv.parse_command_arguments(NAME, arguments)
+def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, format_command.resolve_files(args))
 
 

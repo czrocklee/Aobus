@@ -12,15 +12,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ..core import builddir, buildlock
+from ..core import builddir, buildlock, compiler_cache
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
+from . import build
 from .test import SUITE_TARGETS, run_suite
 
 HELP = "Build with --coverage, run tests, and report uncovered lines per source file"
 NAME = "coverage"
 # True when ao.bat must initialize the MSVC/vcpkg build environment first.
 REQUIRES_BUILD_ENV = False
+
+
+def requires_build_environment(_args: argparse.Namespace) -> bool:
+    return builddir.platform_profile().name == "linux"
 
 
 EPILOG = """\
@@ -308,9 +313,12 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
             f"-DCMAKE_CXX_FLAGS={coverage_cxx_flags()}",
             "-DCMAKE_EXE_LINKER_FLAGS=--coverage",
             "-DCMAKE_SHARED_LINKER_FLAGS=--coverage",
+            *compiler_cache.cmake_launcher_arguments(build_dir=build_dir),
         ]
         if run(configure) != 0:
             raise die("coverage configure failed.")
+    else:
+        build.sync_compiler_cache(build_dir)
 
     print("Building tests...")
     suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)

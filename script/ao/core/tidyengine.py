@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, buildlock, gitfiles
+from . import builddir, buildlock, compiler_cache, gitfiles
 from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
@@ -115,7 +115,8 @@ def _ensure_compile_db(
 ) -> None:
     database = build_dir / "compile_commands.json"
     database_existed = database.is_file()
-    if database_existed and not reconfigure_preset:
+    launcher_args = compiler_cache.cmake_launcher_arguments(build_dir=build_dir)
+    if database_existed and not reconfigure_preset and not launcher_args:
         return
 
     if reconfigure_preset:
@@ -141,7 +142,10 @@ def _ensure_compile_db(
             # after a preset stops overriding an AOBUS_BUILD_* cache option.
             configure += ["-U", "AOBUS_BUILD_*"]
     elif (build_dir / "CMakeCache.txt").is_file():
-        print("compile_commands.json missing, running cmake configure...")
+        if database_existed:
+            print(f"Updating compiler-cache launchers in {build_dir}...")
+        else:
+            print("compile_commands.json missing, running cmake configure...")
         configure = ["cmake", str(PROJECT_ROOT), "-B", str(build_dir)]
     else:
         print("compile_commands.json missing, running cmake configure...")
@@ -155,6 +159,7 @@ def _ensure_compile_db(
             str(build_dir),
         ]
     configure += configure_args or []
+    configure += launcher_args
     _run_tail(configure, "configure")
     print("Configure done.")
     if not database.is_file():

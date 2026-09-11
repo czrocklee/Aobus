@@ -1,5 +1,7 @@
 """Tests for the cross-platform clang-tidy execution plumbing."""
 
+import contextlib
+import io
 import json
 import os
 import shlex
@@ -203,6 +205,16 @@ class ClangToolDiscoveryTest(unittest.TestCase):
 
 
 class CompileDatabaseProvisioningTest(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.dict(os.environ))
+        for key in (
+            "CMAKE_C_COMPILER_LAUNCHER",
+            "CMAKE_CXX_COMPILER_LAUNCHER",
+            "AOBUS_MANAGED_C_COMPILER_LAUNCHER",
+            "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER",
+        ):
+            os.environ.pop(key, None)
+
     def test_existing_database_is_reconfigured_with_requested_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
@@ -248,6 +260,47 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                 tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
 
             run_tail.assert_not_called()
+
+    def test_existing_database_refreshes_when_managed_launcher_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
+            (build_dir / "CMakeCache.txt").write_text("", encoding="utf-8")
+            output = io.StringIO()
+            environment = {
+                "CMAKE_CXX_COMPILER_LAUNCHER": "/managed/ccache",
+                "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER": "1",
+            }
+            with (
+                mock.patch.dict(os.environ, environment),
+                mock.patch.object(tidyengine, "_run_tail") as run_tail,
+                contextlib.redirect_stdout(output),
+            ):
+                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
+
+            configure = run_tail.call_args_list[0].args[0]
+            self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=/managed/ccache", configure)
+            self.assertEqual(run_tail.call_args_list[0].args[1], "configure")
+            self.assertIn("Updating compiler-cache launchers", output.getvalue())
+            self.assertNotIn("compile_commands.json missing", output.getvalue())
+            # An existing compile database does not prove generated headers
+            # exist; preserve their incremental readiness check after configure.
+            self.assertEqual(run_tail.call_count, 2)
+            self.assertEqual(
+                run_tail.call_args_list[1].args,
+                (
+                    [
+                        "cmake",
+                        "--build",
+                        str(build_dir),
+                        "--target",
+                        "aobus_generated_headers",
+                        "--parallel",
+                        str(tidyengine.os.cpu_count() or 1),
+                    ],
+                    "header generation build",
+                ),
+            )
 
     def test_new_database_builds_only_the_generated_header_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
