@@ -11,6 +11,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -150,6 +151,57 @@ namespace ao::tui::test
         CHECK(titled.screen.PixelAt(optTitle->x_min, optTitle->y_min).foreground_color ==
               missing.screen.PixelAt(optFilename->x_min, optFilename->y_min).foreground_color);
         CHECK_FALSE(titled.text.contains("song.flac"));
+      }
+    }
+  }
+
+  TEST_CASE("DetailFieldLayout - native Unicode filenames wrap within the value column", "[tui][regression][detail]")
+  {
+    auto const row = rt::TrackRow{.optUriPath = utility::pathFromUtf8("/音楽/演奏/夜空 旋律 月光 海辺 終曲.flac")};
+
+    for (std::string_view const locale : {"en-US", "ja-JP", "zh-Hans"})
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const track = makeTrackListEntry(catalog, row);
+
+      for (auto const columns : {24, 40})
+      {
+        CAPTURE(locale, columns);
+        auto const rendered = renderElement(detailPane(catalog, &track, {}, columns), columns, 12);
+        INFO(rendered.text);
+        auto const optFirst = findTextCells(rendered.screen, "夜空");
+        auto const optLast = findTextCells(rendered.screen, "終曲.flac");
+        REQUIRE(optFirst);
+        REQUIRE(optLast);
+        CHECK(optFirst->x_min > 4);
+        CHECK(optFirst->y_min < optLast->y_min);
+
+        for (std::string_view const word : {"夜空", "旋律", "月光", "海辺", "終曲.flac"})
+        {
+          CAPTURE(word);
+          auto const optCells = findTextCells(rendered.screen, word);
+          REQUIRE(optCells);
+          CHECK(optCells->x_min >= optFirst->x_min);
+          CHECK(optCells->x_max <= columns - 3);
+          CHECK(rendered.screen.PixelAt(optCells->x_min, optCells->y_min).bold);
+        }
+
+        for (auto line = optFirst->y_min; line <= optLast->y_min; ++line)
+        {
+          CHECK(rendered.screen.PixelAt(optFirst->x_min, line).character != " ");
+          CHECK(rendered.screen.PixelAt(optFirst->x_min, line).bold);
+
+          for (auto const offset : {1, 2})
+          {
+            auto const& gap = rendered.screen.PixelAt(optFirst->x_min - offset, line).character;
+            CHECK((gap.empty() || gap == " "));
+          }
+        }
+
+        CHECK_FALSE(rendered.text.contains("音楽"));
+        CHECK_FALSE(rendered.text.contains("演奏"));
+        CHECK(track.row.title.empty());
+        CHECK(track.row.optUriPath == row.optUriPath);
       }
     }
   }

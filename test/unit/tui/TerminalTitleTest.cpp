@@ -420,6 +420,62 @@ namespace ao::tui::test
     CHECK(writes.size() == expectedWrites);
   }
 
+  TEST_CASE("TerminalTitle - failed write after throttling restores once and retires output",
+            "[tui][regression][terminal-title]")
+  {
+    auto const now = std::chrono::steady_clock::time_point{};
+    auto temp = ao::test::TempDir{};
+    auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
+    auto writes = std::vector<std::string>{};
+    bool returnFailure = false;
+
+    SECTION("sink returns false")
+    {
+      returnFailure = true;
+    }
+
+    SECTION("sink throws an I/O error")
+    {
+      returnFailure = false;
+    }
+
+    {
+      auto title = TerminalTitle{runtimePtr->library(),
+                                 [&](std::string_view value)
+                                 {
+                                   writes.emplace_back(value);
+
+                                   if (value == "\033]2;D\033\\")
+                                   {
+                                     if (returnFailure)
+                                     {
+                                       return false;
+                                     }
+
+                                     throw std::system_error{std::make_error_code(std::errc::io_error)};
+                                   }
+
+                                   return true;
+                                 }};
+      REQUIRE(title.setFormat("$title"));
+      title.update(kInvalidTrackId, "A", now);
+      title.update(kInvalidTrackId, "B", now + std::chrono::milliseconds{50});
+      title.update(kInvalidTrackId, "C", now + std::chrono::milliseconds{199});
+      REQUIRE(writes == std::vector<std::string>{"\033[22;2t\033]2;A\033\\"});
+
+      CHECK_NOTHROW(title.update(kInvalidTrackId, "D", now + std::chrono::milliseconds{200}));
+      CHECK(writes == std::vector<std::string>{"\033[22;2t\033]2;A\033\\", "\033]2;D\033\\", "\033[23;2t"});
+      title.update(kInvalidTrackId, "E", now + std::chrono::milliseconds{400});
+      REQUIRE(title.setFormat(""));
+      title.update(kInvalidTrackId, {}, now + std::chrono::milliseconds{401});
+      REQUIRE(title.setFormat("$title"));
+      title.update(kInvalidTrackId, "F", now + std::chrono::milliseconds{600});
+      title.restore();
+    }
+
+    CHECK(writes == std::vector<std::string>{"\033[22;2t\033]2;A\033\\", "\033]2;D\033\\", "\033[23;2t"});
+  }
+
   TEST_CASE("TerminalTitle - unexpected sink exceptions remain programming failures",
             "[tui][regression][terminal-title]")
   {
