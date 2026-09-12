@@ -1049,7 +1049,8 @@ zh_Hant:table {
     tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
     tui_shell_tags { "標籤" }
-    tui_tag_popover_cancel { "取消" }
+    tui_tag_popover_cancel { "捨棄變更" }
+    tui_tag_popover_close { "關閉" }
     tui_tag_popover_title { "標籤 · {count, plural, other {# 首曲目}}" }
     tui_tag_popover_apply { "套用" }
     tui_tag_popover_add_apply { "新增並套用" }

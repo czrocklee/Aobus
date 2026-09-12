@@ -1051,7 +1051,8 @@ root:table {
     tui_detail_keys { "Shift+←/→ resize · j/k sections · Enter toggle · ←/→ collapse/expand · PgUp/PgDn scroll · Esc tracks" }
     tui_detail_keys_compact { "Shift+←/→ resize · Enter toggle · Esc tracks" }
     tui_shell_tags { "Tags" }
-    tui_tag_popover_cancel { "Cancel" }
+    tui_tag_popover_cancel { "Discard changes" }
+    tui_tag_popover_close { "Close" }
     tui_tag_popover_title { "Tags · {count, plural, one {# track} other {# tracks}}" }
     tui_tag_popover_apply { "Apply" }
     tui_tag_popover_add_apply { "Add & apply" }

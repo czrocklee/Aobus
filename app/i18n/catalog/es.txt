@@ -1049,7 +1049,8 @@ es:table {
     tui_detail_keys { "Shift+←/→ ancho · j/k secciones · Enter alternar · ←/→ plegar/desplegar · PgUp/PgDn desplazar · Esc pistas" }
     tui_detail_keys_compact { "Shift+←/→ ancho · Enter alternar · Esc pistas" }
     tui_shell_tags { "Etiquetas" }
-    tui_tag_popover_cancel { "Cancelar" }
+    tui_tag_popover_cancel { "Descartar cambios" }
+    tui_tag_popover_close { "Cerrar" }
     tui_tag_popover_title { "Etiquetas · {count, plural, one {# pista} other {# pistas}}" }
     tui_tag_popover_apply { "Aplicar" }
     tui_tag_popover_add_apply { "Añadir y aplicar" }

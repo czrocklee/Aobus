@@ -351,7 +351,9 @@ Space toggles a focused result, while spaces typed in the query remain text.
 Arrow navigation returns focus to results.
 Enter applies the pending tag patch; with query focus it first adds an offered new name even alongside partial matches, while result focus creates only from the selected creation row.
 An exact search match alone never changes an existing tag.
-Escape, the Cancel footer, or an outside press cancels the draft directly, without the full editor's discard prompt.
+Escape, the exit footer, or an outside press cancels the draft directly, without the full editor's discard prompt.
+The footer says Close for a clean view and Discard changes when tag intents or an offered new tag would be lost.
+At 80 columns, the maintained locale labels fit on one action row; narrower terminals may stack the actions.
 Ctrl+R reloads the same targets and retains the tags-only mode only in Failed or Stale state, where the footer advertises recovery; while Ready it preserves the draft.
 During submission, all dismissal and editing inputs remain blocked.
 Metadata is excluded from the patch in this mode.
@@ -477,7 +479,7 @@ The notification center can be opened explicitly even when compact status is not
 ## Test map
 
 - [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) protects expression compilation, metadata invalidation, title ownership, Soul composition, and control-safe output. [`SoulButtonTest.cpp`](../../../test/unit/tui/SoulButtonTest.cpp) protects shared playback-state glyphs.
-- [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, mouse dismissal, localized narrow layouts, and submission/recovery controls.
+- [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, localized Close/Discard transitions, key and label mouse targets in narrow layouts, and submission/recovery controls.
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, and overlay state.
 - [`ShellInputTest.cpp`](../../../test/unit/tui/ShellInputTest.cpp) protects caret editing, history, cursor-aware replacement, and localized action discovery. [`ListSearchTest.cpp`](../../../test/unit/tui/ListSearchTest.cpp) protects local query ownership and filtered selection.

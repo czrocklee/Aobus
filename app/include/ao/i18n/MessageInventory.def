@@ -1065,6 +1065,7 @@ AO_I18N_MESSAGE(TuiShellDetailEditTags, "tui_shell_detail_edit_tags")
 
 AO_I18N_MESSAGE(TuiShellTags, "tui_shell_tags")
 AO_I18N_MESSAGE(TuiTagPopoverCancel, "tui_tag_popover_cancel")
+AO_I18N_MESSAGE(TuiTagPopoverClose, "tui_tag_popover_close")
 
 AO_I18N_MESSAGE(TuiSettingsTerminalTitle, "tui_settings_terminal_title")
 AO_I18N_MESSAGE(TuiSettingsTerminalTitleHint, "tui_settings_terminal_title_hint")

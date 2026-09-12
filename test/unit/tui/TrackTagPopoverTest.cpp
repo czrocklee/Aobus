@@ -12,9 +12,11 @@
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -130,37 +132,134 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isConfirmingDiscard());
   }
 
-  TEST_CASE("TrackTagPopover - localized narrow frames retain apply and cancel controls", "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes",
+            "[tui][regression][editor]")
   {
-    for (auto const* locale : {"en", "zh-Hans", "zh-Hant", "ja", "de", "es", "fr"})
+    constexpr auto kLabels = std::array{std::tuple{"en", "Close", "Discard changes"},
+                                        std::tuple{"zh-Hans", "关闭", "放弃更改"},
+                                        std::tuple{"zh-Hant", "關閉", "捨棄變更"},
+                                        std::tuple{"ja", "閉じる", "変更を破棄"},
+                                        std::tuple{"de", "Schließen", "Änderungen verwerfen"},
+                                        std::tuple{"es", "Cerrar", "Descartar cambios"},
+                                        std::tuple{"fr", "Fermer", "Abandonner les modifications"}};
+
+    for (auto const& [locale, close, discard] : kLabels)
     {
       CAPTURE(locale);
       auto editor =
         makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, locale, TrackEditorMode::Tags);
+      auto const clean = frame(editor);
+      CHECK(clean.contains(close));
+      CHECK_FALSE(clean.contains(discard));
+
+      editor.tryHandleEvent(ftxui::Event::Character(' '));
+      REQUIRE(editor.isDirty());
+      auto const dirty = frame(editor);
+      CHECK(dirty.contains(discard));
+      CHECK_FALSE(dirty.contains(close));
+
+      editor.tryHandleEvent(ftxui::Event::Character(' '));
+      REQUIRE_FALSE(editor.isDirty());
+      auto const restored = frame(editor);
+      CHECK(restored.contains(close));
+      CHECK_FALSE(restored.contains(discard));
+
       typeText(editor, "New");
+      CHECK_FALSE(editor.isDirty());
+      auto const offered = frame(editor);
+      CHECK(offered.contains(discard));
+      CHECK_FALSE(offered.contains(close));
+
+      editor.tryHandleEvent(ftxui::Event::Escape);
+      CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+      CHECK_FALSE(editor.isConfirmingDiscard());
+    }
+  }
+
+  TEST_CASE("TrackTagPopover - clearing a new-tag query and filtering an existing tag keep the view clean",
+            "[tui][regression][editor]")
+  {
+    auto editor =
+      makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
+    typeText(editor, "X");
+    CHECK(frame(editor).contains("Discard changes"));
+    editor.tryHandleEvent(ftxui::Event::Backspace);
+    auto const cleared = frame(editor);
+    CHECK(cleared.contains("Close"));
+    CHECK_FALSE(cleared.contains("Discard changes"));
+    CHECK_FALSE(editor.isDirty());
+
+    typeText(editor, "Jazz");
+    auto const filtered = frame(editor);
+    CHECK(filtered.contains("Close"));
+    CHECK_FALSE(filtered.contains("Discard changes"));
+    CHECK_FALSE(editor.isDirty());
+    editor.tryHandleEvent(ftxui::Event::Escape);
+    CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+    CHECK_FALSE(editor.isConfirmingDiscard());
+  }
+
+  TEST_CASE("TrackTagPopover - localized narrow frames retain clickable clean and draft exit controls",
+            "[tui][unit][editor][layout]")
+  {
+    for (auto const* locale : {"en", "zh-Hans", "zh-Hant", "ja", "de", "es", "fr"})
+    {
       auto const catalog = ao::test::messageCatalog(locale);
 
-      for (std::int32_t const width : {24, 36, 48, 80})
+      for (bool const offersTag : {false, true})
       {
-        CAPTURE(width);
-        auto const rendered = renderElement(editor.renderModal(width, 16), width, 16);
-        CHECK(rendered.text.contains("Enter"));
-        CHECK(rendered.text.contains("Esc"));
+        auto const applyLabel =
+          offersTag ? i18n::MessageId::TuiTagPopoverAddApply : i18n::MessageId::TuiTagPopoverApply;
+        auto const exitLabel = offersTag ? i18n::MessageId::TuiTagPopoverCancel : i18n::MessageId::TuiTagPopoverClose;
 
-        if (width >= 48)
+        for (std::int32_t const width : {24, 36, 48, 80})
         {
-          CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiTagPopoverAddApply)));
-          CHECK(rendered.text.contains(i18n::requiredText(catalog, i18n::MessageId::TuiTagPopoverCancel)));
-        }
+          for (bool const clickLabel : {false, true})
+          {
+            CAPTURE(locale, offersTag, width, clickLabel);
+            auto editor =
+              makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, locale, TrackEditorMode::Tags);
 
-        auto const optCancelBox = findTextCells(rendered.screen, "Esc");
-        REQUIRE(optCancelBox);
-        auto const mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
-                                        .motion = ftxui::Mouse::Pressed,
-                                        .x = optCancelBox->x_min,
-                                        .y = optCancelBox->y_min};
-        editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
-        CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+            if (offersTag)
+            {
+              typeText(editor, "New");
+            }
+
+            auto const rendered = renderElement(editor.renderModal(width, 16), width, 16);
+            INFO(rendered.text);
+            CHECK(rendered.text.contains("Enter"));
+            auto const optExitKeyBox = findTextCells(rendered.screen, "Esc");
+            REQUIRE(optExitKeyBox);
+
+            if (width == 80)
+            {
+              auto const optApplyKeyBox = findTextCells(rendered.screen, "Enter");
+              REQUIRE(optApplyKeyBox);
+              CHECK(optApplyKeyBox->y_min == optExitKeyBox->y_min);
+            }
+
+            if (width >= 48)
+            {
+              CHECK(rendered.text.contains(i18n::requiredText(catalog, applyLabel)));
+            }
+
+            if (width >= 48 || !offersTag)
+            {
+              CHECK(rendered.text.contains(i18n::requiredText(catalog, exitLabel)));
+            }
+
+            // The label starts after the key and its single separating space.
+            auto const clickColumn = clickLabel ? optExitKeyBox->x_max + 2 : optExitKeyBox->x_min;
+            CHECK(rendered.screen.PixelAt(clickColumn, optExitKeyBox->y_min).character != " ");
+            auto const mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                            .motion = ftxui::Mouse::Pressed,
+                                            .x = clickColumn,
+                                            .y = optExitKeyBox->y_min};
+            editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+            CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+            CHECK_FALSE(editor.isConfirmingDiscard());
+          }
+        }
       }
     }
   }
@@ -168,30 +267,53 @@ namespace ao::tui::test
   TEST_CASE("TrackTagPopover - narrow failure frames preserve recovery controls and drafts",
             "[tui][unit][editor][layout]")
   {
-    for (auto const status : {TrackEditorStatus::Stale, TrackEditorStatus::Failed})
+    constexpr auto kVisibleLabels =
+      std::array{std::tuple{"de", "Schließen", "Änderungen"}, std::tuple{"fr", "Fermer", "Abandonner"}};
+
+    for (auto const& [locale, close, discardPrefix] : kVisibleLabels)
     {
-      CAPTURE(status);
-      auto editor =
-        makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "de", TrackEditorMode::Tags);
-      editor.tryHandleEvent(ftxui::Event::Character(' '));
-      editor.setStatus(status, std::string(400, 'x'));
-      auto const rendered = renderElement(editor.renderModal(24, 16), 24, 16);
-      auto const optReloadBox = findTextCells(rendered.screen, "Ctrl-R");
-      REQUIRE(optReloadBox);
-      auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
-                                .motion = ftxui::Mouse::Pressed,
-                                .x = optReloadBox->x_min,
-                                .y = optReloadBox->y_min};
-      editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
-      CHECK(editor.takeRequest() == TrackEditorRequest::Reload);
-      CHECK(editor.buildPatch().tagsToRemove == std::vector<std::string>{"Jazz"});
-      auto const nextFrame = renderElement(editor.renderModal(24, 16), 24, 16);
-      auto const optCancelBox = findTextCells(nextFrame.screen, "Esc");
-      REQUIRE(optCancelBox);
-      mouse.x = optCancelBox->x_min;
-      mouse.y = optCancelBox->y_min;
-      editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
-      CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+      for (auto const status : {TrackEditorStatus::Stale, TrackEditorStatus::Failed})
+      {
+        for (bool const hasEdits : {false, true})
+        {
+          CAPTURE(locale, status, hasEdits);
+          auto editor =
+            makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, locale, TrackEditorMode::Tags);
+
+          if (hasEdits)
+          {
+            editor.tryHandleEvent(ftxui::Event::Character(' '));
+          }
+
+          auto const expectedRemovals = hasEdits ? std::vector<std::string>{"Jazz"} : std::vector<std::string>{};
+          editor.setStatus(status, std::string(400, 'x'));
+          auto const rendered = renderElement(editor.renderModal(24, 16), 24, 16);
+          INFO(rendered.text);
+          CHECK(rendered.text.contains(hasEdits ? discardPrefix : close));
+          CHECK_FALSE(rendered.text.contains(hasEdits ? close : discardPrefix));
+          auto const optReloadBox = findTextCells(rendered.screen, "Ctrl-R");
+          REQUIRE(optReloadBox);
+          auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                    .motion = ftxui::Mouse::Pressed,
+                                    .x = optReloadBox->x_min,
+                                    .y = optReloadBox->y_min};
+          editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+          CHECK(editor.takeRequest() == TrackEditorRequest::Reload);
+          CHECK(editor.buildPatch().tagsToRemove == expectedRemovals);
+
+          for (auto const* target : {"Esc", hasEdits ? discardPrefix : close})
+          {
+            auto const nextFrame = renderElement(editor.renderModal(24, 16), 24, 16);
+            auto const optExitBox = findTextCells(nextFrame.screen, target);
+            REQUIRE(optExitBox);
+            mouse.x = optExitBox->x_max;
+            mouse.y = optExitBox->y_min;
+            editor.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+            CHECK(editor.takeRequest() == TrackEditorRequest::Close);
+            CHECK_FALSE(editor.isConfirmingDiscard());
+          }
+        }
+      }
     }
   }
 

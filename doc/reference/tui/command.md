@@ -205,7 +205,7 @@ Its title shows the captured target count.
 | Tab / Shift+Tab | switch between query and results |
 | Enter | apply pending changes and close; while querying, add the offered new name first, even alongside partial matches; with results focused, create only when the new-tag row is selected |
 | Ctrl+G | restore the focused tag's original state |
-| Esc, Cancel footer, outside click | cancel the draft and close |
+| Esc, Close / Discard changes footer, outside click | close the popover, discarding any pending changes |
 | Ctrl+R | in failed or stale state, reload captured targets and discard the draft; ignored while ready |
 
 Only tag changes are submitted.

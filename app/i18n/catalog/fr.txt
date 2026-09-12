@@ -1049,7 +1049,8 @@ fr:table {
     tui_detail_keys { "Shift+←/→ largeur · j/k sections · Enter basculer · ←/→ replier/déplier · PgUp/PgDn défiler · Esc titres" }
     tui_detail_keys_compact { "Shift+←/→ largeur · Enter basculer · Esc titres" }
     tui_shell_tags { "Tags" }
-    tui_tag_popover_cancel { "Annuler" }
+    tui_tag_popover_cancel { "Abandonner les modifications" }
+    tui_tag_popover_close { "Fermer" }
     tui_tag_popover_title { "Tags · {count, plural, one {# morceau} other {# morceaux}}" }
     tui_tag_popover_apply { "Appliquer" }
     tui_tag_popover_add_apply { "Ajouter et appliquer" }
