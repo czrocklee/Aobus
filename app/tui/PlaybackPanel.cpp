@@ -3,6 +3,7 @@
 
 #include "PlaybackPanel.h"
 
+#include "MouseBindings.h"
 #include "OutputDevicePanel.h"
 #include "PlaybackStatusFormatter.h"
 #include "ShellText.h"
@@ -25,6 +26,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -36,6 +38,7 @@ namespace ao::tui
     constexpr std::int32_t kMinimumSeekRailColumns = 24;
     constexpr std::int32_t kMaximumSeekRailColumns = 48;
     constexpr std::int32_t kPlaybackRows = 1;
+    constexpr std::int32_t kMinimumMetadataFieldColumns = 4;
 
     std::string playbackTitle(i18n::MessageCatalog const& textCatalog, rt::NowPlayingInfo const& track)
     {
@@ -64,10 +67,29 @@ namespace ao::tui
       return result;
     }
 
+    ftxui::Element playbackMetadataLabel(std::string value, std::size_t const index, bool const hovered)
+    {
+      using namespace ftxui;
+      auto valuePtr = text(std::move(value));
+
+      if (hovered)
+      {
+        return std::move(valuePtr) | style::buttonHover();
+      }
+
+      if (index == 0)
+      {
+        return std::move(valuePtr) | style::accent() | bold;
+      }
+
+      return std::move(valuePtr) | (index == 2 ? dim : nothing);
+    }
+
     ftxui::Element playbackMetadata(i18n::MessageCatalog const& textCatalog,
                                     rt::NowPlayingInfo const& track,
                                     std::int32_t const columns,
-                                    PlaybackMetadataHitRegions* const hitRegions)
+                                    PlaybackMetadataHitRegions* const hitRegions,
+                                    std::array<bool, 3> const& hovered)
     {
       using namespace ftxui;
 
@@ -90,7 +112,7 @@ namespace ao::tui
         }
 
         // Keep at least four cells per visible field before admitting another.
-        if (columns >= 0 && count > 0 && columns < ((count + 1) * 4) + (count * 3))
+        if (columns >= 0 && count > 0 && columns < ((count + 1) * kMinimumMetadataFieldColumns) + (count * 3))
         {
           break;
         }
@@ -100,10 +122,14 @@ namespace ao::tui
         ++count;
       }
 
-      while (columns >= 0 && total > columns)
+      // Preserve the title first, then artist, while retaining recognizable linked fragments.
+      for (auto index = widths.size(); index > 0 && columns >= 0 && total > columns; --index)
       {
-        --*std::ranges::max_element(widths);
-        --total;
+        auto& width = widths[index - 1];
+        auto const minimum = index == 1 ? 0 : std::min(width, kMinimumMetadataFieldColumns);
+        auto const reduction = std::min(width - minimum, total - columns);
+        width -= reduction;
+        total -= reduction;
       }
 
       auto elements = Elements{};
@@ -117,15 +143,15 @@ namespace ao::tui
 
         if (!elements.empty())
         {
-          elements.push_back(text(" — ") | dim);
+          elements.push_back(text(index == 2 && widths[1] > 0 ? " / " : " · ") | dim);
         }
 
-        auto valuePtr = text(ellipsizeToCellWidth(values[index], widths[index]));
+        auto valuePtr = playbackMetadataLabel(ellipsizeToCellWidth(values[index], widths[index]),
+                                              index,
+                                              track.trackId != kInvalidTrackId && hovered[index]);
 
         if (track.trackId != kInvalidTrackId)
         {
-          valuePtr = std::move(valuePtr) | style::accent();
-
           if (hitRegions != nullptr)
           {
             auto const boxes = std::array{&hitRegions->title, &hitRegions->artist, &hitRegions->album};
@@ -199,6 +225,50 @@ namespace ao::tui
     }
   } // namespace
 
+  std::optional<PlaybackModePreset> playbackModePreset(rt::ShuffleMode const shuffle, rt::RepeatMode const repeat)
+  {
+    if (shuffle != rt::ShuffleMode::Off && shuffle != rt::ShuffleMode::On)
+    {
+      return std::nullopt;
+    }
+
+    switch (repeat)
+    {
+      case rt::RepeatMode::Off:
+        if (shuffle == rt::ShuffleMode::On)
+        {
+          return PlaybackModePreset{.code = "SHF-",
+                                    .labelSelector = "shuffle",
+                                    .next = {.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::All}};
+        }
+
+        return PlaybackModePreset{.code = "SEQ-", .labelSelector = "order", .next = {.repeat = rt::RepeatMode::All}};
+      case rt::RepeatMode::All:
+        if (shuffle == rt::ShuffleMode::On)
+        {
+          return PlaybackModePreset{
+            .code = "SHF*", .labelSelector = "shuffle_all", .next = {.repeat = rt::RepeatMode::One}};
+        }
+
+        return PlaybackModePreset{.code = "SEQ*", .labelSelector = "all", .next = {.shuffle = rt::ShuffleMode::On}};
+      case rt::RepeatMode::One:
+        if (shuffle == rt::ShuffleMode::On)
+        {
+          return PlaybackModePreset{.code = "SHF1", .labelSelector = "shuffle_one", .next = {}};
+        }
+
+        return PlaybackModePreset{.code = "SEQ1", .labelSelector = "one", .next = {}};
+    }
+
+    return std::nullopt;
+  }
+
+  PlaybackModeChoice nextPlaybackMode(rt::ShuffleMode const shuffle, rt::RepeatMode const repeat)
+  {
+    auto const optPreset = playbackModePreset(shuffle, repeat);
+    return optPreset ? optPreset->next : PlaybackModeChoice{};
+  }
+
   std::int32_t playbackBarRows(std::int32_t const /*terminalRows*/) noexcept
   {
     return kPlaybackRows;
@@ -211,45 +281,60 @@ namespace ao::tui
     auto fallbackState = rt::PlaybackTransportSnapshot{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
     auto const succession = view.succession == nullptr ? rt::PlaybackSuccessionSnapshot{} : *view.succession;
-    auto shufflePtr = text("⇄");
-    shufflePtr = succession.shuffle == rt::ShuffleMode::On ? std::move(shufflePtr) | style::accent() | bold
-                                                           : std::move(shufflePtr) | dim;
-    auto repeatPtr = text(succession.repeat == rt::RepeatMode::One ? "↻1" : "↻ ");
-    repeatPtr = succession.repeat == rt::RepeatMode::Off ? std::move(repeatPtr) | dim
-                                                         : std::move(repeatPtr) | style::accent() | bold;
+    // One padded target stays stable across modes and languages.
+    constexpr std::int32_t kModeButtonColumns = 6;
+    auto const optPreset = playbackModePreset(succession.shuffle, succession.repeat);
+    auto modePtr = text(optPreset ? std::string{optPreset->code} : std::string{}) | bold | center |
+                   size(WIDTH, EQUAL, kModeButtonColumns);
+    modePtr = std::move(modePtr) | (optPreset && view.playbackModeHovered ? style::buttonHover() : style::accent());
 
-    if (view.shuffleBox != nullptr)
+    if (view.playbackModeBox != nullptr)
     {
-      shufflePtr = std::move(shufflePtr) | reflect(*view.shuffleBox);
+      *view.playbackModeBox = kEmptyMouseBox;
+
+      if (optPreset)
+      {
+        modePtr = std::move(modePtr) | reflect(*view.playbackModeBox);
+      }
     }
 
-    if (view.repeatBox != nullptr)
-    {
-      repeatPtr = std::move(repeatPtr) | reflect(*view.repeatBox);
-    }
-
-    auto modesPtr = hbox({std::move(shufflePtr), text(" "), std::move(repeatPtr), text(" ")});
-    modesPtr->ComputeRequirement();
+    modePtr->ComputeRequirement();
     auto const effectiveElapsed = clampedElapsed(view.displayElapsed, state.duration);
     auto const elapsed = formatDuration(effectiveElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
-    auto const volume =
-      state.volume.muted
-        ? std::string{i18n::requiredText(textCatalog, i18n::MessageId::AudioFindingMuted)}
-        : playbackVolume(textCatalog, static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
+    constexpr std::int32_t kMaximumVolumePercent = 100;
+    auto const mutedVolume = i18n::requiredText(textCatalog, i18n::MessageId::AudioFindingMuted);
+    auto const levelVolume =
+      playbackVolume(textCatalog, static_cast<std::int32_t>(std::round(state.volume.level * kMaximumVolumePercent)));
+    auto const volume = state.volume.muted ? std::string{mutedVolume} : levelVolume;
+    // Keep adjacent controls stationary while time ticks or normalized volume changes.
+    auto const durationColumns = cellWidth(duration);
+    auto const elapsedColumns = std::max(cellWidth(elapsed), state.duration.count() > 0 ? durationColumns : 0);
+    auto const minimumVolumeColumns =
+      std::max(cellWidth(levelVolume), cellWidth(playbackVolume(textCatalog, kMaximumVolumePercent)));
+    auto volumeColumns = std::max(minimumVolumeColumns, cellWidth(mutedVolume));
     auto const soulAura = uimodel::resolveSoulAura(state.transport, state.ready, state.quality);
     auto const soulVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(soulAura), view.soulMotion);
     auto outputElementPtr = outputDeviceBadge(view.outputView, view.outputDeviceHovered);
     auto soulButtonElementPtr = soulButtonElement(state.transport, soulVisual, view.animationElapsed);
     outputElementPtr->ComputeRequirement();
     soulButtonElementPtr->ComputeRequirement();
-    auto const fixedColumns = outputElementPtr->requirement().min_x + soulButtonElementPtr->requirement().min_x +
-                              cellWidth(elapsed) + cellWidth(duration) + cellWidth(volume) + 5 +
-                              modesPtr->requirement().min_x;
-    auto const freeColumns = std::max(0, view.terminalColumns - fixedColumns);
+    auto const fixedColumnsWithoutVolume = outputElementPtr->requirement().min_x +
+                                           soulButtonElementPtr->requirement().min_x + elapsedColumns +
+                                           durationColumns + 5 + modePtr->requirement().min_x;
     // Keep readable metadata fragments before assigning the remaining space to the seek rail.
     constexpr std::int32_t kTitleReadabilityColumns = 12;
     constexpr std::int32_t kLinkedFieldReadabilityColumns = 9;
+
+    if (view.terminalColumns > 0)
+    {
+      // Preserve the numeric volume and title before reserving a longer mute label.
+      volumeColumns = std::clamp(view.terminalColumns - fixedColumnsWithoutVolume - kTitleReadabilityColumns - 1,
+                                 minimumVolumeColumns,
+                                 volumeColumns);
+    }
+
+    auto const freeColumns = std::max(0, view.terminalColumns - fixedColumnsWithoutVolume - volumeColumns);
     auto const metadataColumns = kTitleReadabilityColumns +
                                  (state.nowPlaying.artist.empty() ? 0 : kLinkedFieldReadabilityColumns) +
                                  (state.nowPlaying.album.empty() ? 0 : kLinkedFieldReadabilityColumns);
@@ -262,7 +347,8 @@ namespace ao::tui
     auto metadataPtr = playbackMetadata(textCatalog,
                                         state.nowPlaying,
                                         view.terminalColumns > 0 ? freeColumns - railColumns : -1,
-                                        view.metadataHitRegions);
+                                        view.metadataHitRegions,
+                                        {view.titleHovered, view.artistHovered, view.albumHovered});
 
     if (view.outputDeviceBox != nullptr)
     {
@@ -279,21 +365,22 @@ namespace ao::tui
       seekRailElementPtr = std::move(seekRailElementPtr) | reflect(*view.seekRailBox);
     }
 
-    auto volumePtr = text(volume);
+    auto volumePtr =
+      hbox({filler(), text(ellipsizeToCellWidth(volume, volumeColumns))}) | size(WIDTH, EQUAL, volumeColumns);
 
     if (view.volumeBox != nullptr)
     {
-      volumePtr = std::move(volumePtr) | ftxui::reflect(*view.volumeBox);
+      volumePtr = std::move(volumePtr) | reflect(*view.volumeBox);
     }
 
     return hbox({
       std::move(soulButtonElementPtr),
       text(" "),
-      std::move(metadataPtr) | bold | flex,
+      std::move(metadataPtr) | flex,
       text(" "),
-      std::move(modesPtr),
+      std::move(modePtr),
       std::move(outputElementPtr),
-      text(elapsed),
+      text(elapsed) | size(WIDTH, EQUAL, elapsedColumns),
       text(" "),
       std::move(seekRailElementPtr),
       text(" "),

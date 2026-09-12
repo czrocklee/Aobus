@@ -112,8 +112,8 @@ namespace ao::rt
     /** Freezes sequence authority without changing restorable cursor state. */
     Changes invalidateSource(PlaybackCursorPolicy& policy);
 
-    Changes setRepeatMode(RepeatMode mode, PlaybackCursorPolicy& policy);
-    Changes setShuffleMode(ShuffleMode mode, PlaybackCursorPolicy& policy);
+    /** Settles both modes before invalidating and resolving the forward candidate once. */
+    Changes setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat, PlaybackCursorPolicy& policy);
 
     /**
      * Updates the elapsed-time restart policy. Elapsed progress is not part of

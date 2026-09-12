@@ -204,14 +204,9 @@ namespace ao::rt
     return _cursor.setPreviousRestartAvailable(available, *this);
   }
 
-  PlaybackCursor::Changes PlaybackCursorSession::setShuffleMode(ShuffleMode const mode)
+  PlaybackCursor::Changes PlaybackCursorSession::setPlaybackMode(ShuffleMode const shuffle, RepeatMode const repeat)
   {
-    return _cursor.setShuffleMode(mode, *this);
-  }
-
-  PlaybackCursor::Changes PlaybackCursorSession::setRepeatMode(RepeatMode const mode)
-  {
-    return _cursor.setRepeatMode(mode, *this);
+    return _cursor.setPlaybackMode(shuffle, repeat, *this);
   }
 
   PlaybackCursor::CommandResolution PlaybackCursorSession::resolvePrevious()

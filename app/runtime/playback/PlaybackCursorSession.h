@@ -83,8 +83,7 @@ namespace ao::rt
     ProjectionAnchor anchorFor(TrackId trackId, std::size_t fallbackGap) const;
     PlaybackCursor::Changes refreshSemanticState();
     PlaybackCursor::Changes setPreviousRestartAvailable(bool available);
-    PlaybackCursor::Changes setShuffleMode(ShuffleMode mode);
-    PlaybackCursor::Changes setRepeatMode(RepeatMode mode);
+    PlaybackCursor::Changes setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat);
     PlaybackCursor::CommandResolution resolvePrevious();
     Result<PlaybackCursor::Changes> adoptCurrent(TrackId trackId,
                                                  std::optional<PreparedNextToken> optPreparedNextToken,

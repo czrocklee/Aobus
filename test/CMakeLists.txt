@@ -768,6 +768,8 @@ add_executable(ao_tui_test
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackNavigationTest.cpp
     unit/tui/GoToMenuTest.cpp
+    unit/tui/PlaybackModeTest.cpp
+    unit/tui/PlaybackHoverTest.cpp
     unit/tui/PlaybackPanelTest.cpp
     unit/tui/RenderTest.cpp
     unit/tui/WorkspaceUsabilityTest.cpp

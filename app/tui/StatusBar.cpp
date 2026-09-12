@@ -8,12 +8,14 @@
 #include "Keymap.h"
 #include "MouseBindings.h"
 #include "PanelResize.h"
+#include "PlaybackPanel.h"
 #include "ShellInteractionModel.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TextField.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <ftxui/component/event.hpp>
@@ -34,6 +36,34 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kExpandedWorkspaceHintColumns = 100;
+
+    void clearStatusHitRegions(StatusBarViewState const& state)
+    {
+      if (state.navigationSearchBox != nullptr)
+      {
+        *state.navigationSearchBox = kEmptyMouseBox;
+      }
+
+      if (state.settingsButtonBox != nullptr)
+      {
+        *state.settingsButtonBox = kEmptyMouseBox;
+      }
+
+      if (state.actionHitRegions != nullptr)
+      {
+        state.actionHitRegions->clear();
+      }
+
+      if (state.cancelSelectionBox != nullptr)
+      {
+        *state.cancelSelectionBox = kEmptyMouseBox;
+      }
+
+      if (state.goToHitRegions != nullptr)
+      {
+        *state.goToHitRegions = {};
+      }
+    }
 
     ftxui::Element statusAction(ftxui::Element elementPtr, KeyAction action, StatusBarViewState const& state)
     {
@@ -329,6 +359,50 @@ namespace ao::tui
       return hbox(std::move(parts));
     }
 
+    std::string playbackModeLabel(i18n::MessageCatalog const& catalog, PlaybackModeChoice const choice)
+    {
+      auto const optPreset = playbackModePreset(choice.shuffle, choice.repeat);
+      return optPreset
+               ? i18n::requiredFormat(catalog, i18n::MessageId::TuiPlaybackMode, {{"mode", optPreset->labelSelector}})
+               : std::string{};
+    }
+
+    ftxui::Element playbackModeStatus(i18n::MessageCatalog const& catalog, StatusBarViewState const& state)
+    {
+      using namespace ftxui;
+      auto const& mode = *state.hoveredPlaybackMode;
+      auto const current = playbackModeLabel(catalog, {.shuffle = mode.shuffle, .repeat = mode.repeat});
+
+      if (current.empty())
+      {
+        return nullptr;
+      }
+
+      auto const next = playbackModeLabel(catalog, nextPlaybackMode(mode.shuffle, mode.repeat));
+      auto const fullHint =
+        i18n::requiredFormat(catalog, i18n::MessageId::TuiPlaybackModeHint, {{"current", current}, {"next", next}});
+      constexpr std::int32_t kMinimumActivityColumns = 5; // Four frame cells and one content cell.
+      auto const availableActivityColumns =
+        hasVisibleActivity(state.activityStatus)
+          ? std::min(style::kClassicStatusSlotColumns, std::max(0, state.terminalColumns - cellWidth(current) - 3))
+          : 0;
+      auto const activityColumns = availableActivityColumns >= kMinimumActivityColumns ? availableActivityColumns : 0;
+      auto const columns = std::max(0, state.terminalColumns - activityColumns);
+      auto const hint = cellWidth(fullHint) <= columns ? fullHint : current;
+      auto activityPtr = text("");
+
+      if (activityColumns > 0)
+      {
+        activityPtr = activityStatusSlot(state, 0) | size(WIDTH, EQUAL, activityColumns);
+      }
+      else if (state.activityStatusBox != nullptr)
+      {
+        *state.activityStatusBox = kEmptyMouseBox;
+      }
+
+      return hbox({std::move(activityPtr), filler(), text(ellipsizeToCellWidth(hint, columns))});
+    }
+
     ftxui::Element panelResizeStatus(i18n::MessageCatalog const& textCatalog,
                                      StatusBarViewState const& state,
                                      bool const hasActivity,
@@ -515,30 +589,7 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    if (state.navigationSearchBox != nullptr)
-    {
-      *state.navigationSearchBox = kEmptyMouseBox;
-    }
-
-    if (state.settingsButtonBox != nullptr)
-    {
-      *state.settingsButtonBox = kEmptyMouseBox;
-    }
-
-    if (state.actionHitRegions != nullptr)
-    {
-      state.actionHitRegions->clear();
-    }
-
-    if (state.cancelSelectionBox != nullptr)
-    {
-      *state.cancelSelectionBox = kEmptyMouseBox;
-    }
-
-    if (state.goToHitRegions != nullptr)
-    {
-      *state.goToHitRegions = {};
-    }
+    clearStatusHitRegions(state);
 
     auto const hasActivity = hasVisibleActivity(state.activityStatus);
     auto fallbackShell = ShellInteractionModel{};
@@ -578,6 +629,15 @@ namespace ao::tui
     if (state.optResizingDivider && !shell.isInputActive() && shell.overlay() == Overlay::None)
     {
       return panelResizeStatus(textCatalog, state, hasActivity, *state.optResizingDivider);
+    }
+
+    if (state.hoveredPlaybackMode != nullptr && !state.visualSelectionActive && !shell.isInputActive() &&
+        shell.overlay() == Overlay::None)
+    {
+      if (auto modeStatusPtr = playbackModeStatus(textCatalog, state); modeStatusPtr != nullptr)
+      {
+        return modeStatusPtr;
+      }
     }
 
     if (shell.isDetailFocused() && !shell.isInputActive() && !isModalOverlay(shell.overlay()))

@@ -211,6 +211,56 @@ namespace ao::rt::test
     CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
   }
 
+  TEST_CASE("PlaybackService - paired mode command publishes only the final snapshot",
+            "[runtime][regression][playback][coherence]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
+
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
+
+    fixture.commands().setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
+    CHECK(snapshots.front().succession.repeat == RepeatMode::All);
+    CHECK(fixture.playback().snapshot() == snapshots.front());
+  }
+
+  TEST_CASE("PlaybackService - inactive paired modes publish once and identical repeats publish nothing",
+            "[runtime][regression][playback][coherence]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    auto const before = fixture.playback().snapshot();
+    REQUIRE(before.succession.sourceState == PlaybackSourceState::Inactive);
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
+
+    fixture.commands().setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+    REQUIRE(snapshots.size() == 1);
+    auto const published = snapshots.front();
+    CHECK(published.transport == before.transport);
+    CHECK(published.succession.sourceState == PlaybackSourceState::Inactive);
+    CHECK(published.succession.currentTrackId == kInvalidTrackId);
+    CHECK(published.succession.sourceListId == kInvalidListId);
+    CHECK_FALSE(published.succession.hasNext);
+    CHECK_FALSE(published.succession.hasPrevious);
+    CHECK(published.succession.shuffle == ShuffleMode::On);
+    CHECK(published.succession.repeat == RepeatMode::All);
+    CHECK(fixture.playback().snapshot() == published);
+
+    fixture.commands().setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+    CHECK(snapshots.size() == 1);
+    CHECK(fixture.playback().snapshot() == published);
+  }
+
   TEST_CASE("PlaybackSnapshot - elapsed clock samples do not define content equality",
             "[runtime][regression][playback][snapshot]")
   {
@@ -456,6 +506,59 @@ namespace ao::rt::test
 
     REQUIRE(snapshots.size() == 2);
     CHECK(snapshots.back().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackService - observer paired and repeat commands preserve FIFO mode state",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto laterSnapshots = std::vector<PlaybackSnapshot>{};
+    auto laterReadbacks = std::vector<PlaybackSnapshot>{};
+    bool requestedCommands = false;
+    bool publicationUnchanged = false;
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot) noexcept
+      {
+        snapshots.push_back(snapshot);
+
+        if (!requestedCommands)
+        {
+          requestedCommands = true;
+          fixture.commands().setPlaybackMode(ShuffleMode::Off, RepeatMode::All);
+          fixture.commands().setRepeatMode(RepeatMode::One);
+          publicationUnchanged = snapshot == snapshots.front() && fixture.playback.snapshot() == snapshots.front();
+        }
+      });
+    auto const laterSubscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot) noexcept
+      {
+        laterSnapshots.push_back(snapshot);
+        laterReadbacks.push_back(fixture.playback.snapshot());
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+
+    REQUIRE(requestedCommands);
+    CHECK(publicationUnchanged);
+    REQUIRE(snapshots.size() == 1);
+    CHECK(fixture.playback.snapshot() == snapshots.front());
+    CHECK(laterSnapshots == snapshots);
+    CHECK(laterReadbacks == snapshots);
+    CHECK(fixture.executor.queuedCount() != 0);
+
+    fixture.executor.drain();
+
+    REQUIRE(snapshots.size() == 3);
+    CHECK(snapshots[0].succession.shuffle == ShuffleMode::On);
+    CHECK(snapshots[0].succession.repeat == RepeatMode::Off);
+    CHECK(snapshots[1].succession.shuffle == ShuffleMode::Off);
+    CHECK(snapshots[1].succession.repeat == RepeatMode::All);
+    CHECK(snapshots[2].succession.shuffle == ShuffleMode::Off);
+    CHECK(snapshots[2].succession.repeat == RepeatMode::One);
+    CHECK(laterSnapshots == snapshots);
+    CHECK(laterReadbacks == snapshots);
+    CHECK(fixture.playback.snapshot() == snapshots.back());
   }
 
   TEST_CASE("PlaybackService - later commands do not overtake queued observer commands",

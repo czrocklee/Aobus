@@ -189,6 +189,39 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("PlaybackSuccession - pending shuffled start adopts paired sequential repeat modes",
+            "[runtime][regression][playback-succession][concurrency]")
+  {
+    auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+    }};
+    fixture.buildThreeTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    bool settled = false;
+    auto const subscription = succession.onExplicitStartSettled([&settled] noexcept { settled = true; });
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
+    succession.setPlaybackMode(ShuffleMode::On, RepeatMode::Off);
+    REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
+    REQUIRE(gatePtr->tryWaitForEntry());
+
+    succession.setPlaybackMode(ShuffleMode::Off, RepeatMode::All);
+    releaseGuard.release();
+    REQUIRE(fixture.transport.executor.tryDrainUntil([&settled] { return settled; }));
+
+    auto const& state = succession.state();
+    CHECK(state.currentTrackId == fixture.thirdTrackId);
+    CHECK(state.sourceState == PlaybackSuccessionSourceState::Live);
+    CHECK(state.shuffle == ShuffleMode::Off);
+    CHECK(state.repeat == RepeatMode::All);
+    CHECK(state.hasPrevious);
+    CHECK(state.hasNext);
+    CHECK(state.optResolvedSuccessor == fixture.firstTrackId);
+    CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.thirdTrackId);
+    CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
+  }
+
   TEST_CASE("PlaybackSuccession - newer pending start silently replaces blocked preparation",
             "[runtime][regression][playback-succession][concurrency]")
   {

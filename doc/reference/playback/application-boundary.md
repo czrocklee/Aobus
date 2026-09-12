@@ -134,6 +134,7 @@ new value; copy it when an older value is needed for comparison.
 |---|---|---|
 | `startFromView` | `(ViewId, TrackId)` | `Result<>`; synchronous validation and async-task admission, or queued command admission. Success does not prove that the decoder opened. |
 | `next` / `previous` / `clearSequence` | `()` | `void` |
+| `setPlaybackMode` | `(ShuffleMode, RepeatMode)` | `void`; settles the pair as one mode update. |
 | `setShuffleMode` / `setRepeatMode` | `(mode)` | `void` |
 | `pause` / `resume` / `stop` | `()` | `void` |
 | `seek` | `(milliseconds, PlaybackSeekMode = Final)` | `void` |

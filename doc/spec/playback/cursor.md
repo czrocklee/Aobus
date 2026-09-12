@@ -230,6 +230,8 @@ Public observer reentrancy is serialized by the owning `PlaybackService` commit 
 Shuffle and repeat preferences exist even while Inactive and are inherited by the next launch.
 Setting a mode to its current value is a no-op.
 An actual mode change invalidates or replaces the sticky/prepared forward candidate as needed and publishes its dedicated mode event.
+Paired shuffle/repeat changes settle both values before resolving the successor, invalidating a live sticky candidate once without choosing a candidate for an intermediate mode.
+Lookahead preparation and public snapshot publication use the final pair; setting both modes to their current values is a no-op.
 
 ## Failure and cancellation
 
@@ -292,7 +294,7 @@ Observers are observational and do not choose succession policy.
 
 ## Test map
 
-- [`PlaybackCursorModelTest.cpp`](../../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp) proves state precedence, semantic/restorable mutation effects, complete-batch observation, and model-based anchor invariants.
+- [`PlaybackCursorModelTest.cpp`](../../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp) proves state precedence, semantic/restorable mutation effects, paired-mode reconciliation without intermediate shuffle selection, complete-batch observation, and model-based anchor invariants.
 - [`ProjectionAnchorTest.cpp`](../../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) proves insertion/removal boundaries, move reconciliation, reset, empty gaps, and range invariants.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
