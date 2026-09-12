@@ -17,16 +17,18 @@ Those facts belong in specifications, reference documents, and the focused archi
 
 ## System context
 
-Aobus ships four interactive or automation frontends over a shared C++ core and
-application runtime, including a native WinUI desktop frontend.
+Aobus has five interactive or automation frontends over a shared C++ core and
+application runtime, including native WinUI and AppKit desktop frontends.
+The AppKit frontend is an incremental development slice.
 
 ```text
-GTK ---+-> ao_app_uimodel -> ao_app_runtime -> core libraries
-TUI ---+
-WinUI -+
-CLI -------------------> ao_app_runtime -> core libraries
+GTK ----+-> ao_app_uimodel -> ao_app_runtime -> core libraries
+TUI ----+
+WinUI --+
+AppKit -+
+CLI --------------------> ao_app_runtime -> core libraries
 
-GTK and WinUI -> ao_desktop_launch -> utility / Boost.Process
+GTK, WinUI and AppKit -> ao_desktop_launch -> utility / Boost.Process
 
 core libraries: utility, async, lmdb, media, library, query, audio
 ```
@@ -36,12 +38,13 @@ An arrow in this diagram means “depends on.”
 The core libraries provide storage, encoded-media reading, query, asynchronous, and audio primitives without depending on application services or frontends.
 `ao_app_runtime` composes those primitives into frontend-neutral services.
 `ao_app_uimodel` turns runtime state and commands into platform-neutral presentation state and interaction policy.
-`ao_desktop_launch` supplies GTK and WinUI with pure library-root, startup, and
+`ao_desktop_launch` supplies GTK, WinUI and AppKit with pure library-root, startup, and
 successor-protocol rules plus detached process creation; it is not an
 interactive runtime or frontend-lifecycle owner.
 GTK and TUI bind runtime and UIModel state to their native event loops and rendering systems.
 WinUI binds the same runtime and UIModel authorities to C++/WinRT, XAML,
 DispatcherQueue, WASAPI, SMTC, and native Windows picker services.
+AppKit binds them to native windows, controls, the main run loop, and Core Audio.
 The CLI uses `ao_app_runtime` directly when an interactive presentation model is unnecessary.
 
 ## Responsibilities
@@ -85,12 +88,12 @@ It consumes runtime services and stable value types but does not become a second
 ### Desktop application support
 
 `ao_desktop_launch` owns application-level values and mechanisms shared only by
-the two graphical desktop composition roots. Its public surface under
+the graphical desktop composition roots. Its public surface under
 `app/include/ao/desktop/` contains library root identity, startup/switch plans,
 the private successor protocol, and detached-launch policy. Sources under
 `app/desktop/` perform filesystem inspection and Boost.Process creation.
 
-It remains below GTK and WinUI and beside, rather than above, `AppRuntime` and
+It remains below GTK, WinUI and AppKit and beside, rather than above, `AppRuntime` and
 UIModel. It cannot inspect state stores, drive a toolkit event loop, checkpoint
 a runtime, show failures, or claim graph teardown. TUI and CLI do not link it.
 
@@ -117,6 +120,14 @@ Windows suite. Windows shell policy that carries no WinRT dependency is compiled
 into `ao_core_test` on every host instead, so a Linux-only change cannot break it
 unnoticed. Cross-desktop rules in `ao_desktop_launch` compile and run on both Linux
 and Windows without creating a second WinUI model target on Linux.
+AppKit owns native windows, menus, editors, Modern and Classic presentation,
+and a main-run-loop executor. Its `ao_appkit` object target supplies the shipping
+bundle and an independent native GUI test bundle; scenario code is test-owned. Its `LibrarySession` retains the shared runtime
+and UIModel observers across window presentation changes and owns their ordered
+teardown before a successor process opens another library. Its development
+commands and GUI smoke are documented in [macOS development](../development/macos.md);
+[application shell architecture](application-shell.md#appkit-shell-owner) owns its
+coordinator and native presentation boundaries.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction
@@ -170,13 +181,13 @@ These routes expose where a change crosses architecture owners without duplicati
 |---|---|---|
 | Library maintenance | Frontend or CLI intent -> runtime library role -> core storage or external-data mechanism -> revisioned changes -> sources and projections | [Library](library.md), [runtime execution](runtime-execution.md), and [failure and reporting](failure-and-reporting.md) |
 | Media ingestion and identity | Encoded path -> `ao_media` file reader -> visitor-to-library runtime adapter and payload evidence -> stored records and resource descriptors | [Encoded media](encoded-media.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
-| Cover-art delivery | Stored descriptor -> runtime id -> derived cache or carrier media file -> owned bytes -> projection/playback state -> GTK, WinUI, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
+| Cover-art delivery | Stored descriptor -> runtime id -> derived cache or carrier media file -> owned bytes -> projection/playback state -> GTK, WinUI, AppKit, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
 | Interactive playback | Frontend command -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
 | Session restore and library transition | Frontend composition root -> managed state -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
-| Desktop shell construction | Shared layout language -> GTK-owned policy and widget tree, or WinUI-owned policy and native Modern/Classic XAML surfaces | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
+| Desktop shell construction | Shared layout language -> GTK-owned policy/widget tree or WinUI-owned policy/Modern/Classic XAML; AppKit coordinator -> native presentation components | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
 | Failure reporting | Subsystem failure -> typed result or event -> owning recovery boundary -> runtime notification or application-leaf presentation | [Failure and reporting](failure-and-reporting.md) plus the originating subsystem architecture |
-| Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK, TUI, or WinUI rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
+| Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK, TUI, WinUI, or AppKit rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
 
 The [architecture landscape](README.md) owns the portfolio classification, relationship map, and capability coverage that connect these flows.
 
@@ -187,7 +198,7 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
   Phase-only presence is optional, and PImpl allocation pins implementation addresses across the wrapper's sole post-factory move.
 - Cross-frontend domain behavior belongs in runtime or UIModel. Pure
   desktop-process selection and launch rules belong in `ao_desktop_launch`, not in
-  parallel GTK and WinUI implementations.
+  parallel desktop implementations.
 - Runtime services expose stable application values and narrow command surfaces instead of leaking storage transactions or audio engine objects.
 - UIModel state can be discarded and reconstructed from runtime state plus UI-local persisted preferences.
 - Platform-specific names, widget types, CSS classes, terminal geometry, and event-loop handles stop at the frontend boundary.
@@ -217,8 +228,8 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
-- [`ResourceByteMemoryCache`](../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral read-through caching and independently owned encoded bytes shared by GTK, TUI, WinUI, and MPRIS consumers.
-- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
+- [`ResourceByteMemoryCache`](../../app/include/ao/rt/resource/ResourceByteMemoryCache.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral read-through caching and independently owned encoded bytes shared by GTK, TUI, WinUI, AppKit, and MPRIS consumers.
+- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`app/macos-appkit/DesktopApplication.mm`](../../app/macos-appkit/DesktopApplication.mm), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
 - [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake) owns the declarative application-layer scan and composes the specialized UIModel, GTK, and WinUI structural checks.
 
 ## Test map

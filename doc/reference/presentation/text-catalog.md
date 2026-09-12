@@ -13,7 +13,7 @@ This reference enumerates the locale-selected `ao::i18n::MessageCatalog`, the fa
 They are in-process presentation surfaces with no persisted format version.
 Stable ids remain owned by their runtime or Core domains; catalog output is display text and is never persisted, parsed for control flow, or used as an aggregation key.
 
-`MessageCatalog` is an immutable ICU catalog value. TUI Settings may replace its injected value live; GTK and WinUI retain the startup selection.
+`MessageCatalog` is an immutable ICU catalog value. TUI Settings may replace its injected value live; GTK, WinUI, and AppKit retain the startup selection.
 `requiredText` and `requiredFormat` are the required-message resolvers over that catalog: fixed messages use typed `MessageId` values, while named functions remain only where UIModel must map a domain value or derive message selectors.
 The canonical id/key inventory is [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def).
 
@@ -22,9 +22,9 @@ The canonical id/key inventory is [`MessageInventory.def`](../../../app/include/
 The shared typed catalog belongs to UIModel under `app/include/ao/uimodel/presentation/` and `app/uimodel/presentation/`.
 The interactive facade belongs to the presentation leaf under `app/include/ao/i18n/` and `app/i18n/`.
 Runtime and Core publish stable ids, typed semantic kinds, raw values, and structured arguments.
-GTK, TUI, and WinUI composition roots own the locale-selected facade; CLI does not link it.
+GTK, TUI, WinUI, and AppKit composition roots own the locale-selected facade; CLI does not link it.
 Each root injects the process `MessageCatalog`; copies share immutable backing storage.
-GTK and TUI resolve shell copy through canonical `MessageId` values on that catalog; WinUI resolves generated shell resources through its configured MRT context.
+GTK, TUI, and AppKit resolve shell copy through canonical `MessageId` values on that catalog; WinUI resolves generated shell resources through its configured MRT context.
 Text returned as `std::string_view` remains valid for the lifetime of the source catalog value; state that crosses that lifetime owns a copy.
 
 The following text is not catalog copy:
@@ -98,6 +98,7 @@ The production shared-id families are:
 | `tui_editor_*` | TUI track Properties pages, edit intents, confirmation prompts, submission status, and contextual shortcuts |
 | `tui_presentation_*`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
+| `appkit_*` | AppKit menus, toolbar, native editors, count grammar, and accessibility descriptions through canonical `MessageId` values |
 
 [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def) is the exact typed-id-to-key map. `MessageCatalog.h` and `MessageIds.h` include it to emit enumerators and definition entries.
 The complete English patterns and maintained localized overrides live in [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt); generated WinUI resources use those same keys.
@@ -121,10 +122,11 @@ The exact fallback behavior belongs to the [interactive localization specificati
 
 ### Frontend shell catalogs
 
-GTK and TUI resolve shell copy through the process `MessageCatalog` and canonical `MessageId` values.
+GTK, TUI, and AppKit resolve shell copy through the process `MessageCatalog` and canonical `MessageId` values.
 There is no separate frontend message-id space.
 GTK widget APIs that require owned strings copy `requiredText` at the widget boundary.
 TUI argument-bearing chrome such as hints and footers is formatted through feature-local TUI formatters.
+AppKit converts required catalog text and formatted messages to native strings at its frontend boundary.
 Help descriptions remain catalog text, while the TUI renderer owns the separate shortcut and command columns.
 
 The completed frontend migration owns these families:
@@ -134,6 +136,7 @@ The completed frontend migration owns these families:
 | GTK | Canonical `MessageId` values through `requiredText` / `requiredFormat` | application menus; shell/playback accessibility copy; library and authoring dialogs; preferences and shortcut/action descriptors; presentation and metadata/property editing; Layout Editor display vocabulary; tooltips, empty states, startup, and recoverable errors |
 | TUI | Canonical `MessageId` values through `requiredText` / `requiredFormat` / `chromeText` | workspace and overlay copy, status shortcuts, command metadata, help, playback/output empty states, library navigation/filter status, presentation-navigation qualifiers, accessibility states, and recoverable errors |
 | WinUI | generated MRT resources | shell menus/actions, playback/output, library, metadata, tooltips, accessibility, empty states, and recoverable native wrappers |
+| AppKit | Canonical `MessageId` values through `requiredText` / `requiredFormat` and the `AppKitText` native-string boundary | menus and actions; browser, playback, inspector, activity, and authoring copy; tooltips, accessibility, empty states, startup, and recoverable-error presentation |
 
 TUI command strings and key names remain shell identity, not translated copy.
 The help pane lays those tokens out beside localized descriptions as structured columns rather than embedding alignment spaces in catalog patterns.
@@ -413,6 +416,7 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt)
 - [`GtkText.h`](../../../app/linux-gtk/i18n/GtkText.h) and [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp)
 - [`ShellText.h`](../../../app/tui/ShellText.h) and [`ShellText.cpp`](../../../app/tui/ShellText.cpp)
+- [`AppKitText.h`](../../../app/macos-appkit/AppKitText.h) and [`AppKitText.mm`](../../../app/macos-appkit/AppKitText.mm)
 - [`WinUiResourceProjection.h`](../../../app/i18n/WinUiResourceProjection.h)
 - [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp)
 
@@ -427,9 +431,10 @@ Open backend/profile ids remain usable through id-only fallback; Aobus does not 
 - [`LayoutEditorTextTest.cpp`](../../../test/unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp) protects localized built-in layout vocabulary and unchanged extension values.
 - [`TrackPresentationPickerViewModelTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp) and [`TrackPresentationNavigationTest.cpp`](../../../test/unit/tui/TrackPresentationNavigationTest.cpp) protect shared and TUI presentation copy.
 - [`StringResourceTest.cpp`](../../../test/unit/winui/StringResourceTest.cpp) protects generated canonical keys and the bounded platform projection map.
+- [`AppKitMessageCatalogTest.cpp`](../../../test/unit/i18n/AppKitMessageCatalogTest.cpp) protects AppKit count and selection formatting plus English fallback for untranslated AppKit messages.
 - [`WinUiLocalizationProbe.cpp`](../../../test/helper/WinUiLocalizationProbe.cpp) protects generated WinUI resource selection and formatted parity with ICU.
 - Runtime projection, completion, playback, and notification tests protect the structured inputs before catalog resolution.
-- GTK and TUI adapter tests protect consumption without moving native vocabulary into UIModel.
+- GTK, TUI, and AppKit adapter tests protect consumption without moving native vocabulary into UIModel.
 
 ## Related documents
 

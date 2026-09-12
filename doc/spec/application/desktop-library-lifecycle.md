@@ -3,20 +3,20 @@ id: application.desktop-library-lifecycle
 type: spec
 status: current
 domain: application
-summary: Defines the shared GTK and WinUI library selection, successor-process handoff, durable-root admission, and detached-launch contract.
+summary: Defines the shared desktop library selection, successor-process handoff, durable-root admission, and detached-launch contract.
 ---
 # Desktop library lifecycle
 
 ## Scope
 
-This specification owns the behavior shared by the GTK and WinUI desktop
+This specification owns the behavior shared by the GTK, WinUI and AppKit desktop
 frontends when they select a startup library, reuse the active root, or replace
 the active library through a successor process. It covers root identity,
 startup planning, the private successor request, durable-root and playback
 admission, parent preparation, graph release, and detached launch.
 
 It does not own GTK application registration, Windows dispatcher and XAML
-lifetime, native picker behavior, platform state schemas, workspace payloads,
+lifetime, AppKit window and run-loop ownership, native picker behavior, platform state schemas, workspace payloads,
 or playback-session serialization. Those remain with the platform and
 subsystem owners linked below.
 
@@ -28,7 +28,7 @@ and [interactive session lifecycle architecture](../../architecture/interactive-
 Its public surface is under `app/include/ao/desktop/` and its implementation is
 under `app/desktop/`.
 
-GTK and WinUI depend on this target and supply composition-root effects. The
+GTK, WinUI and AppKit depend on this target and supply composition-root effects. The
 target does not depend on `AppRuntime`, UIModel, toolkit types, native picker
 types, state stores, or frontend callbacks. TUI and CLI do not consume this
 desktop lifecycle.
@@ -101,7 +101,12 @@ phases and perform checkpoints, dialogs, graph release, and process exit.
 There is deliberately no shared `LibraryProcessSwitch` stateful service or
 teardown token. A GTK main-loop return proves destruction of its scoped graph;
 a WinUI dispatcher turn explicitly releases its window/session owner while the
-XAML application remains alive. A common token could prove neither condition.
+XAML application remains alive. AppKit admits a request in the native callback,
+then prepares and releases its `LibrarySession` on later main-run-loop service
+turns after sheet, menu and callback-executor activity has returned. Service
+scheduling remains active while the window is hidden; rendering timers do not
+own Quit or library-switch progress. Each
+frontend owns its release proof; no common teardown token is used.
 There is also no second persistence-gate owner above `AppRuntime`: frontends
 decide when the selected root is durable, while runtime persistence alone owns
 write sealing and terminal retirement.
@@ -138,8 +143,10 @@ window and stops the transition. Success closes new callback admission and
 releases the old graph in the platform's owned teardown order.
 
 GTK completes its main-loop and scoped-composition unwind before launch. WinUI
-releases `LibraryWindowSession` on its dispatcher turn before launch. These are
-distinct lifetime proofs and remain platform owned.
+releases `LibraryWindowSession` on its dispatcher turn before launch. AppKit
+checkpoints and retires playback after the selecting callback returns, then
+releases its session and application-state lease before detached launch.
+These lifetime proofs remain platform owned.
 
 ### Launch and activate the successor
 
@@ -150,9 +157,9 @@ then exits regardless of process-creation success.
 The successor parses the request before constructing its frontend application,
 opens only that root, activates one usable graph with idle playback, and then
 commits a settings candidate containing the selected root. Commit success
-starts playback persistence. Commit failure retains the previous live and
-durable root snapshot, seals playback writes, and leaves unrelated settings and
-workspace persistence available.
+starts playback persistence. Commit failure retains the previous durable-root
+state, restores any frontend live settings candidate, seals playback writes,
+and leaves unrelated settings and workspace persistence available.
 
 The successor starts a scan when the request carries scan intent or the
 canonical database did not exist, according to the consuming frontend's scan
@@ -185,8 +192,18 @@ The request exists only across one parent-to-successor handoff.
 
 GTK commits its root through the application session store. WinUI commits a
 copy of its desktop settings and replaces the live snapshot only after the
-atomic candidate save succeeds. Both inject an application-global playback
-store into `AppRuntime`; playback payload and lifecycle semantics belong to the
+atomic candidate save succeeds. AppKit applies the selected-root and
+recent-library candidate to its private desktop settings, then either admits
+playback after the atomic save or restores the previous in-memory values and
+refreshes the recent library menu after failure.
+For AppKit, the prior durable root is the desktop-settings value retained after
+that rollback; it does not select the active target session's per-library
+store.
+
+GTK and WinUI inject an application-global playback store into `AppRuntime`.
+AppKit supplies its per-library runtime workspace store and no playback-store
+override, so the runtime's default store selection applies. The exact AppKit
+store, playback payload, and lifecycle semantics belong to the
 [playback session persistence specification](../playback/session-persistence.md).
 
 ## Frontend observations
@@ -220,6 +237,10 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
   [`ProcessLauncher.cpp`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   adapt dispatcher phases, state candidates, teardown, executable discovery,
   and exit.
+- AppKit [`DesktopApplication.mm`](../../../app/macos-appkit/DesktopApplication.mm)
+  and [`LibrarySession.cpp`](../../../app/macos-appkit/LibrarySession.cpp) own
+  pending-request admission, later main-run-loop preparation, session and
+  application-state lease release, and detached launch.
 
 ## Test map
 
@@ -239,6 +260,18 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
   and GTK [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp)
   protect the runtime write seal, terminal retirement, and durable-root
   admission behavior.
+- [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm)
+  protects AppKit's retained close/reopen behavior, dirty-editor switch block,
+  persisted-root observation before the accepted switch, and successor reentry
+  through the production lifecycle and launcher invocation, with a test-only
+  bridge assigning actual successor-process ownership to the portal supervisor.
+- AppKit portal tests in [`test_cli.py`](../../../test/script/test_cli.py) protect
+  isolated fixture admission, bounded parent collection, and invocation-bound
+  parent and successor completion markers.
+- [`test_appkitprocess.py`](../../../test/script/test_appkitprocess.py) uses real
+  processes to reject nonzero successor exits, hangs after a valid marker, and
+  successful exits without a marker. It also checks that a failed parent cannot
+  leave its supervised successor running.
 
 ## Related documents
 

@@ -45,6 +45,8 @@ namespace ao::test::wav
     std::vector<Chunk> extraChunks = {};
   };
 
+  std::vector<std::uint8_t> makeId3WithPicture(std::span<std::uint8_t const> imageData);
+
   void appendId(std::vector<std::uint8_t>& output, std::array<char, 4> const& id);
 
   void appendId(std::vector<std::uint8_t>& output, std::string_view id);

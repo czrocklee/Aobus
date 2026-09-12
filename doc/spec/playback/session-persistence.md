@@ -135,7 +135,7 @@ Subject changes, final seeks, and transitions to paused or idle request an immed
 
 From `Dormant`, an explicit observation start, restore, checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
 No other lifecycle can transition back to `Observing`.
-GTK, WinUI, and TUI start observation when they activate an ordinary restoring session.
+GTK, WinUI, TUI, and AppKit start observation when they activate an ordinary restoring session.
 TUI does so after workspace restoration and terminal active-view attachment, then invokes restore before entering its event loop.
 A desktop successor idle session reads no stored payload and starts observation only after its selected root is durable.
 An explicit checkpoint writes only from `Dormant` or `Observing`; ordinary
@@ -163,9 +163,10 @@ and makes observation start, natural triggers, explicit checkpoints, and
 shutdown saves no-ops. It does not mutate the store or clear the runtime's
 last-restorable snapshots.
 
-GTK and WinUI use this seal when a successor's selected-root commit fails after
-the parent has already removed the global payload. The active successor remains
-usable, but it cannot persist resume intent under the prior durable root.
+GTK, WinUI, and AppKit use this seal when a successor's selected-root commit
+fails. The seal makes no claim that the successor's selected store contains no
+older payload. The active successor remains usable, but it cannot write resume
+intent while its selected root is not durable.
 A later terminal retirement may still attempt physical group removal and clear
 the retained runtime snapshots.
 
@@ -202,13 +203,31 @@ Only schema version `4` is accepted; older or newer values are rejected rather t
 GTK injects its global application config as the playback-session store. WinUI
 injects its separate global `windows-playback.yaml` store. Current TUI
 composition uses its runtime workspace config when no separate store is
-injected.
+injected. AppKit likewise supplies no separate playback store: its runtime-owned
+workspace store is `appkit-workspace.yaml` under the active library's database
+path, so `AppRuntime` uses that same per-library store for the playback-session
+group.
 The payload itself contains library-scoped track/list ids but no durable library identity.
-Both desktop switch lifecycles checkpoint the active graph, physically remove
-this group, and terminally seal playback persistence in the parent before that
-graph is destroyed.
-Only after complete parent teardown does a successor activate the explicit target with idle playback.
-Successful selected-root persistence admits future playback writes; failure keeps the prior root, no payload, and the permanent write seal, so no process interprets one library's ids against another root.
+GTK and WinUI checkpoint the active graph, physically remove this group from
+their application-global playback store, and terminally seal playback
+persistence in the parent before that graph is destroyed.
+AppKit checkpoints workspace state and terminally retires playback before graph
+destruction; retirement removes the group only from the retiring library's
+per-library `appkit-workspace.yaml` store.
+
+Only after complete parent teardown does a successor activate the explicit
+target with idle playback. GTK and WinUI then admit future writes only after the
+selected root is durable; failure retains the prior root, leaves the global
+playback store without a payload, and keeps the permanent write seal.
+
+An AppKit successor constructs the target library runtime with playback
+persistence dormant and does not restore the target store's playback group.
+That separate per-library store may contain an older payload from an earlier
+visit. A successful desktop-settings commit starts observation from the current
+idle state without loading or immediately removing that group; a later save may
+replace it. A failed commit restores the prior selected-root settings values and
+seals writes, leaving any older target-library group untouched and unread by
+that process.
 
 ## Frontend observations
 
@@ -217,9 +236,12 @@ It never starts audio.
 GTK may use a successful restore to reveal the actual current track. WinUI
 restores before its controllers bind and then projects the restored snapshot
 through its ordinary playback command and presentation adapters.
+AppKit restores while constructing its library session before native components
+bind to the runtime snapshot.
 TUI restores after workspace attachment and leaves the restored subject Idle for ordinary Play/PlayPause consumption; it does not force workspace navigation or selection.
-On normal exit, the composition root explicitly checkpoints playback before requesting stop.
+On normal exit, GTK, WinUI, and TUI explicitly checkpoint playback before requesting stop.
 Stop checkpoints the frozen restorable snapshots as it enters Idle, frontend observers are then destroyed, and `AppRuntime::shutdown()` may rewrite the same frozen payload as its final observing-lifecycle checkpoint.
+AppKit explicitly checkpoints its workspace and desktop settings, detaches native consumers, and releases its library session. That session destroys UIModel observers before `AppRuntime::shutdown()` performs the final Observing playback save and stops playback. AppKit does not issue a separate pre-stop playback checkpoint; a sealed or retired session cannot write during shutdown.
 Failure of the explicit TUI checkpoint is logged and teardown continues.
 The exact ordering belongs to interactive lifecycle architecture.
 
@@ -230,6 +252,10 @@ The exact ordering belongs to interactive lifecycle architecture.
 - [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h) and [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp) own explicit YAML mapping, version dispatch, and pre-restore validation.
 - [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp) owns public composition and lifecycle forwarding.
 - [`App.cpp`](../../../app/tui/App.cpp) owns TUI observation start, restore, explicit checkpoint, stop, and shutdown ordering.
+- AppKit [`LibrarySession.cpp`](../../../app/macos-appkit/LibrarySession.cpp) owns
+  its workspace-store construction and restore path; [`DesktopApplication.mm`](../../../app/macos-appkit/DesktopApplication.mm)
+  owns selected-root admission, explicit checkpoint, write sealing, and terminal
+  retirement ordering.
 
 ## Test map
 
@@ -240,6 +266,9 @@ The exact ordering belongs to interactive lifecycle architecture.
   protect WinUI's immutable root candidate and preparation-failure boundary;
   native WinUI builds protect the runtime store injection and restore call path.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
+- [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm)
+  protects AppKit's production-composed successor startup, persisted-root
+  observation before an accepted switch, and the terminal switch transition.
 
 ## Related documents
 

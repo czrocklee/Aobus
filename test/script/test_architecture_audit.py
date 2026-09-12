@@ -73,6 +73,7 @@ class ArchitectureAuditTest(unittest.TestCase):
                 "app/desktop",
                 "app/runtime",
                 "app/linux-gtk",
+                "app/macos-appkit",
                 "app/windows-winui",
                 "app/tui",
                 "app/cli",
@@ -105,6 +106,11 @@ class ArchitectureAuditTest(unittest.TestCase):
             (source_root / "app/uimodel/Documented.h").write_text(
                 "// @import AppKit;\n/*\n@import Foundation;\n*/\n", encoding="utf-8"
             )
+            (source_root / "app/macos-appkit/Violation.mm").write_text(
+                "#include <ao/rt/CoreRuntime.h>\n#include <ao/yaml/Reflect.h>\n"
+                'PlaybackTransport* transport;\nauto database = "data.mdb";\n',
+                encoding="utf-8",
+            )
 
             result = subprocess.run(
                 [
@@ -122,7 +128,7 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 7 violation", output)
+        self.assertIn("Application architecture audit found 11 violation", output)
         self.assertIn("frontend_core: app/tui/Violation.cpp", output)
         self.assertIn("frontend_core: app/tui/Violation.mm", output)
         self.assertIn("managed_state_mechanism: app/tui/ManagedState.def", output)
@@ -131,6 +137,8 @@ class ArchitectureAuditTest(unittest.TestCase):
         self.assertIn("uimodel_platform: app/uimodel/Native.mm", output)
         self.assertIn("uimodel_platform: app/uimodel/NativeModule.h", output)
         self.assertNotIn("uimodel_platform: app/uimodel/Documented.h", output)
+        for rule in ("frontend_core", "managed_state_mechanism", "playback_internal", "frontend_library_path"):
+            self.assertIn(f"{rule}: app/macos-appkit/Violation.mm", output)
         self.assertIn("use .cpp, .mm, .h, .hpp, or .def", output)
 
     def test_forbidden_include_guardrail_checks_objective_cpp_sources(self):

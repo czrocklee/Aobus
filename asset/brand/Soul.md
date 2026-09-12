@@ -53,6 +53,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 | `SoulMark.svg` | Static full-color mark on a transparent background. |
 | `SoulSymbol.svg` | Static soul-only symbol for tiny or square placements. |
 | `SoulMono.svg` | Single-color transparent mark for one-color applications. |
+| `Aobus.icns` | Native macOS application icon rendered from the unmodified `SoulSymbol.svg`. |
 
 ## Usage
 
@@ -66,6 +67,12 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 ## Technical Note
 
 `Soul.svg` is the visual source of truth. Runtime UI code uses the shared Soul color and motion recipe in `app/uimodel/playback/soul/AobusSoulViewModel.cpp`, while GTK and TUI reconstruct their own platform-specific shapes from that same model so the brand mark can stay sharp, lightweight, and responsive.
+
+The macOS icon contains the standard 16, 32, 128, 256, and 512 point iconset entries,
+each at 1x and 2x resolution. Render each PNG directly from `SoulSymbol.svg` at its
+target pixel size with the pinned development environment's `rsvg-convert`, then
+package the `.iconset` directory with macOS `iconutil --convert icns`. Preserve the
+transparent background and bundle the brand license alongside the icon.
 
 ---
 

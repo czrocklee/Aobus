@@ -87,6 +87,10 @@ History and pinned info compact states use the presentation-only `kActivityStatu
 The view model records a steady-clock deadline for such compact state.
 `autoDismissCompact()` clears that temporary presentation and reprojects warning/error state.
 `tryAutoDismissCompactIfDue()` performs the same transition only after the deadline.
+`compactAutoDismissRemaining()` exposes the remaining lifetime without changing it.
+Hosts that coalesce renders must schedule from this deadline, since identical final
+presentations can have different deadlines after intermediate transitions. An early
+timer callback retains a future wakeup while a local deadline remains outstanding.
 
 Warning and error compact states have no local timeout.
 Runtime-transient info also has no local timeout because its authoritative service expiry removes it for all consumers.
@@ -112,6 +116,7 @@ They handle expected fallible work locally; an exception that escapes instead is
 - [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) protects grouping, expiry, updates, and compact suppression.
 - [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) protects detail eligibility, ordering, and local hiding.
 - [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) protects rendering, deadlines, and subscriptions.
+- [`AppKitActivityExpirationScenario.mm`](../../../test/integration/macos/AppKitActivityExpirationScenario.mm) controls the model clock and native timer delivery to protect coalesced A-B-A transitions, early wakeup rearming, and cancellation without a playback timer.
 
 ## Related documents
 

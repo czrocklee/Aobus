@@ -71,7 +71,8 @@ when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
 ### macOS
 
 The native macOS profile builds the shared core, CLI, and TUI with Core Audio
-output. It has no Cocoa or GTK desktop frontend. Install the Xcode Command Line
+output. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
+is available via `./ao run appkit`; it is still under development. Install the Xcode Command Line
 Tools and the documented Homebrew host tools; the `./ao` portal bootstraps a
 pinned vcpkg checkout and resolves the shared manifest.
 

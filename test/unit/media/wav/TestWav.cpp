@@ -3,14 +3,59 @@
 
 #include "test/unit/media/wav/TestWav.h"
 
+#include "lib/media/file/mpeg/id3v2/Layout.h"
+
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <string_view>
 #include <vector>
 
 namespace ao::test::wav
 {
+  namespace
+  {
+    namespace id3v2 = ao::media::file::mpeg::id3v2;
+
+    void addPictureFrame(std::vector<std::uint8_t>& data, std::span<std::uint8_t const> const imageData)
+    {
+      auto body = std::vector<std::uint8_t>{0}; // Latin1
+      body.insert(body.end(), {'i', 'm', 'a', 'g', 'e', '/', 'p', 'n', 'g', 0});
+      body.insert(body.end(), {3, 0}); // Front cover and empty description
+      body.insert(body.end(), imageData.begin(), imageData.end());
+
+      auto frame = id3v2::V23CommonFrameLayout{};
+      std::memcpy(frame.id.data(), "APIC", frame.id.size());
+      frame.size = static_cast<std::uint32_t>(body.size());
+      auto const* const frameBytes = reinterpret_cast<std::uint8_t const*>(&frame);
+      data.insert(data.end(), frameBytes, frameBytes + sizeof(frame));
+      data.insert(data.end(), body.begin(), body.end());
+    }
+  } // namespace
+
+  std::vector<std::uint8_t> makeId3WithPicture(std::span<std::uint8_t const> const imageData)
+  {
+    auto body = std::vector<std::uint8_t>{};
+    addPictureFrame(body, imageData);
+
+    auto header = id3v2::HeaderLayout{};
+    std::memcpy(header.id.data(), "ID3", header.id.size());
+    header.majorVersion = 3;
+
+    auto const size = static_cast<std::uint32_t>(body.size());
+    header.size.data[0] = (size >> 21U) & 0x7FU;
+    header.size.data[1] = (size >> 14U) & 0x7FU;
+    header.size.data[2] = (size >> 7U) & 0x7FU;
+    header.size.data[3] = size & 0x7FU;
+
+    auto data = std::vector<std::uint8_t>{};
+    auto const* const headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
+    data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
+    data.insert(data.end(), body.begin(), body.end());
+    return data;
+  }
+
   void appendId(std::vector<std::uint8_t>& output, std::array<char, 4> const& id)
   {
     output.insert(output.end(), id.begin(), id.end());

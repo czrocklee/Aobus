@@ -61,6 +61,7 @@ namespace ao::uimodel::test
       CHECK(latest.compact.text == "Partial import");
       CHECK(latest.compact.dismissible);
       CHECK_FALSE(latest.compact.optAutoDismissTimeout);
+      CHECK_FALSE(viewModel.compactAutoDismissRemaining());
 
       viewModel.dismissCompact();
 
@@ -79,13 +80,17 @@ namespace ao::uimodel::test
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
       CHECK(latest.compact.text == "Saved playlist");
       REQUIRE(latest.compact.optAutoDismissTimeout);
+      CHECK(viewModel.compactAutoDismissRemaining() == kActivityStatusDefaultAutoDismissTimeout);
 
       now += kActivityStatusDefaultAutoDismissTimeout - std::chrono::milliseconds{1};
+      CHECK(viewModel.compactAutoDismissRemaining() == std::chrono::milliseconds{1});
       CHECK_FALSE(viewModel.tryAutoDismissCompactIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
 
       now += std::chrono::milliseconds{1};
+      CHECK(viewModel.compactAutoDismissRemaining() == std::chrono::steady_clock::duration::zero());
       CHECK(viewModel.tryAutoDismissCompactIfDue());
+      CHECK_FALSE(viewModel.compactAutoDismissRemaining());
       CHECK(latest.compact.kind == ActivityStatusKind::Idle);
       CHECK_FALSE(latest.compact.optAutoDismissTimeout);
       CHECK(notifications.feed().entries.size() == 1);

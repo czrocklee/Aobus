@@ -10,8 +10,9 @@ summary: Defines native macOS prerequisites, portal bootstrap, local state, supp
 ## Scope
 
 The native macOS profile supports development of the shared core libraries,
-CLI, FTXUI terminal application, native tests, and shared-mode playback through
-Core Audio. It does not provide a Cocoa or GTK desktop frontend. The TUI uses
+CLI, FTXUI terminal application, AppKit desktop, native tests, and shared-mode
+playback through Core Audio. The desktop is an incremental development slice;
+GTK is not built on macOS. The TUI uses
 the same interactive playback stack as the other native frontends and can play
 through any live Core Audio output device published by macOS.
 
@@ -23,8 +24,8 @@ only AUHAL output unit, disables input, and does not request microphone access.
 It uses the shared profile; macOS may resample, remap channels, or convert the
 lossless client PCM stream downstream of Aobus.
 
-The build targets macOS 15.0 or newer. The project-maintained validation host is
-macOS 15.7.9 on x86_64. GitHub Actions runs the native gate on both the
+The build targets macOS 15.0 or newer. The current local validation VM runs
+macOS 26.6.2 on x86_64. GitHub Actions runs the native gate on both the
 `macos-15-intel` x86_64 image and the `macos-15` arm64 image, using a dedicated
 vcpkg triplet and compiler-cache namespace for each architecture.
 
@@ -49,6 +50,10 @@ target, vcpkg tool revision, archive URL, and archive SHA-256.
 `vcpkg-configuration.json` owns registry revisions, `vcpkg.json` owns ports and
 features, and `cmake/vcpkg-triplets/` owns macOS linkage and deployment flags.
 The native dependency contract is shared with Linux and Windows.
+
+The Release IPO probe covers C++ only.
+With the current CMake toolchain, C++ translation units and the final executable link use ThinLTO; Objective-C++ translation units use normal Release optimization without IPO.
+A successful Release build validates the native bundle, not LTO coverage of every `.mm` file.
 
 Keep generated state on the guest or workstation's local disk. A source tree
 may be mounted over SMB, but build trees, compiler caches, and toolchains must
@@ -85,6 +90,7 @@ The supported commands are:
 ./ao build release            # Release build
 ./ao run cli                  # Build and run the CLI
 ./ao run tui                  # Build and run the terminal frontend
+./ao run appkit               # Build and run the native desktop
 ./ao test                     # Core and TUI fast loop
 ./ao test --lint              # Native Aobus clang-tidy fixture suite
 ./ao test --all               # Core, TUI, CLI, integration, and lint suites
@@ -134,6 +140,108 @@ The share is read-write and does not survive a guest reboot. Credentials are
 managed outside the repository. Do not copy the checkout into the guest or run
 two writers against the same source files.
 
+## Native desktop development slice
+
+`./ao run appkit` builds and launches the AppKit bundle. The application keeps one
+library-bound runtime and native main window, with sidebar navigation, grouped
+track tables, column sorting, filtering, playback, seeking, volume and output
+selection, artwork, and metadata/List editing. Tracks can be dragged into saved
+Lists; a dropped music folder and Open Recent use the same library-switch path
+as the folder picker. Classic and Modern are built-in compositions over
+the same retained session. Closing the window keeps the session alive; reopening
+uses that session. Quit drains runtime callbacks before teardown, and switching
+libraries releases the old graph before starting a successor process.
+
+The deployment baseline remains macOS 15. Newer native split-view materials use
+availability checks and fall back on older macOS versions. Native shell and
+editor copy use the startup-selected MessageCatalog; missing AppKit translations
+fall back to English root. Custom layouts, complete preferences, system media controls,
+signing and distribution remain outside this development slice.
+
+The Window menu retains a Show Aobus Window command (Command-0) after closing the
+window. Properties uses Command-I, Inspector uses Option-Command-I, and Sidebar
+uses Control-Command-S. Modern toolbar customization, recent library paths, and
+window geometry belong to the selected application state root. Appearance is an
+application preference shared by the main window, sheets, and popovers.
+
+Static UI changes are coalesced onto the main run loop. Visible playback and
+Soul animation use an on-demand frame timer; hidden, fully occluded, or idle
+windows do not keep that timer running. Playback position is interpolated from the shared model
+anchor, recorded at publication even while the window is hidden. Separate
+service scheduling advances Quit and library switching even when rendering is
+suspended. A close request waits through saving and field-menu tracking and
+joins any existing nested discard sheet; only the actual Keep response cancels
+it.
+
+Pass an absent or empty disposable music directory and an absent or empty
+isolated state directory for each GUI scenario. The portal and native test
+bundle reject ordinary files, nonempty directories, and either path containing
+the other, so they never overwrite user media or state. The bundle fills the
+music directory with 20 deterministic, silent, mono 16-bit 44.1 kHz INFO WAV
+tracks at least 12 seconds long; the desktop successor receives an independent
+fixture generated by the same support code. No external media encoder is
+required. Before creating `NSApplication`, both the shipping desktop and smoke bundle call the same restoration opt-out, merging
+`ApplePersistenceIgnoreState=YES` into the volatile `NSArgumentDomain` without writing global or persistent defaults.
+This follows AppKit's documented
+[restoration opt-out](https://developer.apple.com/library/archive/releasenotes/AppKit/RN-AppKitOlderNotes/index.html)
+and the [volatile argument-domain precedence](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/UserDefaults/AboutPreferenceDomains/AboutPreferenceDomains.html).
+The main window is also non-restorable: `desktop.plist` alone owns its persisted geometry, and AppKit restoration must not compete with library switching or a fresh state root after a crash.
+These scenarios run in `ao_appkit_smoke`, a test bundle linked
+against the same production objects as the shipping desktop. The shipping
+`aobus-appkit` executable does not accept test flags or contain scenario code.
+
+```bash
+./ao test --appkit --scenario desktop --state-root /tmp/aobus-desktop-state --library /tmp/aobus-desktop-music
+./ao test --appkit --scenario authoring --state-root /tmp/aobus-authoring-state --library /tmp/aobus-authoring-music
+./ao test --appkit --scenario presentation --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
+```
+
+Do not pre-populate the fixture directories; successful preparation is part of
+the native scenario contract and failures are reported before AppKit creates a
+session. The desktop scenario drives the real application through native windows,
+controls and menus. It covers browsing, progressing playback time, modes, filtering, native
+editor-close arbitration, blocked library-switch commands while editing,
+retained close/reopen, and an accepted library switch. Its
+successor reenters the test executable using the shared successor protocol.
+The test launch configuration points the unmodified production launcher at a
+temporary bridge. That bridge forwards the real arguments to the portal's
+process supervisor, which owns both GUI processes and collects their exit
+statuses. Both must exit successfully and write completion markers matching
+the current invocation. Timeouts and interrupted or failed runs terminate and
+collect outstanding GUI children. This proves the production coordinator,
+launcher invocation and successor protocol, but not the separate
+shipping executable's argument parser. That entry point remains a thin adapter
+over the independently tested shared protocol.
+
+The authoring scenario owns a real library session and editor through their
+normal APIs. It covers native field editing, numeric validation, mixed values,
+captured bulk edits, stale drafts, List expression recovery, membership,
+subtree deletion, and editor completion. It mutates the disposable library.
+The presentation scenario tests browser callback detachment and selection,
+playback controls, inspector sheets, and activity updates through component
+APIs. Native mouse tracking covers a seek spanning track replacement and replay
+of the same track, plus a valid gesture. Artwork rescans cover replacement,
+addition and removal while selection stays fixed, including filtered-out tracks.
+Activity expiration uses a controlled model clock and native one-shot timer delivery
+to cover batched A-B-A updates and early wakeup rearming without a playback session.
+Neither scenario accesses private coordinator state.
+
+Native view captures omit system window frames and do not replace compositor,
+keyboard, accessibility, or energy measurements. Hidden-window scheduling
+needs separate energy or callback observation; a visual smoke alone does not
+prove the absence of timers.
+
+Run the applicable GUI scenarios in Debug, Release and TSan when changing native
+lifecycle or authoring behavior; add ASan for memory-sensitive changes. Use
+`--tsan` or `--asan` for sanitizer trees, or `--path` to select an already-built
+Release tree. Default and ASan `check` builds include both bundles, but `check --tsan` builds only the core suite's targets and guardrails.
+Run `./ao test --appkit --tsan ...` to build the native GUI test bundle separately; use `--no-build` only after that bundle has been built in the selected tree.
+None of these `check` invocations executes the fixture-dependent GUI scenarios.
+Scoped `hygiene` must include changed
+sources under both `app/macos-appkit` and `test/integration/macos`.
+`./ao analyze --folder app/macos-appkit --fail-on-diagnostics` adds Cocoa path
+analysis with an exact native compile database.
+
 ## Validation
 
 Select the completion route in [validation and review](test/validation-and-review.md).
@@ -145,9 +253,9 @@ run the relevant `--asan` or `--tsan` gate.
 
 The GitHub Actions matrix runs that native gate on Intel and Apple Silicon
 for changes requiring product validation. Documentation-only changes use the
-documentation route described by the completion authority. Native jobs validate the shared libraries, CLI, TUI, Core
-Audio provider, tests, and native lint integration; they do not claim a Cocoa
-desktop frontend.
+documentation route described by the completion authority. Native jobs build the AppKit desktop and validate the shared libraries, CLI,
+TUI, Core Audio provider, tests, and native lint integration. GUI behavior
+requires the separate desktop smoke described above.
 
 The macOS `all` group is exactly core, TUI, CLI, integration, and lint. Its core
 suite opens the native AUHAL path and exercises a silent render/drain cycle on

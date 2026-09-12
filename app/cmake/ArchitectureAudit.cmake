@@ -222,6 +222,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/macos-appkit
       app/tui
       app/windows-winui
       app/cli
@@ -249,6 +250,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/macos-appkit
       app/tui
       app/windows-winui
     FORBIDDEN "ao/yaml/Reflect[.]h|namespace[ \t\r\n]+ao::yaml")
@@ -274,12 +276,12 @@ function(_aobus_run_architecture_audit)
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${_forbidden_audio_control}))|${_forbidden_write_authority}")
   _aobus_register_architecture_rule(frontend_core
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/windows-winui app/tui
+    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/rt/CoreRuntime[.]h|ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${_forbidden_write_authority}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${_forbidden_frontend_commands}"
     ALLOWED "${_allowed_playback_commands}")
   _aobus_register_architecture_rule(frontend_library_path
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/windows-winui app/tui app/cli
+    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui app/cli
     FORBIDDEN "\"([.]aobus|data[.]mdb)")
   _aobus_register_architecture_rule(cli_localization
     ROOTS app/cli

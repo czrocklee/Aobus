@@ -10,7 +10,7 @@ summary: Defines ownership and lifetime boundaries for the declarative shell, ac
 ## Scope
 
 This document owns the structural graph of Aobus desktop application shells.
-It covers the GTK declarative layout session, schema, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement, plus the TUI's projection of neutral application shortcuts into terminal input.
+It covers the GTK declarative layout session, schema, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, window/session ownership, responsive policy, and native adapter placement, the AppKit coordinator and native presentation components, and the TUI's projection of neutral application shortcuts into terminal input.
 
 It does not own the semantic state rendered by a track, playback, workspace, status, or resource component.
 It does not make the GTK declarative layout system a cross-frontend contract: the document, schema values, and build-time state vocabulary are platform-neutral, but component construction is not, so WinUI builds its own presets against its own schema while TUI builds its terminal shell independently.
@@ -120,6 +120,40 @@ A WinUI component observes mutable UI state through a current-value-plus-signal 
 `aobus-winui-lib` owns this shell's responsive breakpoints and strict Windows settings and theme schemas, because only this shell uses or persists them.
 Shared UIModel values own Soul constants and animation gating, and bounded row and artwork caching.
 WinUI also owns XAML controls, HWND and `AppWindow` adaptation, `DispatcherQueue` delivery, FolderPicker, SMTC, and WASAPI provider registration.
+
+### AppKit shell owner
+
+`AobusDesktopDelegate` owns one `LibrarySession`, the application-state lease,
+the main window, and one main-run-loop service admission point. It serializes
+library switching, Quit, window hiding, and the editor-close transaction.
+`DesktopShell.mm` and `DesktopCommandSurface.mm` are named Objective-C categories
+of that same coordinator: they organize window composition and command surfaces
+without introducing another owner. Their internal header is confined to those
+implementation files; presentation components do not include it.
+
+`AobusLibraryBrowser` owns the native track table and List outline, their
+projection caches, selection reconciliation, sorting, and drag callbacks. It
+borrows the session until `detach` disconnects native callbacks and revokes that
+borrow. `AobusPlaybackBar` owns Modern/Classic playback controls and the volume
+popover. `AobusActivityPopover` owns activity rows and their notification
+identities. `AobusTrackInspector` owns selection details, artwork, and its compact
+sheet. Those three presentation owners consume snapshots and native actions;
+they do not retain a session or subscribe to runtime observers.
+
+The coordinator routes session invalidations and owns rendering and activity
+expiry timers. `LibrarySession` anchors its shared playback-position
+interpolator when UIModel publishes a position transition, independently of
+window visibility; the coordinator samples it when rendering a frame. It stops native callback admission before detaching presentation
+objects, then releases the session and lease before launching a successor.
+Mode changes and closing the visible window retain the same session.
+
+The `ao_appkit` object target owns production implementation. The shipping
+bundle and the separate `ao_appkit_smoke` test bundle link those same objects;
+only the test target contains scenario drivers, captures, and assertions.
+The desktop scenario operates normal AppKit windows, controls and menus through
+`runDesktopApplication`. Detailed component fixtures own their collaborators
+and use component APIs. Tests do not include the coordinator's internal header
+or change its private state. The production executable has no smoke mode.
 
 ### Component and action registries
 
@@ -338,6 +372,9 @@ The selected root is persisted only after successor activation; its initial scan
 - [`TransportButton`](../../app/windows-winui/playback/TransportButton.h), [`SoulTransportButton`](../../app/windows-winui/playback/SoulTransportButton.h), [`OutputDeviceControl`](../../app/windows-winui/playback/OutputDeviceControl.h), [`SeekControl`](../../app/windows-winui/playback/SeekControl.h), [`PlaybackTimeControl`](../../app/windows-winui/playback/PlaybackTimeControl.h), and [`VolumeControl`](../../app/windows-winui/playback/VolumeControl.h) own playback leaf adaptation; a document's playback components compose them.
 - [`ShellState`](../../app/windows-winui/include/ao/winui/layout/ShellState.h) owns the Windows-only shell-state values and decisions, while [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) owns shared Soul behavior.
 
+- [`DesktopApplication.mm`](../../app/macos-appkit/DesktopApplication.mm), [`DesktopShell.mm`](../../app/macos-appkit/DesktopShell.mm), and [`DesktopCommandSurface.mm`](../../app/macos-appkit/DesktopCommandSurface.mm) implement the AppKit coordinator; [`DesktopMain.mm`](../../app/macos-appkit/DesktopMain.mm) parses launch arguments.
+- [`LibraryBrowser.h`](../../app/macos-appkit/LibraryBrowser.h), [`PlaybackBar.h`](../../app/macos-appkit/PlaybackBar.h), [`ActivityPopover.h`](../../app/macos-appkit/ActivityPopover.h), and [`TrackInspector.h`](../../app/macos-appkit/TrackInspector.h) define the native presentation boundaries.
+
 ## Test map
 
 - UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, schema, actions, component state, promotion, and session policy.
@@ -349,6 +386,8 @@ The selected root is persisted only after successor activation; its initial scan
 - [`AssertWinUiLeafCapabilities.cmake`](../../cmake/AssertWinUiLeafCapabilities.cmake) scans the whole WinUI frontend and keeps `LibrarySession` and `AppRuntime` to the composition roots it names, so every other file receives exact capabilities.
 - [`AssertGtkLeafCapabilities.cmake`](../../cmake/AssertGtkLeafCapabilities.cmake) scans the whole GTK frontend and keeps `AppRuntime` to the composition roots it names, so every other file receives exact capabilities.
 - Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component schema, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
+
+- The separate AppKit GUI scenarios under [`test/integration/macos/`](../../test/integration/macos/) cover native browser, playback, inspector, activity, authoring, and lifecycle composition; [macOS development](../development/macos.md#native-desktop-development-slice) owns their invocation and fixtures.
 
 ## Related documents
 

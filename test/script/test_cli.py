@@ -947,6 +947,275 @@ class CliParseTest(unittest.TestCase):
             args = self.parse(["test", "--cli"])
             self.assertEqual(args.suite, "cli")
 
+    def test_appkit_suite_is_selectable_only_on_macos(self):
+        arguments = [
+            "test",
+            "--appkit",
+            "--library",
+            "/tmp/aobus-library",
+            "--state-root",
+            "/tmp/aobus-state",
+        ]
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                self.parse(arguments)
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            args = self.parse(arguments)
+
+        self.assertEqual(args.suite, "appkit")
+
+    def test_appkit_suite_stays_out_of_macos_groups(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            self.assertEqual(test_command.suites_for("all"), builddir.MACOS_PROFILE.all_suites)
+            self.assertNotIn("appkit", test_command.suites_for("default"))
+            self.assertNotIn("appkit", test_command.suites_for("concurrency"))
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="clang")
+    def test_appkit_dispatch_reuses_selected_tree_and_sanitizer_options(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            library = Path(temp_dir) / "music"
+            state_root = Path(temp_dir) / "state"
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                args = self.parse(
+                    [
+                        "test",
+                        "--appkit",
+                        "--scenario",
+                        "authoring",
+                        "--library",
+                        str(library),
+                        "--state-root",
+                        str(state_root),
+                        "--asan",
+                        "--no-build",
+                        "--path",
+                        temp_dir,
+                    ]
+                )
+                with mock.patch.object(test_command, "run_appkit_smoke", return_value=0) as run_smoke:
+                    self.assertEqual(test_command.run_command(args), 0)
+
+        run_smoke.assert_called_once_with(
+            Path(temp_dir),
+            scenario="authoring",
+            library=library.resolve(),
+            state_root=state_root.resolve(),
+            asan=True,
+            tsan=False,
+        )
+
+    def test_appkit_fixture_options_are_rejected_for_other_suites(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            args = self.parse(["test", "--core", "--library", "/tmp/aobus-library"])
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                test_command.run_command(args)
+
+    def test_appkit_runner_forwards_scenario_fixtures_run_id_and_sanitizer_environment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir) / "build"
+            binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+            library = Path(temp_dir) / "music"
+            state_root = Path(temp_dir) / "state"
+            parent = mock.Mock()
+            parent.wait.return_value = 0
+            run_id = "0123456789abcdef0123456789abcdef"
+
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                environment = {"INHERITED": "yes", test_command.APPKIT_RUN_ID_ENV: "old"}
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    with mock.patch.object(test_command.uuid, "uuid4", return_value=mock.Mock(hex=run_id)):
+                        with mock.patch.object(test_command.subprocess, "Popen", return_value=parent) as popen:
+                            self.assertEqual(
+                                test_command.run_appkit_smoke(
+                                    build_dir,
+                                    scenario="authoring",
+                                    library=library,
+                                    state_root=state_root,
+                                    asan=True,
+                                ),
+                                0,
+                            )
+
+        popen.assert_called_once_with(
+            [
+                str(binary),
+                "--scenario",
+                "authoring",
+                "--library",
+                str(library.resolve()),
+                "--state-root",
+                str(state_root.resolve()),
+            ],
+            cwd=test_command.PROJECT_ROOT,
+            env={
+                "INHERITED": "yes",
+                test_command.APPKIT_RUN_ID_ENV: run_id,
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+            },
+        )
+        parent.wait.assert_called_once_with(timeout=test_command.APPKIT_PARENT_TIMEOUT_SECONDS)
+
+    def test_appkit_parent_timeout_terminates_and_collects_only_that_process(self):
+        parent = mock.Mock()
+        parent.wait.side_effect = (
+            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
+            0,
+        )
+        with mock.patch.object(test_command.subprocess, "Popen", return_value=parent):
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(test_command._run_appkit_parent(["ao_appkit_smoke"], {}), 1)
+
+        parent.terminate.assert_called_once_with()
+        parent.kill.assert_not_called()
+        self.assertEqual(
+            parent.wait.call_args_list,
+            [
+                mock.call(timeout=test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
+                mock.call(timeout=test_command.APPKIT_PARENT_TERMINATE_SECONDS),
+            ],
+        )
+
+    def test_appkit_parent_timeout_kills_and_collects_when_termination_stalls(self):
+        parent = mock.Mock()
+        parent.wait.side_effect = (
+            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TIMEOUT_SECONDS),
+            subprocess.TimeoutExpired("ao_appkit_smoke", test_command.APPKIT_PARENT_TERMINATE_SECONDS),
+            -9,
+        )
+        with mock.patch.object(test_command.subprocess, "Popen", return_value=parent):
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(test_command._run_appkit_parent(["ao_appkit_smoke"], {}), 1)
+
+        parent.terminate.assert_called_once_with()
+        parent.kill.assert_called_once_with()
+        self.assertEqual(parent.wait.call_args_list[-1], mock.call())
+
+    def test_appkit_parent_timeout_collects_a_real_sleeping_process(self):
+        real_popen = subprocess.Popen
+        started = []
+
+        def launch(*args, **kwargs):
+            parent = real_popen(*args, **kwargs)
+            started.append(parent)
+
+            def cleanup():
+                if parent.poll() is None:
+                    parent.kill()
+                    parent.wait()
+
+            self.addCleanup(cleanup)
+            return parent
+
+        command = [sys.executable, "-c", "import time; time.sleep(60)"]
+        with mock.patch.object(test_command, "APPKIT_PARENT_TIMEOUT_SECONDS", 0.1):
+            with mock.patch.object(test_command.subprocess, "Popen", side_effect=launch):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(test_command._run_appkit_parent(command, {}), 1)
+
+        self.assertEqual(len(started), 1)
+        self.assertIsNotNone(started[0].returncode)
+        self.assertEqual(started[0].poll(), started[0].returncode)
+
+    def test_appkit_rejects_nonempty_invalid_or_nested_fixtures_before_starting_parent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            nonempty_state = root / "nonempty-state"
+            nonempty_state.mkdir()
+            (nonempty_state / "desktop.plist").touch()
+            nonempty_library = root / "nonempty-library"
+            nonempty_library.mkdir()
+            (nonempty_library / "user-track.wav").touch()
+            library_file = root / "library-file"
+            library_file.touch()
+            state_file = root / "state-file"
+            state_file.touch()
+            cases = (
+                (nonempty_state, root / "music"),
+                (state_file, root / "music-file-state"),
+                (root / "state-a", nonempty_library),
+                (root / "state-b", library_file),
+                (root / "same", root / "same"),
+                (root / "state", root / "state" / "music"),
+                (root / "music" / "state", root / "music"),
+            )
+            with mock.patch.object(test_command.subprocess, "Popen") as popen:
+                for state_root, library in cases:
+                    with self.subTest(state_root=state_root, library=library):
+                        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                            test_command.run_appkit_smoke(
+                                root / "build", scenario="presentation", library=library, state_root=state_root
+                            )
+
+            popen.assert_not_called()
+
+    def test_appkit_command_rejects_nonempty_state_before_build_subprocess(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state_root = root / "state"
+            state_root.mkdir()
+            (state_root / "desktop.plist").touch()
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+                args = self.parse(
+                    [
+                        "test",
+                        "--appkit",
+                        "--library",
+                        str(root / "music"),
+                        "--state-root",
+                        str(state_root),
+                        "--path",
+                        str(root / "build"),
+                    ]
+                )
+                with mock.patch.object(test_command, "run") as run:
+                    with mock.patch.object(test_command.subprocess, "Popen") as popen:
+                        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                            test_command.run_command(args)
+
+        run.assert_not_called()
+        popen.assert_not_called()
+
+    def test_appkit_desktop_requires_matching_markers_after_successful_process_exits(self):
+        for wrong_marker in ("desktop-pass.txt", "successor-pass.txt", "missing", None):
+            with self.subTest(wrong_marker=wrong_marker), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                build_dir = root / "build"
+                binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+                binary.parent.mkdir(parents=True)
+                binary.touch()
+                state_root = root / "state"
+                run_id = "0123456789abcdef0123456789abcdef"
+
+                def completed_processes(
+                    *args, state_root=state_root, run_id=run_id, wrong_marker=wrong_marker, **kwargs
+                ):
+                    self.assertEqual(kwargs["environment"][test_command.APPKIT_RUN_ID_ENV], run_id)
+                    state_root.mkdir()
+                    for marker in ("desktop-pass.txt", "successor-pass.txt"):
+                        if wrong_marker == "missing" and marker == "successor-pass.txt":
+                            continue
+                        value = "another-invocation\n" if marker == wrong_marker else f"{run_id}\n"
+                        (state_root / marker).write_text(value, encoding="utf-8")
+                    return 0
+
+                with mock.patch.object(test_command.uuid, "uuid4", return_value=mock.Mock(hex=run_id)):
+                    with mock.patch.object(test_command.appkitprocess, "run_desktop", side_effect=completed_processes):
+                        if wrong_marker is None:
+                            self.assertEqual(
+                                test_command.run_appkit_smoke(
+                                    build_dir, scenario="desktop", library=root / "music", state_root=state_root
+                                ),
+                                0,
+                            )
+                        else:
+                            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                                test_command.run_appkit_smoke(
+                                    build_dir, scenario="desktop", library=root / "music", state_root=state_root
+                                )
+
     def test_test_defaults_to_default_suite_group(self):
         args = self.parse(["test"])
         self.assertEqual(args.suite, "default")
@@ -1993,6 +2262,18 @@ class CliParseTest(unittest.TestCase):
                 run_command_mod.run_command(args)
         self.assertIn("Did you build the project", stderr.getvalue())
         validate.assert_not_called()
+
+    def test_macos_run_executes_bundle_binary_and_forwards_library_argument(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
+            args = self.parse(["run", "appkit", "--", "--library", "/tmp/aobus-library"])
+            with mock.patch.object(run_command_mod.build, "do_build") as do_build:
+                with mock.patch.object(run_command_mod.os, "execvp") as execvp:
+                    with mock.patch.object(run_command_mod.Path, "exists", return_value=True):
+                        run_command_mod.run_command(args)
+        do_build.assert_called_once_with(args, ["aobus-appkit"])
+        executable, arguments = execvp.call_args.args
+        self.assertEqual(Path(executable).parts[-4:], ("aobus-appkit.app", "Contents", "MacOS", "aobus-appkit"))
+        self.assertEqual(arguments, [executable, "--library", "/tmp/aobus-library"])
 
     def test_run_command_no_build_skips_build(self):
         args = self.parse(["run", "-n", "tui"])

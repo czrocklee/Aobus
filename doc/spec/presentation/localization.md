@@ -18,7 +18,8 @@ Locale-aware ordering is independent and is not part of this contract.
 
 The [system architecture](../../architecture/system-overview.md) defines the process layers, and the [presentation architecture](../../architecture/presentation.md) owns localization composition and dependency direction.
 The interactive localization facade is public under `app/include/ao/i18n/`; its ICU-backed implementation, canonical resources, and build compiler live under `app/i18n/` and `tool/catalog/`.
-GTK, TUI, and WinUI may construct the facade at their process roots.
+GTK, TUI, WinUI, and AppKit may construct the facade at their process roots.
+AppKit converts resolved UTF-8 to native strings through its `AppKitText` leaf.
 Core, application runtime, UIModel, and CLI do not depend on the concrete catalog target.
 
 ## Terminology
@@ -40,9 +41,9 @@ The [text-catalog reference](../../reference/presentation/text-catalog.md#chines
 
 ## Invariants
 
-- Each interactive composition root resolves one locale at startup. TUI may replace its catalog value from Settings on the callback executor; GTK and WinUI retain their startup selection. Copies retain immutable catalog storage, and state crossing replacement owns its display strings.
+- Each interactive composition root resolves one locale at startup. TUI may replace its catalog value from Settings on the callback executor; GTK, WinUI, and AppKit retain their startup selection. Copies retain immutable catalog storage, and state crossing replacement owns its display strings.
 - Each interactive composition root injects that `MessageCatalog` through the UI graph; production code has no hidden English/default construction path.
-- Interactive call sites look up required copy with `requiredText` and `requiredFormat`. GTK, TUI, and WinUI use canonical typed `MessageId` values directly; WinUI also consumes generated MRT resources where native lookup is required.
+- Interactive call sites look up required copy with `requiredText` and `requiredFormat`. GTK, TUI, WinUI, and AppKit use canonical typed `MessageId` values directly; WinUI also consumes generated MRT resources where native lookup is required. AppKit converts resolved UTF-8 to native strings at its frontend boundary.
 - Explicit locale input must be a complete strict BCP 47 tag; invalid input is never repaired or interpreted through the ambient C locale.
 - Resolution tries the exact locale, its ICU likely-subtags expansion, parent sequence, and English root in that order.
 - English root contains every typed message id; maintained locale catalogs may contain overrides only.
@@ -120,13 +121,13 @@ At startup, catalog construction or WinUI context initialization failure is fata
 
 ## Persistence and versioning
 
-TUI persists its explicit language override in the global `preferences` group described by the [application-config reference](../../reference/persistence/application-config.md). An empty override follows the system locale. Resolved messages are not persisted as locale configuration; GTK and WinUI continue to select the system locale at startup.
+TUI persists its explicit language override in the global `preferences` group described by the [application-config reference](../../reference/persistence/application-config.md). An empty override follows the system locale. Resolved messages are not persisted as locale configuration; GTK, WinUI, and AppKit continue to select the system locale at startup.
 Catalog changes have no library, workspace, session, or interchange schema version.
 The exact ICU family and capabilities are governed by `dependency-contract.json`; changing the message runtime or fallback model requires an architectural decision.
 
 ## Frontend observations
 
-GTK, TUI, and WinUI construct the same `MessageCatalog` facade and inject its cheap handle through their UI graphs. TUI selects its saved override or system locale and can replace that handle live through Settings; GTK and WinUI select the system locale at startup.
+GTK, TUI, WinUI, and AppKit construct the same `MessageCatalog` facade and inject its cheap handle through their UI graphs. TUI selects its saved override or system locale and can replace that handle live through Settings; GTK, WinUI, and AppKit select the system locale at startup.
 Shared track-field labels, group and missing-value labels, built-in presentation copy, audio descriptions and profiles, completion roles, structured notifications, library progress and scan results, filter errors, track and selection counts, smart-List state, manual-order and Playlist-membership results, import/export results, language-bearing track-field formatting, now-playing states, transport and volume presentation, and audio-quality semantics resolve through that catalog.
 GTK menu copy plus GTK-specific shell and playback accessibility copy, library pickers, import/export and saved-List dialogs, smart-List fields, and List membership/order controls use canonical ids through `gtkText` or GTK-local formatting functions.
 Preferences, shortcut-editor chrome and action descriptors, custom-presentation editing, metadata/property controls, Layout Editor vocabulary and validation, accessibility/tooltips, startup wrappers, and recoverable errors use direct canonical ids through the injected `MessageCatalog` because each call maps one message without additional semantic selection.
@@ -137,6 +138,8 @@ Operating-system device names, track metadata, audio node names, and external ap
 The audio-quality formatter keeps established technical numbers and symbols locale-neutral while the catalog owns complete lexical and grammatical messages.
 Neutral German proves substitutions and plural behavior, and the generated pseudo locale exercises every migrated shared message while preserving runtime arguments.
 WinUI consumes generated shared track-field, presentation, shell-navigation, playback/output, static library, tooltip, accessibility, empty-state, and recoverable-error resources from the same canonical ids. Native single-argument formatting and XAML property lookup are generated projections of those ids, not independently authored messages.
+AppKit shell, browser, playback, inspector, activity, and authoring copy uses canonical ids through `AppKitText` native-string conversions or direct required catalog formatting.
+Missing AppKit messages in a maintained locale follow the catalog's explicit fallback chain to the English root.
 The English root is the default presentation baseline owned by the [presentation text catalog reference](../../reference/presentation/text-catalog.md). Deliberate English copy corrections are reviewed as user-visible changes and protected by focused expectations; catalog migration does not otherwise rewrite copy.
 
 CLI does not construct a catalog and retains English command, diagnostic, and machine-output behavior.
@@ -146,7 +149,7 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 - [`MessageCatalog.h`](../../../app/include/ao/i18n/MessageCatalog.h) defines the typed facade and owned result.
 - [`MessageCatalog.cpp`](../../../app/i18n/MessageCatalog.cpp) owns admission, explicit fallback, immutable formatter construction, and formatting.
 - [`TrackPresentationText.cpp`](../../../app/uimodel/library/presentation/TrackPresentationText.cpp), [`PlaybackCommandText.cpp`](../../../app/uimodel/playback/command/PlaybackCommandText.cpp), [`PlaybackOutputText.cpp`](../../../app/uimodel/playback/output/PlaybackOutputText.cpp), and [`ActivityPresentationText.cpp`](../../../app/uimodel/status/activity/ActivityPresentationText.cpp) map domain inputs only where message selection or fallback is semantic.
-- [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp) and [`ShellText.cpp`](../../../app/tui/ShellText.cpp) own frontend-local copy helpers and argument binding.
+- [`GtkText.cpp`](../../../app/linux-gtk/i18n/GtkText.cpp), [`ShellText.cpp`](../../../app/tui/ShellText.cpp), and AppKit [`AppKitText.h`](../../../app/macos-appkit/AppKitText.h) / [`AppKitText.mm`](../../../app/macos-appkit/AppKitText.mm) own frontend-local copy helpers, native-string conversion, and argument binding.
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation and structure-aware pseudo transformation.
 - [`root.txt`](../../../app/i18n/catalog/root.txt), [`de.txt`](../../../app/i18n/catalog/de.txt), [`zh_Hans.txt`](../../../app/i18n/catalog/zh_Hans.txt), [`zh_Hant.txt`](../../../app/i18n/catalog/zh_Hant.txt), [`ja.txt`](../../../app/i18n/catalog/ja.txt), [`es.txt`](../../../app/i18n/catalog/es.txt), and [`fr.txt`](../../../app/i18n/catalog/fr.txt) are the canonical authored catalogs.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates assets and generates pseudo and WinUI resources.
@@ -165,6 +168,7 @@ CLI does not construct a catalog and retains English command, diagnostic, and ma
 - [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp), [`ListMembershipAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp), and the GTK List/dialog tests protect localized library authoring and frontend wiring.
 - [`CatalogPatternTest.cpp`](../../../test/unit/i18n/CatalogPatternTest.cpp) protects signature validation and deterministic ICU/RESW generation.
 - [`StringResourceTest.cpp`](../../../test/unit/winui/StringResourceTest.cpp) protects canonical WinUI resource reachability and the bounded generated projection set.
+- [`AppKitMessageCatalogTest.cpp`](../../../test/unit/i18n/AppKitMessageCatalogTest.cpp) protects AppKit count and selection formatting plus English fallback for untranslated AppKit messages.
 - [`WinUiLocalizationProbe.cpp`](../../../test/helper/WinUiLocalizationProbe.cpp) runs after native WinUI linking and compares ICU and MRT selection and formatting for the required locale matrix.
 - The CLI target-closure check in [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) rejects concrete localization and ICU i18n dependencies below `aobus`.
 

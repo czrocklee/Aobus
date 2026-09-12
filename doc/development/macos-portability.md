@@ -21,8 +21,8 @@ Machine setup, portal behavior, local state, and the SMB workflow belong to
 ## Current support
 
 The macOS profile builds the shared core libraries, the CLI, the FTXUI terminal
-application, and the native test suites. There is no GTK or Cocoa desktop
-frontend. Audio playback uses the native Core Audio shared backend, and the TUI
+application, the [AppKit desktop development slice](macos.md#native-desktop-development-slice),
+and the native test suites. GTK is not built on macOS. Audio playback uses the native Core Audio shared backend, and the TUI
 can render through any live Core Audio output device published by macOS.
 
 The toolchain is Clang 22 from Homebrew's `llvm@22` formula, targeting
@@ -46,6 +46,7 @@ repository. None of them is a design choice.
 | 5 | `-Wno-c2y-extensions` | `cmake/CompilerOptions.cmake` | fakeit stops expanding `__COUNTER__`, or Clang stops reporting it |
 | 6 | `StringMaker<file_time_type>` | `test/unit/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
 | 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
+| 8 | Objective-C++26 compiler flag mapping | root `CMakeLists.txt` | CMake supplies Clang's Objective-C++26 standard flags |
 
 ### 1-3: standard-library seams
 
@@ -174,6 +175,18 @@ To retire it: remove the Darwin condition from `cmake/Dependencies.cmake`,
 build the affected rapidyaml consumers with the current Homebrew Clang in
 C++26 mode, and run the complete macOS gate. A dependency upgrade is not enough
 evidence unless those consumers compile without the definition.
+
+### 8: Objective-C++26 compiler flag mapping
+
+Some CMake versions accept `OBJCXX_STANDARD=26` without defining the matching
+Clang flags. The root build configuration supplies the standard and extension
+flags only when that mapping is absent. `DesktopApplication.mm` also asserts the
+active language version so the bridge cannot silently fall back to C++23.
+
+To retire it: remove the conditional mapping from the root `CMakeLists.txt`,
+configure a clean native build with the supported CMake version, and build the
+AppKit target in Debug and Release. The source language assertion must continue
+to pass.
 
 ## Permanent platform differences
 
