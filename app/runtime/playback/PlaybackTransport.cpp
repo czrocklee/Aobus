@@ -126,7 +126,7 @@ namespace ao::rt
         .ready = status.isReady,
         .volume =
           VolumeState{
-            .level = status.engine.volume,
+            .level = normalizePlaybackVolume(status.engine.volume),
             .muted = status.engine.muted,
             .available = status.engine.volumeAvailable,
             .hardwareAssisted = status.engine.volumeIsHardwareAssisted,

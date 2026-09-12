@@ -1025,6 +1025,8 @@ AO_I18N_MESSAGE(TuiWorkspaceForward, "tui_workspace_forward")
 AO_I18N_MESSAGE(TuiWorkspaceHistoryUnavailable, "tui_workspace_history_unavailable")
 AO_I18N_MESSAGE(TuiSettingsKeyboardScope, "tui_settings_keyboard_scope")
 AO_I18N_MESSAGE(TuiPlaybackModes, "tui_playback_modes")
+AO_I18N_MESSAGE(TuiPlaybackMode, "tui_playback_mode")
+AO_I18N_MESSAGE(TuiPlaybackModeHint, "tui_playback_mode_hint")
 
 AO_I18N_MESSAGE(TuiGoToTitle, "tui_go_to_title")
 AO_I18N_MESSAGE(TuiGoToStatus, "tui_go_to_status")
@@ -1065,6 +1067,7 @@ AO_I18N_MESSAGE(TuiShellDetailEditTags, "tui_shell_detail_edit_tags")
 
 AO_I18N_MESSAGE(TuiShellTags, "tui_shell_tags")
 AO_I18N_MESSAGE(TuiTagPopoverCancel, "tui_tag_popover_cancel")
+AO_I18N_MESSAGE(TuiTagPopoverClose, "tui_tag_popover_close")
 
 AO_I18N_MESSAGE(TuiSettingsTerminalTitle, "tui_settings_terminal_title")
 AO_I18N_MESSAGE(TuiSettingsTerminalTitleHint, "tui_settings_terminal_title_hint")

@@ -212,10 +212,13 @@ namespace ao::tui
              bold;
     }
 
+    auto const cancelLabel =
+      isDirty() || _tagEditor.hasNewTagOffer() ? MessageId::TuiTagPopoverCancel : MessageId::TuiTagPopoverClose;
+
     if (_status != TrackEditorStatus::Ready)
     {
       return vbox({hbox({filler(), hint("Ctrl-R", MessageId::TuiEditorHintReload, Event::CtrlR)}),
-                   hbox({filler(), hint("Esc", MessageId::TuiTagPopoverCancel, Event::Escape)})});
+                   hbox({filler(), hint("Esc", cancelLabel, Event::Escape)})});
     }
 
     auto rows = Elements{};
@@ -253,9 +256,11 @@ namespace ao::tui
     auto const createsTag = _tagQueryFocused ? _tagEditor.hasNewTagOffer() : _tagEditor.isCreatingTag();
     auto const applyLabel = createsTag ? MessageId::TuiTagPopoverAddApply : MessageId::TuiTagPopoverApply;
     auto applyPtr = hint("Enter", applyLabel, Event::Return);
-    auto cancelPtr = hint("Esc", MessageId::TuiTagPopoverCancel, Event::Escape);
-    auto const actionColumns = 13 + cellWidth(i18n::requiredText(_textCatalog, applyLabel)) +
-                               cellWidth(i18n::requiredText(_textCatalog, MessageId::TuiTagPopoverCancel));
+    auto cancelPtr = hint("Esc", cancelLabel, Event::Escape);
+    // "Enter " (6), separator " · " (3), and "Esc " (4).
+    constexpr std::int32_t kActionFixedColumns = 13;
+    auto const actionColumns = kActionFixedColumns + cellWidth(i18n::requiredText(_textCatalog, applyLabel)) +
+                               cellWidth(i18n::requiredText(_textCatalog, cancelLabel));
 
     if (actionColumns > columns)
     {

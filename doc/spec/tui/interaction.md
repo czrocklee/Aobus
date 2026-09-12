@@ -99,7 +99,7 @@ Its List navigation pane consumes the shared [list-navigation tree](../presentat
 - List navigation preserves shared parent recovery and sibling order; its frontend model owns cursor identity, expansion, local search, and visible rows.
 - Startup attaches the exact active runtime view restored by `WorkspaceService`; a valid empty projection does not cause replacement navigation.
 - Reload materializes the same active view id and preserves its filter, presentation, grouping, sorting, history identity, filter draft, selected track when that track remains visible, and independent List cursor and presentation-picker highlight.
-- Play/pause, stop, sequence previous/next, shuffle, and repeat use `PlaybackActions`; explicit selected-track activation remains a distinct view-based sequence command.
+- Play/pause, stop, sequence previous/next, and keyboard shuffle/repeat actions use `PlaybackActions`; the mouse mode preset applies its shuffle/repeat pair through `PlaybackCommands`, and explicit selected-track activation remains a distinct view-based sequence command.
 - A modal surface arriving mid-gesture ends it: a pointer drag cannot be continued while text input or a modal overlay owns the workspace.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag previews a per-list terminal-cell layout; only normal release commits it, while any interruption rolls the preview back.
@@ -109,7 +109,23 @@ Reveal uses the shared playback reveal request. It focuses the subject in the cu
 
 Browse overlays admit only play/pause, stop, sequence navigation, mode toggles, seek, and volume after local navigation/activation/toggle handling. Search, shell input, Settings, and editors retain exclusive input ownership. Help closes on its effective Help shortcut as well as Escape.
 
-The playback bar always shows shuffle (`⇄`) and repeat (`↻`, `↻1`) indicators. Inactive modes are dim; active modes are accented, with `1` distinguishing repeat-one. With mouse control enabled and no foreground input or modal surface owning the click, pressing shuffle toggles off/on and pressing repeat cycles off → all → one → off through the same playback commands as the keyboard. Mode changes also report localized text, including turning a mode off.
+### Playback modes
+
+The playback bar's single mode button cycles through `SEQ-` → `SEQ*` → `SHF-` → `SHF*` → `SEQ1` → `SEQ-`, using the [locale-neutral mode codes](../../reference/tui/command.md#playback-mode-codes).
+Its padded six-cell hit region has the same width for every mode and locale, so mode changes alone keep repeated clicks on the button; hover highlights the whole target.
+The mode and output-backend targets are adjacent and disjoint, with one padding cell per target between their labels and no extra separator.
+With a known duration, elapsed time reserves enough columns to reach that duration without widening; before duration resolves, it keeps its compact zero-time label.
+Volume reserves room for the localized full-volume and mute labels while retaining readable title space and a seek cell; narrow layouts always retain the complete numeric volume and may ellipsize a longer mute label within that stable slot.
+With the same duration, backend, locale, and terminal width, ordinary ticking and volume/mute changes preserve the mode and output targets.
+An unrecognized mode keeps the layout space but has no hover or click target; a stale click cannot normalize an unrecognized runtime mode.
+Hover replaces ordinary workspace hints with the localized current mode and click destination, right-aligned in the status bar.
+After each painted frame, retained button hover is retired if the last pointer position no longer hits that button; duration resolution, track/backend changes, and terminal resizing can still move the controls and restore ordinary hints.
+This geometry check does not reinstate hover cancelled by keyboard input or interrupt an active pointer drag.
+When both do not fit, the current mode takes priority; active input, visual selection, popovers, and keyboard panel resizing keep their own hints.
+An activity slot is omitted when its available width cannot fit the four frame cells and at least one content cell.
+With mouse control enabled and no foreground input or modal surface owning the click, a left press applies the next preset through playback commands without opening a menu.
+When keyboard commands enable shuffle together with repeat-one, the button shows `SHF1` and its localized hover names both preferences; the next mode-button press returns to `SEQ-`.
+Keyboard shuffle and repeat remain independent and report localized status, including turning a mode off.
 
 ## State model
 
@@ -244,6 +260,9 @@ Artist navigation treats the complete metadata value as one quoted query constan
 Artist and album navigation checkpoint the current live filter and presentation before leaving, so workspace Back/Forward restores the previous view without rewriting saved List predicates.
 An empty artist or album field supplies no link; a missing title uses the clickable track-id fallback. An invalid playback track supplies no links. A click captured before the playback subject or its metadata changes is consumed without navigating until the new text has been rendered.
 Each hit region covers only its painted text, excluding separators and padding. Narrow docks shorten whole display-cell clusters and omit trailing metadata fields when space is insufficient; hidden fields have no hit region.
+The title is accented and bold, the artist uses normal text, and the album is dimmed, with ` · ` before the artist and ` / ` before the album when both are present.
+Hover applies the shared button highlight only to the pointed field without changing its geometry; separators, hidden fields, and metadata behind active input or overlays are not hover targets.
+Within the admitted fields, shortening preserves the title before the artist and the album while retaining small readable linked fragments.
 The `artist` and `album` commands expose the same destinations when their text is hidden. Text input, editors, and floating-menu dismissal retain their existing pointer ownership.
 Clicking the volume label toggles mute; wheel input over it adjusts gain by the configured volume step. Muted output renders a localized mute label while preserving the stored level.
 
@@ -351,7 +370,9 @@ Space toggles a focused result, while spaces typed in the query remain text.
 Arrow navigation returns focus to results.
 Enter applies the pending tag patch; with query focus it first adds an offered new name even alongside partial matches, while result focus creates only from the selected creation row.
 An exact search match alone never changes an existing tag.
-Escape, the Cancel footer, or an outside press cancels the draft directly, without the full editor's discard prompt.
+Escape, the exit footer, or an outside press cancels the draft directly, without the full editor's discard prompt.
+The footer says Close for a clean view and Discard changes when tag intents or an offered new tag would be lost.
+At 80 columns, the maintained locale labels fit on one action row; narrower terminals may stack the actions.
 Ctrl+R reloads the same targets and retains the tags-only mode only in Failed or Stale state, where the footer advertises recovery; while Ready it preserves the draft.
 During submission, all dismissal and editing inputs remain blocked.
 Metadata is excluded from the patch in this mode.
@@ -477,15 +498,17 @@ The notification center can be opened explicitly even when compact status is not
 ## Test map
 
 - [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) protects expression compilation, metadata invalidation, title ownership, Soul composition, and control-safe output. [`SoulButtonTest.cpp`](../../../test/unit/tui/SoulButtonTest.cpp) protects shared playback-state glyphs.
-- [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, mouse dismissal, localized narrow layouts, and submission/recovery controls.
+- [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tag-only patches, query/result focus, localized Close/Discard transitions, key and label mouse targets in narrow layouts, and submission/recovery controls.
 
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, and overlay state.
 - [`ShellInputTest.cpp`](../../../test/unit/tui/ShellInputTest.cpp) protects caret editing, history, cursor-aware replacement, and localized action discovery. [`ListSearchTest.cpp`](../../../test/unit/tui/ListSearchTest.cpp) protects local query ownership and filtered selection.
 - [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects command parsing and key-action mappings.
 - [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects shared action identities, independent terminal defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, selection commands, and exit without early playback stop.
-- [`PlaybackNavigationTest.cpp`](../../../test/unit/tui/PlaybackNavigationTest.cpp) protects playback metadata link geometry, literal artist queries, album-group reveal, navigation history, command parity, and stale or modal pointer input.
-- [`PinnedNavigationTest.cpp`](../../../test/unit/tui/PinnedNavigationTest.cpp) protects independent access/pin bindings, switching from chooser to pinned tree, divider targets, disclosure clicks without List activation, popup dismissal, layout checkpoints, and restored frame/status entry points.
+- [`PlaybackNavigationTest.cpp`](../../../test/unit/tui/PlaybackNavigationTest.cpp) protects playback metadata link geometry, title priority, per-field hover, literal artist queries, album-group reveal, navigation history, command parity, and stale or modal pointer input.
+- [`PlaybackHoverTest.cpp`](../../../test/unit/tui/PlaybackHoverTest.cpp) protects hover retirement after painted control geometry changes without mouse motion, retained hover while elapsed time gains a digit, stable hover during height-only resize, and explicit cancellation.
+- [`PlaybackModeTest.cpp`](../../../test/unit/tui/PlaybackModeTest.cpp) protects all six ASCII mode codes, stable padded geometry and adjacent output targets through elapsed/volume/mute changes, retired targets for unrecognized modes, localized current/next hints including shuffle with repeat-one, narrow status layouts, retired shortcut targets, and foreground hint ownership.
+- [`PinnedNavigationTest.cpp`](../../../test/unit/tui/PinnedNavigationTest.cpp) protects independent access/pin bindings, switching from chooser to pinned tree, divider targets, disclosure clicks without List activation, popup dismissal, scrollbar-capture cancellation when foreground input opens, layout checkpoints, and restored frame/status entry points.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects chooser preorder, indentation, and label contents; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects chooser selection across refresh.
 - [`PanelResizeTest.cpp`](../../../test/unit/tui/PanelResizeTest.cpp) protects width constraints, resize commit/rollback, hover retirement, and mode hints; [`PanelDividerTest.cpp`](../../../test/unit/tui/PanelDividerTest.cpp) protects shared/separate border geometry and reveal hover.
 - [`TrackDetailLinesTest.cpp`](../../../test/unit/tui/TrackDetailLinesTest.cpp) protects detail row labels, filename fallback, and metadata-title precedence.

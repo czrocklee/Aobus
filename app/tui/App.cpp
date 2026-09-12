@@ -164,6 +164,16 @@ namespace ao::tui
       }
     }
 
+    void refreshWorkspaceInteraction(EventController& events, ftxui::ScreenInteractive& screen)
+    {
+      events.syncWorkspaceGeometry();
+
+      if (events.tryRetireHover())
+      {
+        screen.PostEvent(ftxui::Event::Custom);
+      }
+    }
+
     ftxui::Element commandPalettePopover(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
                                          KeymapPlan const& keymapPlan,
@@ -820,6 +830,9 @@ namespace ao::tui
                                                 .activityStatusHovered = hoveredButton == HoveredButton::ActivityStatus,
                                                 .settingsButtonBox = &hitRegions.settingsButtonBox,
                                                 .settingsHovered = hoveredButton == HoveredButton::Settings,
+                                                .hoveredPlaybackMode = hoveredButton == HoveredButton::PlaybackMode
+                                                                         ? &playback.snapshot().succession
+                                                                         : nullptr,
                                                 .actionHitRegions = &hitRegions.statusActions,
                                                 .inputHitRegions = &hitRegions.completion,
                                                 .goToState = events.goToMenuState(),
@@ -1020,10 +1033,13 @@ namespace ao::tui
                                            .soulButtonBox = &hitRegions.soulButtonBox,
                                            .seekRailBox = &hitRegions.seekRailBox,
                                            .volumeBox = &hitRegions.volumeBox,
-                                           .shuffleBox = &hitRegions.shuffleBox,
-                                           .repeatBox = &hitRegions.repeatBox,
+                                           .playbackModeBox = &hitRegions.playbackModeBox,
                                            .metadataHitRegions = &hitRegions.playbackMetadata,
                                            .outputDeviceHovered = hoveredButton == HoveredButton::OutputDevice,
+                                           .playbackModeHovered = hoveredButton == HoveredButton::PlaybackMode,
+                                           .titleHovered = hoveredButton == HoveredButton::PlaybackTitle,
+                                           .artistHovered = hoveredButton == HoveredButton::PlaybackArtist,
+                                           .albumHovered = hoveredButton == HoveredButton::PlaybackAlbum,
                                            .terminalColumns = terminalColumns}),
           std::move(mainLayerPtr) | flex,
           shell.overlay() == Overlay::GoTo ? text("") : statusPtr,
@@ -1663,7 +1679,7 @@ namespace ao::tui
                            titleSoul,
                            std::chrono::steady_clock::now(),
                            {.transport = titleTransport.transport, .reducedMotion = preferences.reducedMotion});
-      events.syncWorkspaceGeometry();
+      refreshWorkspaceInteraction(events, screen);
       frameTimer.recordPresentIfDrawn();
 
       if (std::exchange(layoutCheckpointRequested, false))

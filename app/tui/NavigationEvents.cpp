@@ -546,6 +546,7 @@ namespace ao::tui
 
       _lastClickedTrack = kInvalidTrackId;
       _navigationScrollbarDrag = false;
+
       _lastNavigationGeometry = _hitRegions.navigationLayout;
       _lastTrackTableBox = box;
     }

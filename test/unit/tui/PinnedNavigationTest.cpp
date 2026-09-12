@@ -519,4 +519,52 @@ namespace ao::tui::test
     CHECK(library.activeViewId() == activeView);
     CHECK(fixture.layoutCheckpointCount == 0);
   }
+
+  TEST_CASE("PinnedNavigation - a foreground interaction cancels scrollbar capture",
+            "[tui][regression][navigation][mouse]")
+  {
+    auto fixture = EventControllerFixture{};
+
+    for (std::int32_t index = 0; index < 12; ++index)
+    {
+      fixture.addList("List " + std::to_string(index));
+    }
+
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    updateGeometry(fixture);
+    std::ignore = renderElement(navigationPanel(ao::test::englishMessageCatalog(),
+                                                library.navigation(),
+                                                library.currentListId(),
+                                                {.columns = 26, .regions = &fixture.hitRegions.navigation}),
+                                26,
+                                8);
+    auto const viewport = fixture.hitRegions.navigation.panel.navigationBox;
+    REQUIRE(viewport.y_min < viewport.y_max);
+    REQUIRE(events.tryHandleEvent(ftxui::Event::Mouse(
+      "", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = viewport.x_max, .y = viewport.y_max})));
+    auto const cursor = library.navigation().cursor();
+    REQUIRE(library.navigation().selectedIndex() > 0);
+
+    SECTION("Help opens and closes without mouse motion")
+    {
+      REQUIRE(events.tryHandleEvent(ftxui::Event::Character('?')));
+      REQUIRE(fixture.shell.overlay() == Overlay::Help);
+      REQUIRE(events.tryHandleEvent(ftxui::Event::Escape));
+    }
+
+    SECTION("Command input opens and closes without mouse motion")
+    {
+      REQUIRE(events.tryHandleEvent(ftxui::Event::Character(':')));
+      REQUIRE(fixture.shell.isInputActive());
+      REQUIRE(events.tryHandleEvent(ftxui::Event::Escape));
+    }
+
+    REQUIRE_FALSE(fixture.shell.isInputActive());
+    REQUIRE(fixture.shell.overlay() == Overlay::None);
+    CHECK(library.navigation().cursor() == cursor);
+    std::ignore = events.tryHandleEvent(ftxui::Event::Mouse(
+      "", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = viewport.x_max, .y = viewport.y_min}));
+    CHECK(library.navigation().cursor() == cursor);
+  }
 } // namespace ao::tui::test

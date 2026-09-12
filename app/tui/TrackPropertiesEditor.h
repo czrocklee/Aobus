@@ -148,7 +148,7 @@ namespace ao::tui
     ftxui::Element renderModal(std::int32_t terminalColumns, std::int32_t terminalRows) const;
 
   private:
-    static constexpr std::int32_t kTagPopoverColumns = 64;
+    static constexpr std::int32_t kTagPopoverColumns = 66;
     static constexpr std::int32_t kTagPopoverRows = 20;
     static constexpr std::int32_t kTagPopoverNavigationRows = 12;
 

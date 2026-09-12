@@ -178,6 +178,11 @@ namespace ao::rt
       submitVoid([this] { succession.clear(); }, true, false);
     }
 
+    void setPlaybackMode(ShuffleMode const shuffle, RepeatMode const repeat) override
+    {
+      submitVoid([this, shuffle, repeat] { succession.setPlaybackMode(shuffle, repeat); }, false, false);
+    }
+
     void setShuffleMode(ShuffleMode const mode) override
     {
       submitVoid([this, mode] { succession.setShuffleMode(mode); }, false, false);

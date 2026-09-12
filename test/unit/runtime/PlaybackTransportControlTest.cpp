@@ -3,21 +3,27 @@
 
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/audio/BackendTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/audio/Property.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackState.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <fakeit.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 namespace ao::rt::test
 {
@@ -201,6 +207,59 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().volume.muted == true);
     CHECK(mutedChangedFired);
     CHECK(lastMutedState == true);
+  }
+
+  TEST_CASE("PlaybackTransport control - backend volume is normalized before publication",
+            "[runtime][regression][playback][control]")
+  {
+    bool muted = false;
+
+    SECTION("unmuted backend")
+    {
+    }
+
+    SECTION("muted backend")
+    {
+      muted = true;
+    }
+
+    for (auto const& [backendLevel, expectedLevel] :
+         std::array{std::pair{0.42F, 0.42F},
+                    std::pair{-0.5F, 0.0F},
+                    std::pair{1.5F, 1.0F},
+                    std::pair{std::numeric_limits<float>::quiet_NaN(), 1.0F},
+                    std::pair{std::numeric_limits<float>::infinity(), 1.0F}})
+    {
+      CAPTURE(backendLevel, muted);
+      auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+      audio::test::SpyBackend<>& backend = *fixture.spyBackendPtr;
+      auto& backendMock = backend.mock();
+      fakeit::When(Method(backendMock, property))
+        .AlwaysDo(
+          [backendLevel, muted](audio::PropertyId const id) -> Result<audio::PropertyValue>
+          {
+            if (id == audio::PropertyId::Volume)
+            {
+              return backendLevel;
+            }
+
+            if (id == audio::PropertyId::Muted)
+            {
+              return muted;
+            }
+
+            return 0.0F;
+          });
+
+      fixture.onDevicesChangedCb(fixture.status.devices);
+      fakeit::Verify(Method(backendMock, setProperty)).Never();
+
+      auto const& volume = fixture.playbackTransport.state().volume;
+      CHECK(volume.level == expectedLevel);
+      CHECK(volume.muted == muted);
+      CHECK(volume.available);
+      CHECK(volume.hardwareAssisted);
+    }
   }
 
   TEST_CASE("PlaybackTransport control - commands refresh state synchronously", "[runtime][unit][playback][control]")
