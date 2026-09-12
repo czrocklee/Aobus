@@ -1,5 +1,5 @@
 ---
-Language:        Cpp
+# Shared C++ and Objective-C++ formatting policy.
 # BasedOnStyle:  Mozilla
 AccessModifierOffset: -2
 AlignAfterOpenBracket: Align

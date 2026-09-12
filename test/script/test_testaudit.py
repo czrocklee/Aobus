@@ -132,10 +132,18 @@ class TestAuditTest(unittest.TestCase):
             fixture.parent.mkdir(parents=True)
             real.touch()
             fixture.touch()
+            objective_cpp = real.with_suffix(".mm")
+            objective_cpp.write_text('TEST_CASE("bad", "[unknown]") {}\n', encoding="utf-8")
+            fixture.with_suffix(".mm").touch()
 
             files = testaudit.resolve_files([], root)
+            self.assertEqual(testaudit.resolve_files([str(objective_cpp)], root), [objective_cpp])
+            self.assertEqual(testaudit.resolve_files([str(root / "test")], root), [real, objective_cpp])
+            issues = testaudit.audit_paths([str(objective_cpp)], root)
+            self.assertEqual({issue.kind for issue in issues}, {"name", "tag-order"})
+            self.assertEqual({issue.path for issue in issues}, {objective_cpp})
 
-        self.assertEqual(files, [real])
+        self.assertEqual(files, [real, objective_cpp])
 
 
 if __name__ == "__main__":

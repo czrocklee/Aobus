@@ -31,7 +31,7 @@ if(NOT _mode STREQUAL "enforce" AND NOT _mode STREQUAL "report")
   message(FATAL_ERROR "AssertNoForbiddenIncludes: MODE must be 'enforce' or 'report' (got '${_mode}')")
 endif()
 
-set(_regex "#[ \t]*include[ \t]*[<\"]\(gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/")
+set(_regex "#[ \t]*(include|import)[ \t]*[<\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/")
 
 if(FORBIDDEN_REGEX_FILE)
   file(READ "${FORBIDDEN_REGEX_FILE}" _regex)
@@ -67,6 +67,7 @@ foreach(root IN LISTS ROOTS)
       "${root}/*.cc"
       "${root}/*.cpp"
       "${root}/*.cxx"
+      "${root}/*.mm"
       "${root}/*.inl"
       "${root}/*.ipp"
       "${root}/*.def")

@@ -14,12 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import PROJECT_ROOT
+from .proc import die
 
 FIXTURE_DIR = PROJECT_ROOT / "test" / "integration" / "lint" / "fixture"
 DIAGNOSTIC_RE = re.compile(r"^(.+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
 POSITIVE_RE = re.compile(r"//\s*POSITIVE(?::\s*([a-zA-Z0-9_-]+))?")
 NEGATIVE_RE = re.compile(r"//\s*NEGATIVE(?::\s*([a-zA-Z0-9_-]+))?")
 FIX_TO_RE = re.compile(r"//\s*(?:POSITIVE:\s*)?FIX-TO:\s*(.*)")
+LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*(?:include|import)\s*"([^"]+)"', re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -55,15 +57,16 @@ class Reporter:
 
 
 def discover_fixtures(fixture_dir: Path = FIXTURE_DIR) -> list[Fixture]:
-    paths = sorted(path for path in fixture_dir.glob("*/*") if path.is_file() and path.suffix in {".cpp", ".h"})
+    paths = sorted(path for path in fixture_dir.glob("*/*") if path.is_file() and path.suffix in {".cpp", ".h", ".mm"})
     return [Fixture(path, path.parent.name) for path in paths]
 
 
-def parse_diagnostics(output: str) -> dict[int, set[str]]:
-    diagnostics: dict[int, set[str]] = defaultdict(set)
+def parse_diagnostics(output: str) -> dict[tuple[Path, int], set[str]]:
+    diagnostics: dict[tuple[Path, int], set[str]] = defaultdict(set)
     for line in output.splitlines():
         if match := DIAGNOSTIC_RE.match(line):
-            diagnostics[int(match.group(2))].add(match.group(5))
+            path = (PROJECT_ROOT / match.group(1)).resolve()
+            diagnostics[path, int(match.group(2))].add(match.group(5))
     return dict(diagnostics)
 
 
@@ -87,25 +90,29 @@ def parse_expectations(source: str, check: str) -> Expectations:
     return Expectations(dict(expected), dict(negated))
 
 
-def verify_diagnostics(source: str, output: str, check: str) -> list[str]:
+def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> list[str]:
     actual = parse_diagnostics(output)
-    expectations = parse_expectations(source, check)
+    expectations = {path.resolve(): parse_expectations(source, check) for path, source in sources.items()}
     errors: list[str] = []
 
-    lines = sorted(set(actual) | set(expectations.expected) | set(expectations.negated))
-    for line in lines:
-        actual_checks = actual.get(line, set())
-        expected_checks = expectations.expected.get(line, set())
-        negated_checks = expectations.negated.get(line, set())
+    locations = set(actual)
+    for path, expected in expectations.items():
+        locations.update((path, line) for line in expected.expected | expected.negated)
+    for path, line in sorted(locations):
+        actual_checks = actual.get((path, line), set())
+        expected = expectations.get(path, Expectations({}, {}))
+        expected_checks = expected.expected.get(line, set())
+        negated_checks = expected.negated.get(line, set())
+        location = f"{path}:{line}"
 
         for actual_check in sorted(actual_checks - expected_checks):
             if actual_check in negated_checks:
-                errors.append(f"diagnostic found on explicitly NEGATIVE line {line}: [{actual_check}]")
+                errors.append(f"diagnostic found on explicitly NEGATIVE line {location}: [{actual_check}]")
             else:
-                errors.append(f"unexpected diagnostic on line {line}: [{actual_check}]")
+                errors.append(f"unexpected diagnostic on line {location}: [{actual_check}]")
         for expected_check in sorted(expected_checks - actual_checks):
             if expected_check == check:
-                errors.append(f"missing expected diagnostic on line {line}: [{expected_check}]")
+                errors.append(f"missing expected diagnostic on line {location}: [{expected_check}]")
 
     return errors
 
@@ -171,8 +178,8 @@ def _tidy_command(fixture: Fixture, build_dir: Path, *extra: str) -> list[str]:
     ]
 
 
-def _fixture_tidy_args(include_dir: Path) -> tuple[str, ...]:
-    return (
+def _fixture_tidy_args(include_dir: Path, language: str = "c++") -> tuple[str, ...]:
+    args: tuple[str, ...] = (
         "--tidy-arg=--extra-arg=-Wno-error",
         "--tidy-arg=--extra-arg=-Wno-unused-function",
         "--tidy-arg=--extra-arg=-Wno-unused-parameter",
@@ -180,21 +187,54 @@ def _fixture_tidy_args(include_dir: Path) -> tuple[str, ...]:
         "--tidy-arg=--extra-arg=-Wno-unused-variable",
         "--tidy-arg=--extra-arg=-std=c++26",
         "--tidy-arg=--extra-arg=-x",
-        "--tidy-arg=--extra-arg=c++",
+        f"--tidy-arg=--extra-arg={language}",
         f"--tidy-arg=--extra-arg=-I{PROJECT_ROOT / 'include'}",
         f"--tidy-arg=--extra-arg=-I{PROJECT_ROOT / 'lib'}",
         f"--tidy-arg=--extra-arg=-I{FIXTURE_DIR}",
         f"--tidy-arg=--extra-arg=-I{include_dir}",
     )
+    if language == "objective-c++":
+        header_filter = re.escape(include_dir.as_posix()).replace("/", r"[/\\]") + r"[/\\]"
+        args += ("--tidy-arg=--extra-arg=-fblocks", f"--header-filter={header_filter}")
+    return args
+
+
+def _fixture_sources(fixture: Fixture) -> dict[Path, str]:
+    """Snapshot the main file and literal local Objective-C++ context headers."""
+    root = fixture.path.parent.resolve()
+    pending = [fixture.path.resolve()]
+    sources: dict[Path, str] = {}
+    while pending:
+        path = pending.pop()
+        if path in sources:
+            continue
+        source = path.read_text(encoding="utf-8")
+        sources[path] = source
+        if fixture.path.suffix != ".mm":
+            continue
+        for match in LOCAL_INCLUDE_RE.finditer(source):
+            for directory in (path.parent, root):
+                header = (directory / match.group(1)).resolve()
+                if header.is_relative_to(root) and header.suffix == ".h" and header.is_file():
+                    pending.append(header)
+                    break
+    return sources
 
 
 def _diagnostic_errors(
     fixture: Fixture,
-    source: str,
+    sources: dict[Path, str],
     result: subprocess.CompletedProcess[str],
 ) -> list[str]:
-    errors = verify_diagnostics(source, result.stdout, fixture.check)
-    has_expected_diagnostics = bool(parse_expectations(source, fixture.check).expected)
+    errors = verify_diagnostics(sources, result.stdout, fixture.check)
+    has_expected_diagnostics = any(
+        fixture.check in checks
+        for source in sources.values()
+        for checks in parse_expectations(source, fixture.check).expected.values()
+    )
+    for path, source in sources.items():
+        if path != fixture.path.resolve() and expected_fixes(source):
+            errors.append(f"context header FIX-TO markers require a standalone fixture: {path}")
     if "[clang-diagnostic-error]" in result.stdout:
         errors.append("clang-tidy reported a fatal compiler diagnostic")
     if result.returncode != 0 and (errors or not has_expected_diagnostics):
@@ -205,15 +245,19 @@ def _diagnostic_errors(
 def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
-    source = fixture.path.read_text(encoding="utf-8")
+    sources = _fixture_sources(fixture)
     result = subprocess.run(
-        _tidy_command(fixture, build_dir, *_fixture_tidy_args(fixture.path.parent)),
+        _tidy_command(
+            fixture,
+            build_dir,
+            *_fixture_tidy_args(fixture.path.parent, "objective-c++" if fixture.path.suffix == ".mm" else "c++"),
+        ),
         cwd=PROJECT_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
-    errors = _diagnostic_errors(fixture, source, result)
+    errors = _diagnostic_errors(fixture, sources, result)
     with log.open("w", encoding="utf-8") as sink:
         sink.write(result.stdout)
         for error in errors:
@@ -228,20 +272,27 @@ def _copy_fixture_context(fixture: Fixture, case_dir: Path) -> Path:
     # SMB flags with chflags and can fail even though the data copy succeeded.
     shutil.copyfile(fixture.path, fixed)
     shutil.copyfile(FIXTURE_DIR / "TestHelpers.h", case_dir / "TestHelpers.h")
-    for sibling in fixture.path.parent.glob("*.h"):
-        destination = case_dir / sibling.name
+    for sibling in fixture.path.parent.rglob("*.h"):
+        destination = case_dir / sibling.relative_to(fixture.path.parent)
         if destination != fixed:
+            destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(sibling, destination)
     return fixed
 
 
 def _syntax_command(fixed: Path, case_dir: Path) -> list[str]:
     """Return a syntax-only compile command from the active native toolchain."""
-    configured = os.environ.get("CXX")
-    if configured:
-        compiler = shlex.split(configured)
-    else:
-        compiler = ["clang++" if sys.platform == "darwin" else "g++"]
+    objective_cpp = fixed.suffix == ".mm"
+    variable = "OBJCXX" if objective_cpp else "CXX"
+    configured = os.environ.get(variable)
+    try:
+        compiler = shlex.split(configured) if configured else []
+    except ValueError as error:
+        raise die(f"{variable} must be a valid compiler command: {error}") from error
+    if not compiler:
+        compiler = ["clang++" if objective_cpp or sys.platform == "darwin" else "g++"]
+    elif not compiler[0]:
+        raise die(f"{variable} must name a compiler executable")
 
     command = [
         *compiler,
@@ -251,6 +302,8 @@ def _syntax_command(fixed: Path, case_dir: Path) -> list[str]:
         f"-I{PROJECT_ROOT / 'lib'}",
         f"-I{case_dir}",
     ]
+    if objective_cpp:
+        command.append("-fblocks")
     if expected_shim := os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
         command.extend(("-isystem", expected_shim))
     command.append(str(fixed))
@@ -261,19 +314,21 @@ def _run_fix(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[bool, Pa
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.fix.", dir=run_dir))
     log = case_dir / "run.log"
     fixed = _copy_fixture_context(fixture, case_dir)
-    source = fixture.path.read_text(encoding="utf-8")
+    copied_fixture = Fixture(fixed, fixture.check)
+    sources = _fixture_sources(copied_fixture)
+    source = sources[fixed.resolve()]
     tidy_args = (
         "--fix",
-        *_fixture_tidy_args(case_dir),
+        *_fixture_tidy_args(case_dir, "objective-c++" if fixture.path.suffix == ".mm" else "c++"),
     )
     tidy = subprocess.run(
-        _tidy_command(Fixture(fixed, fixture.check), build_dir, *tidy_args),
+        _tidy_command(copied_fixture, build_dir, *tidy_args),
         cwd=PROJECT_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
     )
-    errors = _diagnostic_errors(fixture, source, tidy)
+    errors = _diagnostic_errors(copied_fixture, sources, tidy)
     fixed_text = fixed.read_text(encoding="utf-8")
     fixes = expected_fixes(source)
     if fixes and fixed_text == source:

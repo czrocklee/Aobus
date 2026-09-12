@@ -12,7 +12,7 @@ import argparse
 import sys
 from collections.abc import Callable
 
-from ..core import buildenv, gitfiles, tidyengine
+from ..core import buildenv, gitfiles, testregistry, tidyengine
 from . import format as format_command
 from . import name_audit, test_audit, tidy
 
@@ -105,7 +105,7 @@ def run_command(args: argparse.Namespace) -> int:
         return 1
 
     cpp_files = [name for name in files if name.endswith(gitfiles.CPP_SUFFIXES) and format_command._file_exists(name)]
-    test_files = [name for name in cpp_files if name.endswith("Test.cpp")]
+    test_files = [name for name in cpp_files if name.endswith(testregistry.TEST_SOURCE_SUFFIXES)]
 
     print()
     print("=== test-audit ===")

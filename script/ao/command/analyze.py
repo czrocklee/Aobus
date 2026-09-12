@@ -37,6 +37,7 @@ ANALYZER_CHECK_GROUPS = [
     "clang-analyzer-cplusplus.*",
     "clang-analyzer-deadcode.*",
     "clang-analyzer-nullability.*",
+    "clang-analyzer-osx.*",
     "clang-analyzer-optin.cplusplus.*",
     "clang-analyzer-optin.performance.*",
     "clang-analyzer-optin.portability.*",
@@ -116,7 +117,7 @@ def run_command(args: argparse.Namespace) -> int:
         if args.debug:
             print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
 
-        candidates, _ = tidyengine.resolve_scope(args, ALL_FOLDERS, "Analyzing")
+        candidates, explicit = tidyengine.resolve_scope(args, ALL_FOLDERS, "Analyzing")
         files: list[Path] = []
         seen: set[Path] = set()
         for name in candidates:
@@ -130,8 +131,32 @@ def run_command(args: argparse.Namespace) -> int:
                 seen.add(path)
                 files.append(path)
         if not files:
-            print("No analyzable .cpp/.h/.hpp files found.", file=sys.stderr)
+            print("No analyzable C++ or Objective-C++ sources found.", file=sys.stderr)
             return 0
+
+        objective_cpp = [path for path in files if path.suffix.lower() == ".mm"]
+        if objective_cpp:
+            plan = tidyengine.compile_command_plan(build_dir, objective_cpp, project_root=PROJECT_ROOT)
+            exact = {target.selected for target in plan.targets if target.selected == target.translation_unit}
+            foreign = {detail.selected for detail in plan.deferral_details if detail.is_platform_incompatible}
+            missing = [path for path in objective_cpp if path not in exact and (explicit or path not in foreign)]
+            if missing:
+                print("ERROR: Objective-C++ analysis requires an exact native compile command:", file=sys.stderr)
+                for path in missing:
+                    print(f"  {path}", file=sys.stderr)
+                print(
+                    "Build these files on their native platform and select the resulting compile_commands.json.",
+                    file=sys.stderr,
+                )
+                return 1
+            if foreign:
+                print("Deferred Objective-C++ files incompatible with this platform (not analyzed):", file=sys.stderr)
+                for path in objective_cpp:
+                    if path in foreign:
+                        print(f"  {path}", file=sys.stderr)
+                files = [path for path in files if path not in foreign]
+                if not files:
+                    return 0
 
         checks = analyzer_checks(args.alpha, args.check)
 

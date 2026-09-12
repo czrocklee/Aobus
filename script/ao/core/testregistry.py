@@ -3,9 +3,11 @@
 import re
 from pathlib import Path
 
+from .gitfiles import CPP_TRANSLATION_UNIT_SUFFIXES
 from .paths import PROJECT_ROOT
 
-CMAKE_TEST_SOURCE_RE = re.compile(r"[A-Za-z0-9_./+-]+Test\.cpp")
+TEST_SOURCE_SUFFIXES = tuple(f"Test{suffix}" for suffix in CPP_TRANSLATION_UNIT_SUFFIXES)
+CMAKE_TEST_SOURCE_RE = re.compile(r"[A-Za-z0-9_./+-]+(?:" + "|".join(map(re.escape, TEST_SOURCE_SUFFIXES)) + ")")
 LINT_FIXTURE_PARTS = ("integration", "lint", "fixture")
 
 
@@ -13,7 +15,9 @@ def real_test_sources(root: Path = PROJECT_ROOT) -> list[str]:
     test_root = root / "test"
     sources: list[str] = []
 
-    for path in test_root.rglob("*Test.cpp"):
+    for path in test_root.rglob("*Test.*"):
+        if not path.is_file() or not path.name.endswith(TEST_SOURCE_SUFFIXES):
+            continue
         relative = path.relative_to(test_root)
         if relative.parts[: len(LINT_FIXTURE_PARTS)] == LINT_FIXTURE_PARTS:
             continue

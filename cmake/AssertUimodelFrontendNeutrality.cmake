@@ -11,6 +11,8 @@
 # admission not shared. Such a file belongs to that frontend - see
 # app/windows-winui for where the WinUI half went.
 
+include("${CMAKE_CURRENT_LIST_DIR}/AoSourceCode.cmake")
+
 if(NOT PUBLIC_ROOT)
   message(FATAL_ERROR "AssertUimodelFrontendNeutrality: PUBLIC_ROOT not specified")
 endif()
@@ -24,13 +26,13 @@ if(NOT TEST_ROOT)
 endif()
 
 # Each frontend Aobus ships, spelled as it would appear at the head of a name.
-set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|Qt)([._A-Z0-9]|$)")
+set(_ao_frontend_name_regex "^(Windows|WinUi|WinUI|Gtk|GTK|Linux|Tui|Cli|Cocoa|AppKit|Qt)([._A-Z0-9]|$)")
 
 # A frontend's API vocabulary, which no shared file has a reason to spell in
 # code. Comments are exempt on purpose: explaining that GTK derives expansion
 # from a widget's children is why a shared field is optional, and that reason
 # belongs next to the field. Reaching for the type in code is a different act.
-set(_ao_frontend_vocabulary_regex "(winrt::|Xaml|gtkmm|Gtk::|Gdk::|Glib::|Gio::|Pango::|Cairo::|ftxui::|ftxui/)")
+set(_ao_frontend_vocabulary_regex "(winrt::|Xaml|gtkmm|Gtk::|Gdk::|Glib::|Gio::|Pango::|Cairo::|ftxui::|ftxui/|#[ \t]*(include|import)[ \t]*[<\"](AppKit|Cocoa|Foundation|CoreGraphics)/|@[ \t]*import[ \t]+(AppKit|Cocoa|Foundation|CoreGraphics)[ \t]*([.]|;)|(^|[^A-Za-z0-9_])((NS|CG)[A-Z_]|kCG[A-Z])[A-Za-z0-9_]*)")
 
 function(_ao_assert_frontend_neutral root label)
   if(NOT IS_DIRECTORY "${root}")
@@ -41,7 +43,8 @@ function(_ao_assert_frontend_neutral root label)
   file(GLOB_RECURSE _files LIST_DIRECTORIES false
        "${root}/*.h"
        "${root}/*.hpp"
-       "${root}/*.cpp")
+       "${root}/*.cpp"
+       "${root}/*.mm")
 
   foreach(_file IN LISTS _files)
     file(RELATIVE_PATH _rel "${root}" "${_file}")
@@ -52,22 +55,12 @@ function(_ao_assert_frontend_neutral root label)
               "AssertUimodelFrontendNeutrality: ${label} file names a frontend, so it is that frontend's own: ${_rel}")
     endif()
 
-    file(STRINGS "${_file}" _candidates REGEX "${_ao_frontend_vocabulary_regex}")
-
-    foreach(_line IN LISTS _candidates)
-      # Comment out what is commentary: a line-comment tail, and a block-comment
-      # body, which is every line a documentation block contributes.
-      string(REGEX REPLACE "//.*$" "" _code "${_line}")
-
-      if(_code MATCHES "^[ \t]*(\\*|/\\*)")
-        set(_code "")
-      endif()
-
-      if(_code MATCHES "${_ao_frontend_vocabulary_regex}")
-        message(FATAL_ERROR
-                "AssertUimodelFrontendNeutrality: ${label} file speaks a frontend's vocabulary: ${_rel}: ${_line}")
-      endif()
-    endforeach()
+    ao_read_code_text(_code "${_file}")
+    if(_code MATCHES "${_ao_frontend_vocabulary_regex}")
+      string(REGEX MATCH "${_ao_frontend_vocabulary_regex}" _match "${_code}")
+      message(FATAL_ERROR
+              "AssertUimodelFrontendNeutrality: ${label} file speaks a frontend's vocabulary: ${_rel}: ${_match}")
+    endif()
   endforeach()
 endfunction()
 

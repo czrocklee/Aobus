@@ -100,10 +100,25 @@ Place fixtures in `test/integration/lint/fixture/<check-alias>/`; the directory
 selects the check. Put each marker immediately before the source line:
 `// POSITIVE` requires a diagnostic, `// NEGATIVE` forbids one, and
 `// POSITIVE: FIX-TO: <fixed line>` also specifies the replacement.
-The runner syntax-checks fixed temporary copies. Markers assert locations and
-FixIt output, not diagnostic wording; a wording-only correction can reuse the
-existing fixture and inspect the emitted message. Extend an owning fixture for
-new behavior rather than creating a parallel case for an already covered contract.
+The runner syntax-checks fixed temporary copies.
+Objective-C++ `.mm` fixtures enable blocks for diagnostics, FixIts, and fixed-output
+syntax checks. Headers in the fixture's directory participate in diagnostics.
+Diagnostic identity includes the normalized file path and line; a header warning
+cannot satisfy or hide a source-file expectation. Context `.h` headers with markers
+must be reached through unconditional literal quoted includes or imports within
+the fixture directory. The runner follows these includes recursively and checks
+each file's own markers; unrelated sibling fixtures are not required to emit
+diagnostics. Keep conditional or generated include graphs out of marker-bearing
+context headers. Header `FIX-TO` markers require a standalone fixture; context
+headers support `POSITIVE` and `NEGATIVE` markers. FixIt verification snapshots
+the copied source and context headers before clang-tidy can change their lines.
+Fixed Objective-C++ copies use `OBJCXX` when provided, otherwise `clang++` from
+the managed toolchain; they do not inherit a C++-only GCC selection from `CXX`.
+No Foundation link is required for declaration-only checker fixtures.
+Markers assert locations and FixIt output, not diagnostic wording; a wording-only
+correction can reuse the existing fixture and inspect the emitted message.
+Extend an owning fixture for new behavior rather than creating a parallel case
+for an already covered contract.
 
 Coverage keeps its narrower `all` definition of core, TUI, and GTK because tooling and standalone integration
 tests are not part of the application source coverage calculation.

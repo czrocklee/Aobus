@@ -131,6 +131,27 @@ function(_aobus_architecture_audit_self_test)
     runtime_mechanism_surface "class SmartListEvaluator;" "class TrackSourceCache;")
   _aobus_adjudicate_architecture_rule(
     uimodel_platform "#include <gtkmm/widget.h>" "#include <ao/uimodel/layout/LayoutSchema.h>")
+  foreach(_sample IN ITEMS
+      "#import <AppKit/AppKit.h>"
+      "#include <Cocoa/Cocoa.h>"
+      "#import <Foundation/Foundation.h>"
+      "#include <CoreGraphics/CGGeometry.h>"
+      "@import AppKit;"
+      "@import Cocoa;"
+      "@import Foundation.NSString;"
+      "@import CoreGraphics.CGGeometry;"
+      "@import\nFoundation;"
+      "@ import Foundation . NSString;"
+      "/* comment */ @import AppKit;")
+    _aobus_assert_architecture_rejects(uimodel_platform "${_sample}")
+  endforeach()
+  foreach(_sample IN ITEMS
+      "// @import AppKit;"
+      "/*\n@import Foundation;\n*/"
+      "@import FoundationExtras;"
+      "@import Shared.AppKit;")
+    _aobus_assert_architecture_allows(uimodel_platform "${_sample}")
+  endforeach()
   _aobus_adjudicate_architecture_rule(
     uimodel_core "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
 
@@ -246,7 +267,8 @@ function(_aobus_run_architecture_audit)
   _aobus_register_architecture_rule(uimodel_platform
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
-      "(#[ \t]*include[ \t]*[<\\\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/)|(\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic)\")")
+      "(#[ \t]*(include|import)[ \t]*[<\\\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib|AppKit|Cocoa|Foundation|CoreGraphics)/)|(@[ \t\r\n]*import[ \t\r\n]+(AppKit|Cocoa|Foundation|CoreGraphics)[ \t\r\n]*([.]|;))|(\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic)\")"
+    ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
   _aobus_register_architecture_rule(uimodel_core
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
@@ -287,6 +309,7 @@ function(_aobus_run_architecture_audit)
           "${_root}/*.cc"
           "${_root}/*.cpp"
           "${_root}/*.cxx"
+          "${_root}/*.mm"
           "${_root}/*.inl"
           "${_root}/*.ipp"
           "${_root}/*.def")
@@ -352,7 +375,7 @@ function(_aobus_run_architecture_audit)
   endforeach()
 
   # Git discovery, format, naming, and changed-file hygiene share one governed
-  # first-party C++ suffix set: .cpp, .h, .hpp, plus .def include fragments.
+  # first-party source suffix set: .cpp/.mm, .h/.hpp, plus .def include fragments.
   # Reject alternate spellings before they can evade part of that toolchain.
   foreach(_source_root IN ITEMS app include lib test tool)
     if(IS_DIRECTORY "${AOBUS_SOURCE_DIR}/${_source_root}")
@@ -363,6 +386,7 @@ function(_aobus_run_architecture_audit)
         "${AOBUS_SOURCE_DIR}/${_source_root}/*.c++"
         "${AOBUS_SOURCE_DIR}/${_source_root}/*.hh"
         "${AOBUS_SOURCE_DIR}/${_source_root}/*.hxx"
+        "${AOBUS_SOURCE_DIR}/${_source_root}/*.m"
         "${AOBUS_SOURCE_DIR}/${_source_root}/*.inl"
         "${AOBUS_SOURCE_DIR}/${_source_root}/*.ipp")
       foreach(_unsupported_source IN LISTS _unsupported_cpp_sources)
@@ -370,7 +394,7 @@ function(_aobus_run_architecture_audit)
           BASE_DIRECTORY "${AOBUS_SOURCE_DIR}"
           OUTPUT_VARIABLE _unsupported_relative)
         list(APPEND _findings
-          "unsupported_cpp_suffix: ${_unsupported_relative}: use .cpp, .h, .hpp, or .def")
+          "unsupported_cpp_suffix: ${_unsupported_relative}: use .cpp, .mm, .h, .hpp, or .def")
       endforeach()
     endif()
   endforeach()

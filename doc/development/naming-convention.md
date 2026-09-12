@@ -118,6 +118,15 @@ iterator, handle, callback, or value wrapper. Hungarian prefixes are rejected on
 both: no `pWindow`, no `_pWindow`. A factory returning a pointer still describes
 what it creates: `makeRuntime()`, not `makeRuntimePtr()`.
 
+Objective-C object pointers are a separate language boundary. Under ARC, an
+ordinary object local or ivar is normally a strong owner; `__weak` expresses a
+non-owning target. Keep native names such as `_window` without adding `Ptr`;
+the C++ observer interpretation above does not apply. Project Objective-C class
+names use an `Aobus` prefix because their runtime names do not use C++ namespaces.
+Preserve framework selectors, and respect the ownership semantics of the
+`init`, `new`, `copy`, and `mutableCopy` method families. C++ declarations in
+the same `.mm` file continue to follow the C++ naming rules.
+
 An `std::optional` variable begins with `opt`: `optTrackId`.
 A function or type name describes the semantic result and does not acquire that
 prefix. Pointer nullability and expected error channels are not optionals.

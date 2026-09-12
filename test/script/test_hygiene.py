@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import shutil
 import tempfile
 import unittest
@@ -630,104 +631,122 @@ class TidyCommandTest(unittest.TestCase):
                                                     self.assertEqual(tidy.run_command(args), 1)
 
     def test_mapped_header_runs_as_main_file_with_synthetic_native_flags(self):
-        args = Namespace(
-            files=["include/ao/Foo.h"],
-            all=False,
-            folder=[],
-            commit=None,
-            check="aobus-include-convention",
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            fix=False,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        header = Path("include/ao/Foo.h")
-        translation_unit = Path("lib/Foo.cpp")
-        toolchain = tidy.TidyToolchain(
-            "AobusClangTidy.exe",
-            None,
-            Path("C:/llvm/lib/clang/22"),
-        )
-
-        def run_parallel(invocations, _jobs, tmpdir, runner):
-            self.assertEqual(len(invocations), 1)
-            log = tmpdir / "000000.log"
-            status = runner(invocations[0], log)
-            return tidy.tidyengine.BatchResult(
-                failed=status != 0,
-                logs=[log],
-                failed_logs=[log] if status else [],
-            )
-
-        with tempfile.TemporaryDirectory() as temp_dir, contextlib.ExitStack() as stack:
-            build_dir = Path(temp_dir) / "build"
-            tmpdir = Path(temp_dir) / "tidy"
-            build_dir.mkdir()
-            tmpdir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "directory": str(build_dir),
-                            "file": str(tidy.absolute_path(translation_unit)),
-                            "command": (f'clang++ -DAOBUS_NATIVE_FLAGS=1 -c "{tidy.absolute_path(translation_unit)}"'),
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            args.path = str(build_dir)
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True)))
-            stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
-            stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
-            stack.enter_context(mock.patch.object(tidy, "prepare_toolchain", return_value=toolchain))
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [header], "RELAXED": []},
+        for suffix in (".cpp", ".mm"):
+            with self.subTest(suffix=suffix):
+                args = Namespace(
+                    files=["include/ao/Foo.h"],
+                    all=False,
+                    folder=[],
+                    commit=None,
+                    check="aobus-include-convention",
+                    debug=False,
+                    output=None,
+                    jobs=1,
+                    path=None,
+                    fix=False,
+                    no_build=False,
+                    tidy_arg=[],
+                    header_filter=None,
                 )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan(
-                        (tidy.tidyengine.CompileCommandTarget(header, translation_unit),),
-                        (),
-                    ),
+                header = Path("include/ao/Foo.h")
+                translation_unit = Path(f"lib/Foo{suffix}")
+                native_language = "-x objective-c++ -fobjc-arc" if suffix == ".mm" else ""
+                toolchain = tidy.TidyToolchain(
+                    "AobusClangTidy.exe",
+                    None,
+                    Path("C:/llvm/lib/clang/22"),
                 )
-            )
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]))
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=tmpdir))
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel", side_effect=run_parallel))
-            stack.enter_context(mock.patch.object(tidy.shutil, "rmtree"))
-            clang_tidy = stack.enter_context(mock.patch.object(tidy.subprocess, "call", return_value=0))
-            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-            stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
 
-            self.assertEqual(tidy.run_command(args), 0)
-            command = clang_tidy.call_args.args[0]
-            database_dir = Path(command[command.index("-p") + 1])
-            synthetic = json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8"))
+                def run_parallel(invocations, _jobs, tmpdir, runner):
+                    self.assertEqual(len(invocations), 1)
+                    log = tmpdir / "000000.log"
+                    status = runner(invocations[0], log)
+                    return tidy.tidyengine.BatchResult(
+                        failed=status != 0,
+                        logs=[log],
+                        failed_logs=[log] if status else [],
+                    )
 
-        self.assertEqual(command[-1], str(tidy.absolute_path(header)))
-        self.assertNotEqual(database_dir, build_dir)
-        self.assertEqual(synthetic[0]["file"], tidy.absolute_path(header).as_posix())
-        self.assertIn("-DAOBUS_NATIVE_FLAGS=1", synthetic[0]["command"])
-        self.assertIn(str(tidy.absolute_path(header)), synthetic[0]["command"])
-        self.assertNotIn(str(tidy.absolute_path(translation_unit)), synthetic[0]["command"])
-        self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
-        self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
-        self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
-        line_filter = next(argument for argument in command if argument.startswith("-line-filter="))
-        self.assertIn(tidy.absolute_path(header).as_posix(), line_filter)
-        self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), line_filter)
-        self.assertFalse(any(argument.startswith("-load=") for argument in command))
+                with tempfile.TemporaryDirectory() as temp_dir, contextlib.ExitStack() as stack:
+                    build_dir = Path(temp_dir) / "build"
+                    tmpdir = Path(temp_dir) / "tidy"
+                    build_dir.mkdir()
+                    tmpdir.mkdir()
+                    (build_dir / "compile_commands.json").write_text(
+                        json.dumps(
+                            [
+                                {
+                                    "directory": str(build_dir),
+                                    "file": str(tidy.absolute_path(translation_unit)),
+                                    "command": (
+                                        f"clang++ {native_language} -DAOBUS_NATIVE_FLAGS=1 -c "
+                                        f'"{tidy.absolute_path(translation_unit)}"'
+                                    ),
+                                }
+                            ]
+                        ),
+                        encoding="utf-8",
+                    )
+                    args.path = str(build_dir)
+                    stack.enter_context(
+                        mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True))
+                    )
+                    stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
+                    stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
+                    stack.enter_context(mock.patch.object(tidy, "prepare_toolchain", return_value=toolchain))
+                    stack.enter_context(
+                        mock.patch.object(
+                            tidy,
+                            "classify_existing",
+                            return_value={"STRICT": [header], "RELAXED": []},
+                        )
+                    )
+                    stack.enter_context(
+                        mock.patch.object(
+                            tidy.tidyengine,
+                            "compile_command_plan",
+                            return_value=tidy.tidyengine.CompileCommandPlan(
+                                (tidy.tidyengine.CompileCommandTarget(header, translation_unit),),
+                                (),
+                            ),
+                        )
+                    )
+                    stack.enter_context(mock.patch.object(tidy.tidyengine, "system_include_args", return_value=[]))
+                    stack.enter_context(mock.patch.object(tidy.tidyengine, "make_tmpdir", return_value=tmpdir))
+                    stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel", side_effect=run_parallel))
+                    stack.enter_context(mock.patch.object(tidy.shutil, "rmtree"))
+                    clang_tidy = stack.enter_context(mock.patch.object(tidy.subprocess, "call", return_value=0))
+                    stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+
+                    self.assertEqual(tidy.run_command(args), 0)
+                    command = clang_tidy.call_args.args[0]
+                    database_dir = Path(command[command.index("-p") + 1])
+                    synthetic = json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8"))
+
+                self.assertEqual(command[-1], str(tidy.absolute_path(header)))
+                self.assertNotEqual(database_dir, build_dir)
+                self.assertEqual(synthetic[0]["file"], tidy.absolute_path(header).as_posix())
+                self.assertIn("-DAOBUS_NATIVE_FLAGS=1", synthetic[0]["command"])
+                self.assertIn(str(tidy.absolute_path(header)), synthetic[0]["command"])
+                self.assertNotIn(str(tidy.absolute_path(translation_unit)), synthetic[0]["command"])
+                self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
+                self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
+                self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
+                line_filter = next(argument for argument in command if argument.startswith("-line-filter="))
+                self.assertIn(tidy.absolute_path(header).as_posix(), line_filter)
+                self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), line_filter)
+                self.assertFalse(any(argument.startswith("-load=") for argument in command))
+
+                if suffix == ".mm":
+                    self.assertIn("-x objective-c++ -fobjc-arc", synthetic[0]["command"])
+                    native_args = shlex.split(synthetic[0]["command"])
+                    header_index = native_args.index(str(tidy.absolute_path(header)))
+                    self.assertEqual(native_args[header_index - 2 : header_index], ["-x", "objective-c++-header"])
+                    self.assertNotIn("--extra-arg=-x", command)
+                    self.assertNotIn("--extra-arg-before=c++-header", command)
+                else:
+                    self.assertIn("--extra-arg-before=c++-header", command)
 
 
 def _hygiene_args(**overrides):
@@ -768,6 +787,12 @@ class HygieneCommandTest(unittest.TestCase):
         self.test_audit.assert_not_called()
         self.name_audit.assert_not_called()
         self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (["script/foo.py"], True))
+
+    def test_objective_cpp_tests_reach_the_test_audit(self):
+        self.resolve.return_value = ["test/unit/utility/FooTest.mm"]
+        self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
+        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/unit/utility/FooTest.mm"])
+        self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
 
     def test_empty_scope_does_not_expand_to_a_repository_scan(self):
         self.resolve.return_value = []
