@@ -1044,6 +1044,7 @@ fr:table {
     tui_panel_resize_keys { "Tab séparation · ←/→ ou h/l déplacer · Enter appliquer · Esc annuler" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "Déplacer la séparation du panneau actif" }
+    tui_detail_file_name { "Nom du fichier" }
     tui_detail_focus { "Accéder aux détails du titre" }
     tui_detail_keys { "Shift+←/→ largeur · j/k sections · Enter basculer · ←/→ replier/déplier · PgUp/PgDn défiler · Esc titres" }
     tui_detail_keys_compact { "Shift+←/→ largeur · Enter basculer · Esc titres" }

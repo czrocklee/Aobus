@@ -1044,6 +1044,7 @@ es:table {
     tui_panel_resize_keys { "Tab separador · ←/→ o h/l mover · Enter aplicar · Esc cancelar" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "Mover el separador del panel enfocado" }
+    tui_detail_file_name { "Nombre de archivo" }
     tui_detail_focus { "Acceder a los detalles de la pista" }
     tui_detail_keys { "Shift+←/→ ancho · j/k secciones · Enter alternar · ←/→ plegar/desplegar · PgUp/PgDn desplazar · Esc pistas" }
     tui_detail_keys_compact { "Shift+←/→ ancho · Enter alternar · Esc pistas" }

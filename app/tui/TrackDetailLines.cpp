@@ -10,6 +10,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/utility/Path.h>
 
 #include <array>
 #include <format>
@@ -99,6 +100,17 @@ namespace ao::tui
     };
 
     append(rt::TrackField::Title, row.title, Kind::Title);
+
+    if (row.title.empty() && row.optUriPath)
+    {
+      if (auto const filename = row.optUriPath->filename(); !filename.empty())
+      {
+        lines.push_back({.label = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFileName)},
+                         .value = utility::pathToUtf8(filename),
+                         .kind = Kind::Title});
+      }
+    }
+
     append(rt::TrackField::Artist, row.artist);
     append(rt::TrackField::Album, row.album);
 

@@ -41,6 +41,8 @@ Unchanged playback ticks do not open database snapshots, reload track data, or e
 Idle formatting does not open a snapshot, including after a library publication.
 The runtime snapshot reads a single track, including dictionary-backed and custom fields, independent of list selection and size.
 Only changed output produces OSC 2.
+Updates caused only by Soul animation are coalesced to the latest sampled frame with at least 200 milliseconds between writes.
+Playing-track, formatted metadata, format preference, transport, Soul visibility, and reduced-motion changes bypass that animation interval; title disablement and restoration are immediate.
 The title payload replaces terminal control characters and line breaks with spaces and limits output to 512 terminal cells without splitting Unicode text.
 The first update pushes the window title using the xterm title stack; disabling and normal or handled-signal exit pop it exactly once.
 Restoration is best effort when the output sink fails; teardown retires ownership without retrying a potentially delivered pop.
@@ -211,6 +213,8 @@ While Go to is open, the status row replaces ordinary shortcuts and activity wit
 
 The detail sidebar follows the focused track while leaving keyboard navigation with the workspace. The effective `tui.detail.focus` action (default uppercase `D`) opens it if needed and explicitly transfers keyboard focus to its sections. Ordinary `Tab` / `Shift+Tab` continue to alternate Lists and Tracks; from Detail either first returns to Tracks. Detail owns `j/k` and Up/Down to select its Metadata or Audio Properties section, Enter to toggle, Left/Right to collapse/expand, and PageUp/PageDown to scroll. The selected header is revealed and highlighted only while Detail has keyboard focus. Escape returns to Tracks without hiding Detail or cancelling a visual selection. Playback shortcuts remain available. A modal or text input takes precedence over Detail keys.
 
+When title metadata is absent and a source filename is available, expanded Metadata shows a localized File Name row; it never substitutes that filename into title metadata.
+The collapsed header retains the existing filename identity fallback.
 Metadata, including Tags, starts expanded and Audio Properties starts collapsed. Collapsed headers retain a title/artist or audio summary. Section expansion survives changing tracks and hiding the sidebar within the session. Clicking a visible header toggles that section without transferring keyboard focus; header hits are clipped to the text viewport and validated against the rendered track. Clicking the track table returns keyboard focus to Tracks. Hiding a focused Detail also returns to Tracks. The status row displays the local section controls while Detail is focused.
 While it is visible, track and group navigation, wheel selection, scrollbar drag, section-header selection, column resizing, playback, seek, volume, Quick Filter, and the Command Palette all remain available against the reduced workspace geometry, and the pane follows the selection the workspace produces.
 Entering text input suspends those gestures for the duration of the input without closing the inspector.
@@ -437,7 +441,8 @@ Exact startup paths/options and managed locations belong to the TUI and persiste
 ## Frontend observations
 
 The detail pane remains beside the track workspace and shows a terminal cover-art representation plus selected-track fields.
-Title, artist, album, display track number, and duration always appear, keeping a placeholder when the track lacks them; every other field appears only when it carries a value.
+Fields appear when they carry a value.
+When title metadata is missing, the track path supplies a separately labeled File Name row if a filename is available.
 Kitty, block, automatic, and disabled cover modes come from the saved preference, with an explicit command-line option taking precedence for the session. Without that override, Settings changes the effective renderer live, canceling the previous cover request and hiding stale Kitty placement. With an override, Settings still saves the preference for subsequent launches while the session renderer stays unchanged.
 On a cover change, the pane renders one compact unavailable line until asynchronous delivery completes; an older selection cannot replace the current cover.
 A frame that reserves no artwork cells leaves an invalid cover box behind, which is how out-of-band Kitty paint state learns to delete a stale image.
@@ -465,6 +470,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`PanelResize.cpp`](../../../app/tui/PanelResize.cpp) owns constrained width previews over [`PanelWidths.h`](../../../app/tui/PanelWidths.h); [`PanelResizeEvents.cpp`](../../../app/tui/PanelResizeEvents.cpp) owns pointer and keyboard resize lifecycles, cancellation, and commit.
 - [`ListNavigationModel.cpp`](../../../app/tui/ListNavigationModel.cpp), [`NavigationPanel.cpp`](../../../app/tui/NavigationPanel.cpp), and [`NavigationEvents.cpp`](../../../app/tui/NavigationEvents.cpp) own List cursor/search projection, terminal geometry, and scoped interaction.
 - [`Render.cpp`](../../../app/tui/Render.cpp) and [`Style.cpp`](../../../app/tui/Style.cpp) own common terminal composition and styling; [`CommandPalettePanel.cpp`](../../../app/tui/CommandPalettePanel.cpp) owns command/filter completion panels, and [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) owns the Quick Filter input row.
+- [`TrackDetailLines.cpp`](../../../app/tui/TrackDetailLines.cpp) projects populated track fields and the separately labeled filename fallback into detail rows.
 - [`TerminalTrackColumnLayout.cpp`](../../../app/tui/TerminalTrackColumnLayout.cpp) projects shared column state into terminal cells; [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) owns track-table output; [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp) owns the presentation file.
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
 
@@ -482,7 +488,8 @@ The notification center can be opened explicitly even when compact status is not
 - [`PinnedNavigationTest.cpp`](../../../test/unit/tui/PinnedNavigationTest.cpp) protects independent access/pin bindings, switching from chooser to pinned tree, divider targets, disclosure clicks without List activation, popup dismissal, layout checkpoints, and restored frame/status entry points.
 - [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects chooser preorder, indentation, and label contents; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects chooser selection across refresh.
 - [`PanelResizeTest.cpp`](../../../test/unit/tui/PanelResizeTest.cpp) protects width constraints, resize commit/rollback, hover retirement, and mode hints; [`PanelDividerTest.cpp`](../../../test/unit/tui/PanelDividerTest.cpp) protects shared/separate border geometry and reveal hover.
-- [`DetailSectionsTest.cpp`](../../../test/unit/tui/DetailSectionsTest.cpp) protects detail focus, section input, and activity/hint allocation; [`DetailFieldLayoutTest.cpp`](../../../test/unit/tui/DetailFieldLayoutTest.cpp) protects aligned values and Unicode wrapping without changing explicit line breaks.
+- [`TrackDetailLinesTest.cpp`](../../../test/unit/tui/TrackDetailLinesTest.cpp) protects detail row labels, filename fallback, and metadata-title precedence.
+- [`DetailSectionsTest.cpp`](../../../test/unit/tui/DetailSectionsTest.cpp) protects detail focus, section input, and activity/hint allocation; [`DetailFieldLayoutTest.cpp`](../../../test/unit/tui/DetailFieldLayoutTest.cpp) protects aligned values, localized filename labels at constrained widths, and Unicode wrapping without changing explicit line breaks.
 - [`GoToMenuTest.cpp`](../../../test/unit/tui/GoToMenuTest.cpp) protects navigation suffixes, prefix rebinding, input ownership, history, menu/footer click parity, disabled targets, stale state, and localized hints at constrained widths.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.

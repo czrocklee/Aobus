@@ -6,8 +6,11 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/audio/Transport.h>
 #include <ao/query/FormatExpression.h>
 
+#include <chrono>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -34,6 +37,8 @@ namespace ao::tui
     TerminalTitleFormatter& operator=(TerminalTitleFormatter&&) = delete;
     Result<> setFormat(std::string_view expression);
     std::optional<std::string> format(TrackId playingTrack, std::string_view soulFrame = {});
+    /// Changes when the expression, playing subject, or formatted metadata changes, independently of Soul.
+    std::uint64_t contentRevision() const noexcept { return _contentRevision; }
 
   private:
     rt::Library const& _library;
@@ -44,7 +49,16 @@ namespace ao::tui
     std::string _lastSoulFrame;
     TrackId _lastTrack = kInvalidTrackId;
     bool _dirty = true;
+    std::uint64_t _contentRevision = 0;
     async::Subscription _librarySubscription;
+  };
+
+  struct TerminalTitleContext final
+  {
+    audio::Transport transport = audio::Transport::Idle;
+    bool reducedMotion = false;
+
+    bool operator==(TerminalTitleContext const&) const = default;
   };
 
   /// Owns one terminal title stack entry. The library and output sink outlive this object.
@@ -61,7 +75,12 @@ namespace ao::tui
 
     Result<> setFormat(std::string_view expression);
     /// An output failure restores once and disables writes for this owner.
-    void update(TrackId playingTrack, std::string_view soulFrame = {});
+    /// Pure animation changes coalesce to the latest frame at most once per 200 ms.
+    /// Supply nondecreasing times from one clock timeline for this owner's lifetime.
+    void update(TrackId playingTrack,
+                std::string_view soulFrame,
+                std::chrono::steady_clock::time_point now,
+                TerminalTitleContext const& context = {});
     /// Best-effort restoration: a failed output sink must not prevent teardown.
     void restore() noexcept;
 
@@ -71,6 +90,10 @@ namespace ao::tui
     TerminalTitleFormatter _formatter;
     std::function<bool(std::string_view)> _sink;
     std::string _lastTitle;
+    TerminalTitleContext _lastContext;
+    std::chrono::steady_clock::time_point _lastWriteTime{};
+    std::uint64_t _lastContentRevision = 0;
+    bool _lastSoulEnabled = false;
     bool _ownsTitle = false;
     bool _outputFailed = false;
   };

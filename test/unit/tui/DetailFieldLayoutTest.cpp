@@ -7,16 +7,20 @@
 #include "tui/TextCell.h"
 #include "tui/TrackListEntry.h"
 #include <ao/AudioCodec.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::tui::test
 {
@@ -82,7 +86,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailFieldLayout - missing title is omitted but collapsed identity retains its filename",
+  TEST_CASE("DetailFieldLayout - missing title retains filename identity in both section states",
             "[tui][regression][detail]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -90,10 +94,116 @@ namespace ao::tui::test
     auto const track = makeTrackListEntry(catalog, row);
     auto const expanded = renderElement(detailPane(catalog, &track, {}, 40), 40, 12);
     CHECK_FALSE(expanded.text.contains("Title"));
-    CHECK_FALSE(expanded.text.contains("untitled"));
+    CHECK(expanded.text.contains("File Name"));
+    CHECK(expanded.text.contains("untitled.flac"));
+    CHECK_FALSE(expanded.text.contains("/music/"));
     auto const collapsed = renderElement(
       detailPane(catalog, &track, {}, 40, nullptr, 0, {.sections = {.expanded = {false, false}}}), 40, 12);
     CHECK(collapsed.text.contains("untitled.flac"));
+  }
+
+  TEST_CASE("DetailFieldLayout - filename fallback fits localized narrow panes without replacing metadata",
+            "[tui][regression][detail]")
+  {
+    constexpr auto kLabels = std::array{std::pair{"en-US", "File Name"},
+                                        std::pair{"de-DE", "Dateiname"},
+                                        std::pair{"es-ES", "Nombre de archivo"},
+                                        std::pair{"fr-FR", "Nom du fichier"},
+                                        std::pair{"ja-JP", "ファイル名"},
+                                        std::pair{"zh-Hans", "文件名"},
+                                        std::pair{"zh-Hant", "檔案名稱"}};
+
+    for (auto const& [locale, expectedLabel] : kLabels)
+    {
+      CAPTURE(locale);
+      auto const catalog = ao::test::messageCatalog(locale);
+      CHECK(i18n::requiredText(catalog, i18n::MessageId::TuiDetailFileName) == expectedLabel);
+
+      for (auto const columns : {24, 40})
+      {
+        CAPTURE(locale, columns);
+        auto row = rt::TrackRow{.optUriPath = "/music/song.flac"};
+        auto track = makeTrackListEntry(catalog, row);
+        auto const missing = renderElement(detailPane(catalog, &track, {}, columns), columns, 12);
+        INFO("Missing title:\n" << missing.text);
+        auto const optFilename = findTextCells(missing.screen, "song.flac");
+        REQUIRE(optFilename);
+        CHECK(optFilename->x_min > 4);
+        CHECK(optFilename->x_max <= columns - 3);
+        CHECK(missing.screen.PixelAt(optFilename->x_min, optFilename->y_min).bold);
+        // Labels may shorten to preserve value space; verify their visible text and column gap.
+        auto const visibleLabel = ellipsizeToCellWidth(expectedLabel, optFilename->x_min - 2 - 2);
+        auto const optLabel = findTextCells(missing.screen, visibleLabel);
+        REQUIRE(optLabel);
+        CHECK(optLabel->x_min == 2);
+        CHECK(optLabel->y_min == optFilename->y_min);
+        CHECK(missing.screen.PixelAt(optLabel->x_min, optLabel->y_min).dim);
+        CHECK(missing.screen.PixelAt(optFilename->x_min - 1, optFilename->y_min).character == " ");
+        CHECK(missing.screen.PixelAt(optFilename->x_min - 2, optFilename->y_min).character == " ");
+        CHECK_FALSE(missing.text.contains("/music/"));
+        row.title = "Real title";
+        track = makeTrackListEntry(catalog, row);
+        auto const titled = renderElement(detailPane(catalog, &track, {}, columns), columns, 12);
+        INFO("Metadata title:\n" << titled.text);
+        auto const optTitle = findTextCells(titled.screen, "Real title");
+        REQUIRE(optTitle);
+        CHECK(optTitle->x_min == optFilename->x_min);
+        CHECK(titled.screen.PixelAt(optTitle->x_min, optTitle->y_min).foreground_color ==
+              missing.screen.PixelAt(optFilename->x_min, optFilename->y_min).foreground_color);
+        CHECK_FALSE(titled.text.contains("song.flac"));
+      }
+    }
+  }
+
+  TEST_CASE("DetailFieldLayout - native Unicode filenames wrap within the value column", "[tui][regression][detail]")
+  {
+    auto const row = rt::TrackRow{.optUriPath = utility::pathFromUtf8("/音楽/演奏/夜空 旋律 月光 海辺 終曲.flac")};
+
+    for (std::string_view const locale : {"en-US", "ja-JP", "zh-Hans"})
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const track = makeTrackListEntry(catalog, row);
+
+      for (auto const columns : {24, 40})
+      {
+        CAPTURE(locale, columns);
+        auto const rendered = renderElement(detailPane(catalog, &track, {}, columns), columns, 12);
+        INFO(rendered.text);
+        auto const optFirst = findTextCells(rendered.screen, "夜空");
+        auto const optLast = findTextCells(rendered.screen, "終曲.flac");
+        REQUIRE(optFirst);
+        REQUIRE(optLast);
+        CHECK(optFirst->x_min > 4);
+        CHECK(optFirst->y_min < optLast->y_min);
+
+        for (std::string_view const word : {"夜空", "旋律", "月光", "海辺", "終曲.flac"})
+        {
+          CAPTURE(word);
+          auto const optCells = findTextCells(rendered.screen, word);
+          REQUIRE(optCells);
+          CHECK(optCells->x_min >= optFirst->x_min);
+          CHECK(optCells->x_max <= columns - 3);
+          CHECK(rendered.screen.PixelAt(optCells->x_min, optCells->y_min).bold);
+        }
+
+        for (auto line = optFirst->y_min; line <= optLast->y_min; ++line)
+        {
+          CHECK(rendered.screen.PixelAt(optFirst->x_min, line).character != " ");
+          CHECK(rendered.screen.PixelAt(optFirst->x_min, line).bold);
+
+          for (auto const offset : {1, 2})
+          {
+            auto const& gap = rendered.screen.PixelAt(optFirst->x_min - offset, line).character;
+            CHECK((gap.empty() || gap == " "));
+          }
+        }
+
+        CHECK_FALSE(rendered.text.contains("音楽"));
+        CHECK_FALSE(rendered.text.contains("演奏"));
+        CHECK(track.row.title.empty());
+        CHECK(track.row.optUriPath == row.optUriPath);
+      }
+    }
   }
 
   TEST_CASE("DetailFieldLayout - display controls cannot corrupt wrapped Unicode metadata", "[tui][regression][detail]")

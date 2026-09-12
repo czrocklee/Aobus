@@ -146,7 +146,7 @@ Within Detail, `j/k` or Up/Down select a section, Enter toggles it, Left/Right c
 
 Metadata starts expanded; Audio Properties starts collapsed with a compact summary. Their expansion states survive changing tracks during the session. Clicking a section header toggles it without taking keyboard focus from Lists or Tracks. Tags remain read-only.
 
-Fields use aligned label and value columns, including title, artist, album, year, track number, duration, and audio properties. Long values continue in the value column; missing fields are omitted.
+Fields use aligned label and value columns, including title, artist, album, year, track number, duration, and audio properties. Long values continue in the value column; missing fields are omitted. When the title is missing, Detail shows a localized File Name row if the track path has a filename.
 
 ## Mouse controls
 
@@ -184,11 +184,13 @@ Invalid expressions show a diagnostic and cannot be saved.
 An empty setting leaves the terminal title alone; without a playing track the enabled title shows only Soul, or `Aobus` when Soul is disabled.
 Selecting a different track does not change it.
 Title updates are sent only when their text changes.
+During frequent redraws, Soul animation changes update the terminal title at most five times per second.
+Track, playback-state, title-format, **Soul in terminal title**, and **Reduce motion** changes take effect immediately.
 Disabling the setting or exiting restores the previous title on terminals that support the xterm title stack, including Kitty; terminal tab-width limits still apply.
 
 The separate **Soul in terminal title** Appearance switch defaults on.
 Soul shares the playback button’s rotating braille arc; pausing freezes it and Reduce motion keeps it static.
-The default title is `Soul · artist - title`, without repeating the Aobus name.
+The default title places the Soul glyph before `artist - title`, separated by one space and without repeating the Aobus name.
 Custom expression text is preserved.
 Animation uses the existing playback refresh and does not reevaluate track metadata per frame.
 Terminal titles carry plain glyphs; colors remain controlled by the terminal.

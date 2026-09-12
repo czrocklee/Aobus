@@ -148,7 +148,7 @@ namespace ao::tui::test
 
     std::int32_t widestDetailLabelColumns(i18n::MessageCatalog const& textCatalog)
     {
-      std::int32_t widest = 0;
+      std::int32_t widest = cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFileName));
 
       for (auto const field : trackDetailFields())
       {

@@ -363,7 +363,8 @@ namespace ao::tui
     /// The label column this locale asks for, capped and including the column gap.
     std::int32_t detailLabelContentColumns(i18n::MessageCatalog const& textCatalog)
     {
-      std::int32_t labelColumns = 0;
+      // The filename fallback is a detail label outside the TrackField schema.
+      std::int32_t labelColumns = cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFileName));
 
       for (auto const field : trackDetailFields())
       {

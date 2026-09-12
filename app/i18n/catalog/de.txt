@@ -1044,6 +1044,7 @@ de:table {
     tui_panel_resize_keys { "Tab Trennlinie · ←/→ oder h/l bewegen · Enter anwenden · Esc abbrechen" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "Trennlinie der fokussierten Seitenleiste verschieben" }
+    tui_detail_file_name { "Dateiname" }
     tui_detail_focus { "Titeldetails fokussieren" }
     tui_detail_keys { "Shift+←/→ Breite · j/k Abschnitte · Enter umschalten · ←/→ zu/auf · PgUp/PgDn scrollen · Esc Titel" }
     tui_detail_keys_compact { "Shift+←/→ Breite · Enter auf/zu · Esc Titel" }

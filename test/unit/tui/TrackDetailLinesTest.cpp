@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <string_view>
 #include <vector>
 
@@ -121,10 +122,49 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "Track"));
   }
 
-  TEST_CASE("TrackDetailLines - missing metadata title does not become a filename field", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - missing metadata title uses a separately labeled filename", "[tui][unit][track-detail]")
   {
     auto const row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
-    CHECK(trackDetailLines(ao::test::englishMessageCatalog(), row).empty());
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const lines = trackDetailLines(catalog, row);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines.front().kind == TrackDetailLine::Kind::Title);
+    CHECK(valueFor(lines, "File Name") == "untitled.flac");
+    CHECK_FALSE(hasLabel(lines, "Title"));
+  }
+
+  TEST_CASE("TrackDetailLines - metadata title takes precedence over the filename", "[tui][unit][track-detail]")
+  {
+    auto const row = rt::TrackRow{.optUriPath = "/music/untitled.flac", .title = "Real title"};
+    auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines.front().kind == TrackDetailLine::Kind::Title);
+    CHECK(valueFor(lines, "Title") == "Real title");
+    CHECK_FALSE(hasLabel(lines, "File Name"));
+  }
+
+  TEST_CASE("TrackDetailLines - missing title without a usable filename has no identity row",
+            "[tui][unit][track-detail]")
+  {
+    auto row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
+    auto const& catalog = ao::test::englishMessageCatalog();
+
+    SECTION("absent path")
+    {
+      row.optUriPath.reset();
+    }
+
+    SECTION("empty path")
+    {
+      row.optUriPath = std::filesystem::path{};
+    }
+
+    SECTION("path ending in a separator")
+    {
+      row.optUriPath = "/music/";
+    }
+
+    CHECK(trackDetailLines(catalog, row).empty());
   }
 
   TEST_CASE("TrackDetailLines - track numbering retains disc and total context", "[tui][unit][track-detail]")
