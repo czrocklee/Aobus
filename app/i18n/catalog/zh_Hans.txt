@@ -1045,6 +1045,7 @@ zh_Hans:table {
     tui_panel_resize_keys { "Tab 分隔线 · ←/→ 或 h/l 移动 · Enter 保存 · Esc 取消" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "移动当前侧栏的分隔线" }
+    tui_detail_file_name { "文件名" }
     tui_detail_focus { "进入曲目详情" }
     tui_detail_keys { "Shift+←/→ 调整宽度 · j/k 分组 · Enter 展开/收起 · ←/→ 收起/展开 · PgUp/PgDn 滚动 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 调整宽度 · Enter 展开/收起 · Esc 曲目" }

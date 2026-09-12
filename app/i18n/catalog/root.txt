@@ -1046,6 +1046,7 @@ root:table {
     tui_panel_resize_keys { "Tab divider · ←/→ or h/l move · Enter apply · Esc cancel" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "Move focused sidebar divider" }
+    tui_detail_file_name { "File Name" }
     tui_detail_focus { "Focus track detail" }
     tui_detail_keys { "Shift+←/→ resize · j/k sections · Enter toggle · ←/→ collapse/expand · PgUp/PgDn scroll · Esc tracks" }
     tui_detail_keys_compact { "Shift+←/→ resize · Enter toggle · Esc tracks" }

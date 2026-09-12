@@ -1044,6 +1044,7 @@ ja:table {
     tui_panel_resize_keys { "Tab 区切り · ←/→ または h/l 移動 · Enter 適用 · Esc 取消" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "フォーカス中のサイドバーの区切りを移動" }
+    tui_detail_file_name { "ファイル名" }
     tui_detail_focus { "曲の詳細を操作" }
     tui_detail_keys { "Shift+←/→ 幅を調整 · j/k セクション · Enter 開閉 · ←/→ 閉じる/開く · PgUp/PgDn スクロール · Esc 曲一覧" }
     tui_detail_keys_compact { "Shift+←/→ 幅を調整 · Enter 開閉 · Esc 曲一覧" }

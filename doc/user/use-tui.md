@@ -146,7 +146,7 @@ Within Detail, `j/k` or Up/Down select a section, Enter toggles it, Left/Right c
 
 Metadata starts expanded; Audio Properties starts collapsed with a compact summary. Their expansion states survive changing tracks during the session. Clicking a section header toggles it without taking keyboard focus from Lists or Tracks. Tags remain read-only.
 
-Fields use aligned label and value columns, including title, artist, album, year, track number, duration, and audio properties. Long values continue in the value column; missing fields are omitted.
+Fields use aligned label and value columns, including title, artist, album, year, track number, duration, and audio properties. Long values continue in the value column; missing fields are omitted. When the title is missing, Detail shows a localized File Name row if the track path has a filename.
 
 ## Mouse controls
 

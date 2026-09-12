@@ -1044,6 +1044,7 @@ zh_Hant:table {
     tui_panel_resize_keys { "Tab 分隔線 · ←/→ 或 h/l 移動 · Enter 儲存 · Esc 取消" }
     tui_panel_resize_keys_compact { "Tab · ←/→ · Enter · Esc" }
     tui_panel_resize { "移動目前側欄的分隔線" }
+    tui_detail_file_name { "檔案名稱" }
     tui_detail_focus { "進入曲目詳情" }
     tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
