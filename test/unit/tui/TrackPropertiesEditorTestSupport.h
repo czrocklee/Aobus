@@ -32,7 +32,8 @@ namespace ao::tui::test
                                    TrackPropertiesEditor::CompletionProvider completionProvider = {},
                                    std::vector<std::pair<std::string, std::size_t>> tagCounts = {},
                                    std::vector<std::string> tagSuggestions = {},
-                                   std::string_view locale = "en");
+                                   std::string_view locale = "en",
+                                   TrackEditorMode mode = TrackEditorMode::Properties);
   std::string frame(TrackPropertiesEditor const& editor);
   ftxui::Event applyEvent();
   ftxui::Event reloadEvent();

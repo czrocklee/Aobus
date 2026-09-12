@@ -117,6 +117,13 @@ namespace ao::tui::test
           std::vector<std::string>{"select toggle", "select visual", "select all", "select clear"});
   }
 
+  TEST_CASE("CommandCompletion - finds quick tags by command prefix", "[tui][unit][completion]")
+  {
+    auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "tag", CommandCompletionContext{});
+    REQUIRE(optResult);
+    CHECK(insertTexts(*optResult) == std::vector<std::string>{"tags"});
+  }
+
   TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{}, 1);

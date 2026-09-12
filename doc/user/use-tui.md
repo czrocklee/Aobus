@@ -48,7 +48,14 @@ Initialize the root with the GTK application or `aobus -C /music init` first. Af
    A marked row reverses its own foreground and background, so it follows your terminal color scheme instead of a fixed color; the cursor row reverses its yellow highlight the same way when it is marked.
    Playback, Detail, and cover art still follow the cursor. Enter plays the focused track even when other rows are marked. When marks exist, the status line shows how many tracks are marked.
    Opening a different List or applying a new filter clears marks and returns the cursor to the top; confirming the current List or reloading keeps both the marked ids that are still in the view and the cursor.
-6. Press `e`, `:edit`, or `:properties` to open the Track Properties editor over the current selection: every marked track, or the focused track when nothing is marked.
+6. For a quick tag change, press `t` or run `:tags`.
+   The centered popover edits marked tracks, or just the focused track when nothing is marked, and shows the target count.
+   Type to search or name a new tag, use Up/Down to select a result, and Space to toggle it.
+   While typing a query, spaces remain part of the name.
+   Enter applies pending changes and creates the offered name while typing a query, even when existing tags partially match it.
+   With results focused, a new tag is created only when its creation row is selected.
+   Escape or an outside click cancels the draft immediately.
+   For the full editor, press `e`, `:edit`, or `:properties` to open the Track Properties editor over the current selection: every marked track, or the focused track when nothing is marked.
    The editor appears as a centered modal dialog floating over the dimmed workspace. Its target list is frozen when it opens, so editing a different set of tracks means closing it and opening a new one.
    Press Tab or Shift+Tab to switch between the editor's pages: `Metadata`, `Tags`, `Properties` (read-only audio/technical details), and (for multi-track selections) `Tracks` (to review captured titles and paths).
    On Properties and Tracks, j/k or Up/Down scrolls rows; PageUp/PageDown moves by a viewport and Home/End goes to the beginning/end.
@@ -168,7 +175,23 @@ Mouse modifiers must be forwarded by your terminal; some terminals reserve Shift
 
 If saved preferences are invalid or unreadable, TUI starts with defaults and shows a warning. The original preference group is retained until an explicit successful Settings save.
 
-Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser or shortcut capture only cancels that unconfirmed choice.
+Press `,` in the workspace or click Settings at the bottom right. `:settings` and `:config` also work. The status bar and Help show your current shortcut; the Settings button remains available if you unbind it. Text input keeps treating a comma as text. Tab and Shift+Tab switch between General, Appearance, Interaction, and Keyboard. Up/Down selects an item; Escape closes unless a failed save is pending, in which case it asks for confirmation before discarding that attempt. Escape inside the language chooser, shortcut capture, or title-format editor only cancels that unconfirmed choice or draft.
+
+Settings → Appearance → Terminal title format accepts the shared [format expression](../reference/query/format-language.md), for example `$artist " - " $title`.
+Enter or a value click opens a text editor with a live preview of the playing track.
+Enter saves a valid expression; Escape discards the draft.
+Invalid expressions show a diagnostic and cannot be saved.
+An empty setting leaves the terminal title alone; without a playing track the enabled title shows only Soul, or `Aobus` when Soul is disabled.
+Selecting a different track does not change it.
+Title updates are sent only when their text changes.
+Disabling the setting or exiting restores the previous title on terminals that support the xterm title stack, including Kitty; terminal tab-width limits still apply.
+
+The separate **Soul in terminal title** Appearance switch defaults on.
+Soul shares the playback button’s rotating braille arc; pausing freezes it and Reduce motion keeps it static.
+The default title is `Soul · artist - title`, without repeating the Aobus name.
+Custom expression text is preserved.
+Animation uses the existing playback refresh and does not reevaluate track metadata per frame.
+Terminal titles carry plain glyphs; colors remain controlled by the terminal.
 
 In Settings Keyboard, press `/` to find an action by its translated name or action id, then Enter to edit its shortcut. Escape clears the search first; Tab switches pages and clears it.
 

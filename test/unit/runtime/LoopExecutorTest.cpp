@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <barrier>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <semaphore>
@@ -53,6 +54,52 @@ namespace ao::async::test
 
     executor.runOneTurn();
 
+    CHECK(callbackThread == ownerThread);
+    CHECK_FALSE(executor.tryRunReadyTurn());
+  }
+
+  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[runtime][regression][async]")
+  {
+    auto executor = LoopExecutor{};
+
+    SECTION("deadline is already expired")
+    {
+      CHECK_FALSE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now()));
+    }
+
+    SECTION("deadline lies ahead")
+    {
+      CHECK_FALSE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now() + std::chrono::milliseconds{2}));
+    }
+
+    auto order = std::vector<int>{};
+    executor.defer(
+      [&]
+      {
+        order.push_back(1);
+        executor.defer([&] { order.push_back(2); });
+      });
+
+    REQUIRE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now() + std::chrono::seconds{5}));
+    CHECK(order == std::vector<int>{1});
+    REQUIRE(executor.tryRunReadyTurn());
+    CHECK(order == std::vector<int>{1, 2});
+    CHECK_FALSE(executor.tryRunReadyTurn());
+  }
+
+  TEST_CASE("LoopExecutor - a bounded wait accepts a foreign producer", "[runtime][regression][async][concurrency]")
+  {
+    auto executor = LoopExecutor{};
+    auto const ownerThread = std::this_thread::get_id();
+    auto callbackThread = std::thread::id{};
+    auto startLine = std::barrier{2};
+    auto worker = std::jthread{[&]
+                               {
+                                 startLine.arrive_and_wait();
+                                 executor.defer([&] { callbackThread = std::this_thread::get_id(); });
+                               }};
+    startLine.arrive_and_wait();
+    REQUIRE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now() + std::chrono::seconds{5}));
     CHECK(callbackThread == ownerThread);
     CHECK_FALSE(executor.tryRunReadyTurn());
   }

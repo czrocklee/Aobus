@@ -36,8 +36,10 @@
 #include "ShellInteractionModel.h"
 #include "ShellText.h"
 #include "SignalExitWatcher.h"
+#include "SoulButton.h"
 #include "StatusBar.h"
 #include "Style.h"
+#include "TerminalTitle.h"
 #include "TerminalTrackColumnLayout.h"
 #include "TextCell.h"
 #include "TrackEditController.h"
@@ -49,6 +51,7 @@
 #include <ao/Error.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/audio/Transport.h>
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -120,6 +123,46 @@ namespace ao::tui
   {
     constexpr auto kPlaybackTickInterval = std::chrono::milliseconds{250};
     constexpr std::int32_t kNotificationCenterPanelRows = 12;
+
+    std::string terminalSoulFrame(Preferences const& preferences,
+                                  audio::Transport const transport,
+                                  uimodel::AobusSoulMotionFrame const& motion,
+                                  std::chrono::milliseconds const transientElapsed)
+    {
+      return preferences.terminalTitleSoul ? soulTitleText(transport, motion, transientElapsed) : std::string{};
+    }
+
+    bool tryWriteTerminalTitle(std::string_view const escape)
+    {
+      std::print("{}", escape);
+      return std::fflush(stdout) == 0;
+    }
+
+    Result<std::optional<std::string>> previewTerminalTitle(TerminalTitleFormatter& formatter,
+                                                            std::string_view const expression,
+                                                            rt::PlaybackService const& playback,
+                                                            Preferences const& preferences)
+    {
+      if (auto const formatRes = formatter.setFormat(expression); !formatRes)
+      {
+        return std::unexpected{formatRes.error()};
+      }
+
+      auto const& transport = playback.snapshot().transport;
+      auto const soul = terminalSoulFrame(preferences,
+                                          transport.transport,
+                                          uimodel::aobusSoulMotionAt(std::chrono::milliseconds{0}),
+                                          std::chrono::milliseconds{0});
+      return formatter.format(transport.nowPlaying.trackId, soul);
+    }
+
+    void refreshSettingsPreview(SettingsEditor& settings, ftxui::ScreenInteractive& screen)
+    {
+      if (settings.tryRefreshTitlePreview())
+      {
+        screen.PostEvent(ftxui::Event::Custom);
+      }
+    }
 
     ftxui::Element commandPalettePopover(i18n::MessageCatalog const& textCatalog,
                                          ShellInteractionModel const& shell,
@@ -587,6 +630,8 @@ namespace ao::tui
       CoverArtDeliveryMode const& coverArtMode;
       std::int32_t coverColumns = kCoverArtDefaultColumns;
       uimodel::AobusSoulAnimationState soulAnimation{};
+      // Reuse the dock's last rendered sample for title updates between draws.
+      std::chrono::milliseconds soulTransientElapsed{};
       std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
       ListId observedList = kInvalidListId;
       TrackId observedDetailTrack = kInvalidTrackId;
@@ -842,6 +887,7 @@ namespace ao::tui
           preferences.reducedMotion
             ? std::chrono::milliseconds{0}
             : std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
+        soulTransientElapsed = animationElapsed;
         auto const& presentation = library.activePresentation();
         auto const sidePanelLimit = sidePanelColumnsLimit(terminalColumns);
         auto detailPanelColumns = detailVisible ? detailPaneColumns(textCatalog, sidePanelLimit, coverColumns) : 0;
@@ -1449,6 +1495,8 @@ namespace ao::tui
                                          runtime.textOrderingPolicy()};
     auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
     auto onSignalExit = std::function<void()>{};
+    auto titlePreview = TerminalTitleFormatter{runtime.library()};
+    auto terminalTitle = TerminalTitle{runtime.library(), tryWriteTerminalTitle};
     auto settings = SettingsEditor{
       textCatalog,
       preferences,
@@ -1503,6 +1551,8 @@ namespace ao::tui
           auto const mode = coverDeliveryMode;
           return coverModeDescription(mode, !options.coverArtMode.empty());
         },
+        .previewTerminalTitle = [&](std::string_view const expression) -> Result<std::optional<std::string>>
+        { return previewTerminalTitle(titlePreview, expression, playback, preferences); },
       }};
     auto exitController = ExitController{{
       .retire =
@@ -1601,6 +1651,15 @@ namespace ao::tui
       // after input dispatch unwinds so a lost wake cannot strand worker results
       // or reenter a Settings save that is still publishing its candidate.
       executor->drainPendingTasks();
+
+      refreshSettingsPreview(settings, screen);
+      std::ignore = terminalTitle.setFormat(preferences.terminalTitleFormat);
+      auto const& titleTransport = playback.snapshot().transport;
+      auto const titleSoul = terminalSoulFrame(preferences,
+                                               titleTransport.transport,
+                                               frameRenderer.soulAnimation.motionFrame(),
+                                               frameRenderer.soulTransientElapsed);
+      terminalTitle.update(titleTransport.nowPlaying.trackId, titleSoul);
       events.syncWorkspaceGeometry();
       frameTimer.recordPresentIfDrawn();
 
@@ -1628,6 +1687,7 @@ namespace ao::tui
       std::fflush(stdout);
     }
 
+    terminalTitle.restore();
     coverArt.cancel();
     libraryScan.retire();
     trackEdit.retire();

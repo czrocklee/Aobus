@@ -39,6 +39,23 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kTitleControlColumns = 6;
+    enum class AppearancePreference : std::uint8_t
+    {
+      DimBackdrop,
+      ReducedMotion,
+      CoverArt,
+      PanelSeparator,
+      RevealIndicators,
+      TerminalTitle,
+      TerminalSoul,
+    };
+
+    struct AppearanceRow final
+    {
+      AppearancePreference preference;
+      i18n::MessageId label;
+    };
+
     constexpr std::int32_t kPreferenceControlColumns = 6;
 
     using i18n::MessageId;
@@ -46,11 +63,15 @@ namespace ao::tui
                                                       MessageId::TuiSettingsAppearance,
                                                       MessageId::TuiSettingsInteraction,
                                                       MessageId::TuiSettingsKeyboard});
-    constexpr auto kAppearanceLabels = std::to_array<MessageId>({MessageId::TuiSettingsDim,
-                                                                 MessageId::TuiSettingsMotion,
-                                                                 MessageId::TuiSettingsCover,
-                                                                 MessageId::TuiSettingsSeparator,
-                                                                 MessageId::TuiSettingsRevealIndicatorsOnHover});
+    constexpr auto kAppearanceRows = std::to_array<AppearanceRow>({
+      {.preference = AppearancePreference::DimBackdrop, .label = MessageId::TuiSettingsDim},
+      {.preference = AppearancePreference::ReducedMotion, .label = MessageId::TuiSettingsMotion},
+      {.preference = AppearancePreference::CoverArt, .label = MessageId::TuiSettingsCover},
+      {.preference = AppearancePreference::PanelSeparator, .label = MessageId::TuiSettingsSeparator},
+      {.preference = AppearancePreference::RevealIndicators, .label = MessageId::TuiSettingsRevealIndicatorsOnHover},
+      {.preference = AppearancePreference::TerminalTitle, .label = MessageId::TuiSettingsTerminalTitle},
+      {.preference = AppearancePreference::TerminalSoul, .label = MessageId::TuiSettingsTerminalSoul},
+    });
     constexpr auto kInteractionLabels = std::to_array<MessageId>({MessageId::TuiSettingsMouse,
                                                                   MessageId::TuiSettingsWheel,
                                                                   MessageId::TuiSettingsSeek,
@@ -122,6 +143,9 @@ namespace ao::tui
     _search.clear();
     _active = false;
     _editingChord = false;
+    _editingTitle = false;
+    _titlePreview.clear();
+    _titleError.clear();
     _choosingLanguage = false;
     _confirmClose = false;
     _optPreferenceCandidate.reset();
@@ -160,6 +184,12 @@ namespace ao::tui
       return true;
     }
 
+    if (_editingTitle)
+    {
+      handleTitleEditing(event);
+      return true;
+    }
+
     if (_choosingLanguage)
     {
       handleLanguageChoice(event);
@@ -175,6 +205,13 @@ namespace ao::tui
     if (_page == SettingsPage::Keyboard && _search.tryHandleEvent(event))
     {
       moveRow(0);
+      return true;
+    }
+
+    if (_page == SettingsPage::Appearance && kAppearanceRows[_row].preference == AppearancePreference::TerminalTitle &&
+        (event == ftxui::Event::ArrowLeft || event == ftxui::Event::ArrowRight ||
+         event == ftxui::Event::Character(" ")))
+    {
       return true;
     }
 
@@ -257,6 +294,7 @@ namespace ao::tui
     _renderedPage = _page;
     _renderedLanguage = _choosingLanguage;
     _renderedChord = _editingChord;
+    _renderedTitle = _editingTitle;
     auto tabs = Elements{};
     _mouseReady = true;
 
@@ -287,7 +325,8 @@ namespace ao::tui
 
   void SettingsEditor::handleMouse(ftxui::Mouse const& mouse)
   {
-    if (_renderedPage != _page || _renderedLanguage != _choosingLanguage || _renderedChord != _editingChord)
+    if (_renderedPage != _page || _renderedLanguage != _choosingLanguage || _renderedChord != _editingChord ||
+        _renderedTitle != _editingTitle)
     {
       return;
     }
@@ -296,6 +335,16 @@ namespace ao::tui
     {
       _mouseBindings.clear();
       tryHandleEvent(*optEvent);
+      return;
+    }
+
+    if (_editingTitle)
+    {
+      if (isLeftPress(mouse) && containsMouse(_titleInputBox, mouse))
+      {
+        _titleInput.tryMoveToCell(mouse.x - _titleTextBox.x_min);
+      }
+
       return;
     }
 
@@ -392,7 +441,7 @@ namespace ao::tui
     switch (_page)
     {
       case SettingsPage::General: return 1;
-      case SettingsPage::Appearance: return kAppearanceLabels.size();
+      case SettingsPage::Appearance: return kAppearanceRows.size();
       case SettingsPage::Interaction: return kInteractionLabels.size();
       case SettingsPage::Keyboard: return actionDescriptors().size();
     }
@@ -445,29 +494,27 @@ namespace ao::tui
 
     if (_page == SettingsPage::Appearance)
     {
-      if (_row == 0)
+      switch (kAppearanceRows[_row].preference)
       {
-        candidate.dimBackdrop = !candidate.dimBackdrop;
-      }
-      else if (_row == 1)
-      {
-        candidate.reducedMotion = !candidate.reducedMotion;
-      }
-      else if (_row == 2)
-      {
-        auto const index = static_cast<std::int32_t>(std::ranges::distance(
-          kCoverArtModes.begin(),
-          std::ranges::find(kCoverArtModes, candidate.coverArtMode, &CoverArtModeDescriptor::name)));
-        auto const count = static_cast<std::int32_t>(kCoverArtModes.size());
-        candidate.coverArtMode = kCoverArtModes[static_cast<std::size_t>((index + delta + count) % count)].name;
-      }
-      else if (_row == 3)
-      {
-        candidate.panelSeparator = candidate.panelSeparator == "single" ? "double" : "single";
-      }
-      else if (_row == 4)
-      {
-        candidate.revealIndicatorsOnHover = !candidate.revealIndicatorsOnHover;
+        case AppearancePreference::DimBackdrop: candidate.dimBackdrop = !candidate.dimBackdrop; break;
+        case AppearancePreference::ReducedMotion: candidate.reducedMotion = !candidate.reducedMotion; break;
+        case AppearancePreference::CoverArt:
+        {
+          auto const index = static_cast<std::int32_t>(std::ranges::distance(
+            kCoverArtModes.begin(),
+            std::ranges::find(kCoverArtModes, candidate.coverArtMode, &CoverArtModeDescriptor::name)));
+          auto const count = static_cast<std::int32_t>(kCoverArtModes.size());
+          candidate.coverArtMode = kCoverArtModes[static_cast<std::size_t>((index + delta + count) % count)].name;
+          break;
+        }
+        case AppearancePreference::PanelSeparator:
+          candidate.panelSeparator = candidate.panelSeparator == "single" ? "double" : "single";
+          break;
+        case AppearancePreference::RevealIndicators:
+          candidate.revealIndicatorsOnHover = !candidate.revealIndicatorsOnHover;
+          break;
+        case AppearancePreference::TerminalTitle: beginTitleEditing(); return;
+        case AppearancePreference::TerminalSoul: candidate.terminalTitleSoul = !candidate.terminalTitleSoul; break;
       }
     }
     else if (_page == SettingsPage::Interaction)
@@ -741,7 +788,7 @@ namespace ao::tui
 
     if (_page == SettingsPage::Appearance)
     {
-      id = kAppearanceLabels[index];
+      id = kAppearanceRows[index].label;
     }
     else if (_page == SettingsPage::Interaction)
     {
@@ -771,30 +818,25 @@ namespace ao::tui
 
     if (_page == SettingsPage::Appearance)
     {
-      if (index == 0)
+      switch (kAppearanceRows[index].preference)
       {
-        return boolean(preferences.dimBackdrop);
+        case AppearancePreference::DimBackdrop: return boolean(preferences.dimBackdrop);
+        case AppearancePreference::ReducedMotion: return boolean(preferences.reducedMotion);
+        case AppearancePreference::CoverArt: return preferences.coverArtMode;
+        case AppearancePreference::PanelSeparator:
+          return std::string{i18n::requiredText(_textCatalog,
+                                                preferences.panelSeparator == "double"
+                                                  ? MessageId::TuiSettingsSeparatorDouble
+                                                  : MessageId::TuiSettingsSeparatorSingle)};
+        case AppearancePreference::RevealIndicators: return boolean(preferences.revealIndicatorsOnHover);
+        case AppearancePreference::TerminalSoul: return boolean(preferences.terminalTitleSoul);
+        case AppearancePreference::TerminalTitle:
+          return preferences.terminalTitleFormat.empty()
+                   ? std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsOff)}
+                   : preferences.terminalTitleFormat;
       }
 
-      if (index == 1)
-      {
-        return boolean(preferences.reducedMotion);
-      }
-
-      if (index == 2)
-      {
-        return preferences.coverArtMode;
-      }
-
-      if (index == 4)
-      {
-        return boolean(preferences.revealIndicatorsOnHover);
-      }
-
-      return std::string{i18n::requiredText(_textCatalog,
-                                            preferences.panelSeparator == "double"
-                                              ? MessageId::TuiSettingsSeparatorDouble
-                                              : MessageId::TuiSettingsSeparatorSingle)};
+      return {};
     }
 
     switch (index)
@@ -882,6 +924,11 @@ namespace ao::tui
     using namespace ftxui;
     auto rows = Elements{};
 
+    if (_editingTitle)
+    {
+      return renderTitleEditing(columns);
+    }
+
     if (_choosingLanguage)
     {
       _rowBoxes.assign(languageChoices().size(), kEmptyMouseBox);
@@ -907,10 +954,13 @@ namespace ao::tui
 
       for (std::size_t index = 0; index < rowCount(); ++index)
       {
+        auto const titleFormat =
+          _page == SettingsPage::Appearance && kAppearanceRows[index].preference == AppearancePreference::TerminalTitle;
         auto rowPtr =
           hbox({text(ellipsizeToCellWidth(preferenceLabel(index), columns / 2)) | flex,
-                text(" < ") | ftxui::reflect(_decreaseBoxes[index]),
-                text(ellipsizeToCellWidth(preferenceValue(index), (columns / 2) - kPreferenceControlColumns) + " > ") |
+                titleFormat ? emptyElement() : text(" < ") | ftxui::reflect(_decreaseBoxes[index]),
+                text(ellipsizeToCellWidth(preferenceValue(index), (columns / 2) - kPreferenceControlColumns) +
+                     (titleFormat ? " … " : " > ")) |
                   ftxui::reflect(_valueBoxes[index])});
         rows.push_back((index == _row ? std::move(rowPtr) | style::selected() | focus : rowPtr) |
                        ftxui::reflect(_rowBoxes[index]));
@@ -920,7 +970,8 @@ namespace ao::tui
           rows.push_back(paragraph(std::string{i18n::requiredText(_textCatalog, MessageId::TuiSettingsLanguageHint)}) |
                          dim);
         }
-        else if (_page == SettingsPage::Appearance && index == 2)
+        else if (_page == SettingsPage::Appearance &&
+                 kAppearanceRows[index].preference == AppearancePreference::CoverArt)
         {
           rows.push_back(paragraph(i18n::requiredFormat(
                            _textCatalog, MessageId::TuiSettingsEffectiveCover, {{"mode", _outputs.coverMode()}})) |
@@ -995,9 +1046,13 @@ namespace ao::tui
       return finish();
     }
 
-    if (_editingChord)
+    if (_editingChord || _editingTitle)
     {
-      button("Enter", MessageId::TuiSettingsActionSave, Event::Return);
+      if (!_editingTitle || _titleError.empty())
+      {
+        button("Enter", MessageId::TuiSettingsActionSave, Event::Return);
+      }
+
       button("Esc", MessageId::TuiSettingsActionCancel, Event::Escape);
       return finish();
     }
@@ -1041,6 +1096,11 @@ namespace ao::tui
       }
 
       button("r", MessageId::TuiSettingsActionReset, Event::Character("r"));
+    }
+    else if (_page == SettingsPage::Appearance &&
+             kAppearanceRows[_row].preference == AppearancePreference::TerminalTitle)
+    {
+      button("Enter", MessageId::TuiSettingsActionEdit, Event::Return);
     }
     else if (_page == SettingsPage::General)
     {

@@ -73,6 +73,13 @@ namespace ao::rt
     Library(Library&&) = delete;
     Library& operator=(Library&&) = delete;
 
+    /// Terminally and idempotently closes write/publication admission and
+    /// settles admitted mutations. Borrowed runtime workers must remain alive
+    /// while this call waits. Keep this Library alive through the subsequent
+    /// Runtime::requestStop()/join(); closing alone does not quiesce all jobs.
+    /// Defer closing from synchronous availability observers to a later turn.
+    void beginClosing() noexcept;
+
     LibrarySnapshot snapshot() const;
     LibraryChanges const& changes() const noexcept;
     LibraryCommands& commands() noexcept;
@@ -88,11 +95,7 @@ namespace ao::rt
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
 
   private:
-    void beginClosing() noexcept;
-
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
-
-    friend class CoreRuntime;
   };
 } // namespace ao::rt

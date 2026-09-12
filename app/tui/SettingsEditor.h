@@ -21,6 +21,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::i18n
@@ -48,6 +49,8 @@ namespace ao::tui
       std::function<Result<>(uimodel::KeymapModel const&)> applyKeymap;
       /// Effective renderer, including an explicit command-line override.
       std::function<std::string()> coverMode;
+      /// Compile and preview a draft; nullopt means disabled. Called outside rendering.
+      std::function<Result<std::optional<std::string>>(std::string_view)> previewTerminalTitle;
     };
 
     SettingsEditor(i18n::MessageCatalog const& textCatalog,
@@ -61,6 +64,8 @@ namespace ao::tui
     SettingsPage page() const noexcept { return _page; }
     bool tryHandleEvent(ftxui::Event const& event);
     ftxui::Element renderModal(std::int32_t columns, std::int32_t rows) const;
+    /// Refresh an active draft after playback/library publication; reports a display change.
+    bool tryRefreshTitlePreview();
 
   private:
     void handleLanguageChoice(ftxui::Event const& event);
@@ -73,6 +78,9 @@ namespace ao::tui
     void applyKeymap(uimodel::KeymapModel candidate);
     void retry();
     bool tryHandlePrompt(ftxui::Event const& event);
+    void beginTitleEditing();
+    void handleTitleEditing(ftxui::Event const& event);
+    ftxui::Element renderTitleEditing(std::int32_t columns) const;
     void handleChordEditing(ftxui::Event const& event);
     void submitKeymap(uimodel::KeymapModel candidate);
     void handleKeyboard(ftxui::Event const& event);
@@ -96,6 +104,10 @@ namespace ao::tui
     std::optional<Preferences> _optPreferenceCandidate;
     std::optional<uimodel::KeymapModel> _optKeymapCandidate;
     std::string _diagnostic;
+    bool _editingTitle = false;
+    TextFieldModel _titleInput;
+    std::string _titlePreview;
+    std::string _titleError;
     bool _editingChord = false;
     bool _addingChord = false;
     TextFieldModel _chordInput;
@@ -122,5 +134,8 @@ namespace ao::tui
     mutable SettingsPage _renderedPage = SettingsPage::General;
     mutable bool _renderedLanguage = false;
     mutable bool _renderedChord = false;
+    mutable bool _renderedTitle = false;
+    mutable ftxui::Box _titleInputBox = kEmptyMouseBox;
+    mutable ftxui::Box _titleTextBox = kEmptyMouseBox;
   };
 } // namespace ao::tui

@@ -381,6 +381,9 @@ The typed resolver supplies these internal message arguments:
 | shortcut capture hint | `key` |
 | custom-presentation copy label | `label` |
 | TUI custom-presentation detail or badge | `id` |
+| TUI quick tag popover title (`tui_tag_popover_title`) | `count` |
+| TUI terminal-title draft preview (`tui_settings_title_preview`) | `title` |
+| TUI terminal-title compilation diagnostic (`tui_settings_invalid_title_format`) | `detail` |
 
 The `has*` arguments are closed `yes`/`no` selectors supplied by UIModel; they are not translated values.
 

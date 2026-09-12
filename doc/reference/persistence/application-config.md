@@ -143,6 +143,8 @@ The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and i
 | `language` | empty string | System (empty), `en`, `de`, `es`, `fr`, `ja`, `zh-Hans`, `zh-Hant` |
 | `coverArtMode` | `auto` | `auto`, `kitty`, `blocks`, `off` |
 | `panelSeparator` | `single` | `single` (shared border), `double` (adjacent panel borders) |
+| `terminalTitleFormat` | `$artist " - " $title` | A scalar [format expression](../query/format-language.md); empty disables terminal-title ownership |
+| `terminalTitleSoul` | `true` | Prefix the enabled terminal title with the shared three-cell Soul animation |
 | `revealIndicatorsOnHover` | `false` | Show panel arrows only while hovering their divider or collapsed edge |
 | `dimBackdrop` | `true` | Boolean |
 | `reducedMotion` | `false` | Boolean |

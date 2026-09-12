@@ -1047,5 +1047,16 @@ fr:table {
     tui_detail_focus { "Accéder aux détails du titre" }
     tui_detail_keys { "Shift+←/→ largeur · j/k sections · Enter basculer · ←/→ replier/déplier · PgUp/PgDn défiler · Esc titres" }
     tui_detail_keys_compact { "Shift+←/→ largeur · Enter basculer · Esc titres" }
+    tui_shell_tags { "Tags" }
+    tui_tag_popover_cancel { "Annuler" }
+    tui_tag_popover_title { "Tags · {count, plural, one {# morceau} other {# morceaux}}" }
+    tui_tag_popover_apply { "Appliquer" }
+    tui_tag_popover_add_apply { "Ajouter et appliquer" }
+    tui_shell_detail_edit_tags { "modifier les tags des morceaux" }
+    tui_settings_terminal_title { "Format du titre du terminal" }
+    tui_settings_terminal_soul { "Soul dans le titre du terminal" }
+    tui_settings_terminal_title_hint { "Utilise le morceau en cours, par exemple $artist \" - \" $title. Vide : désactivé." }
+    tui_settings_title_preview { "Aperçu : {title}" }
+    tui_settings_invalid_title_format { "Format invalide : {detail}" }
   }
 }

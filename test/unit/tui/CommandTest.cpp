@@ -67,6 +67,7 @@ namespace ao::tui::test
     CHECK(requiredCommand("select clear").action == CommandAction::SelectClear);
     CHECK(requiredCommand("settings").action == CommandAction::OpenSettings);
     CHECK(requiredCommand("config").action == CommandAction::OpenSettings);
+    CHECK(requiredCommand("tags").action == CommandAction::EditTags);
     CHECK(requiredCommand("edit").action == CommandAction::EditProperties);
     CHECK(requiredCommand("properties").action == CommandAction::EditProperties);
     CHECK(requiredCommand("play").action == CommandAction::Play);
@@ -114,6 +115,7 @@ namespace ao::tui::test
       {CommandAction::SelectClear, KeyAction::SelectClear},
       {CommandAction::OpenSettings, KeyAction::OpenSettings},
       {CommandAction::EditProperties, KeyAction::EditProperties},
+      {CommandAction::EditTags, KeyAction::EditTags},
       {CommandAction::Play, KeyAction::PlaySelection},
       {CommandAction::TogglePlayback, KeyAction::PlaybackPlayPause},
       {CommandAction::Previous, KeyAction::PlaybackPrevious},

@@ -4,6 +4,7 @@
 #include "TrackPropertiesEditor.h"
 
 #include "MouseBindings.h"
+#include "Render.h"
 #include "SelectableList.h"
 #include "SelectionNavigation.h"
 #include "Style.h"
@@ -37,17 +38,20 @@ namespace ao::tui
 
   TrackPropertiesEditor::TrackPropertiesEditor(i18n::MessageCatalog textCatalog,
                                                TrackEditorPreparation preparation,
-                                               CompletionProvider completionProvider)
+                                               CompletionProvider completionProvider,
+                                               TrackEditorMode const mode)
     : _textCatalog{std::move(textCatalog)}
     , _targets{std::move(preparation.targets)}
     , _metadataEditor{_textCatalog, _targets.size(), std::move(preparation.baseline), std::move(completionProvider)}
     , _tagEditor{_textCatalog, _targets.size(), std::move(preparation.tagCounts), std::move(preparation.tagSuggestions)}
+    , _mode{mode}
+    , _tab{mode == TrackEditorMode::Tags ? TrackEditorTab::Tags : TrackEditorTab::Metadata}
   {
   }
 
   bool TrackPropertiesEditor::isDirty() const noexcept
   {
-    return _metadataEditor.isDirty() || _tagEditor.isDirty();
+    return (_mode == TrackEditorMode::Properties && _metadataEditor.isDirty()) || _tagEditor.isDirty();
   }
 
   void TrackPropertiesEditor::setStatus(TrackEditorStatus const status, std::string diagnostic)
@@ -72,14 +76,15 @@ namespace ao::tui
 
   bool TrackPropertiesEditor::canApply() const noexcept
   {
-    return _status == TrackEditorStatus::Ready && isDirty() && !_metadataEditor.hasInvalidFields();
+    return _status == TrackEditorStatus::Ready && isDirty() &&
+           (_mode == TrackEditorMode::Tags || !_metadataEditor.hasInvalidFields());
   }
 
   TrackEditorPatchSummary TrackPropertiesEditor::patchSummary() const noexcept
   {
     return TrackEditorPatchSummary{
-      .fieldCount = _metadataEditor.editedFieldCount(),
-      .clearCount = _metadataEditor.clearedFieldCount(),
+      .fieldCount = _mode == TrackEditorMode::Properties ? _metadataEditor.editedFieldCount() : 0,
+      .clearCount = _mode == TrackEditorMode::Properties ? _metadataEditor.clearedFieldCount() : 0,
       .tagAddCount = _tagEditor.additionCount(),
       .tagRemoveCount = _tagEditor.removalCount(),
     };
@@ -87,7 +92,13 @@ namespace ao::tui
 
   rt::TrackPropertiesPatch TrackPropertiesEditor::buildPatch() const
   {
-    auto patch = rt::TrackPropertiesPatch{.metadata = _metadataEditor.buildPatch()};
+    auto patch = rt::TrackPropertiesPatch{};
+
+    if (_mode == TrackEditorMode::Properties)
+    {
+      patch.metadata = _metadataEditor.buildPatch();
+    }
+
     _tagEditor.appendChanges(patch.tagsToAdd, patch.tagsToRemove);
     return patch;
   }
@@ -99,6 +110,11 @@ namespace ao::tui
     if (_status == TrackEditorStatus::Submitting)
     {
       return true;
+    }
+
+    if (_mode == TrackEditorMode::Tags)
+    {
+      return tryHandleTagPopoverEvent(event);
     }
 
     if (event.is_mouse())
@@ -207,6 +223,11 @@ namespace ao::tui
   {
     using namespace ftxui;
 
+    if (_mode == TrackEditorMode::Tags)
+    {
+      return renderTagPopover(kTagPopoverColumns, kTagPopoverRows);
+    }
+
     auto const title = _targets.size() == 1
                          ? std::string{i18n::requiredText(_textCatalog, MessageId::TuiEditorTitle)}
                          : countedText(_textCatalog, MessageId::TuiEditorTitleMultiple, _targets.size());
@@ -259,6 +280,14 @@ namespace ao::tui
                                                     std::int32_t const terminalRows) const
   {
     using namespace ftxui;
+
+    if (_mode == TrackEditorMode::Tags)
+    {
+      auto const columns = std::max(1, std::min(kTagPopoverColumns, terminalColumns - 2));
+      auto const rows =
+        std::max(1, std::min(terminalRows - 2, std::clamp(_tagEditor.visibleRowCount() + 10, 14, kTagPopoverRows)));
+      return centerPopover(renderTagPopover(columns, rows) | size(WIDTH, EQUAL, columns) | size(HEIGHT, EQUAL, rows));
+    }
 
     // A terminal narrower or shorter than the preferred box gets the whole of
     // itself instead, which is what makes 80x24 a full-surface presentation.

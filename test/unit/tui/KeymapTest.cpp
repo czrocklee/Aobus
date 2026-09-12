@@ -93,6 +93,7 @@ namespace ao::tui::test
       {KeyAction::SelectAll, "tui.library.selectAll"},
       {KeyAction::SelectClear, "tui.library.selectClear"},
       {KeyAction::EditProperties, "tui.library.editProperties"},
+      {KeyAction::EditTags, "tui.library.editTags"},
       {KeyAction::PlaySelection, "tui.library.playSelection"},
       {KeyAction::PreviousRow, "tui.library.previousRow"},
       {KeyAction::NextRow, "tui.library.nextRow"},

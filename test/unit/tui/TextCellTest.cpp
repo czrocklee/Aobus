@@ -19,6 +19,21 @@ namespace ao::tui::test
     constexpr std::string_view kJapanFlag = "\U0001F1EF\U0001F1F5";
   } // namespace
 
+  TEST_CASE("TextCell - single-line controls share rejection and substitution byte boundaries", "[tui][unit][text]")
+  {
+    CHECK(singleLineControlLength("\nrest") == 1);
+    CHECK(singleLineControlLength("\x7f") == 1);
+    CHECK(singleLineControlLength("\u0085") == 2);
+    CHECK(singleLineControlLength("\u009f") == 2);
+    CHECK(singleLineControlLength("\u00a0") == 0);
+    CHECK(singleLineControlLength("\u2028rest") == 3);
+    CHECK(singleLineControlLength("\u2029") == 3);
+    CHECK(singleLineControlLength("曲") == 0);
+    CHECK(singleLineControlLength("\xc2") == 0);
+    CHECK(singleLineControlLength("\xc2!") == 0);
+    CHECK(singleLineControlLength("") == 0);
+  }
+
   TEST_CASE("TextCell - cellWidth measures terminal cells", "[tui][unit][text]")
   {
     CHECK(cellWidth("abc") == 3);

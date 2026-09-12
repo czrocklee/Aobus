@@ -9,6 +9,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -257,10 +258,10 @@ namespace ao::rt::test
 
     while (!predicate() && std::chrono::steady_clock::now() < deadline)
     {
-      if (!executor.tryRunReadyTurn())
-      {
-        std::this_thread::yield();
-      }
+      // Worker-only completion need not enqueue a callback. Recheck it periodically,
+      // while the executor's semaphore wakes immediately for actual queued work.
+      auto const nextCheckDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{1};
+      std::ignore = executor.tryRunOneTurnUntil(std::min(deadline, nextCheckDeadline));
     }
 
     return predicate();

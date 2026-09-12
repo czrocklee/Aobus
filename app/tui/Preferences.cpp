@@ -4,6 +4,7 @@
 #include "Preferences.h"
 
 #include "CoverArt.h"
+#include "TerminalTitleFormat.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ConfigStore.h>
@@ -32,6 +33,11 @@ namespace ao::tui
         return makeError(Error::Code::InvalidInput, "Invalid TUI preference value");
       }
 
+      if (auto const formatRes = compileTerminalTitleFormat(value.terminalTitleFormat); !formatRes)
+      {
+        return std::unexpected{formatRes.error()};
+      }
+
       return {};
     }
 
@@ -49,6 +55,8 @@ namespace ao::tui
           .scalar("language", value.language)
           .scalar("coverArtMode", value.coverArtMode)
           .scalar("panelSeparator", value.panelSeparator)
+          .scalar("terminalTitleFormat", value.terminalTitleFormat)
+          .scalar("terminalTitleSoul", value.terminalTitleSoul)
           .scalar("revealIndicatorsOnHover", value.revealIndicatorsOnHover)
           .scalar("dimBackdrop", value.dimBackdrop)
           .scalar("reducedMotion", value.reducedMotion)
@@ -66,6 +74,8 @@ namespace ao::tui
                                                                 "language",
                                                                 "coverArtMode",
                                                                 "panelSeparator",
+                                                                "terminalTitleFormat",
+                                                                "terminalTitleSoul",
                                                                 "revealIndicatorsOnHover",
                                                                 "dimBackdrop",
                                                                 "reducedMotion",
@@ -81,6 +91,8 @@ namespace ao::tui
           .optionalScalar("language", value.language)
           .optionalScalar("coverArtMode", value.coverArtMode)
           .optionalScalar("panelSeparator", value.panelSeparator)
+          .optionalScalar("terminalTitleFormat", value.terminalTitleFormat)
+          .optionalScalar("terminalTitleSoul", value.terminalTitleSoul)
           .optionalScalar("revealIndicatorsOnHover", value.revealIndicatorsOnHover)
           .optionalScalar("dimBackdrop", value.dimBackdrop)
           .optionalScalar("reducedMotion", value.reducedMotion)

@@ -23,6 +23,7 @@
 #include "TerminalTrackColumnLayout.h"
 #include "TrackEditController.h"
 #include "TrackListEntry.h"
+#include "TrackPropertiesEditor.h"
 #include "TrackSection.h"
 #include "TrackTable.h"
 #include <ao/Contract.h>
@@ -457,15 +458,15 @@ namespace ao::tui
       std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiNotificationsOpened)});
   }
 
-  void EventController::editSelectedTrackProperties()
+  void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
   {
-    if (!_trackEdit.tryOpen(_library.selectedTrackIds()))
+    if (!_trackEdit.tryOpen(_library.selectedTrackIds(), mode))
     {
       return;
     }
 
-    // The editor takes the whole surface, so whatever the workspace was in the
-    // middle of ends here instead of finishing against a layout nobody can see.
+    // Both editor modes consume every event, so cancel pending workspace
+    // gestures and overlays before handing input to the editor.
     cancelTransientInteractions();
     // The editor captured the range the moment it opened. Leaving the range
     // armed would let the next motion key after the modal closes reshape the
@@ -662,6 +663,7 @@ namespace ao::tui
       case SelectVisual:
       case SelectAll:
       case SelectClear:
+      case EditTags:
       case EditProperties:
       case OpenSettings:
       case PlaySelection:
@@ -723,7 +725,8 @@ namespace ao::tui
       case CommandAction::SelectVisual: _library.toggleVisualSelection(); break;
       case CommandAction::SelectAll: _library.markAllTracks(); break;
       case CommandAction::SelectClear: _library.clearMarks(); break;
-      case CommandAction::EditProperties: editSelectedTrackProperties(); break;
+      case CommandAction::EditProperties: editSelectedTrackProperties(TrackEditorMode::Properties); break;
+      case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
       case CommandAction::OpenSettings:
         cancelTransientInteractions();
         _library.commitVisualSelection();

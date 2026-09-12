@@ -26,6 +26,8 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/FormatExpression.h>
+#include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
@@ -120,6 +122,7 @@ namespace ao::rt::test
         .channels(Channels{2})
         .bitDepth(BitDepth{24})
         .codec(AudioCodec::Flac);
+      trackBuilder.customMetadata().add("catalog", "Archiv 123");
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
@@ -166,6 +169,27 @@ namespace ao::rt::test
                                     .filteredListId = filteredListId};
     }
   } // namespace
+
+  TEST_CASE("LibrarySnapshot - evaluates a scalar format against one track including custom fields",
+            "[runtime][unit][library][readmodel]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const seeded = seedLibrary(temp);
+    auto runtimePtr = makeCoreRuntime(temp);
+    auto const parsedRes = query::parse(R"($artist " - " $title " / " %catalog " / " @codec)");
+    REQUIRE(parsedRes);
+    auto const planRes = query::compileFormat(*parsedRes);
+    REQUIRE(planRes);
+    auto const snapshot = runtimePtr->library().snapshot();
+    CHECK(snapshot.formatTrack(seeded.trackId, *planRes) == "An Artist - A Song / Archiv 123 / FLAC");
+    CHECK_FALSE(snapshot.formatTrack(kInvalidTrackId, *planRes));
+    CHECK_FALSE(snapshot.formatTrack(TrackId{999999}, *planRes));
+    auto const customParsedRes = query::parse("%catalog");
+    REQUIRE(customParsedRes);
+    auto const customPlanRes = query::compileFormat(*customParsedRes);
+    REQUIRE(customPlanRes);
+    CHECK(snapshot.formatTrack(seeded.otherTrackId, *customPlanRes) == "");
+  }
 
   TEST_CASE("LibrarySnapshot - reads track rows and dictionary values", "[runtime][unit][library][readmodel]")
   {

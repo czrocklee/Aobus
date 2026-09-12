@@ -147,6 +147,25 @@ namespace ao::tui
       return frames[soulFrameIndex(elapsed, period, frames.size())];
     }
 
+    SoulFrame soulGlyphFrame(audio::Transport const transport,
+                             uimodel::AobusSoulMotionFrame const& motion,
+                             std::chrono::milliseconds const transientElapsed)
+    {
+      switch (transport)
+      {
+        case audio::Transport::Playing:
+        case audio::Transport::Paused: return soulArcFrame(motion);
+        case audio::Transport::Opening:
+        case audio::Transport::Buffering:
+        case audio::Transport::Seeking: return transientSoulArcFrame(transientElapsed, kSoulTransientPulsePeriod);
+        case audio::Transport::Error: return {"!", "!", "!"};
+        case audio::Transport::Idle:
+        case audio::Transport::Stopping: return kDormantSoulFrame;
+      }
+
+      return kDormantSoulFrame;
+    }
+
     struct SoulFrameSpec final
     {
       SoulFrame frame{};
@@ -221,15 +240,32 @@ namespace ao::tui
     }
   } // namespace
 
+  std::string soulTitleText(audio::Transport const transport,
+                            uimodel::AobusSoulMotionFrame const& motion,
+                            std::chrono::milliseconds const transientElapsed)
+  {
+    auto result = std::string{};
+
+    for (auto const glyph : soulGlyphFrame(transport, motion, transientElapsed))
+    {
+      // Braille blanks preserve the canvas when terminals trim title whitespace.
+      result.append(glyph == " " ? "⠀" : glyph);
+    }
+
+    return result;
+  }
+
   ftxui::Element soulButtonElement(audio::Transport const transport,
                                    uimodel::AobusSoulVisualFrame const& visual,
                                    std::chrono::milliseconds const transientElapsed)
   {
+    auto const frame = soulGlyphFrame(transport, visual.motion, transientElapsed);
+
     switch (transport)
     {
       case audio::Transport::Playing:
       case audio::Transport::Paused:
-        return soulFrameElement({.frame = soulArcFrame(visual.motion),
+        return soulFrameElement({.frame = frame,
                                  .optRotation = visual.motion.rotationRadians,
                                  .gradientColors = visual.gradientColors,
                                  .luminance = visual.motion.luminance});
@@ -237,9 +273,8 @@ namespace ao::tui
       case audio::Transport::Buffering:
       case audio::Transport::Seeking:
       {
-        return soulFrameElement({.frame = transientSoulArcFrame(transientElapsed, kSoulTransientPulsePeriod),
-                                 .gradientColors = visual.gradientColors,
-                                 .luminance = kTransientSoulLuminance});
+        return soulFrameElement(
+          {.frame = frame, .gradientColors = visual.gradientColors, .luminance = kTransientSoulLuminance});
       }
       case audio::Transport::Error:
         return fixedText("!!!", kSoulGlyphColumns) |
@@ -252,6 +287,6 @@ namespace ao::tui
 
     // Dormant: stopped playback keeps a dim cyan core, matching the GTK soul.
     return soulFrameElement(
-      {.frame = kDormantSoulFrame, .gradientColors = visual.gradientColors, .luminance = kDormantSoulLuminance});
+      {.frame = frame, .gradientColors = visual.gradientColors, .luminance = kDormantSoulLuminance});
   }
 } // namespace ao::tui

@@ -13,13 +13,13 @@ This reference defines the current string-producing subset accepted by `ao::quer
 It shares lexical parsing and field names with the [predicate language](predicate-language.md) but has a distinct result type and validation surface.
 Evaluation behavior belongs to the [format evaluation specification](../../spec/query/format-evaluation.md).
 
-The current product consumer is plain `aobus track show --format` output.
+The current product consumers are plain `aobus track show --format` output and the TUI terminal-title setting.
 Format expressions are not track-list presentation specs, column definitions, or filesystem path templates.
 
 ## Code boundary
 
 The language belongs to the **core libraries** layer in the [system architecture](../../architecture/system-overview.md) and is refined by the [track expression architecture](../../architecture/track-expression.md).
-Its public API is `include/ao/query/FormatExpression.h`, its implementation is `lib/query/FormatExpression.cpp`, and the CLI adapter is the current application consumer.
+Its public API is `include/ao/query/FormatExpression.h`, its implementation is `lib/query/FormatExpression.cpp`, and the CLI adapter and TUI terminal title consume it. The TUI evaluates one playing track through `rt::LibrarySnapshot::formatTrack()`, keeping storage access in the runtime.
 
 ## Surface
 

@@ -761,6 +761,7 @@ add_executable(ao_tui_test
     unit/tui/TrackPresentationNavigationTest.cpp
     unit/tui/TrackPropertiesEditorTest.cpp
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
+    unit/tui/TrackTagPopoverTest.cpp
     unit/tui/TrackPropertiesEditorTagsTest.cpp
     unit/tui/TrackPropertiesEditorTestSupport.cpp
     unit/tui/TrackSectionTest.cpp
@@ -781,6 +782,7 @@ add_executable(ao_tui_test
     unit/tui/KeymapTest.cpp
     unit/tui/SettingsEditorTest.cpp
     unit/tui/PreferencesTest.cpp
+    unit/tui/TerminalTitleTest.cpp
     unit/tui/LayoutStateStoreTest.cpp
     unit/tui/TuiSignalProbeTest.cpp
     unit/tui/TextFieldModelTest.cpp

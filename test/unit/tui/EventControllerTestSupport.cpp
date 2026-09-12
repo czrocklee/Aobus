@@ -18,6 +18,7 @@
 #include "tui/LibraryScanController.h"
 #include "tui/Preferences.h"
 #include "tui/SettingsEditor.h"
+#include "tui/TerminalTitleFormat.h"
 #include "tui/TrackEditController.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -33,7 +34,11 @@
 #include <ftxui/component/mouse.hpp>
 #include <ftxui/screen/box.hpp>
 
+#include <expected>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::tui::test
@@ -104,17 +109,29 @@ namespace ao::tui::test
       ao::test::englishMessageCatalog(),
       preferences,
       settingsKeymap,
-      SettingsEditor::Outputs{.applyPreferences = [&](Preferences const& candidate) -> Result<>
-                              {
-                                preferences = candidate;
-                                return {};
-                              },
-                              .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
-                              {
-                                settingsKeymap = candidate;
-                                return {};
-                              },
-                              .coverMode = [] { return std::string{"off"}; }});
+      SettingsEditor::Outputs{
+        .applyPreferences = [&](Preferences const& candidate) -> Result<>
+        {
+          preferences = candidate;
+          return {};
+        },
+        .applyKeymap = [&](uimodel::KeymapModel const& candidate) -> Result<>
+        {
+          settingsKeymap = candidate;
+          return {};
+        },
+        .coverMode = [] { return std::string{"off"}; },
+        .previewTerminalTitle = [](std::string_view expression) -> Result<std::optional<std::string>>
+        {
+          auto planRes = compileTerminalTitleFormat(expression);
+
+          if (!planRes)
+          {
+            return std::unexpected{planRes.error()};
+          }
+
+          return *planRes ? std::optional{std::string{"Aobus"}} : std::nullopt;
+        }});
     hitRegions.trackTableRevision = library.trackRowsRevision();
     return EventController{shell,
                            library,

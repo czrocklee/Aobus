@@ -41,6 +41,13 @@ Avoid or minimize:
 
 If a timeout helper is necessary, keep it centralized and make failure diagnostics useful.
 `tryRunLoopUntil()` provides the bounded test-only driver for a production `LoopExecutor`; do not add local polling loops for the same job.
+It waits on the executor's wake signal through `tryRunOneTurnUntil()` instead of spinning, with bounded rechecks for worker completion that does not enqueue a callback.
+The test driver is the bounded wait's current consumer outside its direct regression tests; no production caller uses it yet.
+The operation belongs to `LoopExecutor` because it owns the wake semaphore and turn draining, so the test driver does not need access to private synchronization state.
+Deadlines guard against a hung test; queue observations, barriers, and terminal state establish ordering and correctness.
+`LibraryCommandsFixture` and the short-lived runtime in `addTrackAndPublishImpl()` use two worker threads so sharded service tests retain real concurrency without allocating a machine-sized pool in every process.
+Library-owning fixtures first close write/publication admission while workers can still retire admitted commands, then stop and join the runtime before releasing the Library and its change bus, including assertion-unwinding paths.
+The lower-level `WriteLaneFixture` closes admission by destroying the lane, whose lifetime state waits for active owner leases; it keeps the change bus, executor, and storage alive through runtime stop and join.
 
 Example shape:
 

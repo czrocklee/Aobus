@@ -50,10 +50,15 @@ namespace ao::uimodel::test
 
     ~Impl()
     {
-      optLibrary.reset();
-      changesPtr.reset();
+      if (optLibrary)
+      {
+        optLibrary->beginClosing();
+      }
+
       asyncRuntime.requestStop();
       asyncRuntime.join();
+      optLibrary.reset();
+      changesPtr.reset();
     }
 
     Impl(Impl const&) = delete;

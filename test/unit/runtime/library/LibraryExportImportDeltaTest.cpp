@@ -10,30 +10,38 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
-#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/TaskFuture.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <c4/yml/tree.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <future>
+#include <memory>
+#include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -44,6 +52,9 @@ namespace ao::rt::test
 
   namespace
   {
+    // Imports exercise disk-backed preparation and commit, not a latency contract.
+    constexpr auto kImportTaskTimeout = std::chrono::seconds{10};
+
     ryml::Tree loadTree(std::filesystem::path const& path, std::vector<char>& buffer)
     {
       auto bufferRes = yaml::readFileResult(path);
@@ -55,24 +66,56 @@ namespace ao::rt::test
       return tree;
     }
 
-    Result<ImportReport> importThroughRuntime(library::MusicLibrary& library,
-                                              LibraryChanges& changes,
+    Result<ImportReport> importThroughRuntime(CoreRuntime& core,
                                               QueuedExecutor& executor,
                                               std::filesystem::path const& path,
                                               ImportMode mode)
     {
-      auto runtime = async::Runtime{executor};
-      auto runtimeLibrary = Library{runtime, ao::test::requireValue(Library::prepare(library)), changes};
-      auto planRes = runQueuedTask(runtime, executor, runtimeLibrary.jobs().prepareLibraryImportAsync(path, mode));
+      auto& runtime = core.async();
+      auto& runtimeLibrary = core.library();
+      INFO("Preparing library import");
+      auto planRes = runQueuedTask(
+        runtime, executor, runtimeLibrary.jobs().prepareLibraryImportAsync(path, mode), kImportTaskTimeout);
 
       if (!planRes)
       {
         return std::unexpected{planRes.error()};
       }
 
-      return runQueuedTask(runtime, executor, runtimeLibrary.jobs().applyLibraryImportPlanAsync(std::move(*planRes)));
+      INFO("Applying prepared library import");
+      return runQueuedTask(
+        runtime, executor, runtimeLibrary.jobs().applyLibraryImportPlanAsync(std::move(*planRes)), kImportTaskTimeout);
     }
   } // namespace
+
+  TEST_CASE("LibraryYaml - failed import wait retires the suspended task during runtime unwinding",
+            "[runtime][regression][import-export][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto optFuture = std::optional<async::TaskFuture<Result<LibraryImportPlan>>>{};
+    auto const run = [&]
+    {
+      auto executorPtr = std::make_unique<QueuedExecutor>();
+      auto& executor = *executorPtr;
+      auto core = ao::test::requireValue(CoreRuntime::create(
+        std::move(executorPtr), temp.path(), temp.path(), {}, library::test::kTestMusicLibraryMapBytes));
+      optFuture.emplace(core.async().spawn(
+        flagCompletionAsync(completedPtr,
+                            core.library().jobs().prepareLibraryImportAsync(
+                              std::filesystem::path{temp.path()} / "absent.yaml", ImportMode::Merge))));
+      executor.checkQueued();
+      CHECK_FALSE(completedPtr->load());
+      // Model a failed test assertion while the real import is suspended at its first executor hop.
+      throw std::runtime_error{"import wait failed"};
+    };
+    REQUIRE_THROWS_AS(run(), std::runtime_error);
+    REQUIRE(completedPtr->load());
+    REQUIRE(optFuture);
+    CHECK_THROWS_AS(optFuture->get(), std::future_error);
+    auto reopened = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    CHECK(Library::prepare(reopened));
+  }
 
   TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
             "[runtime][workflow][import-export][delta]")
@@ -257,9 +300,12 @@ namespace ao::rt::test
             "[runtime][workflow][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto const existingId = library::test::addTrackWithUniqueFixtureUri(
-      ml, library::test::TrackSpec{.title = "Before", .artist = "", .album = "", .uri = "existing.flac"});
+    auto existingId = kInvalidTrackId;
+    {
+      auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+      existingId = library::test::addTrackWithUniqueFixtureUri(
+        ml, library::test::TrackSpec{.title = "Before", .artist = "", .album = "", .uri = "existing.flac"});
+    }
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
@@ -276,12 +322,16 @@ library:
 )";
     }
 
-    auto executor = QueuedExecutor{};
-    auto changes = makeLibraryChanges(executor, ml);
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto& executor = *executorPtr;
+    auto core = ao::test::requireValue(CoreRuntime::create(
+      std::move(executorPtr), temp.path(), temp.path(), {}, library::test::kTestMusicLibraryMapBytes));
+    auto const& ml = core.musicLibrary();
+    auto const& changes = core.library().changes();
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Merge));
+    REQUIRE(importThroughRuntime(core, executor, yamlPath, ImportMode::Merge));
 
     REQUIRE(observed.size() == 1);
     REQUIRE(observed.front().tracksInserted.size() == 1);
@@ -295,19 +345,22 @@ library:
   TEST_CASE("LibraryYaml - restore publishes a library reset", "[runtime][workflow][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 5\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
-    auto executor = QueuedExecutor{};
-    auto changes = makeLibraryChanges(executor, ml);
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto& executor = *executorPtr;
+    auto core = ao::test::requireValue(CoreRuntime::create(
+      std::move(executorPtr), temp.path(), temp.path(), {}, library::test::kTestMusicLibraryMapBytes));
+    auto const& ml = core.musicLibrary();
+    auto const& changes = core.library().changes();
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(core, executor, yamlPath, ImportMode::Restore));
 
     REQUIRE(observed.size() == 1);
     CHECK(observed.front().libraryReset);
@@ -319,7 +372,6 @@ library:
             "[runtime][workflow][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
-    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
@@ -332,12 +384,16 @@ library:
            << "  lists: []\n";
     }
 
-    auto executor = QueuedExecutor{};
-    auto changes = makeLibraryChanges(executor, ml);
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto& executor = *executorPtr;
+    auto core = ao::test::requireValue(CoreRuntime::create(
+      std::move(executorPtr), temp.path(), temp.path(), {}, library::test::kTestMusicLibraryMapBytes));
+    auto const& ml = core.musicLibrary();
+    auto const& changes = core.library().changes();
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(core, executor, yamlPath, ImportMode::Restore));
 
     CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(observed.size() == 1);

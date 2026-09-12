@@ -23,6 +23,11 @@ namespace ao::library
   class MusicLibrary;
 }
 
+namespace ao::query
+{
+  struct FormatPlan;
+}
+
 namespace ao::rt
 {
   class Library;
@@ -45,6 +50,8 @@ namespace ao::rt
 
     // Tracks
     std::optional<TrackRow> trackRow(TrackId id) const;
+    /// Evaluates one compiled scalar format; missing or unreadable tracks return nullopt.
+    std::optional<std::string> formatTrack(TrackId id, query::FormatPlan const& plan) const;
     bool containsTrack(TrackId id) const;
     ResourceId trackCoverArtId(TrackId id) const;
     TrackFieldRawValue trackField(TrackId id, TrackField field) const;

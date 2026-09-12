@@ -312,6 +312,7 @@ namespace ao::tui
         case KeyAction::SelectVisual:
         case KeyAction::SelectAll:
         case KeyAction::SelectClear:
+        case KeyAction::EditTags:
         case KeyAction::EditProperties: return true;
         default: executeKeyAction(*optAction); break;
       }

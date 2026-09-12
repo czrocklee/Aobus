@@ -40,6 +40,7 @@ namespace ao::tui
     SelectAll,
     SelectClear,
     EditProperties,
+    EditTags,
     OpenSettings,
     Play,
     TogglePlayback,

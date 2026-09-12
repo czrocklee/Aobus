@@ -1047,5 +1047,16 @@ zh_Hant:table {
     tui_detail_focus { "進入曲目詳情" }
     tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
+    tui_shell_tags { "標籤" }
+    tui_tag_popover_cancel { "取消" }
+    tui_tag_popover_title { "標籤 · {count, plural, other {# 首曲目}}" }
+    tui_tag_popover_apply { "套用" }
+    tui_tag_popover_add_apply { "新增並套用" }
+    tui_shell_detail_edit_tags { "編輯曲目標籤" }
+    tui_settings_terminal_title { "終端標題格式" }
+    tui_settings_terminal_soul { "終端標題 Soul 動畫" }
+    tui_settings_terminal_title_hint { "使用正在播放的曲目，例如 $artist \" - \" $title。留空停用標題更新。" }
+    tui_settings_title_preview { "預覽：{title}" }
+    tui_settings_invalid_title_format { "格式無效：{detail}" }
   }
 }

@@ -133,6 +133,7 @@ The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shif
 | `tui.library.selectAll` | `Shift+A` |
 | `tui.library.selectClear` | `U` |
 | `tui.library.editProperties` | `E` |
+| `tui.library.editTags` | `T` |
 | `tui.library.playSelection` | `Enter` |
 | `tui.library.previousRow` | `K` |
 | `tui.library.nextRow` | `J` |

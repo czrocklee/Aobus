@@ -136,6 +136,61 @@ namespace ao::tui
     refreshVisibleTags();
   }
 
+  void TrackTagEditor::activateFocusedTag()
+  {
+    std::size_t tagIndex = 0;
+
+    if (_focusedTagRow < _visibleTags.size())
+    {
+      tagIndex = _visibleTags[_focusedTagRow];
+      cycleTagIntent(_tags[tagIndex]);
+    }
+    else if (_offersNewTag)
+    {
+      auto optNormalized = normalizedTagQuery();
+
+      if (!optNormalized || utility::trim(*optNormalized).empty())
+      {
+        return;
+      }
+
+      // _tags stays partitioned into the selection's own tags and then the
+      // library suggestions, so a created tag joins the first group rather
+      // than being buried under every suggestion the library has.
+      auto const firstSuggested = std::ranges::find(_tags, true, &TagRow::suggested);
+      auto searchKey = tagSearchKey(*optNormalized);
+      auto const inserted = _tags.insert(firstSuggested,
+                                         TagRow{
+                                           .name = std::move(*optNormalized),
+                                           .searchKey = std::move(searchKey),
+                                           .originalCount = 0,
+                                           .intent = TagIntent::AddToAll,
+                                           .suggested = false,
+                                         });
+      tagIndex = static_cast<std::size_t>(std::distance(_tags.begin(), inserted));
+    }
+    else
+    {
+      return;
+    }
+
+    // The query has done its job. Dropping it puts the tag back among its
+    // neighbours so the change is read in context, and leaves the field ready
+    // for the next name.
+    _tagQuery.reset("");
+    refreshVisibleTags();
+    focusTag(tagIndex);
+  }
+
+  void TrackTagEditor::createTagFromQuery()
+  {
+    if (_offersNewTag)
+    {
+      _focusedTagRow = _visibleTags.size();
+      activateFocusedTag();
+    }
+  }
+
   void TrackTagEditor::handleEvent(ftxui::Event const& event)
   {
     if (event.is_mouse())
@@ -152,7 +207,7 @@ namespace ao::tui
         else if (auto const optRow = mouseRowAt(_rowBoxes, mouse); optRow)
         {
           _focusedTagRow = *optRow;
-          commitFocusedTag();
+          activateFocusedTag();
           _rowBoxes.clear();
         }
       }
@@ -186,7 +241,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::Return)
     {
-      commitFocusedTag();
+      activateFocusedTag();
       return;
     }
 
@@ -215,16 +270,25 @@ namespace ao::tui
     }
   }
 
-  ftxui::Element TrackTagEditor::render() const
+  bool TrackTagEditor::isQueryHit(ftxui::Mouse const& mouse) const
+  {
+    return containsMouse(_queryBox, mouse);
+  }
+
+  std::int32_t TrackTagEditor::visibleRowCount() const noexcept
+  {
+    return static_cast<std::int32_t>(_visibleTags.size()) + (_offersNewTag ? 1 : 0);
+  }
+
+  ftxui::Element TrackTagEditor::render(bool const queryFocused, std::optional<std::int32_t> const optColumns) const
   {
     using namespace ftxui;
 
-    // The query field is always live: the tab has no second mode to enter, so
-    // a printable key is always a step towards naming a tag.
+    // Keep mouse hits tied to the query and results from this frame.
     _renderedQuery = _tagQuery.value();
     _renderedTags = _visibleTags;
     auto const& query = _tagQuery.value();
-    auto queryInputPtr = textFieldValue(_tagQuery, &_queryTextBox);
+    auto queryInputPtr = textFieldValue(_tagQuery, &_queryTextBox, queryFocused);
 
     if (!query.empty())
     {
@@ -248,7 +312,7 @@ namespace ao::tui
       // rather than shrinking every segment away from it.
       hbox(std::move(queryCells)) | ftxui::reflect(_queryBox),
       separator(),
-      renderTagsList(),
+      renderTagsList(optColumns),
     };
 
     // A truncated list would otherwise claim the library holds nothing further.
@@ -373,52 +437,6 @@ namespace ao::tui
     }
   }
 
-  void TrackTagEditor::commitFocusedTag()
-  {
-    std::size_t tagIndex = 0;
-
-    if (_focusedTagRow < _visibleTags.size())
-    {
-      tagIndex = _visibleTags[_focusedTagRow];
-      cycleTagIntent(_tags[tagIndex]);
-    }
-    else if (_offersNewTag)
-    {
-      auto optNormalized = normalizedTagQuery();
-
-      if (!optNormalized || utility::trim(*optNormalized).empty())
-      {
-        return;
-      }
-
-      // _tags stays partitioned into the selection's own tags and then the
-      // library suggestions, so a created tag joins the first group rather
-      // than being buried under every suggestion the library has.
-      auto const firstSuggested = std::ranges::find(_tags, true, &TagRow::suggested);
-      auto searchKey = tagSearchKey(*optNormalized);
-      auto const inserted = _tags.insert(firstSuggested,
-                                         TagRow{
-                                           .name = std::move(*optNormalized),
-                                           .searchKey = std::move(searchKey),
-                                           .originalCount = 0,
-                                           .intent = TagIntent::AddToAll,
-                                           .suggested = false,
-                                         });
-      tagIndex = static_cast<std::size_t>(std::distance(_tags.begin(), inserted));
-    }
-    else
-    {
-      return;
-    }
-
-    // The query has done its job. Dropping it puts the tag back among its
-    // neighbours so the change is read in context, and leaves the field ready
-    // for the next name.
-    _tagQuery.reset("");
-    refreshVisibleTags();
-    focusTag(tagIndex);
-  }
-
   ftxui::Element TrackTagEditor::renderTagCheckbox(TagRow const& tag) const
   {
     using namespace ftxui;
@@ -469,12 +487,23 @@ namespace ao::tui
     });
   }
 
-  ftxui::Element TrackTagEditor::renderTagsList() const
+  ftxui::Element TrackTagEditor::renderTagsList(std::optional<std::int32_t> const optColumns) const
   {
     using namespace ftxui;
 
     auto const total = _targetCount;
+    constexpr std::int32_t kTagChromeColumns = 8;
+    auto const statusColumns =
+      std::max(kTagStatusColumns, cellWidth(std::format("{}/{}", total, total)) + 1) +
+      std::max(cellWidth(i18n::requiredText(_textCatalog, i18n::MessageId::TuiEditorTagsStateAdd)),
+               cellWidth(i18n::requiredText(_textCatalog, i18n::MessageId::TuiEditorTagsStateRemove)));
+    constexpr std::int32_t kMinimumTagColumns = 8;
+    auto const compact = optColumns && *optColumns < kMinimumTagColumns + statusColumns + kTagChromeColumns;
+    auto const tagColumns =
+      optColumns ? std::clamp(*optColumns - kTagChromeColumns - (compact ? 0 : statusColumns), 1, kTagColumns)
+                 : kTagColumns;
     auto rows = std::vector<SelectableListRow>{};
+    rows.reserve(_visibleTags.size() + (_offersNewTag ? 1 : 0));
 
     _rowBoxes.assign(_visibleTags.size() + (_offersNewTag ? 1 : 0), kEmptyMouseBox);
 
@@ -489,16 +518,16 @@ namespace ao::tui
         .elementPtr = hbox({
           marker(_focusedTagRow == row),
           renderTagCheckbox(tag),
-          text(fitCellText(tag.name, kTagColumns)),
+          text(fitCellText(tag.name, tagColumns)),
           text(" "),
-          renderTagStatus(tag, total),
+          compact ? text("") : renderTagStatus(tag, total),
         }),
         .box = &_rowBoxes[row],
       });
     }
 
-    // Creation trails the matches so Enter lands on an existing tag whenever
-    // the query found one, and only names a new tag when nothing matched.
+    // Creation trails existing matches in result navigation. Query activation
+    // can choose this offer directly without moving the result cursor.
     if (_offersNewTag)
     {
       auto const isFocused = _focusedTagRow == _visibleTags.size();

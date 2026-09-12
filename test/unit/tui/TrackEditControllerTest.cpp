@@ -183,9 +183,12 @@ namespace ao::tui::test
     auto fixture = EditFixture{};
     auto controller = fixture.makeController();
 
-    CHECK_FALSE(controller.tryOpen({}));
-    CHECK_FALSE(controller.isActive());
-    CHECK(fixture.lastMessage() == "No track is selected");
+    for (auto const mode : {TrackEditorMode::Properties, TrackEditorMode::Tags})
+    {
+      CHECK_FALSE(controller.tryOpen({}, mode));
+      CHECK_FALSE(controller.isActive());
+      CHECK(fixture.lastMessage() == "No track is selected");
+    }
   }
 
   TEST_CASE("TrackEditController - refuses a selection it cannot open completely", "[tui][unit][editor]")
@@ -425,5 +428,32 @@ namespace ao::tui::test
     auto const secondSpec = fixture.trackSpec(secondId);
     CHECK(secondSpec.album == "Blue");
     CHECK(secondSpec.tags == std::vector<std::string>{"jazz"});
+  }
+
+  TEST_CASE("TrackEditController - quick tags reload preserves mode and writes only captured targets",
+            "[tui][unit][editor]")
+  {
+    auto fixture = EditFixture{};
+    auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac", .tags = {"rock"}});
+    auto const secondId = fixture.addTrack({.title = "Second", .album = "Other", .uri = "second.flac"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.tryOpen({firstId}, TrackEditorMode::Tags));
+    typeText(controller, "discarded");
+    fixture.commitUnrelatedChange();
+    controller.tryHandleEvent(reloadEvent());
+    REQUIRE(controller.isActive());
+    CHECK(controller.activeEditor()->mode() == TrackEditorMode::Tags);
+    CHECK_FALSE(controller.activeEditor()->isDirty());
+    typeText(controller, "late night");
+    controller.tryHandleEvent(ftxui::Event::Return);
+    REQUIRE(controller.hasPendingSubmission());
+    controller.tryHandleEvent(ftxui::Event::Escape);
+    CHECK(controller.isActive());
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+    CHECK_FALSE(controller.isActive());
+    CHECK(fixture.trackSpec(firstId).tags == std::vector<std::string>{"rock", "late night"});
+    CHECK(fixture.trackSpec(firstId).album == "Old");
+    CHECK(fixture.trackSpec(secondId).tags.empty());
+    CHECK(fixture.trackSpec(secondId).album == "Other");
   }
 } // namespace ao::tui::test

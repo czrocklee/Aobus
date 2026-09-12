@@ -5,6 +5,7 @@
 
 #include "QueuedExecutorBase.h"
 
+#include <chrono>
 #include <semaphore>
 
 namespace ao::async
@@ -29,6 +30,9 @@ namespace ao::async
 
     // Execute one ready turn without waiting. Returns false when none is ready.
     bool tryRunReadyTurn();
+
+    // Wait until the deadline for one turn. A timeout leaves later work queued normally.
+    bool tryRunOneTurnUntil(std::chrono::steady_clock::time_point deadline);
 
   private:
     void wake() noexcept override;

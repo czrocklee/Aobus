@@ -32,6 +32,7 @@ namespace ao::tui::test
                                  "preferences: {version: 1, volumePercent: 0}",
                                  "preferences: {version: 1, coverArtMode: invalid}",
                                  "preferences: {version: 1, panelSeparator: triple}",
+                                 "preferences: {version: 1, terminalTitleFormat: $unknown}",
                                  "preferences: {version: 1, language: unsupported}",
                                  "preferences: {version: 1, unknown: true}"})
     {
@@ -74,6 +75,31 @@ namespace ao::tui::test
     CHECK(loadedRes->panelSeparator == "single");
     CHECK(loadedRes->coverArtMode == "off");
     CHECK_FALSE(loadedRes->revealIndicatorsOnHover);
+  }
+
+  TEST_CASE("Preferences - title formats preserve defaults and round trip disabled and custom values",
+            "[tui][unit][config]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
+    std::ofstream{path} << "preferences: {version: 1}";
+    auto store = rt::ConfigStore{path};
+    REQUIRE(loadPreferences(store));
+    CHECK(loadPreferences(store)->terminalTitleFormat == Preferences{}.terminalTitleFormat);
+    CHECK(loadPreferences(store)->terminalTitleSoul);
+
+    for (auto const* format : {"", R"($title " / " %catalog)"})
+    {
+      auto preferences = Preferences{};
+      preferences.terminalTitleFormat = format;
+      preferences.terminalTitleSoul = false;
+      REQUIRE(savePreferences(store, preferences));
+      auto reopened = rt::ConfigStore{path};
+      auto loadedRes = loadPreferences(reopened);
+      REQUIRE(loadedRes);
+      CHECK(loadedRes->terminalTitleFormat == format);
+      CHECK_FALSE(loadedRes->terminalTitleSoul);
+    }
   }
 
   TEST_CASE("Preferences - round trips language and preserves sibling keymap writes", "[tui][unit][config]")
