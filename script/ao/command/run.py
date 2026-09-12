@@ -2,7 +2,6 @@
 
 import argparse
 import os
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,10 +15,9 @@ NAME = "run"
 REQUIRES_BUILD_ENV = True
 
 
-def requires_build_environment(arguments: Sequence[str]) -> bool:
+def requires_build_environment(args: argparse.Namespace) -> bool:
     """Return whether this invocation can build before launching."""
-    portal_arguments = arguments[: arguments.index("--")] if "--" in arguments else arguments
-    return not any(argument in {"-n", "--no-build"} for argument in portal_arguments)
+    return not args.no_build
 
 
 @dataclass(frozen=True)

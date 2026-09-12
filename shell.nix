@@ -5,6 +5,7 @@ let
     sha256 = pin.sha256;
   }) { };
   toolchain = builtins.fromJSON (builtins.readFile ./script/ao/toolchain.json);
+  compilerCache = builtins.fromJSON (builtins.readFile ./script/ao/compiler-cache.json);
   requireToolVersion = name: expected: actual:
     if expected == actual then true else throw (
       "Aobus requires ${name} ${expected}, but pinned Nixpkgs resolves ${actual}. "
@@ -106,6 +107,8 @@ let
     requireToolVersion "Python" toolchain.python pkgs.python3.version
       && requireToolVersion "Ruff" toolchain.ruff pkgs.python3Packages.ruff.version
       && requireToolVersion "mypy" toolchain.mypy pkgs.python3Packages.mypy.version;
+  compilerCacheMatchesContract =
+    requireToolVersion "ccache" compilerCache.local.linuxVersion pkgs.ccache.version;
 
   # Linux desktop, audio, and development tooling.
   linuxOnlyInputs = with pkgs; [
@@ -132,6 +135,8 @@ in
 assert pkgs.stdenv.isLinux || throw "Aobus shell.nix supports Linux only; on macOS use ./ao with the native vcpkg profile.";
 assert toolchain.schemaVersion == 1;
 assert toolchainMatchesContract;
+assert compilerCache.schemaVersion == 1;
+assert compilerCacheMatchesContract;
 pkgs.mkShell {
   name = "cpp-dev-env";
   passthru.portalShell = pkgs.bashInteractive;
@@ -185,13 +190,6 @@ pkgs.mkShell {
     # Set header-only dependency include paths
     export CMAKE_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include:$CMAKE_INCLUDE_PATH"
     export CPLUS_INCLUDE_PATH="${lexy}/include:${aobus-stb}/include/stb:${pkgs.gsl-lite}/include:$CPLUS_INCLUDE_PATH"
-
-    # ccache configuration
-    export CCACHE_DIR="$PWD/.cache/ccache"
-    export CCACHE_BASEDIR="$PWD"
-    export CCACHE_MAXSIZE="''${CCACHE_MAXSIZE:-10G}"
-    export CCACHE_COMPRESS=1
-    export CCACHE_SLOPPINESS="time_macros"
 
     echo "Using nixpkgs pinned (see nixpkgs.json)"
     echo "Using GCC by default"

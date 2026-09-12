@@ -108,39 +108,12 @@ class NativePortalTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unsupported architecture", result.stderr)
 
-    def test_macos_ccache_state_stays_under_the_managed_local_root(self):
+    def test_macos_bootstrap_leaves_compiler_cache_activation_to_python_portal(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
-        bash = shutil.which("bash")
-        if bash is None:
-            self.skipTest("bash is unavailable on this host")
+        content = helper.read_text(encoding="utf-8")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir)
-            project = temp / "project"
-            state = temp / "state"
-            project.mkdir()
-            result = subprocess.run(
-                [
-                    bash,
-                    "-c",
-                    'source "$1"; aobus_macos_prepare_ccache_environment "$2" "$3"; '
-                    'printf "%s\\n" "$CCACHE_DIR" "$CCACHE_BASEDIR" "$CCACHE_MAXSIZE" '
-                    '"$CCACHE_COMPRESS" "$CCACHE_SLOPPINESS"',
-                    "aobus-bootstrap-test",
-                    str(helper),
-                    str(project),
-                    str(state),
-                ],
-                capture_output=True,
-                text=True,
-            )
-
-            self.assertEqual(result.returncode, 0, result.stderr)
-            lines = result.stdout.splitlines()
-            self.assertEqual(Path(lines[0]), state / "ccache")
-            self.assertEqual(Path(lines[1]), project)
-            self.assertEqual(lines[2:], ["10G", "1", "time_macros"])
-            self.assertTrue((state / "ccache").is_dir())
+        self.assertNotIn("aobus_macos_prepare_ccache_environment", content)
+        self.assertNotIn("CCACHE_MAXSIZE", content)
 
     def test_macos_expected_shim_disables_exactly_five_libcxx_gates(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "macos-vcpkg-bootstrap.sh"
@@ -252,6 +225,7 @@ class NativePortalTest(unittest.TestCase):
         shell = (Path(__file__).resolve().parents[2] / "shell.nix").read_text(encoding="utf-8")
 
         self.assertNotIn("core.hooksPath", shell)
+        self.assertNotIn("export CCACHE_", shell)
         self.assertIn("pkgs.stdenv.isLinux", shell)
         self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
         self.assertNotIn("isDarwin", shell)
@@ -839,6 +813,7 @@ class CliParseTest(unittest.TestCase):
         self.assertFalse(doctor.build_only)
         self.assertTrue(self.parse(["doctor", "winui", "--build-only"]).build_only)
         self.assertEqual(self.parse(["setup", "winui-runtime"]).component, "winui-runtime")
+        self.assertEqual(self.parse(["setup", "compiler-cache"]).component, "compiler-cache")
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
     def test_windows_build_selects_the_shared_flavor_preset(self, _validate_build_tree):
@@ -1233,10 +1208,12 @@ class CliParseTest(unittest.TestCase):
                     "parallel_build_arguments",
                     return_value=["--parallel", "8"],
                 ):
-                    with mock.patch.object(test_command, "run", return_value=0) as run:
-                        with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                            self.assertEqual(test_command.run_command(args), 0)
+                    with mock.patch.object(test_command.build, "sync_compiler_cache") as sync_cache:
+                        with mock.patch.object(test_command, "run", return_value=0) as run:
+                            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                                self.assertEqual(test_command.run_command(args), 0)
 
+        sync_cache.assert_called_once_with(build_dir)
         run.assert_called_once_with(
             ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "ao_core_test", "ao_tui_test"]
         )
@@ -1676,6 +1653,37 @@ class CliParseTest(unittest.TestCase):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
             with self.assertRaisesRegex(SystemExit, "1"):
                 coverage_command.run_command(args)
+
+    def test_coverage_prepares_build_environment_only_on_linux(self):
+        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
+            with self.subTest(platform=profile.name):
+                with mock.patch.object(builddir, "platform_profile", return_value=profile):
+                    self.assertEqual(buildenv.requires_build_env("coverage"), profile.name == "linux")
+
+    def test_existing_coverage_tree_updates_cache_launcher_before_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            (build_dir / "CMakeCache.txt").write_text("CMAKE_CXX_FLAGS:STRING=--coverage\n", encoding="utf-8")
+            args = self.parse(["coverage", "--tui", "-p", str(build_dir)])
+            environment = {
+                "CMAKE_CXX_COMPILER_LAUNCHER": "/managed/ccache",
+                "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER": "1",
+            }
+            with (
+                mock.patch.dict(os.environ, environment, clear=True),
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(coverage_command, "run", return_value=0) as run,
+                mock.patch.object(build_command, "run", run),
+                mock.patch.object(coverage_command, "run_coverage_tests", return_value=0),
+                mock.patch.object(coverage_command, "collect_coverage", return_value={}),
+                mock.patch.object(coverage_command, "report"),
+            ):
+                self.assertEqual(coverage_command.run_command(args), 0)
+
+        configure, compile_tests = (call.args[0] for call in run.call_args_list)
+        self.assertEqual(configure[:5], ["cmake", "-S", str(build_command.PROJECT_ROOT), "-B", str(build_dir)])
+        self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=/managed/ccache", configure)
+        self.assertEqual(compile_tests[:3], ["cmake", "--build", str(build_dir)])
 
     def test_tidy_scope_and_passthrough_arguments(self):
         args = self.parse(

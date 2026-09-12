@@ -3,7 +3,6 @@
 import argparse
 import subprocess
 import sys
-from collections.abc import Sequence
 from pathlib import Path
 
 from ..core import builddir, buildenv, gitfiles, pythoncheck, tidyengine
@@ -74,8 +73,7 @@ def _file_exists(name: str) -> bool:
     return path.is_file()
 
 
-def requires_build_environment(arguments: Sequence[str]) -> bool:
-    args = buildenv.parse_command_arguments(NAME, arguments)
+def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, resolve_files(args))
 
 

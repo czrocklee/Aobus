@@ -44,6 +44,7 @@ def requires_source_build_env(args: argparse.Namespace, files: list[str]) -> boo
     """Hand the selected files to the native invocation, without a second Git scan."""
     from .gitfiles import CPP_SUFFIXES
 
+    args._resolved_sources = list(files)
     if destination := os.environ.get("AOBUS_PREFLIGHT_SCOPE"):
         Path(destination).write_text(json.dumps({"scope": _scope_key(args), "files": files}), encoding="utf-8")
     return any(name.endswith(CPP_SUFFIXES) and (PROJECT_ROOT / name).is_file() for name in files)
@@ -72,8 +73,20 @@ def requires_build_env(command: str, arguments: Sequence[str] = ()) -> bool:
         return False
     for module in COMMAND_MODULES:
         if module.NAME == command:
+            if hasattr(module, "requires_build_environment"):
+                return requires_parsed_build_env(parse_command_arguments(command, arguments))
+            return bool(module.REQUIRES_BUILD_ENV)
+    return False
+
+
+def requires_parsed_build_env(args: argparse.Namespace) -> bool:
+    """Use the invocation's parsed options and any prepared source scope."""
+    from ..command import COMMAND_MODULES
+
+    for module in COMMAND_MODULES:
+        if module.NAME == args.command:
             if policy := getattr(module, "requires_build_environment", None):
-                return bool(policy(arguments))
+                return bool(policy(args))
             return bool(module.REQUIRES_BUILD_ENV)
     return False
 

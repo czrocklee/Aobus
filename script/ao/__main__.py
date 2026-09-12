@@ -9,7 +9,7 @@ import os
 import sys
 
 from .command import COMMAND_MODULES
-from .core import buildenv
+from .core import buildenv, compiler_cache
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -49,6 +49,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args = parse_arguments(parser, arguments)
     buildenv.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
+    if buildenv.requires_parsed_build_env(args):
+        try:
+            compiler_cache.activate_local()
+        except compiler_cache.CompilerCacheError as exc:
+            print(f"Warning: compiler cache is disabled: {exc}", file=sys.stderr)
     return args.func(args) or 0
 
 

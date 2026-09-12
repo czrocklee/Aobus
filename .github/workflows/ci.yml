@@ -77,29 +77,27 @@ jobs:
         with:
           enable_kvm: false
 
+      - name: Read compiler cache contract
+        id: compiler-cache-contract
+        run: python3 script/ao/core/compiler_cache.py ci-contract >> "$GITHUB_OUTPUT"
+
       - name: Set up compiler cache
         id: sccache
         continue-on-error: true
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
         with:
-          version: v0.17.0
+          version: ${{ steps.compiler-cache-contract.outputs.version }}
 
       - name: Enable compiler cache
         id: compiler-cache
         if: ${{ steps.sccache.outcome == 'success' }}
         continue-on-error: true
         shell: bash
-        run: |
-          if [[ ! -x "$SCCACHE_PATH" ]]; then
-            echo "sccache action did not provide an executable: $SCCACHE_PATH" >&2
-            exit 1
-          fi
-          sccache="$(realpath "$SCCACHE_PATH")"
-          {
-            printf 'SCCACHE_PATH=%s\n' "$sccache"
-            printf 'CMAKE_C_COMPILER_LAUNCHER=%s\n' "$sccache"
-            printf 'CMAKE_CXX_COMPILER_LAUNCHER=%s\n' "$sccache"
-          } >> "$GITHUB_ENV"
+        run: >-
+          python3 script/ao/core/compiler_cache.py activate-ci
+          --github-env "$GITHUB_ENV"
+          --state-root "$RUNNER_TEMP/aobus-state"
+          --platform Linux
 
       - name: Reset compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
@@ -226,29 +224,28 @@ jobs:
             "$sdk_version" \
             "${ImageVersion:-unknown}"
 
-      - name: Set up compiler cache
+      - name: Read compiler cache contract
+        id: compiler-cache-contract
+        shell: bash
+        run: python3 script/ao/core/compiler_cache.py ci-contract >> "$GITHUB_OUTPUT"
+
+      - name: Set up compiler cache provider
         id: sccache
         continue-on-error: true
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
         with:
-          version: v0.17.0
+          version: ${{ steps.compiler-cache-contract.outputs.version }}
 
       - name: Enable compiler cache
         id: compiler-cache
         if: ${{ steps.sccache.outcome == 'success' }}
         continue-on-error: true
         shell: bash
-        run: |
-          if [[ ! -x "$SCCACHE_PATH" ]]; then
-            echo "sccache action did not provide an executable: $SCCACHE_PATH" >&2
-            exit 1
-          fi
-          sccache="$(cd "$(dirname "$SCCACHE_PATH")" && pwd -P)/$(basename "$SCCACHE_PATH")"
-          {
-            printf 'SCCACHE_PATH=%s\n' "$sccache"
-            printf 'CMAKE_C_COMPILER_LAUNCHER=%s\n' "$sccache"
-            printf 'CMAKE_CXX_COMPILER_LAUNCHER=%s\n' "$sccache"
-          } >> "$GITHUB_ENV"
+        run: >-
+          python3 script/ao/core/compiler_cache.py activate-ci
+          --github-env "$GITHUB_ENV"
+          --state-root "$AOBUS_STATE_ROOT"
+          --platform Darwin
 
       - name: Restore managed macOS tools
         id: macos-state
@@ -389,42 +386,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up compiler cache
+      - name: Read compiler cache contract
+        id: compiler-cache-contract
+        shell: pwsh
+        run: python script/ao/core/compiler_cache.py ci-contract >> $env:GITHUB_OUTPUT
+
+      - name: Set up compiler cache provider
         id: sccache
         continue-on-error: true
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba  # v0.0.11
         with:
-          version: v0.17.0
+          version: ${{ steps.compiler-cache-contract.outputs.version }}
 
       - name: Enable compiler cache
         id: compiler-cache
         if: ${{ steps.sccache.outcome == 'success' }}
         continue-on-error: true
         shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:SCCACHE_PATH)) {
-            throw 'sccache action did not provide SCCACHE_PATH.'
-          }
-          $sccacheCandidate = $env:SCCACHE_PATH
-          if (-not (Test-Path -LiteralPath $sccacheCandidate -PathType Leaf)) {
-            $windowsCandidate = "$sccacheCandidate.exe"
-            if (Test-Path -LiteralPath $windowsCandidate -PathType Leaf) {
-              $sccacheCandidate = $windowsCandidate
-            }
-          }
-          if (-not (Test-Path -LiteralPath $sccacheCandidate -PathType Leaf)) {
-            throw "sccache action did not provide a valid executable: $env:SCCACHE_PATH"
-          }
-          $sccache = (Resolve-Path -LiteralPath $sccacheCandidate).Path
-          $shimDirectory = Join-Path $env:RUNNER_TEMP 'aobus-sccache-msbuild'
-          $shim = Join-Path $shimDirectory 'cl.exe'
-          New-Item -ItemType Directory -Force -Path $shimDirectory | Out-Null
-          Copy-Item -LiteralPath $sccache -Destination $shim -Force
-
-          "SCCACHE_PATH=$sccache" >> $env:GITHUB_ENV
-          "CMAKE_C_COMPILER_LAUNCHER=$sccache" >> $env:GITHUB_ENV
-          "CMAKE_CXX_COMPILER_LAUNCHER=$sccache" >> $env:GITHUB_ENV
-          "AOBUS_MSBUILD_CL_TOOL_EXE=$shim" >> $env:GITHUB_ENV
+        run: >-
+          python script/ao/core/compiler_cache.py activate-ci
+          --github-env $env:GITHUB_ENV
+          --state-root "$env:RUNNER_TEMP\aobus-state"
+          --platform Windows
 
       - name: Capture Windows image version
         id: windows-image

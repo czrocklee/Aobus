@@ -64,9 +64,10 @@ nix-prefetch-url --unpack \
   https://github.com/NixOS/nixpkgs/archive/<revision>.tar.gz
 ```
 
-4. Enter the new environment through `./ao`. Tooling assertions fail early if
-   the package set no longer provides the exact Python, Ruff, or mypy versions
-   from `script/ao/toolchain.json`.
+4. Review the selected package versions before entering the new environment through `./ao`.
+   Tooling assertions fail early if the package set no longer provides the exact Python, Ruff, or mypy versions from `script/ao/toolchain.json`, or the ccache `local.linuxVersion` from `script/ao/compiler-cache.json`.
+   Keep the current Nixpkgs pin or update the corresponding tool contract deliberately; do not bypass the assertions.
+   After accepting the new pin, rerun `./ao setup compiler-cache` if ccache's Nix store identity changed.
 5. Build and generate the new dependency report:
 
 ```bash
@@ -259,6 +260,19 @@ dependencies, and native suite gate remain independent.
 Do not change Ruff `target-version` or mypy `python_version` merely because the
 managed interpreter patch release changed. Those settings express the minimum
 Python language target.
+
+## Updating compiler-cache tools
+
+`script/ao/compiler-cache.json` governs local ccache versions and the CI sccache provider.
+Keep `local.linuxVersion` aligned with the ccache package selected by `nixpkgs.json`; macOS accepts its Homebrew formula at or above `local.minimumVersion`.
+When upgrading Windows ccache, update its version, official archive URL, verified SHA-256, and exact archive member together.
+When changing the pinned sccache action, update both `ci.action` and the workflow's literal action references; tooling tests enforce their agreement.
+The workflow reads the sccache version from the contract.
+
+Run `./ao setup compiler-cache` on affected Linux and macOS hosts, or `ao.bat setup compiler-cache` on Windows, to validate the replacement executable and refresh the saved activation record.
+This is also the recovery step after a Homebrew ccache upgrade or a cache-root purge.
+Run tooling checks on Linux and Windows and exercise setup and a native build on each affected host, verifying the launcher and capacity reported by setup.
+See [Compiler cache](compiler-cache.md) for shared-store locations and explicit override precedence.
 
 ## When vcpkg does not carry the contracted version
 

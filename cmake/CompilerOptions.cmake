@@ -11,6 +11,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # including commands consumed before a target has ever been built.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# The portal owns only launchers carrying these cache markers. This lets a
+# later failed or removed managed configuration clear its stale launcher while
+# preserving launchers configured explicitly by a developer.
+set(AOBUS_MANAGED_C_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured C compiler launcher")
+set(AOBUS_MANAGED_CXX_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured C++ compiler launcher")
+mark_as_advanced(AOBUS_MANAGED_C_COMPILER_LAUNCHER AOBUS_MANAGED_CXX_COMPILER_LAUNCHER)
+
 if(MSVC)
   # CMake has no MSVC mapping for C++26 yet; 23 selects /std:c++latest (or the
   # closest supported flag), so don't also pass an explicit /std: option.
@@ -180,25 +187,12 @@ else()
     endif()
   endif()
 
-  # Compiler Cache
-  option(USE_CCACHE "Use ccache for faster recompilation if available" ON)
-
-  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
-    message(STATUS
-      "Using configured compiler launcher(s): "
-      "C='${CMAKE_C_COMPILER_LAUNCHER}', "
-      "CXX='${CMAKE_CXX_COMPILER_LAUNCHER}'")
-  elseif(USE_CCACHE)
-    find_program(CCACHE_PROGRAM ccache)
-    if(CCACHE_PROGRAM)
-      message(STATUS "Using compiler cache: ${CCACHE_PROGRAM}")
-      set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-      set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    else()
-      message(STATUS "ccache not found, proceeding without compiler cache.")
-    endif()
-  endif()
 endif()
+
+message(STATUS
+  "Configured compiler launcher(s): "
+  "C='${CMAKE_C_COMPILER_LAUNCHER}' (managed=${AOBUS_MANAGED_C_COMPILER_LAUNCHER}), "
+  "CXX='${CMAKE_CXX_COMPILER_LAUNCHER}' (managed=${AOBUS_MANAGED_CXX_COMPILER_LAUNCHER})")
 
 # spdlog
 # Force spdlog call sites to use C++20 std::format instead of the fmt library.

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
 
-from ..core import builddir, buildenv, buildlock, linttest, proc, tooltest
+from ..core import builddir, buildlock, linttest, proc, tooltest
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 from . import build
@@ -37,9 +37,8 @@ SHARD_ENV = "AOBUS_TEST_SHARDS"
 SHARD_CAP = 16
 
 
-def requires_build_environment(arguments: Sequence[str]) -> bool:
+def requires_build_environment(args: argparse.Namespace) -> bool:
     """Return whether this invocation can build before running tests."""
-    args = buildenv.parse_command_arguments(NAME, arguments)
     return not args.no_build and any(
         SUITES[suite].kind != "tooling" for suite in suites_for(args.suite, tsan=args.tsan)
     )
@@ -717,6 +716,7 @@ def run_command(args: argparse.Namespace) -> int:
             build_cmd += build.parallel_build_arguments()
             build_cmd += ["--target", *targets]
             with buildlock.build_tree_lock(build_dir):
+                build.sync_compiler_cache(build_dir)
                 if run(build_cmd) != 0:
                     raise die("test build failed.")
 

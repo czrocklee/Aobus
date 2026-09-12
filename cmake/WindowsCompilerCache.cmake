@@ -50,8 +50,8 @@ function(aobus_apply_msbuild_compiler_cache directory)
     return()
   endif()
 
-  # TrackFileAccess=false is required by sccache's MSBuild wrapper mode, but it
-  # must be scoped to ClCompile. CMake-generated C++ projects also contain
+  # Disable TrackFileAccess for the compiler-cache wrapper, scoped to
+  # ClCompile. CMake-generated C++ projects also contain
   # custom rules that rely on file tracking to order generated output.
   set(_aobus_compiled_target_types
     EXECUTABLE
