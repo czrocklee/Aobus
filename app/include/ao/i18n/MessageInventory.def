@@ -1025,6 +1025,8 @@ AO_I18N_MESSAGE(TuiWorkspaceForward, "tui_workspace_forward")
 AO_I18N_MESSAGE(TuiWorkspaceHistoryUnavailable, "tui_workspace_history_unavailable")
 AO_I18N_MESSAGE(TuiSettingsKeyboardScope, "tui_settings_keyboard_scope")
 AO_I18N_MESSAGE(TuiPlaybackModes, "tui_playback_modes")
+AO_I18N_MESSAGE(TuiPlaybackMode, "tui_playback_mode")
+AO_I18N_MESSAGE(TuiPlaybackModeHint, "tui_playback_mode_hint")
 
 AO_I18N_MESSAGE(TuiGoToTitle, "tui_go_to_title")
 AO_I18N_MESSAGE(TuiGoToStatus, "tui_go_to_status")

@@ -26,6 +26,8 @@ de:table {
     tui_workspace_history_unavailable { "Keine Ansicht in dieser Richtung." }
     tui_settings_keyboard_scope { "Tasten für die Arbeitsansicht. Editoren und Auswahllisten haben eigene Tasten." }
     tui_playback_modes { "Zufallswiedergabe: {shuffle, select, on {an} other {aus}} · Wiederholen: {repeat, select, one {ein Titel} all {alle} other {aus}}" }
+    tui_playback_mode { "{mode, select, order {Der Reihe nach} all {Alle wiederholen} shuffle {Zufallswiedergabe} shuffle_all {Zufallswiedergabe mit Wiederholung} one {Einen Titel wiederholen} shuffle_one {Zufallswiedergabe mit Titelwiederholung} other {Der Reihe nach}}" }
+    tui_playback_mode_hint { "{current} · Klicken für „{next}“" }
 
     tui_settings_save_failed { "Einstellungen konnten nicht gespeichert werden. {detail}" }
     tui_settings_load_failed { "Gespeicherte Einstellungen konnten nicht geladen werden; Standardwerte werden verwendet. {detail}" }

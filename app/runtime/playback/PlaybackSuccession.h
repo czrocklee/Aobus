@@ -97,6 +97,7 @@ namespace ao::rt
     bool tryMoveNext();
     bool tryMovePrevious();
     void clear();
+    void setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat);
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
 

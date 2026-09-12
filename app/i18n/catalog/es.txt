@@ -26,6 +26,8 @@ es:table {
     tui_workspace_history_unavailable { "No hay ninguna vista en esa dirección." }
     tui_settings_keyboard_scope { "Atajos del área de trabajo. Los editores y selectores tienen sus propias teclas." }
     tui_playback_modes { "Aleatorio: {shuffle, select, on {activado} other {desactivado}} · Repetir: {repeat, select, one {una pista} all {todo} other {desactivado}}" }
+    tui_playback_mode { "{mode, select, order {En orden} all {Repetir todo} shuffle {Aleatorio} shuffle_all {Aleatorio con repetición} one {Repetir una pista} shuffle_one {Aleatorio con repetición de una pista} other {En orden}}" }
+    tui_playback_mode_hint { "{current} · Clic para cambiar a «{next}»" }
 
     tui_settings_save_failed { "No se pudo guardar la configuración. {detail}" }
     tui_settings_load_failed { "No se pudieron cargar las preferencias guardadas; se usan los valores predeterminados. {detail}" }

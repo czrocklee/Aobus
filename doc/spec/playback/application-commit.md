@@ -50,6 +50,8 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   and shutdown are confined to the runtime callback executor.
 - A snapshot is assembled only after matching transport and succession changes
   have settled.
+- Runtime projects backend volume into a finite application level in `[0, 1]`, clamping finite out-of-range values and using `1` for non-finite values, including while muted.
+  This projection leaves raw audio-layer gain and device volume unchanged.
 - While succession is active, transport and succession identify the same current
   track and source.
 - A command issued by a playback observer never executes on that observer stack.
@@ -292,7 +294,7 @@ producers while succession and the remaining runtime graph are alive.
 - [`PlaybackTransportTokenTest.cpp`](../../../test/unit/runtime/PlaybackTransportTokenTest.cpp)
   protects internal event delivery order across an accepted replacement.
 - [`PlaybackTransportControlTest.cpp`](../../../test/unit/runtime/PlaybackTransportControlTest.cpp)
-  protects pause/resume transient events against idle and duplicate commands;
+  protects pause/resume transient events against idle and duplicate commands and normalizes backend-originated volume before runtime publication, including while muted;
   fatal subprocess coverage protects off-executor snapshot, command, and event access.
 
 ## Related documents

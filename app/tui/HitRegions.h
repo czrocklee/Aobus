@@ -34,6 +34,10 @@ namespace ao::tui
     NavigationToggle,
     DetailToggle,
     OutputDevice,
+    PlaybackMode,
+    PlaybackTitle,
+    PlaybackArtist,
+    PlaybackAlbum,
     Soul,
     Presentation,
     ActivityStatus,
@@ -68,8 +72,7 @@ namespace ao::tui
     ftxui::Box cancelSelectionBox = kEmptyMouseBox;
     ftxui::Box seekRailBox{};
     ftxui::Box volumeBox{};
-    ftxui::Box shuffleBox = kEmptyMouseBox;
-    ftxui::Box repeatBox = kEmptyMouseBox;
+    ftxui::Box playbackModeBox = kEmptyMouseBox;
     PlaybackMetadataHitRegions playbackMetadata{};
     GoToMenuHitRegions goToMenu{};
     GoToMenuHitRegions goToStatus{};

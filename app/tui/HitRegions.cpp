@@ -8,7 +8,9 @@
 
 #include <ftxui/screen/box.hpp>
 
+#include <array>
 #include <cstdint>
+#include <utility>
 
 namespace ao::tui
 {
@@ -51,8 +53,7 @@ namespace ao::tui
     completion = {};
     statusActions.clear();
     cancelSelectionBox = kEmptyMouseBox;
-    shuffleBox = kEmptyMouseBox;
-    repeatBox = kEmptyMouseBox;
+    playbackModeBox = kEmptyMouseBox;
     playbackMetadata = {};
     goToMenu = {};
     goToStatus = {};
@@ -78,6 +79,27 @@ namespace ao::tui
 
     if (!context.isOverlayActive)
     {
+      if (contains(playbackModeBox, column, row))
+      {
+        result.hoveredButton = HoveredButton::PlaybackMode;
+        return result;
+      }
+
+      auto const metadataButtons = std::array{
+        std::pair{&playbackMetadata.title, HoveredButton::PlaybackTitle},
+        std::pair{&playbackMetadata.artist, HoveredButton::PlaybackArtist},
+        std::pair{&playbackMetadata.album, HoveredButton::PlaybackAlbum},
+      };
+
+      for (auto const& [box, button] : metadataButtons)
+      {
+        if (contains(*box, column, row))
+        {
+          result.hoveredButton = button;
+          return result;
+        }
+      }
+
       if (contains(navigationPinBox, column, row) || contains(navigationDividerBox, column, row))
       {
         result.hoveredButton = HoveredButton::NavigationToggle;

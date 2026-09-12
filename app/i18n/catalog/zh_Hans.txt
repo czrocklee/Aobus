@@ -26,6 +26,8 @@ zh_Hans:table {
     tui_workspace_history_unavailable { "没有可切换的历史视图。" }
     tui_settings_keyboard_scope { "工作区快捷键。编辑器和选择面板使用各自的按键。" }
     tui_playback_modes { "随机播放：{shuffle, select, on {开} other {关}} · 循环：{repeat, select, one {单曲} all {全部} other {关}}" }
+    tui_playback_mode { "{mode, select, order {顺序播放} all {列表循环} shuffle {随机播放} shuffle_all {随机循环} one {单曲循环} shuffle_one {随机播放与单曲循环} other {顺序播放}}" }
+    tui_playback_mode_hint { "{current} · 点击切换为「{next}」" }
 
     tui_settings_save_failed { "无法保存设置。{detail}" }
     tui_settings_load_failed { "无法读取已保存的偏好设置，已使用默认值。{detail}" }

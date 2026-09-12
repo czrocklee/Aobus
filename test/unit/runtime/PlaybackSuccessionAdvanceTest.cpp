@@ -8,6 +8,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackMode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -93,6 +94,50 @@ namespace ao::rt::test
     CHECK(*optReplacementToken != *optFirstToken);
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.firstTrackId);
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
+  }
+
+  TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state",
+            "[runtime][regression][playback-succession][token]")
+  {
+    auto fixture = PlaybackSuccessionTransportFixture{};
+    fixture.buildThreeTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+
+    auto signalStates = std::vector<PlaybackSuccessionState>{};
+    auto const shuffleSubscription = succession.onShuffleModeChanged([&](PlaybackSuccession::ShuffleModeChanged const&)
+                                                                     { signalStates.push_back(succession.state()); });
+    auto const repeatSubscription = succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&)
+                                                                   { signalStates.push_back(succession.state()); });
+    auto activationCount = [&]
+    {
+      std::size_t count = 0;
+
+      for (auto const& entry : fixture.decoderProbePtr->snapshot())
+      {
+        count += entry.second;
+      }
+
+      return count;
+    };
+    auto const beforeActivations = activationCount();
+
+    succession.setPlaybackMode(ShuffleMode::On, RepeatMode::All);
+
+    REQUIRE(fixture.transport.executor.tryDrainUntil(
+      [&] { return activationCount() > beforeActivations; }, std::chrono::seconds{5}));
+    fixture.transport.executor.drain();
+    REQUIRE(signalStates.size() == 2);
+
+    for (auto const& state : signalStates)
+    {
+      CHECK(state.shuffle == ShuffleMode::On);
+      CHECK(state.repeat == RepeatMode::All);
+    }
+
+    CHECK(succession.state().shuffle == ShuffleMode::On);
+    CHECK(succession.state().repeat == RepeatMode::All);
+    CHECK(activationCount() == beforeActivations + 1);
   }
 
   TEST_CASE("PlaybackSuccession - natural prepared winner is adopted exactly once",
