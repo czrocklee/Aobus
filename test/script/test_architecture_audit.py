@@ -94,10 +94,17 @@ class ArchitectureAuditTest(unittest.TestCase):
 
             violation = source_root / "app/tui/Violation.cpp"
             violation.write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
+            violation.with_suffix(".mm").write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
             managed_state_violation = source_root / "app/tui/ManagedState.def"
             managed_state_violation.write_text("#include <ao/yaml/Reflect.h>\n", encoding="utf-8")
             suffix_violation = source_root / "app/tui/Unsupported.cc"
             suffix_violation.write_text("// unsupported suffix\n", encoding="utf-8")
+            suffix_violation.with_suffix(".m").write_text("// unsupported suffix\n", encoding="utf-8")
+            (source_root / "app/uimodel/Native.mm").write_text("#import <AppKit/AppKit.h>\n", encoding="utf-8")
+            (source_root / "app/uimodel/NativeModule.h").write_text("@import Foundation.NSString;\n", encoding="utf-8")
+            (source_root / "app/uimodel/Documented.h").write_text(
+                "// @import AppKit;\n/*\n@import Foundation;\n*/\n", encoding="utf-8"
+            )
 
             result = subprocess.run(
                 [
@@ -115,10 +122,75 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 3 violation", output)
+        self.assertIn("Application architecture audit found 7 violation", output)
         self.assertIn("frontend_core: app/tui/Violation.cpp", output)
+        self.assertIn("frontend_core: app/tui/Violation.mm", output)
         self.assertIn("managed_state_mechanism: app/tui/ManagedState.def", output)
         self.assertIn("unsupported_cpp_suffix: app/tui/Unsupported.cc", output)
+        self.assertIn("unsupported_cpp_suffix: app/tui/Unsupported.m", output)
+        self.assertIn("uimodel_platform: app/uimodel/Native.mm", output)
+        self.assertIn("uimodel_platform: app/uimodel/NativeModule.h", output)
+        self.assertNotIn("uimodel_platform: app/uimodel/Documented.h", output)
+        self.assertIn("use .cpp, .mm, .h, .hpp, or .def", output)
+
+    def test_forbidden_include_guardrail_checks_objective_cpp_sources(self):
+        cmake = shutil.which("cmake")
+        if cmake is None:
+            self.skipTest("cmake is not on PATH")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "Boundary.mm").write_text("#include <forbidden/Api.h>\n", encoding="utf-8")
+            result = subprocess.run(
+                [
+                    cmake,
+                    f"-DROOTS={root.as_posix()}",
+                    "-DFORBIDDEN_REGEX=forbidden/Api.h",
+                    "-P",
+                    str(PROJECT_ROOT / "cmake" / "AssertNoForbiddenIncludes.cmake"),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("Forbidden dependency in", output)
+        self.assertIn("Boundary.mm", output)
+
+    def test_default_forbidden_include_regex_rejects_gtk_and_allows_shared_headers(self):
+        cmake = shutil.which("cmake")
+        if cmake is None:
+            self.skipTest("cmake is not on PATH")
+
+        for directive, include, rejected in (
+            (directive, include, rejected)
+            for directive in ("include", "import")
+            for include, rejected in (("gtkmm/widget.h", True), ("ao/uimodel/Track.h", False))
+        ):
+            with self.subTest(directive=directive, include=include), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                (root / "Boundary.mm").write_text(f"#{directive} <{include}>\n", encoding="utf-8")
+                result = subprocess.run(
+                    [
+                        cmake,
+                        f"-DROOTS={root.as_posix()}",
+                        "-P",
+                        str(PROJECT_ROOT / "cmake/AssertNoForbiddenIncludes.cmake"),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                )
+            output = result.stdout + result.stderr
+            self.assertEqual(result.returncode != 0, rejected, output)
+            self.assertNotIn("Invalid escape sequence", output)
+            if rejected:
+                self.assertIn("Forbidden dependency in", output)
 
     def test_gtk_leaf_guardrail_scans_the_whole_frontend(self):
         rejected = self.run_leaf_guardrail(
@@ -339,7 +411,7 @@ class ArchitectureAuditTest(unittest.TestCase):
         self.assertNotEqual(unsupported_source_rejected.returncode, 0, output)
         self.assertIn("does not support weak references", output)
 
-    def test_uimodel_frontend_neutrality_rejects_terminal_types_and_names(self):
+    def test_uimodel_frontend_neutrality_rejects_native_types_and_names(self):
         cmake = shutil.which("cmake")
         if cmake is None:
             self.skipTest("cmake is not on PATH")
@@ -385,6 +457,51 @@ class ArchitectureAuditTest(unittest.TestCase):
         self.assertNotEqual(name_rejected.returncode, 0, output)
         self.assertIn("Tui.h", output)
         self.assertIn("file names a frontend", output)
+
+        for filename, source in (
+            ("Projection.mm", "NSView* view;\n"),
+            ("Projection.h", "NSWindow* window;\n"),
+            ("Projection.h", "#import <AppKit/AppKit.h>\n"),
+            ("Projection.mm", "#include <Cocoa/Cocoa.h>\n"),
+            ("Projection.mm", "#import <Foundation/Foundation.h>\n"),
+            ("Projection.h", "#include <CoreGraphics/CGGeometry.h>\n"),
+            ("Projection.h", "NSButton* button;\n"),
+            ("Projection.h", "NSString* title;\n"),
+            ("Projection.h", "CGRect rect;\n"),
+            ("Projection.h", "CGContextRef context;\n"),
+            ("Projection.h", "NS_ENUM(int, Mode) { Default };\n"),
+            ("Projection.h", "NS_OPTIONS(int, Options) { None };\n"),
+            ("Projection.h", "NS_ASSUME_NONNULL_BEGIN\n"),
+            ("Projection.h", "CG_EXTERN void configure();\n"),
+            ("Projection.h", "CG_INLINE void configure() {}\n"),
+            ("Projection.h", "auto colorSpace = kCGColorSpaceSRGB;\n"),
+            ("Projection.mm", "@import AppKit;\n"),
+            ("Projection.mm", "@import Cocoa;\n"),
+            ("Projection.mm", "@import Foundation.NSString;\n"),
+            ("Projection.mm", "@import CoreGraphics.CGGeometry;\n"),
+            ("Projection.mm", "@import\nFoundation;\n"),
+            ("Projection.mm", "@ import Foundation . NSString;\n"),
+            ("Projection.mm", "/*\ncomment\n*/ @import AppKit;\n"),
+            ("AppKitProjection.h", "struct SharedValue {};\n"),
+        ):
+            with self.subTest(filename=filename, source=source):
+                rejected = run_fixture(filename, source)
+                output = rejected.stdout + rejected.stderr
+                self.assertNotEqual(rejected.returncode, 0, output)
+                self.assertIn(filename, output)
+
+        native_comment_allowed = run_fixture(
+            "Projection.mm",
+            "// NSView and NSWindow remain frontend-owned.\n"
+            "// @import AppKit;\n"
+            "/*\n@import Foundation;\nNSString* title;\n*/\n"
+            "struct SharedNSStringState {};\n"
+            "@import FoundationExtras;\n"
+            "@import Shared.AppKit;\n",
+        )
+        self.assertEqual(
+            native_comment_allowed.returncode, 0, native_comment_allowed.stdout + native_comment_allowed.stderr
+        )
 
         comment_allowed = run_fixture("Projection.h", "// ftxui::Event remains frontend-owned.\n")
         self.assertEqual(comment_allowed.returncode, 0, comment_allowed.stdout + comment_allowed.stderr)

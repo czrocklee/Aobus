@@ -196,4 +196,4 @@ Before finishing, confirm:
 - Focused validation has been run when practical, or skipped with an honest reason.
 - The applicable completion route above passes, with its scope and any missing host evidence reported.
 
-`ao check` rejects unregistered C++ test sources before building on every native profile, including macOS. This lightweight invariant does not depend on running the Python tooling suite.
+`ao check` rejects unregistered C++ and Objective-C++ test sources before building on every native profile, including macOS. This lightweight invariant does not depend on running the Python tooling suite.

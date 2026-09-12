@@ -639,27 +639,28 @@ class CompileCommandCoverageTest(unittest.TestCase):
             self.assertTrue(plan.deferral_details[0].is_platform_incompatible)
 
     def test_platform_suffix_implementation_covers_header_in_same_component(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "repo"
-            build_dir = Path(temp_dir) / "build"
-            header = root / "include" / "ao" / "utility" / "AtomicFile.h"
-            native = root / "lib" / "utility" / "AtomicFileWindows.cpp"
-            for path in (header, native):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.touch()
-            build_dir.mkdir()
-            (build_dir / "compile_commands.json").write_text(
-                json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"cl /c {native}"}]),
-                encoding="utf-8",
-            )
+        for native_name in ("AtomicFileWindows.cpp", "AtomicFileMacos.cpp", "AtomicFileMacos.mm"):
+            with self.subTest(native_name=native_name), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir) / "repo"
+                build_dir = Path(temp_dir) / "build"
+                header = root / "include" / "ao" / "utility" / "AtomicFile.h"
+                native = root / "lib" / "utility" / native_name
+                for path in (header, native):
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+                build_dir.mkdir()
+                (build_dir / "compile_commands.json").write_text(
+                    json.dumps([{"directory": str(build_dir), "file": str(native), "command": f"cl /c {native}"}]),
+                    encoding="utf-8",
+                )
 
-            plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
+                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
 
-            self.assertEqual(list(plan.deferred), [])
-            self.assertEqual(
-                [(target.selected, target.translation_unit) for target in plan.targets],
-                [(header, native)],
-            )
+                self.assertEqual(list(plan.deferred), [])
+                self.assertEqual(
+                    [(target.selected, target.translation_unit) for target in plan.targets],
+                    [(header, native)],
+                )
 
     def test_same_stem_translation_unit_in_another_component_does_not_cover_header(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -786,6 +787,35 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
 
 
 class HeaderCompileDatabaseTest(unittest.TestCase):
+    def test_objc_header_language_precedes_quoted_input_and_keeps_native_flags(self):
+        for representation in ("arguments", "command"):
+            with self.subTest(representation=representation), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir) / "native source"
+                root.mkdir()
+                source = root / "Soul.mm"
+                header = root / "Soul.h"
+                source.touch()
+                header.touch()
+                arguments = [
+                    "clang++",
+                    "-x",
+                    "objective-c++",
+                    "-fobjc-arc",
+                    "-isysroot",
+                    "/native sdk",
+                    "-c",
+                    str(source),
+                ]
+                entry = {"directory": str(root), "file": str(source)}
+                entry[representation] = arguments if representation == "arguments" else shlex.join(arguments)
+                (root / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
+                destination = tidyengine.write_header_compile_database(
+                    root, [tidyengine.CompileCommandTarget(header, source)], root / "synthetic"
+                )
+                rewritten = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))[0]
+                actual = rewritten["arguments"] if representation == "arguments" else shlex.split(rewritten["command"])
+                self.assertEqual(actual, [*arguments[:-1], "-x", "objective-c++-header", str(header)])
+
     def test_forced_cmake_pch_is_removed_by_pattern(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

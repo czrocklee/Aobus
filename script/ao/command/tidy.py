@@ -64,6 +64,14 @@ STRICT_CHECKS = ",".join(
         "modernize-*",  # modern C++ usage
         "readability-*",  # readability improvements
         "portability-*",  # portability concerns
+        "objc-avoid-nserror-init",
+        "objc-dealloc-in-category",
+        "objc-forbidden-subclassing",
+        "objc-missing-hash",
+        "objc-nsinvocation-argument-lifetime",
+        "objc-property-declaration",
+        "objc-super-self",
+        "google-objc-avoid-throwing-exception",
         "google-build-namespaces",
         "google-readability-casting",
         "google-readability-namespace-comments",
@@ -782,7 +790,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
 
         if not cpp_files:
             if not python_files:
-                print("No .cpp/.h/.hpp/.py files found.", file=sys.stderr)
+                print("No C++, Objective-C++, or Python sources found.", file=sys.stderr)
             return 1 if overall_failed else 0
 
         toolchain = prepare_toolchain(
@@ -972,7 +980,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")
             if limits_diagnostics_to_selected_path(invocation):
                 extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
-            if invocation.is_header:
+            if invocation.is_header and invocation.compile_command_source.suffix.lower() != ".mm":
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")
             if "linux-gtk/" in invocation.compile_command_source.as_posix():

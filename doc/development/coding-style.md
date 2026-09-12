@@ -259,3 +259,29 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
   - 6.2. Platform Capability Selection
     - 6.2.1. Prefer platform-suffixed implementation files selected by CMake over generated availability macros in shared source.
     - 6.2.2. Raw compiler/OS macros (`_WIN32`, `__linux__`) belong only inside platform-suffixed files or the small branches allowed by 6.1.2.
+
+## 7. Objective-C++ boundary
+
+- 7.1. Apply the C++ rules to C++ declarations and expressions in Objective-C++
+  files. At the Cocoa boundary, preserve framework selectors, parameter types
+  such as `NSInteger`, `CGFloat`, and `BOOL`, and native object initialization
+  with `alloc`/`init` or framework factories. Use `nil` for Objective-C object
+  absence and `nullptr` for ordinary C++ pointers. Do not change a protocol or
+  superclass signature to satisfy a C++ spelling preference.
+- 7.2. Build the AppKit boundary with ARC. Objective-C object pointers have ARC
+  ownership qualifiers; they are not the ordinary C++ observer pointers
+  described above. Keep `__weak` callback targets where a strong capture would
+  create a cycle, and load a weak target once into a strong local before multiple
+  accesses. A const pointer binding does not make its Cocoa object immutable.
+  See the [ARC specification](https://clang.llvm.org/docs/AutomaticReferenceCounting.html).
+- 7.3. ARC does not replace explicit timer/subscription invalidation or
+  join-before-destruction. Keep view access on the main thread and contain C++
+  exceptions at native event callbacks.
+- 7.4. In Objective-C++ delegate methods, mark unused parameters on their
+  declarations, for example `- (void)runProbe:(id) [[maybe_unused]] sender`.
+  Preserve the selector.
+- 7.5. Do not use `== YES` as a general boolean test: `BOOL` can represent other
+  nonzero values on some targets. Use a truth test or `!= NO`; normalize values
+  explicitly when crossing the C++/Cocoa boundary. Native diagnostics and their
+  validation entry points are owned by
+  [linting policy](linting.md#objective-c-diagnostics).

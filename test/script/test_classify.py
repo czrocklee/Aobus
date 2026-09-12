@@ -49,6 +49,13 @@ class TidyChecksTest(unittest.TestCase):
         self.assertIn("readability-magic-numbers", strict)
         self.assertNotIn("-readability-magic-numbers", strict)
 
+    def test_cocoa_checks_supplement_cpp_rules_in_production(self):
+        checks = tidy.checks_for("STRICT", None).split(",")
+        self.assertIn("objc-super-self", checks)
+        self.assertIn("objc-property-declaration", checks)
+        self.assertIn("cppcoreguidelines-*", checks)
+        self.assertIn("clang-analyzer-osx.*", analyze.analyzer_checks(alpha=False, only=None).split(","))
+
     def test_mode_disabled_checks_excludes_star(self):
         disables = tidy.mode_disabled_checks("STRICT")
         self.assertNotIn("-*", disables)

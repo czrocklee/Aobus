@@ -52,6 +52,37 @@ drive-by lint sweep.
 - Python files in scope are checked by Ruff and mypy through `./ao tidy` using
   `pyproject.toml`.
 
+## Objective-C diagnostics
+
+Objective-C++ (`.mm`) production files remain `STRICT`. The shared formatter
+supports Objective-C syntax, and native tidy uses the exact Objective-C++
+compile command, including ARC and the macOS SDK. C++ checks still apply to
+C++ declarations; framework signatures and ARC ownership follow the
+[Cocoa boundary](coding-style.md#7-objective-c-boundary).
+
+The curated tidy baseline adds `objc-avoid-nserror-init`,
+`objc-dealloc-in-category`, `objc-forbidden-subclassing`, `objc-missing-hash`,
+`objc-nsinvocation-argument-lifetime`, `objc-property-declaration`,
+`objc-super-self`, and `google-objc-avoid-throwing-exception`.
+These complement the C++ rules rather than replacing them with a foreign
+naming style. Checker regressions must distinguish Objective-C methods and
+ivars from C++ methods and record fields; a clean unmatched AST is not coverage.
+
+`./ao analyze` includes the stable `clang-analyzer-osx.*` family for Cocoa and
+Core Foundation path analysis. It remains report-only unless
+`--fail-on-diagnostics` is selected; tool failures always fail. Select an
+explicit source scope on its native host so the analyzer uses the matching
+compile command and SDK.
+Objective-C++ translation units without an exact compile command fail analysis.
+Batch scopes explicitly report incompatible platform files as not analyzed;
+selecting such a file explicitly fails.
+The `.mm` suffix selects a language, not a platform owner. Add a new native
+target's source tree to platform coverage with the target itself.
+
+The [LLVM check catalog](https://releases.llvm.org/22.1.0/tools/clang/tools/extra/docs/clang-tidy/checks/list.html)
+and [analyzer catalog](https://clang.llvm.org/docs/analyzer/checkers.html)
+define the upstream checks. Static analysis does not replace runtime validation.
+
 ## Platform coverage
 
 Clang-format does not depend on a compile database, so the same source can be

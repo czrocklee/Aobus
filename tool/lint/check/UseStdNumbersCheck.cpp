@@ -9,8 +9,10 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclObjC.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/AST/ExprObjC.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
 #include <clang/AST/TypeLoc.h>
@@ -63,6 +65,12 @@ namespace clang::tidy::readability
 
   namespace
   {
+    bool isObjCMethodParameter(Decl const* decl)
+    {
+      auto const* parameter = llvm::dyn_cast_or_null<ParmVarDecl>(decl);
+      return parameter != nullptr && llvm::isa<ObjCMethodDecl>(parameter->getDeclContext());
+    }
+
     bool isOverriddenMethod(Decl const* decl)
     {
       if (auto const* func = llvm::dyn_cast_or_null<CXXMethodDecl>(decl); func != nullptr)
@@ -160,7 +168,7 @@ namespace clang::tidy::readability
           return false;
         }
 
-        expr = expr->IgnoreParenImpCasts();
+        expr = expr->IgnoreParenCasts();
 
         if (auto const* declRef = llvm::dyn_cast<DeclRefExpr>(expr); declRef != nullptr)
         {
@@ -172,6 +180,11 @@ namespace clang::tidy::readability
           return memberExpr->getMemberDecl() == targetDecl;
         }
 
+        if (auto const* ivarRef = llvm::dyn_cast<ObjCIvarRefExpr>(expr); ivarRef != nullptr)
+        {
+          return ivarRef->getDecl() == targetDecl;
+        }
+
         if (auto const* unOp = llvm::dyn_cast<UnaryOperator>(expr); unOp != nullptr)
         {
           return hasDeclReference(unOp->getSubExpr());
@@ -181,28 +194,80 @@ namespace clang::tidy::readability
       }
     };
 
+    bool isIvarPassedToExternC(ObjCIvarDecl const* ivar)
+    {
+      // Subclasses can use exposed ivars; other translation units' categories
+      // can use even private ivars declared in a header.
+      if (auto const& sm = ivar->getASTContext().getSourceManager();
+          ivar->getCanonicalAccessControl() != ObjCIvarDecl::Private ||
+          !sm.isWrittenInMainFile(sm.getSpellingLoc(ivar->getLocation())))
+      {
+        return true;
+      }
+
+      auto const* classInterface = ivar->getContainingInterface();
+      auto* implementation = classInterface != nullptr ? classInterface->getImplementation() : nullptr;
+
+      // A header alone cannot establish how native methods use the ivar.
+      if (implementation == nullptr)
+      {
+        return true;
+      }
+
+      auto visitor = ExternCUsageVisitor{ivar};
+      visitor.TraverseDecl(implementation);
+
+      if (visitor.found)
+      {
+        return true;
+      }
+
+      for (auto const* category : classInterface->known_categories())
+      {
+        if (auto* categoryImplementation = category->getImplementation(); categoryImplementation != nullptr)
+        {
+          visitor.TraverseDecl(categoryImplementation);
+
+          if (visitor.found)
+          {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+
     bool isPassedToExternC(ValueDecl const* decl)
     {
       if (auto const* var = llvm::dyn_cast<VarDecl>(decl); var != nullptr)
       {
-        if (auto const* declCtx = var->getDeclContext(); declCtx != nullptr && declCtx->isFunctionOrMethod())
-        {
-          if (auto const* func = llvm::dyn_cast<FunctionDecl>(declCtx); func != nullptr)
-          {
-            if (func->hasBody())
-            {
-              auto visitor = ExternCUsageVisitor{var};
-              visitor.TraverseStmt(func->getBody());
-              return visitor.found;
-            }
-          }
-        }
-      }
-      else if (auto const* field = llvm::dyn_cast<FieldDecl>(decl); field != nullptr)
-      {
-        auto const* record = field->getParent();
+        auto visitor = ExternCUsageVisitor{var};
 
-        for (auto const* member : record->decls())
+        if (auto const* func = llvm::dyn_cast_or_null<FunctionDecl>(var->getDeclContext()); func != nullptr)
+        {
+          visitor.TraverseStmt(func->getBody());
+        }
+        else if (auto const* method = llvm::dyn_cast_or_null<ObjCMethodDecl>(var->getDeclContext()); method != nullptr)
+        {
+          visitor.TraverseStmt(method->getBody());
+        }
+        else if (auto const* block = llvm::dyn_cast_or_null<BlockDecl>(var->getDeclContext()); block != nullptr)
+        {
+          visitor.TraverseStmt(block->getBody());
+        }
+
+        return visitor.found;
+      }
+
+      if (auto const* ivar = llvm::dyn_cast<ObjCIvarDecl>(decl); ivar != nullptr)
+      {
+        return isIvarPassedToExternC(ivar);
+      }
+
+      if (auto const* field = llvm::dyn_cast<FieldDecl>(decl); field != nullptr)
+      {
+        for (auto const* member : field->getParent()->decls())
         {
           if (auto const* method = llvm::dyn_cast<FunctionDecl>(member); method != nullptr)
           {
@@ -298,8 +363,8 @@ namespace clang::tidy::readability
 
       if (match.contextDecl != nullptr)
       {
-        if (isMainFunction(match.contextDecl) || hasCStyleLinkage(match.contextDecl) ||
-            isOverriddenMethod(match.contextDecl))
+        if (isMainFunction(match.contextDecl) || isObjCMethodParameter(match.contextDecl) ||
+            hasCStyleLinkage(match.contextDecl) || isOverriddenMethod(match.contextDecl))
         {
           return true;
         }

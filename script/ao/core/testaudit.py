@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
+from .testregistry import TEST_SOURCE_SUFFIXES
 
 LINT_FIXTURE_PARTS = ("integration", "lint", "fixture")
 
@@ -68,7 +69,11 @@ class Issue:
 
 def discover_test_files(root: Path = PROJECT_ROOT) -> list[Path]:
     test_root = root / "test"
-    return sorted(path for path in test_root.rglob("*Test.cpp") if _is_auditable_test_file(path, test_root))
+    return sorted(
+        path
+        for path in test_root.rglob("*Test.*")
+        if path.is_file() and path.name.endswith(TEST_SOURCE_SUFFIXES) and _is_auditable_test_file(path, test_root)
+    )
 
 
 def resolve_files(paths: Iterable[str], root: Path = PROJECT_ROOT) -> list[Path]:
@@ -86,8 +91,12 @@ def resolve_files(paths: Iterable[str], root: Path = PROJECT_ROOT) -> list[Path]
         if not path.exists():
             raise die(f"explicitly selected audit path does not exist: {name}")
         if path.is_dir():
-            candidates = sorted(path.rglob("*Test.cpp"))
-        elif path.is_file() and path.name.endswith("Test.cpp"):
+            candidates = sorted(
+                candidate
+                for candidate in path.rglob("*Test.*")
+                if candidate.is_file() and candidate.name.endswith(TEST_SOURCE_SUFFIXES)
+            )
+        elif path.is_file() and path.name.endswith(TEST_SOURCE_SUFFIXES):
             candidates = [path]
         else:
             candidates = []

@@ -22,8 +22,13 @@ class TestRegistryTest(unittest.TestCase):
             fixture.parent.mkdir(parents=True)
             registered.touch()
             fixture.touch()
+            registered.with_suffix(".mm").touch()
+            fixture.with_suffix(".mm").touch()
 
-            self.assertEqual(testregistry.real_test_sources(root), ["unit/utility/RegisteredTest.cpp"])
+            self.assertEqual(
+                testregistry.real_test_sources(root),
+                ["unit/utility/RegisteredTest.cpp", "unit/utility/RegisteredTest.mm"],
+            )
 
     def test_registered_test_sources_ignore_comments_and_normalize_paths(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -34,8 +39,10 @@ class TestRegistryTest(unittest.TestCase):
                 """\
 add_executable(ao_core_test
     unit/utility/RegisteredTest.cpp
+    unit/utility/RegisteredTest.mm
     ${CMAKE_SOURCE_DIR}/test/unit/core/AbsoluteTest.cpp
     # unit/utility/CommentedTest.cpp
+    # unit/utility/CommentedTest.mm
 )
 """,
                 encoding="utf-8",
@@ -43,7 +50,7 @@ add_executable(ao_core_test
 
             self.assertEqual(
                 testregistry.registered_test_sources(root),
-                ["unit/core/AbsoluteTest.cpp", "unit/utility/RegisteredTest.cpp"],
+                ["unit/core/AbsoluteTest.cpp", "unit/utility/RegisteredTest.cpp", "unit/utility/RegisteredTest.mm"],
             )
 
     def test_unregistered_test_sources_report_repo_relative_paths(self):
@@ -55,14 +62,16 @@ add_executable(ao_core_test
             registered.parent.mkdir(parents=True)
             registered.touch()
             missing.touch()
+            registered.with_suffix(".mm").touch()
+            missing.with_suffix(".mm").touch()
             cmake_file.write_text(
-                "add_executable(ao_core_test unit/utility/RegisteredTest.cpp)\n",
+                "add_executable(ao_core_test unit/utility/RegisteredTest.cpp unit/utility/RegisteredTest.mm)\n",
                 encoding="utf-8",
             )
 
             self.assertEqual(
                 testregistry.unregistered_test_sources(root),
-                ["test/unit/utility/MissingTest.cpp"],
+                ["test/unit/utility/MissingTest.cpp", "test/unit/utility/MissingTest.mm"],
             )
 
 
@@ -87,6 +96,7 @@ class NativeCheckRegistryTest(unittest.TestCase):
             root = Path(temporary)
             (root / "test").mkdir()
             (root / "test" / "UnregisteredTest.cpp").touch()
+            (root / "test" / "UnregisteredTest.mm").touch()
             (root / "test" / "CMakeLists.txt").write_text("", encoding="utf-8")
             missing = testregistry.unregistered_test_sources(root)
             for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE, builddir.MACOS_PROFILE):
@@ -99,6 +109,7 @@ class NativeCheckRegistryTest(unittest.TestCase):
                                     with self.assertRaises(SystemExit):
                                         check.run_command(args)
                                 self.assertIn("test/UnregisteredTest.cpp", errors.getvalue())
+                                self.assertIn("test/UnregisteredTest.mm", errors.getvalue())
                                 build.assert_not_called()
 
 

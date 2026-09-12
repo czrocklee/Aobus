@@ -83,7 +83,7 @@ class GitFilesTest(unittest.TestCase):
         )
 
     def test_include_fragment_suffixes_cover_def_without_treating_it_as_a_translation_unit(self):
-        self.assertEqual(gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES, (".cpp",))
+        self.assertEqual(gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES, (".cpp", ".mm"))
         self.assertIn(".def", gitfiles.CPP_INCLUDE_FRAGMENT_SUFFIXES)
         self.assertNotIn(".def", gitfiles.CPP_TRANSLATION_UNIT_SUFFIXES)
         self.assertTrue("app/include/ao/i18n/MessageInventory.def".endswith(gitfiles.CPP_SUFFIXES))

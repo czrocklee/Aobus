@@ -292,11 +292,11 @@ def clang_tool(build_dir: Path, name: str, *, os_name: str | None = None) -> str
     return str(tool)
 
 
-_TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
+_TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
 _SELF_CONTAINED_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
 _INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))
 _HEADER_SUFFIXES = _SELF_CONTAINED_HEADER_SUFFIXES | _INCLUDE_FRAGMENT_SUFFIXES
-_PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Posix", "Windows")
+_PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
 
 
 def _path_key(path: Path) -> str:
@@ -810,6 +810,7 @@ def _replace_compile_input(
     entry: _CompileDatabaseEntry,
     selected: Path,
     command_line_style: Literal["posix", "windows"] = "posix",
+    main_file_language: str | None = None,
 ) -> dict[str, object]:
     """Clone one command while replacing its exact source token with ``selected``."""
     data = dict(entry.data)
@@ -825,6 +826,8 @@ def _replace_compile_input(
             if not argument_path.is_absolute():
                 argument_path = base / argument_path
             if _path_key(argument_path) == _path_key(entry.path):
+                if main_file_language is not None:
+                    rewritten_arguments.extend(["-x", main_file_language])
                 rewritten_arguments.append(selected_text)
                 replaced += 1
             else:
@@ -861,6 +864,11 @@ def _replace_compile_input(
                 replacement = subprocess.list2cmdline([selected_text])
             else:
                 replacement = shlex.quote(selected_text)
+            if main_file_language is not None:
+                # Language flags must precede the input, outside its path quotes.
+                if prefix in {'"', "'"}:
+                    return f"-x {main_file_language} {prefix}{replacement}"
+                return f"{prefix}-x {main_file_language} {replacement}"
             return f"{prefix}{replacement}"
 
         for spelling in sorted(spellings, key=len, reverse=True):
@@ -909,7 +917,8 @@ def write_header_compile_database(
         entry = entries.get(_path_key(target.translation_unit))
         if entry is None:
             raise die(f"compile command disappeared for mapped translation unit {target.translation_unit}.")
-        data = _replace_compile_input(entry, target.selected, command_line_style)
+        main_file_language = "objective-c++-header" if target.translation_unit.suffix.lower() == ".mm" else None
+        data = _replace_compile_input(entry, target.selected, command_line_style, main_file_language)
         data = _without_compile_arguments(data, excluded_arguments, excluded_argument_patterns)
         arguments = data.get("arguments")
         if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
