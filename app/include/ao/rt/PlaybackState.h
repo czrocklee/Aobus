@@ -65,6 +65,7 @@ namespace ao::rt
 
   struct VolumeState final
   {
+    // Finite application level in [0, 1]; raw backend gain remains in the audio layer.
     float level = 1.0F;
     bool muted = false;
     bool available = false;

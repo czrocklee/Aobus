@@ -26,6 +26,8 @@ fr:table {
     tui_workspace_history_unavailable { "Aucune vue dans cette direction." }
     tui_settings_keyboard_scope { "Raccourcis de l’espace de travail. Les éditeurs et sélecteurs ont leurs propres touches." }
     tui_playback_modes { "Aléatoire : {shuffle, select, on {activé} other {désactivé}} · Répétition : {repeat, select, one {un titre} all {tout} other {désactivée}}" }
+    tui_playback_mode { "{mode, select, order {Lecture dans l’ordre} all {Tout répéter} shuffle {Lecture aléatoire} shuffle_all {Lecture aléatoire en boucle} one {Répéter un titre} shuffle_one {Lecture aléatoire avec répétition d’un titre} other {Lecture dans l’ordre}}" }
+    tui_playback_mode_hint { "{current} · Cliquer pour passer à « {next} »" }
 
     tui_settings_save_failed { "Impossible d’enregistrer les paramètres. {detail}" }
     tui_settings_load_failed { "Impossible de charger les préférences enregistrées ; les valeurs par défaut sont utilisées. {detail}" }
@@ -1049,7 +1051,8 @@ fr:table {
     tui_detail_keys { "Shift+←/→ largeur · j/k sections · Enter basculer · ←/→ replier/déplier · PgUp/PgDn défiler · Esc titres" }
     tui_detail_keys_compact { "Shift+←/→ largeur · Enter basculer · Esc titres" }
     tui_shell_tags { "Tags" }
-    tui_tag_popover_cancel { "Annuler" }
+    tui_tag_popover_cancel { "Abandonner les modifications" }
+    tui_tag_popover_close { "Fermer" }
     tui_tag_popover_title { "Tags · {count, plural, one {# morceau} other {# morceaux}}" }
     tui_tag_popover_apply { "Appliquer" }
     tui_tag_popover_add_apply { "Ajouter et appliquer" }

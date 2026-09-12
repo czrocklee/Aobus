@@ -132,6 +132,7 @@ namespace ao::rt::test
       std::size_t historySize() const noexcept { return _shuffleHistory.historySize(); }
       std::size_t queryCount() const noexcept { return _queryCount; }
       std::size_t shuffleForwardQueryCount() const noexcept { return _shuffleForwardQueries; }
+      std::size_t shuffleCandidateInvalidationCount() const noexcept { return _shuffleCandidateInvalidations; }
       std::size_t shuffleClearCount() const noexcept { return _shuffleClears; }
       void setIndexOfObserver(std::function<void()> observer) { _onIndexOf = std::move(observer); }
 
@@ -416,9 +417,9 @@ namespace ao::rt::test
     CHECK(cursor.resolveNext() == stopPlayback());
     CHECK(cursor.resolvePrevious(policy) == noCommand());
 
-    effect = cursor.setRepeatMode(RepeatMode::All, policy);
+    effect = cursor.setPlaybackMode(cursor.shuffleMode(), RepeatMode::All, policy);
     CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
-    effect = cursor.setShuffleMode(ShuffleMode::Off, policy);
+    effect = cursor.setPlaybackMode(ShuffleMode::Off, cursor.repeatMode(), policy);
     CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
 
     effect = cursor.setPreviousRestartAvailable(true, policy);
@@ -432,6 +433,30 @@ namespace ao::rt::test
     CHECK(cursor.currentTrackId() == kFourthTrack);
     CHECK(cursor.anchor() == frozenAnchor);
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kFourthTrack));
+  }
+
+  TEST_CASE("PlaybackCursor - paired modes resolve once without an intermediate shuffle candidate",
+            "[runtime][regression][playback-cursor]")
+  {
+    auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
+    auto cursor = boundCursor(policy, kSecondTrack, 1, RepeatMode::Off, ShuffleMode::On);
+    REQUIRE(cursor.semanticTuple().optResolvedSuccessor == kFourthTrack);
+    auto const beforeShuffleQueries = policy.shuffleForwardQueryCount();
+    auto const beforeInvalidations = policy.shuffleCandidateInvalidationCount();
+
+    auto const effect = cursor.setPlaybackMode(ShuffleMode::Off, RepeatMode::All, policy);
+
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = true}));
+    CHECK(cursor.shuffleMode() == ShuffleMode::Off);
+    CHECK(cursor.repeatMode() == RepeatMode::All);
+    CHECK(cursor.semanticTuple().optResolvedSuccessor == kThirdTrack);
+    CHECK(policy.shuffleForwardQueryCount() == beforeShuffleQueries);
+    CHECK(policy.shuffleCandidateInvalidationCount() == beforeInvalidations + 1);
+
+    auto const beforeQueries = policy.queryCount();
+    CHECK(cursor.setPlaybackMode(ShuffleMode::Off, RepeatMode::All, policy) == PlaybackCursor::Changes{});
+    CHECK(policy.queryCount() == beforeQueries);
+    CHECK(policy.shuffleCandidateInvalidationCount() == beforeInvalidations + 1);
   }
 
   TEST_CASE("PlaybackCursor - repeat one overrides shuffle forward but not previous policy",
@@ -488,7 +513,7 @@ namespace ao::rt::test
 
     effect = cursor.adoptLiveCurrent(ProjectionAnchor::gap(TrackId{9}, 0, policy.tracks().size()), policy);
     REQUIRE(effect.restorableStateChanged);
-    effect = cursor.setRepeatMode(RepeatMode::All, policy);
+    effect = cursor.setPlaybackMode(cursor.shuffleMode(), RepeatMode::All, policy);
     REQUIRE(effect.restorableStateChanged);
     CHECK(cursor.resolveNext() == startTrack(kFirstTrack));
     CHECK(cursor.resolvePrevious(policy) == startTrack(kThirdTrack));
@@ -500,7 +525,7 @@ namespace ao::rt::test
     CHECK(cursor.resolveNext() == stopPlayback());
     CHECK(cursor.resolvePrevious(policy) == noCommand());
 
-    effect = cursor.setRepeatMode(RepeatMode::One, policy);
+    effect = cursor.setPlaybackMode(cursor.shuffleMode(), RepeatMode::One, policy);
     CHECK(effect.restorableStateChanged);
     CHECK(cursor.resolveNext() == startTrack(TrackId{9}));
     CHECK(cursor.resolvePrevious(policy) == noCommand());
@@ -539,7 +564,7 @@ namespace ao::rt::test
     CHECK(cursor.semanticTuple() != initialTuple);
     auto const successorChangedTuple = cursor.semanticTuple();
 
-    effect = cursor.setRepeatMode(RepeatMode::All, policy);
+    effect = cursor.setPlaybackMode(cursor.shuffleMode(), RepeatMode::All, policy);
     CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
     CHECK(cursor.semanticTuple() == successorChangedTuple);
 
@@ -621,7 +646,7 @@ namespace ao::rt::test
       {
         auto const previousTuple = expectedTuple;
         repeatMode = repeatMode == RepeatMode::Off ? RepeatMode::All : RepeatMode::Off;
-        auto const modeEffect = cursor.setRepeatMode(repeatMode, policy);
+        auto const modeEffect = cursor.setPlaybackMode(cursor.shuffleMode(), repeatMode, policy);
         expectedTuple = referenceTuple(tracks, referenceAnchor, kSecondTrack, repeatMode);
         auto const semanticChanged = expectedTuple != previousTuple;
 

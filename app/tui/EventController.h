@@ -109,10 +109,13 @@ namespace ao::tui
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     GoToMenuState goToMenuState() const;
     bool tryHandleEvent(ftxui::Event const& event);
+    // Check retained hover against the painted frame; return whether a redraw is needed.
+    bool tryRetireHover();
     void cancelTransientInteractions();
     void syncWorkspaceGeometry();
 
   private:
+    bool isExitWaiting() const { return _isExitWaiting && _isExitWaiting(); }
     bool tryHandleDetailEvent(ftxui::Event const& event);
     void scrollDetail(std::int32_t delta);
     bool tryHandleNavigationEvent(ftxui::Event const& event);
@@ -141,6 +144,7 @@ namespace ao::tui
     bool tryHandleGoToEvent(ftxui::Event const& event);
     void navigateCurrentMetadata(bool album);
     void playSelectedTrack();
+    void reportPlaybackControlUnavailable();
     void executePlaybackCommand(uimodel::PlaybackCommand command);
     void executeKeyAction(KeyAction action);
     void runCommand(Command const& command);
@@ -166,6 +170,7 @@ namespace ao::tui
     std::optional<bool> handleScrollbarPress(ftxui::Mouse const& mouse);
     std::optional<bool> handleSectionPress(ftxui::Mouse const& mouse);
     bool tryHandlePlaybackMetadataPress(ftxui::Mouse const& mouse);
+    bool tryHandlePlaybackModePress(ftxui::Mouse const& mouse);
     std::optional<bool> handleButtonPress(ftxui::Mouse const& mouse);
     bool tryHandleLibraryPress(ftxui::Mouse const& mouse);
     void selectLibraryList();
@@ -268,6 +273,7 @@ namespace ao::tui
     std::chrono::steady_clock::time_point _lastTrackClickTime{};
     bool _qualityHoverVisible = false;
     HoveredButton _hoveredButton = HoveredButton::None;
+    std::optional<ftxui::Mouse> _optLastMouse;
     std::uint64_t _filterDebounceGeneration = 0;
     async::Subscription _revealSub;
     // Declared last so teardown requests stop before any callback target is destroyed.

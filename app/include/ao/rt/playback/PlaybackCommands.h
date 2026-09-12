@@ -47,6 +47,7 @@ namespace ao::rt
     virtual void next() = 0;
     virtual void previous() = 0;
     virtual void clearSequence() = 0;
+    virtual void setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat) = 0;
     virtual void setShuffleMode(ShuffleMode mode) = 0;
     virtual void setRepeatMode(RepeatMode mode) = 0;
 

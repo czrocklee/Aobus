@@ -26,6 +26,8 @@ root:table {
     tui_workspace_history_unavailable { "No view in that direction." }
     tui_settings_keyboard_scope { "Workspace shortcuts. Editors and pickers keep their own keys." }
     tui_playback_modes { "Shuffle: {shuffle, select, on {on} other {off}} · Repeat: {repeat, select, one {one} all {all} other {off}}" }
+    tui_playback_mode { "{mode, select, order {In order} all {Repeat all} shuffle {Shuffle} shuffle_all {Shuffle and repeat} one {Repeat one} shuffle_one {Shuffle and repeat one} other {In order}}" }
+    tui_playback_mode_hint { "{current} · Click for {next}" }
 
     tui_settings_save_failed { "Could not save settings. {detail}" }
     tui_settings_load_failed { "Could not load saved preferences; using defaults. {detail}" }
@@ -1051,7 +1053,8 @@ root:table {
     tui_detail_keys { "Shift+←/→ resize · j/k sections · Enter toggle · ←/→ collapse/expand · PgUp/PgDn scroll · Esc tracks" }
     tui_detail_keys_compact { "Shift+←/→ resize · Enter toggle · Esc tracks" }
     tui_shell_tags { "Tags" }
-    tui_tag_popover_cancel { "Cancel" }
+    tui_tag_popover_cancel { "Discard changes" }
+    tui_tag_popover_close { "Close" }
     tui_tag_popover_title { "Tags · {count, plural, one {# track} other {# tracks}}" }
     tui_tag_popover_apply { "Apply" }
     tui_tag_popover_add_apply { "Add & apply" }

@@ -266,8 +266,7 @@ namespace ao::rt
       // The candidate was built at admission time. Mode commands remain live
       // while preparation runs, so settle it against the latest preferences
       // before the candidate becomes the authoritative cursor.
-      std::ignore = pending.sessionPtr->setRepeatMode(repeatMode);
-      std::ignore = pending.sessionPtr->setShuffleMode(shuffleMode);
+      std::ignore = pending.sessionPtr->setPlaybackMode(shuffleMode, repeatMode);
       sessionPtr = std::move(pending.sessionPtr);
       startObservingCurrentSession();
       // An explicit user start begins a fresh failure streak once per action.
@@ -1206,52 +1205,50 @@ namespace ao::rt
     impl->deactivateSession();
   }
 
-  void PlaybackSuccession::setShuffleMode(ShuffleMode const mode)
+  void PlaybackSuccession::setPlaybackMode(ShuffleMode const shuffle, RepeatMode const repeat)
   {
     auto* const impl = checkedImpl();
+    auto const shuffleChanged = impl->shuffleMode != shuffle;
+    auto const repeatChanged = impl->repeatMode != repeat;
 
-    if (impl->shuffleMode == mode)
+    if (!shuffleChanged && !repeatChanged)
     {
       return;
     }
 
-    impl->shuffleMode = mode;
+    impl->shuffleMode = shuffle;
+    impl->repeatMode = repeat;
 
     if (impl->sessionPtr)
     {
-      std::ignore = impl->sessionPtr->setShuffleMode(mode);
+      std::ignore = impl->sessionPtr->setPlaybackMode(shuffle, repeat);
       impl->tryReprepareNext(true);
     }
 
     impl->synchronizeState();
 
-    impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
+    // Observers see the final pair and must defer emitting-owner teardown.
+    if (shuffleChanged)
+    {
+      impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = shuffle});
+    }
+
+    if (!impl->isClosing() && repeatChanged)
+    {
+      impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = repeat});
+    }
 
     impl->notifyRestorableStateChanged();
   }
 
+  void PlaybackSuccession::setShuffleMode(ShuffleMode const mode)
+  {
+    setPlaybackMode(mode, checkedImpl()->repeatMode);
+  }
+
   void PlaybackSuccession::setRepeatMode(RepeatMode const mode)
   {
-    auto* const impl = checkedImpl();
-
-    if (impl->repeatMode == mode)
-    {
-      return;
-    }
-
-    impl->repeatMode = mode;
-
-    if (impl->sessionPtr)
-    {
-      std::ignore = impl->sessionPtr->setRepeatMode(mode);
-      impl->tryReprepareNext(true);
-    }
-
-    impl->synchronizeState();
-
-    impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
-
-    impl->notifyRestorableStateChanged();
+    setPlaybackMode(checkedImpl()->shuffleMode, mode);
   }
 
   PlaybackSuccessionState const& PlaybackSuccession::state() const
@@ -1360,8 +1357,8 @@ namespace ao::rt
     impl->tryReprepareNext(false);
     impl->synchronizeState();
 
-    // Restore enters while the service is active, but signal delivery is
-    // synchronous: a shuffle observer may close it before the second emission.
+    // Restored preferences are published synchronously; observers must defer
+    // emitting-owner teardown to a later executor turn.
     impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode});
 
     if (!impl->isClosing())

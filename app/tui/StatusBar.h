@@ -21,6 +21,11 @@
 #include <string>
 #include <string_view>
 
+namespace ao::rt
+{
+  struct PlaybackSuccessionSnapshot;
+}
+
 namespace ao::tui
 {
   inline constexpr std::int32_t kDefaultStatusBarColumns = 140;
@@ -53,6 +58,7 @@ namespace ao::tui
     bool activityStatusHovered = false;
     ftxui::Box* settingsButtonBox = nullptr;
     bool settingsHovered = false;
+    rt::PlaybackSuccessionSnapshot const* hoveredPlaybackMode = nullptr;
     std::list<StatusActionHitRegion>* actionHitRegions = nullptr;
     CompletionHitRegions* inputHitRegions = nullptr;
     GoToMenuState goToState{};

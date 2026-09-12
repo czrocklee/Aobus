@@ -87,31 +87,17 @@ namespace ao::rt
     return changes(false, policy);
   }
 
-  PlaybackCursor::Changes PlaybackCursor::setRepeatMode(RepeatMode const mode, PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::setPlaybackMode(ShuffleMode const shuffle,
+                                                          RepeatMode const repeat,
+                                                          PlaybackCursorPolicy& policy)
   {
-    if (_repeatMode == mode)
+    if (_shuffleMode == shuffle && _repeatMode == repeat)
     {
       return {};
     }
 
-    _repeatMode = mode;
-
-    if (_sourceState == SourceState::Live)
-    {
-      policy.invalidateShuffleForwardCandidate();
-    }
-
-    return changes(true, policy);
-  }
-
-  PlaybackCursor::Changes PlaybackCursor::setShuffleMode(ShuffleMode const mode, PlaybackCursorPolicy& policy)
-  {
-    if (_shuffleMode == mode)
-    {
-      return {};
-    }
-
-    _shuffleMode = mode;
+    _shuffleMode = shuffle;
+    _repeatMode = repeat;
 
     if (_sourceState == SourceState::Live)
     {

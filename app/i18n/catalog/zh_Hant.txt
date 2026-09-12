@@ -26,6 +26,8 @@ zh_Hant:table {
     tui_workspace_history_unavailable { "沒有可切換的歷史檢視。" }
     tui_settings_keyboard_scope { "工作區快捷鍵。編輯器和選擇面板使用各自的按鍵。" }
     tui_playback_modes { "隨機播放：{shuffle, select, on {開} other {關}} · 循環：{repeat, select, one {單曲} all {全部} other {關}}" }
+    tui_playback_mode { "{mode, select, order {依序播放} all {列表循環} shuffle {隨機播放} shuffle_all {隨機循環} one {單曲循環} shuffle_one {隨機播放與單曲循環} other {依序播放}}" }
+    tui_playback_mode_hint { "{current} · 點擊切換為「{next}」" }
 
     tui_settings_save_failed { "無法儲存設定。{detail}" }
     tui_settings_load_failed { "無法讀取已儲存的偏好設定，已使用預設值。{detail}" }
@@ -1049,7 +1051,8 @@ zh_Hant:table {
     tui_detail_keys { "Shift+←/→ 調整寬度 · j/k 分組 · Enter 展開/收合 · ←/→ 收合/展開 · PgUp/PgDn 捲動 · Esc 曲目" }
     tui_detail_keys_compact { "Shift+←/→ 調整寬度 · Enter 展開/收合 · Esc 曲目" }
     tui_shell_tags { "標籤" }
-    tui_tag_popover_cancel { "取消" }
+    tui_tag_popover_cancel { "捨棄變更" }
+    tui_tag_popover_close { "關閉" }
     tui_tag_popover_title { "標籤 · {count, plural, other {# 首曲目}}" }
     tui_tag_popover_apply { "套用" }
     tui_tag_popover_add_apply { "新增並套用" }

@@ -205,7 +205,7 @@ Its title shows the captured target count.
 | Tab / Shift+Tab | switch between query and results |
 | Enter | apply pending changes and close; while querying, add the offered new name first, even alongside partial matches; with results focused, create only when the new-tag row is selected |
 | Ctrl+G | restore the focused tag's original state |
-| Esc, Cancel footer, outside click | cancel the draft and close |
+| Esc, Close / Discard changes footer, outside click | close the popover, discarding any pending changes |
 | Ctrl+R | in failed or stale state, reload captured targets and discard the draft; ignored while ready |
 
 Only tag changes are submitted.
@@ -265,6 +265,23 @@ Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked,
 | Notifications | effective toggle (default `n`), `x` hide compact/local entry when eligible, `Esc` close |
 | Help | effective toggle (defaults `?` and F1), `Esc` close; navigation keys scroll the body within its fixed frame |
 
+### Playback mode codes
+
+The playback bar uses four ASCII characters in every locale.
+The prefix identifies sequential (`SEQ`) or shuffled (`SHF`) order; the suffix identifies no repeat (`-`), repeat all (`*`), or repeat one (`1`).
+Hover uses localized names instead of these codes.
+
+| Code | Ordering | Repeat |
+| --- | --- | --- |
+| `SEQ-` | Sequential | Off |
+| `SEQ*` | Sequential | All |
+| `SHF-` | Shuffle | Off |
+| `SHF*` | Shuffle | All |
+| `SEQ1` | Sequential | One track |
+| `SHF1` | Shuffle | One track |
+
+The [playback-mode interaction specification](../../spec/tui/interaction.md#playback-modes) owns the mouse cycle and how independent shuffle/repeat commands interact with it.
+
 ### Mouse targets
 
 All track-table gestures below remain available while the detail inspector is open and are blocked by modal overlays. A left press outside a rendered floating menu dismisses it and consumes the click; a different trigger therefore needs a subsequent click. Command Palette and Quick Filter outside presses follow their respective Escape semantics, with the Quick Filter status-row field counted as inside. Centered Help follows the same outside-click dismissal rule. The Detail sidebar uses its divider arrow or `d`; editor dialogs use their close controls.
@@ -276,8 +293,8 @@ All track-table gestures below remain available while the detail inspector is op
 | header column edge drag/release | preview a terminal-cell width, then persist the current list's canonical layout on release; interruption rolls back |
 | group header click | select first track in section |
 | seek rail press/drag/release | preview/final seek |
-| shuffle indicator click | toggle shuffle off/on |
-| repeat indicator click | cycle repeat off → all → one → off |
+| playback mode button hover | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode |
+| playback mode button click | advance to the next preset in the [playback-mode cycle](../../spec/tui/interaction.md#playback-modes) |
 | Soul button click | toggle playback |
 | Soul button hover | show quality hover panel |
 | playback title click | reveal the current track |

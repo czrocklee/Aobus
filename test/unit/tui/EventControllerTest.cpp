@@ -40,6 +40,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationService.h>
@@ -71,6 +72,7 @@
 #include <ftxui/screen/screen.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -79,6 +81,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ao::tui::test
@@ -2720,45 +2723,72 @@ namespace ao::tui::test
     CHECK(fixture.shell.inputDraft() == "oldx");
   }
 
-  TEST_CASE("EventController - painted mode controls toggle shuffle and cycle every repeat mode",
-            "[tui][unit][mouse][event]")
+  TEST_CASE("EventController - one stable mode button cycles every playback preset", "[tui][unit][mouse][playback]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto controller = fixture.makeEvents(library);
-    auto const rendered = renderElement(playbackBar(library.textCatalog(),
-                                                    {.shuffleBox = &fixture.hitRegions.shuffleBox,
-                                                     .repeatBox = &fixture.hitRegions.repeatBox,
-                                                     .terminalColumns = 80}),
-                                        80,
-                                        1);
-    REQUIRE(findTextCells(rendered.screen, "⇄"));
-    REQUIRE(findTextCells(rendered.screen, "↻"));
-    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left,
-                              .motion = ftxui::Mouse::Pressed,
-                              .x = fixture.hitRegions.shuffleBox.x_min,
-                              .y = fixture.hitRegions.shuffleBox.y_min};
+    auto mouse = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed};
+    auto const expected = std::array{
+      PlaybackModeChoice{.repeat = rt::RepeatMode::All},
+      PlaybackModeChoice{.shuffle = rt::ShuffleMode::On},
+      PlaybackModeChoice{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::All},
+      PlaybackModeChoice{.repeat = rt::RepeatMode::One},
+      PlaybackModeChoice{},
+    };
+    bool first = true;
 
-    for (auto const shuffle : {rt::ShuffleMode::On, rt::ShuffleMode::Off, rt::ShuffleMode::On})
+    for (auto const choice : expected)
     {
+      auto const state = currentPlayback(fixture).succession;
+      auto const rendered = renderElement(
+        playbackBar(
+          library.textCatalog(),
+          {.succession = &state, .playbackModeBox = &fixture.hitRegions.playbackModeBox, .terminalColumns = 80}),
+        80,
+        1);
+      REQUIRE_FALSE(rendered.text.empty());
+      auto const& box = fixture.hitRegions.playbackModeBox;
+      REQUIRE(box.x_max - box.x_min + 1 == 6);
+
+      if (first)
+      {
+        mouse.x = box.x_max;
+        mouse.y = box.y_min;
+        first = false;
+      }
+
+      CHECK(box.Contain(mouse.x, mouse.y));
+      mouse.motion = ftxui::Mouse::Moved;
+      controller.tryHandleEvent(ftxui::Event::Mouse("", mouse));
+      CHECK(controller.hoveredButton() == HoveredButton::PlaybackMode);
+      mouse.motion = ftxui::Mouse::Pressed;
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
       fixture.executor->drain();
-      CHECK(currentPlayback(fixture).succession.shuffle == shuffle);
-      CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
-    }
-
-    mouse.x = fixture.hitRegions.repeatBox.x_min;
-    mouse.y = fixture.hitRegions.repeatBox.y_min;
-
-    for (auto const repeat : {rt::RepeatMode::All, rt::RepeatMode::One, rt::RepeatMode::Off})
-    {
-      REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
-      fixture.executor->drain();
-      CHECK(currentPlayback(fixture).succession.repeat == repeat);
-      CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::On);
+      CHECK(currentPlayback(fixture).succession.shuffle == choice.shuffle);
+      CHECK(currentPlayback(fixture).succession.repeat == choice.repeat);
       CHECK(library.selectedTrack() == 0);
     }
+
+    fixture.runtimePtr->playback().commands().setShuffleMode(rt::ShuffleMode::On);
+    fixture.runtimePtr->playback().commands().setRepeatMode(rt::RepeatMode::One);
+    fixture.executor->drain();
+    auto const state = currentPlayback(fixture).succession;
+    auto const rendered = renderElement(
+      playbackBar(
+        library.textCatalog(),
+        {.succession = &state, .playbackModeBox = &fixture.hitRegions.playbackModeBox, .terminalColumns = 80}),
+      80,
+      1);
+    REQUIRE(rendered.text.contains("SHF1"));
+    auto const& box = fixture.hitRegions.playbackModeBox;
+    REQUIRE(box.x_max - box.x_min + 1 == 6);
+    REQUIRE(box.Contain(mouse.x, mouse.y));
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
+    fixture.executor->drain();
+    CHECK(currentPlayback(fixture).succession.shuffle == rt::ShuffleMode::Off);
+    CHECK(currentPlayback(fixture).succession.repeat == rt::RepeatMode::Off);
   }
 
   TEST_CASE("EventController - mode clicks respect mouse preferences and foreground ownership",
@@ -2768,8 +2798,7 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto controller = fixture.makeEvents(library);
-    fixture.hitRegions.shuffleBox = {.x_min = 40, .x_max = 40, .y_min = 0, .y_max = 0};
-    fixture.hitRegions.repeatBox = {.x_min = 42, .x_max = 43, .y_min = 0, .y_max = 0};
+    fixture.hitRegions.playbackModeBox = {.x_min = 40, .x_max = 43, .y_min = 0, .y_max = 0};
 
     auto const checkModesUnchanged = [&fixture]
     {
@@ -2812,6 +2841,58 @@ namespace ao::tui::test
       REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("", mouse)));
       CHECK_FALSE(fixture.shell.isInputActive());
       checkModesUnchanged();
+    }
+  }
+
+  TEST_CASE("EventController - unavailable mode click preserves modes and reports the playback warning",
+            "[tui][regression][mouse][playback]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.playbackModeBox = {.x_min = 40, .x_max = 44, .y_min = 0, .y_max = 0};
+    auto const beforeNotifications = fixture.runtimePtr->notifications().feed().entries.size();
+
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 42, .y = 0})));
+    fixture.executor->drain();
+
+    auto const& playback = fixture.runtimePtr->playback().snapshot();
+    CHECK(playback.succession.shuffle == rt::ShuffleMode::Off);
+    CHECK(playback.succession.repeat == rt::RepeatMode::Off);
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE(feed.entries.size() == beforeNotifications + 1);
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
+    auto const* message = std::get_if<std::string>(&feed.entries.back().message);
+    REQUIRE(message != nullptr);
+    CHECK(*message == i18n::requiredText(library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable));
+  }
+
+  TEST_CASE("EventController - stale mode targets do not normalize an unrecognized mode",
+            "[tui][regression][mouse][playback]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    fixture.addReadyAudioProvider();
+    fixture.executor->drain();
+    auto controller = fixture.makeEvents(library);
+    fixture.hitRegions.playbackModeBox = {.x_min = 40, .x_max = 44, .y_min = 0, .y_max = 0};
+    auto& playback = fixture.runtimePtr->playback();
+    REQUIRE(playback.snapshot().transport.ready);
+
+    for (auto const choice : {PlaybackModeChoice{.shuffle = static_cast<rt::ShuffleMode>(2)},
+                              PlaybackModeChoice{.repeat = static_cast<rt::RepeatMode>(3)}})
+    {
+      playback.commands().setPlaybackMode(choice.shuffle, choice.repeat);
+      auto const before = playback.snapshot();
+      REQUIRE(before.succession.shuffle == choice.shuffle);
+      REQUIRE(before.succession.repeat == choice.repeat);
+
+      REQUIRE(controller.tryHandleEvent(
+        ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 42, .y = 0})));
+      fixture.executor->drain();
+
+      CHECK(playback.snapshot() == before);
     }
   }
 

@@ -32,6 +32,7 @@ The following text is not catalog copy:
 - persisted stable ids and query-language tokens;
 - user-authored list, preset, tag, and metadata text;
 - filesystem paths and operating-system device names or descriptions;
+- the TUI's fixed [playback-mode codes](../tui/command.md#playback-mode-codes), whose ordering/repeat notation is locale-neutral (mode names and hover instructions remain catalog copy);
 - diagnostic error text and command-scoped CLI output; and
 - explicitly resolved frontend-local notification or completion text.
 

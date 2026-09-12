@@ -26,6 +26,8 @@ ja:table {
     tui_workspace_history_unavailable { "この方向に移動できるビューはありません。" }
     tui_settings_keyboard_scope { "ワークスペースのショートカットです。エディターや選択画面のキー操作は別です。" }
     tui_playback_modes { "シャッフル：{shuffle, select, on {オン} other {オフ}} · リピート：{repeat, select, one {1曲} all {すべて} other {オフ}}" }
+    tui_playback_mode { "{mode, select, order {順番に再生} all {全曲リピート} shuffle {シャッフル} shuffle_all {シャッフルリピート} one {1曲リピート} shuffle_one {シャッフル・1曲リピート} other {順番に再生}}" }
+    tui_playback_mode_hint { "{current} · クリックで「{next}」に切り替え" }
 
     tui_settings_save_failed { "設定を保存できませんでした。{detail}" }
     tui_settings_load_failed { "保存済みの設定を読み込めないため、既定値を使用します。{detail}" }
@@ -1049,7 +1051,8 @@ ja:table {
     tui_detail_keys { "Shift+←/→ 幅を調整 · j/k セクション · Enter 開閉 · ←/→ 閉じる/開く · PgUp/PgDn スクロール · Esc 曲一覧" }
     tui_detail_keys_compact { "Shift+←/→ 幅を調整 · Enter 開閉 · Esc 曲一覧" }
     tui_shell_tags { "タグ" }
-    tui_tag_popover_cancel { "キャンセル" }
+    tui_tag_popover_cancel { "変更を破棄" }
+    tui_tag_popover_close { "閉じる" }
     tui_tag_popover_title { "タグ · {count, plural, other {# 曲}}" }
     tui_tag_popover_apply { "適用" }
     tui_tag_popover_add_apply { "追加して適用" }

@@ -237,7 +237,7 @@ namespace ao::tui
 
     // Waiting for a submitted write swallows ordinary input; only the Ctrl-C
     // above can stop the wait.
-    if (_isExitWaiting && _isExitWaiting())
+    if (isExitWaiting())
     {
       return true;
     }
@@ -245,6 +245,12 @@ namespace ao::tui
     if (event.is_mouse() && !_preferences.mouseEnabled)
     {
       return true;
+    }
+
+    if (event.is_mouse())
+    {
+      auto mouseEvent = event;
+      _optLastMouse = mouseEvent.mouse();
     }
 
     // An open editor owns the whole surface, including keys and mouse events
@@ -328,6 +334,32 @@ namespace ao::tui
     }
 
     return tryHandleRootEvent(event);
+  }
+
+  bool EventController::tryRetireHover()
+  {
+    // Layout changes may retire hover, but must not resurrect a keyboard-cancelled
+    // interaction or take pointer ownership from an active drag.
+    if (!_optLastMouse || hasWorkspaceGesture() || (_hoveredButton == HoveredButton::None && !_qualityHoverVisible))
+    {
+      return false;
+    }
+
+    auto const hit = _hitRegions.hitTestButton(
+      _optLastMouse->x,
+      _optLastMouse->y,
+      {.isTextInputActive = _shell.isInputActive() || _settings.isActive() || _trackEdit.isActive() ||
+                            !_preferences.mouseEnabled || isExitWaiting(),
+       .isOverlayActive = isOverlayActive(_shell.overlay())});
+
+    if (hit.hoveredButton != _hoveredButton || hit.isQualityHoverVisible != _qualityHoverVisible)
+    {
+      _hoveredButton = HoveredButton::None;
+      _qualityHoverVisible = false;
+      return true;
+    }
+
+    return false;
   }
 
   void EventController::cancelTransientInteractions()
@@ -567,15 +599,20 @@ namespace ao::tui
     }
   }
 
+  void EventController::reportPlaybackControlUnavailable()
+  {
+    postActivityNotification(
+      rt::NotificationSeverity::Warning,
+      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable)});
+  }
+
   void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
   {
     if (!_playbackActions.tryExecute(command))
     {
       if (command != uimodel::PlaybackCommand::Stop)
       {
-        postActivityNotification(
-          rt::NotificationSeverity::Warning,
-          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPlaybackControlUnavailable)});
+        reportPlaybackControlUnavailable();
       }
 
       return;
@@ -1384,6 +1421,30 @@ namespace ao::tui
     return false;
   }
 
+  bool EventController::tryHandlePlaybackModePress(ftxui::Mouse const& mouse)
+  {
+    if (!containsMouse(_hitRegions.playbackModeBox, mouse))
+    {
+      return false;
+    }
+
+    if (!_playbackActions.isEnabled(uimodel::PlaybackCommand::ToggleShuffle) ||
+        !_playbackActions.isEnabled(uimodel::PlaybackCommand::CycleRepeat))
+    {
+      reportPlaybackControlUnavailable();
+      return true;
+    }
+
+    auto const& current = _playback.snapshot().succession;
+
+    if (auto const optPreset = playbackModePreset(current.shuffle, current.repeat); optPreset)
+    {
+      _playback.commands().setPlaybackMode(optPreset->next.shuffle, optPreset->next.repeat);
+    }
+
+    return true;
+  }
+
   std::optional<bool> EventController::handleButtonPress(ftxui::Mouse const& mouse)
   {
     if (!isModalOverlay(_shell.overlay()))
@@ -1399,15 +1460,8 @@ namespace ao::tui
         return true;
       }
 
-      if (containsMouse(_hitRegions.shuffleBox, mouse))
+      if (tryHandlePlaybackModePress(mouse))
       {
-        executeKeyAction(KeyAction::PlaybackShuffle);
-        return true;
-      }
-
-      if (containsMouse(_hitRegions.repeatBox, mouse))
-      {
-        executeKeyAction(KeyAction::PlaybackRepeat);
         return true;
       }
 
@@ -2093,11 +2147,13 @@ namespace ao::tui
 
   bool EventController::hasWorkspaceGesture() const noexcept
   {
-    return !std::holds_alternative<std::monostate>(_workspaceGesture);
+    return _navigationScrollbarDrag || !std::holds_alternative<std::monostate>(_workspaceGesture);
   }
 
   void EventController::cancelWorkspaceGestures()
   {
+    _navigationScrollbarDrag = false;
+
     if (std::holds_alternative<SeekRailDrag>(_workspaceGesture) && _seekSlider.hasPendingFinalSeek())
     {
       _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
@@ -2117,6 +2173,7 @@ namespace ao::tui
   {
     cancelWorkspaceGestures();
     _lastClickedTrack = kInvalidTrackId;
+    _qualityHoverVisible = false;
     _hoveredButton = HoveredButton::None;
     _shell.openOverlay(overlay);
   }

@@ -134,7 +134,13 @@ Up/Down or j/k moves the List cursor. In the pinned pane, Left/Right expands or 
 
 Use `c` to return to the currently playing track, even after filtering it out or browsing another List. The previous view remains available through `:back`; `:forward` returns to the reveal destination. Use uppercase `C` to clear the current filter.
 
-`<` and `>` change the playing track; Up/Down and `j/k` move the table focus. Left/Right seek, Space pauses/resumes, `S` toggles shuffle, `r` cycles repeat, and `R` reloads the List. The playback bar shows `⇄` for shuffle and `↻` / `↻1` for repeat-all / repeat-one; dim indicators mean off. Playback controls remain available while browsing panels, except while typing or editing.
+`<` and `>` change the playing track; Up/Down and `j/k` move the table focus.
+Left/Right seek, Space pauses/resumes, `S` toggles shuffle, `r` cycles repeat, and `R` reloads the List.
+The playback bar’s mode button combines ordering and repeat in a compact [four-character code](../reference/tui/command.md#playback-mode-codes).
+Click to advance through the [playback-mode presets](../spec/tui/interaction.md#playback-modes); the padded button stays the same size across modes and languages.
+The keyboard controls let you change shuffle and repeat independently.
+Hover shows the current mode and the next click’s destination in the status bar; narrow windows prioritize the current mode name.
+Playback controls remain available while browsing panels, except while typing or editing.
 
 ### Operate detail sections
 
@@ -157,7 +163,7 @@ Enable Mouse control under Settings → Interaction. With it enabled:
 | Status bar | Click a visible shortcut chip to open or run its action. |
 | Tracks | Click to focus and clear marks; double-click to play. Ctrl+click toggles a mark. Shift+click starts or extends a visual range; Escape cancels it and `v` confirms it. |
 | Track table | Wheel moves focus; drag the scrollbar to jump. Click a section heading to focus its first track; drag a column edge to resize. |
-| Shuffle / Repeat | Click `⇄` to toggle shuffle. Click `↻` to cycle repeat: off → all → one → off. Active modes are highlighted; `↻1` means repeat one. |
+| Playback mode | Click to advance through the [mode presets](../spec/tui/interaction.md#playback-modes); hover shows the current mode and next click’s destination. |
 | Volume | Wheel changes the level using the configured volume step. Click to mute or restore sound; muted output displays a localized mute label. |
 | Lists, Presentation, Output | Click a row to activate it; wheel moves the highlighted row. |
 | Command and filter suggestions | Click a candidate to accept it. A complete command runs immediately; a command prefix or Quick Filter stays open for more input. Wheel moves the highlight. |
