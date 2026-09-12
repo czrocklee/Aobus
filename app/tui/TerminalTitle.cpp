@@ -13,6 +13,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/UnicodeText.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -28,6 +29,7 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kMaximumTitleColumns = 512;
+    constexpr auto kTitleAnimationInterval = std::chrono::milliseconds{200};
 
     std::optional<std::string> safeTitle(std::string_view value)
     {
@@ -75,7 +77,7 @@ namespace ao::tui
 
       if (optTrackTitle)
       {
-        title.append(" · ").append(*optTrackTitle);
+        title.append(" ").append(*optTrackTitle);
       }
 
       return ellipsizeToCellWidth(title, kMaximumTitleColumns);
@@ -105,6 +107,7 @@ namespace ao::tui
     _expression = expression;
     _optPlan = std::move(*planRes);
     _dirty = true;
+    ++_contentRevision;
     return {};
   }
 
@@ -120,9 +123,16 @@ namespace ao::tui
 
     if (refreshTrack)
     {
-      _optTrackTitle = playingTrack == kInvalidTrackId
-                         ? std::nullopt
-                         : formattedTrackTitle(_library.snapshot(), playingTrack, *_optPlan);
+      auto optTrackTitle = playingTrack == kInvalidTrackId
+                             ? std::nullopt
+                             : formattedTrackTitle(_library.snapshot(), playingTrack, *_optPlan);
+
+      if (playingTrack != _lastTrack || optTrackTitle != _optTrackTitle)
+      {
+        ++_contentRevision;
+      }
+
+      _optTrackTitle = std::move(optTrackTitle);
       _lastTrack = playingTrack;
       _dirty = false;
     }
@@ -163,7 +173,10 @@ namespace ao::tui
     }
   }
 
-  void TerminalTitle::update(TrackId const playingTrack, std::string_view const soulFrame)
+  void TerminalTitle::update(TrackId const playingTrack,
+                             std::string_view const soulFrame,
+                             std::chrono::steady_clock::time_point const now,
+                             TerminalTitleContext const& context)
   {
     if (_outputFailed)
     {
@@ -178,13 +191,29 @@ namespace ao::tui
       return;
     }
 
+    auto const soulEnabled = !soulFrame.empty();
+    auto const animationOnly = _lastContentRevision == _formatter.contentRevision() && _lastContext == context &&
+                               _lastSoulEnabled == soulEnabled;
+    // Semantic changes may stop future animation ticks, so they must be immediate.
+    // Observe semantic transitions even when they produce identical text. They
+    // must not exempt a later animation frame or postpone the last-write deadline.
+    _lastContext = context;
+    _lastContentRevision = _formatter.contentRevision();
+    _lastSoulEnabled = soulEnabled;
+
     if (!_ownsTitle || *optTitle != _lastTitle)
     {
+      if (_ownsTitle && animationOnly && now - _lastWriteTime < kTitleAnimationInterval)
+      {
+        return;
+      }
+
       auto escape = std::string{_ownsTitle ? "" : "\033[22;2t"};
       escape.append("\033]2;").append(*optTitle).append("\033\\");
       // A throwing sink may have delivered the push before reporting failure.
       _ownsTitle = true;
       _lastTitle = std::move(*optTitle);
+      _lastWriteTime = now;
 
       if (!tryWrite(escape))
       {

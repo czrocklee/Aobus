@@ -41,6 +41,8 @@ Unchanged playback ticks do not open database snapshots, reload track data, or e
 Idle formatting does not open a snapshot, including after a library publication.
 The runtime snapshot reads a single track, including dictionary-backed and custom fields, independent of list selection and size.
 Only changed output produces OSC 2.
+Updates caused only by Soul animation are coalesced to the latest sampled frame with at least 200 milliseconds between writes.
+Playing-track, formatted metadata, format preference, transport, Soul visibility, and reduced-motion changes bypass that animation interval; title disablement and restoration are immediate.
 The title payload replaces terminal control characters and line breaks with spaces and limits output to 512 terminal cells without splitting Unicode text.
 The first update pushes the window title using the xterm title stack; disabling and normal or handled-signal exit pop it exactly once.
 Restoration is best effort when the output sink fails; teardown retires ownership without retrying a potentially delivered pop.

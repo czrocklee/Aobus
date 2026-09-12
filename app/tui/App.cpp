@@ -1659,7 +1659,10 @@ namespace ao::tui
                                                titleTransport.transport,
                                                frameRenderer.soulAnimation.motionFrame(),
                                                frameRenderer.soulTransientElapsed);
-      terminalTitle.update(titleTransport.nowPlaying.trackId, titleSoul);
+      terminalTitle.update(titleTransport.nowPlaying.trackId,
+                           titleSoul,
+                           std::chrono::steady_clock::now(),
+                           {.transport = titleTransport.transport, .reducedMotion = preferences.reducedMotion});
       events.syncWorkspaceGeometry();
       frameTimer.recordPresentIfDrawn();
 
