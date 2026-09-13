@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -16,10 +17,72 @@ from unittest import mock
 
 from ao.__main__ import main as portal_main
 from ao.command import test as test_command
-from ao.core import compiler_cache
+from ao.core import compiler_cache, msbuild_cache
 
 
 class CompilerCacheContractTest(unittest.TestCase):
+    def test_standalone_contract_entry_point_matches_ci_output(self):
+        environment = dict(os.environ)
+        environment.pop("PYTHONPATH", None)
+        process = subprocess.run(
+            [sys.executable, "script/ao/core/compiler_cache.py", "ci-contract"],
+            cwd=compiler_cache.PROJECT_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(process.stdout, f"version={compiler_cache.load_policy().ci_version}\n")
+
+    def test_standalone_ci_activation_writes_launchers_and_windows_wrapper(self):
+        for system in ("Linux", "Darwin", "Windows"):
+            with self.subTest(system=system), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                executable = root / "sccache.exe"
+                executable.write_bytes(b"activation copies the provider without executing it")
+                output = root / "github.env"
+                environment = {
+                    key: value
+                    for key, value in os.environ.items()
+                    if not key.startswith(("AOBUS_", "CMAKE_", "SCCACHE_")) and key != "PYTHONPATH"
+                }
+                environment["SCCACHE_PATH"] = str(executable)
+                process = subprocess.run(
+                    [
+                        sys.executable,
+                        "script/ao/core/compiler_cache.py",
+                        "activate-ci",
+                        "--platform",
+                        system,
+                        "--github-env",
+                        str(output),
+                        "--state-root",
+                        str(root / "state"),
+                    ],
+                    cwd=compiler_cache.PROJECT_ROOT,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(process.returncode, 0, process.stderr)
+                updates = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+                self.assertEqual(updates["SCCACHE_PATH"], str(executable.resolve()))
+                self.assertEqual(updates["SCCACHE_CACHE_SIZE"], compiler_cache.load_policy().default_size)
+                for language in ("C", "CXX"):
+                    self.assertEqual(updates[f"CMAKE_{language}_COMPILER_LAUNCHER"], str(executable.resolve()))
+                    self.assertEqual(updates[f"AOBUS_MANAGED_{language}_COMPILER_LAUNCHER"], "1")
+                if system == "Windows":
+                    wrapper = Path(updates["AOBUS_MSBUILD_CL_TOOL_EXE"])
+                    self.assertTrue(wrapper.is_relative_to(root.resolve() / "state"))
+                    self.assertEqual(wrapper.name, "cl.exe")
+                    self.assertEqual(wrapper.read_bytes(), executable.read_bytes())
+                    self.assertEqual(updates[msbuild_cache.TRACKING_ENV], "0")
+                else:
+                    self.assertNotIn("AOBUS_MSBUILD_CL_TOOL_EXE", updates)
+                    self.assertNotIn(msbuild_cache.TRACKING_ENV, updates)
+
     def test_repository_contract_governs_local_and_ci_versions(self):
         policy = compiler_cache.load_policy()
 
@@ -326,6 +389,61 @@ class CompilerCacheInstallTest(unittest.TestCase):
             self.assertEqual(updates["CCACHE_MAXSIZE"], "48 GiB")
             self.assertEqual(config.stat().st_mtime_ns, first_mtime)
 
+    def test_setup_persists_or_preserves_shared_workspace_preference(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache"
+            executable.write_bytes(b"known executable")
+            environment = {"AOBUS_STATE_ROOT": str(root), "HOME": str(root)}
+            with (
+                mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
+                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
+                mock.patch.object(compiler_cache, "_configured_namespace", return_value="personal"),
+            ):
+                enabled = compiler_cache.setup_local(environ=environment, system="Linux", shared_workspaces=True)
+                preserved = compiler_cache.setup_local(environ=environment, system="Linux")
+                disabled = compiler_cache.setup_local(environ=environment, system="Linux", shared_workspaces=False)
+
+            self.assertEqual(enabled[compiler_cache.SHARED_WORKSPACES_EFFECTIVE], "1")
+            self.assertEqual(preserved[compiler_cache.SHARED_WORKSPACES_EFFECTIVE], "1")
+            self.assertEqual(disabled[compiler_cache.SHARED_WORKSPACES_EFFECTIVE], "0")
+            record = json.loads(compiler_cache.config_path(root).read_text(encoding="utf-8"))
+            self.assertIs(record["sharedWorkspaces"], False)
+
+    def test_setup_does_not_probe_namespace_when_shared_workspaces_are_disabled(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache"
+            executable.write_bytes(b"known executable")
+            with (
+                mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
+                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
+                mock.patch.object(
+                    compiler_cache,
+                    "_configured_namespace",
+                    side_effect=AssertionError("unexpected namespace probe"),
+                ),
+            ):
+                compiler_cache.setup_local(
+                    environ={"AOBUS_STATE_ROOT": str(root)},
+                    system="Linux",
+                    shared_workspaces=False,
+                )
+
+    def test_windows_sharing_requires_ssh_and_respects_explicit_off(self):
+        record = {"sharedWorkspaces": True}
+        for environment, expected in (
+            ({}, False),
+            ({"SSH_CONNECTION": "native session"}, True),
+            ({"SSH_CONNECTION": "native session", "AOBUS_SHARED_WORKSPACES": "0"}, False),
+        ):
+            with self.subTest(environment=environment):
+                self.assertEqual(
+                    compiler_cache._shared_workspaces_effective(record, system="Windows", environ=environment), expected
+                )
+
     def test_windows_setup_remains_usable_after_removing_wrapper_override(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -454,6 +572,89 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 # A shell can retain ownership markers after clearing a launcher.
                 environment.update(AOBUS_MANAGED_C_COMPILER_LAUNCHER="1", AOBUS_MANAGED_CXX_COMPILER_LAUNCHER="1")
                 self.assertEqual(compiler_cache.cmake_launcher_arguments(environment, build_dir=root), expected)
+
+    def test_activation_exposes_shared_workspace_state_and_off_override(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache"
+            executable.write_bytes(b"cache")
+            record = {**self.record(executable), "sharedWorkspaces": True}
+            config = compiler_cache.config_path(root)
+            config.parent.mkdir(parents=True)
+            config.write_text(json.dumps(record), encoding="utf-8")
+            environment = {"AOBUS_STATE_ROOT": str(root)}
+            with mock.patch.object(compiler_cache, "_configured_namespace", return_value="personal"):
+                self.assertTrue(compiler_cache.activate_local(environ=environment, system="Linux"))
+            self.assertEqual(environment[compiler_cache.SHARED_WORKSPACES_EFFECTIVE], "1")
+            self.assertEqual(environment[compiler_cache.SHARED_WORKSPACES_CCACHE], str(executable.resolve()))
+            self.assertEqual(environment[compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX], "personal")
+
+            environment = {
+                "AOBUS_STATE_ROOT": str(root),
+                compiler_cache.SHARED_WORKSPACES_OVERRIDE: "off",
+            }
+            with mock.patch.object(
+                compiler_cache,
+                "_configured_namespace",
+                side_effect=AssertionError("unexpected namespace probe"),
+            ):
+                self.assertTrue(compiler_cache.activate_local(environ=environment, system="Linux"))
+            self.assertEqual(environment[compiler_cache.SHARED_WORKSPACES_EFFECTIVE], "0")
+            self.assertNotIn(compiler_cache.SHARED_WORKSPACES_CCACHE, environment)
+
+    def test_activation_reads_namespace_from_the_effective_cache_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache"
+            executable.write_bytes(b"cache")
+            config = compiler_cache.config_path(root)
+            config.parent.mkdir(parents=True)
+            config.write_text(json.dumps({**self.record(executable), "sharedWorkspaces": True}))
+            for overrides in (
+                {},
+                {"CCACHE_DIR": str(root / "custom")},
+                {"CCACHE_CONFIGPATH": str(root / "custom.conf")},
+                {"CCACHE_NAMESPACE": "explicit"},
+                {"CCACHE_NAMESPACE": ""},
+            ):
+                environment = {"AOBUS_STATE_ROOT": str(root), **overrides}
+                expected_directory = overrides.get(
+                    "CCACHE_DIR", str(compiler_cache.cache_directory(root, system="Linux"))
+                )
+                expected_config_path = overrides.get("CCACHE_CONFIGPATH")
+
+                def query(command, *, directory=expected_directory, config_path=expected_config_path, **kwargs):
+                    self.assertEqual(command, [str(executable), "--get-config", "namespace"])
+                    self.assertEqual(kwargs["env"].get("CCACHE_DIR"), directory)
+                    self.assertEqual(kwargs["env"].get("CCACHE_CONFIGPATH"), config_path)
+                    return subprocess.CompletedProcess(command, 0, "personal-cache\n")
+
+                with (
+                    self.subTest(overrides=overrides),
+                    mock.patch.object(compiler_cache.subprocess, "run", side_effect=query) as run,
+                ):
+                    self.assertTrue(compiler_cache.activate_local(environ=environment, system="Linux"))
+                self.assertEqual(
+                    environment[compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX],
+                    overrides.get("CCACHE_NAMESPACE", "personal-cache"),
+                )
+                self.assertEqual(environment["CCACHE_DIR"], expected_directory)
+                self.assertEqual(run.call_count, 0 if "CCACHE_NAMESPACE" in overrides else 1)
+
+    def test_shared_workspace_override_cannot_enable_an_unconfigured_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache"
+            executable.write_bytes(b"cache")
+            config = compiler_cache.config_path(root)
+            config.parent.mkdir(parents=True)
+            config.write_text(json.dumps(self.record(executable)), encoding="utf-8")
+            environment = {
+                "AOBUS_STATE_ROOT": str(root),
+                compiler_cache.SHARED_WORKSPACES_OVERRIDE: "1",
+            }
+            with self.assertRaisesRegex(compiler_cache.CompilerCacheError, "is an off switch"):
+                compiler_cache.activate_local(environ=environment, system="Linux")
 
     def test_two_workspaces_share_host_cache_and_keep_distinct_base_dirs(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -594,6 +795,49 @@ class CompilerCacheActivationTest(unittest.TestCase):
             self.assertNotIn("PATH", updates)
             self.assertEqual(environment["PATH"], "C:/VisualStudio/VC/bin")
 
+    def test_windows_activation_defers_tracking_and_clears_inherited_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache.exe"
+            executable.write_bytes(b"cache")
+            config = compiler_cache.config_path(root)
+            config.parent.mkdir()
+            config.write_text(json.dumps(self.record(executable)), encoding="utf-8")
+            for mode in ("0", "1"):
+                environment = {
+                    "AOBUS_STATE_ROOT": str(root),
+                    "AOBUS_MSBUILD_CL_TOOL_EXE": "custom-wrapper",
+                    msbuild_cache.TRACKING_ENV: "1" if mode == "0" else "0",
+                }
+                with (
+                    self.subTest(mode=mode),
+                    mock.patch.object(msbuild_cache, "tracking_mode") as tracking,
+                ):
+                    self.assertTrue(compiler_cache.activate_local(environ=environment, system="Windows"))
+                self.assertEqual(environment[msbuild_cache.TRACKING_ENV], "0")
+                tracking.assert_not_called()
+
+    def test_msbuild_decision_uses_actual_compiler_views_only_for_the_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "ccache.exe"
+            executable.write_bytes(b"cache")
+            source = Path("S:/")
+            build = Path("B:/windows-winui")
+            inherited = dict(os.environ)
+            with (
+                mock.patch.object(compiler_cache, "state_root", return_value=root),
+                mock.patch.object(compiler_cache, "_trusted_local_config", return_value=self.record(executable)),
+                mock.patch.object(msbuild_cache, "tracking_mode", return_value=("1", None)) as tracking,
+            ):
+                result = compiler_cache.msbuild_environment(
+                    root / "windows-winui", compiler_source_dir=source, compiler_build_dir=build
+                )
+            self.assertEqual(result, {msbuild_cache.TRACKING_ENV: "1"})
+            self.assertEqual(tracking.call_args.kwargs["compiler_roots"], (source, build))
+            self.assertEqual(tracking.call_args.kwargs["build_roots"], (root / "windows-winui",))
+            self.assertEqual(dict(os.environ), inherited)
+
     def test_windows_activation_is_read_only_and_rejects_stale_wrappers(self):
         for condition in ("valid", "missing", "modified", "explicit"):
             with self.subTest(condition=condition), tempfile.TemporaryDirectory() as temporary:
@@ -683,7 +927,11 @@ class CompilerCacheActivationTest(unittest.TestCase):
             executable.write_bytes(b"ci cache")
             state = root / "runner-temp"
             long_lived = root / "managed-tools"
-            environment = {"SCCACHE_PATH": str(root / "sccache"), "AOBUS_STATE_ROOT": str(long_lived)}
+            environment = {
+                "SCCACHE_PATH": str(root / "sccache"),
+                "AOBUS_STATE_ROOT": str(long_lived),
+                msbuild_cache.TRACKING_ENV: "1",
+            }
             updates = compiler_cache.ci_environment(environ=environment, system="Windows", state=state)
             wrapper = Path(updates["AOBUS_MSBUILD_CL_TOOL_EXE"])
             self.assertTrue(wrapper.is_relative_to(state.resolve()))
@@ -691,6 +939,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
             self.assertEqual(updates["SCCACHE_PATH"], str(executable.resolve()))
             self.assertEqual(updates["CMAKE_CXX_COMPILER_LAUNCHER"], str(executable.resolve()))
             self.assertFalse(long_lived.exists())
+            self.assertEqual(updates[msbuild_cache.TRACKING_ENV], "0")
 
     def test_ci_adapter_preserves_backend_tokens_capacity_and_launcher(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -858,6 +1107,54 @@ class CompilerCacheActivationTest(unittest.TestCase):
 
 
 class CompilerCacheCliTest(unittest.TestCase):
+    def test_setup_shared_workspace_flags_reach_persistent_setup(self):
+        for option, expected in (("--shared-workspaces", True), ("--no-shared-workspaces", False)):
+            with (
+                self.subTest(option=option),
+                mock.patch.object(
+                    compiler_cache,
+                    "setup_local",
+                    return_value={
+                        "CMAKE_CXX_COMPILER_LAUNCHER": "managed-ccache",
+                        "CCACHE_DIR": "managed-store",
+                        "CCACHE_MAXSIZE": "20G",
+                        compiler_cache.SHARED_WORKSPACES_EFFECTIVE: "1" if expected else "0",
+                    },
+                ) as setup,
+            ):
+                self.assertEqual(portal_main(["setup", "compiler-cache", option]), 0)
+                setup.assert_called_once_with(shared_workspaces=expected)
+
+    def test_setup_explains_saved_preference_when_the_shell_disables_sharing(self):
+        for system, overrides, reason in (
+            ("Linux", {compiler_cache.SHARED_WORKSPACES_OVERRIDE: "0"}, "AOBUS_SHARED_WORKSPACES"),
+            ("Windows", {}, "isolated Windows SSH logon"),
+            (
+                "Windows",
+                {compiler_cache.SHARED_WORKSPACES_OVERRIDE: "0", "SSH_CONNECTION": "session"},
+                "AOBUS_SHARED_WORKSPACES",
+            ),
+        ):
+            with self.subTest(system=system, overrides=overrides), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                executable = root / "ccache.exe"
+                executable.write_bytes(b"cache")
+                output = io.StringIO()
+                with (
+                    mock.patch.dict(os.environ, {"AOBUS_STATE_ROOT": str(root), **overrides}, clear=True),
+                    mock.patch.object(compiler_cache.platform, "system", return_value=system),
+                    mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
+                    mock.patch.object(compiler_cache, "_install_windows_ccache", return_value=executable),
+                    mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                    mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
+                    contextlib.redirect_stdout(output),
+                ):
+                    self.assertEqual(portal_main(["setup", "compiler-cache", "--shared-workspaces"]), 0)
+                self.assertTrue(json.loads(compiler_cache.config_path(root).read_text())["sharedWorkspaces"])
+                self.assertIn("Shared workspaces (current shell): disabled", output.getvalue())
+                self.assertIn("saved shared-workspace preference remains enabled", output.getvalue())
+                self.assertIn(reason, output.getvalue())
+
     def test_setup_reports_only_preexisting_environment_overrides(self):
         for explicit in (False, True):
             with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as temporary:

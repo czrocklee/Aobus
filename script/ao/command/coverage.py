@@ -12,7 +12,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ..core import builddir, buildlock, compiler_cache
+from ..core import builddir, buildlock, compiler_cache, workspace_cache
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from . import build
@@ -300,12 +300,16 @@ def run_command(args: argparse.Namespace) -> int:
 
 
 def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
+    try:
+        workspace = workspace_cache.prepare(build_dir, unsupported_reason="coverage builds")
+    except workspace_cache.WorkspaceCacheError as exc:
+        raise die(str(exc)) from exc
     if not (build_dir / "CMakeCache.txt").is_file():
         print(f"Configuring coverage build in {build_dir}...")
         configure = [
             "cmake",
             "-S",
-            str(PROJECT_ROOT),
+            str(workspace.source_dir),
             "--preset",
             "linux-debug",
             "-B",
@@ -314,11 +318,12 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
             "-DCMAKE_EXE_LINKER_FLAGS=--coverage",
             "-DCMAKE_SHARED_LINKER_FLAGS=--coverage",
             *compiler_cache.cmake_launcher_arguments(build_dir=build_dir),
+            *workspace.cmake_arguments,
         ]
         if run(configure) != 0:
             raise die("coverage configure failed.")
     else:
-        build.sync_compiler_cache(build_dir)
+        build.sync_compiler_cache(build_dir, unsupported_reason="coverage builds")
 
     print("Building tests...")
     suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)

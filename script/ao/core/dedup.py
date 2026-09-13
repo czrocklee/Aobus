@@ -7,7 +7,7 @@ analyze commands (formerly two divergent copies embedded in the shell scripts).
 
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import IO
 
@@ -25,11 +25,14 @@ def deduplicate(
     project_root: Path,
     *,
     include_external: bool = True,
+    path_mapper: Callable[[Path], Path] | None = None,
 ) -> int:
     """Write unique diagnostic blocks from the logs to `out`; return the unique count.
 
     With include_external=False, blocks whose primary location resolves outside
     project_root are dropped entirely (analyzer reports on third-party headers).
+    An optional mapper projects compiler paths before filtering, deduplication,
+    and display, so reports remain usable after temporary compiler views retire.
     """
     root = absolute_path(project_root)
     seen: set[str] = set()
@@ -43,6 +46,8 @@ def deduplicate(
         if not p.is_absolute():
             p = root / p
         try:
+            if path_mapper is not None:
+                p = path_mapper(p)
             return absolute_path(p)
         except OSError:
             return p
@@ -71,6 +76,8 @@ def deduplicate(
             for line in log:
                 match = DIAGNOSTIC_RE.match(line)
                 if match:
+                    if path_mapper is not None:
+                        line = f"{normalized_path(match.group(1))}{line[len(match.group(1)) :]}"
                     if match.group(4) in ("warning", "error"):
                         flush()
                         if not include_external and not is_project_path(match.group(1)):

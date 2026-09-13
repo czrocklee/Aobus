@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, compiler_cache, winui
+from ..core import builddir, buildlock, compiler_cache, winui, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -142,20 +142,39 @@ def _winui_build_environment(jobs: int) -> dict[str, str]:
     }
 
 
-def sync_compiler_cache(build_dir: Path) -> None:
-    """Reconfigure an existing tree only when its managed launchers changed."""
-    arguments = compiler_cache.cmake_launcher_arguments(build_dir=build_dir)
+def _workspace_cache(build_dir: Path, *, unsupported_reason: str | None = None) -> workspace_cache.WorkspaceCache:
+    try:
+        return workspace_cache.prepare(build_dir, project_root=PROJECT_ROOT, unsupported_reason=unsupported_reason)
+    except workspace_cache.WorkspaceCacheError as exc:
+        raise die(str(exc)) from exc
+
+
+def sync_compiler_cache(build_dir: Path, *, unsupported_reason: str | None = None) -> None:
+    """Reconfigure an existing tree only when its managed cache settings changed."""
+    workspace = _workspace_cache(build_dir, unsupported_reason=unsupported_reason)
+    arguments = [
+        *compiler_cache.cmake_launcher_arguments(build_dir=build_dir),
+        *workspace.cmake_arguments,
+    ]
     if not arguments:
         return
-    print(f"Updating compiler-cache launchers in {build_dir}...")
-    if run(["cmake", "-S", str(PROJECT_ROOT), "-B", str(build_dir), *arguments]) != 0:
-        raise die("compiler-cache launcher configure failed.")
+    print(f"Updating compiler-cache settings in {build_dir}...")
+    cmake_build_dir = workspace.compiler_build_dir or build_dir
+    if (
+        run(
+            ["cmake", "-S", str(workspace.source_dir), "-B", str(cmake_build_dir), *arguments],
+            cwd=workspace.compiler_build_dir or PROJECT_ROOT,
+        )
+        != 0
+    ):
+        raise die("compiler-cache configure failed.")
 
 
 def validate_build_tree(
     args: argparse.Namespace, build_dir: Path, *, compiler_only: bool = False, expected_build_type: str | None = None
 ) -> str:
     """Check CMake's configured identity before reusing or reporting a native tree."""
+    workspace_cache.validate_consumer(build_dir, project_root=PROJECT_ROOT)
     profile = builddir.platform_profile()
     compiler = "clang" if args.clang else profile.compiler
     portal = "ao.bat" if profile.name == "windows" else "./ao"
@@ -259,11 +278,15 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         if args.clang:
             print("clang enabled for this build.")
 
-        configure = ["cmake", "-S", str(PROJECT_ROOT), "--preset", preset, "-B", str(build_dir)]
+        sanitizer = "sanitizer builds" if args.asan or args.tsan else None
+        workspace = _workspace_cache(build_dir, unsupported_reason=sanitizer)
+        cmake_build_dir = workspace.compiler_build_dir or build_dir
+        configure = ["cmake", "-S", str(workspace.source_dir), "--preset", preset, "-B", str(cmake_build_dir)]
         configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_ASAN={'ON' if args.asan else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_TSAN={'ON' if args.tsan else 'OFF'}")
         configure.extend(compiler_cache.cmake_launcher_arguments(build_dir=build_dir))
+        configure.extend(workspace.cmake_arguments)
         if args.asan:
             sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
             print(f"{sanitizer_name} enabled for this build.")
@@ -271,11 +294,11 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
             print("TSan enabled for this build.")
 
         print(f"Configuring Aobus with preset '{preset}' in '{build_dir}'...")
-        if run(configure, env=env, log=log) != 0:
+        if run(configure, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=env, log=log) != 0:
             raise die("configure failed.")
         compiler = validate_build_tree(args, build_dir)
 
-        build = ["cmake", "--build", str(build_dir)]
+        build = ["cmake", "--build", str(cmake_build_dir)]
         if requested_winui:
             build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
         parallel_jobs = parallel_build_jobs()
@@ -289,8 +312,14 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         print("Building Aobus...")
         build_env = env
         if requested_winui:
-            build_env = {**(env or {}), **_winui_build_environment(parallel_jobs)}
-        if run(build, env=build_env, log=log, append=True) != 0:
+            build_env = {
+                **(env or {}),
+                **_winui_build_environment(parallel_jobs),
+                **compiler_cache.msbuild_environment(
+                    build_dir, compiler_source_dir=workspace.source_dir, compiler_build_dir=cmake_build_dir
+                ),
+            }
+        if run(build, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=build_env, log=log, append=True) != 0:
             raise die("build failed.")
 
         return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)

@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from . import compiler_cache
 from .paths import PROJECT_ROOT
 
 
@@ -155,7 +156,10 @@ def windows_build_root(
         if environment.get("AOBUS_BUILD_ROOT")
         else windows_state_root(environ=environment) / "build"
     )
-    return base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
+    root = base / windows_checkout_key(project_root, environ=environment, create_id=create_id)
+    if environment.get(compiler_cache.SHARED_WORKSPACES_EFFECTIVE) == "1":
+        return root / "shared-workspaces-v1"
+    return root
 
 
 # Compatibility snapshot for callers that only need profile metadata. Native

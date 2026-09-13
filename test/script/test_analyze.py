@@ -49,6 +49,49 @@ class AnalyzerCompileCoverageTest(unittest.TestCase):
     def run_analyzer(self):
         return analyze.run_command(make_parser().parse_args(["analyze", "-p", str(self.build), "-j", "1"]))
 
+    def test_test_sources_receive_leak_exclusion_with_native_path_separators(self):
+        test_source = self.root / "test" / "unit" / "Probe.cpp"
+        test_source.parent.mkdir(parents=True)
+        test_source.touch()
+        self.scope.return_value = ([str(test_source), str(self.other)], True)
+        self.assertEqual(self.run_analyzer(), 0)
+        commands = {call.args[0][-1]: call.args[0] for call in self.tool.call_args_list}
+        test_config = next(arg for arg in commands[str(test_source)] if arg.startswith("-config="))
+        production_config = next(arg for arg in commands[str(self.other)] if arg.startswith("-config="))
+        self.assertIn(",-clang-analyzer-cplusplus.NewDeleteLeaks", test_config)
+        self.assertNotIn(",-clang-analyzer-cplusplus.NewDeleteLeaks", production_config)
+
+    def test_compiler_view_diagnostics_count_and_fail_the_analyzer_gate(self):
+        view = self.root.parent / (self.root.name + "-compiler-view")
+        viewed = view / self.other.relative_to(self.root)
+        external = self.root.parent / "external" / "Header.h"
+        self.scope.return_value = ([str(self.other)], True)
+
+        def emit(command, **kwargs):
+            kwargs["stdout"].write(
+                f"{viewed}:7:2: warning: null dereference [clang-analyzer-core.NullDereference]\n"
+                f"{viewed}:6:2: note: pointer became null here\n"
+                f"{external}:3:1: warning: external issue [clang-analyzer-core.DivideZero]\n"
+            )
+            return 0
+
+        def physical(path, **kwargs):
+            try:
+                return self.root / path.relative_to(view)
+            except ValueError:
+                return path
+
+        self.tool.side_effect = emit
+        with mock.patch.object(analyze.workspace_cache, "canonical_portal_path", side_effect=physical):
+            args = make_parser().parse_args(["analyze", "-p", str(self.build), "-j", "1", "--fail-on-diagnostics"])
+            self.assertEqual(analyze.run_command(args), 1)
+        output = self.stdout.getvalue()
+        self.assertIn("Analyzer diagnostics: 1", output)
+        self.assertIn("pointer became null here", output)
+        self.assertEqual(output.count("null dereference"), 1)
+        self.assertNotIn(str(view), output)
+        self.assertNotIn("external issue", output)
+
     def test_missing_exact_command_fails_for_explicit_and_batch_native_sources(self):
         for explicit in (True, False):
             with self.subTest(explicit=explicit):

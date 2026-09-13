@@ -18,6 +18,9 @@ set(AOBUS_MANAGED_C_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured
 set(AOBUS_MANAGED_CXX_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured C++ compiler launcher")
 mark_as_advanced(AOBUS_MANAGED_C_COMPILER_LAUNCHER AOBUS_MANAGED_CXX_COMPILER_LAUNCHER)
 
+include(cmake/SharedWorkspaceCache.cmake)
+include(cmake/SharedWorkspaceCacheWindows.cmake)
+
 if(MSVC)
   # CMake has no MSVC mapping for C++26 yet; 23 selects /std:c++latest (or the
   # closest supported flag), so don't also pass an explicit /std: option.

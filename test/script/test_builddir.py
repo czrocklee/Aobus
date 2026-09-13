@@ -212,6 +212,18 @@ class BuildDirTest(unittest.TestCase):
         self.assertRegex(root.name, r"^[A-Za-z0-9._-]+-[0-9a-f]{12}$")
         self.assertNotIn("out", root.parts)
 
+    def test_windows_shared_profile_uses_a_separate_root_only_when_effective(self):
+        for base in ({"AOBUS_STATE_ROOT": "C:/state"}, {"AOBUS_BUILD_ROOT": "D:/builds"}):
+            environment = {**base, "AOBUS_CHECKOUT_ID": "checkout-a"}
+            ordinary = builddir.windows_build_root(environ=environment, project_root=Path("Y:/"))
+            for effective in ("0", "1"):
+                with self.subTest(base=base, effective=effective):
+                    actual = builddir.windows_build_root(
+                        environ={**environment, "AOBUS_SHARED_WORKSPACES_EFFECTIVE": effective},
+                        project_root=Path("Y:/"),
+                    )
+                    self.assertEqual(actual, ordinary / "shared-workspaces-v1" if effective == "1" else ordinary)
+
     def test_windows_build_root_overrides_state_root_but_keeps_checkout_isolation(self):
         environment = {
             "AOBUS_STATE_ROOT": "C:/ignored-state",

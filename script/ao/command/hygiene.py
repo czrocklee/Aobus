@@ -11,6 +11,7 @@ be invalidated by formatting. Every stage uses the same resolved source scope.
 import argparse
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 from ..core import buildenv, gitfiles, testregistry, tidyengine
 from . import format as format_command
@@ -99,7 +100,8 @@ def run_command(args: argparse.Namespace) -> int:
         return 0
 
     print("=== format --check ===")
-    if format_command.run_command(_format_args(), files=files) != 0:
+    build_dir = Path(args.path) if args.path else None
+    if format_command.run_command(_format_args(), files=files, build_dir=build_dir) != 0:
         print("Hygiene stopped after formatting failure; this gate is check-only.", file=sys.stderr)
         print("Run ./ao format on the same scope, review the diff, then rerun ./ao hygiene.", file=sys.stderr)
         return 1

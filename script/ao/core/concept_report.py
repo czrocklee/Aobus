@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import buildlock, concept_scope, tidyengine
+from . import buildlock, concept_scope, tidyengine, workspace_cache
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
@@ -1242,15 +1242,16 @@ def _project_flags(
 
 def _is_project_include_path(value: str, root: Path, build_dir: Path | None, entry: Mapping[str, Any]) -> bool:
     path = Path(value)
-    bases = [absolute_path(root)]
+    candidate = workspace_cache.canonical_portal_path(absolute_path(path))
+    bases = [workspace_cache.canonical_portal_path(root)]
     if build_dir is not None:
-        bases.append(absolute_path(build_dir))
+        bases.append(workspace_cache.canonical_portal_path(build_dir))
     directory = entry.get("directory")
     if isinstance(directory, str):
-        bases.append(absolute_path(Path(directory)))
+        bases.append(workspace_cache.canonical_portal_path(Path(directory)))
     for base in bases:
         try:
-            absolute_path(path).relative_to(base)
+            candidate.relative_to(base)
             return True
         except ValueError:
             continue
@@ -1271,7 +1272,7 @@ def _relative(path: Path, root: Path) -> str:
 
 
 def _normalize_path(path: Path | str) -> str:
-    return os.path.normcase(str(absolute_path(path)))
+    return os.path.normcase(str(workspace_cache.canonical_portal_path(Path(path))))
 
 
 def _ninja_path(value: str, build_dir: Path) -> Path:

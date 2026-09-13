@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
 
-from ..core import builddir, buildlock, linttest, proc, tooltest
+from ..core import builddir, buildlock, linttest, proc, tooltest, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 from . import build
@@ -712,12 +712,14 @@ def run_command(args: argparse.Namespace) -> int:
             print("=====================================")
             print(f"Building {', '.join(targets)} in {build_dir}...")
             print("=====================================")
-            build_cmd = ["cmake", "--build", str(build_dir)]
+            cmake_build_dir = workspace_cache.compiler_build_dir(build_dir)
+            build_cmd = ["cmake", "--build", str(cmake_build_dir)]
             build_cmd += build.parallel_build_arguments()
             build_cmd += ["--target", *targets]
             with buildlock.build_tree_lock(build_dir):
-                build.sync_compiler_cache(build_dir)
-                if run(build_cmd) != 0:
+                sanitizer = "sanitizer builds" if args.asan or args.tsan else None
+                build.sync_compiler_cache(build_dir, unsupported_reason=sanitizer)
+                if run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT) != 0:
                     raise die("test build failed.")
 
     options = {

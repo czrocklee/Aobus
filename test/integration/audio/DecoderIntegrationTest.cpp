@@ -8,6 +8,7 @@
 #include "lib/audio/OpusDecoderSession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmBlock.h>
@@ -498,11 +499,11 @@ namespace ao::audio::test
   {
     SECTION("Corrupt: Opening a non-FLAC file as FLAC")
     {
-      // Use this source file itself as a fake FLAC
-      auto const testFile = std::filesystem::path{__FILE__};
-      auto const res = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+      auto const testFile = ao::test::TempFile{".flac"};
+      auto const res = FlacDecoderSession::open(testFile.path, SampleEncoding::Signed16Le);
 
-      CHECK_FALSE(res);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::DecodeFailed);
     }
 
     SECTION("MP3: Seek near EOF")

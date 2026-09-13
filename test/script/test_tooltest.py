@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,6 +81,25 @@ class ToolTestRunnerTest(unittest.TestCase):
 
             self.assertEqual(status, 0)
             self.assertEqual(log.read_text(encoding="utf-8"), completed.stdout)
+
+    def test_host_shared_workspace_activation_is_not_inherited_by_unit_tests(self):
+        completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
+        inherited = {
+            tooltest.compiler_cache.SHARED_WORKSPACES_EFFECTIVE: "1",
+            tooltest.compiler_cache.SHARED_WORKSPACES_CCACHE: "/cache/ccache",
+            tooltest.compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX: "personal",
+        }
+        with (
+            mock.patch.dict(os.environ, inherited, clear=False),
+            mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
+            mock.patch.object(tooltest.doccheck, "check_tree", return_value=[]),
+            mock.patch.object(tooltest.subprocess, "run", return_value=completed) as run,
+        ):
+            self.assertEqual(tooltest.run(), 0)
+
+        child_environment = run.call_args.kwargs["env"]
+        for key in inherited:
+            self.assertNotIn(key, child_environment)
 
 
 if __name__ == "__main__":

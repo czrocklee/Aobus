@@ -26,6 +26,13 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+if __package__:
+    from . import msbuild_cache
+else:
+    # CI also invokes this file before the portal's Python environment exists.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from ao.core import msbuild_cache
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = PROJECT_ROOT / "script" / "ao" / "compiler-cache.json"
 CONFIG_SCHEMA_VERSION = 1
@@ -34,6 +41,12 @@ _MANAGED_LAUNCHER_MARKERS = {
     "C": "AOBUS_MANAGED_C_COMPILER_LAUNCHER",
     "CXX": "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER",
 }
+SHARED_WORKSPACES_OVERRIDE = "AOBUS_SHARED_WORKSPACES"
+SHARED_WORKSPACES_EFFECTIVE = "AOBUS_SHARED_WORKSPACES_EFFECTIVE"
+SHARED_WORKSPACES_CCACHE = "AOBUS_SHARED_WORKSPACES_CCACHE"
+SHARED_WORKSPACES_NAMESPACE_PREFIX = "AOBUS_SHARED_WORKSPACES_NAMESPACE_PREFIX"
+SHARED_WORKSPACES_FALLBACK = "AOBUS_SHARED_WORKSPACES_FALLBACK"
+SHARED_WORKSPACES_MSBUILD_WRAPPER = "AOBUS_SHARED_WORKSPACES_MSBUILD_WRAPPER"
 
 
 class CompilerCacheError(RuntimeError):
@@ -350,6 +363,46 @@ def _configured_max_size(executable: Path, environment: Mapping[str, str]) -> st
         return None
 
 
+def _configured_namespace(executable: Path, environment: Mapping[str, str]) -> str:
+    """Read the user's effective namespace without letting our profile replace it."""
+    if "CCACHE_NAMESPACE" in environment:
+        return environment["CCACHE_NAMESPACE"]
+    probe_environment = dict(environment)
+    try:
+        result = subprocess.run(
+            [str(executable), "--get-config", "namespace"],
+            env=probe_environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CompilerCacheError(f"cannot read the configured ccache namespace: {exc}") from exc
+    return result.stdout.strip()
+
+
+def _shared_workspaces_preference(record: Mapping[str, object]) -> bool:
+    value = record.get("sharedWorkspaces", False)
+    if not isinstance(value, bool):
+        raise CompilerCacheError("saved compiler-cache sharedWorkspaces preference must be a boolean")
+    return value
+
+
+def _shared_workspaces_effective(record: Mapping[str, object], *, system: str, environ: Mapping[str, str]) -> bool:
+    enabled = _shared_workspaces_preference(record)
+    if SHARED_WORKSPACES_OVERRIDE in environ:
+        override = environ[SHARED_WORKSPACES_OVERRIDE]
+        if override.strip().lower() not in {"0", "false", "no", "off"}:
+            raise CompilerCacheError(f"{SHARED_WORKSPACES_OVERRIDE} is an off switch; use 0, false, no, or off")
+        enabled = False
+    if enabled and system == "Windows" and not environ.get("SSH_CONNECTION"):
+        enabled = False
+    elif enabled and system not in {"Linux", "Darwin", "Windows"}:
+        raise CompilerCacheError("shared-workspace compiler caching is supported only on Linux, macOS, and Windows")
+    return enabled
+
+
 def _validate_local_version(version: str, policy: CachePolicy, system: str) -> None:
     if not version_at_least(version, policy.local_minimum_version):
         raise CompilerCacheError(
@@ -364,6 +417,7 @@ def setup_local(
     *,
     environ: MutableMapping[str, str] | None = None,
     system: str | None = None,
+    shared_workspaces: bool | None = None,
 ) -> dict[str, str]:
     """Install or resolve local ccache, then persist Aobus-local activation."""
     environment = os.environ if environ is None else environ
@@ -395,6 +449,14 @@ def setup_local(
         if configured := _configured_max_size(executable, probe_environment):
             candidates.append(configured)
         cache_size = larger_size(*candidates)
+        previous_shared_workspaces = False
+        if isinstance(previous, dict):
+            if "sharedWorkspaces" in previous and not isinstance(previous["sharedWorkspaces"], bool):
+                raise CompilerCacheError("saved compiler-cache sharedWorkspaces preference must be a boolean")
+            previous_shared_workspaces = bool(previous.get("sharedWorkspaces", False))
+        enable_shared_workspaces = previous_shared_workspaces if shared_workspaces is None else shared_workspaces
+        if enable_shared_workspaces and host not in {"Linux", "Darwin", "Windows"}:
+            raise CompilerCacheError("shared-workspace compiler caching is supported only on Linux, macOS, and Windows")
         record = {
             "schemaVersion": CONFIG_SCHEMA_VERSION,
             "provider": policy.local_provider,
@@ -402,8 +464,18 @@ def setup_local(
             "executable": str(executable),
             "executableSha256": _sha256(executable),
             "cacheSize": cache_size,
+            "sharedWorkspaces": enable_shared_workspaces,
         }
-        updates = local_environment(record, root=root, system=host, environ=environment)
+        effective_shared_workspaces = _shared_workspaces_effective(record, system=host, environ=environment)
+        namespace_prefix = _configured_namespace(executable, probe_environment) if effective_shared_workspaces else ""
+        updates = local_environment(
+            record,
+            root=root,
+            system=host,
+            environ=environment,
+            shared_workspaces=effective_shared_workspaces,
+            namespace_prefix=namespace_prefix,
+        )
         if host == "Windows":
             # Provision the saved configuration even when this invocation
             # selects an explicit wrapper instead of the managed one.
@@ -431,6 +503,7 @@ def _trusted_local_config(root: Path, policy: CachePolicy, system: str) -> dict[
         or not isinstance(record.get("cacheSize"), str)
         or not isinstance(record.get("executable"), str)
         or not isinstance(record.get("executableSha256"), str)
+        or not isinstance(record.get("sharedWorkspaces", False), bool)
     ):
         raise CompilerCacheError(f"saved compiler-cache configuration is incompatible or invalid: {path}")
     _validate_local_version(str(record["version"]), policy, system)
@@ -460,6 +533,8 @@ def local_environment(
     system: str,
     environ: Mapping[str, str],
     project_root: Path = PROJECT_ROOT,
+    shared_workspaces: bool | None = None,
+    namespace_prefix: str = "",
 ) -> dict[str, str]:
     """Generate managed local settings without replacing explicit overrides."""
     executable = Path(str(record["executable"])).resolve()
@@ -480,7 +555,27 @@ def local_environment(
             updates[key] = str(executable)
             updates[marker] = "1"
     if system == "Windows" and not environ.get("AOBUS_MSBUILD_CL_TOOL_EXE"):
-        updates["AOBUS_MSBUILD_CL_TOOL_EXE"] = str(_local_windows_wrapper(root, str(record["version"])))
+        wrapper = str(_local_windows_wrapper(root, str(record["version"])))
+        updates["AOBUS_MSBUILD_CL_TOOL_EXE"] = wrapper
+        updates[SHARED_WORKSPACES_MSBUILD_WRAPPER] = wrapper
+    effective_shared_workspaces = (
+        _shared_workspaces_preference(record) if shared_workspaces is None else shared_workspaces
+    )
+    updates[SHARED_WORKSPACES_EFFECTIVE] = "1" if effective_shared_workspaces else "0"
+    if _shared_workspaces_preference(record) and not effective_shared_workspaces:
+        if SHARED_WORKSPACES_OVERRIDE in environ:
+            updates[SHARED_WORKSPACES_FALLBACK] = (
+                f"the saved shared-workspace preference remains enabled, but {SHARED_WORKSPACES_OVERRIDE} "
+                "disables it in this shell"
+            )
+        elif system == "Windows":
+            updates[SHARED_WORKSPACES_FALLBACK] = (
+                "the saved shared-workspace preference remains enabled; fixed paths require an isolated Windows "
+                "SSH logon, so this shell uses the ordinary per-workspace cache"
+            )
+    if effective_shared_workspaces:
+        updates[SHARED_WORKSPACES_CCACHE] = str(executable)
+        updates[SHARED_WORKSPACES_NAMESPACE_PREFIX] = namespace_prefix
     return updates
 
 
@@ -498,7 +593,20 @@ def activate_local(
         record = _trusted_local_config(root, policy, host)
         if record is None:
             return False
-        updates = local_environment(record, root=root, system=host, environ=environment)
+        shared_workspaces = _shared_workspaces_effective(record, system=host, environ=environment)
+        updates = local_environment(
+            record,
+            root=root,
+            system=host,
+            environ=environment,
+            shared_workspaces=shared_workspaces,
+        )
+        if shared_workspaces:
+            updates[SHARED_WORKSPACES_NAMESPACE_PREFIX] = _configured_namespace(
+                Path(str(record["executable"])), {**environment, **updates}
+            )
+        if fallback := updates.get(SHARED_WORKSPACES_FALLBACK):
+            print(f"Notice: {fallback}.", file=sys.stderr)
         if wrapper_name := updates.get("AOBUS_MSBUILD_CL_TOOL_EXE"):
             wrapper = Path(wrapper_name)
             if not wrapper.is_file() or _sha256(wrapper) != record["executableSha256"]:
@@ -506,8 +614,35 @@ def activate_local(
     except (OSError, CompilerCacheError) as exc:
         portal = "ao.bat" if host == "Windows" else "./ao"
         raise CompilerCacheError(f"{exc}; run {portal} setup compiler-cache") from exc
+    if host == "Windows":
+        updates[msbuild_cache.TRACKING_ENV] = "0"
     environment.update(updates)
     return True
+
+
+def msbuild_environment(build_dir: Path, *, compiler_source_dir: Path, compiler_build_dir: Path) -> dict[str, str]:
+    """Decide tracking only for a native MSBuild invocation, after views exist."""
+    updates = {msbuild_cache.TRACKING_ENV: "0"}
+    try:
+        root = state_root()
+        record = _trusted_local_config(root, load_policy(), "Windows")
+        if record is None:
+            return updates
+        mode, reason = msbuild_cache.tracking_mode(
+            executable=Path(str(record["executable"])),
+            managed_wrapper=_local_windows_wrapper(root, str(record["version"])),
+            expected_sha256=str(record["executableSha256"]),
+            environ=os.environ,
+            source_root=PROJECT_ROOT,
+            build_roots=(build_dir,),
+            compiler_roots=(compiler_source_dir, compiler_build_dir),
+        )
+        updates[msbuild_cache.TRACKING_ENV] = mode
+        if reason:
+            print(f"Notice: MSBuild retains legacy compiler tracking: {reason}.", file=sys.stderr)
+    except (OSError, CompilerCacheError) as exc:
+        print(f"Notice: MSBuild retains legacy compiler tracking: {exc}.", file=sys.stderr)
+    return updates
 
 
 def ci_environment(
@@ -528,6 +663,8 @@ def ci_environment(
         raise CompilerCacheError(f"sccache action did not provide a valid executable: {supplied}")
     executable = executable.resolve()
     updates: dict[str, str] = {"SCCACHE_PATH": str(executable)}
+    if system == "Windows":
+        updates[msbuild_cache.TRACKING_ENV] = "0"
     for key in ("CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"):
         if key not in environ:
             updates[key] = str(executable)
@@ -542,9 +679,10 @@ def ci_environment(
     return updates
 
 
-def _cmake_cache(path: Path) -> dict[str, str]:
+def read_cmake_cache(path: Path) -> dict[str, str]:
+    """Read CMake cache entries shared by launcher and workspace ownership checks."""
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return {}
     values = {}
@@ -574,7 +712,7 @@ def cmake_launcher_arguments(
 ) -> list[str]:
     """Return only the launcher changes needed for one CMake configure."""
     environment = os.environ if environ is None else environ
-    cache = _cmake_cache(build_dir / "CMakeCache.txt") if build_dir is not None else {}
+    cache = read_cmake_cache(build_dir / "CMakeCache.txt") if build_dir is not None else {}
     arguments: list[str] = []
     for language in ("C", "CXX"):
         key = f"CMAKE_{language}_COMPILER_LAUNCHER"

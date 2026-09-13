@@ -1213,9 +1213,10 @@ class CliParseTest(unittest.TestCase):
                             with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
                                 self.assertEqual(test_command.run_command(args), 0)
 
-        sync_cache.assert_called_once_with(build_dir)
+        sync_cache.assert_called_once_with(build_dir, unsupported_reason=None)
         run.assert_called_once_with(
-            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "ao_core_test", "ao_tui_test"]
+            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "ao_core_test", "ao_tui_test"],
+            cwd=test_command.PROJECT_ROOT,
         )
         run_suites.assert_called_once_with(
             ("core", "tui"),
@@ -1981,6 +1982,17 @@ class CliParseTest(unittest.TestCase):
                     run_command_mod.run_command(args)
         do_build.assert_called_once_with(args, ["aobus-tui"])
         execvp.assert_called_once()
+
+    def test_run_missing_executable_reports_build_instruction_before_tree_ownership(self):
+        args = self.parse(["run", "-n", "tui"])
+        with (
+            mock.patch.object(run_command_mod.Path, "exists", return_value=False),
+            mock.patch.object(run_command_mod.workspace_cache, "validate_consumer") as validate,
+        ):
+            with contextlib.redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit):
+                run_command_mod.run_command(args)
+        self.assertIn("Did you build the project", stderr.getvalue())
+        validate.assert_not_called()
 
     def test_run_command_no_build_skips_build(self):
         args = self.parse(["run", "-n", "tui"])

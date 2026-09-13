@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import doccheck, pythoncheck
+from . import compiler_cache, doccheck, pythoncheck, workspace_cache
 from .paths import PROJECT_ROOT
 
 TEST_COUNT_RE = re.compile(r"Ran (\d+) tests?")
@@ -27,6 +27,21 @@ def run(*, log: Path | None = None) -> int:
                 sink.write("\n".join(lines) + "\n")
 
     env = dict(os.environ)
+    for key in (
+        compiler_cache.SHARED_WORKSPACES_EFFECTIVE,
+        compiler_cache.SHARED_WORKSPACES_CCACHE,
+        compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX,
+        compiler_cache.SHARED_WORKSPACES_FALLBACK,
+        compiler_cache.SHARED_WORKSPACES_MSBUILD_WRAPPER,
+        workspace_cache.WINDOWS_SOURCE_VIEW,
+        workspace_cache.WINDOWS_BUILD_VIEW,
+        workspace_cache.WINDOWS_BUILD_PHYSICAL_ROOT,
+        "CCACHE_NAMESPACE",
+        "CCACHE_BASEDIR",
+        "CCACHE_HASHDIR",
+        "CCACHE_SLOPPINESS",
+    ):
+        env.pop(key, None)
     script_dir = str(PROJECT_ROOT / "script")
     env["PYTHONPATH"] = script_dir + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     result = subprocess.run(

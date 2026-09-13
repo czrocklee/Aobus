@@ -62,6 +62,77 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             self.assertIn("-getTargetResult:GetCompileCommands", run.call_args.args[0])
             self.assertIn("/p:Configuration=Debug", run.call_args.args[0])
 
+    def test_fixed_view_commands_keep_compiler_paths_and_match_physical_owners(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "repo"
+            view = root / "fixed-source"
+            build = root / "build"
+            generator = root / "vs"
+            main = source / "app/windows-winui/App.cpp"
+            header = main.with_suffix(".h")
+            auxiliary = source / "test/helper/WinUiLocalizationProbe.cpp"
+            generated = build / "generated/XamlTypeInfo.g.cpp"
+            clang = root / "llvm/clang-cl.exe"
+            projects = (
+                build / "app/windows-winui/aobus-winui-lib.vcxproj",
+                build / "app/windows-winui/ao_winui_localization_probe.vcxproj",
+            )
+            for path in (
+                main,
+                header,
+                auxiliary,
+                generated,
+                clang,
+                *projects,
+                generator / "MSBuild/Current/Bin/MSBuild.exe",
+            ):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+            main.write_text('#include "App.h"\n')
+            (build / "CMakeCache.txt").write_text(f"CMAKE_GENERATOR_INSTANCE:INTERNAL={generator}\n")
+            viewed_main = view / main.relative_to(source)
+            viewed_auxiliary = view / auxiliary.relative_to(source)
+
+            def physical(path, **kwargs):
+                try:
+                    return source / path.relative_to(view)
+                except ValueError:
+                    return path
+
+            def result(files):
+                payload = {
+                    "TargetResults": {
+                        "GetCompileCommands": {
+                            "Result": "Success",
+                            "Items": [{"Identity": "/c /DWINUI", "WorkingDirectory": str(build), "Files": files}],
+                        }
+                    }
+                }
+                return mock.Mock(returncode=0, stdout=json.dumps(payload))
+
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", source),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", main.parent),
+                mock.patch("ao.core.workspace_cache.canonical_portal_path", side_effect=physical),
+                mock.patch.object(
+                    winuitidy.subprocess,
+                    "run",
+                    side_effect=(
+                        result(f"{viewed_main};{generated}"),
+                        result(str(viewed_auxiliary)),
+                    ),
+                ),
+            ):
+                commands = winuitidy.compile_commands(build, clang, required_translation_units=(main, auxiliary))
+                companions = winuitidy.find_header_companions(
+                    commands, (header,), project_root=source, winui_root=main.parent
+                )
+            self.assertEqual([Path(command["file"]) for command in commands], [viewed_main, viewed_auxiliary])
+            self.assertIn(str(viewed_main), commands[0]["command"])
+            self.assertEqual(Path(commands[0]["directory"]), build)
+            self.assertEqual(companions, {header: main})
+
     def test_indexes_header_companions_from_the_winui_include_graph(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"

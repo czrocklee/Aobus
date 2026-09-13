@@ -1,12 +1,30 @@
 # ao_test_options: shared test compilation settings
 add_library(ao_test_options INTERFACE)
 target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
-target_compile_definitions(
-  ao_test_options
-  INTERFACE AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio" AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_options(ao_test_options INTERFACE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:-Wno-array-bounds>
   $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,15>>:-Wno-mismatched-new-delete>
+)
+
+set_property(SOURCE
+  unit/audio/AudioFixtureSupport.cpp
+  unit/cli/CliTestSupport.cpp
+  unit/audio/AacDecoderSessionTest.cpp
+  unit/audio/AlacDecoderMalformedMp4Test.cpp
+  unit/media/mp4/DemuxerTest.cpp
+  unit/runtime/library/LibraryCommandsDryRunTest.cpp
+  unit/runtime/library/LibraryCommandsTrackCreateCommandTest.cpp
+  unit/runtime/library/LibraryExportImportDeltaTest.cpp
+  unit/runtime/library/LibraryExportImportTest.cpp
+  unit/runtime/resource/ResourceByteReadTest.cpp
+  integration/audio/DecoderIntegrationTest.cpp
+  integration/audio/GraphIntegrityTest.cpp
+  integration/media/file/FileTest.cpp
+  APPEND PROPERTY COMPILE_DEFINITIONS AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio"
+)
+set_property(SOURCE
+  unit/uimodel/layout/component/LayoutSchemaTest.cpp
+  APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 if(LINUX)
