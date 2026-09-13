@@ -1199,6 +1199,61 @@ namespace ao::tui::test
     }
   }
 
+  TEST_CASE("Render - notification close hint stays visible once with or without activity", "[tui][regression][render]")
+  {
+    using ao::tui::notificationCenterPanel;
+
+    struct LocaleCase final
+    {
+      std::string_view locale;
+      std::string_view closeHint;
+    };
+    auto const cases = std::to_array<LocaleCase>({
+      {.locale = "fr", .closeHint = "Esc fermer"},
+      {.locale = "ja", .closeHint = "Esc 閉じる"},
+    });
+    auto shell = ShellInteractionModel{};
+    shell.openOverlay(Overlay::Notifications);
+    auto const& keymapPlan = defaultKeymapPlan();
+
+    for (auto const& item : cases)
+    {
+      auto const textCatalog = ao::test::messageCatalog(item.locale);
+
+      for (auto const hasActivity : {false, true})
+      {
+        auto activity = uimodel::ActivityStatusViewState{};
+
+        if (hasActivity)
+        {
+          activity.compact = uimodel::ActivityCompactState{
+            .kind = uimodel::ActivityStatusKind::Warning,
+            .text = "Partial import",
+            .dismissible = true,
+          };
+        }
+
+        for (std::int32_t const columns : {48, 100})
+        {
+          auto const panelColumns = notificationCenterPanelColumns(textCatalog, activity, columns);
+          auto const rendered = renderElement(
+            ftxui::vbox(
+              {notificationCenterPanel(textCatalog, activity, nullptr, panelColumns),
+               statusBar(textCatalog,
+                         StatusBarViewState{.activityStatus = &activity, .terminalColumns = columns, .shell = &shell},
+                         keymapPlan)}),
+            columns,
+            20);
+          CAPTURE(item.locale, columns, hasActivity);
+          INFO(rendered.text);
+          REQUIRE(rendered.text.contains(item.closeHint));
+          CHECK(rendered.text.find(item.closeHint) == rendered.text.rfind(item.closeHint));
+          CHECK(rendered.text.contains("Partial import") == hasActivity);
+        }
+      }
+    }
+  }
+
   TEST_CASE("Render - one effective keymap drives status, overlay, palette, and help hints", "[tui][unit][keymap]")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};

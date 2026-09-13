@@ -127,7 +127,11 @@ namespace ao::tui
     }
 
     rows.push_back(separator());
-    rows.push_back(style::panelFooterHint(notificationFooter(textCatalog)));
+
+    for (auto const& line : wrapCellText(notificationFooter(textCatalog), style::popupPanelBodyColumns(panelColumns)))
+    {
+      rows.push_back(style::panelFooterHint(line));
+    }
 
     return style::popupPanel(overlayLabel(textCatalog, Overlay::Notifications), vbox(std::move(rows))) |
            size(WIDTH, EQUAL, panelColumns);
