@@ -442,7 +442,7 @@ namespace ao::winui::layout
         {
           auto const targets = _membershipTargets();
           auto addSubmenu = MenuFlyoutSubItem{};
-          addSubmenu.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListAddToPlaylist)));
+          addSubmenu.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListAddToPlaylist)));
           std::size_t addCount = 0;
           auto const activeListId = _trackList.activeListId();
 
@@ -462,7 +462,7 @@ namespace ao::winui::layout
           if (addCount == 0)
           {
             appendItem(addSubmenu.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListNoEditablePlaylists),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListNoEditablePlaylists),
                        {},
                        false);
           }
@@ -474,7 +474,7 @@ namespace ao::winui::layout
           {
             appendItem(_contextFlyout.Items(),
                        i18n::requiredFormat(_textCatalog,
-                                            i18n::MessageId::WinUiListRemoveFromCurrent,
+                                            i18n::MessageId::ListRemoveFromCurrent,
                                             {i18n::MessageArgument{"name", current->name},
                                              i18n::MessageArgument{"tag", tagExpression(current->tag)}}),
                        [edit = _editMembership, listId = current->listId] { edit(listId, false); });
@@ -485,7 +485,7 @@ namespace ao::winui::layout
         {
           _contextFlyout.Items().Append(MenuFlyoutSeparator{});
           auto ordering = MenuFlyoutSubItem{};
-          ordering.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListManualOrder)));
+          ordering.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::ListManualOrder)));
 
           if (auto const capabilities = _orderCapabilities(); !capabilities.canAuthorOrder)
           {
@@ -496,28 +496,28 @@ namespace ao::winui::layout
             auto const action = [this](std::string_view const id)
             { return [this, id = std::string{id}] { std::ignore = _actions.tryInvoke(id, ActionContext{}); }; };
             appendItem(ordering.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveUp),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListMoveUp),
                        action("track.orderMoveUp"),
                        capabilities.canRelativeMove,
                        _shortcutHint("track.orderMoveUp"));
             appendItem(ordering.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveDown),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListMoveDown),
                        action("track.orderMoveDown"),
                        capabilities.canRelativeMove,
                        _shortcutHint("track.orderMoveDown"));
             appendItem(ordering.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveToTop),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListMoveToTop),
                        action("track.orderMoveToTop"),
                        capabilities.canAbsoluteMove,
                        _shortcutHint("track.orderMoveToTop"));
             appendItem(ordering.Items(),
-                       i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListMoveToBottom),
+                       i18n::requiredText(_textCatalog, i18n::MessageId::ListMoveToBottom),
                        action("track.orderMoveToBottom"),
                        capabilities.canAbsoluteMove,
                        _shortcutHint("track.orderMoveToBottom"));
             appendItem(
               ordering.Items(),
-              i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListResetOrder),
+              i18n::requiredText(_textCatalog, i18n::MessageId::ListResetOrder),
               [apply = _applyOrder] { apply(ListOrderCommand::Reset); },
               capabilities.canResetOrder);
           }

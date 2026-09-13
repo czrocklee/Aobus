@@ -16,6 +16,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <string>
 #include <string_view>
 
@@ -82,9 +83,9 @@ namespace ao::uimodel::test
     format.precisionBits = 24;
     CHECK(audioFormatLabel(format) == "48.0 kHz · 24-bit · 6 ch");
 
-    auto const paddedFormat =
+    auto const pcmFormat =
       audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed32Le};
-    CHECK(audioFormatLabel(paddedFormat) == "44.1 kHz · 32-bit · Stereo");
+    CHECK(audioFormatLabel(pcmFormat) == "44.1 kHz · 32-bit · Stereo");
   }
 
   TEST_CASE("AudioQualityFormatter - quality categories map raw quality to visual tiers",
@@ -382,7 +383,7 @@ namespace ao::uimodel::test
     auto const format = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
 
     CHECK(formatter.nodeTypeLabel(audio::flow::NodeType::Source) == "[Quelle]");
-    CHECK(formatter.formatLabel(format) == "44.1 kHz · 16 Bit · Stereo");
+    CHECK(formatter.formatLabel(format) == "44.1 kHz · 16-bit · Stereo");
     CHECK(formatter.findingLabel(audio::QualityFinding{
             .kind = audio::QualityFindingKind::MixedSources,
             .sharedApps = {"Dvořák", "誰か"},
@@ -423,6 +424,45 @@ namespace ao::uimodel::test
       auto strippedGainLabel = gainLabel;
       strippedGainLabel.erase(gainLabel.find(kMagnitude), kMagnitude.size());
       CHECK(strippedGainLabel != plainLabel);
+    }
+  }
+
+  TEST_CASE("AudioQualityFormatter - localized bit units preserve signal and PCM widths",
+            "[uimodel][regression][quality][localization]")
+  {
+    struct ExpectedFormatLabels final
+    {
+      std::string_view locale;
+      std::string_view signal;
+      std::string_view pcm;
+    };
+
+    static constexpr auto kExpected = std::array{
+      ExpectedFormatLabels{
+        .locale = "en-US", .signal = "44.1 kHz · 24-bit · Stereo", .pcm = "44.1 kHz · 32-bit · Stereo"},
+      ExpectedFormatLabels{
+        .locale = "de-DE", .signal = "44.1 kHz · 24-bit · Stereo", .pcm = "44.1 kHz · 32-bit · Stereo"},
+      ExpectedFormatLabels{
+        .locale = "zh-CN", .signal = "44.1 kHz · 24-bit · 立体声", .pcm = "44.1 kHz · 32-bit · 立体声"},
+      ExpectedFormatLabels{
+        .locale = "zh-TW", .signal = "44.1 kHz · 24-bit · 立體聲", .pcm = "44.1 kHz · 32-bit · 立體聲"},
+      ExpectedFormatLabels{
+        .locale = "ja-JP", .signal = "44.1 kHz · 24-bit · ステレオ", .pcm = "44.1 kHz · 32-bit · ステレオ"},
+      ExpectedFormatLabels{
+        .locale = "es-ES", .signal = "44.1 kHz · 24-bit · Estéreo", .pcm = "44.1 kHz · 32-bit · Estéreo"},
+      ExpectedFormatLabels{
+        .locale = "fr-FR", .signal = "44.1 kHz · 24-bit · Stéréo", .pcm = "44.1 kHz · 32-bit · Stéréo"},
+    };
+    auto const signalFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 24};
+    auto const pcmFormat =
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed24In32Le};
+
+    for (auto const& expected : kExpected)
+    {
+      INFO("locale: " << expected.locale);
+      auto const formatter = AudioQualityFormatter{ao::test::messageCatalog(expected.locale)};
+      CHECK(formatter.formatLabel(signalFormat) == expected.signal);
+      CHECK(formatter.formatLabel(pcmFormat) == expected.pcm);
     }
   }
 

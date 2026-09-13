@@ -38,7 +38,7 @@ namespace ao::gtk::test
     CHECK(gtkLabel->get_text().empty());
     CHECK(gtkLabel->has_css_class("ao-nowplaying"));
     CHECK(gtkLabel->has_css_class("ao-clickable"));
-    CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
+    CHECK(gtkLabel->get_tooltip_text() == "Show the currently playing track");
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(

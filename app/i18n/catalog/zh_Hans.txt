@@ -48,7 +48,7 @@ zh_Hans:table {
     tui_settings_reveal_indicators_on_hover { "悬停显示面板指示器" }
     tui_settings_mouse { "鼠标操作" }
     tui_settings_wheel { "滚轮移动步长" }
-    tui_settings_seek { "键盘快进步长" }
+    tui_settings_seek { "键盘快进/快退步长" }
     tui_settings_volume { "音量步长" }
     tui_settings_hover { "悬停显示音频详情" }
     tui_settings_on { "开启" }
@@ -140,8 +140,8 @@ zh_Hans:table {
     missing_track_work { "未知作品" }
     track_presentation_library { "音乐库" }
     track_presentation_description_library { "所有曲目按专辑艺人和专辑排序。" }
-    track_presentation_list_order { "自定义顺序" }
-    track_presentation_description_list_order { "按自定义顺序排列曲目。" }
+    track_presentation_list_order { "手动排序" }
+    track_presentation_description_list_order { "按自己的顺序排列曲目。" }
     track_presentation_songs { "歌曲" }
     track_presentation_description_songs { "以列表形式显示按标题排序的所有曲目。" }
     track_presentation_albums { "专辑" }
@@ -245,7 +245,7 @@ zh_Hans:table {
     list_order_authoring_unavailable { "当前无法修改音乐库。" }
     list_order_list_unavailable { "此列表已不再可用。" }
     list_order_fix_filter { "更改排序前，请先修复列表表达式或快速筛选条件。" }
-    list_order_choose_flat_presentation { "选择“手动排序”或其他平铺未排序视图以重新排列曲目。" }
+    list_order_choose_flat_presentation { "请选择“手动排序”或其他未设置排序规则的平铺视图，以重新排列曲目。" }
     list_order_clear_quick_filter { "清除快速筛选条件后才能拖动或相对移动；移至顶部或底部仍然可用。" }
     list_order_changed { "列表已更改。请重新启动排序操作。" }
     list_order_unchanged { "排序未更改。" }
@@ -278,7 +278,7 @@ zh_Hans:table {
     audio_node_device { "[设备]" }
     audio_node_other_source { "[其他源]" }
     audio_node_unknown { "[未知]" }
-    audio_format { "{sampleRate} kHz · {bits} 位 · {channels}" }
+    audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} 声道" }
     audio_finding_lossy_source { "有损音源" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {软件音量衰减：{gain}} other {软件音量衰减}}" }
@@ -330,18 +330,18 @@ zh_Hans:table {
     gtk_shell_menu_help { "帮助" }
     gtk_shell_about { "关于" }
     gtk_shell_application_menu { "应用程序菜单" }
-    gtk_playback_show_playing_list { "点击显示播放列表" }
+    gtk_playback_reveal_playing_track { "定位正在播放的曲目" }
     gtk_playback_toggle_mute { "切换静音" }
     gtk_playback_show_current_album { "显示当前专辑" }
-    gtk_playback_now_playing_cover_art { "正在播放封面" }
+    gtk_playback_now_playing_cover_art { "当前播放曲目的封面" }
     gtk_library_quick_filter_placeholder { "搜索歌曲、艺人、专辑、标签..." }
     gtk_library_clear_filter { "清除筛选" }
     gtk_library_create_list_from_filter { "根据当前筛选条件创建列表" }
-    gtk_list_new { "新建列表..." }
+    list_new { "新建列表..." }
     gtk_list_new_playlist { "新建播放列表..." }
-    gtk_list_edit { "编辑列表..." }
-    gtk_list_delete { "删除列表" }
-    gtk_list_delete_subtree { "删除列表及其子项..." }
+    list_edit { "编辑列表..." }
+    list_delete { "删除列表" }
+    list_delete_subtree { "删除列表及其子项..." }
     gtk_smart_list_new_title { "新建列表" }
     gtk_smart_list_edit_title { "编辑列表" }
     gtk_smart_list_new_playlist_title { "新建播放列表" }
@@ -368,51 +368,51 @@ zh_Hans:table {
     gtk_smart_list_invalid_source { "(无效源)" }
     gtk_smart_list_choose_membership_tag { "选择一个可见标签作为播放列表成员资格" }
     gtk_library_open_music_library { "打开音乐库" }
-    gtk_library_select_export_mode { "选择导出模式" }
-    gtk_library_choose_backup_contents { "选择要包含在备份中的内容：" }
-    gtk_library_export_mode_delta { "增量（同步用户编辑、标签、列表）" }
-    gtk_library_export_mode_metadata { "元数据（整理的文本、标签和列表）" }
-    gtk_library_export_mode_full { "完整（灾难恢复：包含全部数据）" }
-    gtk_library_export_mode_list_only { "仅列表（仅同步播放列表，不触碰曲目）" }
-    gtk_library_include { "包含" }
-    gtk_library_next { "下一步" }
-    gtk_library_export_yaml { "导出音乐库为 YAML" }
-    gtk_library_yaml_files { "YAML 文件" }
-    gtk_library_import_yaml { "从 YAML 导入音乐库" }
-    gtk_library_confirm_restore { "确认音乐库恢复" }
-    gtk_library_restore_library { "恢复音乐库" }
-    gtk_library_restore_lists { "恢复列表" }
-    gtk_library_restore_scope_library { "音乐库曲目和列表" }
-    gtk_library_restore_scope_lists { "列表" }
+    library_select_export_mode { "选择导出模式" }
+    library_choose_backup_contents { "选择要包含在备份中的内容：" }
+    library_export_mode_delta { "增量（用户编辑、标签、列表）" }
+    library_export_mode_metadata { "元数据（整理的文本、标签和列表）" }
+    library_export_mode_full { "完整（全部音乐库数据，不含音频和封面文件）" }
+    library_export_mode_list_only { "仅列表（全部已保存列表，不含曲目数据）" }
+    library_include { "包含" }
+    library_next { "下一步" }
+    library_export_yaml { "导出音乐库为 YAML" }
+    library_yaml_files { "YAML 文件" }
+    library_import_yaml { "从 YAML 导入音乐库" }
+    library_confirm_restore { "确认恢复" }
+    library_restore_library { "恢复音乐库" }
+    library_restore_lists { "恢复列表" }
+    library_restore_scope_library { "音乐库曲目和列表" }
+    library_restore_scope_lists { "列表" }
     gtk_library_file_selection_failed { "文件选择失败" }
     gtk_library_could_not_select_music_folder { "无法选择音乐库文件夹" }
-    gtk_library_could_not_select_export_file { "无法选择导出文件" }
-    gtk_library_could_not_select_backup { "无法选择音乐库备份文件" }
-    gtk_list_delete_question_title { "删除列表？" }
-    gtk_list_delete_subtree_title { "删除列表及其子项？" }
-    gtk_list_delete_action { "删除" }
-    gtk_list_delete_all_action { "全部删除" }
+    library_could_not_select_export_file { "无法选择导出文件" }
+    library_could_not_select_backup { "无法选择音乐库备份文件" }
+    list_delete_title { "删除列表？" }
+    list_delete_subtree_title { "删除列表及其子项？" }
+    list_delete_action { "删除" }
+    list_delete_all_action { "全部删除" }
     gtk_list_unable_to_delete_title { "无法删除列表" }
-    gtk_list_delete_question { "删除“{name}”？\n\n该列表将被移除，音乐文件将予以保留。" }
-    gtk_list_delete_subtree_question { "删除此派生子树中的 {count, plural, one {# 个列表} other {# 个列表}}？\n\n{entries}\n嵌套播放列表使用的标签将被保留。\n音乐文件将予以保留。" }
-    gtk_list_remove_tag { "同时从 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
-    gtk_list_tag_references { "{tag} 还被以下对象引用：{references}。移除它可能会更改这些列表。" }
-    gtk_library_restore_confirmation { "此恢复操作将替换当前的 {scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用。\n\n仅在此内容与所选备份匹配时继续。" }
-    gtk_library_file_selection_error { "{operation}：{message}" }
+    list_delete_question { "删除“{name}”？\n\n该列表将被移除，音乐文件将予以保留。" }
+    list_delete_subtree_question { "删除此派生子树中的 {count, plural, one {# 个列表} other {# 个列表}}？\n\n{entries}\n嵌套播放列表使用的标签将被保留。\n音乐文件将予以保留。" }
+    list_remove_tag { "同时从 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
+    list_tag_references { "{tag} 还被以下对象引用：{references}。移除它可能会更改这些列表。" }
+    library_restore_confirmation { "此恢复操作将替换以下内容：{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用。\n\n仅在此内容与所选备份匹配时继续。" }
+    library_file_selection_error { "{operation}：{message}" }
     gtk_list_other_computed_membership { "其他列表具有计算出的成员资格；请改为编辑其表达式或曲目标签。" }
-    gtk_list_no_editable_playlists { "没有可直接编辑的播放列表" }
+    list_no_editable_playlists { "没有可直接编辑的播放列表" }
     gtk_list_create_playlist { "创建播放列表..." }
     gtk_list_manage_lists { "管理列表..." }
-    gtk_list_add_to_playlist { "添加到播放列表" }
-    gtk_list_remove_from_current { "从 {name} ({tag}) 中移除" }
+    list_add_to_playlist { "添加到播放列表" }
+    list_remove_from_current { "从 {name} ({tag}) 中移除" }
     gtk_list_remove_computed_unavailable { "无法从此列表中移除，因为其成员资格是通过计算得出的。" }
-    gtk_list_move_up { "上移" }
-    gtk_list_move_down { "下移" }
-    gtk_list_move_to_top { "移至顶部" }
-    gtk_list_move_to_bottom { "移至底部" }
-    gtk_list_reset_order { "重置排序" }
+    list_move_up { "上移" }
+    list_move_down { "下移" }
+    list_move_to_top { "移至顶部" }
+    list_move_to_bottom { "移至底部" }
+    list_reset_order { "重置排序" }
     gtk_list_forget_hidden_positions { "清除隐藏的位置" }
-    gtk_list_manual_order { "手动排序" }
+    list_manual_order { "手动排序" }
     gtk_list_select_tracks_for_order { "请选择至少一首曲目以更改手动排序。" }
     gtk_list_move_up_action { "在手动排序中上移" }
     gtk_list_move_down_action { "在手动排序中下移" }
@@ -499,7 +499,6 @@ zh_Hans:table {
     tui_shell_workspace_view { "视图" }
     tui_shell_overlay_tracks { "曲目" }
     tui_shell_overlay_lists { "列表" }
-    tui_shell_overlay_detail { "详情" }
     tui_shell_overlay_pipeline { "音频链路" }
     tui_shell_overlay_output { "输出" }
     tui_shell_overlay_views { "视图" }
@@ -507,12 +506,9 @@ zh_Hans:table {
     tui_shell_overlay_help { "帮助" }
     tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{pinState, select, bound {{pinKey} 常驻  } other {}}{openKey} 打开  {closeKey} 关闭" }
     tui_library_no_lists_found { "未找到列表" }
-    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{closeKey} 关闭" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{closeKey} 关闭" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{selectKey} 选择  {closeKey} 关闭" }
     tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{selectKey} 选择  {closeKey} 关闭" }
-    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{hideKey} 隐藏紧凑  {closeKey} 关闭" }
-    tui_shell_hint_help { "{closeKey} 关闭" }
     tui_shell_status_command { "命令" }
     tui_shell_status_lists { "列表" }
     tui_shell_status_view { "视图" }
@@ -554,7 +550,7 @@ zh_Hans:table {
     tui_shell_detail_select_all { "标记此视图中的全部曲目" }
     tui_shell_detail_select_clear { "清除标记" }
     tui_shell_output_devices_title { "输出设备" }
-    tui_playback_no_active_track { "无活动曲目" }
+    tui_playback_no_active_track { "暂无播放曲目" }
     tui_playback_volume { "音量 {percent}%" }
     tui_playback_no_output_device_selected { "未选择输出设备" }
     tui_playback_no_output_devices_found { "未找到输出设备" }
@@ -576,13 +572,13 @@ zh_Hans:table {
     tui_shell_help_playback { "播放控制" }
     tui_shell_help_quit { "退出" }
     tui_shell_help_footer { "{closeKey} 关闭" }
-    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{hideKey} 隐藏紧凑  点击可清除行  {closeKey} 关闭" }
+    tui_shell_notification_footer { "{toggleState, select, bound {{toggleKey} 切换  } other {}}{hideKey} 隐藏状态摘要  点击可清除的通知  {closeKey} 关闭" }
     tui_library_detail { "音乐库" }
     tui_library_no_sections { "此视图中无分节" }
     tui_library_no_section_selected { "未选择分节" }
     tui_library_no_current_track { "无当前曲目" }
-    tui_library_current_track_not_in_view { "无法在曲库中定位当前曲目" }
-    tui_library_no_active_track_view { "无活动曲目视图" }
+    tui_library_current_track_not_in_view { "无法在音乐库中定位当前曲目" }
+    tui_library_no_active_track_view { "当前没有曲目视图" }
     tui_library_no_views_available { "无可用视图" }
     tui_library_filter_cleared { "筛选条件已清除" }
     tui_library_filter_applied { "筛选条件已应用" }
@@ -606,7 +602,6 @@ zh_Hans:table {
     tui_library_revealed_track { "已定位 {track}" }
     tui_library_unknown_view { "未知视图 {id}" }
     tui_library_view { "视图：{id}" }
-    tui_library_opened_list { "已打开 {list}" }
     tui_library_reloaded_tracks { "已重新加载 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     tui_library_quick_filter_matched { "快速筛选匹配 {count, plural, one {# 首曲目} other {# 首曲目}}" }
     tui_library_expression_filter_matched { "表达式筛选匹配 {count, plural, one {# 首曲目} other {# 首曲目}}" }
@@ -662,30 +657,10 @@ zh_Hans:table {
     winui_shell_rescan_library { "重新扫描音乐库" }
     winui_shell_import_library_data { "导入音乐库数据..." }
     winui_shell_export_library_data { "导出音乐库数据..." }
-    winui_library_select_export_mode { "选择导出模式" }
-    winui_library_choose_backup_contents { "选择要包含在备份中的内容：" }
-    winui_library_include { "包含" }
-    winui_library_export_mode_delta { "增量（同步用户编辑、标签、列表）" }
-    winui_library_export_mode_metadata { "元数据（整理的文本、标签和列表）" }
-    winui_library_export_mode_full { "完整（灾难恢复：包含全部数据）" }
-    winui_library_export_mode_list_only { "仅列表（仅同步播放列表，不触碰曲目）" }
     winui_library_select_import_mode { "选择导入模式" }
     winui_library_choose_import_mode { "将此备份合并到音乐库，或恢复其数据范围：" }
     winui_library_import_mode_merge { "合并（保留备份范围外的数据）" }
     winui_library_import_mode_restore { "恢复（预览后替换备份范围）" }
-    winui_library_next { "下一步" }
-    winui_library_export_yaml { "导出音乐库为 YAML" }
-    winui_library_import_yaml { "从 YAML 导入音乐库" }
-    winui_library_yaml_files { "YAML 文件" }
-    winui_library_confirm_restore { "确认恢复" }
-    winui_library_restore_library { "恢复音乐库" }
-    winui_library_restore_lists { "恢复列表" }
-    winui_library_restore_scope_library { "音乐库" }
-    winui_library_restore_scope_lists { "列表" }
-    winui_library_restore_confirmation { "此恢复操作将替换当前的{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用。\n\n仅在此内容与所选备份匹配时继续。" }
-    winui_library_could_not_select_export_file { "无法选择导出文件" }
-    winui_library_could_not_select_backup { "无法选择音乐库备份文件" }
-    winui_library_file_selection_error { "{operation}：{message}" }
     winui_shell_menu_view { "视图" }
     winui_shell_modern_mode { "现代模式" }
     winui_shell_columns { "列设置..." }
@@ -711,10 +686,6 @@ zh_Hans:table {
     winui_track_properties_stale { "打开此对话框期间，音乐库已发生更改。请重新打开属性后重试。" }
     winui_track_properties_invalid_value { "值无效：{detail}" }
     winui_list_create_from_filter { "根据当前筛选条件创建列表" }
-    winui_list_new { "新建列表..." }
-    winui_list_edit { "编辑列表..." }
-    winui_list_delete { "删除列表" }
-    winui_list_delete_subtree { "删除列表及其子项..." }
     winui_list_editor_new_title { "新建列表" }
     winui_list_editor_edit_title { "编辑列表" }
     winui_common_cancel { "取消" }
@@ -732,23 +703,6 @@ zh_Hans:table {
     winui_list_auto_presentation { "自动" }
     winui_list_presentation { "视图" }
     winui_list_preview { "预览" }
-    winui_list_delete_title { "删除列表？" }
-    winui_list_delete_subtree_title { "删除列表及其子项？" }
-    winui_list_delete_commit { "删除" }
-    winui_list_delete_all_commit { "全部删除" }
-    winui_list_delete_question { "删除“{name}”？\n\n该列表将被移除，音乐文件将予以保留。" }
-    winui_list_delete_subtree_question { "删除此派生子树中的 {count, plural, one {# 个列表} other {# 个列表}}？\n\n{entries}\n嵌套播放列表使用的标签将被保留。\n音乐文件将予以保留。" }
-    winui_list_remove_tag { "同时从 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
-    winui_list_tag_references { "{tag} 还被以下对象引用：{references}。移除它可能会更改这些列表。" }
-    winui_list_no_editable_playlists { "没有可直接编辑的播放列表" }
-    winui_list_add_to_playlist { "添加到播放列表" }
-    winui_list_remove_from_current { "从 {name} ({tag}) 中移除" }
-    winui_list_manual_order { "手动排序" }
-    winui_list_move_up { "上移" }
-    winui_list_move_down { "下移" }
-    winui_list_move_to_top { "移至顶部" }
-    winui_list_move_to_bottom { "移至底部" }
-    winui_list_reset_order { "重置排序" }
     winui_shell_track_details { "曲目详情" }
     winui_shell_classic_mode { "经典模式" }
     winui_playback_output_device { "输出设备" }
@@ -763,6 +717,7 @@ zh_Hans:table {
     winui_library_no_selection { "无选择项" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
+    winui_playback_options { "播放选项" }
     winui_more_menu { "更多" }
     winui_error { "错误：{detail}" }
     winui_save_settings_failed { "无法保存设置：{detail}" }
@@ -799,7 +754,6 @@ zh_Hans:table {
     track_hide_empty_fields { "隐藏空字段" }
     track_missing_on_some { "在部分曲目中缺失" }
     track_fallback { "曲目 {id}" }
-    track_detail_title { "曲目详情" }
     track_no_selection { "未选择曲目" }
     cover_art_title { "封面" }
     cover_art_none { "无封面" }
@@ -833,7 +787,7 @@ zh_Hans:table {
     gtk_hide_details { "隐藏详情" }
     gtk_show_details { "显示详情" }
     gtk_no_track_view_available { "无可用曲目视图。" }
-    gtk_save_layout_defaults_message { "这会将当前面板大小写入磁盘上的 ''{preset}'' 布局预设。\n\n写入预设的大小将从运行时状态中移除；展开状态等其他运行时值仍会保留。" }
+    gtk_save_layout_defaults_message { "将当前面板大小保存为 ''{preset}'' 布局的默认值？\n\n其他已保存的面板设置（包括显示状态）将保留。" }
     gtk_unable_switch_libraries { "无法切换音乐库" }
     gtk_startup_failed_title { "Aobus 启动失败" }
     gtk_startup_select_library_failed { "Aobus 无法选择启动音乐库：{detail}" }
@@ -1027,18 +981,13 @@ zh_Hans:table {
     gtk_layout_value_center { "居中" }
     tui_untitled_section { "无标题分节" }
     tui_notification_none { "无通知" }
-    tui_pipeline_closed { "音频链路已关闭" }
-    tui_pipeline_opened { "音频链路" }
-    tui_output_closed { "输出设备已关闭" }
-    tui_output_opened { "输出设备" }
-    tui_views_closed { "视图已关闭" }
-    tui_views_opened { "视图" }
-    tui_notifications_closed { "通知已关闭" }
-    tui_notifications_opened { "通知" }
+    tui_pipeline_closed { "已关闭音频链路面板" }
+    tui_output_closed { "已关闭输出设备选择面板" }
+    tui_views_closed { "已关闭视图选择面板" }
+    tui_notifications_closed { "已关闭通知中心" }
     tui_playback_start_failed { "无法开始播放。请检查输出设备、文件路径和日志。" }
     tui_playback_control_unavailable { "播放控制不可用" }
     tui_overlay_closed { "浮层已关闭" }
-    tui_help_opened { "帮助" }
     tui_section_unavailable { "分节已不再可用" }
     tui_unknown_command { "未知命令：{command}" }
     tui_filter_failed { "筛选失败：{detail}" }
@@ -1059,8 +1008,8 @@ zh_Hans:table {
     tui_tag_popover_add_apply { "添加并应用" }
     tui_shell_detail_edit_tags { "编辑曲目标签" }
     tui_settings_terminal_title { "终端标题格式" }
-    tui_settings_terminal_soul { "终端标题 Soul 动画" }
-    tui_settings_terminal_title_hint { "使用正在播放的曲目，例如 $artist \" - \" $title。留空关闭标题更新。" }
+    tui_settings_terminal_soul { "在终端标题中显示 Soul" }
+    tui_settings_terminal_title_hint { "设置当前播放曲目的标题格式，例如 $artist \" - \" $title。留空则停用标题更新。" }
     tui_settings_title_preview { "预览：{title}" }
     tui_settings_invalid_title_format { "格式无效：{detail}" }
   }

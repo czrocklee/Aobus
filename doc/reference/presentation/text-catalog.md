@@ -80,7 +80,8 @@ The production shared-id families are:
 | `completion_*` | completion semantic roles |
 | `notification_*` | structured playback reports |
 | `library_task_*`, `library_scan_*` | structured progress and scan outcomes |
-| `library_*`, `track_count`, `track_selection_summary` | shared library state, List fallback labels, and count presentation |
+| Other `library_*`, `track_count`, `track_selection_summary` | shared library state, GTK and WinUI transfer dialogs, List fallback labels, and count presentation |
+| `list_*` except `list_order_*` and `list_membership_*` | shared GTK and WinUI List authoring labels and actions |
 | `track_filter_error` | query diagnostic wrapper |
 | `smart_list_*` | smart-List membership and preview state |
 | `list_order_*`, `list_membership_*` | manual-order capability/results and Playlist-membership results |
@@ -95,7 +96,7 @@ The production shared-id families are:
 | `tui_shell_*`, `tui_playback_*`, `tui_library_*` | TUI navigation, help, playback, and library copy through canonical `MessageId` values |
 | `tui_settings_*` | TUI Settings pages, preference values, validation, persistence feedback, and contextual key arguments |
 | `tui_editor_*` | TUI track Properties pages, edit intents, confirmation prompts, submission status, and contextual shortcuts |
-| `tui_presentation_*`, `tui_*_opened`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
+| `tui_presentation_*`, `tui_*_closed`, `tui_*_failed` | TUI presentation-navigation, accessibility state, and recoverable-error copy |
 | `winui_shell_*`, `winui_playback_*`, `winui_library_*`, `winui_*_failed` | WinUI shell, playback, library, native tooltip, empty-state, and recoverable-error copy through MRT |
 
 [`MessageInventory.def`](../../../app/include/ao/i18n/MessageInventory.def) is the exact typed-id-to-key map. `MessageCatalog.h` and `MessageIds.h` include it to emit enumerators and definition entries.
@@ -154,7 +155,7 @@ Aobus uses the following terms consistently in its maintained Chinese catalogs:
 The shared `zh_Hant` catalog also serves regional requests such as `zh-TW` and `zh-HK`; it does not promise each region's preferred terminology.
 [Decision 0018](../../decision/0018-chinese-metadata-terminology.md) records the terminology sources, choice, and alternatives.
 
-Apply the same term to `TrackMetadataHeading`, `TuiEditorTabMetadata`, `GtkLibraryExportModeMetadata`, `WinUiLibraryExportModeMetadata`, `WinUiTrackPropertiesCustomMetadata`, `GtkCustomMetadataTitle`, `GtkCustomMetadataDeleted`, and `GtkCustomMetadataDelete`, including future messages for the same concept.
+Apply the same term to `TrackMetadataHeading`, `TuiEditorTabMetadata`, `LibraryExportModeMetadata`, `WinUiTrackPropertiesCustomMetadata`, `GtkCustomMetadataTitle`, `GtkCustomMetadataDeleted`, and `GtkCustomMetadataDelete`, including future messages for the same concept.
 Sentence grammar may vary; the concept name must remain consistent across frontends.
 
 Do not substitute the broader Track Detail or Properties labels for Metadata, or rename Audio Properties to match it.
@@ -281,6 +282,8 @@ Operating-system device facts remain raw external data.
 Playback presentation also resolves shared now-playing states, transport controls, volume state, and audio-quality semantics through this catalog.
 `AudioQualityFormatter` receives structured node formats and quality findings and returns complete localized messages; it does not expose message ids to frontends.
 Sample rates, bit counts, channel counts, precision markers, gain values, and the established `Hz`, `kHz`, and `dB` symbols are preformatted locale-neutral arguments in this tranche.
+The `audio_format` pattern uses `{bits}-bit` in every maintained locale, matching track-field bit-depth notation.
+The numeric values retain their separate meanings: audio-pipeline PCM formats may report container bits, while track fields report source bit depth.
 Node names, device names, track metadata, and external application names pass through byte-for-byte as message arguments.
 
 | Backend id | Label | Description | Short label | Device-description fallback | `AudioIconKind` |

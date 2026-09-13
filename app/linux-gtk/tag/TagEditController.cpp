@@ -335,7 +335,7 @@ namespace ao::gtk
     {
       addAction(
         addToListMenuPtr,
-        gtkText(_textCatalog, i18n::MessageId::GtkListNoEditablePlaylists),
+        gtkText(_textCatalog, i18n::MessageId::ListNoEditablePlaylists),
         "add-to-list-unavailable",
         [] {},
         false);
@@ -346,7 +346,7 @@ namespace ao::gtk
       addManageListsAction(gtkText(_textCatalog, i18n::MessageId::GtkListManageLists));
     }
 
-    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::GtkListAddToPlaylist), addToListMenuPtr);
+    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::ListAddToPlaylist), addToListMenuPtr);
 
     if (_optActiveSelection)
     {
@@ -399,29 +399,27 @@ namespace ao::gtk
     {
       if (capabilities.canRelativeMove)
       {
-        addOrderAction(gtkText(_textCatalog, i18n::MessageId::GtkListMoveUp), "order-up", TrackOrderCommand::MoveUp);
-        addOrderAction(
-          gtkText(_textCatalog, i18n::MessageId::GtkListMoveDown), "order-down", TrackOrderCommand::MoveDown);
+        addOrderAction(gtkText(_textCatalog, i18n::MessageId::ListMoveUp), "order-up", TrackOrderCommand::MoveUp);
+        addOrderAction(gtkText(_textCatalog, i18n::MessageId::ListMoveDown), "order-down", TrackOrderCommand::MoveDown);
       }
       else
       {
-        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::GtkListMoveUp), "order-up", [] {}, false);
-        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::GtkListMoveDown), "order-down", [] {}, false);
+        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::ListMoveUp), "order-up", [] {}, false);
+        addAction(orderingMenuPtr, gtkText(_textCatalog, i18n::MessageId::ListMoveDown), "order-down", [] {}, false);
         addAction(orderingMenuPtr, capabilities.disabledReason, "relative-ordering-unavailable", [] {}, false);
       }
 
       if (capabilities.canAbsoluteMove)
       {
         addOrderAction(
-          gtkText(_textCatalog, i18n::MessageId::GtkListMoveToTop), "order-top", TrackOrderCommand::MoveToTop);
+          gtkText(_textCatalog, i18n::MessageId::ListMoveToTop), "order-top", TrackOrderCommand::MoveToTop);
         addOrderAction(
-          gtkText(_textCatalog, i18n::MessageId::GtkListMoveToBottom), "order-bottom", TrackOrderCommand::MoveToBottom);
+          gtkText(_textCatalog, i18n::MessageId::ListMoveToBottom), "order-bottom", TrackOrderCommand::MoveToBottom);
       }
 
       if (capabilities.canResetOrder)
       {
-        addOrderAction(
-          gtkText(_textCatalog, i18n::MessageId::GtkListResetOrder), "order-reset", TrackOrderCommand::Reset);
+        addOrderAction(gtkText(_textCatalog, i18n::MessageId::ListResetOrder), "order-reset", TrackOrderCommand::Reset);
       }
 
       if (capabilities.canForgetHiddenPositions)
@@ -432,7 +430,7 @@ namespace ao::gtk
       }
     }
 
-    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::GtkListManualOrder), orderingMenuPtr);
+    menuModelPtr->append_submenu(gtkText(_textCatalog, i18n::MessageId::ListManualOrder), orderingMenuPtr);
     _contextPopoverPtr->set_menu_model(menuModelPtr);
     _contextActionsRegistration = std::move(actionRegistration);
   }

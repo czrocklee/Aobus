@@ -246,7 +246,7 @@ namespace ao::gtk
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveUp));
+      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::ListMoveUp));
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -257,7 +257,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveDown));
+      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::ListMoveDown));
       downBtn->set_sensitive(i + 1 < sortTerms.size());
 
       downBtn->signal_clicked().connect(
@@ -315,7 +315,7 @@ namespace ao::gtk
       spacer->set_hexpand(true);
       box->append(*spacer);
 
-      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveUp));
+      auto* upBtn = makeRowIconButton("go-up-symbolic", gtkText(_textCatalog, MessageId::ListMoveUp));
       upBtn->set_sensitive(i > 0);
 
       upBtn->signal_clicked().connect(
@@ -326,7 +326,7 @@ namespace ao::gtk
         });
       box->append(*upBtn);
 
-      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::GtkListMoveDown));
+      auto* downBtn = makeRowIconButton("go-down-symbolic", gtkText(_textCatalog, MessageId::ListMoveDown));
       downBtn->set_sensitive(i + 1 < visibleFields.size());
 
       downBtn->signal_clicked().connect(

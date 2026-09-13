@@ -24,7 +24,7 @@ namespace ao::gtk
   {
     _label.add_css_class("ao-nowplaying");
     _label.add_css_class("ao-clickable");
-    _label.set_tooltip_text(gtkText(textCatalog, i18n::MessageId::GtkPlaybackShowPlayingList));
+    _label.set_tooltip_text(gtkText(textCatalog, i18n::MessageId::GtkPlaybackRevealPlayingTrack));
 
     auto const clickGesturePtr = Gtk::GestureClick::create();
     clickGesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { _commands.revealPlayingTrack(); });

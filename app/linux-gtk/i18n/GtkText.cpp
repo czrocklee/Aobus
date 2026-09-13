@@ -18,7 +18,7 @@ namespace ao::gtk
 
   std::string deleteListQuestion(i18n::MessageCatalog const& catalog, std::string_view const name)
   {
-    return requiredFormat(catalog, MessageId::GtkListDeleteQuestion, {i18n::MessageArgument{"name", name}});
+    return requiredFormat(catalog, MessageId::ListDeleteQuestion, {i18n::MessageArgument{"name", name}});
   }
 
   std::string deleteSubtreeQuestion(i18n::MessageCatalog const& catalog,
@@ -26,7 +26,7 @@ namespace ao::gtk
                                     std::string_view const entries)
   {
     return requiredFormat(catalog,
-                          MessageId::GtkListDeleteSubtreeQuestion,
+                          MessageId::ListDeleteSubtreeQuestion,
                           {i18n::MessageArgument{"count", count}, i18n::MessageArgument{"entries", entries}});
   }
 
@@ -35,7 +35,7 @@ namespace ao::gtk
                                           std::size_t const count)
   {
     return requiredFormat(
-      catalog, MessageId::GtkListRemoveTag, {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"count", count}});
+      catalog, MessageId::ListRemoveTag, {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"count", count}});
   }
 
   std::string membershipTagReferencesWarning(i18n::MessageCatalog const& catalog,
@@ -43,7 +43,7 @@ namespace ao::gtk
                                              std::string_view const references)
   {
     return requiredFormat(catalog,
-                          MessageId::GtkListTagReferences,
+                          MessageId::ListTagReferences,
                           {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}});
   }
 
@@ -52,16 +52,16 @@ namespace ao::gtk
                                     std::string_view const tag)
   {
     return requiredFormat(catalog,
-                          MessageId::GtkListRemoveFromCurrent,
+                          MessageId::ListRemoveFromCurrent,
                           {i18n::MessageArgument{"name", name}, i18n::MessageArgument{"tag", tag}});
   }
 
   std::string libraryRestoreConfirmation(i18n::MessageCatalog const& catalog, rt::ImportReport const& report)
   {
-    auto const scopeId = report.targetScope == rt::ImportTargetScope::Library ? MessageId::GtkLibraryRestoreScopeLibrary
-                                                                              : MessageId::GtkLibraryRestoreScopeLists;
+    auto const scopeId = report.targetScope == rt::ImportTargetScope::Library ? MessageId::LibraryRestoreScopeLibrary
+                                                                              : MessageId::LibraryRestoreScopeLists;
     return requiredFormat(catalog,
-                          MessageId::GtkLibraryRestoreConfirmation,
+                          MessageId::LibraryRestoreConfirmation,
                           {i18n::MessageArgument{"scope", requiredText(catalog, scopeId)},
                            i18n::MessageArgument{"version", report.payloadVersion},
                            i18n::MessageArgument{"mode", rt::exportModeName(report.payloadMode)},
@@ -78,7 +78,7 @@ namespace ao::gtk
                                  std::string_view const message)
   {
     return requiredFormat(catalog,
-                          MessageId::GtkLibraryFileSelectionError,
+                          MessageId::LibraryFileSelectionError,
                           {i18n::MessageArgument{"operation", operation}, i18n::MessageArgument{"message", message}});
   }
 } // namespace ao::gtk

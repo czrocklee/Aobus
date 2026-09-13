@@ -92,11 +92,11 @@ namespace ao::gtk
     _listView.set_header_factory(headerFactoryPtr);
 
     auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListNew), "win.list-new-smart-list");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::ListNew), "win.list-new-smart-list");
     menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListNewPlaylist), "win.list-new-playlist");
-    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListEdit), "win.list-edit");
-    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListDelete), "win.list-delete");
-    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::GtkListDeleteSubtree), "win.list-delete-subtree");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::ListEdit), "win.list-edit");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::ListDelete), "win.list-delete");
+    menuModelPtr->append(gtkText(_textCatalog, i18n::MessageId::ListDeleteSubtree), "win.list-delete-subtree");
     _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }

@@ -244,6 +244,9 @@ Settings has one right-aligned, clickable footer of actions for its current stat
 
 Presentations offer `/` local search by Unicode case-insensitive substring. Settings Keyboard searches localized action labels and stable action ids. Search keeps owner row indices and identities, restricts navigation and activation to matches, and never changes the workspace filter. While searching, printable keys including j/k edit the query; Up/Down and page keys move through matches. Return activates the match, and an empty result cannot activate a hidden row. Escape first clears local search; the next Escape closes the overlay. Switching panels or Settings pages clears that panel's query.
 Outside local search, Escape closes the active overlay.
+Each overlay presents its interaction hints in its own panel; the status row retains independent activity feedback without repeating the panel title or hints.
+Go to keeps its dedicated clickable navigation status row in addition to the menu's selection-key footer.
+Opening an overlay does not post a transient notification; closing it retains the existing status feedback and errors remain visible.
 Notification `x` locally suppresses the compact activity entry according to the shared activity model.
 
 Overlays are composed over the root in one place, ordered by keyboard ownership: whichever surface answers for every key is drawn last, so no candidate below it can cover a surface that still owns input.

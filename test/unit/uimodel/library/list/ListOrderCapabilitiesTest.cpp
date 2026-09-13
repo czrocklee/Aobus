@@ -89,7 +89,7 @@ namespace ao::uimodel::test
 
     CHECK_FALSE(state.canAuthorOrder);
     CHECK(state.disabledReason ==
-          "Die Bibliothek ist beschäftigt. Manuelle Sortierung ist nach Abschluss der Wartung wieder verfügbar.");
+          "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar.");
   }
 
   TEST_CASE("ListOrder - rejects virtual, grouped, unavailable, and erroneous sources",

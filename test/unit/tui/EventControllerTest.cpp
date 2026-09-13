@@ -1058,6 +1058,84 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
+  TEST_CASE("EventController - opening overlays is silent and closing them reports feedback", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    auto const verifyToggle = [&](ftxui::Event const& openEvent,
+                                  ftxui::Event const& closeEvent,
+                                  Overlay const overlay,
+                                  i18n::MessageId const closedMessage)
+    {
+      auto const notificationCount = fixture.runtimePtr->notifications().feed().entries.size();
+
+      REQUIRE(controller.tryHandleEvent(openEvent));
+      CHECK(fixture.shell.overlay() == overlay);
+      CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
+
+      REQUIRE(controller.tryHandleEvent(closeEvent));
+      CHECK(fixture.shell.overlay() == Overlay::None);
+      auto const feed = fixture.runtimePtr->notifications().feed();
+      REQUIRE(feed.entries.size() == notificationCount + 1);
+      auto const* message = std::get_if<std::string>(&feed.entries.back().message);
+      REQUIRE(message != nullptr);
+      CHECK(*message == i18n::requiredText(library.textCatalog(), closedMessage));
+    };
+
+    SECTION("audio pipeline")
+    {
+      verifyToggle(ftxui::Event::Character("a"),
+                   ftxui::Event::Character("a"),
+                   Overlay::QualityPanel,
+                   i18n::MessageId::TuiPipelineClosed);
+    }
+
+    SECTION("output devices")
+    {
+      verifyToggle(ftxui::Event::Character("o"),
+                   ftxui::Event::Character("o"),
+                   Overlay::OutputDevices,
+                   i18n::MessageId::TuiOutputClosed);
+    }
+
+    SECTION("presentations")
+    {
+      verifyToggle(ftxui::Event::Character("p"),
+                   ftxui::Event::Character("p"),
+                   Overlay::PresentationPanel,
+                   i18n::MessageId::TuiViewsClosed);
+    }
+
+    SECTION("notification center")
+    {
+      fixture.runtimePtr->notifications().post(
+        rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::pinned());
+      verifyToggle(ftxui::Event::Character("n"),
+                   ftxui::Event::Character("n"),
+                   Overlay::Notifications,
+                   i18n::MessageId::TuiNotificationsClosed);
+    }
+
+    SECTION("help closed with Escape")
+    {
+      verifyToggle(
+        ftxui::Event::Character("?"), ftxui::Event::Escape, Overlay::Help, i18n::MessageId::TuiOverlayClosed);
+    }
+
+    SECTION("help closed with question mark")
+    {
+      verifyToggle(
+        ftxui::Event::Character("?"), ftxui::Event::Character("?"), Overlay::Help, i18n::MessageId::TuiOverlayClosed);
+    }
+
+    SECTION("help closed with F1")
+    {
+      verifyToggle(ftxui::Event::F1, ftxui::Event::F1, Overlay::Help, i18n::MessageId::TuiOverlayClosed);
+    }
+  }
+
   TEST_CASE("EventController - output shortcut toggles the output overlay", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};

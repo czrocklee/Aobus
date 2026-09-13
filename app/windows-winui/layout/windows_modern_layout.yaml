@@ -286,7 +286,7 @@ root:
                   type: menuButton
                   props:
                     menuId: nowPlayingOverflow
-                    textResourceKey: winui_more_menu
+                    textResourceKey: winui_playback_options
                     glyph: ""
                   layout:
                     valign: center

@@ -429,9 +429,6 @@ namespace ao::tui
     }
 
     openOverlay(Overlay::QualityPanel);
-    postActivityNotification(
-      rt::NotificationSeverity::Info,
-      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiPipelineOpened)});
   }
 
   void EventController::toggleOutputDevices()
@@ -447,8 +444,6 @@ namespace ao::tui
 
     _outputDevices.refresh();
     openOverlay(Overlay::OutputDevices);
-    postActivityNotification(rt::NotificationSeverity::Info,
-                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiOutputOpened)});
   }
 
   void EventController::togglePresentationPanel()
@@ -463,8 +458,6 @@ namespace ao::tui
     }
 
     openOverlay(Overlay::PresentationPanel);
-    postActivityNotification(rt::NotificationSeverity::Info,
-                             std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiViewsOpened)});
   }
 
   void EventController::toggleNotificationCenter()
@@ -485,9 +478,6 @@ namespace ao::tui
     }
 
     openOverlay(Overlay::Notifications);
-    postActivityNotification(
-      rt::NotificationSeverity::Info,
-      std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiNotificationsOpened)});
   }
 
   void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
@@ -740,12 +730,7 @@ namespace ao::tui
         }
 
         break;
-      case CommandAction::ShowHelp:
-        openOverlay(Overlay::Help);
-        postActivityNotification(
-          rt::NotificationSeverity::Info,
-          std::string{i18n::requiredText(_library.textCatalog(), i18n::MessageId::TuiHelpOpened)});
-        break;
+      case CommandAction::ShowHelp: openOverlay(Overlay::Help); break;
       case CommandAction::OpenGoTo: openOverlay(Overlay::GoTo); break;
       case CommandAction::RevealCurrentTrack: revealCurrentTrack(); break;
       case CommandAction::OpenCurrentArtist: navigateCurrentMetadata(false); break;
@@ -2040,7 +2025,7 @@ namespace ao::tui
       case Overlay::Help:
         if (optAction == KeyAction::ShowHelp)
         {
-          closeOverlay();
+          runCommand({.action = CommandAction::CloseOverlay});
         }
 
         break;

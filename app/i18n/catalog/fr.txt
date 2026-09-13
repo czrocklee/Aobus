@@ -176,7 +176,7 @@ fr:table {
     audio_profile_shared_description { "Mixage au niveau du système avec d''autres applications" }
     audio_profile_exclusive { "Mode exclusif" }
     audio_profile_exclusive_description { "Accès direct au périphérique matériel" }
-    system_default_output_device { "Périphérique par défaut" }
+    system_default_output_device { "Périphérique par défaut du système" }
     completion_field { "champ" }
     completion_alias { "alias" }
     completion_operator { "opérateur" }
@@ -233,15 +233,15 @@ fr:table {
     smart_list_membership_computed { "Membres calculés — modifiez les tags ou l''expression" }
     smart_list_expression_none { "(aucun)" }
     smart_list_no_tracks { "{source, select, library {Aucun morceau dans la bibliothèque} other {Aucun morceau dans la source}}" }
-    smart_list_showing_source { "{source, select, library {Affichage des {count, plural, one {# morceau} other {# morceaux}}} other {Affichage des {count, plural, one {# morceau} other {# morceaux}} de la source}}" }
+    smart_list_showing_source { "{source, select, library {{count, plural, one {Affichage de tous les morceaux : #} other {Affichage de tous les morceaux : #}}} other {{count, plural, one {Affichage de tous les morceaux de la source : #} other {Affichage de tous les morceaux de la source : #}}}}" }
     smart_list_invalid_filter { "Filtre invalide" }
     smart_list_no_matches { "Aucune correspondance" }
-    smart_list_showing_all_matches { "Affichage des {count, plural, one {# correspondance} other {# correspondances}}" }
+    smart_list_showing_all_matches { "{count, plural, one {Affichage de toutes les correspondances : #} other {Affichage de toutes les correspondances : #}}" }
     smart_list_showing_first_matches { "Affichage de {visible} sur {count} correspondances" }
     smart_list_untitled_track { "(sans titre)" }
     list_order_saved_lists_only { "L''ordre manuel n''est disponible que pour les listes enregistrées." }
     list_order_library_busy { "Bibliothèque occupée. L''ordre manuel sera disponible après la maintenance." }
-    list_order_authoring_unavailable { "La création de bibliothèque est indisponible." }
+    list_order_authoring_unavailable { "La modification de la bibliothèque n’est pas disponible." }
     list_order_list_unavailable { "Cette liste n''est plus disponible." }
     list_order_fix_filter { "Corrigez la liste ou l''expression de filtre rapide avant de changer l''ordre." }
     list_order_choose_flat_presentation { "Choisissez Ordre manuel ou une autre vue non triée pour réorganiser les morceaux." }
@@ -277,7 +277,7 @@ fr:table {
     audio_node_device { "[Périphérique]" }
     audio_node_other_source { "[Autre source]" }
     audio_node_unknown { "[Inconnu]" }
-    audio_format { "{sampleRate} kHz · {bits} bits · {channels}" }
+    audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} can." }
     audio_finding_lossy_source { "Source avec perte" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Atténuation logicielle du volume : {gain}} other {Atténuation logicielle du volume}}" }
@@ -329,18 +329,18 @@ fr:table {
     gtk_shell_menu_help { "Aide" }
     gtk_shell_about { "À propos" }
     gtk_shell_application_menu { "Menu de l''application" }
-    gtk_playback_show_playing_list { "Cliquer pour afficher la liste de lecture" }
+    gtk_playback_reveal_playing_track { "Afficher le morceau en cours" }
     gtk_playback_toggle_mute { "Activer/désactiver le mode muet" }
     gtk_playback_show_current_album { "Afficher l''album actuel" }
     gtk_playback_now_playing_cover_art { "Pochette du morceau en cours" }
     gtk_library_quick_filter_placeholder { "Rechercher des morceaux, artistes, albums ou tags..." }
     gtk_library_clear_filter { "Effacer le filtre" }
     gtk_library_create_list_from_filter { "Créer une liste depuis le filtre actuel" }
-    gtk_list_new { "Nouvelle liste..." }
+    list_new { "Nouvelle liste..." }
     gtk_list_new_playlist { "Nouvelle liste de lecture..." }
-    gtk_list_edit { "Modifier la liste..." }
-    gtk_list_delete { "Supprimer la liste" }
-    gtk_list_delete_subtree { "Supprimer la liste et ses sous-éléments..." }
+    list_edit { "Modifier la liste..." }
+    list_delete { "Supprimer la liste" }
+    list_delete_subtree { "Supprimer la liste et ses sous-éléments..." }
     gtk_smart_list_new_title { "Nouvelle liste" }
     gtk_smart_list_edit_title { "Modifier la liste" }
     gtk_smart_list_new_playlist_title { "Nouvelle liste de lecture" }
@@ -365,53 +365,53 @@ fr:table {
     gtk_smart_list_waiting_for_filter { "En attente du filtre..." }
     gtk_smart_list_track { "Morceau" }
     gtk_smart_list_invalid_source { "(source invalide)" }
-    gtk_smart_list_choose_membership_tag { "Choisissez un tag visible pour l''appartenance à la liste" }
+    gtk_smart_list_choose_membership_tag { "Choisissez un tag visible pour l’appartenance à la liste de lecture" }
     gtk_library_open_music_library { "Ouvrir la bibliothèque musicale" }
-    gtk_library_select_export_mode { "Sélectionner le mode d''exportation" }
-    gtk_library_choose_backup_contents { "Choisissez les éléments à inclure dans la sauvegarde :" }
-    gtk_library_export_mode_delta { "Différentiel (synchro modifications, tags, listes)" }
-    gtk_library_export_mode_metadata { "Métadonnées (texte, étiquettes et listes)" }
-    gtk_library_export_mode_full { "Complet (restauration complète : tout)" }
-    gtk_library_export_mode_list_only { "Listes uniquement (synchroniser les listes sans modifier les morceaux)" }
-    gtk_library_include { "Inclure" }
-    gtk_library_next { "Suivant" }
-    gtk_library_export_yaml { "Exporter la bibliothèque en YAML" }
-    gtk_library_yaml_files { "Fichiers YAML" }
-    gtk_library_import_yaml { "Importer la bibliothèque depuis YAML" }
-    gtk_library_confirm_restore { "Confirmer la restauration de la bibliothèque" }
-    gtk_library_restore_library { "Restaurer la bibliothèque" }
-    gtk_library_restore_lists { "Restaurer les listes" }
-    gtk_library_restore_scope_library { "morceaux et listes de la bibliothèque" }
-    gtk_library_restore_scope_lists { "listes" }
+    library_select_export_mode { "Sélectionner le mode d''exportation" }
+    library_choose_backup_contents { "Choisissez les éléments à inclure dans la sauvegarde :" }
+    library_export_mode_delta { "Différentiel (modifications de l’utilisateur, tags, listes)" }
+    library_export_mode_metadata { "Métadonnées (texte, tags et listes)" }
+    library_export_mode_full { "Complet (toutes les données de la bibliothèque ; sans fichiers audio ni fichiers de pochette)" }
+    library_export_mode_list_only { "Listes uniquement (toutes les listes enregistrées ; sans données sur les morceaux)" }
+    library_include { "Inclure" }
+    library_next { "Suivant" }
+    library_export_yaml { "Exporter la bibliothèque en YAML" }
+    library_yaml_files { "Fichiers YAML" }
+    library_import_yaml { "Importer la bibliothèque depuis YAML" }
+    library_confirm_restore { "Confirmer la restauration" }
+    library_restore_library { "Restaurer la bibliothèque" }
+    library_restore_lists { "Restaurer les listes" }
+    library_restore_scope_library { "morceaux et listes de la bibliothèque" }
+    library_restore_scope_lists { "listes" }
     gtk_library_file_selection_failed { "Échec de la sélection de fichier" }
     gtk_library_could_not_select_music_folder { "Impossible de sélectionner un dossier de bibliothèque musicale" }
-    gtk_library_could_not_select_export_file { "Impossible de sélectionner un fichier d''exportation" }
-    gtk_library_could_not_select_backup { "Impossible de sélectionner une sauvegarde de bibliothèque" }
-    gtk_list_delete_question_title { "Supprimer la liste ?" }
-    gtk_list_delete_subtree_title { "Supprimer la liste et ses sous-éléments ?" }
-    gtk_list_delete_action { "Supprimer" }
-    gtk_list_delete_all_action { "Tout supprimer" }
+    library_could_not_select_export_file { "Impossible de sélectionner un fichier d''exportation" }
+    library_could_not_select_backup { "Impossible de sélectionner une sauvegarde de bibliothèque" }
+    list_delete_title { "Supprimer la liste ?" }
+    list_delete_subtree_title { "Supprimer la liste et ses sous-éléments ?" }
+    list_delete_action { "Supprimer" }
+    list_delete_all_action { "Tout supprimer" }
     gtk_list_unable_to_delete_title { "Impossible de supprimer la liste" }
-    gtk_list_delete_question { "Supprimer « {name} » ?\n\nLa liste sera supprimée. Les fichiers musicaux seront conservés." }
-    gtk_list_delete_subtree_question { "Supprimer {count, plural, one {# liste} other {# listes}} dans cette sous-arborescence dérivée ?\n\n{entries}\nLes tags utilisés par les listes imbriquées sont conservés.\nLes fichiers musicaux seront conservés." }
-    gtk_list_remove_tag { "Supprimer également {tag} de {count, plural, one {# morceau} other {# morceaux}}" }
-    gtk_list_tag_references { "{tag} est également référencé par : {references}. Le supprimer peut modifier ces listes." }
-    gtk_library_restore_confirmation { "Cette restauration remplacera {scope} actuel(le).\n\nDonnées : YAML v{version}, mode ''{mode}''.\nAperçu : {tracksCreated} créé(es), {tracksUpdated} mis à jour, {tracksDeleted} supprimé(es) ; {listsCreated} listes créées, {listsDeleted} supprimées ; {dangling} références orphelines ignorées.\n\nNe continuez que si cela correspond à la sauvegarde sélectionnée." }
-    gtk_library_file_selection_error { "{operation} : {message}" }
+    list_delete_question { "Supprimer « {name} » ?\n\nLa liste sera supprimée. Les fichiers musicaux seront conservés." }
+    list_delete_subtree_question { "Supprimer {count, plural, one {# liste} other {# listes}} dans cette sous-arborescence dérivée ?\n\n{entries}\nLes tags utilisés par les listes de lecture imbriquées sont conservés.\nLes fichiers musicaux seront conservés." }
+    list_remove_tag { "Supprimer également {tag} de {count, plural, one {# morceau} other {# morceaux}}" }
+    list_tag_references { "{tag} est également référencé par : {references}. Le supprimer peut modifier ces listes." }
+    library_restore_confirmation { "Cette restauration remplacera le contenu actuel du périmètre suivant : {scope}.\n\nDonnées : YAML v{version}, mode ''{mode}''.\nAperçu : morceaux créés : {tracksCreated}, morceaux mis à jour : {tracksUpdated}, morceaux supprimés : {tracksDeleted} ; listes créées : {listsCreated}, listes supprimées : {listsDeleted} ; références orphelines ignorées : {dangling}.\n\nNe continuez que si cela correspond à la sauvegarde sélectionnée." }
+    library_file_selection_error { "{operation} : {message}" }
     gtk_list_other_computed_membership { "D''autres listes ont des membres calculés ; modifiez leur expression ou leurs tags à la place." }
-    gtk_list_no_editable_playlists { "Aucune liste de lecture directement modifiable" }
+    list_no_editable_playlists { "Aucune liste de lecture directement modifiable" }
     gtk_list_create_playlist { "Créer une liste de lecture..." }
     gtk_list_manage_lists { "Gérer les listes..." }
-    gtk_list_add_to_playlist { "Ajouter à la liste de lecture" }
-    gtk_list_remove_from_current { "Supprimer de {name} ({tag})" }
+    list_add_to_playlist { "Ajouter à la liste de lecture" }
+    list_remove_from_current { "Supprimer de {name} ({tag})" }
     gtk_list_remove_computed_unavailable { "Impossible de supprimer de cette liste car ses membres sont calculés." }
-    gtk_list_move_up { "Monter" }
-    gtk_list_move_down { "Descendre" }
-    gtk_list_move_to_top { "Placer en haut" }
-    gtk_list_move_to_bottom { "Placer en bas" }
-    gtk_list_reset_order { "Réinitialiser l''ordre" }
+    list_move_up { "Monter" }
+    list_move_down { "Descendre" }
+    list_move_to_top { "Placer en haut" }
+    list_move_to_bottom { "Placer en bas" }
+    list_reset_order { "Réinitialiser l''ordre" }
     gtk_list_forget_hidden_positions { "Oublier les positions masquées" }
-    gtk_list_manual_order { "Ordre manuel" }
+    list_manual_order { "Ordre manuel" }
     gtk_list_select_tracks_for_order { "Sélectionnez au moins un morceau pour modifier l''ordre manuel." }
     gtk_list_move_up_action { "Monter dans l''ordre manuel" }
     gtk_list_move_down_action { "Descendre dans l''ordre manuel" }
@@ -462,7 +462,7 @@ fr:table {
     gtk_action_category_tracks { "Morceaux" }
     gtk_action_output_devices { "Périphériques de sortie" }
     gtk_action_system_menu { "Menu système" }
-    gtk_action_reveal_track { "Révéler le morceau" }
+    gtk_action_reveal_track { "Afficher le morceau" }
     gtk_action_track_properties { "Propriétés" }
     gtk_action_edit_tags { "Modifier les tags" }
     gtk_custom_view_title { "Modifier la vue personnalisée" }
@@ -498,7 +498,6 @@ fr:table {
     tui_shell_workspace_view { "vue" }
     tui_shell_overlay_tracks { "Morceaux" }
     tui_shell_overlay_lists { "Listes" }
-    tui_shell_overlay_detail { "Détail" }
     tui_shell_overlay_pipeline { "Chaîne" }
     tui_shell_overlay_output { "Sortie" }
     tui_shell_overlay_views { "Vues" }
@@ -506,12 +505,9 @@ fr:table {
     tui_shell_overlay_help { "Aide" }
     tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{pinState, select, bound {{pinKey} Volet fixe  } other {}}{openKey} ouvrir  {closeKey} fermer" }
     tui_library_no_lists_found { "Aucune liste trouvée" }
-    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{closeKey} fermer" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{closeKey} fermer" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{selectKey} choisir  {closeKey} fermer" }
     tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{selectKey} choisir  {closeKey} fermer" }
-    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} basculer  } other {}}{hideKey} masquer compact  {closeKey} fermer" }
-    tui_shell_hint_help { "{closeKey} fermer" }
     tui_shell_status_command { "commande" }
     tui_shell_status_lists { "listes" }
     tui_shell_status_view { "vue" }
@@ -565,7 +561,7 @@ fr:table {
     tui_shell_help_output_device { "choisir le périphérique de sortie" }
     tui_shell_help_choose_view { "choisir la vue" }
     tui_shell_help_notifications { "afficher le centre de notifications" }
-    tui_shell_help_current_track { "révéler le morceau actuel" }
+    tui_shell_help_current_track { "afficher le morceau en cours" }
     tui_shell_help_switch_presentation { "changer de vue" }
     tui_shell_help_previous_next_group { "groupe précédent / suivant" }
     tui_shell_help_clear_filter { "effacer le filtre" }
@@ -602,10 +598,9 @@ fr:table {
     tui_library_scan_already_running { "Une analyse de la bibliothèque est déjà en cours" }
     tui_library_scan_cancelling { "L''annulation de l''analyse est déjà en cours" }
     tui_library_section { "Section : {name}" }
-    tui_library_revealed_track { "{track} révélé" }
+    tui_library_revealed_track { "Morceau affiché : {track}" }
     tui_library_unknown_view { "Vue inconnue {id}" }
     tui_library_view { "Vue : {id}" }
-    tui_library_opened_list { "{list} ouverte" }
     tui_library_reloaded_tracks { "{count, plural, one {# morceau rechargé} other {# morceaux rechargés}}" }
     tui_library_quick_filter_matched { "Le filtre rapide correspond à {count, plural, one {# morceau} other {# morceaux}}" }
     tui_library_expression_filter_matched { "Le filtre d''expression correspond à {count, plural, one {# morceau} other {# morceaux}}" }
@@ -661,30 +656,10 @@ fr:table {
     winui_shell_rescan_library { "Réanalyser la bibliothèque" }
     winui_shell_import_library_data { "Importer les données de la bibliothèque..." }
     winui_shell_export_library_data { "Exporter les données de la bibliothèque..." }
-    winui_library_select_export_mode { "Sélectionner le mode d''exportation" }
-    winui_library_choose_backup_contents { "Choisissez les éléments à inclure dans la sauvegarde :" }
-    winui_library_include { "Inclure" }
-    winui_library_export_mode_delta { "Différentiel (synchro modifications, tags, listes)" }
-    winui_library_export_mode_metadata { "Métadonnées (texte, étiquettes et listes)" }
-    winui_library_export_mode_full { "Complet (restauration complète : tout)" }
-    winui_library_export_mode_list_only { "Listes uniquement (synchroniser les listes sans modifier les morceaux)" }
     winui_library_select_import_mode { "Sélectionner le mode d''importation" }
     winui_library_choose_import_mode { "Fusionnez cette sauvegarde ou restaurez son périmètre :" }
     winui_library_import_mode_merge { "Fusionner (conserver les éléments hors sauvegarde)" }
     winui_library_import_mode_restore { "Restaurer (remplacer le périmètre après aperçu)" }
-    winui_library_next { "Suivant" }
-    winui_library_export_yaml { "Exporter la bibliothèque en YAML" }
-    winui_library_import_yaml { "Importer la bibliothèque depuis YAML" }
-    winui_library_yaml_files { "Fichiers YAML" }
-    winui_library_confirm_restore { "Confirmer la restauration" }
-    winui_library_restore_library { "Restaurer la bibliothèque" }
-    winui_library_restore_lists { "Restaurer les listes" }
-    winui_library_restore_scope_library { "bibliothèque" }
-    winui_library_restore_scope_lists { "listes" }
-    winui_library_restore_confirmation { "Cette restauration remplacera la {scope} actuelle.\n\nDonnées : YAML v{version}, mode ''{mode}''.\nAperçu : {tracksCreated} créé(es), {tracksUpdated} mis à jour, {tracksDeleted} supprimé(es) ; {listsCreated} listes créées, {listsDeleted} supprimées ; {dangling} références orphelines ignorées.\n\nNe continuez que si cela correspond à la sauvegarde sélectionnée." }
-    winui_library_could_not_select_export_file { "Impossible de sélectionner un fichier d''exportation" }
-    winui_library_could_not_select_backup { "Impossible de sélectionner une sauvegarde de bibliothèque" }
-    winui_library_file_selection_error { "{operation} : {message}" }
     winui_shell_menu_view { "Affichage" }
     winui_shell_modern_mode { "Mode moderne" }
     winui_shell_columns { "Colonnes..." }
@@ -692,7 +667,7 @@ fr:table {
     winui_shell_menu_playback { "Lecture" }
     winui_shell_play_pause { "Lecture/Pause" }
     winui_shell_stop { "Arrêter" }
-    winui_shell_reveal_current_track { "Révéler le morceau actuel" }
+    winui_shell_reveal_current_track { "Afficher le morceau en cours" }
     winui_track_properties_command { "Propriétés..." }
     winui_track_properties_title { "Propriétés" }
     winui_track_properties_selected_title { "Propriétés — {count, plural, one {# morceau sélectionné} other {# morceaux sélectionnés}}" }
@@ -710,10 +685,6 @@ fr:table {
     winui_track_properties_stale { "La bibliothèque a changé pendant que cette boîte de dialogue était ouverte. Rouvrez les propriétés et réessayez." }
     winui_track_properties_invalid_value { "Valeur non valide : {detail}" }
     winui_list_create_from_filter { "Créer une liste depuis le filtre actuel" }
-    winui_list_new { "Nouvelle liste..." }
-    winui_list_edit { "Modifier la liste..." }
-    winui_list_delete { "Supprimer la liste" }
-    winui_list_delete_subtree { "Supprimer la liste et ses sous-éléments..." }
     winui_list_editor_new_title { "Nouvelle liste" }
     winui_list_editor_edit_title { "Modifier la liste" }
     winui_common_cancel { "Annuler" }
@@ -731,23 +702,6 @@ fr:table {
     winui_list_auto_presentation { "Automatique" }
     winui_list_presentation { "Vue" }
     winui_list_preview { "Aperçu" }
-    winui_list_delete_title { "Supprimer la liste ?" }
-    winui_list_delete_subtree_title { "Supprimer la liste et ses sous-éléments ?" }
-    winui_list_delete_commit { "Supprimer" }
-    winui_list_delete_all_commit { "Tout supprimer" }
-    winui_list_delete_question { "Supprimer « {name} » ?\n\nLa liste sera supprimée. Les fichiers musicaux seront conservés." }
-    winui_list_delete_subtree_question { "Supprimer {count, plural, one {# liste} other {# listes}} dans cette sous-arborescence dérivée ?\n\n{entries}\nLes tags utilisés par les listes imbriquées sont conservés.\nLes fichiers musicaux seront conservés." }
-    winui_list_remove_tag { "Supprimer également {tag} de {count, plural, one {# morceau} other {# morceaux}}" }
-    winui_list_tag_references { "{tag} est également référencé par : {references}. Le supprimer peut modifier ces listes." }
-    winui_list_no_editable_playlists { "Aucune liste de lecture directement modifiable" }
-    winui_list_add_to_playlist { "Ajouter à la liste de lecture" }
-    winui_list_remove_from_current { "Supprimer de {name} ({tag})" }
-    winui_list_manual_order { "Ordre manuel" }
-    winui_list_move_up { "Monter" }
-    winui_list_move_down { "Descendre" }
-    winui_list_move_to_top { "Placer en haut" }
-    winui_list_move_to_bottom { "Placer en bas" }
-    winui_list_reset_order { "Réinitialiser l''ordre" }
     winui_shell_track_details { "Détails du morceau" }
     winui_shell_classic_mode { "Mode classique" }
     winui_playback_output_device { "Périphérique de sortie" }
@@ -762,6 +716,7 @@ fr:table {
     winui_library_no_selection { "Aucune sélection" }
     winui_track_move_column_left { "Déplacer vers la gauche" }
     winui_track_move_column_right { "Déplacer vers la droite" }
+    winui_playback_options { "Options de lecture" }
     winui_more_menu { "Plus" }
     winui_error { "Erreur : {detail}" }
     winui_save_settings_failed { "Impossible d''enregistrer les paramètres : {detail}" }
@@ -798,7 +753,6 @@ fr:table {
     track_hide_empty_fields { "Masquer les champs vides" }
     track_missing_on_some { "Manquant sur certains morceaux" }
     track_fallback { "Morceau {id}" }
-    track_detail_title { "Détail du morceau" }
     track_no_selection { "Aucun morceau sélectionné" }
     cover_art_title { "Pochette" }
     cover_art_none { "Aucune pochette" }
@@ -832,7 +786,7 @@ fr:table {
     gtk_hide_details { "Masquer les détails" }
     gtk_show_details { "Afficher les détails" }
     gtk_no_track_view_available { "Aucune vue de morceau disponible." }
-    gtk_save_layout_defaults_message { "Cela mettra à jour sur le disque le préréglage de disposition ''{preset}'' avec les tailles actuelles des panneaux.\n\nCes tailles ne seront plus conservées dans l''état de la session ; les autres valeurs temporaires, comme les panneaux affichés, seront préservées." }
+    gtk_save_layout_defaults_message { "Enregistrer les tailles actuelles des panneaux comme valeurs par défaut pour la disposition ''{preset}'' ?\n\nLes autres paramètres enregistrés des panneaux, notamment leur visibilité, seront conservés." }
     gtk_unable_switch_libraries { "Impossible de changer de bibliothèque" }
     gtk_startup_failed_title { "Échec du démarrage d''Aobus" }
     gtk_startup_select_library_failed { "Aobus n''a pas pu sélectionner la bibliothèque de démarrage : {detail}" }
@@ -916,7 +870,7 @@ fr:table {
     gtk_layout_component_spacer { "Espaceur" }
     gtk_layout_component_scroll_window { "Fenêtre défilante" }
     gtk_layout_component_tabs { "Onglets" }
-    gtk_layout_component_responsive_class { "Classe réactive" }
+    gtk_layout_component_responsive_class { "Classe adaptative" }
     gtk_layout_component_center_box { "Boîte centrée" }
     gtk_layout_component_open_library_button { "Bouton d''ouverture de bibliothèque" }
     gtk_layout_component_workspace_with_detail { "Espace de travail avec détail" }
@@ -944,7 +898,7 @@ fr:table {
     gtk_layout_property_action { "Action" }
     gtk_layout_property_show_label { "Afficher l''étiquette" }
     gtk_layout_property_size { "Taille" }
-    gtk_layout_property_icon_symbolic { "Icône (Symbolic)" }
+    gtk_layout_property_icon_symbolic { "Icône (symbolique)" }
     gtk_layout_property_style { "Style" }
     gtk_layout_property_homogeneous { "Homogène" }
     gtk_layout_property_snap_to_grid { "Aligner sur la grille" }
@@ -971,7 +925,7 @@ fr:table {
     gtk_layout_property_resize_end { "Redimensionner fin" }
     gtk_layout_property_shrink_end { "Réduire fin" }
     gtk_layout_property_collapse_side { "Côté de repli" }
-    gtk_layout_property_initially_revealed { "Initialement révélé" }
+    gtk_layout_property_initially_revealed { "Affiché initialement" }
     gtk_layout_property_css_classes { "Classes CSS" }
     gtk_layout_property_categories { "Catégories" }
     gtk_layout_property_show_when { "Afficher si" }
@@ -1012,7 +966,7 @@ fr:table {
     gtk_layout_value_inline { "En ligne" }
     gtk_layout_value_compact { "Compact" }
     gtk_layout_value_tooltip { "Info-bulle" }
-    gtk_layout_value_reveal { "Révéler le morceau actuel" }
+    gtk_layout_value_reveal { "Afficher le morceau en cours" }
     gtk_layout_value_play_pause { "Lecture/Pause" }
     gtk_layout_value_filter_by_field { "Filtrer par champ" }
     gtk_layout_value_start { "Début" }
@@ -1026,18 +980,13 @@ fr:table {
     gtk_layout_value_center { "Centre" }
     tui_untitled_section { "Section sans titre" }
     tui_notification_none { "Aucune notification" }
-    tui_pipeline_closed { "Chaîne audio fermée" }
-    tui_pipeline_opened { "Chaîne audio" }
-    tui_output_closed { "Périphériques de sortie fermés" }
-    tui_output_opened { "Périphériques de sortie" }
-    tui_views_closed { "Vues fermées" }
-    tui_views_opened { "Vues" }
-    tui_notifications_closed { "Notifications fermées" }
-    tui_notifications_opened { "Notifications" }
+    tui_pipeline_closed { "Panneau de la chaîne audio fermé" }
+    tui_output_closed { "Sélecteur de périphérique de sortie fermé" }
+    tui_views_closed { "Sélecteur de vues fermé" }
+    tui_notifications_closed { "Centre de notifications fermé" }
     tui_playback_start_failed { "La lecture n''a pas démarré. Vérifiez le périphérique, le chemin et les journaux." }
     tui_playback_control_unavailable { "Contrôle de lecture indisponible" }
     tui_overlay_closed { "Volet fermé" }
-    tui_help_opened { "Aide" }
     tui_section_unavailable { "La section n''est plus disponible" }
     tui_unknown_command { "Commande inconnue : {command}" }
     tui_filter_failed { "Échec du filtre : {detail}" }
@@ -1059,7 +1008,7 @@ fr:table {
     tui_shell_detail_edit_tags { "modifier les tags des morceaux" }
     tui_settings_terminal_title { "Format du titre du terminal" }
     tui_settings_terminal_soul { "Soul dans le titre du terminal" }
-    tui_settings_terminal_title_hint { "Utilise le morceau en cours, par exemple $artist \" - \" $title. Vide : désactivé." }
+    tui_settings_terminal_title_hint { "Formatez le morceau en cours, par exemple $artist \" - \" $title. Laissez ce champ vide pour désactiver la mise à jour du titre." }
     tui_settings_title_preview { "Aperçu : {title}" }
     tui_settings_invalid_title_format { "Format invalide : {detail}" }
   }

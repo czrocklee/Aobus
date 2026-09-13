@@ -50,8 +50,9 @@ namespace ao::winui::test
     CHECK(state.title == "Confirm Restore");
     CHECK(state.primaryActionText == "Restore Library");
     CHECK(state.message ==
-          "This restore will replace the current library.\n\nPayload: YAML v5, mode 'full'.\nPreview: 2 created, "
-          "3 updated, 4 deleted; 5 lists created, 6 deleted; 7 dangling references ignored.\n\nContinue only if "
+          "This restore will replace the current library tracks and Lists.\n\nPayload: YAML v5, mode 'full'.\nPreview: "
+          "2 created, "
+          "3 updated, 4 deleted; 5 Lists created, 6 deleted; 7 dangling references ignored.\n\nContinue only if "
           "this matches the selected backup.");
   }
 

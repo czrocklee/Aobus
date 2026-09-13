@@ -4,8 +4,8 @@
 #include "portal/ImportExportCoordinator.h"
 
 #include "app/AppDialog.h"
-#include "app/FormBuilder.h"
 #include "app/ThemeCoordinator.h"
+#include "common/AccessibleLabel.h"
 #include "i18n/GtkText.h"
 #include "layout/LayoutConstants.h"
 #include "portal/ImportExportCallbacks.h"
@@ -28,9 +28,13 @@
 #include <gtkmm/filedialog.h>
 #include <gtkmm/filefilter.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listitem.h>
 #include <gtkmm/object.h>
+#include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/stringlist.h>
+#include <gtkmm/stringobject.h>
 #include <gtkmm/window.h>
+#include <pangomm/layout.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -41,6 +45,63 @@
 
 namespace ao::gtk::portal
 {
+  namespace
+  {
+    constexpr int kExportModeWidthChars = 48;
+
+    class ExportModeLabel final : public Gtk::Label
+    {
+    protected:
+      void measure_vfunc(Gtk::Orientation orientation,
+                         int forSize,
+                         int& minimum,
+                         int& natural,
+                         int& minimumBaseline,
+                         int& naturalBaseline) const override
+      {
+        Gtk::Label::measure_vfunc(orientation, forSize, minimum, natural, minimumBaseline, naturalBaseline);
+
+        // DropDown omits the width when requesting height; Label otherwise assumes an infinite-width minimum.
+        if (orientation == Gtk::Orientation::VERTICAL && forSize < 0)
+        {
+          minimum = natural;
+          minimumBaseline = naturalBaseline;
+        }
+      }
+    };
+
+    Glib::RefPtr<Gtk::SignalListItemFactory> exportModeFactory()
+    {
+      auto factoryPtr = Gtk::SignalListItemFactory::create();
+      factoryPtr->signal_setup().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+        {
+          auto* const label = Gtk::make_managed<ExportModeLabel>();
+          label->set_halign(Gtk::Align::START);
+          label->set_xalign(0.0F);
+          label->set_hexpand(true);
+          label->set_wrap(true);
+          label->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+          // DropDown rows cannot grow vertically when narrowed; keep every mode at the same wrapped width.
+          label->set_width_chars(kExportModeWidthChars);
+          label->set_max_width_chars(kExportModeWidthChars);
+          listItemPtr->set_child(*label);
+        });
+      factoryPtr->signal_bind().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+        {
+          auto const itemPtr = std::dynamic_pointer_cast<Gtk::StringObject>(listItemPtr->get_item());
+          auto* const label = dynamic_cast<Gtk::Label*>(listItemPtr->get_child());
+
+          if (itemPtr && label != nullptr)
+          {
+            label->set_text(itemPtr->get_string());
+          }
+        });
+      return factoryPtr;
+    }
+  } // namespace
+
   namespace detail
   {
     bool isExpectedNativeChooserCancellation(Gtk::DialogError::Code const code) noexcept
@@ -141,32 +202,34 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::exportLibrary()
   {
     auto* const dialog = Gtk::make_managed<AppDialog>();
-    dialog->set_title(gtkText(_textCatalog, i18n::MessageId::GtkLibrarySelectExportMode));
+    dialog->set_title(gtkText(_textCatalog, i18n::MessageId::LibrarySelectExportMode));
     dialog->configureForParent(_parent);
 
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, layout::kSpacingMedium);
 
     auto* const label =
-      Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, i18n::MessageId::GtkLibraryChooseBackupContents));
+      Gtk::make_managed<Gtk::Label>(gtkText(_textCatalog, i18n::MessageId::LibraryChooseBackupContents));
     label->set_halign(Gtk::Align::START);
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStringsPtr =
-      Gtk::StringList::create({gtkText(_textCatalog, i18n::MessageId::GtkLibraryExportModeDelta),
-                               gtkText(_textCatalog, i18n::MessageId::GtkLibraryExportModeMetadata),
-                               gtkText(_textCatalog, i18n::MessageId::GtkLibraryExportModeFull),
-                               gtkText(_textCatalog, i18n::MessageId::GtkLibraryExportModeListOnly)});
+    auto modeStringsPtr = Gtk::StringList::create({gtkText(_textCatalog, i18n::MessageId::LibraryExportModeDelta),
+                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeMetadata),
+                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeFull),
+                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeListOnly)});
     modeCombo->set_model(modeStringsPtr);
+    modeCombo->set_factory(exportModeFactory());
     modeCombo->set_selected(2); // Default to Full
-
-    auto* list = Gtk::make_managed<FormBoxedList>();
-    list->addRow(gtkText(_textCatalog, i18n::MessageId::GtkLibraryInclude), *modeCombo);
-    box->append(*list);
+    modeCombo->set_hexpand(true);
+    modeCombo->set_halign(Gtk::Align::FILL);
+    setAccessibleLabel(*modeCombo, gtkText(_textCatalog, i18n::MessageId::LibraryInclude));
+    box->append(*modeCombo);
 
     dialog->setContentWidget(*box);
     dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
-    dialog->addPrimaryAction(gtkText(_textCatalog, i18n::MessageId::GtkLibraryNext), Gtk::ResponseType::OK);
+    dialog->addPrimaryAction(gtkText(_textCatalog, i18n::MessageId::LibraryNext), Gtk::ResponseType::OK);
+    dialog->setDefaultResponse(Gtk::ResponseType::OK);
+    dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
 
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
 
@@ -192,11 +255,11 @@ namespace ao::gtk::portal
     dialog->close();
 
     auto fileDialogPtr = Gtk::FileDialog::create();
-    fileDialogPtr->set_title(gtkText(_textCatalog, i18n::MessageId::GtkLibraryExportYaml));
+    fileDialogPtr->set_title(gtkText(_textCatalog, i18n::MessageId::LibraryExportYaml));
     fileDialogPtr->set_initial_name("library_backup.yaml");
 
     auto filterPtr = Gtk::FileFilter::create();
-    filterPtr->set_name(gtkText(_textCatalog, i18n::MessageId::GtkLibraryYamlFiles));
+    filterPtr->set_name(gtkText(_textCatalog, i18n::MessageId::LibraryYamlFiles));
     filterPtr->add_pattern("*.yaml");
     filterPtr->add_pattern("*.yml");
     auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
@@ -225,13 +288,13 @@ namespace ao::gtk::portal
       if (!detail::isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting export file: {}", e.what());
-        presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectExportFile), e.what());
+        presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::LibraryCouldNotSelectExportFile), e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting export file: {}", e.what());
-      presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectExportFile), e.what());
+      presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::LibraryCouldNotSelectExportFile), e.what());
     }
   }
 
@@ -243,10 +306,10 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::importLibrary()
   {
     auto fileDialogPtr = Gtk::FileDialog::create();
-    fileDialogPtr->set_title(gtkText(_textCatalog, i18n::MessageId::GtkLibraryImportYaml));
+    fileDialogPtr->set_title(gtkText(_textCatalog, i18n::MessageId::LibraryImportYaml));
 
     auto filterPtr = Gtk::FileFilter::create();
-    filterPtr->set_name(gtkText(_textCatalog, i18n::MessageId::GtkLibraryYamlFiles));
+    filterPtr->set_name(gtkText(_textCatalog, i18n::MessageId::LibraryYamlFiles));
     filterPtr->add_pattern("*.yaml");
     filterPtr->add_pattern("*.yml");
     auto filtersPtr = Gio::ListStore<Gtk::FileFilter>::create();
@@ -267,14 +330,13 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::presentLibraryRestoreConfirmation(rt::ImportReport const& report,
                                                                   std::function<void(bool)> completion)
   {
-    auto const actionId = report.targetScope == rt::ImportTargetScope::Library
-                            ? i18n::MessageId::GtkLibraryRestoreLibrary
-                            : i18n::MessageId::GtkLibraryRestoreLists;
+    auto const actionId = report.targetScope == rt::ImportTargetScope::Library ? i18n::MessageId::LibraryRestoreLibrary
+                                                                               : i18n::MessageId::LibraryRestoreLists;
     auto const message = libraryRestoreConfirmation(_textCatalog, report);
 
     auto* const dialog =
       AppDialog::presentMessage(_parent,
-                                gtkText(_textCatalog, i18n::MessageId::GtkLibraryConfirmRestore),
+                                gtkText(_textCatalog, i18n::MessageId::LibraryConfirmRestore),
                                 message,
                                 {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel),
                                                  .responseId = Gtk::ResponseType::CANCEL,
@@ -304,13 +366,13 @@ namespace ao::gtk::portal
       if (!detail::isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting import file: {}", e.what());
-        presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectBackup), e.what());
+        presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::LibraryCouldNotSelectBackup), e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting import file: {}", e.what());
-      presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::GtkLibraryCouldNotSelectBackup), e.what());
+      presentFileDialogError(gtkText(_textCatalog, i18n::MessageId::LibraryCouldNotSelectBackup), e.what());
     }
   }
 

@@ -507,12 +507,11 @@ namespace ao::gtk
 
                   auto const& preview = previewRes->deletedLists.front();
 
-                  owner->presentDeleteConfirmation(
-                    listId,
-                    false,
-                    gtkText(owner->_textCatalog, i18n::MessageId::GtkListDeleteQuestionTitle),
-                    deleteListQuestion(owner->_textCatalog, preview.name),
-                    preview.optTagImpact);
+                  owner->presentDeleteConfirmation(listId,
+                                                   false,
+                                                   gtkText(owner->_textCatalog, i18n::MessageId::ListDeleteTitle),
+                                                   deleteListQuestion(owner->_textCatalog, preview.name),
+                                                   preview.optTagImpact);
                 });
   }
 
@@ -551,7 +550,7 @@ namespace ao::gtk
                   owner->presentDeleteConfirmation(
                     listId,
                     true,
-                    gtkText(owner->_textCatalog, i18n::MessageId::GtkListDeleteSubtreeTitle),
+                    gtkText(owner->_textCatalog, i18n::MessageId::ListDeleteSubtreeTitle),
                     std::move(message),
                     std::move(optTagImpact));
                 });
@@ -569,8 +568,8 @@ namespace ao::gtk
     dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
     dialog->addCancelAction(gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
     dialog->addPrimaryAction(
-      gtkText(_textCatalog,
-              deleteDescendants ? i18n::MessageId::GtkListDeleteAllAction : i18n::MessageId::GtkListDeleteAction),
+      gtkText(
+        _textCatalog, deleteDescendants ? i18n::MessageId::ListDeleteAllAction : i18n::MessageId::ListDeleteAction),
       Gtk::ResponseType::YES);
     dialog->setDefaultResponse(Gtk::ResponseType::CANCEL);
 

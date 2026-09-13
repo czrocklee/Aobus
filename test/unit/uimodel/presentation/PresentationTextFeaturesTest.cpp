@@ -20,6 +20,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -315,7 +316,7 @@ namespace ao::uimodel::test
           R"(Direct membership editing via #"road-trip")");
     CHECK(smartListMembershipEditingText(catalog, false) == "Computed membership — edit tags or the expression");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(none)");
-    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Showing all 4 tracks from source");
+    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Showing all tracks from source: 4");
     CHECK(smartListPreviewStatus(catalog, true, 14, true, false) == "Showing 10 of 14 matches");
     CHECK(smartListPreviewStatus(catalog, false, 0, false, false) == "Invalid filter");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListUntitledTrack) == "(untitled)");
@@ -391,9 +392,9 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredFormat(catalog, MessageId::TrackCount, {{"count", 3}}) == "3 Titel");
     CHECK(trackSelectionSummary(catalog, 2, "5:00") == "2 Elemente ausgewählt (5:00)");
     CHECK(i18n::requiredText(catalog, MessageId::SmartListExpressionNone) == "(keiner)");
-    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Alle 4 Titel aus der Quelle werden angezeigt");
+    CHECK(smartListPreviewStatus(catalog, true, 4, false, true) == "Alle Titel aus der Quelle werden angezeigt: 4");
     CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderMoved, {{"count", 2}}) ==
-          "2 Titel wurden in der manuellen Sortierung verschoben.");
+          "2 Titel wurden in der manuellen Reihenfolge verschoben.");
     CHECK(i18n::requiredFormat(catalog, MessageId::LibraryExportFailed, {{"error", "Datenträger voll"}}) ==
           "Export fehlgeschlagen: Datenträger voll");
   }
@@ -413,6 +414,178 @@ namespace ao::uimodel::test
           "Se descartó 1 posición guardada oculta.");
     CHECK(i18n::requiredFormat(catalog, MessageId::ListOrderForgotHidden, {{"count", 2}}) ==
           "Se descartaron 2 posiciones guardadas ocultas.");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - localized previews distinguish complete and partial results",
+            "[uimodel][regression][localization][list]")
+  {
+    struct ExpectedStatuses final
+    {
+      std::string_view locale;
+      std::array<std::string_view, 4> filtered;
+      std::array<std::string_view, 4> library;
+      std::array<std::string_view, 4> source;
+    };
+
+    static constexpr auto kCounts = std::array<std::size_t, 4>{1, 2, 10, 11};
+    static constexpr auto kExpected = std::array{
+      ExpectedStatuses{
+        .locale = "de-DE",
+        .filtered = {"Alle Treffer werden angezeigt: 1",
+                     "Alle Treffer werden angezeigt: 2",
+                     "Alle Treffer werden angezeigt: 10",
+                     "10 von 11 Treffern werden angezeigt"},
+        .library = {"Alle Titel werden angezeigt: 1",
+                    "Alle Titel werden angezeigt: 2",
+                    "Alle Titel werden angezeigt: 10",
+                    "Alle Titel werden angezeigt: 11"},
+        .source = {"Alle Titel aus der Quelle werden angezeigt: 1",
+                   "Alle Titel aus der Quelle werden angezeigt: 2",
+                   "Alle Titel aus der Quelle werden angezeigt: 10",
+                   "Alle Titel aus der Quelle werden angezeigt: 11"},
+      },
+      ExpectedStatuses{
+        .locale = "fr-FR",
+        .filtered = {"Affichage de toutes les correspondances : 1",
+                     "Affichage de toutes les correspondances : 2",
+                     "Affichage de toutes les correspondances : 10",
+                     "Affichage de 10 sur 11 correspondances"},
+        .library = {"Affichage de tous les morceaux : 1",
+                    "Affichage de tous les morceaux : 2",
+                    "Affichage de tous les morceaux : 10",
+                    "Affichage de tous les morceaux : 11"},
+        .source = {"Affichage de tous les morceaux de la source : 1",
+                   "Affichage de tous les morceaux de la source : 2",
+                   "Affichage de tous les morceaux de la source : 10",
+                   "Affichage de tous les morceaux de la source : 11"},
+      },
+      ExpectedStatuses{
+        .locale = "es-ES",
+        .filtered = {"Mostrando todas las coincidencias: 1",
+                     "Mostrando todas las coincidencias: 2",
+                     "Mostrando todas las coincidencias: 10",
+                     "Mostrando 10 de 11 coincidencias"},
+        .library = {"Mostrando todas las pistas: 1",
+                    "Mostrando todas las pistas: 2",
+                    "Mostrando todas las pistas: 10",
+                    "Mostrando todas las pistas: 11"},
+        .source = {"Mostrando todas las pistas del origen: 1",
+                   "Mostrando todas las pistas del origen: 2",
+                   "Mostrando todas las pistas del origen: 10",
+                   "Mostrando todas las pistas del origen: 11"},
+      },
+      ExpectedStatuses{
+        .locale = "ja-JP",
+        .filtered = {"全1件の一致を表示中", "全2件の一致を表示中", "全10件の一致を表示中", "11件中10件の一致を表示中"},
+        .library = {"全1曲を表示中", "全2曲を表示中", "全10曲を表示中", "全11曲を表示中"},
+        .source = {"ソースから全1曲を表示中",
+                   "ソースから全2曲を表示中",
+                   "ソースから全10曲を表示中",
+                   "ソースから全11曲を表示中"},
+      },
+      ExpectedStatuses{
+        .locale = "zh-CN",
+        .filtered =
+          {"显示全部 1 个匹配项", "显示全部 2 个匹配项", "显示全部 10 个匹配项", "显示 11 个匹配项中的前 10 个"},
+        .library = {"显示全部 1 首曲目", "显示全部 2 首曲目", "显示全部 10 首曲目", "显示全部 11 首曲目"},
+        .source =
+          {"从源显示全部 1 首曲目", "从源显示全部 2 首曲目", "从源显示全部 10 首曲目", "从源显示全部 11 首曲目"},
+      },
+      ExpectedStatuses{
+        .locale = "zh-TW",
+        .filtered =
+          {"顯示全部 1 個匹配項", "顯示全部 2 個匹配項", "顯示全部 10 個匹配項", "顯示 11 個匹配項中的前 10 個"},
+        .library = {"顯示全部 1 首曲目", "顯示全部 2 首曲目", "顯示全部 10 首曲目", "顯示全部 11 首曲目"},
+        .source =
+          {"從源顯示全部 1 首曲目", "從源顯示全部 2 首曲目", "從源顯示全部 10 首曲目", "從源顯示全部 11 首曲目"},
+      },
+    };
+
+    for (auto const& expected : kExpected)
+    {
+      auto const catalog = ao::test::messageCatalog(expected.locale);
+
+      for (std::size_t index = 0; index < kCounts.size(); ++index)
+      {
+        INFO("locale: " << expected.locale << ", count: " << kCounts[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, false) == expected.filtered[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], true, true) == expected.library[index]);
+        CHECK(smartListPreviewStatus(catalog, true, kCounts[index], false, true) == expected.source[index]);
+      }
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - localized restore scopes form grammatical sentences",
+            "[uimodel][regression][localization][library]")
+  {
+    struct ExpectedRestoreSentence final
+    {
+      std::string_view locale;
+      std::string_view library;
+      std::string_view lists;
+    };
+
+    static constexpr auto kExpected = std::array{
+      ExpectedRestoreSentence{.locale = "de-DE",
+                              .library = "Diese Wiederherstellung ersetzt Folgendes: "
+                                         "Bibliothekstitel und Listen.",
+                              .lists = "Diese Wiederherstellung ersetzt Folgendes: Listen."},
+      ExpectedRestoreSentence{.locale = "fr-FR",
+                              .library = "Cette restauration remplacera le contenu actuel du périmètre "
+                                         "suivant : morceaux et listes de la bibliothèque.",
+                              .lists = "Cette restauration remplacera le contenu actuel du "
+                                       "périmètre suivant : listes."},
+      ExpectedRestoreSentence{.locale = "es-ES",
+                              .library = "Esta restauración reemplazará el contenido actual de "
+                                         "este ámbito: pistas y listas de la biblioteca.",
+                              .lists = "Esta restauración reemplazará el contenido actual de "
+                                       "este ámbito: listas."},
+    };
+
+    for (auto const& expected : kExpected)
+    {
+      auto const catalog = ao::test::messageCatalog(expected.locale);
+      auto const formatRestore = [&catalog](MessageId const scopeId)
+      {
+        return i18n::requiredFormat(catalog,
+                                    MessageId::LibraryRestoreConfirmation,
+                                    {{"scope", i18n::requiredText(catalog, scopeId)},
+                                     {"version", 2},
+                                     {"mode", "Full"},
+                                     {"tracksCreated", 1},
+                                     {"tracksUpdated", 2},
+                                     {"tracksDeleted", 3},
+                                     {"listsCreated", 4},
+                                     {"listsDeleted", 5},
+                                     {"dangling", 6}});
+      };
+
+      INFO("locale: " << expected.locale);
+      CHECK(formatRestore(MessageId::LibraryRestoreScopeLibrary).starts_with(expected.library));
+      CHECK(formatRestore(MessageId::LibraryRestoreScopeLists).starts_with(expected.lists));
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - Japanese tag edits use complete grammar for each mutation",
+            "[uimodel][regression][localization][tag-edit]")
+  {
+    auto const catalog = ao::test::messageCatalog("ja-JP");
+
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "yes"}, {"hasRemoved", "no"}, {"addedCount", 2}, {"removedCount", 0}, {"trackCount", 1}}) ==
+          "1 曲のタグを 2 件追加しました");
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "no"}, {"hasRemoved", "yes"}, {"addedCount", 0}, {"removedCount", 1}, {"trackCount", 2}}) ==
+          "2 曲のタグを 1 件削除しました");
+    CHECK(i18n::requiredFormat(
+            catalog,
+            MessageId::TrackTagsChanged,
+            {{"hasAdded", "yes"}, {"hasRemoved", "yes"}, {"addedCount", 2}, {"removedCount", 1}, {"trackCount", 2}}) ==
+          "2 曲のタグを 2 件追加し、1 件削除しました");
   }
 
   TEST_CASE("i18n::MessageCatalog - unsupported locale falls back to the complete English surface",
