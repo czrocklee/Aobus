@@ -50,6 +50,23 @@ resolved versions become project policy only after an explicit
 passes. macOS and Windows then consume the same vcpkg registry and manifest
 locks with platform-specific triplets.
 
+## Locating an existing dependency
+
+Start with the selected checkout, target platform, and build configuration; a dependency's provider may live in the native VM rather than on the machine hosting the source.
+
+1. Inspect the existing build's `CMakeCache.txt`, `aobus-dependencies.json`, and `build.log` for package directories, include paths, toolchain files, and SDK roots.
+   `./ao deps report` reports and verifies an already configured tree; it does not configure one or search machine-wide packages.
+2. Identify the provider through the sources of truth above and the relevant `CMakeLists.txt` or `cmake/` module.
+   Search these repository paths for the package or imported target before looking outside the checkout.
+3. Ask that provider for its resolved paths in the target environment:
+   Linux dependencies come from the pinned `nix-shell`; macOS/Windows C++ libraries normally come from the configured vcpkg installation and triplet.
+   Windows WinUI/MSBuild packages use the governed NuGet closure; platform tools and SDKs come from the selected native toolchain.
+   Use compiler/package metadata, package-manager reports, and SDK discovery commands, following the [macOS](macos.md) or [Windows](windows.md) guide where applicable.
+4. Search only the resulting include, library, source, or installation directories, using file indexes or `rg --files` first.
+   Keep any recursive traversal rooted there and within the intended filesystem; `/`, unrelated home directories, and mounted storage are not fallback search roots.
+5. If the provider is missing, report the target, resolver, and paths checked, then follow its documented setup procedure.
+   Do not substitute an ambient package or change dependency pins just to make discovery succeed.
+
 ## Governed dependencies
 
 The governed set is deliberately small:
