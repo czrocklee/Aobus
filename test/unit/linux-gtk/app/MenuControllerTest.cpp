@@ -172,9 +172,9 @@ namespace ao::gtk::test
     CHECK(i18n::requiredText(german, i18n::MessageId::GtkLibraryQuickFilterPlaceholder) ==
           "Titel, Interpreten, Alben und Tags durchsuchen...");
     CHECK(i18n::requiredText(german, i18n::MessageId::GtkSmartListPreview) == "Vorschau");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkListManualOrder) == "Manuelle Sortierung");
+    CHECK(i18n::requiredText(german, i18n::MessageId::ListManualOrder) == "Manuelle Reihenfolge");
     CHECK(i18n::requiredText(german, i18n::MessageId::GtkListMoveToTopAction) ==
-          "An den Anfang der manuellen Sortierung");
+          "An den Anfang der manuellen Reihenfolge verschieben");
     CHECK(removeFromCurrentList(german, "Straße", "#straße") == "Aus Straße (#straße) entfernen");
     CHECK(deleteListQuestion(german, "Sommer").starts_with("\"Sommer\" löschen?"));
 

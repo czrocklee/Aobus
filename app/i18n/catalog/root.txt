@@ -235,10 +235,10 @@ root:table {
     smart_list_membership_computed { "Computed membership — edit tags or the expression" }
     smart_list_expression_none { "(none)" }
     smart_list_no_tracks { "{source, select, library {No tracks in library} other {No tracks in source}}" }
-    smart_list_showing_source { "{source, select, library {Showing all {count, plural, one {# track} other {# tracks}}} other {Showing all {count, plural, one {# track} other {# tracks}} from source}}" }
+    smart_list_showing_source { "{source, select, library {{count, plural, one {Showing all tracks: #} other {Showing all tracks: #}}} other {{count, plural, one {Showing all tracks from source: #} other {Showing all tracks from source: #}}}}" }
     smart_list_invalid_filter { "Invalid filter" }
     smart_list_no_matches { "No matches" }
-    smart_list_showing_all_matches { "Showing all {count, plural, one {# match} other {# matches}}" }
+    smart_list_showing_all_matches { "{count, plural, one {Showing all matches: #} other {Showing all matches: #}}" }
     smart_list_showing_first_matches { "Showing {visible} of {count} matches" }
     smart_list_untitled_track { "(untitled)" }
     list_order_saved_lists_only { "Manual ordering is available for saved Lists only." }
@@ -331,18 +331,18 @@ root:table {
     gtk_shell_menu_help { "Help" }
     gtk_shell_about { "About" }
     gtk_shell_application_menu { "Application menu" }
-    gtk_playback_show_playing_list { "Click to show playing list" }
+    gtk_playback_reveal_playing_track { "Show the currently playing track" }
     gtk_playback_toggle_mute { "Toggle Mute" }
     gtk_playback_show_current_album { "Show current album" }
     gtk_playback_now_playing_cover_art { "Now playing cover art" }
     gtk_library_quick_filter_placeholder { "Search songs, artists, albums, tags..." }
     gtk_library_clear_filter { "Clear filter" }
     gtk_library_create_list_from_filter { "Create List from current filter" }
-    gtk_list_new { "New List..." }
+    list_new { "New List..." }
     gtk_list_new_playlist { "New Playlist..." }
-    gtk_list_edit { "Edit List..." }
-    gtk_list_delete { "Delete List" }
-    gtk_list_delete_subtree { "Delete List and Descendants..." }
+    list_edit { "Edit List..." }
+    list_delete { "Delete List" }
+    list_delete_subtree { "Delete List and Descendants..." }
     gtk_smart_list_new_title { "New List" }
     gtk_smart_list_edit_title { "Edit List" }
     gtk_smart_list_new_playlist_title { "New Playlist" }
@@ -369,51 +369,51 @@ root:table {
     gtk_smart_list_invalid_source { "(invalid source)" }
     gtk_smart_list_choose_membership_tag { "Choose a visible tag for Playlist membership" }
     gtk_library_open_music_library { "Open Music Library" }
-    gtk_library_select_export_mode { "Select Export Mode" }
-    gtk_library_choose_backup_contents { "Choose what to include in the backup:" }
-    gtk_library_export_mode_delta { "Delta (Sync user edits, Tags, Lists)" }
-    gtk_library_export_mode_metadata { "Metadata (Curated text, Tags, Lists)" }
-    gtk_library_export_mode_full { "Full (Disaster Recovery: Everything)" }
-    gtk_library_export_mode_list_only { "List Only (Sync playlists without touching tracks)" }
-    gtk_library_include { "Include" }
-    gtk_library_next { "Next" }
-    gtk_library_export_yaml { "Export Library to YAML" }
-    gtk_library_yaml_files { "YAML files" }
-    gtk_library_import_yaml { "Import Library from YAML" }
-    gtk_library_confirm_restore { "Confirm Library Restore" }
-    gtk_library_restore_library { "Restore Library" }
-    gtk_library_restore_lists { "Restore Lists" }
-    gtk_library_restore_scope_library { "library tracks and lists" }
-    gtk_library_restore_scope_lists { "lists" }
+    library_select_export_mode { "Select Export Mode" }
+    library_choose_backup_contents { "Choose what to include in the backup:" }
+    library_export_mode_delta { "Delta (User edits, Tags, Lists)" }
+    library_export_mode_metadata { "Metadata (Curated text, Tags, Lists)" }
+    library_export_mode_full { "Full (All library data; no audio or artwork files)" }
+    library_export_mode_list_only { "Lists only (All saved Lists; no track data)" }
+    library_include { "Include" }
+    library_next { "Next" }
+    library_export_yaml { "Export Library to YAML" }
+    library_yaml_files { "YAML files" }
+    library_import_yaml { "Import Library from YAML" }
+    library_confirm_restore { "Confirm Restore" }
+    library_restore_library { "Restore Library" }
+    library_restore_lists { "Restore Lists" }
+    library_restore_scope_library { "library tracks and Lists" }
+    library_restore_scope_lists { "Lists" }
     gtk_library_file_selection_failed { "File Selection Failed" }
     gtk_library_could_not_select_music_folder { "Could not select a music library folder" }
-    gtk_library_could_not_select_export_file { "Could not select an export file" }
-    gtk_library_could_not_select_backup { "Could not select a library backup" }
-    gtk_list_delete_question_title { "Delete List?" }
-    gtk_list_delete_subtree_title { "Delete List and Descendants?" }
-    gtk_list_delete_action { "Delete" }
-    gtk_list_delete_all_action { "Delete All" }
+    library_could_not_select_export_file { "Could not select an export file" }
+    library_could_not_select_backup { "Could not select a library backup" }
+    list_delete_title { "Delete List?" }
+    list_delete_subtree_title { "Delete List and Descendants?" }
+    list_delete_action { "Delete" }
+    list_delete_all_action { "Delete All" }
     gtk_list_unable_to_delete_title { "Unable to Delete List" }
-    gtk_list_delete_question { "Delete \"{name}\"?\n\nThe List will be removed. Music files will be kept." }
-    gtk_list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
-    gtk_list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
-    gtk_list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
-    gtk_library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
-    gtk_library_file_selection_error { "{operation}: {message}" }
+    list_delete_question { "Delete \"{name}\"?\n\nThe List will be removed. Music files will be kept." }
+    list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
+    list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
+    list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
+    library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} Lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
+    library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Other Lists have computed membership; edit their expression or track tags instead." }
-    gtk_list_no_editable_playlists { "No directly editable Playlists" }
+    list_no_editable_playlists { "No directly editable Playlists" }
     gtk_list_create_playlist { "Create a Playlist..." }
     gtk_list_manage_lists { "Manage Lists..." }
-    gtk_list_add_to_playlist { "Add to Playlist" }
-    gtk_list_remove_from_current { "Remove from {name} ({tag})" }
+    list_add_to_playlist { "Add to Playlist" }
+    list_remove_from_current { "Remove from {name} ({tag})" }
     gtk_list_remove_computed_unavailable { "Remove from this List is unavailable because its membership is computed." }
-    gtk_list_move_up { "Move Up" }
-    gtk_list_move_down { "Move Down" }
-    gtk_list_move_to_top { "Move to Top" }
-    gtk_list_move_to_bottom { "Move to Bottom" }
-    gtk_list_reset_order { "Reset Order" }
+    list_move_up { "Move Up" }
+    list_move_down { "Move Down" }
+    list_move_to_top { "Move to Top" }
+    list_move_to_bottom { "Move to Bottom" }
+    list_reset_order { "Reset Order" }
     gtk_list_forget_hidden_positions { "Forget Hidden Positions" }
-    gtk_list_manual_order { "Manual Order" }
+    list_manual_order { "Manual Order" }
     gtk_list_select_tracks_for_order { "Select at least one track to change Manual Order." }
     gtk_list_move_up_action { "Move Up in Manual Order" }
     gtk_list_move_down_action { "Move Down in Manual Order" }
@@ -500,7 +500,6 @@ root:table {
     tui_shell_workspace_view { "view" }
     tui_shell_overlay_tracks { "Tracks" }
     tui_shell_overlay_lists { "Lists" }
-    tui_shell_overlay_detail { "Detail" }
     tui_shell_overlay_pipeline { "Pipeline" }
     tui_shell_overlay_output { "Output" }
     tui_shell_overlay_views { "Views" }
@@ -508,12 +507,9 @@ root:table {
     tui_shell_overlay_help { "Help" }
     tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{pinState, select, bound {{pinKey} sidebar  } other {}}{openKey} open  {closeKey} close" }
     tui_library_no_lists_found { "No lists found" }
-    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{closeKey} close" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{selectKey} select  {closeKey} close" }
     tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{selectKey} select  {closeKey} close" }
-    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} toggle  } other {}}{hideKey} hide compact  {closeKey} close" }
-    tui_shell_hint_help { "{closeKey} close" }
     tui_shell_status_command { "command" }
     tui_shell_status_lists { "lists" }
     tui_shell_status_view { "view" }
@@ -607,7 +603,6 @@ root:table {
     tui_library_revealed_track { "Revealed {track}" }
     tui_library_unknown_view { "Unknown view {id}" }
     tui_library_view { "View: {id}" }
-    tui_library_opened_list { "Opened {list}" }
     tui_library_reloaded_tracks { "Reloaded {count, plural, one {# track} other {# tracks}}" }
     tui_library_quick_filter_matched { "Quick filter matched {count, plural, one {# track} other {# tracks}}" }
     tui_library_expression_filter_matched { "Expression filter matched {count, plural, one {# track} other {# tracks}}" }
@@ -663,30 +658,10 @@ root:table {
     winui_shell_rescan_library { "Rescan Library" }
     winui_shell_import_library_data { "Import Library Data..." }
     winui_shell_export_library_data { "Export Library Data..." }
-    winui_library_select_export_mode { "Select Export Mode" }
-    winui_library_choose_backup_contents { "Choose what to include in the backup:" }
-    winui_library_include { "Include" }
-    winui_library_export_mode_delta { "Delta (Sync user edits, Tags, Lists)" }
-    winui_library_export_mode_metadata { "Metadata (Curated text, Tags, Lists)" }
-    winui_library_export_mode_full { "Full (Disaster Recovery: Everything)" }
-    winui_library_export_mode_list_only { "List Only (Sync playlists without touching tracks)" }
     winui_library_select_import_mode { "Select Import Mode" }
     winui_library_choose_import_mode { "Merge this backup into the library, or restore its scope:" }
     winui_library_import_mode_merge { "Merge (keep records outside the backup)" }
     winui_library_import_mode_restore { "Restore (replace the backup scope after preview)" }
-    winui_library_next { "Next" }
-    winui_library_export_yaml { "Export Library to YAML" }
-    winui_library_import_yaml { "Import Library from YAML" }
-    winui_library_yaml_files { "YAML files" }
-    winui_library_confirm_restore { "Confirm Restore" }
-    winui_library_restore_library { "Restore Library" }
-    winui_library_restore_lists { "Restore Lists" }
-    winui_library_restore_scope_library { "library" }
-    winui_library_restore_scope_lists { "Lists" }
-    winui_library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
-    winui_library_could_not_select_export_file { "Could not select an export file" }
-    winui_library_could_not_select_backup { "Could not select a library backup" }
-    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "View" }
     winui_shell_modern_mode { "Modern Mode" }
     winui_shell_columns { "Columns..." }
@@ -712,10 +687,6 @@ root:table {
     winui_track_properties_stale { "The library changed while this dialog was open. Reopen Properties and try again." }
     winui_track_properties_invalid_value { "Invalid value: {detail}" }
     winui_list_create_from_filter { "Create List from current filter" }
-    winui_list_new { "New List..." }
-    winui_list_edit { "Edit List..." }
-    winui_list_delete { "Delete List" }
-    winui_list_delete_subtree { "Delete List and Descendants..." }
     winui_list_editor_new_title { "New List" }
     winui_list_editor_edit_title { "Edit List" }
     winui_common_cancel { "Cancel" }
@@ -733,23 +704,6 @@ root:table {
     winui_list_auto_presentation { "Auto" }
     winui_list_presentation { "Presentation" }
     winui_list_preview { "Preview" }
-    winui_list_delete_title { "Delete List?" }
-    winui_list_delete_subtree_title { "Delete List and Descendants?" }
-    winui_list_delete_commit { "Delete" }
-    winui_list_delete_all_commit { "Delete All" }
-    winui_list_delete_question { "Delete \"{name}\"?\n\nThe List will be removed. Music files will be kept." }
-    winui_list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
-    winui_list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
-    winui_list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
-    winui_list_no_editable_playlists { "No directly editable Playlists" }
-    winui_list_add_to_playlist { "Add to Playlist" }
-    winui_list_remove_from_current { "Remove from {name} ({tag})" }
-    winui_list_manual_order { "Manual Order" }
-    winui_list_move_up { "Move Up" }
-    winui_list_move_down { "Move Down" }
-    winui_list_move_to_top { "Move to Top" }
-    winui_list_move_to_bottom { "Move to Bottom" }
-    winui_list_reset_order { "Reset Order" }
     winui_shell_track_details { "Track Details" }
     winui_shell_classic_mode { "Classic Mode" }
     winui_playback_output_device { "Output device" }
@@ -764,6 +718,7 @@ root:table {
     winui_library_no_selection { "No selection" }
     winui_track_move_column_left { "Move left" }
     winui_track_move_column_right { "Move right" }
+    winui_playback_options { "Playback options" }
     winui_more_menu { "More" }
     winui_error { "Error: {detail}" }
     winui_save_settings_failed { "Could not save settings: {detail}" }
@@ -800,7 +755,6 @@ root:table {
     track_hide_empty_fields { "Hide empty fields" }
     track_missing_on_some { "Missing on some tracks" }
     track_fallback { "Track {id}" }
-    track_detail_title { "Track Detail" }
     track_no_selection { "No track selected" }
     cover_art_title { "Cover Art" }
     cover_art_none { "No cover art" }
@@ -834,7 +788,7 @@ root:table {
     gtk_hide_details { "Hide details" }
     gtk_show_details { "Show details" }
     gtk_no_track_view_available { "No track view is available." }
-    gtk_save_layout_defaults_message { "This will update the ''{preset}'' layout preset on disk with the current panel sizes.\n\nPromoted sizes will be removed from runtime state; other runtime values such as revealed state will remain." }
+    gtk_save_layout_defaults_message { "Save the current panel sizes as defaults for the ''{preset}'' layout?\n\nOther saved panel settings, including visibility, will be kept." }
     gtk_unable_switch_libraries { "Unable to Switch Libraries" }
     gtk_startup_failed_title { "Aobus Startup Failed" }
     gtk_startup_select_library_failed { "Aobus could not select the startup library: {detail}" }
@@ -1028,18 +982,13 @@ root:table {
     gtk_layout_value_center { "Center" }
     tui_untitled_section { "Untitled Section" }
     tui_notification_none { "No notifications" }
-    tui_pipeline_closed { "Pipeline closed" }
-    tui_pipeline_opened { "Audio pipeline" }
-    tui_output_closed { "Output devices closed" }
-    tui_output_opened { "Output devices" }
-    tui_views_closed { "Views closed" }
-    tui_views_opened { "Views" }
-    tui_notifications_closed { "Notifications closed" }
-    tui_notifications_opened { "Notifications" }
+    tui_pipeline_closed { "Audio pipeline panel closed" }
+    tui_output_closed { "Output device picker closed" }
+    tui_views_closed { "View picker closed" }
+    tui_notifications_closed { "Notification center closed" }
     tui_playback_start_failed { "Playback did not start. Check output device, file path, and logs." }
     tui_playback_control_unavailable { "Playback control unavailable" }
     tui_overlay_closed { "Overlay closed" }
-    tui_help_opened { "Help" }
     tui_section_unavailable { "Section is no longer available" }
     tui_unknown_command { "Unknown command: {command}" }
     tui_filter_failed { "Filter failed: {detail}" }

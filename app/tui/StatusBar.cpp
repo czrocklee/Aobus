@@ -659,16 +659,7 @@ namespace ao::tui
 
     if (auto const overlay = shell.overlay(); overlay != Overlay::None)
     {
-      auto const interactionHint = overlayHint(textCatalog, keymapPlan, overlay);
-      auto const contextLabel = std::string{overlayLabel(textCatalog, overlay)};
-
-      return hbox({
-        hasActivity ? activityStatusSlot(state) | xflex : filler() | xflex,
-        text(" "),
-        text(contextLabel) | style::accent() | bold,
-        text("  "),
-        text(interactionHint) | dim,
-      });
+      return hasActivity ? hbox({activityStatusSlot(state), filler()}) : filler();
     }
 
     return workspaceStatus(textCatalog, state, keymapPlan);

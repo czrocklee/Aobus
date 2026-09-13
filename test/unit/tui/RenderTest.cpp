@@ -1085,7 +1085,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("/ Aimer"));
   }
 
-  TEST_CASE("Render - status bar uses title and local help for browse overlays", "[tui][unit][render]")
+  TEST_CASE("Render - overlay status retains activity without repeating panel chrome", "[tui][unit][render]")
   {
     struct Case final
     {
@@ -1102,17 +1102,155 @@ namespace ao::tui::test
       {.overlay = Overlay::Help, .label = "Help", .hint = "Esc close"},
       {.overlay = Overlay::ListChooser, .label = "Lists", .hint = "L sidebar  Enter open  Esc close"},
     };
+    auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
+                                                       .kind = uimodel::ActivityStatusKind::Warning,
+                                                       .text = "Partial import",
+                                                       .dismissible = true,
+                                                     }};
 
     for (auto const& item : cases)
     {
       auto shell = ShellInteractionModel{};
       shell.openOverlay(item.overlay);
 
-      auto const rendered = renderText(statusBar(StatusBarViewState{.shell = &shell}));
+      auto const rendered = renderText(statusBar(StatusBarViewState{.activityStatus = &activity, .shell = &shell}));
 
-      CHECK(rendered.contains(item.label));
-      CHECK(rendered.contains(item.hint));
+      CHECK(rendered.contains("Partial import"));
+      CHECK_FALSE(rendered.contains(item.label));
+      CHECK_FALSE(rendered.contains(item.hint));
       CHECK_FALSE(rendered.contains("/ command"));
+    }
+  }
+
+  TEST_CASE("Render - overlay activity leaves empty status cells non-interactive", "[tui][regression][render]")
+  {
+    auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
+                                                       .kind = uimodel::ActivityStatusKind::Warning,
+                                                       .text = "Partial import",
+                                                       .hasDetails = true,
+                                                     }};
+
+    for (auto const overlay : {Overlay::QualityPanel, Overlay::Help, Overlay::Notifications})
+    {
+      auto shell = ShellInteractionModel{};
+      shell.openOverlay(overlay);
+
+      for (std::int32_t const columns : {48, 100, 180})
+      {
+        auto hitRegions = HitRegions{};
+        auto const rendered =
+          renderElement(statusBar(StatusBarViewState{.activityStatus = &activity,
+                                                     .terminalColumns = columns,
+                                                     .shell = &shell,
+                                                     .activityStatusBox = &hitRegions.activityStatusBox}),
+                        columns,
+                        1);
+        CAPTURE(overlay, columns);
+        CHECK(rendered.text.contains("Partial import"));
+        CHECK(hasHitArea(hitRegions.activityStatusBox));
+        CHECK(hitRegions.activityStatusBox.x_max < columns - 1);
+        CHECK(hitRegions.hitTestButton(1, 0, {.isOverlayActive = true}).hoveredButton == HoveredButton::ActivityStatus);
+        CHECK(hitRegions.hitTestButton(columns - 1, 0, {.isOverlayActive = true}).hoveredButton == HoveredButton::None);
+      }
+    }
+  }
+
+  TEST_CASE("Render - audio pipeline interaction hint appears once with the status row", "[tui][unit][render]")
+  {
+    struct LocaleCase final
+    {
+      std::string_view locale;
+      std::string_view hint;
+    };
+    auto const cases = std::to_array<LocaleCase>({
+      {.locale = "en", .hint = "Esc close"},
+      {.locale = "zh-Hans", .hint = "Esc 关闭"},
+      {.locale = "fr", .hint = "Esc fermer"},
+    });
+    auto const& keymapPlan = defaultKeymapPlan();
+    auto shell = ShellInteractionModel{};
+    shell.openOverlay(Overlay::QualityPanel);
+    auto activity = uimodel::ActivityStatusViewState{.compact = uimodel::ActivityCompactState{
+                                                       .kind = uimodel::ActivityStatusKind::Warning,
+                                                       .text = "Partial import",
+                                                       .dismissible = true,
+                                                     }};
+
+    for (auto const& item : cases)
+    {
+      auto const textCatalog = ao::test::messageCatalog(item.locale);
+
+      for (std::int32_t const columns : {100, 48})
+      {
+        auto const rendered = renderElement(
+          ftxui::vbox(
+            {qualityPanel(textCatalog, rt::PlaybackTransportSnapshot{}, keymapPlan, columns),
+             statusBar(textCatalog,
+                       StatusBarViewState{.activityStatus = &activity, .terminalColumns = columns, .shell = &shell},
+                       keymapPlan)}),
+          columns,
+          20);
+        CAPTURE(item.locale, columns);
+        INFO(rendered.text);
+        REQUIRE(rendered.text.contains(item.hint));
+        CHECK(rendered.text.find(item.hint) == rendered.text.rfind(item.hint));
+        CHECK(rendered.text.contains("Partial import"));
+      }
+    }
+  }
+
+  TEST_CASE("Render - notification close hint stays visible once with or without activity", "[tui][regression][render]")
+  {
+    using ao::tui::notificationCenterPanel;
+
+    struct LocaleCase final
+    {
+      std::string_view locale;
+      std::string_view closeHint;
+    };
+    auto const cases = std::to_array<LocaleCase>({
+      {.locale = "fr", .closeHint = "Esc fermer"},
+      {.locale = "ja", .closeHint = "Esc 閉じる"},
+    });
+    auto shell = ShellInteractionModel{};
+    shell.openOverlay(Overlay::Notifications);
+    auto const& keymapPlan = defaultKeymapPlan();
+
+    for (auto const& item : cases)
+    {
+      auto const textCatalog = ao::test::messageCatalog(item.locale);
+
+      for (auto const hasActivity : {false, true})
+      {
+        auto activity = uimodel::ActivityStatusViewState{};
+
+        if (hasActivity)
+        {
+          activity.compact = uimodel::ActivityCompactState{
+            .kind = uimodel::ActivityStatusKind::Warning,
+            .text = "Partial import",
+            .dismissible = true,
+          };
+        }
+
+        for (std::int32_t const columns : {48, 100})
+        {
+          auto const panelColumns = notificationCenterPanelColumns(textCatalog, activity, columns);
+          auto const rendered = renderElement(
+            ftxui::vbox(
+              {notificationCenterPanel(textCatalog, activity, nullptr, panelColumns),
+               statusBar(textCatalog,
+                         StatusBarViewState{.activityStatus = &activity, .terminalColumns = columns, .shell = &shell},
+                         keymapPlan)}),
+            columns,
+            20);
+          CAPTURE(item.locale, columns, hasActivity);
+          INFO(rendered.text);
+          REQUIRE(rendered.text.contains(item.closeHint));
+          CHECK(rendered.text.find(item.closeHint) == rendered.text.rfind(item.closeHint));
+          CHECK(rendered.text.contains("Partial import") == hasActivity);
+        }
+      }
     }
   }
 

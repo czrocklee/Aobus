@@ -41,7 +41,7 @@ Retain the project's capitalized `List` terminology only where the English produ
 |---|---|---|
 | Codec | The encoded audio format/codec reported for a track. | The container filename extension unless they are actually identical. |
 | Sample rate | Samples per second, displayed with `Hz` or `kHz`. | Bitrate or bit depth. |
-| Bit depth | Bits per sample, displayed with the established `-bit` syntax. | Bitrate. |
+| Bit depth | Source or signal precision in bits per sample. | Bitrate or PCM container width, which can be larger than the signal precision. |
 | Bitrate | Encoded data rate, displayed with `kbps`. | Sample rate. |
 | Channel | One audio signal channel; Mono/Stereo are localized lexical descriptions. | A Track or an output device. |
 | Output device | The selected playback endpoint. | The audio backend/server. |
@@ -57,7 +57,7 @@ Retain the project's capitalized `List` terminology only where the English produ
 | Lossless | Encoding or processing that preserves the represented audio samples. | Bit-perfect output through the complete playback path. |
 | Bit-perfect | The output path preserves the relevant digital sample values and format without modifying stages. | Merely using a lossless source codec. |
 
-The current presentation contract intentionally keeps ASCII digits, clock durations, ISO-style dates, codec symbols, and the established technical units (`Hz`, `kHz`, `kbps`, `KB`/`MB`/`GB`, `dB`, and `-bit`) locale-neutral. Do not localize those fragments unless the owning specification changes; localize the complete surrounding message and its grammar.
+Follow each consumer's owning section in the [text-catalog reference](../../../../doc/reference/presentation/text-catalog.md) for locale-neutral notation; track-field formatting rules are not automatically global.
 
 ## Wording checks
 

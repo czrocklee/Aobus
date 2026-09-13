@@ -39,24 +39,29 @@ namespace ao::uimodel::test
     CHECK(combineSmartListEffectiveExpression("$year > 1970", "") == "$year > 1970");
   }
 
-  TEST_CASE("SmartListEditorModel - formats status text", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results", "[uimodel][regression][list]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    auto const small = formatSmartListPreviewStatusText(textCatalog, true, 3, true, false);
-    auto const large = formatSmartListPreviewStatusText(textCatalog, true, 14, true, false);
 
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 0, true, false) == "No matches");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, false) == "Showing all 1 match");
-    CHECK(small == "Showing all 3 matches");
-    CHECK(large == "Showing 10 of 14 matches");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, false) == "Showing all matches: 1");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, true, false) == "Showing all matches: 2");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, true, false) == "Showing all matches: 10");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, false) == "Showing 10 of 11 matches");
   }
 
-  TEST_CASE("SmartListEditorModel - formats an unfiltered source with track-count grammar", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source", "[uimodel][regression][list]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, true) == "Showing all 1 track");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, false, true) == "Showing all 1 track from source");
-    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 4, false, true) == "Showing all 4 tracks from source");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, true) == "Showing all tracks: 1");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, true, true) == "Showing all tracks: 2");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, true, true) == "Showing all tracks: 10");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, true) == "Showing all tracks: 11");
+
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, false, true) == "Showing all tracks from source: 1");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 2, false, true) == "Showing all tracks from source: 2");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 10, false, true) == "Showing all tracks from source: 10");
+    CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, false, true) == "Showing all tracks from source: 11");
   }
 
   TEST_CASE("SmartListEditorModel - formats an invalid expression", "[uimodel][unit][list]")
@@ -197,7 +202,7 @@ namespace ao::uimodel::test
     CHECK(state.matchCount == 4);
     CHECK(state.canSubmit);
     CHECK(state.isAllTracks == false);
-    CHECK(state.previewStatusText == "Showing all 4 tracks from source");
+    CHECK(state.previewStatusText == "Showing all tracks from source: 4");
     CHECK(state.expressionValid == true);
     CHECK(state.queryInvalid == false);
     CHECK(state.previewVisible == true);
@@ -277,6 +282,6 @@ namespace ao::uimodel::test
     CHECK(state.previewVisible == true);
     CHECK(state.expressionValid == true);
     CHECK(state.errorText.empty());
-    CHECK(state.previewStatusText == "Showing all 5 tracks");
+    CHECK(state.previewStatusText == "Showing all tracks: 5");
   }
 } // namespace ao::uimodel::test

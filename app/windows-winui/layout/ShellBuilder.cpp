@@ -316,12 +316,6 @@ namespace ao::winui::layout
     auto const items = flyout.Items();
     appendItem(items, "winui_shell_stop", _config.commands.stop);
     appendItem(items, "winui_shell_reveal_current_track", _config.commands.revealCurrentTrack);
-    appendItem(items, "winui_shell_open_library", _config.commands.openLibrary);
-    appendItem(items, "winui_shell_rescan_library", _config.commands.rescanLibrary);
-    appendItem(items, "winui_shell_import_library_data", _config.commands.importLibrary);
-    appendItem(items, "winui_shell_export_library_data", _config.commands.exportLibrary);
-    appendSeparator(items);
-    appendItem(items, "winui_shell_classic_mode", _config.commands.toggleShellMode);
     return flyout;
   }
 

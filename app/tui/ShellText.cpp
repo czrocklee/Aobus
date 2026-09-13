@@ -56,7 +56,6 @@ namespace ao::tui
   {
     switch (id)
     {
-      case MessageId::TuiShellHintDetail:
       case MessageId::TuiShellHintPipeline:
         return requiredFormat(catalog,
                               id,
@@ -71,14 +70,6 @@ namespace ao::tui
                                MessageArgument{"toggleKey", ""},
                                MessageArgument{"selectKey", "Enter"},
                                MessageArgument{"closeKey", "Esc"}});
-      case MessageId::TuiShellHintNotifications:
-        return requiredFormat(catalog,
-                              id,
-                              {MessageArgument{"toggleState", "unbound"},
-                               MessageArgument{"toggleKey", ""},
-                               MessageArgument{"hideKey", "x"},
-                               MessageArgument{"closeKey", "Esc"}});
-      case MessageId::TuiShellHintHelp: return requiredFormat(catalog, id, {MessageArgument{"closeKey", "Esc"}});
       default: return {};
     }
   }

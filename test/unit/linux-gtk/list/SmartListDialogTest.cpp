@@ -140,7 +140,7 @@ namespace ao::gtk::test
     auto const previewModelPtr = singleSelectionPtr->get_model();
     REQUIRE(previewModelPtr);
     CHECK(previewModelPtr->get_n_items() == 1);
-    CHECK(findLabelByText(dialog, "Showing all 1 match") != nullptr);
+    CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
   }
 
   TEST_CASE("SmartListDialog - invalid expression rejects the transient preview",

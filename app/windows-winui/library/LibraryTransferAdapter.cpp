@@ -44,13 +44,12 @@ namespace ao::winui
     using i18n::MessageId;
     auto const libraryScope = report.targetScope == rt::ImportTargetScope::Library;
     auto const scope = i18n::requiredText(
-      textCatalog,
-      libraryScope ? MessageId::WinUiLibraryRestoreScopeLibrary : MessageId::WinUiLibraryRestoreScopeLists);
+      textCatalog, libraryScope ? MessageId::LibraryRestoreScopeLibrary : MessageId::LibraryRestoreScopeLists);
 
     return {
-      .title = std::string{i18n::requiredText(textCatalog, MessageId::WinUiLibraryConfirmRestore)},
+      .title = std::string{i18n::requiredText(textCatalog, MessageId::LibraryConfirmRestore)},
       .message = i18n::requiredFormat(textCatalog,
-                                      MessageId::WinUiLibraryRestoreConfirmation,
+                                      MessageId::LibraryRestoreConfirmation,
                                       {{"scope", scope},
                                        {"version", report.payloadVersion},
                                        {"mode", rt::exportModeName(report.payloadMode)},
@@ -61,7 +60,7 @@ namespace ao::winui
                                        {"listsDeleted", report.listsDeleted},
                                        {"dangling", report.danglingReferencesIgnored}}),
       .primaryActionText = std::string{i18n::requiredText(
-        textCatalog, libraryScope ? MessageId::WinUiLibraryRestoreLibrary : MessageId::WinUiLibraryRestoreLists)},
+        textCatalog, libraryScope ? MessageId::LibraryRestoreLibrary : MessageId::LibraryRestoreLists)},
     };
   }
 } // namespace ao::winui

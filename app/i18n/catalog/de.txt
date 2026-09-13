@@ -109,8 +109,8 @@ de:table {
     track_field_movement { "Satz" }
     track_field_soloist { "Solist" }
     track_field_year { "Jahr" }
-    track_field_disc_number { "CD" }
-    track_field_disc_total { "CDs gesamt" }
+    track_field_disc_number { "Disc" }
+    track_field_disc_total { "Discs gesamt" }
     track_field_track_number { "Titel-Nr." }
     track_field_track_total { "Titel gesamt" }
     track_field_movement_number { "Satz-Nr." }
@@ -165,7 +165,7 @@ de:table {
     track_presentation_description_technical { "Liste mit Codec, Bitrate, Größe und Pfad zur Dateiprüfung." }
     create_custom_track_presentation { "Benutzerdefinierte Ansicht erstellen..." }
     track_presentation_picker_label { "Ansicht" }
-    track_presentation_all_tracks_manual_order_unavailable { "Alle Titel haben keine gespeicherte Reihenfolge. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
+    track_presentation_all_tracks_manual_order_unavailable { "Für „Alle Titel“ ist keine Reihenfolge gespeichert. Erstellen Sie eine gespeicherte Liste, um die gesamte Bibliothek manuell anzuordnen." }
     audio_backend_pipewire_description { "Moderner Linux-Audioserver mit niedriger Latenz" }
     audio_backend_alsa_description { "Advanced Linux Sound Architecture (direkter Hardwarezugriff)" }
     audio_backend_wasapi_description { "Windows Audio Session API" }
@@ -187,7 +187,7 @@ de:table {
     notification_track_open_failed { "{track} konnte nicht wiedergegeben werden: {reason}" }
     notification_decode_failed { "Wiedergabe von {track} fehlgeschlagen: {reason}" }
     notification_route_activation_failed { "Wiedergabe konnte nicht gestartet werden: {reason}" }
-    notification_device_lost { "Wiedergabegerät fehlgeschlagen: {reason}" }
+    notification_device_lost { "Wiedergabegerät ausgefallen: {reason}" }
     notification_sequence_finished { "Wiedergabesequenz beendet" }
     notification_tracks_skipped { "{count, plural, one {# nicht abspielbarer Titel übersprungen} other {# nicht abspielbare Titel übersprungen}}" }
     notification_stopped_after_failures { "Wiedergabe nach {count} nicht abspielbaren Titeln beendet" }
@@ -233,24 +233,24 @@ de:table {
     smart_list_membership_computed { "Berechnete Mitgliedschaft — Tags oder Ausdruck bearbeiten" }
     smart_list_expression_none { "(keiner)" }
     smart_list_no_tracks { "{source, select, library {Keine Titel in der Bibliothek} other {Keine Titel in der Quelle}}" }
-    smart_list_showing_source { "{source, select, library {Alle {count, plural, one {# Titel} other {# Titel}} werden angezeigt} other {Alle {count, plural, one {# Titel} other {# Titel}} aus der Quelle werden angezeigt}}" }
+    smart_list_showing_source { "{source, select, library {{count, plural, one {Alle Titel werden angezeigt: #} other {Alle Titel werden angezeigt: #}}} other {{count, plural, one {Alle Titel aus der Quelle werden angezeigt: #} other {Alle Titel aus der Quelle werden angezeigt: #}}}}" }
     smart_list_invalid_filter { "Ungültiger Filter" }
     smart_list_no_matches { "Keine Treffer" }
-    smart_list_showing_all_matches { "Alle {count, plural, one {# Treffer} other {# Treffer}} werden angezeigt" }
+    smart_list_showing_all_matches { "{count, plural, one {Alle Treffer werden angezeigt: #} other {Alle Treffer werden angezeigt: #}}" }
     smart_list_showing_first_matches { "{visible} von {count} Treffern werden angezeigt" }
     smart_list_untitled_track { "(ohne Titel)" }
-    list_order_saved_lists_only { "Manuelle Sortierung ist nur für gespeicherte Listen verfügbar." }
-    list_order_library_busy { "Die Bibliothek ist beschäftigt. Manuelle Sortierung ist nach Abschluss der Wartung wieder verfügbar." }
+    list_order_saved_lists_only { "Eine manuelle Reihenfolge ist nur für gespeicherte Listen verfügbar." }
+    list_order_library_busy { "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar." }
     list_order_authoring_unavailable { "Die Bibliothek kann derzeit nicht bearbeitet werden." }
     list_order_list_unavailable { "Diese Liste ist nicht mehr verfügbar." }
-    list_order_fix_filter { "Korrigieren Sie die Liste oder den Schnellfilter, bevor Sie die Sortierung ändern." }
-    list_order_choose_flat_presentation { "Wählen Sie Manuelle Sortierung oder eine andere flache, unsortierte Darstellung, um Titel neu anzuordnen." }
+    list_order_fix_filter { "Korrigieren Sie die Liste oder den Schnellfilterausdruck, bevor Sie die Reihenfolge ändern." }
+    list_order_choose_flat_presentation { "Wählen Sie „Manuelle Reihenfolge“ oder eine andere flache, unsortierte Ansicht, um Titel neu anzuordnen." }
     list_order_clear_quick_filter { "Löschen Sie den Schnellfilter, um Titel zu ziehen oder relativ zu verschieben; an den Anfang oder das Ende können sie weiterhin verschoben werden." }
-    list_order_changed { "Die Liste wurde geändert. Starten Sie die Sortieraktion erneut." }
-    list_order_unchanged { "Sortierung unverändert." }
+    list_order_changed { "Die Liste wurde geändert. Beginnen Sie die Änderung der Reihenfolge erneut." }
+    list_order_unchanged { "Reihenfolge unverändert." }
     list_order_editing_unavailable { "Die Bibliothek kann derzeit nicht bearbeitet werden." }
-    list_order_moved { "{count, plural, one {# Titel wurde} other {# Titel wurden}} in der manuellen Sortierung verschoben." }
-    list_order_reset { "Die manuelle Sortierung wurde zurückgesetzt und {count, plural, one {# gespeicherte Position wurde} other {# gespeicherte Positionen wurden}} verworfen." }
+    list_order_moved { "{count, plural, one {# Titel wurde} other {# Titel wurden}} in der manuellen Reihenfolge verschoben." }
+    list_order_reset { "Die manuelle Reihenfolge wurde zurückgesetzt. {count, plural, one {# gespeicherte Position wurde verworfen.} other {# gespeicherte Positionen wurden verworfen.}}" }
     list_order_forgot_hidden { "{count, plural, one {# ausgeblendete gespeicherte Position wurde} other {# ausgeblendete gespeicherte Positionen wurden}} verworfen." }
     list_membership_add_stale { "Die Bibliothek wurde geändert, bevor Titel hinzugefügt werden konnten. Versuchen Sie es erneut." }
     list_membership_add_unavailable { "Die Bibliothek ist beschäftigt. Es wurden keine Titel hinzugefügt." }
@@ -277,7 +277,7 @@ de:table {
     audio_node_device { "[Gerät]" }
     audio_node_other_source { "[Andere Quelle]" }
     audio_node_unknown { "[Unbekannt]" }
-    audio_format { "{sampleRate} kHz · {bits} Bit · {channels}" }
+    audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} Kan." }
     audio_finding_lossy_source { "Verlustbehaftete Quelle" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software-Lautstärkeabsenkung: {gain}} other {Software-Lautstärkeabsenkung}}" }
@@ -329,18 +329,18 @@ de:table {
     gtk_shell_menu_help { "Hilfe" }
     gtk_shell_about { "Über" }
     gtk_shell_application_menu { "Anwendungsmenü" }
-    gtk_playback_show_playing_list { "Klicken, um die Wiedergabeliste anzuzeigen" }
+    gtk_playback_reveal_playing_track { "Aktuell wiedergegebenen Titel anzeigen" }
     gtk_playback_toggle_mute { "Stumm ein-/ausschalten" }
     gtk_playback_show_current_album { "Aktuelles Album anzeigen" }
     gtk_playback_now_playing_cover_art { "Cover der aktuellen Wiedergabe" }
     gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags durchsuchen..." }
     gtk_library_clear_filter { "Filter löschen" }
     gtk_library_create_list_from_filter { "Liste aus aktuellem Filter erstellen" }
-    gtk_list_new { "Neue Liste..." }
+    list_new { "Neue Liste..." }
     gtk_list_new_playlist { "Neue Wiedergabeliste..." }
-    gtk_list_edit { "Liste bearbeiten..." }
-    gtk_list_delete { "Liste löschen" }
-    gtk_list_delete_subtree { "Liste und Unterlisten löschen..." }
+    list_edit { "Liste bearbeiten..." }
+    list_delete { "Liste löschen" }
+    list_delete_subtree { "Liste und Unterlisten löschen..." }
     gtk_smart_list_new_title { "Neue Liste" }
     gtk_smart_list_edit_title { "Liste bearbeiten" }
     gtk_smart_list_new_playlist_title { "Neue Wiedergabeliste" }
@@ -367,57 +367,57 @@ de:table {
     gtk_smart_list_invalid_source { "(ungültige Quelle)" }
     gtk_smart_list_choose_membership_tag { "Sichtbares Tag für die Wiedergabelisten-Mitgliedschaft wählen" }
     gtk_library_open_music_library { "Musikbibliothek öffnen" }
-    gtk_library_select_export_mode { "Exportmodus auswählen" }
-    gtk_library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
-    gtk_library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen synchronisieren)" }
-    gtk_library_export_mode_metadata { "Metadaten (gepflegter Text, Tags und Listen)" }
-    gtk_library_export_mode_full { "Vollständig (Notfallwiederherstellung: alles)" }
-    gtk_library_export_mode_list_only { "Nur Listen (Wiedergabelisten ohne Titeländerungen synchronisieren)" }
-    gtk_library_include { "Einschließen" }
-    gtk_library_next { "Weiter" }
-    gtk_library_export_yaml { "Bibliothek als YAML exportieren" }
-    gtk_library_yaml_files { "YAML-Dateien" }
-    gtk_library_import_yaml { "Bibliothek aus YAML importieren" }
-    gtk_library_confirm_restore { "Bibliothekswiederherstellung bestätigen" }
-    gtk_library_restore_library { "Bibliothek wiederherstellen" }
-    gtk_library_restore_lists { "Listen wiederherstellen" }
-    gtk_library_restore_scope_library { "Bibliothekstitel und Listen" }
-    gtk_library_restore_scope_lists { "Listen" }
+    library_select_export_mode { "Exportmodus auswählen" }
+    library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
+    library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen)" }
+    library_export_mode_metadata { "Metadaten (gepflegter Text, Tags und Listen)" }
+    library_export_mode_full { "Vollständig (alle Bibliotheksdaten; keine Audio- oder Coverdateien)" }
+    library_export_mode_list_only { "Nur Listen (alle gespeicherten Listen; keine Titeldaten)" }
+    library_include { "Einschließen" }
+    library_next { "Weiter" }
+    library_export_yaml { "Bibliothek als YAML exportieren" }
+    library_yaml_files { "YAML-Dateien" }
+    library_import_yaml { "Bibliothek aus YAML importieren" }
+    library_confirm_restore { "Wiederherstellung bestätigen" }
+    library_restore_library { "Bibliothek wiederherstellen" }
+    library_restore_lists { "Listen wiederherstellen" }
+    library_restore_scope_library { "Bibliothekstitel und Listen" }
+    library_restore_scope_lists { "Listen" }
     gtk_library_file_selection_failed { "Dateiauswahl fehlgeschlagen" }
     gtk_library_could_not_select_music_folder { "Musikbibliotheksordner konnte nicht ausgewählt werden" }
-    gtk_library_could_not_select_export_file { "Exportdatei konnte nicht ausgewählt werden" }
-    gtk_library_could_not_select_backup { "Bibliothekssicherung konnte nicht ausgewählt werden" }
-    gtk_list_delete_question_title { "Liste löschen?" }
-    gtk_list_delete_subtree_title { "Liste und Unterlisten löschen?" }
-    gtk_list_delete_action { "Löschen" }
-    gtk_list_delete_all_action { "Alle löschen" }
+    library_could_not_select_export_file { "Exportdatei konnte nicht ausgewählt werden" }
+    library_could_not_select_backup { "Bibliothekssicherung konnte nicht ausgewählt werden" }
+    list_delete_title { "Liste löschen?" }
+    list_delete_subtree_title { "Liste und Unterlisten löschen?" }
+    list_delete_action { "Löschen" }
+    list_delete_all_action { "Alle löschen" }
     gtk_list_unable_to_delete_title { "Liste kann nicht gelöscht werden" }
-    gtk_list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
-    gtk_list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
-    gtk_list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
-    gtk_list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
-    gtk_library_restore_confirmation { "Diese Wiederherstellung ersetzt die aktuellen {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; {listsCreated} Listen erstellt, {listsDeleted} gelöscht; {dangling} verwaiste Verweise ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
-    gtk_library_file_selection_error { "{operation}: {message}" }
+    list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
+    list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
+    list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
+    list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
+    library_restore_confirmation { "Diese Wiederherstellung ersetzt Folgendes: {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau — Titel: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; Listen: {listsCreated} erstellt, {listsDeleted} gelöscht; verwaiste Verweise: {dangling} ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
+    library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Andere Listen haben eine berechnete Mitgliedschaft; bearbeiten Sie stattdessen deren Ausdruck oder die Titel-Tags." }
-    gtk_list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
+    list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
     gtk_list_create_playlist { "Wiedergabeliste erstellen..." }
     gtk_list_manage_lists { "Listen verwalten..." }
-    gtk_list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
-    gtk_list_remove_from_current { "Aus {name} ({tag}) entfernen" }
+    list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
+    list_remove_from_current { "Aus {name} ({tag}) entfernen" }
     gtk_list_remove_computed_unavailable { "Das Entfernen aus dieser Liste ist nicht verfügbar, da ihre Mitgliedschaft berechnet wird." }
-    gtk_list_move_up { "Nach oben" }
-    gtk_list_move_down { "Nach unten" }
-    gtk_list_move_to_top { "An den Anfang" }
-    gtk_list_move_to_bottom { "An das Ende" }
-    gtk_list_reset_order { "Sortierung zurücksetzen" }
+    list_move_up { "Nach oben" }
+    list_move_down { "Nach unten" }
+    list_move_to_top { "An den Anfang" }
+    list_move_to_bottom { "An das Ende" }
+    list_reset_order { "Reihenfolge zurücksetzen" }
     gtk_list_forget_hidden_positions { "Ausgeblendete Positionen verwerfen" }
-    gtk_list_manual_order { "Manuelle Sortierung" }
-    gtk_list_select_tracks_for_order { "Wählen Sie mindestens einen Titel aus, um die manuelle Sortierung zu ändern." }
-    gtk_list_move_up_action { "In der manuellen Sortierung nach oben" }
-    gtk_list_move_down_action { "In der manuellen Sortierung nach unten" }
-    gtk_list_move_to_top_action { "An den Anfang der manuellen Sortierung" }
-    gtk_list_move_to_bottom_action { "An das Ende der manuellen Sortierung" }
-    gtk_list_reset_order_action { "Manuelle Sortierung zurücksetzen" }
+    list_manual_order { "Manuelle Reihenfolge" }
+    gtk_list_select_tracks_for_order { "Wählen Sie mindestens einen Titel aus, um die manuelle Reihenfolge zu ändern." }
+    gtk_list_move_up_action { "In der manuellen Reihenfolge nach oben verschieben" }
+    gtk_list_move_down_action { "In der manuellen Reihenfolge nach unten verschieben" }
+    gtk_list_move_to_top_action { "An den Anfang der manuellen Reihenfolge verschieben" }
+    gtk_list_move_to_bottom_action { "An das Ende der manuellen Reihenfolge verschieben" }
+    gtk_list_reset_order_action { "Manuelle Reihenfolge zurücksetzen" }
     gtk_preferences_title { "Einstellungen" }
     gtk_preferences_page_general { "Allgemein" }
     gtk_preferences_page_appearance { "Erscheinungsbild" }
@@ -498,7 +498,6 @@ de:table {
     tui_shell_workspace_view { "Ansicht" }
     tui_shell_overlay_tracks { "Titel" }
     tui_shell_overlay_lists { "Listen" }
-    tui_shell_overlay_detail { "Details" }
     tui_shell_overlay_pipeline { "Audiokette" }
     tui_shell_overlay_output { "Ausgabe" }
     tui_shell_overlay_views { "Ansichten" }
@@ -506,12 +505,9 @@ de:table {
     tui_shell_overlay_help { "Hilfe" }
     tui_shell_hint_lists { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{pinState, select, bound {{pinKey} Seitenleiste  } other {}}{openKey} öffnen  {closeKey} schließen" }
     tui_library_no_lists_found { "Keine Listen gefunden" }
-    tui_shell_hint_detail { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_pipeline { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{closeKey} schließen" }
     tui_shell_hint_output { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
     tui_shell_hint_views { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{selectKey} wählen  {closeKey} schließen" }
-    tui_shell_hint_notifications { "{toggleState, select, bound {{toggleKey} umschalten  } other {}}{hideKey} kompakt ausblenden  {closeKey} schließen" }
-    tui_shell_hint_help { "{closeKey} schließen" }
     tui_shell_status_command { "Befehl" }
     tui_shell_status_lists { "Listen" }
     tui_shell_status_view { "Ansicht" }
@@ -548,7 +544,7 @@ de:table {
     tui_shell_detail_scan { "Bibliothek scannen" }
     tui_shell_detail_scan_cancel { "Scan abbrechen" }
     tui_shell_detail_edit_properties { "Titeleigenschaften bearbeiten" }
-    tui_shell_detail_select_toggle { "fokussierten Titel markieren oder lösen" }
+    tui_shell_detail_select_toggle { "Markierung des fokussierten Titels setzen oder aufheben" }
     tui_shell_detail_select_visual { "eine visuelle Auswahl ab dem fokussierten Titel starten oder bestätigen" }
     tui_shell_detail_select_all { "alle Titel dieser Ansicht markieren" }
     tui_shell_detail_select_clear { "Markierungen löschen" }
@@ -591,7 +587,7 @@ de:table {
     tui_quick_filter_no_suggestions { "Keine Vorschläge. Der eingegebene Text ist weiterhin nutzbar." }
     tui_quick_filter_literal_footer { "{acceptKey} Text anwenden  {keepKey} Text behalten" }
     tui_quick_filter_empty_footer { "{acceptKey} Filter löschen  {keepKey} Filter behalten" }
-    tui_status_keep_marks { "merken" }
+    tui_status_keep_marks { "Markierungen behalten" }
     tui_status_cancel_range { "Bereich verwerfen" }
     tui_status_play { "abspielen" }
     tui_status_clear { "löschen" }
@@ -605,7 +601,6 @@ de:table {
     tui_library_revealed_track { "{track} angezeigt" }
     tui_library_unknown_view { "Unbekannte Ansicht {id}" }
     tui_library_view { "Ansicht: {id}" }
-    tui_library_opened_list { "{list} geöffnet" }
     tui_library_reloaded_tracks { "{count, plural, one {# Titel neu geladen} other {# Titel neu geladen}}" }
     tui_library_quick_filter_matched { "Schnellfilter fand {count, plural, one {# Titel} other {# Titel}}" }
     tui_library_expression_filter_matched { "Ausdrucksfilter fand {count, plural, one {# Titel} other {# Titel}}" }
@@ -654,37 +649,17 @@ de:table {
     tui_editor_applied { "{count, plural, one {# Titel} other {# Titel}} aktualisiert" }
     tui_editor_no_change { "Keine Änderungen erforderlich" }
     tui_editor_busy { "Die Bibliothek ist beschäftigt; erneut versuchen" }
-    tui_editor_exit_waiting { "Speichern wird abgeschlossen … Strg-C beendet das Warten" }
+    tui_editor_exit_waiting { "Speichern wird abgeschlossen … Ctrl-C beendet das Warten" }
     winui_shell_menu_file { "Datei" }
     winui_shell_open_library { "Bibliothek öffnen..." }
     winui_shell_rescan { "Neu scannen" }
     winui_shell_rescan_library { "Bibliothek neu scannen" }
     winui_shell_import_library_data { "Bibliotheksdaten importieren..." }
     winui_shell_export_library_data { "Bibliotheksdaten exportieren..." }
-    winui_library_select_export_mode { "Exportmodus auswählen" }
-    winui_library_choose_backup_contents { "Inhalt der Sicherung auswählen:" }
-    winui_library_include { "Einschließen" }
-    winui_library_export_mode_delta { "Differenz (Benutzeränderungen, Tags und Listen synchronisieren)" }
-    winui_library_export_mode_metadata { "Metadaten (gepflegter Text, Tags und Listen)" }
-    winui_library_export_mode_full { "Vollständig (Notfallwiederherstellung: alles)" }
-    winui_library_export_mode_list_only { "Nur Listen (Wiedergabelisten ohne Titeländerungen synchronisieren)" }
     winui_library_select_import_mode { "Importmodus auswählen" }
     winui_library_choose_import_mode { "Diese Sicherung zusammenführen oder ihren Bereich wiederherstellen:" }
     winui_library_import_mode_merge { "Zusammenführen (Datensätze außerhalb der Sicherung behalten)" }
     winui_library_import_mode_restore { "Wiederherstellen (Sicherungsbereich nach Vorschau ersetzen)" }
-    winui_library_next { "Weiter" }
-    winui_library_export_yaml { "Bibliothek als YAML exportieren" }
-    winui_library_import_yaml { "Bibliothek aus YAML importieren" }
-    winui_library_yaml_files { "YAML-Dateien" }
-    winui_library_confirm_restore { "Wiederherstellung bestätigen" }
-    winui_library_restore_library { "Bibliothek wiederherstellen" }
-    winui_library_restore_lists { "Listen wiederherstellen" }
-    winui_library_restore_scope_library { "Bibliothek" }
-    winui_library_restore_scope_lists { "Listen" }
-    winui_library_restore_confirmation { "Diese Wiederherstellung ersetzt die aktuelle {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; {listsCreated} Listen erstellt, {listsDeleted} gelöscht; {dangling} verwaiste Verweise ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
-    winui_library_could_not_select_export_file { "Exportdatei konnte nicht ausgewählt werden" }
-    winui_library_could_not_select_backup { "Bibliothekssicherung konnte nicht ausgewählt werden" }
-    winui_library_file_selection_error { "{operation}: {message}" }
     winui_shell_menu_view { "Ansicht" }
     winui_shell_modern_mode { "Moderner Modus" }
     winui_shell_columns { "Spalten..." }
@@ -710,10 +685,6 @@ de:table {
     winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Öffnen Sie die Eigenschaften erneut und versuchen Sie es noch einmal." }
     winui_track_properties_invalid_value { "Ungültiger Wert: {detail}" }
     winui_list_create_from_filter { "Liste aus aktuellem Filter erstellen" }
-    winui_list_new { "Neue Liste..." }
-    winui_list_edit { "Liste bearbeiten..." }
-    winui_list_delete { "Liste löschen" }
-    winui_list_delete_subtree { "Liste und Unterlisten löschen..." }
     winui_list_editor_new_title { "Neue Liste" }
     winui_list_editor_edit_title { "Liste bearbeiten" }
     winui_common_cancel { "Abbrechen" }
@@ -731,23 +702,6 @@ de:table {
     winui_list_auto_presentation { "Automatisch" }
     winui_list_presentation { "Ansicht" }
     winui_list_preview { "Vorschau" }
-    winui_list_delete_title { "Liste löschen?" }
-    winui_list_delete_subtree_title { "Liste und Unterlisten löschen?" }
-    winui_list_delete_commit { "Löschen" }
-    winui_list_delete_all_commit { "Alle löschen" }
-    winui_list_delete_question { "\"{name}\" löschen?\n\nDie Liste wird entfernt. Musikdateien bleiben erhalten." }
-    winui_list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
-    winui_list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
-    winui_list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
-    winui_list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }
-    winui_list_add_to_playlist { "Zur Wiedergabeliste hinzufügen" }
-    winui_list_remove_from_current { "Aus {name} ({tag}) entfernen" }
-    winui_list_manual_order { "Manuelle Sortierung" }
-    winui_list_move_up { "Nach oben" }
-    winui_list_move_down { "Nach unten" }
-    winui_list_move_to_top { "An den Anfang" }
-    winui_list_move_to_bottom { "An das Ende" }
-    winui_list_reset_order { "Sortierung zurücksetzen" }
     winui_shell_track_details { "Titeldetails" }
     winui_shell_classic_mode { "Klassischer Modus" }
     winui_playback_output_device { "Ausgabegerät" }
@@ -762,6 +716,7 @@ de:table {
     winui_library_no_selection { "Keine Auswahl" }
     winui_track_move_column_left { "Nach links verschieben" }
     winui_track_move_column_right { "Nach rechts verschieben" }
+    winui_playback_options { "Wiedergabeoptionen" }
     winui_more_menu { "Mehr" }
     winui_error { "Fehler: {detail}" }
     winui_save_settings_failed { "Einstellungen konnten nicht gespeichert werden: {detail}" }
@@ -798,7 +753,6 @@ de:table {
     track_hide_empty_fields { "Leere Felder ausblenden" }
     track_missing_on_some { "Bei einigen Titeln nicht vorhanden" }
     track_fallback { "Titel {id}" }
-    track_detail_title { "Titeldetails" }
     track_no_selection { "Kein Titel ausgewählt" }
     cover_art_title { "Cover" }
     cover_art_none { "Kein Cover" }
@@ -823,7 +777,7 @@ de:table {
     gtk_custom_metadata_delete { "Benutzerdefinierte Metadaten löschen" }
     gtk_activity_hide_status { "Status ausblenden" }
     gtk_activity_hide_notification { "Benachrichtigung aus dem Status ausblenden" }
-    gtk_manual_order_drag { "Ziehen, um Titel in der manuellen Sortierung neu anzuordnen" }
+    gtk_manual_order_drag { "Ziehen, um Titel in der manuellen Reihenfolge neu anzuordnen" }
     gtk_manual_order_rearrange { "Titel neu anordnen" }
     gtk_status_ready { "Aobus ist bereit" }
     gtk_edit_value { "Wert bearbeiten" }
@@ -832,7 +786,7 @@ de:table {
     gtk_hide_details { "Details ausblenden" }
     gtk_show_details { "Details anzeigen" }
     gtk_no_track_view_available { "Keine Titelansicht verfügbar." }
-    gtk_save_layout_defaults_message { "Dadurch wird die Layout-Vorgabe ''{preset}'' auf dem Datenträger mit den aktuellen Bereichsgrößen aktualisiert.\n\nÜbernommene Größen werden aus dem Laufzeitzustand entfernt; andere Laufzeitwerte wie der Einblendzustand bleiben erhalten." }
+    gtk_save_layout_defaults_message { "Die aktuellen Bereichsgrößen als Standardwerte für das Layout ''{preset}'' speichern?\n\nAndere gespeicherte Bereichseinstellungen, einschließlich der Sichtbarkeit, bleiben erhalten." }
     gtk_unable_switch_libraries { "Bibliothek kann nicht gewechselt werden" }
     gtk_startup_failed_title { "Aobus konnte nicht gestartet werden" }
     gtk_startup_select_library_failed { "Aobus konnte die Startbibliothek nicht auswählen: {detail}" }
@@ -961,7 +915,7 @@ de:table {
     gtk_layout_property_compact_max { "Maximum Kompakt" }
     gtk_layout_property_regular_max { "Maximum Regulär" }
     gtk_layout_property_class_prefix { "Klassenpräfix" }
-    gtk_layout_property_slot { "Position" }
+    gtk_layout_property_slot { "Bereich" }
     gtk_layout_property_view_source { "Ansichtsquelle" }
     gtk_layout_property_group_cover_placeholder { "Gruppen-Cover-Platzhalter" }
     gtk_layout_property_position { "Position" }
@@ -1026,18 +980,13 @@ de:table {
     gtk_layout_value_center { "Zentriert" }
     tui_untitled_section { "Unbenannter Abschnitt" }
     tui_notification_none { "Keine Benachrichtigungen" }
-    tui_pipeline_closed { "Audiokette geschlossen" }
-    tui_pipeline_opened { "Audiokette" }
-    tui_output_closed { "Ausgabegeräte geschlossen" }
-    tui_output_opened { "Ausgabegeräte" }
-    tui_views_closed { "Ansichten geschlossen" }
-    tui_views_opened { "Ansichten" }
-    tui_notifications_closed { "Benachrichtigungen geschlossen" }
-    tui_notifications_opened { "Benachrichtigungen" }
+    tui_pipeline_closed { "Audiokettenbereich geschlossen" }
+    tui_output_closed { "Ausgabegeräteauswahl geschlossen" }
+    tui_views_closed { "Ansichtsauswahl geschlossen" }
+    tui_notifications_closed { "Benachrichtigungszentrale geschlossen" }
     tui_playback_start_failed { "Wiedergabe wurde nicht gestartet. Prüfen Sie Ausgabegerät, Dateipfad und Protokolle." }
     tui_playback_control_unavailable { "Wiedergabesteuerung nicht verfügbar" }
     tui_overlay_closed { "Einblendung geschlossen" }
-    tui_help_opened { "Hilfe" }
     tui_section_unavailable { "Abschnitt ist nicht mehr verfügbar" }
     tui_unknown_command { "Unbekannter Befehl: {command}" }
     tui_filter_failed { "Filter fehlgeschlagen: {detail}" }
@@ -1059,7 +1008,7 @@ de:table {
     tui_shell_detail_edit_tags { "Tags der Titel bearbeiten" }
     tui_settings_terminal_title { "Format des Terminaltitels" }
     tui_settings_terminal_soul { "Soul im Terminaltitel" }
-    tui_settings_terminal_title_hint { "Verwendet den laufenden Titel, z. B. $artist \" - \" $title. Leer deaktiviert die Funktion." }
+    tui_settings_terminal_title_hint { "Formatiert den aktuell wiedergegebenen Titel, z. B. $artist \" - \" $title. Ein leerer Wert deaktiviert die Aktualisierung des Terminaltitels." }
     tui_settings_title_preview { "Vorschau: {title}" }
     tui_settings_invalid_title_format { "Ungültiges Format: {detail}" }
   }

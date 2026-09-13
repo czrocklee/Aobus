@@ -550,11 +550,9 @@ namespace ao::winui
     _dialog = ContentDialog{};
     _dialog.XamlRoot(_xamlRoot ? _xamlRoot() : XamlRoot{nullptr});
     _dialog.Title(winrt::box_value(winrt::to_hstring(i18n::requiredText(
-      _textCatalog,
-      includeDescendants ? i18n::MessageId::WinUiListDeleteSubtreeTitle : i18n::MessageId::WinUiListDeleteTitle))));
+      _textCatalog, includeDescendants ? i18n::MessageId::ListDeleteSubtreeTitle : i18n::MessageId::ListDeleteTitle))));
     _dialog.PrimaryButtonText(winrt::to_hstring(i18n::requiredText(
-      _textCatalog,
-      includeDescendants ? i18n::MessageId::WinUiListDeleteAllCommit : i18n::MessageId::WinUiListDeleteCommit)));
+      _textCatalog, includeDescendants ? i18n::MessageId::ListDeleteAllAction : i18n::MessageId::ListDeleteAction)));
     _dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiCommonCancel)));
     _dialog.DefaultButton(ContentDialogButton::Close);
 
@@ -573,11 +571,11 @@ namespace ao::winui
 
     auto const message = includeDescendants
                            ? i18n::requiredFormat(_textCatalog,
-                                                  i18n::MessageId::WinUiListDeleteSubtreeQuestion,
+                                                  i18n::MessageId::ListDeleteSubtreeQuestion,
                                                   {i18n::MessageArgument{"count", preview.deletedLists.size()},
                                                    i18n::MessageArgument{"entries", entries}})
                            : i18n::requiredFormat(_textCatalog,
-                                                  i18n::MessageId::WinUiListDeleteQuestion,
+                                                  i18n::MessageId::ListDeleteQuestion,
                                                   {i18n::MessageArgument{"name", preview.deletedLists.front().name}});
     auto messageText = makeWrappedText();
     messageText.Text(winrt::to_hstring(message));
@@ -592,7 +590,7 @@ namespace ao::winui
       _removeTagCheck = CheckBox{};
       _removeTagCheck.Content(winrt::box_value(winrt::to_hstring(i18n::requiredFormat(
         _textCatalog,
-        i18n::MessageId::WinUiListRemoveTag,
+        i18n::MessageId::ListRemoveTag,
         {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"count", optTagImpact->taggedTrackCount}}))));
       content.Children().Append(_removeTagCheck);
 
@@ -603,7 +601,7 @@ namespace ao::winui
         auto warning = makeWrappedText(kSupportingTextOpacity);
         warning.Text(winrt::to_hstring(
           i18n::requiredFormat(_textCatalog,
-                               i18n::MessageId::WinUiListTagReferences,
+                               i18n::MessageId::ListTagReferences,
                                {i18n::MessageArgument{"tag", tag}, i18n::MessageArgument{"references", references}})));
         content.Children().Append(warning);
       }

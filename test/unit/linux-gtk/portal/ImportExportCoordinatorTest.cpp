@@ -5,15 +5,22 @@
 
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
+#include "i18n/GtkText.h"
 #include "portal/ImportExportCallbacks.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryTransfer.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/error.h>
 #include <gtkmm/window.h>
 
@@ -31,6 +38,82 @@ namespace ao::gtk::test
     CHECK(portal::detail::exportModeForSelection(2U) == rt::ExportMode::Full);
     CHECK(portal::detail::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
     CHECK(portal::detail::exportModeForSelection(99U) == rt::ExportMode::Metadata);
+  }
+
+  TEST_CASE("ImportExportCoordinator - localized export dialog preserves layout and actions",
+            "[gtk][regression][import-export][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto parent = Gtk::Window{};
+    auto theme = ThemeCoordinator{};
+    auto& runtime = fixture.runtime();
+
+    for (auto const* const locale : {"en", "de", "es", "fr", "ja", "zh-Hans", "zh-Hant"})
+    {
+      INFO("locale " << locale);
+      auto const textCatalog = ao::test::messageCatalog(locale);
+      auto const title = gtkText(textCatalog, i18n::MessageId::LibrarySelectExportMode);
+      auto const include = gtkText(textCatalog, i18n::MessageId::LibraryInclude);
+      auto const full = gtkText(textCatalog, i18n::MessageId::LibraryExportModeFull);
+      auto coordinator = portal::ImportExportCoordinator{parent,
+                                                         runtime.async(),
+                                                         runtime.library(),
+                                                         runtime.notifications(),
+                                                         textCatalog,
+                                                         portal::ImportExportCallbacks{},
+                                                         theme};
+
+      coordinator.exportLibrary();
+
+      AppDialog* exportModeDialog = nullptr;
+
+      for (auto* const window : Gtk::Window::list_toplevels())
+      {
+        if (auto* const dialog = dynamic_cast<AppDialog*>(window); dialog != nullptr && dialog->get_title() == title)
+        {
+          exportModeDialog = dialog;
+          break;
+        }
+      }
+
+      REQUIRE(exportModeDialog != nullptr);
+      auto* const modeCombo = findWidget<Gtk::DropDown>(*exportModeDialog);
+      REQUIRE(modeCombo != nullptr);
+      CHECK(findLabelByText(*modeCombo, full) != nullptr);
+      CHECK(findLabelByText(*exportModeDialog, include) == nullptr);
+      CHECK(hasAccessibleLabel(*modeCombo, include));
+
+      drainGtkEvents();
+      auto const initialDialogHorizontal = measureWidget(*exportModeDialog, Gtk::Orientation::HORIZONTAL);
+
+      for (auto const selectedIndex : {0U, 1U, 2U, 3U})
+      {
+        INFO("selection " << selectedIndex);
+        modeCombo->set_selected(selectedIndex);
+        drainGtkEvents();
+
+        auto const dialogHorizontal = measureWidget(*exportModeDialog, Gtk::Orientation::HORIZONTAL);
+        auto const modeHorizontal = measureWidget(*modeCombo, Gtk::Orientation::HORIZONTAL);
+        auto const modeVertical = measureWidget(*modeCombo, Gtk::Orientation::VERTICAL);
+        CHECK(modeHorizontal.minimum == modeHorizontal.natural);
+        CHECK(modeVertical.minimum == modeVertical.natural);
+        CHECK(dialogHorizontal.minimum >= modeHorizontal.natural);
+        CHECK(dialogHorizontal.minimum == initialDialogHorizontal.minimum);
+        CHECK(dialogHorizontal.natural == initialDialogHorizontal.natural);
+      }
+
+      auto* const nextButton = findButtonByLabel(*exportModeDialog, gtkText(textCatalog, i18n::MessageId::LibraryNext));
+      REQUIRE(nextButton != nullptr);
+      CHECK(exportModeDialog->get_default_widget() == nextButton);
+
+      std::int32_t closeResponse = Gtk::ResponseType::NONE;
+      exportModeDialog->signal_response().connect([&closeResponse](std::int32_t response)
+                                                  { closeResponse = response; });
+      exportModeDialog->close();
+      CHECK(closeResponse == Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+    }
   }
 
   TEST_CASE("ImportExportCoordinator - suppresses native chooser cancellation only",
@@ -131,7 +214,7 @@ library:
         for (auto* const window : Gtk::Window::list_toplevels())
         {
           if (auto* const dialog = dynamic_cast<AppDialog*>(window);
-              dialog != nullptr && dialog->get_title() == "Confirm Library Restore")
+              dialog != nullptr && dialog->get_title() == "Confirm Restore")
           {
             confirmationDialog = dialog;
             return true;

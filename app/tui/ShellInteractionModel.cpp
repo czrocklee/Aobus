@@ -137,7 +137,9 @@ namespace ao::tui
   {
     switch (overlay)
     {
-      case Overlay::None: return {};
+      case Overlay::None:
+      case Overlay::Notifications:
+      case Overlay::Help: return {};
       case Overlay::ListChooser:
       {
         auto const unavailable = std::to_array({ftxui::Event::Return,
@@ -157,9 +159,7 @@ namespace ao::tui
       case Overlay::QualityPanel: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintPipeline);
       case Overlay::OutputDevices: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintOutput);
       case Overlay::PresentationPanel: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintViews);
-      case Overlay::Notifications: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintNotifications);
       case Overlay::GoTo: return std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiGoToHint)};
-      case Overlay::Help: return overlayHintText(textCatalog, i18n::MessageId::TuiShellHintHelp);
     }
 
     return {};

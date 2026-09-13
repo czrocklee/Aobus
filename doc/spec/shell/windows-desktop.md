@@ -118,7 +118,9 @@ Its worker completion resumes on the Runtime callback executor before changing s
 There is no live-runtime exchange inside `LibrarySession`.
 Open Library may cancel an active scan through parent teardown; an already queued process transition rejects another Open Library request, while an active Rescan still reports its current operation for another Rescan.
 
-Import Library Data and Export Library Data are available from Modern's More and narrow Now Playing overflow menus and from Classic's File menu.
+Import Library Data and Export Library Data are available from Modern's More menu and Classic's File menu.
+Modern's More menu owns global library and shell actions; the separate Playback options menu contains Stop and Reveal Current Track.
+Both menus have distinct accessible names.
 Export first selects `delta`, `metadata`, `full`, or `listOnly`, defaulting to `full`, then uses the Windows save picker for a `.yaml` or `.yml` path.
 Import first selects `merge` or `restore`, defaulting to `merge`, then uses the Windows open picker.
 Both paths submit to the active session's `LibraryJobs`; preparing an import, applying its plan, and exporting publish coarse file-named progress through Modern's existing activity surface and report their terminal outcome through the existing notification and status surfaces.

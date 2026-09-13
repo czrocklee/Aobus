@@ -228,13 +228,13 @@ namespace ao::winui::layout
 
         if (state.canCreate && _createList)
         {
-          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListNew),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::ListNew),
                  [create = _createList, parentId = uimodel::parentForNewSmartList(row.id)] { create(parentId, {}); });
         }
 
         if (state.canEdit && _editList)
         {
-          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListEdit),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::ListEdit),
                  [edit = _editList, listId = row.id] { edit(listId); });
         }
 
@@ -246,12 +246,12 @@ namespace ao::winui::layout
 
         if (state.canDelete && _deleteList)
         {
-          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDelete),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::ListDelete),
                  [remove = _deleteList, listId = row.id] { remove(listId, false); });
         }
         else if (state.canDeleteSubtree && _deleteList)
         {
-          append(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiListDeleteSubtree),
+          append(i18n::requiredText(_textCatalog, i18n::MessageId::ListDeleteSubtree),
                  [remove = _deleteList, listId = row.id] { remove(listId, true); });
         }
 

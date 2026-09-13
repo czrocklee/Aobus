@@ -90,17 +90,17 @@ namespace ao::tui::test
     CHECK(overlayLabel(textCatalog, Overlay::GoTo) == "Go to");
   }
 
-  TEST_CASE("ShellInteractionModel - overlay hints are stable", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - panel-owned overlay hints are stable", "[tui][unit][shell]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const& keymapPlan = defaultKeymapPlan();
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::None).empty());
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Notifications).empty());
+    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Help).empty());
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::ListChooser) == "L sidebar  Enter open  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel) == "Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::OutputDevices) == "Enter select  Esc close");
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel) == "Enter select  Esc close");
-    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Notifications) == "x hide compact  Esc close");
-    CHECK(overlayHint(textCatalog, keymapPlan, Overlay::Help) == "Esc close");
   }
 
   TEST_CASE("ShellInteractionModel - overlay hints omit access bindings and retain local actions",
@@ -115,9 +115,7 @@ namespace ao::tui::test
     auto const& textCatalog = ao::test::englishMessageCatalog();
 
     CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "Enter");
-
     CHECK(plan.shortcutFor(KeyAction::ToggleNotifications) == "x");
-    CHECK(overlayHint(textCatalog, plan, Overlay::Notifications) == "x hide compact  Esc close");
 
     auto outputModel = uimodel::KeymapModel{defaultKeymap()};
     outputModel.applyOverrides({{"tui.shell.toggleOutputDevices", {"Enter"}}});
