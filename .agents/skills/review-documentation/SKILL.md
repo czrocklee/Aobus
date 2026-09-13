@@ -14,6 +14,9 @@ owning subsystem architecture.
 Prioritize incorrect behavior, duplicated authority, lifecycle drift, and lost
 migration facts. A finding identifies the conflicting evidence and its impact;
 preference-only rewrites are not defects.
+Read a claim in its enclosing heading and consumer scope before applying it to
+another subsystem. Verify external review claims against the current checkout;
+distinguish an actual documentation conflict from inconsistent product behavior.
 
 Run `./ao docs check` for mechanical validation. Completion scope and result
 reuse follow `doc/development/test/validation-and-review.md`.

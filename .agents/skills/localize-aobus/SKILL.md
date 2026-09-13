@@ -18,6 +18,15 @@ Read by contract:
 - [Music and audio terminology](references/music-audio-terminology.md): translating
   metadata, library/List, playback, routing, or quality-analysis vocabulary.
 
+For reviews:
+
+- Verify external reports against the English source, actual handlers, and the
+  governing document section; a formatter's rule may have a narrower scope.
+- Render complete sentences with reachable counts and scope arguments. ICU parity
+  does not prove grammar or preserve distinctions such as all versus partial results.
+- Equal text is only a deduplication candidate. Compare meaning and grammatical
+  role; trace render branches and narrow-layout command access before removing UI.
+
 Preserve ICU argument names and kinds, selectors, `#`, braces, and `other` branches;
 encode literal apostrophes as `''`. Edit authored catalogs, not generated `.res`,
 `.dat`, or `.resw` output. Preserve the intentional root-only
@@ -31,6 +40,10 @@ Inspect the requested locale in affected frontends at normal and constrained
 widths. Pseudo-localization (`qps-ploc`) detects structural omissions but does
 not validate wording. Do not hide layout defects by distorting translations.
 A newly maintained language needs fluent or domain-informed review.
+Check every selection and expanded popup at the GTK window-manager minimum;
+character counts do not establish rendered width. Confirm the displayed locale
+and inspect images and layout warnings; UI Automation alone does not prove correct rendering.
+Record DPI and client size before comparing desktop widths with layout breakpoints.
 
 Use the completion policy in `doc/development/test/validation-and-review.md`.
 Use its catalog-only route for text edits within maintained locales. New locales
