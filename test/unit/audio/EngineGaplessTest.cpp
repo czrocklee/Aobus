@@ -291,8 +291,8 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - control command entry settles a pending splice before acting",
-            "[audio][unit][engine-gapless][window]")
+  TEST_CASE("Engine - seek commands settle a pending splice before acting",
+            "[audio][regression][engine-gapless][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -305,6 +305,7 @@ namespace ao::audio::test
 
     // Declared before the engine so they outlive the event thread's join.
     auto advancedLatch = CallbackLatch{};
+    auto advancedEvent = Engine::TrackAdvanced{};
     auto endedLatch = CallbackLatch{};
     auto routeEntered = CallbackLatch{};
     auto releaseRoute = std::binary_semaphore{0};
@@ -322,7 +323,12 @@ namespace ao::audio::test
                },
                registryPtr)};
 
-    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
+    engine.setOnTrackAdvanced(
+      [&](Engine::TrackAdvanced const& event)
+      {
+        advancedEvent = event;
+        advancedLatch.notify();
+      });
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
 
     // Parks the event worker inside a notification exactly once, so the splice
@@ -339,8 +345,10 @@ namespace ao::audio::test
         }
       });
 
-    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
-    REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
+    auto const firstItem = makePlaybackItem(PlaybackInput{.filePath = "first.flac"});
+    auto const secondItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
+    engine.play(firstItem);
+    REQUIRE(engine.setNext(secondItem));
 
     auto* const target = backendRaw->target();
     REQUIRE(target != nullptr);
@@ -359,25 +367,48 @@ namespace ao::audio::test
     // exactly the raw-pointer-published / owner-not-promoted window.
     CHECK(advancedLatch.count() == 0);
 
-    // seek() must settle the pending splice at entry and act on the new source,
-    // not on the retired first track.
-    engine.seek(std::chrono::milliseconds{3});
-
     auto* const secondDecoder = registryPtr->at("second.flac");
-    CHECK(secondDecoder->lastSeekOffset() == std::chrono::milliseconds{3});
-    CHECK(secondDecoder->seekCount() == 1);
 
-    // Playback continues from the (re-wound) second source.
-    REQUIRE(target->renderPcm(out).bytesWritten == out.size());
-    CHECK(std::vector<std::byte>{out.begin(), out.end()} == secondData);
+    SECTION("unconditional seek targets the advanced item")
+    {
+      engine.seek(std::chrono::milliseconds{3});
+      CHECK(secondDecoder->lastSeekOffset() == std::chrono::milliseconds{3});
+      CHECK(secondDecoder->seekCount() == 1);
+    }
+
+    SECTION("guarded seek rejects the retired item and accepts consecutive winner seeks")
+    {
+      CHECK_FALSE(engine.trySeek(firstItem.id, std::chrono::milliseconds{3}));
+      CHECK(secondDecoder->seekCount() == 0);
+      CHECK(engine.trySeek(secondItem.id, std::chrono::milliseconds{1}));
+      CHECK(engine.trySeek(secondItem.id, std::chrono::milliseconds{3}));
+      CHECK(secondDecoder->lastSeekOffset() == std::chrono::milliseconds{3});
+      CHECK(secondDecoder->seekCount() == 2);
+    }
+
+    SECTION("active-item admission observes the realtime winner before notification")
+    {
+      CHECK_FALSE(engine.isCurrentPlaybackItem({}));
+      CHECK_FALSE(engine.isCurrentPlaybackItem(firstItem.id));
+      CHECK(engine.isCurrentPlaybackItem(secondItem.id));
+      CHECK(secondDecoder->seekCount() == 0);
+
+      // The predicate does not refill the consumed fixture. Rewind explicitly
+      // for the shared post-seek rendering assertions below.
+      engine.seek(std::chrono::milliseconds{3});
+    }
 
     // The advance notification is still delivered by the event worker once it
-    // is unparked, so observers see the usual callback thread and order.
+    // is unparked, so observers retain the winner's identity and input.
     releaseRoute.release();
     REQUIRE(advancedLatch.tryWaitForCount(1));
+    CHECK(advancedEvent.itemId == secondItem.id);
+    CHECK(advancedEvent.input.filePath == "second.flac");
     CHECK(endedLatch.count() == 0);
 
-    // The whole splice-plus-windowed-seek ran on the original backend stream.
+    // Both seek modes keep playback on the winner and the original backend stream.
+    REQUIRE(target->renderPcm(out).bytesWritten == out.size());
+    CHECK(std::vector<std::byte>{out.begin(), out.end()} == secondData);
     CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
   }
 

@@ -150,9 +150,10 @@ serviced on a later main-run-loop turn. The editor retains a lifecycle close
 request through saving or menu tracking and joins an existing nested discard
 confirmation. Only the user's Keep choice rejects that close. Editor
 completion remains serviceable while ordinary rendering is suspended. The
-coordinator waits for sheets, menus, and active executor callbacks to settle
-before releasing the graph. Closing the visible window only hides it; mode
-changes and reopening retain the same session.
+coordinator waits for sheets, menus, and active callbacks to settle before releasing the graph.
+After Quit or a library switch passes its preparation checks, it seals the session's MediaPlayer admission, unregisters native targets, and clears Now Playing before deferred teardown.
+`LibrarySession::canClose()` excludes both active runtime-executor callbacks and active media deliveries; queued or retained media handlers cannot enter after retirement.
+Closing the visible window only hides it; mode changes and reopening retain the same session and media integration.
 
 The [application shell architecture](application-shell.md#appkit-shell-owner)
 owns native component composition. AppKit does not consume the GTK/WinUI
@@ -265,6 +266,8 @@ shared planner admits a different-root request in a native callback
   -> save desktop settings and checkpoint the old workspace
   -> terminally retire the old library's playback group
        failure -> report against the live window and abandon the request
+  -> seal MediaPlayer admission, unregister targets, and clear Now Playing
+  -> wait for canClose(): no active runtime-executor callback or media delivery
   -> close native callback admission and detach components
   -> release LibrarySession after runtime join and final callback drain
   -> release the application-state lease
@@ -303,10 +306,9 @@ The session first begins dispatcher closing, retires its owner callback gate, cl
 `RuntimeGraph` resets `InteractiveBorrowers`, shuts down the runtime, completes dispatcher closing, and is finally reset while the settings stores and dispatcher still exist.
 A pure `CallbackAdmissionGate::Token` never protects raw owner memory: dispatcher confinement plus retire-before-cancel, runtime join, final drain, and owner-last destruction provide that proof.
 A replaceable dialog or workflow renews a distinct generation gate only after retiring the prior one; an old token cannot become admissible again.
-AppKit settles pending editor work before saving desktop settings and the
-workspace. The coordinator detaches native callbacks and components, then
-releases `LibrarySession`. The session stops authoring admission, releases its
-UIModel borrowers and subscriptions, shuts down the runtime, and performs the
+AppKit settles pending editor work before saving desktop settings and the workspace.
+The coordinator seals MediaPlayer admission and waits for `canClose()` before detaching native callbacks and components and releasing `LibrarySession`.
+The session destroys its retired media adapter before stopping authoring admission and releasing UIModel borrowers and subscriptions, shuts down the runtime, and performs the
 executor's final callback drain before destroying remaining editor state.
 An ordinary Observing runtime saves playback during shutdown before stopping
 its audio producers; sealed or retired persistence cannot write. The settings
@@ -430,6 +432,8 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
   discard confirmation, and successor reentry through the production launcher.
   [`AppKitAuthoringScenario.mm`](../../test/integration/macos/AppKitAuthoringScenario.mm)
   covers deferred close across successful and failed saves and nested decisions.
+  [`AppKitMediaScenario.mm`](../../test/integration/macos/AppKitMediaScenario.mm)
+  checks that active media delivery blocks close and that queued or retained handlers are inert after retirement.
   [macOS development](../development/macos.md#native-desktop-development-slice)
   owns explicit GUI invocation and fixture requirements.
 

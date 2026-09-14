@@ -7,6 +7,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -22,6 +23,11 @@
 namespace ao::rt
 {
   class PlaybackService;
+}
+
+namespace Glib
+{
+  class VariantBase;
 }
 
 namespace ao::uimodel
@@ -42,6 +48,7 @@ namespace ao::gtk::platform
     {
       std::function<rt::PlaybackSnapshot const&()> snapshot;
       std::function<async::Subscription(rt::PlaybackSnapshotObserver)> onSnapshot;
+      std::function<std::chrono::milliseconds()> elapsed;
     };
 
     struct Callbacks final
@@ -77,19 +84,19 @@ namespace ao::gtk::platform
 
     bool isActive() const noexcept;
     MetadataSnapshot metadataSnapshot() const;
+    /** Reads the same Player property mapping exported over D-Bus. */
+    Glib::VariantBase playerProperty(std::string_view propertyName) const;
 
     static std::string_view playbackStatus(audio::Transport transport) noexcept;
     static std::string_view loopStatus(rt::RepeatMode mode) noexcept;
     static std::optional<rt::RepeatMode> repeatModeForLoopStatus(std::string_view loopStatus) noexcept;
     static std::int64_t microsecondsFromMilliseconds(std::chrono::milliseconds duration) noexcept;
     static std::chrono::milliseconds fromMprisMicroseconds(std::int64_t value) noexcept;
-    static std::chrono::milliseconds clampElapsed(rt::PlaybackTransportSnapshot const& state,
-                                                  std::chrono::milliseconds elapsed) noexcept;
-    static std::chrono::milliseconds seekTargetElapsed(rt::PlaybackTransportSnapshot const& state,
-                                                       std::int64_t offsetUs) noexcept;
     static bool shouldEmitSeeked(rt::PlaybackTransportSnapshot const& before,
                                  rt::PlaybackTransportSnapshot const& after) noexcept;
-    static std::string trackObjectPath(TrackId trackId);
+    static bool shouldEmitMetadataChanged(rt::PlaybackTransportSnapshot const& before,
+                                          rt::PlaybackTransportSnapshot const& after) noexcept;
+    static std::string trackObjectPath(TrackId trackId, rt::PlaybackOccurrenceId occurrenceId);
     static MetadataSnapshot metadataForState(rt::PlaybackTransportSnapshot const& state, std::string artUrl = {});
 
   private:

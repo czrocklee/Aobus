@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/FrameClock.h>
 
 #include <chrono>
@@ -52,13 +53,16 @@ namespace ao::uimodel
   struct SeekSliderUpdate final
   {
     SeekSliderAction action = SeekSliderAction::None;
+    rt::PlaybackOccurrenceId occurrenceId{};
     std::chrono::milliseconds elapsed{0};
   };
 
   class SeekInteraction final
   {
   public:
-    void applyViewState(std::chrono::milliseconds duration, bool enabled) noexcept;
+    void applyViewState(std::chrono::milliseconds duration,
+                        bool enabled,
+                        rt::PlaybackOccurrenceId occurrenceId) noexcept;
     void reset() noexcept;
 
     bool tryBeginPointerInteraction() noexcept;
@@ -67,14 +71,19 @@ namespace ao::uimodel
 
     bool isPointerActive() const noexcept { return _pointerActive; }
     bool hasPendingFinalSeek() const noexcept { return _pendingFinalSeek; }
-    std::chrono::milliseconds duration() const noexcept { return _duration; }
+    std::chrono::milliseconds duration() const noexcept;
+    rt::PlaybackOccurrenceId occurrenceId() const noexcept { return _occurrenceId; }
 
   private:
     std::chrono::milliseconds clampElapsed(std::chrono::milliseconds elapsed) const noexcept;
 
     std::chrono::milliseconds _duration{0};
+    rt::PlaybackOccurrenceId _occurrenceId{};
+    std::chrono::milliseconds _pointerDuration{0};
+    rt::PlaybackOccurrenceId _pointerOccurrenceId{};
     bool _enabled = false;
     bool _pointerActive = false;
+    bool _pointerOccurrenceCurrent = false;
     bool _pendingFinalSeek = false;
   };
 } // namespace ao::uimodel

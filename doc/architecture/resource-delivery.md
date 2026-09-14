@@ -3,14 +3,14 @@ id: architecture.resource-delivery
 type: architecture
 status: current
 domain: resource
-summary: Defines end-to-end ownership and lifetime boundaries from library descriptors and cover identities to GTK, WinUI, TUI, CLI, playback, and MPRIS consumers.
+summary: Defines end-to-end ownership and lifetime boundaries from library descriptors and cover identities to GTK, WinUI, AppKit, TUI, CLI, playback, and native media consumers.
 ---
 # Resource delivery architecture
 
 ## Scope
 
 This document owns the current end-to-end structural graph for library resources, with cover art as the principal consumer.
-It covers digest-derived `ResourceId` allocation, track cover references and primary selection, verified runtime byte reads from a derived cache or a carrier media file, projection and playback identity flow, GTK and WinUI widget delivery, TUI transforms, CLI export, and MPRIS file-URL publication.
+It covers digest-derived `ResourceId` allocation, track cover references and primary selection, verified runtime byte reads from a derived cache or a carrier media file, projection and playback identity flow, GTK, WinUI, and AppKit widget delivery, MediaPlayer artwork publication, TUI transforms, CLI export, and MPRIS file-URL publication.
 
 It does not own encoded-media cover extraction, track mutation transactions, exact track record layout, general presentation policy, MPRIS transport behavior, or toolkit-specific image rendering algorithms.
 Those facts belong to media, library, presentation, platform, specification, and reference owners.
@@ -34,6 +34,7 @@ media file reading or YAML import
        |              `-> ResourceByteMemoryCache / ResourceBytes
        |                   |-> GTK ImageCache / ResourceImageLoader / CoverArtView
        |                   |-> WinUI CoverArtPresenter and SMTC
+       |                   |-> AppKit LibrarySession covers and MediaPlayerAdapter
        |                   |-> TUI CoverArtLoader -> block preview or Kitty PNG
        |                   `-> MPRIS cache file -> file:// URL
        |-> YAML library export through a scoped read
@@ -79,11 +80,11 @@ A cache that is absent, unwritable, or destroyed costs re-extraction and never a
 `ResourceBytes` shares owned storage across callbacks and remains valid after cache destruction or eviction.
 The cache constructor accepts `async::Runtime&` plus one asynchronous `ReadBytes` function for its whole life.
 `AppRuntime` constructs one cache value whose miss path calls the private interactive reader owned by its `CoreRuntime`; focused tests may construct a cache with a controlled reader directly.
-WinUI, GTK, and TUI borrow that cache through `AppRuntime::resourceBytes()`, so all interactive consumers share one byte cache and it is destroyed before the owned `CoreRuntime`.
+WinUI, GTK, AppKit, and TUI borrow that cache through `AppRuntime::resourceBytes()`, so all interactive consumers share one byte cache and it is destroyed before the owned `CoreRuntime`.
 The encoded-byte cache therefore follows the `AppRuntime` rather than any individual window or consumer; closing one consumer does not flush it, and retention remains bounded at 128 entries and 128 MiB until runtime teardown.
 Each spawned read retains the selected `ReadBytes` function until that flight finishes or cache destruction cancels it.
 It belongs to the interactive runtime rather than the non-interactive `CoreRuntime` used by the CLI.
-GTK, TUI, WinUI, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
+GTK, TUI, WinUI, AppKit, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
 
 ### GTK image delivery
 
@@ -108,6 +109,16 @@ It copies encoded bytes into native owning memory on a worker; the callback exec
 It serves realized group headings, Inspector, Now Playing, and SMTC artwork for the window's one runtime.
 No-entity state hides group-heading and Inspector cover surfaces, while the Now Playing surface retains its configured placeholder.
 Valid-resource loading or failure leaves the corresponding surface empty.
+
+### AppKit image and MediaPlayer delivery
+
+`LibrarySession` retains separate byte-request interests for the selected and playing cover, clears replaced bytes before requesting, and publishes owned `ResourceBytes` to native presentation snapshots.
+`AobusPlaybackBar` and `AobusTrackInspector` decode those bytes into `NSImage` on the main thread.
+The session-owned `MediaPlayerAdapter` independently borrows the same byte cache for system Now Playing artwork.
+It cancels the prior interest and records the replacement cover identity before requesting; completion checks retirement and that identity before decoding and publishing.
+A synchronous cache-hit callback already publishes the new metadata and artwork, so the outer snapshot path does not publish them a second time.
+`MPMediaItemArtwork` retains an image copy in its request handler rather than borrowing the adapter or session.
+Artwork completion preserves the transport clock anchor; [application shell architecture](application-shell.md#appkit-shell-owner) owns command admission and native publication lifetime.
 
 ### Shared placeholder policy
 
@@ -143,7 +154,7 @@ CLI resource commands expose ids and described lengths for inspection, and expor
 - Runtime exposes stable ids and owned bytes without `Gdk::Pixbuf`, FTXUI cells, Kitty escapes, file URLs, MIME strings, or cache paths; its `AppRuntime`-scoped memory cache may retain immutable encoded bytes but never decodes them.
 - The runtime consumes a cache directory it is given and resolves none; `applicationCacheDirectory()` is called by composition roots only.
 - Projections and playback state carry identity only; they do not read or decode bytes on behalf of frontends.
-- GTK, WinUI, and TUI own decoding, scaling, placeholder rendering, and stale-view suppression.
+- Frontends own decoding, scaling, placeholder rendering, and stale-view suppression.
 - GTK and TUI own transform caches, runtime owns the shared frontend encoded-byte cache, and the platform-neutral async layer owns equal-key request coalescing, callback-interest lifetime, and exact-flight dependency retention.
 - UIModel owns placeholder semantics and values, while frontend assets and toolkit code own geometry and decoding.
 - MPRIS file export is a GTK platform adapter and cannot become the canonical resource store.
@@ -180,6 +191,7 @@ ResourceId + logical allocation + display scale
 
 ```text
 WinUI ResourceId -> ResourceByteMemoryCache coalesced read/cache -> worker native-memory preparation -> generation-fenced native image source or empty result
+AppKit ResourceId -> ResourceByteMemoryCache / ResourceBytes -> main-thread NSImage -> current native view or MediaPlayer artwork
 TUI ResourceId -> selection settle -> ResourceByteMemoryCache / ResourceBytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
 MPRIS ResourceId -> ResourceByteMemoryCache / ResourceBytes -> worker cache validation/write -> current-resource file URI
 CLI ResourceId -> descriptor + carrier snapshot -> cache or carrier walk -> output file
@@ -210,6 +222,7 @@ The runtime reader copies the descriptor and the carrier snapshot it read and cl
 
 Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest plus cancellable settle and transform tasks, all retired together by replacement, clearing, and destruction.
 WinUI window teardown destroys SMTC and its cover-art presenters before releasing the heap-pinned session; session release resets `InteractiveBorrowers` and then its optional `RuntimeGraph`, whose direct `AppRuntime` value destroys the shared resource memory cache before the composed `CoreRuntime`; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
+AppKit retires MediaPlayer publication and cancels selected/playing cover interests before destroying its UIModel borrowers or runtime; an independently retained native artwork handler owns only its image copy.
 `ResourceByteMemoryCache` destruction cancels its lifetime scope before clearing in-flight requests and retained bytes; its constructor-selected reader and callback-runtime reference then die with the cache.
 Each delivery owner cancels external work before clearing its shared request coalescer.
 The coalescer's flight token identifies one exact start generation, so a late completion after clear cannot match a same-key replacement.
@@ -233,6 +246,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 - [`ImageCache`](../../app/linux-gtk/image/ImageCache.h), [`ResourceImageLoader`](../../app/linux-gtk/image/ResourceImageLoader.h), [`ResourceImageController`](../../app/linux-gtk/image/ResourceImageController.h), [`CoverArtView`](../../app/linux-gtk/image/CoverArtView.h), and [`ImageWidget`](../../app/linux-gtk/image/ImageWidget.h) own GTK delivery.
 - [`asset/ui/no-cover/`](../../asset/ui/no-cover/) and [`SoulMark.svg`](../../asset/brand/SoulMark.svg) own shared source geometry; [`CoverArtPresenter`](../../app/windows-winui/image/CoverArtPresenter.h) owns WinUI worker preparation and presentation, while the shared [`MemoryRandomAccessStream`](../../app/windows/include/ao/winui/MemoryRandomAccessStream.h) adapter owns Windows Runtime stream wrapping.
 - [`CoverArtLoader`](../../app/tui/CoverArtLoader.h), [`CoverArt.cpp`](../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../app/tui/App.cpp) own TUI delivery, transforms, and paint state.
+- AppKit [`LibrarySession.cpp`](../../app/macos-appkit/LibrarySession.cpp) owns selected/playing cover interests; [`PlaybackBar.mm`](../../app/macos-appkit/PlaybackBar.mm) and [`TrackInspector.mm`](../../app/macos-appkit/TrackInspector.mm) own native image presentation, while [`MediaPlayerAdapter.mm`](../../app/macos-appkit/MediaPlayerAdapter.mm) owns Now Playing artwork delivery.
 - [`MprisArtUrlCache`](../../app/linux-gtk/platform/MprisArtUrlCache.h) owns file-URL export.
 - [`LibCommand.cpp`](../../app/cli/LibCommand.cpp) owns CLI inspection/export adaptation.
 
@@ -249,6 +263,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 - [`CoverArtPlaceholderTest.cpp`](../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects the shared presentation policy.
 - [`MemoryRandomAccessStreamTest.cpp`](../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact native-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtTest.cpp`](../../test/unit/tui/CoverArtTest.cpp) protects TUI decode and Kitty protocol transforms.
+- AppKit [`AppKitArtworkScenario.mm`](../../test/integration/macos/AppKitArtworkScenario.mm) and [`AppKitMediaScenario.mm`](../../test/integration/macos/AppKitMediaScenario.mm) protect live cover replacement, native artwork publication, clock-anchor retention, and single publication on a synchronous byte-cache hit.
 - [`MprisBridgeTest.cpp`](../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects cache-file export and URL publication.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and absence reporting.
 

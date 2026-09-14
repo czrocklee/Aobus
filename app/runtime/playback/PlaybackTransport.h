@@ -176,7 +176,13 @@ namespace ao::rt
     void pause();
     void resume();
     PreparedCancellationBarrier stop();
+    bool canAdvanceFrom(PlaybackOccurrenceId expectedOccurrenceId);
     void seek(std::chrono::milliseconds elapsed, SeekMode mode = SeekMode::Final);
+    // Rejection issues no seek, but may retire the active prepared-slot marker
+    // while retaining consumed-splice metadata for its pending advance callback.
+    bool trySeek(PlaybackOccurrenceId expectedOccurrenceId,
+                 std::chrono::milliseconds elapsed,
+                 SeekMode mode = SeekMode::Final);
     void setOutputDevice(audio::BackendId const& backendId,
                          audio::DeviceId const& deviceId,
                          audio::ProfileId const& profileId);

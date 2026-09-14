@@ -19,7 +19,7 @@ The [system architecture](../../architecture/system-overview.md) places MPRIS in
 `ao::gtk::platform::MprisBridge` and `MprisPlaybackEndpoint` live entirely in `app/linux-gtk/platform/`.
 Core audio and runtime remain D-Bus-free.
 
-The bridge reads the coherent `rt::PlaybackService` snapshot and executes transport and succession commands through `uimodel::PlaybackActions`.
+The bridge reads the coherent `rt::PlaybackService` snapshot and its occurrence-correlated live `elapsed()` query, and executes ordinary transport commands through `uimodel::PlaybackActions`; occurrence-guarded seeks, including their past-end Next behavior, use `PlaybackCommands` directly.
 It never calls transport widgets or layout components, because those surfaces are optional and rebuildable.
 GTK application lifetime enters only through injected raise and quit callbacks; cover art enters only through an injected cancellable asynchronous `ResourceId` to URL request.
 
@@ -27,18 +27,19 @@ GTK application lifetime enters only through injected raise and quit callbacks; 
 
 - The **canonical name** is the one application-wide MPRIS bus name.
 - The **endpoint** is the D-Bus-free command/property mapping object used by the bridge and unit tests.
-- A **stale track path** is a `SetPosition` track object path that does not identify the current runtime track.
+- A **stale track path** is a `SetPosition` track object path whose track and playback occurrence do not identify the current runtime subject.
 - A **final seek** is a runtime seek update whose mode is not preview.
 
 ## Invariants
 
 - At most one Aobus GTK instance exports the canonical MPRIS name.
 - Failure to connect, register, or acquire the name never disables playback or terminates the application.
-- MPRIS transport methods use the same `PlaybackActions` as shell actions, shortcuts, and transport controls.
+- MPRIS transport methods use the same runtime/UIModel command authorities as shell actions, shortcuts, and transport controls.
 - Repeat and shuffle authority remains behind `PlaybackCommands`; MPRIS does not reconstruct succession or access its internal owner.
 - Seek, volume, and now-playing state come from the coherent `PlaybackService` boundary.
 - Capability queries use `PlaybackActions::isCapable`, not GTK action or widget sensitivity.
 - A stale `SetPosition`, an invalid range, or a request without a current track does not mutate playback.
+- `CanSeek` requires a valid current track, a nonzero playback occurrence, and a known positive duration.
 - Preview seek updates do not emit the protocol's final-seek signal.
 - Runtime and core values never contain D-Bus object paths or file URLs.
 
@@ -48,7 +49,7 @@ The bridge retains D-Bus connection/object/name registrations and runtime subscr
 Its active state means the canonical name was acquired, not merely requested.
 
 Protocol properties are derived from current runtime and command-surface state on demand.
-Metadata snapshot construction derives a stable object path from `TrackId` and copies current title, artist, album, duration, and resolved art URL.
+Metadata snapshot construction derives an occurrence-qualified object path from `TrackId` and `PlaybackOccurrenceId` and copies current title, artist, album, duration, and resolved art URL.
 It is not a second now-playing store.
 The bridge retains only the current cover resource id, its delayed request interest, a per-request callback scope, and the last resolved URL for that same id.
 
@@ -57,14 +58,20 @@ The bridge retains only the current cover resource id, its delayed request inter
 `start()` subscribes to playback and command availability, requests the canonical session-bus name, registers both interfaces after bus acquisition, and marks the bridge active only after name acquisition.
 Repeated start is a no-op while ownership registration exists.
 
-Known player methods execute the corresponding command.
-Relative seek clamps before zero; a positive relative seek past known duration delegates to `Next`.
-Absolute seek accepts only the current track path and a non-negative value no greater than known duration.
+Known player methods execute the corresponding `PlaybackActions` command, preserving its capability gate and ordinary queued completion. The standalone Next method has no captured position target.
+Relative seek captures the current occurrence and signed offset, then uses queued `seekBy` with `PlaybackRelativeSeekEndBehavior::Next`.
+At execution, the runtime samples live elapsed and advances only for a positive offset strictly past the known endpoint, with an available successor and matching runtime/audio identity.
+Without an admissible successor it remains a successful no-op; other offsets use an overflow-safe guarded final seek, including an exact-end seek.
+Absolute seek accepts only the current occurrence-qualified track path and a non-negative value no greater than known duration, then submits the occurrence-bearing queued `seek`.
+Both commands preserve FIFO order through a busy boundary; replacement or replay before execution makes the captured occurrence stale and produces no seek or `Seeked`.
+Protocol success acknowledges submission, not eventual audio completion.
 Rate remains fixed: finite nonzero writes are accepted without changing rate, while zero executes pause; non-finite writes are rejected.
 Volume, shuffle, and loop writes route to their runtime authorities.
 
-Transport, now-playing, volume, repeat, shuffle, and command-availability observations emit property-change signals for only the affected protocol fields.
+Transport, occurrence, now-playing, volume, repeat, shuffle, and command-availability observations emit property-change signals for only the affected protocol fields. A new occurrence refreshes `Metadata` even when `TrackId` and descriptive metadata repeat.
 Final runtime seeks emit `Seeked`; preview updates do not.
+`Position` reads live elapsed correlated to the published occurrence through `PlaybackService::elapsed()`, not the snapshot's potentially old clock anchor.
+If audio has advanced ahead of runtime publication, the query retains the published anchor rather than pairing a successor position with old metadata.
 
 When now-playing cover identity changes, the bridge cancels the old URL interest, clears its published URL, and emits current metadata immediately without `mpris:artUrl`.
 The cache validates or writes the derived file off the GTK thread.
@@ -106,7 +113,8 @@ Later instances continue as ordinary GTK applications without MPRIS.
 
 ## Test map
 
-- [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects status, metadata, time, command, capability, repeat/shuffle, volume, and cover-art mapping.
+- [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects status, occurrence-qualified metadata identity, time, guarded-command no-ops, capability, repeat/shuffle, volume, and cover-art mapping.
+- [`MprisPlaybackPositionTest.cpp`](../../../test/unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp) protects real-clock relative positioning, busy submission, stale replay, endpoint behavior, and pending realtime succession.
 
 ## Related documents
 

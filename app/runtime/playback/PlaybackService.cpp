@@ -22,6 +22,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -123,6 +124,27 @@ namespace ao::rt
       return lastSnapshot;
     }
 
+    std::chrono::milliseconds elapsed() const
+    {
+      ensureOnExecutor();
+      auto const& state = lastSnapshot.transport;
+      auto sampleElapsed = state.elapsed;
+
+      if (!closed && transport.canAdvanceFrom(state.occurrenceId))
+      {
+        // The audio item may advance between the first identity check and the
+        // sample. Never associate that successor's position with old metadata.
+        if (auto const liveElapsed = transport.elapsed(); transport.canAdvanceFrom(state.occurrenceId))
+        {
+          sampleElapsed = liveElapsed;
+        }
+      }
+
+      return state.duration > std::chrono::milliseconds{0}
+               ? std::clamp(sampleElapsed, std::chrono::milliseconds{0}, state.duration)
+               : std::max(sampleElapsed, std::chrono::milliseconds{0});
+    }
+
     async::Subscription onSnapshot(PlaybackSnapshotObserver observer) override
     {
       ensureOnExecutor();
@@ -166,6 +188,36 @@ namespace ao::rt
     void next() override
     {
       submitPositioning([this] { return succession.tryMoveNext(); }, true, true);
+    }
+
+    bool tryNext(PlaybackOccurrenceId const expectedOccurrenceId) override
+    {
+      ensureOnExecutor();
+
+      if (closed || isInsideBoundary() || hasQueuedCommandBacklog())
+      {
+        return false;
+      }
+
+      bool admitted = false;
+      auto const generation = ++commandGenerationCounter;
+      auto command = QueuedCommand{
+        .generation = generation,
+        .staleWhenSuperseded = false,
+        .operation = [this, expectedOccurrenceId, generation, &admitted] -> Result<bool>
+        {
+          if (!transport.canAdvanceFrom(expectedOccurrenceId))
+          {
+            return false;
+          }
+
+          latestInvalidatingGeneration = generation;
+          admitted = true;
+          return succession.tryMoveNext();
+        },
+      };
+      std::ignore = executeCommandAndContinue(command);
+      return admitted;
     }
 
     void previous() override
@@ -219,6 +271,77 @@ namespace ao::rt
         },
         false,
         false);
+    }
+
+    void seek(PlaybackOccurrenceId const expectedOccurrenceId,
+              std::chrono::milliseconds const elapsed,
+              PlaybackSeekMode const mode) override
+    {
+      submitVoid(
+        [this, expectedOccurrenceId, elapsed, mode]
+        {
+          std::ignore = transport.trySeek(expectedOccurrenceId,
+                                          elapsed,
+                                          mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
+                                                                            : PlaybackTransport::SeekMode::Final);
+        },
+        false,
+        false);
+    }
+
+    void seekBy(PlaybackOccurrenceId const expectedOccurrenceId,
+                std::chrono::milliseconds const delta,
+                PlaybackRelativeSeekEndBehavior const endBehavior) override
+    {
+      submitPositioning(
+        [this, expectedOccurrenceId, delta, endBehavior]
+        {
+          auto const duration = transport.state().duration;
+
+          if (expectedOccurrenceId.value == 0 || expectedOccurrenceId != transport.state().occurrenceId ||
+              duration <= std::chrono::milliseconds{0})
+          {
+            return false;
+          }
+
+          auto const elapsed = std::clamp(transport.elapsed(), std::chrono::milliseconds{0}, duration);
+
+          if (endBehavior == PlaybackRelativeSeekEndBehavior::Next && delta > std::chrono::milliseconds{0} &&
+              delta > duration - elapsed)
+          {
+            return succession.state().hasNext && transport.canAdvanceFrom(expectedOccurrenceId) &&
+                   succession.tryMoveNext();
+          }
+
+          auto const targetElapsed = elapsed + std::clamp(delta, -elapsed, duration - elapsed);
+          std::ignore = transport.trySeek(expectedOccurrenceId, targetElapsed);
+          return false;
+        },
+        false,
+        false);
+    }
+
+    bool trySeek(PlaybackOccurrenceId const expectedOccurrenceId, std::chrono::milliseconds const elapsed) override
+    {
+      ensureOnExecutor();
+
+      if (closed || isInsideBoundary() || hasQueuedCommandBacklog())
+      {
+        return false;
+      }
+
+      bool issued = false;
+      auto command = QueuedCommand{
+        .generation = ++commandGenerationCounter,
+        .staleWhenSuperseded = false,
+        .operation = [this, expectedOccurrenceId, elapsed, &issued] -> Result<bool>
+        {
+          issued = transport.trySeek(expectedOccurrenceId, elapsed);
+          return false;
+        },
+      };
+      std::ignore = executeCommandAndContinue(command);
+      return issued;
     }
 
     void setOutputDevice(audio::BackendId const& backendId,
@@ -791,6 +914,7 @@ namespace ao::rt
           PlaybackTransportSnapshot{
             .transport = transportState.transport,
             .ready = transportState.ready,
+            .occurrenceId = transportState.occurrenceId,
             .positionRevision = PlaybackPositionRevision{.value = positionRevisionCounter},
             .finalSeekRevision = PlaybackFinalSeekRevision{.value = finalSeekRevisionCounter},
             .elapsed = transportState.elapsed,
@@ -887,6 +1011,11 @@ namespace ao::rt
   PlaybackSnapshot const& PlaybackService::snapshot() const
   {
     return _implPtr->snapshot();
+  }
+
+  std::chrono::milliseconds PlaybackService::elapsed() const
+  {
+    return _implPtr->elapsed();
   }
 
   PlaybackCommands& PlaybackService::commands() noexcept

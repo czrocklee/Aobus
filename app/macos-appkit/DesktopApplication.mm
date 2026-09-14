@@ -584,6 +584,11 @@ namespace ao::appkit
     return YES;
   }
 
+  if (_sessionPtr)
+  {
+    _sessionPtr->sealMediaPlayerAdmission();
+  }
+
   _quitPending = NO;
   _closing = YES;
   [self updateFrameTimer];
@@ -1261,6 +1266,7 @@ namespace ao::appkit
     return;
   }
 
+  _sessionPtr->sealMediaPlayerAdmission();
   _optSuccessor = std::move(_optPendingSuccessor);
   _optPendingSuccessor.reset();
   _closing = YES;

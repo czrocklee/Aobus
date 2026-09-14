@@ -113,6 +113,9 @@ let
   # Linux desktop, audio, and development tooling.
   linuxOnlyInputs = with pkgs; [
     xvfb
+    libX11
+    libXi
+    libXtst
     mold
     sysprof
     gdb

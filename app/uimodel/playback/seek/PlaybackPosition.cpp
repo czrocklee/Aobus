@@ -9,7 +9,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
-#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <optional>
@@ -32,6 +31,7 @@ namespace ao::uimodel
     , _commands{playback.commands()}
     , _onRender{std::move(onRender)}
     , _clockTransport{playback.snapshot().transport.transport}
+    , _clockOccurrenceId{playback.snapshot().transport.occurrenceId}
     , _clockPositionRevision{playback.snapshot().transport.positionRevision}
     , _clockDuration{playback.snapshot().transport.duration}
   {
@@ -50,41 +50,35 @@ namespace ao::uimodel
 
   void PlaybackPositionViewModel::onSnapshotChanged(rt::PlaybackSnapshot const& snapshot)
   {
-    if (snapshot.transport.transport == _clockTransport &&
+    if (snapshot.transport.transport == _clockTransport && snapshot.transport.occurrenceId == _clockOccurrenceId &&
         snapshot.transport.positionRevision == _clockPositionRevision && snapshot.transport.duration == _clockDuration)
     {
       return;
     }
 
     _clockTransport = snapshot.transport.transport;
+    _clockOccurrenceId = snapshot.transport.occurrenceId;
     _clockPositionRevision = snapshot.transport.positionRevision;
     _clockDuration = snapshot.transport.duration;
 
     render(snapshot.transport, true, false);
   }
 
-  void PlaybackPositionViewModel::seekPreview(std::chrono::milliseconds elapsed)
+  void PlaybackPositionViewModel::seekPreview(rt::PlaybackOccurrenceId const expectedOccurrenceId,
+                                              std::chrono::milliseconds const elapsed)
   {
-    _commands.seek(elapsed, rt::PlaybackSeekMode::Preview);
+    _commands.seek(expectedOccurrenceId, elapsed, rt::PlaybackSeekMode::Preview);
   }
 
-  void PlaybackPositionViewModel::seekFinal(std::chrono::milliseconds elapsed)
+  void PlaybackPositionViewModel::seekFinal(rt::PlaybackOccurrenceId const expectedOccurrenceId,
+                                            std::chrono::milliseconds const elapsed)
   {
-    _commands.seek(elapsed, rt::PlaybackSeekMode::Final);
+    _commands.seek(expectedOccurrenceId, elapsed);
   }
 
   void PlaybackPositionViewModel::seekBy(std::chrono::milliseconds const delta)
   {
-    auto const& state = _playback.snapshot().transport;
-
-    if (state.duration <= std::chrono::milliseconds{0})
-    {
-      return;
-    }
-
-    auto const elapsed = std::clamp(state.elapsed, std::chrono::milliseconds{0}, state.duration);
-    auto const clampedDelta = std::clamp(delta, -elapsed, state.duration - elapsed);
-    seekFinal(elapsed + clampedDelta);
+    _commands.seekBy(_playback.snapshot().transport.occurrenceId, delta);
   }
 
   void PlaybackPositionViewModel::refresh(bool immediateUpdate,
@@ -105,6 +99,7 @@ namespace ao::uimodel
     }
 
     auto view = PlaybackPositionViewState{};
+    view.occurrenceId = state.occurrenceId;
     view.duration = state.duration;
     view.elapsed = optOverrideElapsed.value_or(state.elapsed);
     view.isPlaying = isAdvancingTransport(state.transport);

@@ -2091,13 +2091,13 @@ namespace ao::tui
 
   void EventController::syncSeekSlider()
   {
-    auto const duration = _playback.snapshot().transport.duration;
-    _seekSlider.applyViewState(duration, duration > std::chrono::milliseconds{0});
+    auto const& state = _playback.snapshot().transport;
+    _seekSlider.applyViewState(state.duration, state.duration > std::chrono::milliseconds{0}, state.occurrenceId);
   }
 
   std::chrono::milliseconds EventController::seekRailElapsed(std::int32_t const column) const
   {
-    auto const duration = _playback.snapshot().transport.duration;
+    auto const duration = _seekSlider.duration();
 
     if (duration <= std::chrono::milliseconds{0})
     {
@@ -2119,8 +2119,8 @@ namespace ao::tui
     switch (update.action)
     {
       case uimodel::SeekSliderAction::None: return;
-      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(update.elapsed); return;
-      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(update.elapsed); return;
+      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(update.occurrenceId, update.elapsed); return;
+      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(update.occurrenceId, update.elapsed); return;
     }
   }
 
@@ -2137,11 +2137,12 @@ namespace ao::tui
 
   void EventController::cancelWorkspaceGestures()
   {
+    syncSeekSlider();
     _navigationScrollbarDrag = false;
 
     if (std::holds_alternative<SeekRailDrag>(_workspaceGesture) && _seekSlider.hasPendingFinalSeek())
     {
-      _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
+      applySeekUpdate(_seekSlider.endPointerInteraction(_playback.snapshot().transport.elapsed));
     }
 
     if (std::holds_alternative<PanelResizeInteraction>(_workspaceGesture))

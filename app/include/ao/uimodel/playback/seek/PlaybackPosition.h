@@ -5,6 +5,7 @@
 
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
@@ -24,13 +25,14 @@ namespace ao::uimodel
   /** Render state shared by playback-position controls. */
   struct PlaybackPositionViewState final
   {
+    rt::PlaybackOccurrenceId occurrenceId{};
     std::chrono::milliseconds duration{0};
     std::chrono::milliseconds elapsed{0};
     bool isPlaying = false;
     // Whether a position can be chosen at all: false for a track with no known
     // duration, such as a stream.
     bool seekable = false;
-    // True only while the user is dragging: `elapsed` then carries the preview
+    // True for a transient seek preview: `elapsed` then carries the preview
     // position rather than the transport's own clock.
     bool isPreviewing = false;
     bool immediateUpdate = false;
@@ -55,8 +57,8 @@ namespace ao::uimodel
 
     ~PlaybackPositionViewModel() = default;
 
-    void seekPreview(std::chrono::milliseconds elapsed);
-    void seekFinal(std::chrono::milliseconds elapsed);
+    void seekPreview(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
+    void seekFinal(rt::PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed);
     void seekBy(std::chrono::milliseconds delta);
 
   private:
@@ -77,6 +79,7 @@ namespace ao::uimodel
     std::function<void(PlaybackPositionViewState const&)> _onRender;
 
     audio::Transport _clockTransport = audio::Transport::Idle;
+    rt::PlaybackOccurrenceId _clockOccurrenceId{};
     rt::PlaybackPositionRevision _clockPositionRevision{};
     std::chrono::milliseconds _clockDuration{0};
 

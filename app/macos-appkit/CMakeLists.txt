@@ -12,12 +12,13 @@ add_library(ao_appkit OBJECT
   LibraryEditorModel.cpp LibraryEditorModel.h
   LibrarySession.cpp LibrarySession.h
   MainRunLoopExecutor.cpp MainRunLoopExecutor.h
+  MediaPlayerAdapter.mm MediaPlayerAdapter.h
   PlaybackBar.mm PlaybackBar.h
   SoulButton.mm SoulButton.h
   TrackInspector.mm TrackInspector.h)
 target_link_libraries(ao_appkit PUBLIC
   ao_app_uimodel ao_app_runtime ao_app_i18n ao_app_i18n_ordering ao_audio ao_desktop_launch
-  "-framework AppKit" "-framework CoreFoundation" "-framework QuartzCore")
+  "-framework AppKit" "-framework CoreFoundation" "-framework MediaPlayer" "-framework QuartzCore")
 target_compile_options(ao_appkit PUBLIC
   "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc;-Woverloaded-virtual;-Wnon-virtual-dtor>")
 if(AOBUS_ENABLE_ASAN)

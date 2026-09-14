@@ -3,16 +3,19 @@
 
 #pragma once
 
+#include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
+#include <gdkmm/event.h>
+#include <glibmm/refptr.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
-#include <sigc++/connection.h>
 #include <sigc++/scoped_connection.h>
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 
 namespace ao::rt
 {
@@ -44,12 +47,13 @@ namespace ao::gtk
     void stopTick();
     void updateTickState();
 
+    void handlePointerEvent(Glib::RefPtr<Gdk::Event const> const& eventPtr);
     void handleScaleValueChanged();
-    void beginUserInteraction();
+    void beginUserInteraction(Glib::RefPtr<Gdk::Event const> const& eventPtr);
     void endUserInteraction();
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
-    void commitSeekFromScale();
     void executeDebouncedFinalSeek();
+    void scheduleFinalSeek(uimodel::SeekSliderUpdate update);
     void setScaleRange(std::chrono::milliseconds duration);
     void setScaleValue(std::chrono::milliseconds elapsed);
     std::chrono::milliseconds scaleElapsed() const noexcept;
@@ -61,7 +65,13 @@ namespace ao::gtk
     bool _updatingScale = false;
     bool _isMapped = false;
     std::uint32_t _tickId = 0;
-    sigc::connection _debounceConnection;
+    sigc::scoped_connection _debounceConnection;
+    std::optional<uimodel::SeekSliderUpdate> _optPendingFinalSeek;
+    rt::PlaybackOccurrenceId _presentedOccurrenceId{};
+    Glib::RefPtr<Gdk::Event const> _pointerPressEventPtr;
+    sigc::scoped_connection _pointerEventConnection;
+    sigc::scoped_connection _valueChangedConnection;
+    sigc::scoped_connection _stateFlagsConnection;
     sigc::scoped_connection _mapConnection;
     sigc::scoped_connection _unmapConnection;
     uimodel::PlaybackPositionViewModel _seekViewModel;

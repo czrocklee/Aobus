@@ -274,9 +274,10 @@ The effective `playback.playPause` shortcut (shipped with Space first) and the S
 From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
 Stop is an idempotent silent no-op when playback is already Idle.
 
-Seek press begins a shared `SeekInteraction` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `PlaybackPositionViewModel`.
-Release beyond the rail clamps to the rail range.
-Keyboard seek asks the same view model for a clamped five-second relative change and is inert without a known positive duration.
+Seek press begins a shared `SeekInteraction` gesture and captures the current playback occurrence and duration. Pointer motion publishes guarded queued preview seeks, and release publishes the matching guarded queued final seek through `PlaybackPositionViewModel`.
+Release beyond the rail clamps to the captured rail range. If playback is replaced while the pointer remains held, continued motion and release stay inert; only a fresh press may target the replacement.
+Keyboard seek captures the snapshot occurrence and asks the same view model for the configured relative step, which defaults to five seconds.
+The queued runtime command samples live elapsed at execution and clamps the target; it is inert without the matching occurrence and a positive duration.
 Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relative change, including the shared rule that raising volume clears explicit mute.
 
 ### Rendering
@@ -315,7 +316,8 @@ On Error, `LibraryController` preserves the draft, active source/view, rows, sec
 An invalid live expression remains visible in the Quick Filter panel without posting one notification per debounce tick.
 Return or Escape performs one immediate final application before the panel closes; a recoverable expression error posts one Warning, while a command-level failure posts one Error.
 Replacing, closing, or destroying Quick Filter input requests stop on the pending timer; a stopped or obsolete generation cannot mutate shell or library state.
-Text-input or overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
+Text-input or overlay entry first resynchronizes seek identity, then cancels a still-current active seek preview by committing the current runtime elapsed value as the final stabilization point and resetting the gesture.
+A replaced occurrence is reset without dispatching stale stabilization.
 An interrupted column drag instead discards its preview. Overlay changes, text input, list changes, unrelated pointer presses, and teardown therefore produce no column-layout model change or save.
 
 `:scan` and `:rescan` start one eager `LibraryScanController` flight through `uimodel::runLibraryScanAsync`.

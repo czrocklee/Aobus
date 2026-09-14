@@ -264,30 +264,22 @@ namespace ao::winui
       setPointerOver(false);
       stopRendering();
 
-      auto commitElapsed = std::chrono::milliseconds{0};
-      bool shouldCommit = false;
+      auto commitUpdate = uimodel::SeekSliderUpdate{};
 
       if (_interaction.isPointerActive())
       {
-        auto const update = _interaction.endPointerInteraction(sliderElapsed());
-
-        if (update.action == uimodel::SeekSliderAction::Commit)
-        {
-          commitElapsed = update.elapsed;
-          shouldCommit = true;
-        }
+        commitUpdate = _interaction.endPointerInteraction(sliderElapsed());
       }
       else if (_finalSeekPending)
       {
-        commitElapsed = _pendingFinalElapsed;
-        shouldCommit = true;
+        commitUpdate = _pendingFinalUpdate;
       }
 
       cancelPendingFinalSeek();
 
-      if (shouldCommit && _viewModelPtr)
+      if (commitUpdate.action == uimodel::SeekSliderAction::Commit && _viewModelPtr)
       {
-        _viewModelPtr->seekFinal(commitElapsed);
+        _viewModelPtr->seekFinal(commitUpdate.occurrenceId, commitUpdate.elapsed);
       }
 
       _interaction.reset();
@@ -302,7 +294,7 @@ namespace ao::winui
 
     if (_hasState)
     {
-      _interaction.applyViewState(_state.duration, _state.seekable);
+      _interaction.applyViewState(_state.duration, _state.seekable, _state.occurrenceId);
       applyStateToSlider();
     }
 
@@ -312,7 +304,7 @@ namespace ao::winui
   void SeekControl::beginPointerInteraction()
   {
     auto const hadEarlyValueChange = _finalSeekPending;
-    auto const earlyElapsed = _pendingFinalElapsed;
+    auto const earlyUpdate = _pendingFinalUpdate;
 
     if (!_presentationActive || !_viewModelPtr || !_interaction.tryBeginPointerInteraction())
     {
@@ -321,9 +313,9 @@ namespace ao::winui
 
     cancelPendingFinalSeek();
 
-    if (hadEarlyValueChange)
+    if (hadEarlyValueChange && earlyUpdate.occurrenceId == _interaction.occurrenceId())
     {
-      applySeekUpdate(_interaction.valueChanged(earlyElapsed));
+      applySeekUpdate(_interaction.valueChanged(earlyUpdate.elapsed));
     }
 
     updateRenderingRegistration();
@@ -336,7 +328,16 @@ namespace ao::winui
       return;
     }
 
-    applySeekUpdate(_interaction.endPointerInteraction(sliderElapsed()));
+    auto const wasPointerActive = _interaction.isPointerActive();
+    auto const update = _interaction.endPointerInteraction(sliderElapsed());
+    applySeekUpdate(update);
+
+    if (wasPointerActive && update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying())
+    {
+      // A paused replacement has no frame tick to retire the old drag's value.
+      setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
+    }
+
     updateRenderingRegistration();
   }
 
@@ -350,24 +351,24 @@ namespace ao::winui
 
         if (_viewModelPtr)
         {
-          _viewModelPtr->seekPreview(update.elapsed);
+          _viewModelPtr->seekPreview(update.occurrenceId, update.elapsed);
         }
 
         break;
-      case uimodel::SeekSliderAction::Commit: scheduleFinalSeek(update.elapsed); break;
+      case uimodel::SeekSliderAction::Commit: scheduleFinalSeek(update); break;
       case uimodel::SeekSliderAction::None: break;
     }
   }
 
-  void SeekControl::scheduleFinalSeek(std::chrono::milliseconds const elapsed)
+  void SeekControl::scheduleFinalSeek(uimodel::SeekSliderUpdate update)
   {
-    if (!_viewModelPtr || _interaction.duration() <= std::chrono::milliseconds{0})
+    if (!_viewModelPtr || update.occurrenceId.value == 0)
     {
       return;
     }
 
     _finalSeekTimer.Stop();
-    _pendingFinalElapsed = elapsed;
+    _pendingFinalUpdate = update;
     _finalSeekDeadline = std::chrono::steady_clock::now() + kFinalSeekDebounceInterval;
     _finalSeekPending = true;
     _finalSeekTimer.Interval(kFinalSeekDebounceInterval);
@@ -392,12 +393,13 @@ namespace ao::winui
       return;
     }
 
-    auto const elapsed = _pendingFinalElapsed;
+    auto const update = _pendingFinalUpdate;
     _finalSeekPending = false;
+    _pendingFinalUpdate = {};
 
     if (_viewModelPtr)
     {
-      _viewModelPtr->seekFinal(elapsed);
+      _viewModelPtr->seekFinal(update.occurrenceId, update.elapsed);
     }
 
     updateRenderingRegistration();
@@ -406,6 +408,7 @@ namespace ao::winui
   void SeekControl::cancelPendingFinalSeek() noexcept
   {
     _finalSeekPending = false;
+    _pendingFinalUpdate = {};
 
     if (_finalSeekTimer)
     {
@@ -415,9 +418,14 @@ namespace ao::winui
 
   void SeekControl::applyState(uimodel::PlaybackPositionViewState const& state)
   {
+    if (_hasState && state.occurrenceId != _state.occurrenceId)
+    {
+      cancelPendingFinalSeek();
+    }
+
     _state = state;
     _hasState = true;
-    _interaction.applyViewState(state.duration, state.seekable);
+    _interaction.applyViewState(state.duration, state.seekable, state.occurrenceId);
 
     if (state.duration <= std::chrono::milliseconds{0})
     {
@@ -441,7 +449,7 @@ namespace ao::winui
       setSliderRange(state.duration);
       _slider.IsEnabled(state.seekable);
 
-      if (state.immediateUpdate && !_interaction.isPointerActive())
+      if (state.immediateUpdate && !_interaction.isPointerActive() && !_finalSeekPending)
       {
         setSliderValue(state.elapsed);
       }
@@ -466,7 +474,10 @@ namespace ao::winui
       return;
     }
 
-    setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
+    if (!_interaction.isPointerActive() && !_finalSeekPending)
+    {
+      setSliderValue(_interpolator.interpolateElapsed(currentFrameTime()));
+    }
   }
 
   void SeekControl::setSliderRange(std::chrono::milliseconds const duration)

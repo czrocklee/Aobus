@@ -124,8 +124,8 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.clearPreparedNext() == preparedToken);
   }
 
-  TEST_CASE("PlaybackTransport playback - drain emits idle when playback is actually idle",
-            "[runtime][regression][drain][concurrency]")
+  TEST_CASE("PlaybackTransport playback - natural terminal completion clears guarded seek ownership",
+            "[runtime][regression][playback][concurrency]")
   {
     auto const format =
       audio::PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
@@ -154,16 +154,26 @@ namespace ao::rt::test
 
     REQUIRE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.renderTarget != nullptr);
+    auto const occurrenceId = fixture.playbackTransport.state().occurrenceId;
+    REQUIRE(occurrenceId.value != 0);
+    REQUIRE(fixture.playbackTransport.state().duration > std::chrono::milliseconds{1});
 
     auto buffer = std::array<std::byte, 4096>{};
     CHECK(fixture.renderTarget->renderPcm(buffer).bytesWritten > 0);
     CHECK(idleCount == 0);
     REQUIRE(fixture.renderTarget->renderPcm(buffer).drained);
+    CHECK(fixture.playbackTransport.state().occurrenceId == occurrenceId);
+
     fixture.renderTarget->handleDrainComplete();
+    CHECK(fixture.playbackTransport.state().occurrenceId == occurrenceId);
 
     REQUIRE(fixture.executor.tryDrainUntil([&idleCount] { return idleCount > 0; }));
     CHECK(idleCount == 1);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
+    CHECK(fixture.playbackTransport.state().occurrenceId == PlaybackOccurrenceId{});
+    CHECK_FALSE(fixture.playbackTransport.trySeek(
+      occurrenceId, std::chrono::milliseconds{1}, PlaybackTransport::SeekMode::Preview));
+    CHECK_FALSE(fixture.playbackTransport.trySeek(occurrenceId, std::chrono::milliseconds{1}));
   }
 
   TEST_CASE("PlaybackTransport playback - natural advance commits prepared track without idle",
@@ -184,6 +194,8 @@ namespace ao::rt::test
     auto idleSub = fixture.playbackTransport.onIdle([&] noexcept { ++idleCount; });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
+    auto const currentOccurrenceId = fixture.playbackTransport.state().occurrenceId;
+    REQUIRE(currentOccurrenceId.value != 0);
     auto const nextRequestRes = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
     REQUIRE(nextRequestRes);
     auto const preparedTokenRes = fixture.playbackTransport.prepareNext(*nextRequestRes, ListId{7});
@@ -212,6 +224,11 @@ namespace ao::rt::test
     CHECK(nowPlaying[0].optPreparedNextToken == preparedToken);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == nextTrack);
     CHECK(fixture.playbackTransport.state().nowPlaying.title == "Prepared Track");
+    auto const successorOccurrenceId = fixture.playbackTransport.state().occurrenceId;
+    REQUIRE(successorOccurrenceId.value != 0);
+    CHECK(successorOccurrenceId != currentOccurrenceId);
+    CHECK(fixture.playbackTransport.trySeek(
+      successorOccurrenceId, std::chrono::milliseconds{1}, PlaybackTransport::SeekMode::Preview));
     CHECK(idleCount == 0);
   }
 

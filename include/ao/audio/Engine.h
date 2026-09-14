@@ -253,6 +253,14 @@ namespace ao::audio
     void resume();
     void stop();
     void seek(std::chrono::milliseconds offset);
+    /// Returns true when the expected current item matched and the seek was
+    /// issued. Audio failures remain observable through transport status;
+    /// false means rejection, never queued work. Acquiring control may still
+    /// settle an already-consumed realtime transition before rejection.
+    bool trySeek(PlaybackItemId expectedItemId, std::chrono::milliseconds offset);
+    /// Returns whether the settled realtime timeline still has the expected
+    /// nonzero item as its active node. This is an admission observation only.
+    bool isCurrentPlaybackItem(PlaybackItemId expectedItemId);
 
     /// @brief Applies the volume to the backend, returning any device failure.
     /// The cached state always reflects the requested value regardless.

@@ -8,14 +8,15 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/utility/AtomicFile.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace
@@ -59,10 +60,11 @@ namespace
 
     auto const previousTime = std::filesystem::last_write_time(path);
     auto const bytes = ao::test::wav::makeWav(spec);
-    auto output = std::ofstream{path, std::ios::binary | std::ios::trunc};
-    output.write(reinterpret_cast<char const*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    output.close();
-    AO_INVARIANT(output, "Artwork regression must replace only its generated WAV fixture");
+    // A playing decoder can retain a mapping of the old fixture. Replace the
+    // file atomically instead of truncating that mapping's backing file.
+    auto const publishRes =
+      ao::utility::publishAtomically(path, std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()});
+    AO_INVARIANT(publishRes, "Artwork regression must replace only its generated WAV fixture");
     // Make scan admission independent of the filesystem timestamp resolution.
     std::filesystem::last_write_time(path, previousTime + std::chrono::seconds{1});
   }

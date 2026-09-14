@@ -85,7 +85,7 @@ It groups the cursor, projection anchor, shuffle history, and prepared-next regi
 ### Application transport authority
 
 `PlaybackTransport` is the runtime-internal current-subject and transport owner.
-It resolves a library `TrackId` into a runtime playback request, owns the launch-time now-playing request, translates pause/resume/stop/seek and output commands, exposes volume and quality state, and publishes executor-affine application observations.
+It resolves a library `TrackId` into a runtime playback request, owns the launch-time now-playing request and runtime playback-occurrence identity, translates pause/resume/stop/seek and output commands, exposes volume and quality state, and publishes executor-affine application observations.
 
 `PlaybackService` derives live display metadata for its public snapshot from the current library record.
 This cached presentation does not replace the transport's source identity or launch request, and metadata edits do not emit position-anchor events.
@@ -255,11 +255,18 @@ The correlation values have separate owners and meanings:
 | Evidence | Owner and purpose | Not evidence of |
 |---|---|---|
 | `TrackId` and `ListId` | Runtime library subject and source context. | An accepted or still-current audio item. |
+| `PlaybackOccurrenceId` | PlaybackTransport identity for one installed runtime subject, used by delayed guarded commands. | A persisted session identity or an Engine item id. |
 | `PreparedNextToken` | PlaybackTransport/Sequence correlation for one prepared application successor. | Engine generation or current list membership. |
 | `Engine::PlaybackItemId` | Opaque audio item identity allocated at the runtime/audio bridge and echoed by Engine. | Library identity or succession policy. |
 | Playback generation and cancellation barrier | Engine/Player proof that older audio callbacks can no longer win. | Projection revision or save-schedule freshness. |
 
-No layer infers one form of evidence from another.
+No layer infers one form of evidence from another. Guarded queued UI seeks carry
+the input-time runtime occurrence through PlaybackService's FIFO and validate it
+when execution reaches PlaybackTransport. Synchronous guarded final seeks then
+separately check Transport's retained opaque item id inside Player and Engine
+before audio mutation. Guarded Next admission observes the settled Engine active
+item under the control lock, releases that lock, and only then enters succession;
+that observation is not an atomic substitute for the seek mutation guards.
 
 ### Observation protocol
 
@@ -337,7 +344,7 @@ Playback refines them as follows:
 |---|---|---|---|
 | Runtime callback executor | PlaybackService, PlaybackSuccession, PlaybackTransport, PlaybackSessionPersistence, Player application state | Executor affinity; no lower callback mutates these objects inline. | Values and commands enter Engine; observations publish to UIModel/frontends. |
 | Async runtime timer/worker | Persistence delays, explicit-start inspection and optimistic decoder preparation, and gapless lookahead preparation | Stop-token-owned task handles and cancellation-checked callback hops; component-specific callback gates remain where lower producers require them. Playback workers own isolated inspection and prepared-source values; explicit starts briefly return to the callback/control domain for a non-blocking Backend hint between those worker phases. | A scheduled checkpoint, inspected signal, or prepared audio value returns to the callback domain. |
-| Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant commands and complete status snapshots are serialized by Engine control/state synchronization; scalar state-only queries use the narrower state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
+| Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant commands (including `seek()` and `trySeek()`), complete status snapshots, and `isCurrentPlaybackItem()` observations are serialized by Engine control/state synchronization; scalar state-only queries use the narrower state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
 | Engine event worker | Ordered backend/source events and realtime transition signals | One owned worker, synchronized event queue, bounded realtime signal ring. | Engine callbacks enter the Player callback gate. |
 | StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, capacity-bounded byte targets, and producer-confined block headroom over the PCM ring. | PCM enters the render plane; errors enqueue toward Engine. |
 | Backend render/device domains | Native output, render cursor, and provider discovery | Backend-specific synchronization; realtime render avoids Engine control locks and unbounded work. | Non-realtime events enqueue toward Engine or provider callbacks toward Player. |
@@ -345,6 +352,8 @@ Playback refines them as follows:
 Player is the intentional bridge between the callback-executor domain and the thread-tolerant Engine.
 Engine is the intentional bridge between serialized control and the dedicated event, decode, and render domains.
 The Engine control domain is a synchronization domain, not a dedicated control thread: public control calls execute synchronously on their caller and are serialized internally.
+`isCurrentPlaybackItem()` takes the control lock and settles pending realtime signals before observing the active item.
+It is an admission observation, not a reservation: the lock is released before runtime succession acts, while `trySeek()` retains its own item validation at the audio mutation boundary.
 For view-based starts, Player captures immutable route and generation evidence on the callback executor, runs inspection on an `async::Runtime` worker, briefly returns to ask Engine for the selected Backend's non-blocking hint, and resumes worker-side final-decoder open, seek, and preroll before adoption revalidation.
 Explicit commit keeps native backend activation, PCM-mode validation, mismatched or failed optimistic-preparation fallback, source callback installation, and decode-thread activation as synchronous callback-executor control work.
 Gapless lookahead workers additionally open, seek, and preroll the final decoder when the already-open PCM mode is lossless for the inspected successor; they never open or reconfigure a backend.

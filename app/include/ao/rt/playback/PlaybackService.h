@@ -8,6 +8,7 @@
 #include "PlaybackSnapshot.h"
 #include <ao/compat/MoveOnlyFunction.h>
 
+#include <chrono>
 #include <memory>
 
 namespace ao::rt
@@ -41,6 +42,12 @@ namespace ao::rt
      * that may publish a newer snapshot.
      */
     PlaybackSnapshot const& snapshot() const;
+    /**
+     * Samples the live position for the last committed occurrence, bounded by
+     * its known duration. If audio has already replaced that occurrence, uses
+     * the committed anchor rather than the successor's position.
+     */
+    std::chrono::milliseconds elapsed() const;
     PlaybackCommands& commands() noexcept;
     PlaybackEvents& events() noexcept;
 

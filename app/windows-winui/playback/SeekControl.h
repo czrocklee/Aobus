@@ -61,7 +61,7 @@ namespace ao::winui
     void beginPointerInteraction();
     void endPointerInteraction();
     void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
-    void scheduleFinalSeek(std::chrono::milliseconds elapsed);
+    void scheduleFinalSeek(uimodel::SeekSliderUpdate update);
     void commitPendingFinalSeek();
     void cancelPendingFinalSeek() noexcept;
 
@@ -103,7 +103,7 @@ namespace ao::winui
     uimodel::PlaybackPositionInterpolator _interpolator;
     uimodel::PlaybackPositionViewState _state{};
     std::unique_ptr<uimodel::PlaybackPositionViewModel> _viewModelPtr;
-    std::chrono::milliseconds _pendingFinalElapsed{0};
+    uimodel::SeekSliderUpdate _pendingFinalUpdate{};
     std::chrono::steady_clock::time_point _finalSeekDeadline{};
     bool _updating = false;
     bool _loaded = false;

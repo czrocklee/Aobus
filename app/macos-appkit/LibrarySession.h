@@ -44,6 +44,7 @@ namespace ao::rt
 
 namespace ao::appkit
 {
+  class MediaPlayerAdapter;
   struct PlaybackSeekTarget;
 
   enum class DesktopInvalidation : std::uint8_t
@@ -94,6 +95,7 @@ namespace ao::appkit
     rt::AppRuntime& runtime() const noexcept;
     LibraryEditorModel& editor() const noexcept;
     i18n::MessageCatalog const& catalog() const noexcept;
+    MediaPlayerAdapter& mediaPlayer() const noexcept;
     uimodel::TrackDisplayIndex const& displayIndex() const noexcept;
     rt::TrackRow const* rowAt(std::size_t displayIndex);
     uimodel::TrackGroupHeadingPresentation groupHeading(std::size_t groupIndex) const;
@@ -114,6 +116,7 @@ namespace ao::appkit
     void hideActivityNotification(rt::NotificationId id);
     void rescan();
     void checkpoint() const;
+    void sealMediaPlayerAdmission() noexcept;
     bool canClose() const noexcept;
     void close() noexcept;
 

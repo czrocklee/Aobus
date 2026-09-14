@@ -147,6 +147,19 @@ window visibility; the coordinator samples it when rendering a frame. It stops n
 objects, then releases the session and lease before launching a successor.
 Mode changes and closing the visible window retain the same session.
 
+`LibrarySession` also owns `MediaPlayerAdapter`.
+The adapter borrows that session's playback actions, playback service, and resource-byte cache; it owns the MediaPlayer registration tokens, snapshot subscription, and artwork request.
+Foreign command handlers retain a mutex-protected admission state, then post delivery to the main queue.
+They never retain the session itself.
+Position commands capture the runtime playback occurrence and elapsed target at native admission and submit PlaybackService's occurrence-bearing queued seek at main-queue delivery.
+This preserves valid commands through a busy runtime boundary while execution-time identity checks prevent targeting a replacement or replay.
+Ordinary transport and navigation commands use `PlaybackActions` against the execution-time subject, matching the Windows SMTC and ordinary MPRIS command paths; two queued Next deliveries are not pinned to the same old occurrence.
+Native commands outside the supported seven-command surface are explicitly disabled.
+Now Playing elapsed time advances from the last correlated transport clock sample; metadata-only and artwork publications do not reset that anchor.
+Accepted Quit or library switching retires admission before deferred teardown; `canClose()` also excludes active media deliveries.
+Retirement unregisters native targets, clears Now Playing, cancels observations, and revokes the borrowed delivery target, so late queued or independently retained handlers remain inert after session destruction.
+Already submitted playback commands belong to the runtime, not the retired adapter; they retain FIFO and occurrence checks until execution or runtime shutdown.
+
 The `ao_appkit` object target owns production implementation. The shipping
 bundle and the separate `ao_appkit_smoke` test bundle link those same objects;
 only the test target contains scenario drivers, captures, and assertions.
@@ -374,6 +387,7 @@ The selected root is persisted only after successor activation; its initial scan
 
 - [`DesktopApplication.mm`](../../app/macos-appkit/DesktopApplication.mm), [`DesktopShell.mm`](../../app/macos-appkit/DesktopShell.mm), and [`DesktopCommandSurface.mm`](../../app/macos-appkit/DesktopCommandSurface.mm) implement the AppKit coordinator; [`DesktopMain.mm`](../../app/macos-appkit/DesktopMain.mm) parses launch arguments.
 - [`LibraryBrowser.h`](../../app/macos-appkit/LibraryBrowser.h), [`PlaybackBar.h`](../../app/macos-appkit/PlaybackBar.h), [`ActivityPopover.h`](../../app/macos-appkit/ActivityPopover.h), and [`TrackInspector.h`](../../app/macos-appkit/TrackInspector.h) define the native presentation boundaries.
+- [`MediaPlayerAdapter.mm`](../../app/macos-appkit/MediaPlayerAdapter.mm) owns native media command admission, main-queue delivery, Now Playing publication, and registration retirement within the AppKit session.
 
 ## Test map
 
@@ -388,6 +402,7 @@ The selected root is persisted only after successor activation; its initial scan
 - Tests under [`test/unit/winui/`](../../test/unit/winui/) protect breakpoints, persistence, theme fallback, startup/restart policy, shell vocabulary, and command-line behavior. Those needing a native host are included in `ao_core_test` only on Windows; Windows shell policy carrying no WinRT dependency - settings compatibility, output-preference resolution, root-commit sequencing, the component schema, and the keyboard-accelerator plan - is compiled and run on every host, because those are the rules a Linux-only change is most likely to break unnoticed. Shared UIModel tests protect Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect `aobus-winui-lib`, XAML, generated C++/WinRT, PRI resources, and final executable composition; the current repository has no WinUI widget-test host.
 
 - The separate AppKit GUI scenarios under [`test/integration/macos/`](../../test/integration/macos/) cover native browser, playback, inspector, activity, authoring, and lifecycle composition; [macOS development](../development/macos.md#native-desktop-development-slice) owns their invocation and fixtures.
+- [`AppKitMediaScenario.mm`](../../test/integration/macos/AppKitMediaScenario.mm) checks native command availability, queued Next delivery, guarded positions, Now Playing clock and artwork publication, and callback retirement without synthesizing physical media keys.
 
 ## Related documents
 

@@ -142,6 +142,26 @@ Avoid over-coupling tests to incidental widget hierarchy.
 For private-access and seam decisions, use
 `doc/development/test/fixture-and-helper.md#testability-seams`.
 
+### Native pointer routing
+
+Emitting `GestureClick::pressed` directly proves a signal binding, not a native
+GDK sequence or gesture arbitration. In particular, `GtkRange` can claim its own
+drag and cancel a separate click observer while the physical drag continues.
+Tests for that boundary must deliver actual input and assert the resulting
+application state.
+
+`PlaybackUiComponentsTest.cpp` keeps its X11/XTest mouse fixture local to the
+seek-control regressions. It uses public widget/surface coordinate transforms
+and bounded event-delivery waits. X11, XTest, and XInput development dependencies
+come from the pinned Linux shell and are linked only to the GTK test target.
+
+The portal starts a private Xvfb for every GTK test process and marks that child
+with `AOBUS_OWNED_GTK_DISPLAY=1`. Native-input tests skip without that marker;
+never set it for an inherited desktop display. The printed direct shard command
+omits both the display and its ownership marker, so rerun these cases through
+`./ao test --gtk "SeekControlWidget*"` rather than injecting into a user session.
+The native mouse tests do not establish Wayland, touch, or grab-transfer behavior.
+
 ## Show and present
 
 The GTK test suite runs under Xvfb/headless display, so `show()` and `present()`

@@ -44,6 +44,7 @@ if(APPLE)
     integration/macos/AppKitAuthoringScenario.mm
     integration/macos/AppKitActivityExpirationScenario.mm
     integration/macos/AppKitArtworkScenario.mm
+    integration/macos/AppKitMediaScenario.mm
     integration/macos/AppKitPresentationScenario.mm
     integration/macos/AppKitPlaybackScenario.mm
     integration/macos/AppKitPlaybackScenario.h
@@ -550,6 +551,8 @@ add_executable(ao_core_test
     unit/runtime/playback/ProjectionAnchorTest.cpp
     unit/runtime/playback/ShuffleHistoryTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
+    unit/runtime/PlaybackGuardedSeekTest.cpp
+    unit/runtime/PlaybackPositionQueryTest.cpp
     unit/runtime/PlaybackMetadataTest.cpp
     unit/runtime/PlaybackTransportControlTest.cpp
     unit/runtime/PlaybackTransportOutputTest.cpp
@@ -918,6 +921,7 @@ endif()
 
 if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
+pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
 add_executable(ao_gtk_test
     unit/linux-gtk/common/ActionMapRegistrationTest.cpp
     unit/linux-gtk/common/DismissControllerTest.cpp
@@ -979,6 +983,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
     unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp
     unit/linux-gtk/platform/MprisBridgeTest.cpp
+    unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp
     unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
@@ -1031,6 +1036,7 @@ target_link_libraries(ao_gtk_test PRIVATE
     ao_test_support_gtk
     ao_test_support_runtime
     PkgGTKMM
+    PkgConfig::XTEST
     ao_test_options
     Catch2::Catch2
     FakeIt::FakeIt-catch

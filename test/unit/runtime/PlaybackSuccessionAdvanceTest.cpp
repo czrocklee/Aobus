@@ -162,20 +162,48 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - retired prepared winner survives a final-seek race",
-            "[runtime][unit][playback-succession][token]")
+  TEST_CASE("PlaybackSuccession - positioning commands retain a naturally advanced winner",
+            "[runtime][regression][playback-succession][concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
     auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
-    auto const subscription = fixture.transport.playbackTransport.onNowPlayingChanged(
+    std::size_t finalSeekCount = 0;
+    auto const nowPlayingSubscription = fixture.transport.playbackTransport.onNowPlayingChanged(
       [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { events.push_back(event); });
+    auto const seekSubscription = fixture.transport.playbackTransport.onSeekUpdate(
+      [&](PlaybackTransport::SeekUpdate const& update) noexcept
+      {
+        if (update.mode == PlaybackTransport::SeekMode::Final)
+        {
+          ++finalSeekCount;
+        }
+      });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.transport.executor.drain();
     events.clear();
+    auto const retiredOccurrence = fixture.transport.playbackTransport.state().occurrenceId;
 
     fixture.queueNaturalAdvance();
-    fixture.transport.playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
+    std::size_t expectedFinalSeekCount = 0;
+
+    SECTION("unconditional final seek preserves the prepared winner")
+    {
+      fixture.transport.playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
+      expectedFinalSeekCount = 1;
+    }
+
+    SECTION("guarded seek rejects the retired occurrence without a seek event")
+    {
+      CHECK_FALSE(fixture.transport.playbackTransport.trySeek(retiredOccurrence, std::chrono::milliseconds{0}));
+    }
+
+    SECTION("guarded Next observes the realtime winner and preserves its successor")
+    {
+      CHECK_FALSE(fixture.transport.playbackTransport.canAdvanceFrom(retiredOccurrence));
+    }
+
+    CHECK(finalSeekCount == expectedFinalSeekCount);
     fixture.transport.executor.drain();
 
     REQUIRE(events.size() == 1);
@@ -183,7 +211,9 @@ namespace ao::rt::test
     CHECK(events.front().trackId == fixture.secondTrackId);
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
     CHECK(fixture.successionPtr->state().optResolvedSuccessor == fixture.thirdTrackId);
+    CHECK(fixture.transport.playbackTransport.state().occurrenceId != retiredOccurrence);
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(finalSeekCount == expectedFinalSeekCount);
   }
 
   TEST_CASE("PlaybackSuccession - queued natural advance settles before an asynchronous explicit start",

@@ -39,6 +39,8 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   currently connected observers.
 - **Command generation** is the internal ordering value used to discard an old
   queued start or navigation command after a newer invalidating command.
+- **Playback occurrence** is Transport's runtime-only identity for one installed
+  current subject, independent from TrackId, audio item id, and persisted state.
 - **Pending view start** is the private candidate succession session and request
   retained after synchronous validation while audio preparation runs on a worker.
 
@@ -59,8 +61,15 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   synchronous command overtakes it.
 - Stop, replacement start, next, previous, restore, output-route change, clear,
   and shutdown supersede older queued start/navigation commands. Orthogonal
-  volume, mute, pause, resume, seek, shuffle, and repeat commands remain FIFO.
+  volume, mute, pause, resume, seek, shuffle, and repeat commands remain FIFO;
+  occurrence-guarded seeks perform their own execution-time identity check.
 - Elapsed clock drift alone is not semantic content and causes no publication.
+  `elapsed()` samples live position without publishing, bounded by the committed duration when positive.
+  Runtime/audio occurrence checks before and after the sample keep it correlated to the last committed snapshot; a mismatch falls back to that snapshot's anchor.
+- Every installed explicit start, replay, natural advance, and deferred restore
+  receives a new nonzero playback occurrence; refresh, pause, resume, and seek
+  preserve it, and Stop invalidates it.
+  Natural terminal Idle without deferred resume ownership also invalidates it, while a natural successor keeps its newly installed identity.
 - An unexpected command or settlement exception terminally closes the service, retains the last committed snapshot, and abandons the queued backlog.
 - Shutdown closes command admission and makes deferred service tasks safe to
   drop before transport callback producers are quiesced.
@@ -118,18 +127,54 @@ appended to the FIFO. One deferred task consumes one command and schedules the
 next drain after settlement.
 
 `startFromView` reports synchronous view, membership, request, readiness, and
-worker-task admission. Success does not mean that decoder preparation completed or that a
-new current subject was installed. When called by an observer it initially
-reports successful command-queue admission; it has no separate public completion
-token. Session restore keeps its call-level result on `AppRuntime` and is
-rejected while a commit, publication, or backlog is active.
+worker-task admission. Success does not mean that decoder preparation completed
+or that a new current subject was installed. When called by an observer it
+initially reports successful command-queue admission; it has no separate public
+completion token.
+
+The occurrence-bearing `seek` overload is a guarded queued positioning command. It keeps
+normal FIFO ordering through an active commit, publication, or backlog, captures
+occurrence, elapsed position, and mode by value, and validates occurrence and
+range in Transport when the operation executes. A stale queued Preview or Final
+issues no seek and publishes no seek update; a valid queued Preview therefore retains its matching Final
+settlement instead of leaving frontend preview state behind merely because an
+orthogonal command temporarily owned the boundary. The original occurrence-free
+`seek` remains the unconditional compatibility command.
+
+`seekBy` captures an occurrence and signed delta in the same FIFO.
+At execution it requires the matching occurrence and positive duration, samples live Transport elapsed, and clamps the relative target without overflowing before issuing a guarded Final.
+Its default `Clamp` end behavior preserves UI positioning; `Next` instead advances for a positive offset strictly past the live endpoint, only with an available successor and matching runtime/audio identity.
+The accepted Next uses existing succession cancellation of pending explicit preparation and lookahead; a rejected or ordinary relative seek does not invalidate command generations.
+An exact-end target remains a seek, and unavailable or stale past-end Next is a no-op.
+Sequential queued relative commands therefore accumulate from each execution's live position rather than a cached publication; headless consumers do not need rendering subscriptions.
+The live query and seek are separate observations: an intervening realtime replacement is rejected by the existing Engine item guard, not treated as a new target.
+
+`trySeek` is a synchronous-only guarded final seek. It returns `false` without
+queuing when admission is closed, a commit or publication is active, or the
+command FIFO has a backlog. Otherwise it runs through normal commit settlement
+without changing the command-invalidating generation and returns whether
+Transport and Engine accepted the expected occurrence/audio-item chain.
+
+`tryNext` is likewise synchronous-only. It first validates the nonzero runtime
+occurrence and subject. Active playback then asks Player and Engine whether the
+settled realtime timeline still exposes Transport's expected audio item; an
+exact restored Idle occurrence is the sole no-active-audio exception. Only a
+match advances the invalidating generation and enters normal synchronous Next
+planning. The Engine observation releases its control lock before succession
+runs. This admission observation does not replace `trySeek`'s mutation-time
+identity guards.
+
+Session restore keeps its call-level result on `AppRuntime` and is rejected
+while a commit, publication, or backlog is active.
 
 ### Supersession
 
 A queued start, next, or previous command records its generation. A newer
 replacement start, navigation, restore, stop, clear, output-route change, or
-shutdown raises the invalidating generation. An older positioning command is
-discarded before touching either lower owner when it reaches the queue head.
+shutdown raises the invalidating generation. An older generation-fenced start
+or navigation command is discarded before touching either lower owner when it
+reaches the queue head. A guarded seek remains FIFO and lets Transport reject
+its captured occurrence if replacement has already executed.
 
 ### Explicit start and navigation
 
@@ -179,18 +224,40 @@ observations are coalesced into one external-settlement publication.
 
 ### Quick mutations and external settlement
 
-Pause, resume, final seek, volume, mute, shuffle, repeat, stop, clear, and output
-selection execute inside a service commit. Lower signals mark the commit changed;
-composition waits until the command returns.
+Pause, resume, Preview/Final seek, guarded queued seek, synchronous guarded
+final seek, volume, mute, shuffle, repeat, stop, clear, and output selection
+execute inside a service commit. Lower signals
+mark the commit changed; composition waits until the command returns.
 Pause and resume publish their lower transient events only when the refreshed
 transport actually enters `Paused` or `Playing`; idle and duplicate commands
 publish no false transition.
 
-A final seek advances both position identities. Subject replacement,
-same-subject restart, terminal idle, and successful restore advance only the
-position identity. Provider, readiness, quality, prepared-next, and
-natural-advance observations received outside a command schedule one deferred
-publication; observations accepted in the same executor turn coalesce.
+An accepted final seek advances both revision identities while preserving the
+playback occurrence. A guarded seek first requires its nonzero expected
+occurrence, a valid current subject and positive duration, and an elapsed value
+in the inclusive range `[0, duration]`. Deferred Idle restore updates its
+existing resume token with the same offset normalization as an unconditional
+Final seek: the exact duration endpoint becomes zero, including the offset
+later consumed by resume. Active playback additionally requires the expected
+opaque audio item to remain Engine-current across prepared-next disarm and RT
+splice settlement. Preview applies the same occurrence, subject, duration, and inclusive-range
+checks but only publishes the preview event; it never mutates audio, disarms
+lookahead, or advances either seek revision. Any rejection emits no seek event
+and advances no seek revision; a matched final issuance reports success even
+when an audio failure later appears through the existing transport-status
+channel.
+
+Rejection is not a rollback of audio settlement or internal prepared-slot
+bookkeeping. A guarded Final may settle an already-consumed RT splice and clear
+the active prepared-slot marker before rejecting the retired item. Transport
+retains that consumed successor's metadata for the pending advance callback;
+this is not a deferred seek. Runtime disarm must precede the Engine seek so it
+can retain the exact receipt for a candidate that was actually cancelled.
+
+Subject replacement, same-subject restart, terminal idle, and successful
+restore advance only the position revision. Provider, readiness, quality,
+prepared-next, and natural-advance observations received outside a command
+schedule one deferred publication; observations accepted in the same executor turn coalesce.
 If the executor rejects that deferred task before admission, the service keeps
 the last coherent snapshot and clears its scheduling marker. The next lower
 observation retries publication from the then-current lower state; it does not
@@ -203,9 +270,11 @@ installs the deferred idle request, offset, volume, and mute without lower
 publication; succession then installs the prepared session. `PlaybackService`
 publishes the combined state when the synchronous restore command returns.
 
-Every installed restore creates a new position anchor, including a repeated or
-same-subject idle restore. A missing stored session installs and publishes
-nothing. Restore never advances `PlaybackFinalSeekRevision`.
+Every installed restore creates a new position anchor and playback occurrence,
+including a repeated or same-subject idle restore. The restored Idle occurrence
+remains valid for guarded seeks; consuming its deferred resume may install a
+later occurrence for actual playback. A missing stored session installs and
+publishes nothing. Restore never advances `PlaybackFinalSeekRevision`.
 
 ## Observation
 
@@ -221,7 +290,11 @@ are delivered after snapshot settlement.
 ## Failure and cancellation
 
 A result-bearing command rejected because admission is closed returns
-`InvalidState`; void commands after shutdown are ignored. Immediate lower
+`InvalidState`; void commands after shutdown are ignored. Guarded `trySeek` and
+`tryNext` use `false` for every synchronous admission or identity/input
+rejection and never leave deferred work behind. The guarded queued `seek`
+overload has no later result channel; execution-time rejection emits neither a
+preview nor a final update. Immediate lower
 validation errors return to the caller. A queued command has no later public
 result channel; playback execution failures continue through the internal
 recovery and notification owners.
@@ -283,6 +356,9 @@ producers while succession and the remaining runtime graph are alive.
 - [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
   terminal exception closure, scheduler rejection, and queued-command lifetime.
+- [`PlaybackGuardedSeekTest.cpp`](../../../test/unit/runtime/PlaybackGuardedSeekTest.cpp)
+  protects guarded-seek identity, validation, synchronous backlog rejection,
+  consecutive issuance, and same-track lower/publication lag.
 - [`PlaybackSuccessionLaunchTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp),
   [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp),
   and [`PlaybackSuccessionFailureTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp)

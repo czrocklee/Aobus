@@ -982,7 +982,7 @@ class CliParseTest(unittest.TestCase):
                         "test",
                         "--appkit",
                         "--scenario",
-                        "authoring",
+                        "media",
                         "--library",
                         str(library),
                         "--state-root",
@@ -998,7 +998,7 @@ class CliParseTest(unittest.TestCase):
 
         run_smoke.assert_called_once_with(
             Path(temp_dir),
-            scenario="authoring",
+            scenario="media",
             library=library.resolve(),
             state_root=state_root.resolve(),
             asan=True,
@@ -1300,6 +1300,7 @@ class CliParseTest(unittest.TestCase):
             [str(binary), "[layout]"],
             env={
                 "DISPLAY": ":42",
+                "AOBUS_OWNED_GTK_DISPLAY": "1",
                 "GTK_A11Y": "test",
                 "GTK_IM_MODULE": "simple",
                 "GDK_BACKEND": "x11",
@@ -2284,6 +2285,86 @@ class CliParseTest(unittest.TestCase):
         do_build.assert_not_called()
         execvp.assert_called_once()
 
+    def test_main_thread_checker_preserves_environment_and_app_arguments(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            developer = Path(temporary) / "Xcode With Spaces.app"
+            library = developer / "Contents/Developer/usr/lib/libMainThreadChecker.dylib"
+            library.parent.mkdir(parents=True)
+            library.touch()
+            original = {"DEVELOPER_DIR": str(developer), "DYLD_INSERT_LIBRARIES": "/caller/check.dylib", "KEEP": "yes"}
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
+                mock.patch.dict(run_command_mod.os.environ, original, clear=True),
+                mock.patch.object(run_command_mod.build, "do_build") as do_build,
+                mock.patch.object(run_command_mod.os, "execvpe") as execvpe,
+                mock.patch.object(run_command_mod.Path, "exists", return_value=True),
+            ):
+                args = self.parse(
+                    ["run", "appkit", "-n", "--main-thread-checker", "--", "--library", "/tmp/disposable music"]
+                )
+                run_command_mod.run_command(args)
+                self.assertEqual(dict(run_command_mod.os.environ), original)
+            do_build.assert_not_called()
+            executable, arguments, env = execvpe.call_args.args
+            self.assertEqual(arguments, [executable, "--library", "/tmp/disposable music"])
+            self.assertEqual(env["DYLD_INSERT_LIBRARIES"], f"/caller/check.dylib:{library}")
+            self.assertEqual(env["KEEP"], "yes")
+
+    def test_main_thread_checker_uses_selected_xcode_without_duplicate_injection(self):
+        # This macOS protocol fixture must not contain a Windows drive-letter colon.
+        developer = Path("/fixture-xcode")
+        library = developer / "usr/lib/libMainThreadChecker.dylib"
+        with (
+            mock.patch.dict(run_command_mod.os.environ, {"DYLD_INSERT_LIBRARIES": str(library)}, clear=True),
+            mock.patch.object(run_command_mod.subprocess, "check_output", return_value=f"{developer}\n") as select,
+            mock.patch.object(run_command_mod.Path, "is_file", return_value=True),
+        ):
+            env = run_command_mod._main_thread_checker_environment()
+        select.assert_called_once_with(["xcode-select", "--print-path"], text=True, stderr=subprocess.STDOUT)
+        self.assertEqual(env["DYLD_INSERT_LIBRARIES"], str(library))
+
+    def test_main_thread_checker_captures_failed_xcode_select_diagnostics(self):
+        command = ["xcode-select", "--print-path"]
+        failure = subprocess.CalledProcessError(returncode=1, cmd=command, output="xcode-select raw diagnostic\n")
+        with (
+            mock.patch.dict(run_command_mod.os.environ, {}, clear=True),
+            mock.patch.object(run_command_mod.subprocess, "check_output", side_effect=failure) as select,
+            contextlib.redirect_stderr(io.StringIO()) as errors,
+            self.assertRaises(SystemExit),
+        ):
+            run_command_mod._main_thread_checker_environment()
+
+        select.assert_called_once_with(command, text=True, stderr=subprocess.STDOUT)
+        self.assertIn("requires a full Xcode installation", errors.getvalue())
+        self.assertNotIn("xcode-select raw diagnostic", errors.getvalue())
+
+    def test_main_thread_checker_rejects_non_gui_targets_before_build(self):
+        for profile in (builddir.LINUX_PROFILE, builddir.MACOS_PROFILE, builddir.WINDOWS_PROFILE):
+            with (
+                self.subTest(profile=profile.name),
+                mock.patch.object(builddir, "platform_profile", return_value=profile),
+                mock.patch.object(run_command_mod.build, "do_build") as do_build,
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                args = self.parse(["run", "tui", "--main-thread-checker"])
+                with self.assertRaises(SystemExit):
+                    run_command_mod.run_command(args)
+                do_build.assert_not_called()
+
+    def test_main_thread_checker_missing_xcode_fails_before_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE),
+                mock.patch.dict(run_command_mod.os.environ, {"DEVELOPER_DIR": temporary}, clear=True),
+                mock.patch.object(run_command_mod.build, "do_build") as do_build,
+                contextlib.redirect_stderr(io.StringIO()) as errors,
+            ):
+                args = self.parse(["run", "appkit", "--main-thread-checker"])
+                with self.assertRaises(SystemExit):
+                    run_command_mod.run_command(args)
+                do_build.assert_not_called()
+                self.assertIn("Command Line Tools alone do not provide it", errors.getvalue())
+
     def test_linux_run_parser_exposes_cli_tui_and_gtk(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
             for app in ("cli", "tui", "gtk"):
@@ -2475,6 +2556,7 @@ class CliParseTest(unittest.TestCase):
             argv=("/build/test/ao_gtk_test", "--rng-seed", "7"),
             environment={
                 "DISPLAY": ":9",
+                "AOBUS_OWNED_GTK_DISPLAY": "1",
                 "GDK_BACKEND": "x11",
                 "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
             },
@@ -2492,8 +2574,10 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1", command)
         self.assertIn("GDK_BACKEND=x11", command)
         self.assertTrue(command.startswith("env "), command)
-        # DISPLAY names an Xvfb the run has already torn down.
+        # DISPLAY names an Xvfb the run has already torn down. Its marker must
+        # not authorize native injection against the caller's inherited display.
         self.assertNotIn("DISPLAY", command)
+        self.assertNotIn("AOBUS_OWNED_GTK_DISPLAY", command)
 
     def test_a_failed_shard_launch_closes_the_outputs_already_opened(self):
         opened = []

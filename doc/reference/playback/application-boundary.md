@@ -36,21 +36,31 @@ that role safe to call or destroy from another thread.
 | Member | Type | Meaning |
 |---|---|---|
 | `snapshot()` | `PlaybackSnapshot const&` | Borrows the last coherent state; stable until the next publication or service destruction. |
+| `elapsed()` | `std::chrono::milliseconds` | Live position correlated to the committed occurrence, nonnegative and bounded by its positive duration; uses the committed anchor if runtime/audio identity no longer matches. Does not publish. |
 | `commands()` | `PlaybackCommands&` | The mutation port. |
 | `events()` | `PlaybackEvents&` | Snapshot and transient-event subscriptions. |
 
-### Position identities
+### Playback identities
 
-`PlaybackPositionRevision` and `PlaybackFinalSeekRevision` each wrap a
-comparable `std::uint64_t value`, defaulting to `0`.
+`PlaybackOccurrenceId`, `PlaybackPositionRevision`, and
+`PlaybackFinalSeekRevision` each wrap a comparable `std::uint64_t value`,
+defaulting to `0`.
 
+- `PlaybackOccurrenceId` identifies one runtime-installed current subject.
+  Transport allocates a new nonzero value for every explicit start, replay,
+  natural advance, and deferred restore; pause, resumption of paused playback,
+  and seeks preserve it, while Stop resets it to `0`.
+  Natural terminal completion without a deferred resume also clears it; a natural successor retains its newly installed identity.
+  Starting a deferred Idle restore may install a later occurrence.
 - `PlaybackPositionRevision` identifies the playback-clock anchor. It advances
   for subject changes, successful restores, and final seeks.
 - `PlaybackFinalSeekRevision` identifies the most recent committed final seek.
   It advances only for final seeks, allowing clock consumers to distinguish a
   seek from a track transition.
 
-Neither advances for seek previews or ordinary elapsed-time progress.
+The revision identities do not advance for seek previews or ordinary
+elapsed-time progress. Playback occurrence identity is runtime-only and is not
+persisted or derived from an audio item id.
 
 ### `PlaybackSourceState`
 
@@ -73,9 +83,10 @@ snapshot.
 |---|---|---|
 | `transport` | `audio::Transport` | Idle, preparing, playing, or paused state. |
 | `ready` | `bool` | Output readiness for the current subject. |
+| `occurrenceId` | `PlaybackOccurrenceId` | Runtime identity of this installed subject occurrence; `0` means no current occurrence. |
 | `positionRevision` | `PlaybackPositionRevision` | Current playback-clock anchor identity. |
 | `finalSeekRevision` | `PlaybackFinalSeekRevision` | Most recent committed final-seek identity. |
-| `elapsed` | `std::chrono::milliseconds` | Position sampled while composing this snapshot. |
+| `elapsed` | `std::chrono::milliseconds` | Correlated transport position sample copied into the snapshot; a metadata-only publication may retain an older sample. The clock anchor is the tuple of transport state, `positionRevision`, and duration. |
 | `duration` | `std::chrono::milliseconds` | Current subject duration. |
 | `nowPlaying` | `NowPlayingInfo` | Current subject and display metadata. |
 | `volume` | `VolumeState` | Level, mute, availability, and backend capability. |
@@ -134,10 +145,14 @@ new value; copy it when an older value is needed for comparison.
 |---|---|---|
 | `startFromView` | `(ViewId, TrackId)` | `Result<>`; synchronous validation and async-task admission, or queued command admission. Success does not prove that the decoder opened. |
 | `next` / `previous` / `clearSequence` | `()` | `void` |
+| `tryNext` | `(PlaybackOccurrenceId)` | `bool`; synchronously admits `Next` only when the occurrence remains the runtime subject and, for active audio, Engine's settled realtime item. It rejects closed, commit/publication, backlog, stale, and empty-subject states without queuing. A matching restored Idle occurrence is admissible without an active Engine item. |
 | `setPlaybackMode` | `(ShuffleMode, RepeatMode)` | `void`; settles the pair as one mode update. |
 | `setShuffleMode` / `setRepeatMode` | `(mode)` | `void` |
 | `pause` / `resume` / `stop` | `()` | `void` |
-| `seek` | `(milliseconds, PlaybackSeekMode = Final)` | `void` |
+| `seek` | `(milliseconds, PlaybackSeekMode = Final)` | `void`; unconditional compatibility command using the normal FIFO. |
+| guarded `seek` | `(PlaybackOccurrenceId, milliseconds, PlaybackSeekMode = Final)` | `void`; captures occurrence, elapsed position, and mode by value, uses the normal FIFO, and validates occurrence and range when it reaches Transport. A stale request publishes no preview or final update. |
+| `seekBy` | `(PlaybackOccurrenceId, milliseconds, PlaybackRelativeSeekEndBehavior = Clamp)` | `void`; captures occurrence and delta in the normal FIFO and samples live elapsed at execution. `Clamp` bounds the target to the current positive duration and issues a guarded Final; `Next` advances only for a positive offset strictly past the live endpoint, with a successor and matching runtime/audio identity. |
+| `trySeek` | `(PlaybackOccurrenceId, milliseconds)` | `bool`; synchronously issues a final seek only when the occurrence and position remain valid. Returns `false` when closed, inside commit/publication, while a command backlog exists, or when lower identity validation rejects; it never queues. `true` reports issuance, while audio errors remain in transport status. |
 | `setOutputDevice` | `(BackendId, DeviceId, ProfileId)` | `void` |
 | `setVolume` / `setMuted` | `(value)` | `void` |
 | `revealPlayingTrack` | `()` | `void` |
@@ -150,8 +165,9 @@ retain their call-level `Result` on `AppRuntime`.
 
 - A borrowed snapshot reference is valid only until the next publication or
   service destruction.
-- `PlaybackTransportSnapshot` equality excludes `elapsed`; the two position
-  identities make discontinuities part of semantic equality.
+- `PlaybackTransportSnapshot` equality excludes `elapsed`; occurrence and the
+  two revision identities make subject replacement and discontinuities part of
+  semantic equality.
 - `PlaybackSeekMode` accepts only `Final` and `Preview`.
 - Reveal requests default unspecified view and list fields to their invalid ids.
 - Service access, command calls, subscriptions, subscription release, and
@@ -174,9 +190,10 @@ keeps no source-compatibility constraint for it.
 
 - [`PlaybackService.h`](../../../app/include/ao/rt/playback/PlaybackService.h),
   [`PlaybackCommands.h`](../../../app/include/ao/rt/playback/PlaybackCommands.h),
-  [`PlaybackEvents.h`](../../../app/include/ao/rt/playback/PlaybackEvents.h), and
-  [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h)
-  declare the surface.
+  [`PlaybackEvents.h`](../../../app/include/ao/rt/playback/PlaybackEvents.h),
+  [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h),
+  and [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) declare the
+  surface.
 - [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp)
   implements command ordering, supersession, commit composition, and
   publication.
@@ -186,9 +203,13 @@ keeps no source-compatibility constraint for it.
 ## Test authority
 
 - [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
-  protects surface closure, coherent state, position identities,
+  protects surface closure, coherent state, position identities, guarded Next,
   elapsed-insensitive equality, observer deferral, supersession, queue lifetime,
   and end-of-turn coalescing.
+- [`PlaybackGuardedSeekTest.cpp`](../../../test/unit/runtime/PlaybackGuardedSeekTest.cpp)
+  protects occurrence-matched final seek issuance, guarded queued Preview/Final
+  settlement, synchronous backlog and input rejection, same-track replay, and
+  execution-time stale rejection.
 - Fatal subprocess coverage protects off-executor snapshot, command, and event
   access.
 

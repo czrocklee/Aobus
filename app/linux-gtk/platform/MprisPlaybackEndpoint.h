@@ -33,16 +33,16 @@ namespace ao::gtk::platform
 
     bool tryDispatchPlayerMethod(std::string_view methodName) const;
     bool tryDispatchRootMethod(std::string_view methodName) const;
-    bool tryHandleSeek(std::int64_t offsetUs);
-    bool tryHandleSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
+    void handleSeek(std::int64_t offsetUs);
+    void handleSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
     bool tryDispatchSetRate(double rate) const;
     void dispatchSetVolume(double volume);
     void dispatchSetShuffle(bool shuffle);
     bool tryDispatchSetLoopStatus(std::string_view loopStatus);
-    std::optional<bool> playerCapabilityProperty(std::string_view propertyName) const;
+    std::optional<bool> playerCapabilityProperty(std::string_view propertyName,
+                                                 rt::PlaybackTransportSnapshot const& state) const;
 
   private:
-    static bool isRelativeSeekPastEnd(rt::PlaybackTransportSnapshot const& state, std::int64_t offsetUs) noexcept;
     static std::optional<uimodel::PlaybackCommand> commandForPlayerMethod(std::string_view methodName) noexcept;
 
     rt::PlaybackService& _playback;

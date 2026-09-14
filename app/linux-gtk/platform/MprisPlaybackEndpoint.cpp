@@ -55,54 +55,47 @@ namespace ao::gtk::platform
     return false;
   }
 
-  bool MprisPlaybackEndpoint::tryHandleSeek(std::int64_t const offsetUs)
+  void MprisPlaybackEndpoint::handleSeek(std::int64_t const offsetUs)
   {
-    auto const& state = _playback.snapshot().transport;
+    auto const state = _playback.snapshot().transport;
 
     if (state.nowPlaying.trackId == kInvalidTrackId)
     {
-      return true;
+      return;
     }
 
-    if (isRelativeSeekPastEnd(state, offsetUs))
-    {
-      _actions.tryExecute(uimodel::PlaybackCommand::Next);
-      return true;
-    }
-
-    _playbackCommands.seek(MprisBridge::seekTargetElapsed(state, offsetUs));
-    return true;
+    _playbackCommands.seekBy(
+      state.occurrenceId, MprisBridge::fromMprisMicroseconds(offsetUs), rt::PlaybackRelativeSeekEndBehavior::Next);
   }
 
-  bool MprisPlaybackEndpoint::tryHandleSetPosition(std::string_view const requestedTrackObjectPath,
-                                                   std::int64_t const positionUs)
+  void MprisPlaybackEndpoint::handleSetPosition(std::string_view const requestedTrackObjectPath,
+                                                std::int64_t const positionUs)
   {
-    auto const& state = _playback.snapshot().transport;
+    auto const state = _playback.snapshot().transport;
 
     if (state.nowPlaying.trackId == kInvalidTrackId)
     {
-      return true;
+      return;
     }
 
-    if (requestedTrackObjectPath != MprisBridge::trackObjectPath(state.nowPlaying.trackId))
+    if (requestedTrackObjectPath != MprisBridge::trackObjectPath(state.nowPlaying.trackId, state.occurrenceId))
     {
-      return true;
+      return;
     }
 
     if (positionUs < 0)
     {
-      return true;
+      return;
     }
 
     auto const elapsed = MprisBridge::fromMprisMicroseconds(positionUs);
 
     if (state.duration > std::chrono::milliseconds{0} && elapsed > state.duration)
     {
-      return true;
+      return;
     }
 
-    _playbackCommands.seek(elapsed);
-    return true;
+    _playbackCommands.seek(state.occurrenceId, elapsed);
   }
 
   bool MprisPlaybackEndpoint::tryDispatchSetRate(double const rate) const
@@ -143,8 +136,15 @@ namespace ao::gtk::platform
     return true;
   }
 
-  std::optional<bool> MprisPlaybackEndpoint::playerCapabilityProperty(std::string_view const propertyName) const
+  std::optional<bool> MprisPlaybackEndpoint::playerCapabilityProperty(std::string_view const propertyName,
+                                                                      rt::PlaybackTransportSnapshot const& state) const
   {
+    if (propertyName == "CanSeek")
+    {
+      return state.nowPlaying.trackId != kInvalidTrackId && state.occurrenceId.value != 0 &&
+             state.duration > std::chrono::milliseconds{0};
+    }
+
     if (propertyName == "CanGoNext")
     {
       return _actions.isCapable(uimodel::PlaybackCommand::Next);
@@ -171,32 +171,6 @@ namespace ao::gtk::platform
     }
 
     return std::nullopt;
-  }
-
-  bool MprisPlaybackEndpoint::isRelativeSeekPastEnd(rt::PlaybackTransportSnapshot const& state,
-                                                    std::int64_t const offsetUs) noexcept
-  {
-    if (state.duration <= std::chrono::milliseconds{0} || offsetUs <= 0)
-    {
-      return false;
-    }
-
-    auto const offsetMs = MprisBridge::fromMprisMicroseconds(offsetUs).count();
-
-    if (offsetMs <= 0)
-    {
-      return false;
-    }
-
-    auto const elapsedMs = state.elapsed.count();
-    auto const durationMs = state.duration.count();
-
-    if (elapsedMs >= durationMs)
-    {
-      return true;
-    }
-
-    return offsetMs > durationMs - elapsedMs;
   }
 
   std::optional<uimodel::PlaybackCommand> MprisPlaybackEndpoint::commandForPlayerMethod(

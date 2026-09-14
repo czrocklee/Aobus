@@ -123,6 +123,13 @@ namespace ao::audio
     Engine::PreparedCancellationBarrier stopWithBarrier();
     void stop();
     void seek(std::chrono::milliseconds offset);
+    /// Returns true when the expected current item matched and the seek was
+    /// issued. Audio failures remain observable through transport status;
+    /// false means rejection, never queued work.
+    bool trySeek(Engine::PlaybackItemId expectedItemId, std::chrono::milliseconds offset);
+    /// Returns whether Engine's settled realtime timeline still exposes the
+    /// expected nonzero item as active.
+    bool isCurrentPlaybackItem(Engine::PlaybackItemId expectedItemId);
 
     Result<> setVolume(float vol);
     Result<> setMuted(bool muted);

@@ -79,9 +79,17 @@ selecting such a file explicitly fails.
 The `.mm` suffix selects a language, not a platform owner. Add a new native
 target's source tree to platform coverage with the target itself.
 
+For the native desktop media adapter, select the build directory whose
+`compile_commands.json` includes that translation unit:
+
+```bash
+./ao analyze app/macos-appkit/MediaPlayerAdapter.mm --path /path/to/native/build --fail-on-diagnostics
+```
+
 The [LLVM check catalog](https://releases.llvm.org/22.1.0/tools/clang/tools/extra/docs/clang-tidy/checks/list.html)
 and [analyzer catalog](https://clang.llvm.org/docs/analyzer/checkers.html)
-define the upstream checks. Static analysis does not replace runtime validation.
+define the upstream checks. Runtime evidence and the Main Thread Checker
+remain separate from static analysis; see [macOS development](macos.md).
 
 ## Platform coverage
 

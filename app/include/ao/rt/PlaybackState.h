@@ -93,9 +93,19 @@ namespace ao::rt
     bool operator==(QualityState const&) const = default;
   };
 
+  /** Runtime identity of one installed playback subject occurrence. */
+  struct PlaybackOccurrenceId final
+  {
+    std::uint64_t value = 0;
+
+    auto operator<=>(PlaybackOccurrenceId const&) const = default;
+    bool operator==(PlaybackOccurrenceId const&) const = default;
+  };
+
   struct PlaybackState final
   {
     audio::Transport transport = audio::Transport::Idle;
+    PlaybackOccurrenceId occurrenceId{};
     std::chrono::milliseconds elapsed{0};
     std::chrono::milliseconds duration{0};
     bool ready = false;
