@@ -217,7 +217,7 @@ LINUX_PROFILE = PlatformProfile(
 )
 
 # macOS builds the terminal and command-line frontends with Core Audio output.
-# There is no GTK or Cocoa desktop frontend, so the GTK suites do not exist.
+# The AppKit desktop is built by native checks; its GUI smoke runs separately.
 # Python repository tooling remains owned by Linux and Windows. Native
 # clang-tidy integration is supported on Darwin.
 MACOS_PROFILE = PlatformProfile(
@@ -225,7 +225,7 @@ MACOS_PROFILE = PlatformProfile(
     build_root=BUILD_ROOT,
     presets=MACOS_PRESETS,
     executable_suffix="",
-    apps=("cli", "tui"),
+    apps=("cli", "tui", "appkit"),
     default_suites=("core", "tui"),
     all_suites=("core", "tui", "cli", "integration", "lint"),
     tsan_suites=("core",),

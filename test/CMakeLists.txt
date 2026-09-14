@@ -31,6 +31,33 @@ if(LINUX)
   target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
 endif()
 
+# This opt-in GUI harness needs a console session and disposable media. It is
+# built by native checks but deliberately excluded from the unattended suites.
+if(APPLE)
+  add_executable(ao_appkit_smoke MACOSX_BUNDLE
+    integration/macos/AppKitSmokeMain.mm
+    integration/macos/AppKitScenarioSupport.mm
+    integration/macos/AppKitScenarioSupport.h
+    integration/macos/AppKitDesktopScenario.mm
+    integration/macos/AppKitDesktopScenarioHelpers.h
+    integration/macos/AppKitDesktopScenarioHelpers.mm
+    integration/macos/AppKitAuthoringScenario.mm
+    integration/macos/AppKitActivityExpirationScenario.mm
+    integration/macos/AppKitArtworkScenario.mm
+    integration/macos/AppKitPresentationScenario.mm
+    integration/macos/AppKitPlaybackScenario.mm
+    integration/macos/AppKitPlaybackScenario.h
+    unit/media/wav/TestWav.cpp
+    unit/media/wav/TestWav.h
+  )
+  target_link_libraries(ao_appkit_smoke PRIVATE ao_appkit)
+  target_include_directories(ao_appkit_smoke PRIVATE "${CMAKE_SOURCE_DIR}")
+  set_target_properties(ao_appkit_smoke PROPERTIES
+    OBJCXX_STANDARD 26 OBJCXX_STANDARD_REQUIRED ON
+    MACOSX_BUNDLE_GUI_IDENTIFIER "org.aobus.desktop.smoke"
+    MACOSX_BUNDLE_BUNDLE_NAME "Aobus Native Tests")
+endif()
+
 # Owned subprocess coverage uses minimal self-reentering executables so fatal
 # startup, abort behavior, and normal observations stay independent of Catch2.
 add_library(ao_fatal_probe_support STATIC
@@ -235,6 +262,7 @@ add_executable(ao_core_test
     unit/core/FatalProbeTest.cpp
 
     # localization foundation tests
+    unit/i18n/AppKitMessageCatalogTest.cpp
     unit/i18n/CatalogPatternTest.cpp
     unit/i18n/IcuTextOrderingTest.cpp
     unit/i18n/IcuCompletionAliasesTest.cpp

@@ -13,6 +13,7 @@ class TidyClassifyTest(unittest.TestCase):
     def test_production_code_is_strict(self):
         self.assertEqual(tidy.classify(Path("/repo/lib/audio/Foo.cpp"), explicit=False), "STRICT")
         self.assertEqual(tidy.classify(Path("/repo/app/linux-gtk/Window.cpp"), explicit=False), "STRICT")
+        self.assertEqual(tidy.classify(Path("/repo/app/macos-appkit/DesktopApplication.mm"), explicit=False), "STRICT")
         self.assertEqual(tidy.classify(Path("/repo/include/aobus/Foo.h"), explicit=False), "STRICT")
 
     def test_lint_checker_sources_are_strict_despite_tool_prefix(self):

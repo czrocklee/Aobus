@@ -9,6 +9,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ao::rt
 {
@@ -48,6 +49,8 @@ namespace ao::uimodel
     ~ActivityStatusViewModel();
 
     ActivityStatusViewState const& viewState() const noexcept;
+    // Hosts may coalesce renders; schedule against this model-owned deadline.
+    std::optional<std::chrono::steady_clock::duration> compactAutoDismissRemaining() const;
     bool tryAutoDismissCompactIfDue();
     void autoDismissCompact();
     void dismissCompact();

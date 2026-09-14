@@ -52,7 +52,7 @@ Use the [specification template](../template/spec.md).
 
 ## Application
 
-- [Desktop library lifecycle](application/desktop-library-lifecycle.md) defines the shared GTK and WinUI root selection, successor-process handoff, durable-root admission, and detached-launch contract.
+- [Desktop library lifecycle](application/desktop-library-lifecycle.md) defines the shared GTK, WinUI, and AppKit root selection, successor-process handoff, durable-root admission, and detached-launch contract.
 
 ## Playback
 

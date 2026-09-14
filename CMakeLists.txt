@@ -279,6 +279,18 @@ if(AOBUS_BUILD_TESTS)
   enable_testing()
 endif()
 
+# Both the AppKit frontend and its native test bundle compile Objective-C++.
+# Enable the language in their common directory so sibling test targets inherit
+# the same governed compiler and C++26 mapping.
+if(APPLE)
+  set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}")
+  enable_language(OBJCXX)
+  if(NOT CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION)
+    set(CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION "-std=c++26")
+    set(CMAKE_OBJCXX26_EXTENSION_COMPILE_OPTION "-std=gnu++26")
+  endif()
+endif()
+
 add_subdirectory(lib)
 add_subdirectory(app)
 if(AOBUS_BUILD_LINT_PLUGIN)

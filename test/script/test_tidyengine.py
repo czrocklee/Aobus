@@ -331,6 +331,27 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
 
 
 class CompileCommandCoverageTest(unittest.TestCase):
+    def test_objcxx_uses_its_exact_native_compile_command(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            source = root / "app" / "macos-appkit" / "DesktopApplication.mm"
+            source.parent.mkdir(parents=True)
+            source.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(build_dir), "file": str(source), "command": f"clang++ -c {source}"}]),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.MACOS_PROFILE
+            ):
+                plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
+            self.assertEqual(
+                [(target.selected, target.translation_unit) for target in plan.targets], [(source, source)]
+            )
+            self.assertEqual(list(plan.deferred), [])
+
     def test_every_tracked_source_is_in_hygiene_scope_and_cpp_has_a_native_owner(self):
         profiles = (
             tidyengine.builddir.LINUX_PROFILE,
@@ -526,9 +547,20 @@ class CompileCommandCoverageTest(unittest.TestCase):
         ):
             self.assertTrue(tidyengine._is_platform_incompatible(source, root))
 
+    def test_macos_integration_sources_are_incompatible_with_other_native_graphs(self):
+        root = Path("/repo")
+        source = root / "test" / "integration" / "macos" / "AppKitSmokeMain.mm"
+
+        for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
+            with self.subTest(profile=profile.name):
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+
     def test_macos_backend_source_is_incompatible_with_every_other_native_graph(self):
         root = Path("/repo")
         sources = (
+            root / "app" / "macos-appkit" / "DesktopApplication.mm",
+            root / "app" / "macos-appkit" / "MainRunLoopExecutor.h",
             root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp",
             root / "lib" / "audio" / "backend" / "CoreAudioBackend.cpp",
             root / "lib" / "audio" / "backend" / "detail" / "CoreFoundationString.cpp",

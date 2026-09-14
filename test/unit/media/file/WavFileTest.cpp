@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "lib/media/file/mpeg/id3v2/Layout.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/file/TestFile.h"
@@ -18,7 +17,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <vector>
 
 namespace ao::media::file::wav::test
@@ -27,50 +25,11 @@ namespace ao::media::file::wav::test
 
   namespace
   {
-    namespace id3v2 = ao::media::file::mpeg::id3v2;
-
     ao::media::file::test::RecordedContent readContent(File const& file)
     {
       auto res = file.readContent();
       REQUIRE(res);
       return *res;
-    }
-
-    void addPictureFrame(std::vector<std::uint8_t>& data, std::array<std::uint8_t, 3> const imageData)
-    {
-      auto body = std::vector<std::uint8_t>{0}; // Latin1
-      body.insert(body.end(), {'i', 'm', 'a', 'g', 'e', '/', 'p', 'n', 'g', 0});
-      body.insert(body.end(), {3, 0}); // Front cover and empty description
-      body.insert(body.end(), imageData.begin(), imageData.end());
-
-      auto frame = id3v2::V23CommonFrameLayout{};
-      std::memcpy(frame.id.data(), "APIC", frame.id.size());
-      frame.size = static_cast<std::uint32_t>(body.size());
-      auto const* const frameBytes = reinterpret_cast<std::uint8_t const*>(&frame);
-      data.insert(data.end(), frameBytes, frameBytes + sizeof(frame));
-      data.insert(data.end(), body.begin(), body.end());
-    }
-
-    std::vector<std::uint8_t> makeId3WithPicture()
-    {
-      auto body = std::vector<std::uint8_t>{};
-      addPictureFrame(body, {0x12, 0x34, 0x56});
-
-      auto header = id3v2::HeaderLayout{};
-      std::memcpy(header.id.data(), "ID3", header.id.size());
-      header.majorVersion = 3;
-
-      auto const size = static_cast<std::uint32_t>(body.size());
-      header.size.data[0] = (size >> 21U) & 0x7FU;
-      header.size.data[1] = (size >> 14U) & 0x7FU;
-      header.size.data[2] = (size >> 7U) & 0x7FU;
-      header.size.data[3] = size & 0x7FU;
-
-      auto data = std::vector<std::uint8_t>{};
-      auto const* const headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
-      data.insert(data.end(), body.begin(), body.end());
-      return data;
     }
   } // namespace
 
@@ -143,7 +102,7 @@ namespace ao::media::file::wav::test
 
   TEST_CASE("WAV File - preserves ID3 APIC cover art", "[media][regression][wav]")
   {
-    auto const id3 = makeId3WithPicture();
+    auto const id3 = ao::test::wav::makeId3WithPicture(std::array<std::uint8_t, 3>{0x12, 0x34, 0x56});
     auto const data = ao::test::wav::makeWav({
       .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = id3}}},
     });

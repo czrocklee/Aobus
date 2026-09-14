@@ -1,4 +1,4 @@
-"""ao run — run Aobus applications (cli, tui, or gtk)."""
+"""ao run — run applications enabled by the native profile."""
 
 import argparse
 import os
@@ -28,6 +28,7 @@ class AppSpec:
 
 
 APPS = {
+    "appkit": AppSpec("aobus-appkit", Path("app/macos-appkit/aobus-appkit.app/Contents/MacOS/aobus-appkit")),
     "cli": AppSpec("aobus", Path("app/cli/aobus")),
     "tui": AppSpec("aobus-tui", Path("app/tui/aobus-tui")),
     "gtk": AppSpec("aobus-gtk", Path("app/linux-gtk/aobus-gtk")),
@@ -42,6 +43,7 @@ examples:
   ./ao run cli -n           # run the CLI client without rebuilding
   ./ao run cli release      # build and run the CLI client with IPO/LTO
   ./ao run gtk --clang      # build and run the GTK client built using clang compiler
+  ./ao run appkit           # build and run the native macOS desktop
   ./ao run tui -- --library ~/Music   # forward option flags to the application after --
 """
 

@@ -13,6 +13,7 @@
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -168,6 +169,16 @@ namespace ao::uimodel
   ActivityStatusViewState const& ActivityStatusViewModel::viewState() const noexcept
   {
     return _implPtr->feedProjection.viewState();
+  }
+
+  std::optional<std::chrono::steady_clock::duration> ActivityStatusViewModel::compactAutoDismissRemaining() const
+  {
+    if (!_implPtr->optAutoDismissDeadline)
+    {
+      return std::nullopt;
+    }
+
+    return std::max(std::chrono::steady_clock::duration::zero(), *_implPtr->optAutoDismissDeadline - _implPtr->now());
   }
 
   bool ActivityStatusViewModel::tryAutoDismissCompactIfDue()

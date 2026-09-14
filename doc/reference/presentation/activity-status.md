@@ -67,12 +67,16 @@ When `libraryJobs` is present, it subscribes to that job owner's task progress a
 | Member | Return |
 |---|---|
 | `viewState() const noexcept` | `ActivityStatusViewState const&` |
+| `compactAutoDismissRemaining() const` | `std::optional<std::chrono::steady_clock::duration>` |
 | `tryAutoDismissCompactIfDue()` | `bool` |
 | `autoDismissCompact()` | `void` |
 | `dismissCompact()` | `void` |
 | `hideDetailNotification(NotificationId)` | `void` |
 
 `tryAutoDismissCompactIfDue()` returns true only when it clears a due temporary compact presentation.
+`compactAutoDismissRemaining()` returns the remaining model-owned lifetime, clamped to zero when due,
+or `nullopt` when no local deadline exists. Coalescing hosts use it to schedule their next wakeup and
+recheck it after every expiration callback, including callbacks that find the presentation not yet due.
 `autoDismissCompact()` is used by a frontend-owned timer that already waited for `optAutoDismissTimeout`.
 Neither command mutates the runtime notification feed.
 

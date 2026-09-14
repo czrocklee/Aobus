@@ -409,7 +409,13 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         or "pipewire" in joined
         or stem.endswith("linux")
     )
-    owned_by_macos = "coreaudio" in joined or "corefoundation" in joined or stem.endswith("macos")
+    owned_by_macos = (
+        parts[:2] == ("app", "macos-appkit")
+        or parts[:3] == ("test", "integration", "macos")
+        or "coreaudio" in joined
+        or "corefoundation" in joined
+        or stem.endswith("macos")
+    )
     # POSIX sources belong to Linux and macOS alike, so only Windows defers
     # them. They are deliberately not part of owned_by_linux for that reason.
     owned_by_posix = stem.endswith("posix")

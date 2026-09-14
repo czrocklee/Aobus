@@ -76,7 +76,7 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(profile.presets["debug"], "macos-debug")
             self.assertEqual(profile.presets["profile"], "macos-profile")
             self.assertEqual(profile.compiler, "clang")
-            self.assertEqual(profile.apps, ("cli", "tui"))
+            self.assertEqual(profile.apps, ("cli", "tui", "appkit"))
             self.assertEqual(profile.default_suites, ("core", "tui"))
             self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "lint"))
             self.assertEqual(profile.tsan_suites, ("core",))

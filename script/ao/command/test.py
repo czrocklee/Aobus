@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import uuid
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
 
-from ..core import builddir, buildlock, linttest, proc, tooltest, workspace_cache
+from ..core import appkitprocess, builddir, buildlock, linttest, proc, tooltest, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 from . import build
@@ -61,15 +62,20 @@ examples:
   ./ao test --tsan --repeat 20        # repeat the TSan-safe suite group
 """
 
+APPKIT_EPILOG = """\
+  ./ao test --appkit --scenario desktop --library /tmp/music --state-root /tmp/aobus-appkit-state
+"""
+
 
 @dataclass(frozen=True)
 class SuiteSpec:
     label: str
-    kind: Literal["catch2", "tooling", "lint"]
+    kind: Literal["appkit", "catch2", "tooling", "lint"]
     target: str | None = None
 
 
 SUITES = {
+    "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
     "core": SuiteSpec("Core", "catch2", "ao_core_test"),
     "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
     "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),
@@ -79,9 +85,21 @@ SUITES = {
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }
 
+APPKIT_SCENARIOS = ("desktop", "authoring", "presentation")
+APPKIT_SUCCESSOR_TIMEOUT_SECONDS = 60.0
+APPKIT_PARENT_TIMEOUT_SECONDS = 120.0
+APPKIT_PARENT_TERMINATE_SECONDS = 5.0
+APPKIT_RUN_ID_ENV = "AOBUS_APPKIT_TEST_RUN_ID"
+
 SUITE_TARGETS = {
     name: [spec.target] for name, spec in SUITES.items() if spec.kind == "catch2" and spec.target is not None
 }
+
+
+def selectable_suites() -> tuple[str, ...]:
+    """Return individually selectable suites for the active native profile."""
+    profile = builddir.platform_profile()
+    return (*profile.all_suites, "appkit") if profile.name == "macos" else profile.all_suites
 
 
 def suite_groups() -> dict[str, tuple[str, ...]]:
@@ -105,9 +123,10 @@ def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
         selection = "tsan"
     groups = suite_groups()
     suites = groups.get(selection, (selection,))
-    unavailable = [suite for suite in suites if suite not in profile.all_suites]
+    available_suites = selectable_suites()
+    unavailable = [suite for suite in suites if suite not in available_suites]
     if unavailable:
-        available = ", ".join(profile.all_suites)
+        available = ", ".join(available_suites)
         raise die(f"suite '{unavailable[0]}' is unavailable on this platform. Available suites: {available}.")
     return suites
 
@@ -183,18 +202,23 @@ def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     profile = builddir.platform_profile()
+    selectable = selectable_suites()
     parser = subparsers.add_parser(
-        NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+        NAME,
+        help=HELP,
+        description=HELP,
+        epilog=EPILOG + APPKIT_EPILOG if profile.name == "macos" else EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("filter", nargs="?", default="", help="Catch2 test filter")
     suite = parser.add_mutually_exclusive_group()
     suite.add_argument(
         "--suite",
-        choices=(*profile.all_suites, *suite_groups()),
+        choices=(*selectable, *suite_groups()),
         default="default",
         help="test suite or group (default: default)",
     )
-    for name in profile.all_suites:
+    for name in selectable:
         suite.add_argument(
             f"--{name}",
             dest="suite",
@@ -233,6 +257,18 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         metavar="N",
         help="repeat selected tests N times and stop on the first failure",
     )
+    if profile.name == "macos":
+        parser.add_argument(
+            "--scenario",
+            choices=APPKIT_SCENARIOS,
+            help="AppKit smoke scenario (default: desktop; valid only with --appkit)",
+        )
+        parser.add_argument(
+            "--library", metavar="<dir>", help="absent or empty disposable AppKit media directory (requires --appkit)"
+        )
+        parser.add_argument(
+            "--state-root", metavar="<dir>", help="absent or empty isolated AppKit state directory (requires --appkit)"
+        )
     parser.set_defaults(func=run_command)
 
 
@@ -569,6 +605,118 @@ def _tsan_env(build_dir: Path, *, enabled: bool) -> dict[str, str]:
     return {"TSAN_OPTIONS": ":".join((*retained_options, *required_options))}
 
 
+def _sanitizer_env(name: str, build_dir: Path, *, asan: bool, tsan: bool) -> dict[str, str]:
+    return {
+        **_macos_tui_asan_env(name, build_dir, enabled=asan),
+        **_lsan_env(build_dir, enabled=asan),
+        **_ubsan_env(build_dir, enabled=asan),
+        **_tsan_env(build_dir, enabled=tsan),
+    }
+
+
+def _require_appkit_marker(marker: Path, run_id: str, phase: str) -> None:
+    expected = f"{run_id}\n"
+    try:
+        observed = marker.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise die(f"AppKit {phase} did not write a readable marker at {marker}: {exc}") from exc
+    if observed != expected:
+        raise die(f"AppKit {phase} marker at {marker} does not belong to this invocation.")
+
+
+def _resolve_appkit_fixtures(library: Path, state_root: Path) -> tuple[Path, Path]:
+    try:
+        resolved_library = library.resolve()
+        resolved_state_root = state_root.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise die(f"Cannot resolve AppKit smoke fixture paths: {exc}") from exc
+
+    if (
+        resolved_state_root == resolved_library
+        or resolved_state_root in resolved_library.parents
+        or resolved_library in resolved_state_root.parents
+    ):
+        raise die("AppKit --library and --state-root must not equal or contain one another.")
+    try:
+        for option, path in (("--library", resolved_library), ("--state-root", resolved_state_root)):
+            if path.exists():
+                if not path.is_dir():
+                    raise die(f"AppKit {option} is not a directory: {path}")
+                if next(path.iterdir(), None) is not None:
+                    raise die(f"AppKit {option} must be absent or empty: {path}")
+    except OSError as exc:
+        raise die(f"Cannot inspect AppKit fixture paths: {exc}") from exc
+    return resolved_library, resolved_state_root
+
+
+def _run_appkit_parent(command: list[str], environment: dict[str, str]) -> int:
+    parent = subprocess.Popen(command, cwd=PROJECT_ROOT, env={**os.environ, **environment})
+    try:
+        return parent.wait(timeout=APPKIT_PARENT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        print(
+            f"Error: AppKit smoke parent exceeded the {APPKIT_PARENT_TIMEOUT_SECONDS:g}-second controller timeout.",
+            file=sys.stderr,
+        )
+        try:
+            parent.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            parent.wait(timeout=APPKIT_PARENT_TERMINATE_SECONDS)
+        except subprocess.TimeoutExpired:
+            parent.kill()
+            parent.wait()
+        return 1
+
+
+def run_appkit_smoke(
+    build_dir: Path,
+    *,
+    scenario: str,
+    library: Path,
+    state_root: Path,
+    asan: bool = False,
+    tsan: bool = False,
+) -> int:
+    library, state_root = _resolve_appkit_fixtures(library, state_root)
+    binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
+    if not binary.is_file():
+        raise die(f"AppKit smoke executable not found at {binary}. Build first, e.g. with ./ao build.")
+
+    command = [
+        str(binary),
+        "--scenario",
+        scenario,
+        "--library",
+        str(library),
+        "--state-root",
+        str(state_root),
+    ]
+    print("=====================================")
+    print(f"Running AppKit Smoke ({scenario})")
+    print(f"CMD: {' '.join(command)}")
+    print("=====================================")
+    sanitizer_env = _sanitizer_env("appkit", build_dir, asan=asan, tsan=tsan)
+    run_id = uuid.uuid4().hex
+    environment = {**sanitizer_env, APPKIT_RUN_ID_ENV: run_id}
+    if scenario != "desktop":
+        return _run_appkit_parent(command, environment)
+    status = appkitprocess.run_desktop(
+        command,
+        cwd=PROJECT_ROOT,
+        environment=environment,
+        parent_timeout=APPKIT_PARENT_TIMEOUT_SECONDS,
+        successor_timeout=APPKIT_SUCCESSOR_TIMEOUT_SECONDS,
+        terminate_timeout=APPKIT_PARENT_TERMINATE_SECONDS,
+    )
+    if status != 0:
+        return status
+    _require_appkit_marker(state_root / "desktop-pass.txt", run_id, "desktop parent")
+    _require_appkit_marker(state_root / "successor-pass.txt", run_id, "desktop successor")
+    return 0
+
+
 def run_suite(
     name: str,
     build_dir: Path,
@@ -603,12 +751,7 @@ def run_suite(
     print(f"CMD: {' '.join(command)}" + (f" (in {shards} shards)" if sharded else ""))
     print("=====================================")
 
-    sanitizer_env = {
-        **_macos_tui_asan_env(name, build_dir, enabled=asan),
-        **_lsan_env(build_dir, enabled=asan),
-        **_ubsan_env(build_dir, enabled=asan),
-        **_tsan_env(build_dir, enabled=tsan),
-    }
+    sanitizer_env = _sanitizer_env(name, build_dir, asan=asan, tsan=tsan)
 
     def execute(environments: list[dict[str, str]]) -> int:
         if sharded:
@@ -688,8 +831,27 @@ def run_suites(
     return 0
 
 
+def _appkit_options(args: argparse.Namespace) -> tuple[str, Path, Path] | None:
+    scenario = getattr(args, "scenario", None)
+    library = getattr(args, "library", None)
+    state_root = getattr(args, "state_root", None)
+    if args.suite != "appkit":
+        if scenario is not None or library is not None or state_root is not None:
+            raise die("--scenario, --library, and --state-root are valid only with --appkit.")
+        return None
+
+    if args.filter or args.list or args.repeat != 1:
+        raise die("AppKit smoke does not accept Catch2 filters, --list, or --repeat.")
+    if library is None or state_root is None:
+        missing = [option for option, value in (("--library", library), ("--state-root", state_root)) if value is None]
+        raise die(f"AppKit smoke requires {' and '.join(missing)}; no user configuration is used as a fallback.")
+    resolved_library, resolved_state_root = _resolve_appkit_fixtures(Path(library), Path(state_root))
+    return scenario or "desktop", resolved_library, resolved_state_root
+
+
 def run_command(args: argparse.Namespace) -> int:
     build.validate_build_options(args)
+    appkit_options = _appkit_options(args)
     build_dir = (
         Path(args.path) if args.path else builddir.build_dir("debug", clang=args.clang, asan=args.asan, tsan=args.tsan)
     )
@@ -721,6 +883,17 @@ def run_command(args: argparse.Namespace) -> int:
                 build.sync_compiler_cache(build_dir, unsupported_reason=sanitizer)
                 if run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT) != 0:
                     raise die("test build failed.")
+
+    if appkit_options is not None:
+        scenario, library, state_root = appkit_options
+        return run_appkit_smoke(
+            build_dir,
+            scenario=scenario,
+            library=library,
+            state_root=state_root,
+            asan=args.asan,
+            tsan=args.tsan,
+        )
 
     options = {
         "test_filter": test_filter,

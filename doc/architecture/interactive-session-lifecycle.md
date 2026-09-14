@@ -9,7 +9,7 @@ summary: Defines construction, restoration, library transition, checkpointing, a
 
 ## Scope
 
-This document owns how GTK, WinUI, and TUI construct, retain, restore, checkpoint, transition, and destroy a library-bound `AppRuntime` graph.
+This document owns how GTK, WinUI, AppKit, and TUI construct, retain, restore, checkpoint, transition, and destroy a library-bound `AppRuntime` graph.
 It defines composition-root responsibilities, global versus per-library state lifetimes, observer ordering, and current frontend differences.
 
 It does not own workspace state semantics, playback succession, managed-state schemas, presentation policy, or exact GTK transitions.
@@ -18,10 +18,10 @@ Those facts belong to workspace, playback, persistence, presentation, specificat
 ## System context
 
 The [architecture landscape](README.md) classifies interactive session lifecycle as an application system.
-The [system architecture](system-overview.md) makes GTK, WinUI, and TUI composition roots and places `AppRuntime` in application runtime.
+The [system architecture](system-overview.md) makes GTK, WinUI, AppKit, and TUI composition roots and places `AppRuntime` in application runtime.
 
 ```text
-GTK, WinUI, or TUI composition root
+GTK, WinUI, AppKit, or TUI composition root
   -> callback executor + paths + stores + audio providers
   -> AppRuntime
        owns CoreRuntime + workspace/views + playback + session persistence
@@ -31,7 +31,7 @@ GTK, WinUI, or TUI composition root
   -> callback producers stopped before runtime dependencies
 ```
 
-There is no frontend-neutral stateful lifecycle service. GTK and WinUI share
+There is no frontend-neutral stateful lifecycle service. GTK, WinUI, and AppKit share
 the `ao_desktop_launch` value/mechanism boundary for root identity, pure
 startup/switch plans, the private successor protocol, and Boost.Process-based
 detached creation. Each still keeps one library-bound graph per desktop process
@@ -39,7 +39,7 @@ and opens a different root by destroying that graph before launching a
 successor. Application registration, queued-work admission, state stores,
 checkpoint presentation, graph release, native activation, and process exit
 remain frontend-owned.
-TUI creates one runtime for the selected root and does not run either desktop transition sequence.
+TUI creates one runtime for the selected root and does not run a desktop transition sequence.
 
 ## Responsibilities
 
@@ -127,9 +127,40 @@ Explicit Rescan uses the same transactional workflow and relies on `LibraryChang
 Modern/Classic switching remains inside one process and does not participate in this lifecycle.
 Each constructed session reloads library-backed sources before restoring its per-library workspace and checkpoints that workspace with durable desktop-state changes and during teardown.
 
+### AppKit composition root
+
+`AobusDesktopDelegate` owns one `LibrarySession`, the main window, and an
+application-state lease. The session places its returned `AppRuntime` at its
+final address before registering providers, restoring the workspace, or
+constructing UIModel borrowers. Its runtime-owned `MainRunLoopExecutor`
+provides callback affinity; native components borrow the session only until
+the coordinator detaches them.
+
+AppKit keeps desktop settings under the application state root and uses its
+per-library workspace store as the runtime's default playback store. Ordinary
+startup observes and restores playback before native components bind.
+Successor startup constructs the target graph with playback persistence
+dormant, activates its window, and saves the selected-root settings candidate.
+Only success admits playback observation; failure restores the prior settings
+values and seals target playback writes. The old target playback group is not
+read during successor construction.
+
+Quit, library switching, and window hiding are admitted in native callbacks and
+serviced on a later main-run-loop turn. The editor retains a lifecycle close
+request through saving or menu tracking and joins an existing nested discard
+confirmation. Only the user's Keep choice rejects that close. Editor
+completion remains serviceable while ordinary rendering is suspended. The
+coordinator waits for sheets, menus, and active executor callbacks to settle
+before releasing the graph. Closing the visible window only hides it; mode
+changes and reopening retain the same session.
+
+The [application shell architecture](application-shell.md#appkit-shell-owner)
+owns native component composition. AppKit does not consume the GTK/WinUI
+layout language or replace its runtime in place.
+
 ## Boundaries and dependency direction
 
-- Frontends construct `AppRuntime`; application runtime never depends on UIModel, GTK, WinUI, TUI, platform paths, or toolkit lifecycle types.
+- Frontends construct `AppRuntime`; application runtime never depends on UIModel, GTK, WinUI, AppKit, TUI, platform paths, or toolkit lifecycle types.
 - The [workspace architecture](workspace.md) owns view and aggregate semantics inside the runtime graph.
 - The [playback architecture](playback.md) owns restorable listening intent and audio teardown inside the graph.
 - The [persistence and managed-state architecture](persistence-and-managed-state.md) owns store, path, schema, and durable-write boundaries.
@@ -226,6 +257,31 @@ exit remain parent-owned: failure is reported after teardown and the parent
 still exits. The native default passes no inheritable handle list.
 [Decision 0005](../decision/0005-use-process-restart-for-winui-library-switching.md) records the accepted tradeoff.
 
+### AppKit destructive restart
+
+```text
+shared planner admits a different-root request in a native callback
+  -> coalesced service turn waits for editor completion, sheets, menus, and executor callbacks
+  -> save desktop settings and checkpoint the old workspace
+  -> terminally retire the old library's playback group
+       failure -> report against the live window and abandon the request
+  -> close native callback admission and detach components
+  -> release LibrarySession after runtime join and final callback drain
+  -> release the application-state lease
+  -> shared detached launcher(exact executable, paired private request, state root)
+  -> successor strictly constructs its only target graph with playback dormant
+  -> activate the native window and commit selected-root settings
+       success -> admit playback observation
+       failure -> restore prior settings values and seal target playback writes
+  -> optionally scan the target library
+```
+
+The parent never stores the requested target root. Target open failures belong
+to successor startup; expected state/fallback directory creation failures are
+reported through controlled startup failure, not an escaping filesystem
+exception. The [desktop lifecycle specification](../spec/application/desktop-library-lifecycle.md)
+owns the exact durable-root and retirement outcomes.
+
 ### Shutdown
 
 GTK requests a final checkpoint, closes callback admission, removes the active window, and releases frontend controllers, widgets, platform adapters, and subscriptions before the associated heap-pinned runtime.
@@ -247,7 +303,18 @@ The session first begins dispatcher closing, retires its owner callback gate, cl
 `RuntimeGraph` resets `InteractiveBorrowers`, shuts down the runtime, completes dispatcher closing, and is finally reset while the settings stores and dispatcher still exist.
 A pure `CallbackAdmissionGate::Token` never protects raw owner memory: dispatcher confinement plus retire-before-cancel, runtime join, final drain, and owner-last destruction provide that proof.
 A replaceable dialog or workflow renews a distinct generation gate only after retiring the prior one; an old token cannot become admissible again.
-A destructive restart in either desktop frontend uses its ordinary shutdown direction before process creation.
+AppKit settles pending editor work before saving desktop settings and the
+workspace. The coordinator detaches native callbacks and components, then
+releases `LibrarySession`. The session stops authoring admission, releases its
+UIModel borrowers and subscriptions, shuts down the runtime, and performs the
+executor's final callback drain before destroying remaining editor state.
+An ordinary Observing runtime saves playback during shutdown before stopping
+its audio producers; sealed or retired persistence cannot write. The settings
+lease is released before system termination is acknowledged or a successor is
+launched.
+
+A destructive restart in each desktop frontend uses its ordinary shutdown
+direction before process creation.
 
 ## Structural constraints
 
@@ -322,11 +389,17 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`app/tui/App.cpp`](../../app/tui/App.cpp), [`LibraryController.cpp`](../../app/tui/LibraryController.cpp), and [`EventController.cpp`](../../app/tui/EventController.cpp) own TUI restore, exact-view attachment, interaction cancellation, checkpoint, and teardown composition.
 - [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
   and [`OutputSelection`](../../app/include/ao/uimodel/playback/output/OutputSelection.h)
-  own the shared GTK, TUI, and WinUI selector projection, exact requested-intent
+  own the shared GTK, TUI, WinUI, and AppKit selector projection, exact requested-intent
   callback, and pure restore policy.
 - [`DesktopOutputSelection`](../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
   adapts that pure policy to the Windows desktop settings value without owning IO.
 - [`App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`LibraryWindowSession.cpp`](../../app/windows-winui/app/LibraryWindowSession.cpp), [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp), [`CallbackAdmissionGate`](../../app/windows-winui/include/ao/winui/CallbackAdmissionGate.h), [`ProcessLauncher.cpp`](../../app/windows-winui/platform/ProcessLauncher.cpp), and [`DispatcherQueueExecutor.cpp`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) own WinUI final graph placement, phased borrower lifetime, callback admission, destructive restart, process launch, and callback affinity.
+- AppKit [`DesktopApplication.mm`](../../app/macos-appkit/DesktopApplication.mm),
+  [`LibrarySession.cpp`](../../app/macos-appkit/LibrarySession.cpp),
+  [`LibraryEditor.mm`](../../app/macos-appkit/LibraryEditor.mm), and
+  [`MainRunLoopExecutor.cpp`](../../app/macos-appkit/MainRunLoopExecutor.cpp)
+  own native admission, editor close completion, workspace/playback composition,
+  lease release, and runtime join followed by callback drain.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
 
 ## Test map
@@ -347,10 +420,18 @@ The runtime destructor joins its worker tasks; no deferred runtime release or qu
 - [`DesktopOutputSelectionTest.cpp`](../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
   protects Windows startup resolution and in-memory preference updates before the next checkpoint.
 - Tests under [`test/unit/desktop/`](../../test/unit/desktop/) run on Linux and
-  Windows and protect shared startup, switch, protocol, argv, detach, and handle
+  Windows and macOS and protect shared startup, switch, protocol, argv, detach, and handle
   inheritance behavior.
 - WinUI app-policy tests under [`test/unit/winui/app/`](../../test/unit/winui/app/)
   protect output-preference lifecycle, transactional explicit-root commit, destructive preparation/restart order, callback-gate retirement, and generation renewal; [`CallbackAdmissionGateTest.cpp`](../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) proves retired tokens remain inert, while bounded-cache tests and native WinUI builds protect final native composition.
+
+- AppKit [`AppKitDesktopScenario.mm`](../../test/integration/macos/AppKitDesktopScenario.mm)
+  exercises native close/reopen, Quit cancellation, Quit joining an existing
+  discard confirmation, and successor reentry through the production launcher.
+  [`AppKitAuthoringScenario.mm`](../../test/integration/macos/AppKitAuthoringScenario.mm)
+  covers deferred close across successful and failed saves and nested decisions.
+  [macOS development](../development/macos.md#native-desktop-development-slice)
+  owns explicit GUI invocation and fixture requirements.
 
 ## Related documents
 

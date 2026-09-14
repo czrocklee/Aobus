@@ -22,6 +22,10 @@ endif()
 
 add_subdirectory(uimodel)
 
+if(APPLE)
+  add_subdirectory(macos-appkit)
+endif()
+
 if(AOBUS_BUILD_GTK)
   add_subdirectory(linux-gtk)
 endif()
