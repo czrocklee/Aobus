@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ..core import builddir, concept_report, dependency_policy, tidyengine
+from ..core import builddir, concept_report, dependency_policy, tidyengine, workspace_cache
 from ..core.proc import die
 
 HELP = "Report or verify governed dependencies, or emit the public concept baseline"
@@ -40,8 +40,10 @@ def _build_dir(args: argparse.Namespace) -> Path:
 
 
 def _verified(args: argparse.Namespace) -> dict[str, object]:
+    build_dir = _build_dir(args)
+    workspace_cache.validate_consumer(build_dir)
     try:
-        return dependency_policy.verified_report(_build_dir(args))
+        return dependency_policy.verified_report(build_dir)
     except dependency_policy.DependencyPolicyError as exc:
         raise die(str(exc)) from exc
 

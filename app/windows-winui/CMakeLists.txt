@@ -172,6 +172,12 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
 add_library(aobus-winui-lib STATIC ${AOBUS_WINUI_LIBRARY_SOURCES})
 target_precompile_headers(aobus-winui-lib PRIVATE pch.h)
 target_compile_options(aobus-winui-lib PRIVATE /bigobj)
+if(AOBUS_WINDOWS_SHARED_WORKSPACES)
+  # LTCG embeds the PCH and object paths. The portal already fixes their B: root;
+  # declare that identity mapping so deterministic MSVC can validate the paths.
+  target_compile_options(aobus-winui-lib PRIVATE
+    "$<$<CONFIG:Release>:-pathmap:B:\\=B:\\>")
+endif()
 if(MSVC AND MSVC_VERSION EQUAL 1951)
   # MSVC 14.51 ICEs in Boost.Asio's any_io_executor machinery when this
   # translation unit is compiled with /GL. It is the one that builds and

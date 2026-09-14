@@ -32,6 +32,7 @@ Select completion checks by the changed behavior using
 
 To enable the shared compiler cache, run `./ao setup compiler-cache` once for each native host user (`ao.bat setup compiler-cache` on Windows).
 Builds also work without compiler caching.
+Add `--shared-workspaces` to opt into the [supported shared-workspace layouts](doc/development/compiler-cache.md); this preference is disabled by default.
 Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` exports override the shared-store and capacity defaults, including values inherited from an older shell session.
 See [compiler-cache setup and migration](doc/development/compiler-cache.md) before adopting the managed defaults.
 

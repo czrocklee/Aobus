@@ -176,7 +176,7 @@ class GitWorkflowFixtureTest(unittest.TestCase):
         linked = self.root.parent / "linked"
         self.git("worktree", "add", "-b", "linked", str(linked))
         with mock.patch.object(gitfiles, "PROJECT_ROOT", linked), mock.patch.object(setup, "PROJECT_ROOT", linked):
-            self.assertEqual(setup.run_command(Namespace(component="git-hooks")), 0)
+            self.assertEqual(setup.run_command(Namespace(component="git-hooks", shared_workspaces=None)), 0)
         configured = subprocess.check_output(
             ["git", "-C", str(linked), "config", "--local", "--get", "core.hooksPath"], text=True
         ).strip()

@@ -24,6 +24,7 @@ sections relevant to the change; reuse material already read in this session.
 | Contributor or Git workflow | `CONTRIBUTING.md`; `doc/development/commit-message.md` before committing |
 | C++ implementation | `doc/development/coding-style.md`; `doc/development/naming-convention.md` |
 | Documentation ownership, templates, or migration | `doc/README.md` |
+| Finding dependency headers, libraries, tools, or SDKs | `doc/development/dependency-governance.md#locating-an-existing-dependency` |
 | Test design and fixtures | `doc/development/test.md` and the linked task-specific reference |
 | Lint findings or suppressions | `doc/development/linting.md` |
 | Concurrency contracts | `doc/development/test/concurrency-and-sanitizer.md` |

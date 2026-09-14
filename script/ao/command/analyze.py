@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir, tidyengine
+from ..core import builddir, tidyengine, workspace_cache
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
@@ -49,13 +49,11 @@ ANALYZER_CHECK_GROUPS = [
 _PATH_SEPARATOR_RE = r"[/\\]"
 
 
-def project_header_filter() -> str:
+def project_header_filter(*, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return an analyzer header filter that accepts native and POSIX separators."""
-    root = re.escape(absolute_path(PROJECT_ROOT).as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE)
-    return f"{root}{_PATH_SEPARATOR_RE}(lib|app|include|test|tool{_PATH_SEPARATOR_RE}lint){_PATH_SEPARATOR_RE}.*"
-
-
-HEADER_FILTER = project_header_filter()
+    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    root = "|".join(re.escape(path.as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE) for path in roots)
+    return f"({root}){_PATH_SEPARATOR_RE}(lib|app|include|test|tool{_PATH_SEPARATOR_RE}lint){_PATH_SEPARATOR_RE}.*"
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -113,6 +111,10 @@ def run_command(args: argparse.Namespace) -> int:
             stack.callback(out.close)
 
         tidyengine.ensure_compile_db(build_dir)
+        try:
+            source_roots = workspace_cache.validated_source_roots(build_dir, project_root=PROJECT_ROOT)
+        except workspace_cache.WorkspaceCacheError as exc:
+            raise die(str(exc)) from exc
         isystem = tidyengine.system_include_args()
         if args.debug:
             print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
@@ -162,7 +164,10 @@ def run_command(args: argparse.Namespace) -> int:
 
         def run_one(file: str, log: Path) -> int:
             file_checks = checks
-            rel = file[len(f"{PROJECT_ROOT}/") :] if file.startswith(f"{PROJECT_ROOT}/") else file
+            try:
+                rel = absolute_path(file).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+            except ValueError:
+                rel = absolute_path(file).as_posix()
             if not args.check and rel.startswith("test/"):
                 # Catch2 fixtures intentionally leak through REQUIRE-terminated paths.
                 file_checks += ",-clang-analyzer-cplusplus.NewDeleteLeaks"
@@ -176,9 +181,9 @@ def run_command(args: argparse.Namespace) -> int:
                 str(build_dir),
                 *args.tidy_arg,
                 f"-config={config}",
-                f"-header-filter={HEADER_FILTER}",
+                f"-header-filter={project_header_filter(source_roots=source_roots)}",
                 *extra,
-                file,
+                str(workspace_cache.compiler_source_path(Path(file), project_root=PROJECT_ROOT)),
             ]
             with open(log, "w", encoding="utf-8") as sink:
                 if args.debug:
@@ -194,7 +199,11 @@ def run_command(args: argparse.Namespace) -> int:
             noisy = tidyengine.logs_with_diagnostics(result.logs)
             if noisy:
                 diagnostic_count = deduplicate(
-                    noisy, out, PROJECT_ROOT, include_external=args.include_external_diagnostics
+                    noisy,
+                    out,
+                    PROJECT_ROOT,
+                    include_external=args.include_external_diagnostics,
+                    path_mapper=lambda path: workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT),
                 )
                 out.flush()
                 if args.output:

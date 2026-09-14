@@ -6,6 +6,7 @@ import subprocess
 from collections import deque
 from pathlib import Path
 
+from . import workspace_cache
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 
@@ -215,7 +216,8 @@ def compile_commands(
                 path = Path(spelling)
                 if not path.is_absolute():
                     path = directory / path
-                path = absolute_path(path)
+                compiler_path = absolute_path(path)
+                path = workspace_cache.canonical_portal_path(compiler_path, project_root=PROJECT_ROOT)
                 key = _path_key(path)
                 if accepted_keys is None:
                     try:
@@ -232,8 +234,8 @@ def compile_commands(
                 commands.append(
                     {
                         "directory": str(directory),
-                        "command": f'"{clang_cl}" {identity} "{path}"',
-                        "file": str(path),
+                        "command": f'"{clang_cl}" {identity} "{compiler_path}"',
+                        "file": str(compiler_path),
                     }
                 )
 
@@ -284,7 +286,7 @@ def find_header_companions(
             directory = command.get("directory")
             if isinstance(directory, str) and directory:
                 source = Path(directory) / source
-        source = absolute_path(source)
+        source = workspace_cache.canonical_portal_path(source, project_root=root)
         try:
             source.relative_to(source_root)
         except ValueError:

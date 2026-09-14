@@ -2,10 +2,11 @@
 
 import argparse
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, winui
+from ..core import builddir, winui, workspace_cache
 from ..core.proc import die
 from . import build
 
@@ -106,6 +107,21 @@ def run_command(args: argparse.Namespace) -> int:
     if not executable.exists():
         command = "ao.bat build --target winui" if args.app == "winui" else "./ao build"
         raise die(f"Executable not found at {executable}. Did you build the project? Run '{command}' first.")
+    workspace_cache.validate_consumer(build_dir)
 
+    if os.environ.get("AOBUS_WINDOWS_SOURCE_VIEW"):
+        with subprocess.Popen([str(executable), *args.app_args]) as child:
+            try:
+                return child.wait()
+            except KeyboardInterrupt as interrupt:
+                # Retire the views only after this application has exited.
+                # An interrupted build still retains its views for surviving workers.
+                try:
+                    child.kill()
+                    child.wait()
+                except OSError as exc:
+                    interrupt.add_note(f"Could not reap the application: {exc}")
+                    raise interrupt from exc
+                return 130
     # Replaces the current process with the target executable
     os.execvp(str(executable), [str(executable), *args.app_args])

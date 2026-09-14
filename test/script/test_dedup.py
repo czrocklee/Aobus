@@ -34,6 +34,31 @@ class DedupTest(unittest.TestCase):
             logs.append(log)
         return logs
 
+    def test_mapped_paths_share_identity_and_notes_use_the_physical_location(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            view = Path(temporary) / "compiler-view"
+            source = root / "include/Foo.h"
+            alias = view / "include/Foo.h"
+            external = Path(temporary) / "external/Foo.h"
+            logs = self._write_logs(
+                f"{alias}:7:2: warning: problem [example]\n{alias}:6:2: note: origin\n",
+                f"{source}:7:2: warning: problem [example]\n",
+                f"{external}:7:2: warning: external problem [example]\n",
+            )
+
+            def physical(path):
+                try:
+                    return root / path.relative_to(view)
+                except ValueError:
+                    return path
+
+            output = io.StringIO()
+            self.assertEqual(deduplicate(logs, output, root, include_external=False, path_mapper=physical), 1)
+            self.assertEqual(
+                output.getvalue(), f"{source}:7:2: warning: problem [example]\n{source}:6:2: note: origin\n"
+            )
+
     def test_same_header_diagnostic_appears_once(self):
         logs = self._write_logs(HEADER_DIAGNOSTIC, HEADER_DIAGNOSTIC)
         out = io.StringIO()

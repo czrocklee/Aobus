@@ -9,7 +9,7 @@ import os
 import sys
 
 from .command import COMMAND_MODULES
-from .core import buildenv, compiler_cache
+from .core import buildenv, compiler_cache, msbuild_cache, workspace_cache
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -49,12 +49,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     args = parse_arguments(parser, arguments)
     buildenv.load_source_scope(args, os.environ.pop("AOBUS_PREFLIGHT_SCOPE", None))
-    if buildenv.requires_parsed_build_env(args):
+    previous_tracking = os.environ.get(msbuild_cache.TRACKING_ENV)
+    try:
+        if os.name == "nt":
+            os.environ[msbuild_cache.TRACKING_ENV] = "0"
+        if buildenv.requires_parsed_build_env(args) or workspace_cache.command_uses_context(args):
+            try:
+                compiler_cache.activate_local()
+            except compiler_cache.CompilerCacheError as exc:
+                print(f"Warning: compiler cache is disabled: {exc}", file=sys.stderr)
         try:
-            compiler_cache.activate_local()
-        except compiler_cache.CompilerCacheError as exc:
-            print(f"Warning: compiler cache is disabled: {exc}", file=sys.stderr)
-    return args.func(args) or 0
+            with workspace_cache.command_context(args):
+                return args.func(args) or 0
+        except workspace_cache.WorkspaceCacheError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    finally:
+        if os.name == "nt":
+            if previous_tracking is None:
+                os.environ.pop(msbuild_cache.TRACKING_ENV, None)
+            else:
+                os.environ[msbuild_cache.TRACKING_ENV] = previous_tracking
 
 
 if __name__ == "__main__":

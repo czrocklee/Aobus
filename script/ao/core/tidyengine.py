@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, buildlock, compiler_cache, gitfiles
+from . import builddir, buildlock, compiler_cache, gitfiles, workspace_cache
 from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
@@ -115,8 +115,14 @@ def _ensure_compile_db(
 ) -> None:
     database = build_dir / "compile_commands.json"
     database_existed = database.is_file()
+    try:
+        workspace = workspace_cache.prepare(build_dir)
+    except workspace_cache.WorkspaceCacheError as exc:
+        raise die(str(exc)) from exc
     launcher_args = compiler_cache.cmake_launcher_arguments(build_dir=build_dir)
-    if database_existed and not reconfigure_preset and not launcher_args:
+    cache_args = [*launcher_args, *workspace.cmake_arguments]
+    cmake_build_dir = workspace.compiler_build_dir or build_dir
+    if database_existed and not reconfigure_preset and not cache_args:
         return
 
     if reconfigure_preset:
@@ -131,11 +137,11 @@ def _ensure_compile_db(
         configure = [
             "cmake",
             "-S",
-            str(PROJECT_ROOT),
+            str(workspace.source_dir),
             "--preset",
             selected_preset,
             "-B",
-            str(build_dir),
+            str(cmake_build_dir),
         ]
         if selected_preset == builddir.tidy_preset("nt"):
             # This dedicated tree must follow current platform defaults even
@@ -146,20 +152,20 @@ def _ensure_compile_db(
             print(f"Updating compiler-cache launchers in {build_dir}...")
         else:
             print("compile_commands.json missing, running cmake configure...")
-        configure = ["cmake", str(PROJECT_ROOT), "-B", str(build_dir)]
+        configure = ["cmake", "-S", str(workspace.source_dir), "-B", str(cmake_build_dir)]
     else:
         print("compile_commands.json missing, running cmake configure...")
         configure = [
             "cmake",
             "-S",
-            str(PROJECT_ROOT),
+            str(workspace.source_dir),
             "--preset",
             preset or builddir.preset("debug"),
             "-B",
-            str(build_dir),
+            str(cmake_build_dir),
         ]
     configure += configure_args or []
-    configure += launcher_args
+    configure += cache_args
     _run_tail(configure, "configure")
     print("Configure done.")
     if not database.is_file():
@@ -170,7 +176,7 @@ def _ensure_compile_db(
         [
             "cmake",
             "--build",
-            str(build_dir),
+            str(cmake_build_dir),
             "--target",
             "aobus_generated_headers",
             "--parallel",
@@ -300,7 +306,7 @@ _PLATFORM_IMPLEMENTATION_SUFFIXES = ("", "Linux", "Macos", "Posix", "Windows")
 
 
 def _path_key(path: Path) -> str:
-    return os.path.normcase(str(absolute_path(path)))
+    return os.path.normcase(str(workspace_cache.canonical_portal_path(path)))
 
 
 @dataclass(frozen=True)
@@ -327,7 +333,7 @@ def _compile_database_entries(build_dir: Path) -> list[_CompileDatabaseEntry]:
             directory = entry.get("directory")
             base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
             path = base / path
-        compiled.append(_CompileDatabaseEntry(absolute_path(path), entry))
+        compiled.append(_CompileDatabaseEntry(workspace_cache.canonical_portal_path(path), entry))
     return compiled
 
 
@@ -497,7 +503,7 @@ def _ninja_build_directories(
         path = Path(directory)
         if not path.is_absolute():
             path = database_dir / path
-        candidates.add(absolute_path(path))
+        candidates.add(workspace_cache.canonical_portal_path(path))
     return sorted((path for path in candidates if (path / "build.ninja").is_file()), key=_path_key)
 
 
@@ -508,15 +514,17 @@ def _ninja_record_path(value: str, base: Path) -> Path:
     """Resolve Ninja/compile-DB paths while accepting Windows separators on any test host."""
     normalized = value.replace("\\", "/")
     if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized):
-        return Path(posixpath.normpath(normalized))
+        path = Path(posixpath.normpath(normalized))
+        return workspace_cache.canonical_portal_path(path) if os.name == "nt" else path
     path = Path(normalized)
     if path.is_absolute():
-        return absolute_path(path)
+        return workspace_cache.canonical_portal_path(path)
 
     normalized_base = str(base).replace("\\", "/")
     if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized_base):
-        return Path(posixpath.normpath(f"{normalized_base}/{normalized}"))
-    return absolute_path(base / path)
+        path = Path(posixpath.normpath(f"{normalized_base}/{normalized}"))
+        return workspace_cache.canonical_portal_path(path) if os.name == "nt" else path
+    return workspace_cache.canonical_portal_path(base / path)
 
 
 def _ninja_path_key(path: Path) -> str:
@@ -814,7 +822,8 @@ def _replace_compile_input(
 ) -> dict[str, object]:
     """Clone one command while replacing its exact source token with ``selected``."""
     data = dict(entry.data)
-    selected_text = str(absolute_path(selected))
+    selected_compiler_path = workspace_cache.compiler_source_path(selected)
+    selected_text = str(selected_compiler_path)
     arguments = data.get("arguments")
     if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
         directory = data.get("directory")
@@ -891,7 +900,7 @@ def _replace_compile_input(
     else:
         raise die(f"compile command for {entry.path} has neither string command nor argument list.")
 
-    data["file"] = absolute_path(selected).as_posix()
+    data["file"] = selected_compiler_path.as_posix()
     data.pop("output", None)
     return data
 

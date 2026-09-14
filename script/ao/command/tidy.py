@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winuitidy
+from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winuitidy, workspace_cache
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
@@ -45,9 +45,16 @@ examples:
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
 WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
-# Clang tooling does not consume MSVC code-generation toggles. Strip both IPO
-# spellings because individual MSVC 14.51 workarounds may override /GL with /GL-.
-WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib", "/GL", "/GL-")
+# Clang tooling does not consume MSVC code-generation toggles. Strip deterministic
+# output and both IPO spellings; MSVC 14.51 workarounds may override /GL with /GL-.
+WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = (
+    "/Zc:preprocessor",
+    "/c",
+    "/ZW:nostdlib",
+    "/GL",
+    "/GL-",
+    "/experimental:deterministic",
+)
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
 # Check groups: start from nothing, enable curated groups, then disable known false
@@ -168,25 +175,51 @@ EXPECTED_AOBUS_CHECKS = frozenset(
 _PATH_SEPARATOR_RE = r"[/\\]"
 
 
-def project_header_filter(folders: tuple[str, ...]) -> str:
+def _path_regex(path: Path) -> str:
+    return re.escape(path.as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE)
+
+
+def _source_spellings(path: Path, source_roots: tuple[Path, ...]) -> list[Path]:
+    canonical = absolute_path(path)
+    try:
+        relative = canonical.relative_to(absolute_path(PROJECT_ROOT))
+    except ValueError:
+        return [canonical]
+
+    spellings: list[Path] = []
+    for root in source_roots:
+        spelling = Path(os.path.abspath(root / relative))
+        if spelling not in spellings:
+            spellings.append(spelling)
+    return spellings
+
+
+def project_header_filter(folders: tuple[str, ...], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return a project-root filter that accepts native and POSIX separators."""
-    root = re.escape(absolute_path(PROJECT_ROOT).as_posix().rstrip("/")).replace("/", _PATH_SEPARATOR_RE)
-    return f"{root}{_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
+    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    root = "|".join(_path_regex(path) for path in roots)
+    return f"({root}){_PATH_SEPARATOR_RE}({'|'.join(folders)}){_PATH_SEPARATOR_RE}.*"
 
 
-STRICT_HEADER_FILTER = project_header_filter(("lib", "app", "include", "tool"))
-RELAXED_HEADER_FILTER = project_header_filter(("test", "include"))
+STRICT_HEADER_FOLDERS = ("lib", "app", "include", "tool")
+RELAXED_HEADER_FOLDERS = ("test", "include")
 
 
-def exact_header_filter(headers: list[Path]) -> str:
+def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Return an anchored filter for mapped headers with either path separator."""
-    alternatives = [re.escape(absolute_path(path).as_posix()).replace("/", _PATH_SEPARATOR_RE) for path in headers]
+    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    alternatives = [_path_regex(spelling) for path in headers for spelling in _source_spellings(path, roots)]
     return f"^({'|'.join(alternatives)})$"
 
 
-def path_line_filter(paths: list[Path]) -> str:
+def path_line_filter(paths: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Limit diagnostics and exported fixes to the explicitly selected paths."""
-    entries = [{"name": absolute_path(path).as_posix(), "lines": [[1, 2_147_483_647]]} for path in paths]
+    roots = source_roots or (absolute_path(PROJECT_ROOT),)
+    entries = [
+        {"name": spelling.as_posix(), "lines": [[1, 2_147_483_647]]}
+        for path in paths
+        for spelling in _source_spellings(path, roots)
+    ]
     return json.dumps(entries, separators=(",", ":"))
 
 
@@ -411,7 +444,14 @@ def prepare_toolchain(
             target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
             print(f"Building {target} (incremental)...")
             tool_build = subprocess.run(
-                ["cmake", "--build", str(build_dir), "--target", target, *build.parallel_build_arguments()],
+                [
+                    "cmake",
+                    "--build",
+                    str(workspace_cache.compiler_build_dir(build_dir)),
+                    "--target",
+                    target,
+                    *build.parallel_build_arguments(),
+                ],
                 cwd=PROJECT_ROOT,
             )
         if tool_build.returncode != 0:
@@ -798,6 +838,10 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             no_build=args.no_build,
             reconfigure_preset=args.path is None,
         )
+        try:
+            source_roots = workspace_cache.validated_source_roots(build_dir)
+        except workspace_cache.WorkspaceCacheError as exc:
+            raise die(str(exc)) from exc
 
         buckets = classify_existing(cpp_files, explicit)
         if not buckets["STRICT"] and not buckets["RELAXED"]:
@@ -962,9 +1006,12 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
         def run_one(mode: str, invocation: TidyInvocation, log: Path) -> int:
             checks = checks_for(mode, args.check)
             header_filter = args.header_filter or (
-                exact_header_filter([invocation.selected])
+                exact_header_filter([invocation.selected], source_roots=source_roots)
                 if invocation.is_header or invocation.is_include_fragment
-                else (RELAXED_HEADER_FILTER if mode == "RELAXED" else STRICT_HEADER_FILTER)
+                else project_header_filter(
+                    RELAXED_HEADER_FOLDERS if mode == "RELAXED" else STRICT_HEADER_FOLDERS,
+                    source_roots=source_roots,
+                )
             )
             extra: list[str] = list(isystem)
             if toolchain.resource_dir is not None:
@@ -979,7 +1026,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                     # Windows resolves include paths case-insensitively.
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")
             if limits_diagnostics_to_selected_path(invocation):
-                extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
+                extra.append(f"-line-filter={path_line_filter([invocation.selected], source_roots=source_roots)}")
             if invocation.is_header and invocation.compile_command_source.suffix.lower() != ".mm":
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")
@@ -995,7 +1042,9 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")
-            tidy_file = invocation.compile_command_source if invocation.is_include_fragment else invocation.selected
+            tidy_file = workspace_cache.compiler_source_path(
+                invocation.compile_command_source if invocation.is_include_fragment else invocation.selected
+            )
             command = [
                 clang_tidy,
                 "--quiet",
@@ -1036,7 +1085,12 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
 
                 noisy = tidyengine.logs_with_diagnostics(result.logs)
                 if noisy:
-                    deduplicate(noisy, out, PROJECT_ROOT)
+                    deduplicate(
+                        noisy,
+                        out,
+                        PROJECT_ROOT,
+                        path_mapper=lambda path: workspace_cache.canonical_portal_path(path, project_root=PROJECT_ROOT),
+                    )
                     out.flush()
                     overall_failed = True
                     if args.output:

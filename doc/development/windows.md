@@ -250,12 +250,13 @@ the limit applies to concurrent `cl.exe` work across generated projects rather
 than multiplying project-level and translation-unit-level parallelism.
 
 Run `ao.bat setup compiler-cache` to download and verify the governed ccache archive and enable the shared 20 GB host-local store.
-See [Compiler cache](compiler-cache.md) for state paths, capacity, and override precedence.
+See [Compiler cache](compiler-cache.md) for state paths, capacity, override precedence, and the optional fixed compiler views available in isolated Windows SSH logons.
 
 The normal Windows Ninja trees honor CMake's standard `CMAKE_C_COMPILER_LAUNCHER` and `CMAKE_CXX_COMPILER_LAUNCHER` settings.
 The Visual Studio generator does not honor those launchers, so an automated host may instead set `AOBUS_MSBUILD_CL_TOOL_EXE` to an absolute, host-local compiler-cache wrapper whose file name is `cl.exe`.
 The managed setup copies its verified ccache executable to that wrapper path without adding its directory to `PATH`; the real MSVC `cl.exe` remains discoverable in the initialized Visual Studio environment.
-The portal applies the wrapper to every generated WinUI C++ project, disables MSBuild file tracking only while `ClCompile` and `CompileXamlGeneratedFiles` run as required by wrapper mode, and emits embedded debug information for cacheable Debug and RelWithDebInfo compilation.
+The portal applies the wrapper to every generated WinUI C++ project and emits embedded debug information for cacheable Debug and RelWithDebInfo compilation.
+It retains normal compiler file tracking only after verifying that cache-owned writes are excluded from MSBuild project outputs; other wrappers and unverified cache paths use the legacy tracking behavior described in [Compiler cache](compiler-cache.md#windows-compiler-file-tracking).
 CMake regeneration, ICU resources, and other custom commands keep normal file tracking and dependency ordering.
 Without managed setup or an explicit wrapper, ordinary local builds remain uncached.
 

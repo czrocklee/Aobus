@@ -397,6 +397,25 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
 
 
 class NinjaDependencyRecordParsingTest(unittest.TestCase):
+    def test_dependency_keys_never_resolve_paths_or_apply_host_cwd(self):
+        with mock.patch.object(tidyengine.workspace_cache, "canonical_portal_path") as canonical:
+            self.assertEqual(tidyengine._ninja_path_key(Path(r"C:\build\obj.o")), "c:/build/obj.o")
+            self.assertEqual(tidyengine._ninja_path_key(Path("C:/build/./obj.o")), "c:/build/obj.o")
+            canonical.assert_not_called()
+
+    def test_compiler_path_mapping_is_cached_before_repeated_key_lookup(self):
+        root = Path("/physical")
+        output = "".join(f"obj{i}.o: #deps 1, deps mtime 1 (VALID)\n    common.h\n\n" for i in range(20))
+        with mock.patch.object(
+            tidyengine.workspace_cache, "canonical_portal_path", side_effect=lambda path: root / path.name
+        ) as canonical:
+            records = list(tidyengine._parse_ninja_dependency_records(output, Path("/compiler")))
+            keys = [
+                tidyengine._ninja_path_key(path) for target, dependencies in records for path in (target, *dependencies)
+            ]
+        self.assertEqual(canonical.call_count, 21)
+        self.assertEqual(keys.count(tidyengine._ninja_path_key(root / "common.h")), 20)
+
     def test_each_distinct_path_spelling_is_resolved_once(self):
         # A whole-project dump repeats the same headers under every translation
         # unit. Resolving a spelling walks the filesystem, so the parser must

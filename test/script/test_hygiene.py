@@ -32,7 +32,7 @@ class FormatCommandTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()):
                         self.assertEqual(format_command.run_command(args), 0)
 
-        clang.assert_called_once_with(["lib/Foo.cpp"], check=True)
+        clang.assert_called_once_with(["lib/Foo.cpp"], check=True, build_dir=None)
         ruff.assert_called_once_with(["script/foo.py"], check=True)
 
     def test_ruff_format_uses_the_current_python_environment(self):
@@ -74,6 +74,22 @@ class FormatCommandTest(unittest.TestCase):
             cwd=format_command.PROJECT_ROOT,
         )
 
+    def test_windows_format_provisions_the_explicit_tree_without_visiting_default(self):
+        selected = Path("/custom/builds/tidy")
+        with (
+            mock.patch.object(
+                format_command.builddir, "platform_profile", return_value=format_command.builddir.WINDOWS_PROFILE
+            ),
+            mock.patch.object(format_command.builddir, "tidy_dir") as default,
+            mock.patch.object(format_command.tidyengine, "ensure_windows_llvm_sdk") as sdk,
+            mock.patch.object(format_command.tidyengine, "clang_tool", return_value="clang-format") as tool,
+            mock.patch.object(format_command.subprocess, "run", return_value=mock.Mock(returncode=0)),
+        ):
+            self.assertEqual(format_command.run_clang_format(["lib/Foo.cpp"], check=True, build_dir=selected), 0)
+        default.assert_not_called()
+        sdk.assert_called_once_with(selected)
+        tool.assert_called_once_with(selected, "clang-format")
+
     def test_clang_format_batches_include_fragments_with_cpp_sources(self):
         with mock.patch.object(
             format_command.builddir,
@@ -109,8 +125,8 @@ class TidyCommandTest(unittest.TestCase):
         native = str(tidy.PROJECT_ROOT / "lib" / "audio" / "Player.h")
         posix = (tidy.PROJECT_ROOT / "lib" / "audio" / "Player.h").as_posix()
 
-        self.assertRegex(native, tidy.STRICT_HEADER_FILTER)
-        self.assertRegex(posix, tidy.STRICT_HEADER_FILTER)
+        self.assertRegex(native, tidy.project_header_filter(tidy.STRICT_HEADER_FOLDERS))
+        self.assertRegex(posix, tidy.project_header_filter(tidy.STRICT_HEADER_FOLDERS))
 
     def test_def_include_fragment_is_tidied_through_its_consumer(self):
         fragment = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / "MessageInventory.def"
@@ -172,8 +188,16 @@ class TidyCommandTest(unittest.TestCase):
                         {
                             "directory": str(root),
                             "file": str(source),
-                            "command": (f"cl.exe /Zc:preprocessor /c /ZW:nostdlib /GL /GL- {source}"),
-                        }
+                            "command": (
+                                "cl.exe /Zc:preprocessor /c /ZW:nostdlib /GL /GL- "
+                                f"/experimental:deterministic /DKEEP=1 {source}"
+                            ),
+                        },
+                        {
+                            "directory": str(root),
+                            "file": str(source),
+                            "arguments": ["cl.exe", "/EXPERIMENTAL:DETERMINISTIC", "/DKEEP=1", str(source)],
+                        },
                     ]
                 ),
                 encoding="utf-8",
@@ -185,9 +209,13 @@ class TidyCommandTest(unittest.TestCase):
                 tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS,
             )
 
-            command = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))[0]["command"]
+            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
+            command = entries[0]["command"]
             for argument in tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS:
                 self.assertNotIn(f" {argument} ", command)
+            self.assertNotIn("/experimental:deterministic", command)
+            self.assertIn("/DKEEP=1", command)
+            self.assertEqual(entries[1]["arguments"], ["cl.exe", "/DKEEP=1", str(source)])
 
     def test_python_only_scope_runs_pythoncheck_without_preparing_clang_tidy(self):
         args = Namespace(
@@ -770,6 +798,12 @@ class HygieneCommandTest(unittest.TestCase):
         self.tidy = self.stack.enter_context(mock.patch.object(hygiene.tidy, "run_command", return_value=0))
         self.stderr = self.stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
         self.stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+
+    def test_explicit_tree_reaches_both_formatting_and_tidy(self):
+        selected = str(Path("/custom/builds/tidy"))
+        self.assertEqual(hygiene.run_command(_hygiene_args(path=selected)), 0)
+        self.assertEqual(self.format.call_args.kwargs["build_dir"], Path(selected))
+        self.assertEqual(self.tidy.call_args.args[0].path, selected)
 
     def test_resolves_once_and_preserves_implicit_scope_for_native_deferrals(self):
         self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
