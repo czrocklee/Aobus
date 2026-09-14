@@ -209,6 +209,7 @@ namespace
 @interface AobusLibraryBrowser ()
 - (BOOL)isClosing;
 - (BOOL)isSheetBlocked;
+- (BOOL)canAcceptTrackDrop:(id<NSDraggingInfo>)info outlineView:(NSOutlineView*)outline item:(id)item;
 - (NSString*)text:(MessageId)message;
 - (void)selectTracks:(std::vector<ao::TrackId> const&)selection;
 - (void)refreshSortDescriptors:(std::vector<ao::rt::TrackSortTerm> const&)sortBy;
@@ -904,26 +905,30 @@ namespace
   }
 }
 
-- (NSDragOperation)outlineView:(NSOutlineView*)outline
-                  validateDrop:(id<NSDraggingInfo>)info
-                  proposedItem:(id)item
-            proposedChildIndex:(NSInteger)index
+- (BOOL)canAcceptTrackDrop:(id<NSDraggingInfo>)info outlineView:(NSOutlineView*)outline item:(id)item
 {
   if (outline != _lists || [self isClosing] != NO || [self isSheetBlocked] != NO ||
       [item isKindOfClass:NSNumber.class] == NO ||
       [info.draggingPasteboard availableTypeFromArray:@[kTrackPasteboardType]] == nil)
   {
-    return NSDragOperationNone;
+    return NO;
   }
 
   if (_listRevision != _session->state().listRevision)
   {
-    return NSDragOperationNone;
+    return NO;
   }
 
   auto const listId = ao::ListId{[static_cast<NSNumber*>(item) unsignedIntValue]};
+  return static_cast<BOOL>(_writableListIds.contains(listId));
+}
 
-  if (!_writableListIds.contains(listId))
+- (NSDragOperation)outlineView:(NSOutlineView*)outline
+                  validateDrop:(id<NSDraggingInfo>)info
+                  proposedItem:(id)item
+            proposedChildIndex:(NSInteger)index
+{
+  if ([self canAcceptTrackDrop:info outlineView:outline item:item] == NO)
   {
     return NSDragOperationNone;
   }
@@ -941,7 +946,7 @@ namespace
                item:(id)item
          childIndex:(NSInteger) [[maybe_unused]] index
 {
-  if ([self outlineView:outline validateDrop:info proposedItem:item proposedChildIndex:index] == NSDragOperationNone)
+  if ([self canAcceptTrackDrop:info outlineView:outline item:item] == NO)
   {
     return NO;
   }
