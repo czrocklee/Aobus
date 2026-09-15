@@ -89,6 +89,11 @@ It waits for an in-flight command such as seek to finish before reading buffered
 
 Scalar state-only queries including transport, backend id, route state, volume, mute, and availability use narrower state or atomic synchronization and remain safe concurrently.
 They may observe an intermediate transport until the active control command or event worker publishes its next state.
+Backend property observation runs outside Engine's state mutex because a concrete getter may refresh native state and synchronously publish provider graph evidence.
+Synchronous backend/provider graph subscribers may call state-only Engine queries such as `volume()`, `isMuted()`, and `isVolumeAvailable()`, including during an initial subscription callback.
+Those observations may reflect the command's prior intent because graph publication precedes Engine's scalar-state commit; separate queries are not an aggregate snapshot.
+They must not call the complete `status()`, control methods, or `shutdown()`, synchronously destroy Engine, or wait for those operations: graph delivery can hold a provider callback gate or run under Engine control serialization.
+Defer that work until after the graph callback returns. Engine's own event-worker callbacks retain their separate control-reentrancy contract below.
 
 Every public control command settles pending splice signals at entry under the control lock.
 This closes the window after the realtime cursor changed but before status and current-format state caught up.
@@ -439,11 +444,74 @@ The target remains open, permitting stop/flush/start seek flows, while non-rende
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
 
-Volume and mute are Engine runtime state.
-A backend accepting properties before stream open caches and reapplies them when the stream becomes live.
+Volume and application mute are Engine runtime intent, including when a backend reports that a valid requested write failed.
+Backend mute properties expose application intent, not an observed effective route mute, so an external hardware switch cannot become Engine or persisted application mute.
+Engine captures backend property values and Volume metadata without its state mutex and then applies that observation under the mutex.
+The common Backend API still exposes separate scalar reads and does not promise that every platform supplies an atomic multi-property bundle; ALSA's pure application-mute read means this synchronization performs only one native mixer refresh.
+After each valid volume or mute request returns from the backend, Engine refreshes the backend's Volume metadata and commits the requested intent, availability, and hardware-assisted state together under its state mutex.
+That metadata refresh does not read back the backend volume, so a software-unity fallback cannot replace the valid request.
+Explicit Engine stop resets playback state while preserving its existing volume and application-mute intent and refreshing Volume capability from the closed backend.
+It does not replace that intent with the closed backend's scalar fallback or issue another control write.
+Construction, successful open, and backend replacement retain their separate backend-observation semantics.
+A NaN volume request is rejected before any backend control or metadata query and does not mutate Engine intent or capability state; finite values and infinities retain their backend-specific semantics.
+PipeWire, WASAPI, and Core Audio cache application controls accepted before stream open and apply them when the stream becomes live.
 Core Audio applies both through the per-instance AUHAL linear-gain parameter;
 mute writes zero while preserving the cached volume to restore, and graph
 evidence classifies the gain as software rather than device hardware control.
+ALSA handles shared mixer state under the separate contract below.
+
+### Backend graph delivery
+
+The shared `BackendGraphRegistry`, consumed by ALSA and WASAPI, suppresses publication when the complete route graph equals the stored graph.
+Ordinary publish, clear, and initial subscription delivery do not nest graph callbacks, including when a callback reads a backend property that publishes again.
+Reentrant work waits until the active callback returns; revision checks discard superseded publications and cancellation is checked immediately before each callback.
+A normal subscription delivers its captured initial snapshot synchronously; a subscription made inside a graph callback defers that initial delivery and can be cancelled before it runs.
+A clear still removes the stored graph and publishes an empty snapshot rather than storing an empty graph in place of the route fallback.
+
+The callback gate serializes delivery without holding the registry state mutex across callbacks.
+Each publisher retains responsibility for its own thread's delivery: a different publishing thread may update the route revision while waiting for the gate, but never transfers its callbacks to the active publisher's thread.
+Only same-thread reentrant work joins the active delivery drain.
+This does not authorize callbacks to wait for another thread's publication or cancellation while retaining the gate.
+
+Registry retirement is a separate synchronous path, not ordinary queued delivery.
+Shutdown discards pending ordinary deliveries, closes admission, and sends final empty graphs to subscriptions that have not been cancelled.
+An external shutdown caller waits behind in-flight callbacks; after retirement returns, no new callback starts and retained publishers are inert.
+Shutdown initiated on a graph callback stack can synchronously nest final-empty callbacks so that observer state can be released after that shutdown call returns; ordinary non-nesting does not weaken this lifetime boundary or the provider's separate quiescence contract.
+
+### ALSA mixer controls
+
+ALSA mixer initialization, repeated initialization, candidate rejection, and close never write shared volume or switch controls.
+Selection checks active playback-volume capability, valid ranges, and readable playback channels without proving writability by changing their values.
+Hardware assistance describes the selected control mechanism, not a successful speculative write test.
+A cached application volume is not replayed onto a newly selected hardware mixer during open; the backend reads the device's existing volume instead.
+When no usable mixer exists, the cached software gain is applied in software.
+A successful hardware write does not populate that software-gain cache: if a later reopen cannot select hardware, the already-applied attenuation is not applied a second time to PCM.
+
+Hardware volume observations and explicit writes first process mixer events and resolve the selected element again by name and index.
+An element pointer never survives this refresh boundary: removal, replacement, or changed capabilities require a new readable snapshot.
+Read-only hardware switch observations contribute to effective graph mute state, but Aobus never changes those switches.
+The ALSA Muted property and playback-session persistence expose only application mute intent.
+That pure application-mute getter performs no native refresh; the Volume property owns the native mixer observation and publishes its resulting graph after releasing the mixer mutex.
+Application mute always silences the application's PCM samples, independently of the volume-control mechanism; unmute does not clear an external system mute.
+A cached application mute therefore remains effective on the first playback open, including with hardware volume control.
+When unmuted and using hardware volume, the software gain is unity and PCM bytes are unchanged.
+
+If refresh fails or the selected element becomes unusable, the backend switches to software control with unity gain.
+When that observation failure occurs before an explicit volume write, the request reports an I/O error that states no volume write was attempted.
+A failed explicit hardware volume setter reports an I/O error that identifies possible partial hardware effects and makes the same transition, without applying the requested gain a second time in software.
+Hardware writes may have partially succeeded: there is no compensating write, rollback guarantee, or automatic restoration to maximum volume.
+The next explicit volume request controls software gain.
+Each published mixer graph takes volume, effective mute, and control mechanism from one mutex-consistent snapshot.
+A Volume-property observation that changes or loses the selected element updates the registry's corresponding fallback graph before returning its scalar value and capability can be queried.
+Observer delivery follows the [backend graph delivery contract](#backend-graph-delivery), so a change discovered inside a graph callback is delivered after that callback returns rather than recursively.
+Close makes the mixer unavailable before clearing the graph, with no mixer or observation mutex held across graph callbacks.
+An observation during the clear callback or after close returns the scalar fallback without recreating the cleared graph; unknown properties neither observe nor publish mixer state.
+Explicit control requests can still publish their state before PCM open; only unavailable scalar observations suppress publication.
+Control mutations derive and atomically publish the complete software render gain while holding the mixer mutex; the render loop loads that single value once per PCM batch rather than combining independent mute, mode, and gain observations.
+Application mute publishes its render gain before refreshing hardware observations, so mixer I/O cannot delay that publication.
+An in-flight render batch may retain an earlier complete gain, and already queued PCM is not rewritten; no one-period audible-response guarantee is implied.
+Raw and dB volume mappings select their exact endpoints for zero and unity rather than rounding a scaled offset at those boundaries.
+Integer offsets preserve narrow ranges near native integer limits; NaN requests return `InvalidInput` before mixer locking, refresh, graph publication, or gain and intent mutation, while infinities clamp to their respective endpoints.
 
 ### Shutdown
 
@@ -514,11 +582,13 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`BackendProvider.h`](../../../include/ao/audio/BackendProvider.h) owns the common provider facade, callback, subscription, backend-outlives-provider, and shared shutdown-completion contract.
 - [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete providers/backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own advisory prediction, narrow provider control/registry state, lossless candidate derivation, native selection, and lifetime. [`BackendDeviceRegistry`](../../../lib/audio/backend/detail/BackendDeviceRegistry.h), [`BackendGraphRegistry`](../../../lib/audio/backend/detail/BackendGraphRegistry.h), and the ALSA graph publisher provide provider-independent subscription/publication retirement.
+- [`AlsaMixerSession.cpp`](../../../lib/audio/backend/detail/AlsaMixerSession.cpp) owns read-only mixer selection, event refresh and stable element identity, software mute, and safe volume-failure degradation.
 - [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.
 
 ## Test map
 
-- [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown.
+- [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/unit/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, read-triggered fallback, and volume/mute intent across stop after successful or rejected hardware writes.
+- [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, revision supersession, cancellation, and synchronous final-empty retirement.
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal/) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
@@ -527,8 +597,10 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
 - [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.
-- [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
+- [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, scalar-observation graph publication, closed-graph retirement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
 - [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, constant-time reset reuse, and source retirement.
+- [`AlsaMixerSessionTest.cpp`](../../../test/unit/audio/backend/detail/AlsaMixerSessionTest.cpp) protects zero-write lifecycle/mute operations, refreshed hardware state, element replacement/removal, volume failures, and numeric endpoints.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects deferred cold restore without opening output; [`PlaybackSessionVolumeTest.cpp`](../../../test/unit/runtime/PlaybackSessionVolumeTest.cpp) checks exact unity and near-unity YAML round trips; Linux-only [`PlaybackSessionAlsaMuteTest.cpp`](../../../test/unit/runtime/PlaybackSessionAlsaMuteTest.cpp) protects application-mute save/restore against external ALSA switch state and exact hardware-volume intent through public stop snapshots, checkpoint, shutdown, and restore.
 - Runtime playback tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect executor-affine publication and application metadata.
 
 ## Related documents

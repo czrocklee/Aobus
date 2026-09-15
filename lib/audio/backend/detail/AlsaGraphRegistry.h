@@ -34,6 +34,7 @@ namespace ao::audio::backend::detail
     // signal, so the graph cannot disagree with what Engine validated.
     std::optional<OpenedPcmMode> optMode{};
     float volume = 1.0F;
+    // Effective route mute: application intent or an observed hardware switch.
     bool muted = false;
     AlsaVolumeControlMode volumeMode = AlsaVolumeControlMode::Unavailable;
   };

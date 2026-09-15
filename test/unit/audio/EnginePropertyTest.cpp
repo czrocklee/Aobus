@@ -17,11 +17,14 @@
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -69,6 +72,156 @@ namespace ao::audio::test
 
     CHECK(engine.isVolumeAvailable() == true);
     CHECK(engine.status().volumeAvailable == true);
+  }
+
+  TEST_CASE("Engine - controls refresh volume capability while preserving valid intent",
+            "[audio][regression][engine][property]")
+  {
+    for (auto const& [propertyId, controlFails] : std::array{std::pair{PropertyId::Volume, false},
+                                                             std::pair{PropertyId::Volume, true},
+                                                             std::pair{PropertyId::Muted, false},
+                                                             std::pair{PropertyId::Muted, true}})
+    {
+      CAPTURE(propertyId, controlFails);
+      auto spy = SpyBackend<>{};
+      auto& mockBackend = spy.mock();
+      bool hardwareAssisted = true;
+      std::size_t volumeMetadataQueryCount = 0U;
+
+      When(Method(mockBackend, property))
+        .AlwaysDo(
+          [](PropertyId id) -> Result<PropertyValue>
+          {
+            if (id == PropertyId::Volume)
+            {
+              return 1.0F;
+            }
+
+            if (id == PropertyId::Muted)
+            {
+              return false;
+            }
+
+            return makeError(Error::Code::NotSupported);
+          });
+      When(Method(mockBackend, queryProperty))
+        .AlwaysDo(
+          [&](PropertyId id) -> PropertyInfo
+          {
+            if (id != PropertyId::Volume)
+            {
+              return {};
+            }
+
+            ++volumeMetadataQueryCount;
+            return {.canRead = true,
+                    .canWrite = true,
+                    .isAvailable = true,
+                    .emitsChangeNotifications = false,
+                    .isHardwareAssisted = hardwareAssisted};
+          });
+      When(Method(mockBackend, setProperty))
+        .AlwaysDo(
+          [&](PropertyId, PropertyValue const&) -> Result<>
+          {
+            hardwareAssisted = false;
+
+            if (controlFails)
+            {
+              return makeError(Error::Code::IoError, "simulated control failure");
+            }
+
+            return {};
+          });
+
+      auto const device = Device{.id = DeviceId{"test-device"},
+                                 .displayName = "Test",
+                                 .description = "Test",
+                                 .isDefault = false,
+                                 .backendId = kBackendNone};
+      auto engine = Engine{spy.makeProxy(), device};
+      REQUIRE(engine.status().volumeIsHardwareAssisted);
+
+      auto const controlRes = propertyId == PropertyId::Volume ? engine.setVolume(0.35F) : engine.setMuted(true);
+      auto const status = engine.status();
+      auto const backendVolumeRes = spy.get().property(PropertyId::Volume);
+
+      REQUIRE(backendVolumeRes);
+      CHECK(std::get<float>(*backendVolumeRes) == 1.0F);
+
+      if (controlFails)
+      {
+        REQUIRE_FALSE(controlRes);
+        CHECK(controlRes.error().code == Error::Code::IoError);
+        CHECK(controlRes.error().message == "simulated control failure");
+      }
+      else
+      {
+        REQUIRE(controlRes);
+      }
+
+      CHECK(status.volume == Catch::Approx{propertyId == PropertyId::Volume ? 0.35F : 1.0F});
+      CHECK(status.muted == (propertyId == PropertyId::Muted));
+      CHECK(status.volumeAvailable);
+      CHECK_FALSE(status.volumeIsHardwareAssisted);
+      CHECK(volumeMetadataQueryCount == 2U);
+    }
+  }
+
+  TEST_CASE("Engine - NaN volume is rejected without backend observation or intent mutation",
+            "[audio][regression][engine][property]")
+  {
+    auto spy = SpyBackend<>{};
+    auto& mockBackend = spy.mock();
+    std::size_t setCount = 0U;
+    std::size_t volumeMetadataQueryCount = 0U;
+
+    When(Method(mockBackend, setProperty))
+      .AlwaysDo(
+        [&](PropertyId, PropertyValue const&) -> Result<>
+        {
+          ++setCount;
+          return {};
+        });
+    When(Method(mockBackend, queryProperty))
+      .AlwaysDo(
+        [&](PropertyId id) -> PropertyInfo
+        {
+          if (id != PropertyId::Volume)
+          {
+            return {};
+          }
+
+          ++volumeMetadataQueryCount;
+          return {.canRead = true,
+                  .canWrite = true,
+                  .isAvailable = true,
+                  .emitsChangeNotifications = false,
+                  .isHardwareAssisted = true};
+        });
+
+    auto const device = Device{.id = DeviceId{"test-device"},
+                               .displayName = "Test",
+                               .description = "Test",
+                               .isDefault = false,
+                               .backendId = kBackendNone};
+    auto engine = Engine{spy.makeProxy(), device};
+    REQUIRE(engine.setVolume(0.42F));
+    auto const statusBeforeNaN = engine.status();
+    auto const setCountBeforeNaN = setCount;
+    auto const queryCountBeforeNaN = volumeMetadataQueryCount;
+
+    auto const nanRes = engine.setVolume(std::numeric_limits<float>::quiet_NaN());
+    auto const statusAfterNaN = engine.status();
+
+    REQUIRE_FALSE(nanRes);
+    CHECK(nanRes.error().code == Error::Code::InvalidInput);
+    CHECK(setCount == setCountBeforeNaN);
+    CHECK(volumeMetadataQueryCount == queryCountBeforeNaN);
+    CHECK(statusAfterNaN.volume == statusBeforeNaN.volume);
+    CHECK(statusAfterNaN.muted == statusBeforeNaN.muted);
+    CHECK(statusAfterNaN.volumeAvailable == statusBeforeNaN.volumeAvailable);
+    CHECK(statusAfterNaN.volumeIsHardwareAssisted == statusBeforeNaN.volumeIsHardwareAssisted);
   }
 
   TEST_CASE("Engine - exposes property API", "[audio][unit][engine][property]")

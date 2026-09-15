@@ -116,13 +116,26 @@ Writing arbitrary float source samples to integer PCM therefore remains truncati
 
 ### ALSA volume fallback
 
-The ALSA exclusive backend probes candidate playback mixer elements with write/readback verification before classifying volume as hardware-assisted.
-If mixer setup finds no effective writable element, or a later hardware volume/mute write fails, the backend switches to software gain.
-Its graph publication then marks non-unity gain as software rather than hardware, and Player re-runs quality analysis.
+ALSA mixer selection, explicit-write failures, and software-only application mute follow the [audio execution contract](audio-execution.md#alsa-mixer-controls).
+Hardware-assisted volume identifies a readable selected mixer control; initialization does not perform a write/readback probe.
+Each graph publication takes volume, effective mute, and hardware/software control mode from one coherent mixer snapshot.
+Effective mute combines application intent with the observed hardware switch only for graph evidence; the Backend Muted property and playback-session persistence retain application intent alone.
+The pure application-mute property performs no hardware refresh.
+A Volume-property observation publishes the same snapshot after releasing the mixer lock, including a read-triggered transition to software fallback.
+The shared [backend graph delivery contract](audio-execution.md#backend-graph-delivery) suppresses equal graphs and defers reentrant ordinary delivery until the active callback returns, including during initial subscription.
+Application methods retain Engine's control serialization; graph callbacks run without a mixer or observation mutex and may re-enter a read-only property query.
+Close makes the mixer unavailable before clearing the graph, so a scalar read during that clear callback or after close does not recreate the route.
+Explicit control requests retain their publication behavior even before PCM open.
+When the backend falls back to software control, its reported gain describes the PCM gain actually applied, not the previously observed hardware volume or a rejected write request.
+The fallback does not establish that shared hardware controls were restored.
 
-Software fallback applies gain in the PCM path and reports its current gain magnitude.
-The analyzer classifies attenuation as software-volume intervention; any provider-reported gain above unity uses the amplification finding.
-The application volume state simultaneously changes its hardware-assisted observation, so frontend volume presentation no longer claims hardware control.
+The analyzer classifies non-unity software gain as software-volume intervention; any provider-reported gain above unity uses the amplification finding.
+Application software mute and observed external hardware mute both produce mute evidence, without reclassifying hardware volume itself as software gain.
+Engine performs graph-publishing backend observations outside its state mutex, then applies the scalar values and Volume capability under that mutex.
+Graph subscribers may query Engine's state-only getters during publication, but complete `status()` and control calls must be deferred according to the [control and query serialization contract](audio-execution.md#control-and-query-serialization).
+After any valid volume or mute control, Engine refreshes Volume capability metadata even when the backend reports failure, without reading the backend's fallback gain over the requested intent.
+This synchronous refresh does not depend on backend property-change notifications, so the application volume state exposes the changed hardware-assisted capability and frontend volume presentation no longer claims hardware control after fallback.
+A NaN volume request is rejected before mixer observation or graph publication and cannot change this capability state.
 
 ### Core Audio route evidence
 
@@ -194,7 +207,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) proves merged-graph handling, generation gating, incomplete provider evidence, callback marshalling, and readiness.
-- [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication.
+- [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication; [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp) proves the concrete property-to-graph observation wiring and closed-state non-publication.
 - [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) proves Core Audio client/device format separation and software-gain evidence.
 - [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.

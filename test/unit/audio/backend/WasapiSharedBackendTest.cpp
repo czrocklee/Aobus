@@ -91,16 +91,20 @@ namespace ao::audio::backend::test
     CHECK_FALSE(received.back().nodes[1].softwareVolumeNotUnity);
     CHECK(received.back().nodes[1].maxSoftwareGain == 1.0F);
 
+    auto const unappliedGraph = received.back();
+    CHECK(received.front() == unappliedGraph);
     REQUIRE(backend.set(props::kVolume, 1.5F));
     volumeRes = backend.get(props::kVolume);
     REQUIRE(volumeRes);
     CHECK(*volumeRes == 1.0F);
-    REQUIRE(received.size() == 3);
+    // Changed unopened intent leaves the applied-session graph unchanged, so it is not redelivered.
+    REQUIRE(received.size() == 2);
+    CHECK(received.back() == unappliedGraph);
     CHECK_FALSE(received.back().nodes[1].softwareVolumeNotUnity);
     CHECK(received.back().nodes[1].maxSoftwareGain == 1.0F);
 
     backend.close();
-    REQUIRE(received.size() == 4);
+    REQUIRE(received.size() == 3);
     CHECK(received.back().nodes.empty());
     CHECK(received.back().connections.empty());
   }
