@@ -252,10 +252,13 @@ namespace ao::audio
     void pause();
     void resume();
     void stop();
+    /// Does not seek or restart a playback whose transport is already Error.
+    /// Recovery requires a new playback start, not a seek on the failed source.
     void seek(std::chrono::milliseconds offset);
     /// Returns true when the expected current item matched and the seek was
     /// issued. Audio failures remain observable through transport status;
-    /// false means rejection, never queued work. Acquiring control may still
+    /// false means rejection, never queued work. Error rejects before source,
+    /// backend, or lookahead mutation, as for seek(). Acquiring control may still
     /// settle an already-consumed realtime transition before rejection.
     bool trySeek(PlaybackItemId expectedItemId, std::chrono::milliseconds offset);
     /// Returns whether the settled realtime timeline still has the expected

@@ -419,6 +419,7 @@ add_executable(ao_core_test
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
     unit/audio/EngineRtSignalRingTest.cpp
+    unit/audio/EngineSeekErrorTest.cpp
     unit/audio/EngineTest.cpp
     unit/audio/EngineBackendSwapTest.cpp
     unit/audio/EngineCallbackTest.cpp

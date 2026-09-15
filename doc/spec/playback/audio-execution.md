@@ -78,7 +78,7 @@ PlaybackTransport owns runtime metadata separately; `audio::PlaybackInput` conta
 
 ### Control and query serialization
 
-Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `seek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
+Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `seek`, `trySeek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
 This order guarantees safety and a coherent final state, not user-intent priority between racing callers.
 The synchronous compatibility forms of `stagePlayback` and `setNext` retain that serialization across decoder preparation and token or lookahead publication.
 For a compatible lookahead, `setNext` also retains it across final decoder open, preroll, and activation.
@@ -100,6 +100,21 @@ updates the same transition state.
 
 Pending drain-complete signals are not materialized by command entry.
 A command may retire or reposition their render session, so they enter the normal event queue and are rechecked against render generation and drain epoch before notification.
+
+### Seek admission and failure
+
+Once Engine observes `Transport::Error` at control-command admission, `seek()` performs no seek and `trySeek()` returns false, even if the expected item and its source remain present.
+This rejection preserves the error text and position and does not disarm lookahead, seek the source, or stop, flush, or restart the backend.
+The normal control-entry settlement of already-consumed realtime transitions still precedes admission; rejection is not a rollback of that settlement.
+
+An admitted source seek failure sets Error synchronously and also queues its typed source-error event.
+The event worker later retires the failed source and backend through normal failure delivery.
+A seek between those two steps must not erase Error with Buffering or restart the source, including when playback was paused before the failure.
+A matched `trySeek()` that issued the failing seek still returns true; the failure remains observable through status and the existing asynchronous failure channel.
+
+Recovery establishes a new playback through `play()` or an accepted staged start, including a start chosen by application succession; it is not a same-source seek retry.
+The new start clears the previous playback's error text and retains the existing generation fences against retired failure events.
+This Engine rule does not retire application occurrences or change Preview semantics; those remain owned by the [application commit specification](application-commit.md).
 
 ### Event delivery and reentrancy
 
@@ -244,7 +259,8 @@ The current physical PCM mode cannot change without consuming or clearing lookah
 
 `clearNext` returns the disarmed opaque item id when the render thread has not consumed it.
 If already consumed, it returns empty and upper runtime retains matching metadata for the later advanced callback.
-Explicit `play`, `stop`, `seek`, and output-device changes clear unconsumed lookahead.
+Explicit `play`, `stop`, and output-device changes clear unconsumed lookahead.
+A seek clears lookahead only after passing its initial Error and expected-item admission checks.
 An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
 Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
@@ -506,6 +522,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal/) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
+- [`EngineSeekErrorTest.cpp`](../../../test/unit/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.

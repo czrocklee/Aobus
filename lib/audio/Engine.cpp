@@ -2004,6 +2004,7 @@ namespace ao::audio
       backendStarted = false;
       cancelPendingDrainSignal();
       status.transport = Transport::Opening;
+      status.statusText.clear();
       optCurrentItem = item;
       syncBackendIdentity();
     }
@@ -2234,11 +2235,17 @@ namespace ao::audio
   bool Engine::Impl::trySeekUnlocked(std::chrono::milliseconds offset,
                                      std::optional<PlaybackItemId> const optExpectedItemId)
   {
-    if (optExpectedItemId)
     {
       auto const lock = std::scoped_lock{stateMutex};
 
-      if (!optCurrentItem || optCurrentItem->id != *optExpectedItemId)
+      // A failed seek can leave its source alive until queued error delivery.
+      // Reject before Buffering erases Error or any seek side effect restarts it.
+      if (status.transport == Transport::Error)
+      {
+        return false;
+      }
+
+      if (optExpectedItemId && (!optCurrentItem || optCurrentItem->id != *optExpectedItemId))
       {
         return false;
       }
