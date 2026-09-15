@@ -122,6 +122,7 @@ Each graph publication takes volume, effective mute, and hardware/software contr
 Effective mute combines application intent with the observed hardware switch only for graph evidence; the Backend Muted property and playback-session persistence retain application intent alone.
 The pure application-mute property performs no hardware refresh.
 A Volume-property observation publishes the same snapshot after releasing the mixer lock, including a read-triggered transition to software fallback.
+The shared [backend graph delivery contract](audio-execution.md#backend-graph-delivery) suppresses equal graphs and defers reentrant ordinary delivery until the active callback returns, including during initial subscription.
 Application methods retain Engine's control serialization; graph callbacks run without a mixer or observation mutex and may re-enter a read-only property query.
 Close makes the mixer unavailable before clearing the graph, so a scalar read during that clear callback or after close does not recreate the route.
 Explicit control requests retain their publication behavior even before PCM open.

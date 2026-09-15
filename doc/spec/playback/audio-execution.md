@@ -457,6 +457,24 @@ mute writes zero while preserving the cached volume to restore, and graph
 evidence classifies the gain as software rather than device hardware control.
 ALSA handles shared mixer state under the separate contract below.
 
+### Backend graph delivery
+
+The shared `BackendGraphRegistry`, consumed by ALSA and WASAPI, suppresses publication when the complete route graph equals the stored graph.
+Ordinary publish, clear, and initial subscription delivery do not nest graph callbacks, including when a callback reads a backend property that publishes again.
+Reentrant work waits until the active callback returns; revision checks discard superseded publications and cancellation is checked immediately before each callback.
+A normal subscription delivers its captured initial snapshot synchronously; a subscription made inside a graph callback defers that initial delivery and can be cancelled before it runs.
+A clear still removes the stored graph and publishes an empty snapshot rather than storing an empty graph in place of the route fallback.
+
+The callback gate serializes delivery without holding the registry state mutex across callbacks.
+Each publisher retains responsibility for its own thread's delivery: a different publishing thread may update the route revision while waiting for the gate, but never transfers its callbacks to the active publisher's thread.
+Only same-thread reentrant work joins the active delivery drain.
+This does not authorize callbacks to wait for another thread's publication or cancellation while retaining the gate.
+
+Registry retirement is a separate synchronous path, not ordinary queued delivery.
+Shutdown discards pending ordinary deliveries, closes admission, and sends final empty graphs to subscriptions that have not been cancelled.
+An external shutdown caller waits behind in-flight callbacks; after retirement returns, no new callback starts and retained publishers are inert.
+Shutdown initiated on a graph callback stack can synchronously nest final-empty callbacks so that observer state can be released after that shutdown call returns; ordinary non-nesting does not weaken this lifetime boundary or the provider's separate quiescence contract.
+
 ### ALSA mixer controls
 
 ALSA mixer initialization, repeated initialization, candidate rejection, and close never write shared volume or switch controls.
@@ -480,7 +498,8 @@ A failed explicit hardware volume setter reports an I/O error that identifies po
 Hardware writes may have partially succeeded: there is no compensating write, rollback guarantee, or automatic restoration to maximum volume.
 The next explicit volume request controls software gain.
 Each published mixer graph takes volume, effective mute, and control mechanism from one mutex-consistent snapshot.
-A Volume-property observation that changes or loses the selected element publishes the corresponding fallback graph before returning its scalar value and capability can be queried.
+A Volume-property observation that changes or loses the selected element updates the registry's corresponding fallback graph before returning its scalar value and capability can be queried.
+Observer delivery follows the [backend graph delivery contract](#backend-graph-delivery), so a change discovered inside a graph callback is delivered after that callback returns rather than recursively.
 Close makes the mixer unavailable before clearing the graph, with no mixer or observation mutex held across graph callbacks.
 An observation during the clear callback or after close returns the scalar fallback without recreating the cleared graph; unknown properties neither observe nor publish mixer state.
 Explicit control requests can still publish their state before PCM open; only unavailable scalar observations suppress publication.
@@ -565,6 +584,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Test map
 
 - [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/unit/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, and read-triggered fallback.
+- [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, revision supersession, cancellation, and synchronous final-empty retirement.
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal/) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.

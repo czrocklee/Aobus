@@ -82,10 +82,13 @@ namespace ao::audio::backend::test
 
     CHECK(mixerStatePtr->refreshCount == refreshCountBeforeEngine + 1U);
     CHECK_FALSE(audioEngine.status().muted);
+    // Opening must observe a real graph change, not depend on an identical snapshot being redelivered.
+    mixerStatePtr->hardwareElements.front().rawLevels = {100L};
     stage = ObservationStage::Open;
     audioEngine.play(::ao::audio::test::makePlaybackItem(PlaybackInput{.filePath = "test.flac"}));
     stage = ObservationStage::None;
     CHECK_FALSE(audioEngine.status().muted);
+    CHECK(audioEngine.volume() == 1.0F);
     CHECK(openStatusReadCount > 0U);
 
     REQUIRE(audioEngine.setMuted(true));

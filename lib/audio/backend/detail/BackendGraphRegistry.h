@@ -19,7 +19,11 @@ namespace ao::audio::backend::detail
    * provider serves subscriptions from the same registry without exposing
    * backend-specific state. Callback delivery is serialized, happens without
    * the registry state lock, and rechecks cancellation immediately before
-   * invocation.
+   * invocation. Equal stored graphs do not publish again. Ordinary publication,
+   * clear, and initial delivery never nest callbacks: reentrant work drains
+   * after the active callback returns, discarding superseded route revisions.
+   * Delivery stays on the calling thread; another publishing thread waits for
+   * the callback gate rather than handing its callbacks to the active thread.
    */
   class BackendGraphRegistry final
   {
@@ -35,17 +39,19 @@ namespace ao::audio::backend::detail
     BackendGraphRegistry& operator=(BackendGraphRegistry&&) = delete;
 
     /**
-     * @brief Subscribes to one route and immediately publishes its snapshot.
+     * @brief Subscribes to one route and publishes its initial snapshot.
      *
      * An unknown route starts with @p initialGraph, which defaults to an empty
      * graph. A stored publication takes precedence. The returned subscription
-     * may safely outlive the registry.
+     * may safely outlive the registry. Initial delivery is synchronous except
+     * when subscribe is itself called from a graph callback; in that case it
+     * waits for that callback to return and can be cancelled before delivery.
      */
     utility::ScopedRegistration subscribe(std::string_view routeAnchor,
                                           Callback callback,
                                           flow::Graph initialGraph = {});
 
-    /// Replaces one route snapshot and publishes it to current subscribers.
+    /// Replaces a changed route snapshot and publishes it to current subscribers.
     void publish(std::string_view routeAnchor, flow::Graph graph);
 
     /// Removes one route snapshot and publishes an empty graph.
@@ -56,6 +62,9 @@ namespace ao::audio::backend::detail
      *
      * The call waits behind an in-flight graph callback. After it returns, no
      * new callback can begin and later subscribe/publish/clear calls are inert.
+     * Retirement is separate from ordinary delivery: shutdown on a callback
+     * stack synchronously delivers final empty graphs and may nest callbacks.
+     * Pending ordinary deliveries are discarded, not drained after retirement.
      */
     void shutdown() noexcept;
 

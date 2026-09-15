@@ -16,12 +16,15 @@
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <limits>
 #include <memory>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::audio::backend::test
 {
@@ -199,7 +202,114 @@ namespace ao::audio::backend::test
     CHECK(graph.nodes.empty());
   }
 
-  TEST_CASE("AlsaExclusiveBackend - graph callbacks can observe volume during publication and close",
+  TEST_CASE("AlsaExclusiveBackend - every graph callback reads volume without nested delivery",
+            "[audio][regression][alsa][concurrency]")
+  {
+    bool const hardware = GENERATE(false, true);
+    auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
+
+    if (hardware)
+    {
+      mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {25L}});
+    }
+
+    auto mixerFactory = detail::test::FakeMixerOpenFactory{mixerStatePtr};
+    auto mixerPtr = std::make_unique<detail::AlsaMixerSession>(mixerFactory);
+    REQUIRE(mixerPtr->tryInit(nullptr) == hardware);
+
+    if (!hardware)
+    {
+      REQUIRE(mixerPtr->setVolume(0.25F));
+    }
+
+    auto registry = detail::AlsaGraphRegistry{};
+    auto const device = Device{
+      .id = DeviceId{"hw:test,0"}, .displayName = "Test card", .description = "hw:test,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive, registry.publisher(), std::move(mixerPtr)};
+    bool initialGraphIsCurrent = false;
+
+    SECTION("initialized mixer without a stored graph")
+    {
+    }
+
+    SECTION("current stored graph")
+    {
+      REQUIRE(backend.property(PropertyId::Volume));
+      initialGraphIsCurrent = true;
+    }
+
+    SECTION("stale stored graph")
+    {
+      registry.publish({.routeAnchor = "hw:test,0",
+                        .volume = 1.0F,
+                        .volumeMode = hardware ? detail::AlsaVolumeControlMode::HardwareMixer
+                                               : detail::AlsaVolumeControlMode::SoftwareGain});
+    }
+
+    auto graphs = std::vector<flow::Graph>{};
+    std::size_t depth = 0U;
+    std::size_t maxDepth = 0U;
+    bool allReadsSucceeded = true;
+    float observedVolume = -1.0F;
+    auto graphSub = registry.subscribe("hw:test,0",
+                                       [&](flow::Graph const& graph)
+                                       {
+                                         ++depth;
+                                         maxDepth = std::max(maxDepth, depth);
+                                         graphs.push_back(graph);
+
+                                         // Bound the broken implementation's recursion, not normal observation.
+                                         if (depth < 8U)
+                                         {
+                                           auto const volumeRes = backend.property(PropertyId::Volume);
+                                           allReadsSucceeded = allReadsSucceeded && volumeRes.has_value();
+
+                                           if (volumeRes)
+                                           {
+                                             observedVolume = std::get<float>(*volumeRes);
+                                           }
+                                         }
+
+                                         --depth;
+                                       });
+
+    CHECK(maxDepth == 1U);
+    CHECK(graphs.size() == (initialGraphIsCurrent ? 1U : 2U));
+    CHECK(allReadsSucceeded);
+    CHECK(observedVolume == 0.25F);
+    REQUIRE_FALSE(graphs.empty());
+    REQUIRE(graphs.back().nodes.size() == 2U);
+    CHECK(graphs.back().nodes.back().hardwareVolumeNotUnity == hardware);
+    CHECK(graphs.back().nodes.back().softwareVolumeNotUnity == !hardware);
+    CHECK(backend.queryProperty(PropertyId::Volume).isHardwareAssisted == hardware);
+
+    auto const stableCount = graphs.size();
+    REQUIRE(backend.property(PropertyId::Volume));
+    REQUIRE(backend.property(PropertyId::Volume));
+    CHECK(graphs.size() == stableCount);
+
+    // A genuine ordinary publication must still reach a subscriber that always reads volume.
+    REQUIRE(backend.set(props::kMuted, true));
+    CHECK(graphs.size() == stableCount + 1U);
+    CHECK(graphs.back().nodes.back().isMuted);
+    CHECK(maxDepth == 1U);
+
+    auto const countBeforeClose = graphs.size();
+    backend.close();
+    CHECK(graphs.size() == countBeforeClose + 1U);
+    CHECK(graphs.back().nodes.empty());
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
+    CHECK(maxDepth == 1U);
+    CHECK(allReadsSucceeded);
+
+    auto const countAfterClose = graphs.size();
+    REQUIRE(backend.property(PropertyId::Volume));
+    CHECK(graphs.size() == countAfterClose);
+    CHECK(graphs.back().nodes.empty());
+    CHECK(mixerStatePtr->writeCount == 0U);
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - initial callback volume read delivers discovered fallback after unwinding",
             "[audio][regression][alsa][concurrency]")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
@@ -208,49 +318,43 @@ namespace ao::audio::backend::test
     auto mixerPtr = std::make_unique<detail::AlsaMixerSession>(mixerFactory);
     REQUIRE(mixerPtr->tryInit(nullptr));
     auto registry = detail::AlsaGraphRegistry{};
-    auto graph = flow::Graph{};
     auto const device = Device{
       .id = DeviceId{"hw:test,0"}, .displayName = "Test card", .description = "hw:test,0", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive, registry.publisher(), std::move(mixerPtr)};
-    bool reenter = false;
-    bool observationSucceeded = false;
-    float observedVolume = -1.0F;
-    std::size_t reentryCount = 0U;
+    REQUIRE(backend.property(PropertyId::Volume));
+    mixerStatePtr->hardwareElements.clear();
+    auto graphs = std::vector<flow::Graph>{};
+    std::size_t depth = 0U;
+    std::size_t maxDepth = 0U;
+    bool allReadsReturnedUnity = true;
     auto graphSub = registry.subscribe("hw:test,0",
-                                       [&](flow::Graph const& nextGraph)
+                                       [&](flow::Graph const& graph)
                                        {
-                                         graph = nextGraph;
+                                         ++depth;
+                                         maxDepth = std::max(maxDepth, depth);
+                                         graphs.push_back(graph);
 
-                                         if (!reenter)
+                                         if (depth < 8U)
                                          {
-                                           return;
+                                           auto const volumeRes = backend.property(PropertyId::Volume);
+                                           allReadsReturnedUnity =
+                                             allReadsReturnedUnity && volumeRes && std::get<float>(*volumeRes) == 1.0F;
                                          }
 
-                                         reenter = false;
-                                         ++reentryCount;
-                                         auto const volumeRes = backend.property(PropertyId::Volume);
-                                         observationSucceeded = volumeRes.has_value();
-
-                                         if (volumeRes)
-                                         {
-                                           observedVolume = std::get<float>(*volumeRes);
-                                         }
+                                         --depth;
                                        });
 
-    reenter = true;
-    REQUIRE(backend.property(PropertyId::Volume));
-    CHECK(observationSucceeded);
-    CHECK(reentryCount == 1U);
-    CHECK(observedVolume == 0.8F);
-    CHECK_FALSE(graph.nodes.empty());
-
-    reenter = true;
-    backend.close();
-    CHECK(observationSucceeded);
-    CHECK(reentryCount == 2U);
-    CHECK(observedVolume == 1.0F);
-    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
-    CHECK(graph.nodes.empty());
+    CHECK(maxDepth == 1U);
+    CHECK(allReadsReturnedUnity);
+    REQUIRE(graphs.size() == 2U);
+    REQUIRE(graphs.front().nodes.size() == 2U);
+    REQUIRE(graphs.back().nodes.size() == 2U);
+    CHECK(graphs.front().nodes.back().hardwareVolumeNotUnity);
+    CHECK_FALSE(graphs.back().nodes.back().hardwareVolumeNotUnity);
+    CHECK_FALSE(graphs.back().nodes.back().softwareVolumeNotUnity);
+    CHECK(backend.queryProperty(PropertyId::Volume).isAvailable);
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
+    CHECK(mixerStatePtr->writeCount == 0U);
   }
 
   TEST_CASE("AlsaExclusiveBackend - retained publisher is inert after graph retirement",
