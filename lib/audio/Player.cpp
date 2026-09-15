@@ -1295,6 +1295,28 @@ namespace ao::audio
     _implPtr->enginePtr->seek(offset);
   }
 
+  bool Player::trySeek(Engine::PlaybackItemId const expectedItemId, std::chrono::milliseconds offset)
+  {
+    _implPtr->ensureOnExecutor();
+
+    if (!_implPtr->enginePtr->trySeek(expectedItemId, offset))
+    {
+      return false;
+    }
+
+    // Preparation completions are serialized on this executor, so cancellation
+    // after the synchronous Engine decision cannot let one overtake the seek.
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
+    return true;
+  }
+
+  bool Player::isCurrentPlaybackItem(Engine::PlaybackItemId const expectedItemId)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->enginePtr->isCurrentPlaybackItem(expectedItemId);
+  }
+
   Result<> Player::setVolume(float vol)
   {
     _implPtr->ensureOnExecutor();

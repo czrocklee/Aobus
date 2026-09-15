@@ -60,7 +60,7 @@ int main(int argc, char** argv)
     }
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
-        (scenario != "desktop" && scenario != "authoring" && scenario != "presentation"))
+        (scenario != "desktop" && scenario != "authoring" && scenario != "presentation" && scenario != "media"))
     {
       return 2;
     }
@@ -107,9 +107,18 @@ int main(int argc, char** argv)
     [app finishLaunching];
     [app activateIgnoringOtherApps:YES];
     ao::rt::Log::initialize(ao::rt::LogLevel::Info, launch.stateRoot / "logs");
-    auto const result = scenario == "authoring"
-                          ? ao::appkit::test::runAuthoringScenario(launch.optRequest->libraryRoot, launch.stateRoot)
-                          : ao::appkit::test::runPresentationScenario(launch.optRequest->libraryRoot, launch.stateRoot);
+    auto runScenario = ao::appkit::test::runPresentationScenario;
+
+    if (scenario == "authoring")
+    {
+      runScenario = ao::appkit::test::runAuthoringScenario;
+    }
+    else if (scenario == "media")
+    {
+      runScenario = ao::appkit::test::runMediaScenario;
+    }
+
+    auto const result = runScenario(launch.optRequest->libraryRoot, launch.stateRoot);
     ao::rt::Log::shutdown();
     return result;
   }

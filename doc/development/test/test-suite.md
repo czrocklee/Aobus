@@ -181,7 +181,7 @@ behaviour stop the run instead of logging and continuing:
 rerun this shard: env LSAN_OPTIONS=suppressions=... UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 /tmp/build/Aobus/debug-asan/test/ao_core_test --rng-seed 2914 ...
 ```
 
-`DISPLAY` is the one variable left out. It names an Xvfb that the run tears
-down on the way out, so a GTK rerun uses whatever display the caller has: a
-desktop session works as is, and on a headless host start an `Xvfb` first and
-export its display.
+`DISPLAY` and `AOBUS_OWNED_GTK_DISPLAY` are left out because the portal tears down its private Xvfb after the run.
+A direct GTK rerun needs an available display, but native-input cases skip without proof that the portal owns that display.
+Rerun those cases through the portal, for example `./ao test --gtk "SeekControlWidget*"`, so it creates and marks a new private Xvfb.
+Never set the ownership marker for an inherited desktop or a manually supplied display.

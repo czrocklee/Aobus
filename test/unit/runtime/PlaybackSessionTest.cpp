@@ -773,6 +773,28 @@ namespace ao::rt::test
     CHECK(restoredSnapshot.transport.volume.muted);
     CHECK(restoredSnapshot.succession.shuffle == ShuffleMode::On);
     CHECK(restoredSnapshot.succession.repeat == RepeatMode::All);
+    REQUIRE(restoredSnapshot.transport.occurrenceId.value != 0);
+    REQUIRE(restoredSnapshot.transport.duration > std::chrono::milliseconds{750});
+
+    CHECK(runtimePtr->playback().commands().trySeek(
+      restoredSnapshot.transport.occurrenceId, std::chrono::milliseconds{750}));
+    auto const soughtSnapshot = runtimePtr->playback().snapshot();
+    CHECK(soughtSnapshot.transport.transport == audio::Transport::Idle);
+    CHECK(soughtSnapshot.transport.occurrenceId == restoredSnapshot.transport.occurrenceId);
+    CHECK(soughtSnapshot.transport.elapsed == std::chrono::milliseconds{750});
+    CHECK(runtimePtr->playback().elapsed() == soughtSnapshot.transport.elapsed);
+    CHECK(soughtSnapshot.transport.finalSeekRevision.value == restoredSnapshot.transport.finalSeekRevision.value + 1);
+
+    // A restored sequence owns an exact runtime occurrence while Engine is
+    // intentionally stopped, so guarded navigation may resume from that cursor.
+    REQUIRE(runtimePtr->playback().commands().tryNext(soughtSnapshot.transport.occurrenceId));
+    REQUIRE(executor->tryDrainUntil(
+      [&] { return runtimePtr->playback().snapshot().transport.transport == audio::Transport::Playing; }));
+    auto const advancedSnapshot = runtimePtr->playback().snapshot();
+    CHECK(advancedSnapshot.transport.occurrenceId.value != 0);
+    CHECK(advancedSnapshot.transport.occurrenceId != soughtSnapshot.transport.occurrenceId);
+    CHECK(advancedSnapshot.transport.nowPlaying.trackId != kInvalidTrackId);
+    CHECK(advancedSnapshot.transport.nowPlaying.trackId == advancedSnapshot.succession.currentTrackId);
   }
 
   TEST_CASE("PlaybackSession - explicit checkpoint starts event-driven debounce",
@@ -1376,6 +1398,77 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
     REQUIRE(runtimePtr->savePlaybackSession());
     CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 0);
+  }
+
+  TEST_CASE("PlaybackSession - final seeks to a restored endpoint restart from zero",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const current = addPlayableTrack(*runtimePtr, *executor, "Restored endpoint");
+    runtimePtr->sources().reloadAllTracks();
+    storeSession(runtimePtr->workspaceConfigStore(),
+                 PlaybackSessionState{
+                   .sourceListId = kAllTracksListId,
+                   .currentTrackId = current,
+                   .positionMs = 250,
+                 });
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    auto& playback = runtimePtr->playback();
+    auto const restored = playback.snapshot().transport;
+    REQUIRE(restored.transport == audio::Transport::Idle);
+    REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
+    REQUIRE(restored.duration > restored.elapsed);
+
+    SECTION("unconditional final seek")
+    {
+      playback.commands().seek(restored.duration);
+    }
+
+    SECTION("synchronous guarded final seek")
+    {
+      REQUIRE(playback.commands().trySeek(restored.occurrenceId, restored.duration));
+    }
+
+    SECTION("guarded final seek queued during publication")
+    {
+      bool submitted = false;
+      auto const subscription = playback.events().onSnapshot(
+        [&](PlaybackSnapshot const&)
+        {
+          if (!submitted)
+          {
+            submitted = true;
+            playback.commands().seek(restored.occurrenceId, restored.duration);
+          }
+        });
+      playback.commands().setMuted(true);
+      REQUIRE(submitted);
+      CHECK(playback.snapshot().transport.elapsed == restored.elapsed);
+      CHECK(playback.snapshot().transport.finalSeekRevision == restored.finalSeekRevision);
+      executor->runUntilIdle();
+    }
+
+    auto const sought = playback.snapshot().transport;
+    REQUIRE(sought.elapsed == std::chrono::milliseconds{0});
+    CHECK(sought.transport == audio::Transport::Idle);
+    CHECK(sought.occurrenceId == restored.occurrenceId);
+    CHECK(sought.finalSeekRevision.value == restored.finalSeekRevision.value + 1);
+
+    // Resume must consume the normalized token, not merely display zero while
+    // retaining an end-of-stream offset for the later audio start.
+    playback.commands().resume();
+    REQUIRE(
+      executor->tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == current);
+    CHECK(playback.snapshot().transport.occurrenceId != restored.occurrenceId);
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
   }
 
   TEST_CASE("PlaybackSession - volume and mute restore reports the first failure and publishes actual state",

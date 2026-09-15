@@ -1647,7 +1647,7 @@ namespace ao::audio
       std::chrono::milliseconds initialOffset,
       std::uint64_t playbackGeneration,
       std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack = {});
-    void seekUnlocked(std::chrono::milliseconds offset);
+    bool trySeekUnlocked(std::chrono::milliseconds offset, std::optional<PlaybackItemId> optExpectedItemId);
     Result<> setVolumeUnlocked(float volume);
     Result<> setMutedUnlocked(bool muted);
 
@@ -2231,15 +2231,39 @@ namespace ao::audio
     stopPlaybackUnlocked();
   }
 
-  void Engine::Impl::seekUnlocked(std::chrono::milliseconds offset)
+  bool Engine::Impl::trySeekUnlocked(std::chrono::milliseconds offset,
+                                     std::optional<PlaybackItemId> const optExpectedItemId)
   {
+    if (optExpectedItemId)
+    {
+      auto const lock = std::scoped_lock{stateMutex};
+
+      if (!optCurrentItem || optCurrentItem->id != *optExpectedItemId)
+      {
+        return false;
+      }
+    }
+
+    // Render may splice after the first identity check. Disarming lookahead
+    // closes that handoff and settles its current-item promotion before the
+    // guarded command is allowed to mutate the active source.
     clearPreparedNext();
+
+    if (optExpectedItemId)
+    {
+      auto const lock = std::scoped_lock{stateMutex};
+
+      if (!optCurrentItem || optCurrentItem->id != *optExpectedItemId)
+      {
+        return false;
+      }
+    }
 
     auto const sourcePtr = currentSource();
 
     if (!sourcePtr)
     {
-      return;
+      return false;
     }
 
     cancelPendingDrainSignal();
@@ -2265,7 +2289,7 @@ namespace ao::audio
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Error;
       status.statusText = seekRes.error().message;
-      return;
+      return true;
     }
 
     auto const bufferedDuration = sourcePtr->bufferedDuration();
@@ -2279,33 +2303,25 @@ namespace ao::audio
         enqueuePlaybackEvent(DeferredNotifications{.notifications = std::move(notifications)});
       }
 
-      return;
+      return true;
     }
 
     if (wasPaused)
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.transport = Transport::Paused;
-      return;
+      return true;
     }
 
     {
       auto const lock = std::scoped_lock{stateMutex};
-
-      // Error is terminal: if an already-applied error moved the transport to
-      // Error, never clobber it with Playing. Source/backend errors that arrive
-      // while this control command is running are queued behind controlMutex and
-      // will be applied after this command returns.
-      if (status.transport == Transport::Error)
-      {
-        return;
-      }
 
       status.transport = Transport::Playing;
       backendStarted = true;
     }
 
     backendPtr->start();
+    return true;
   }
 
   Result<> Engine::Impl::setVolumeUnlocked(float volume)
@@ -2869,7 +2885,32 @@ namespace ao::audio
       return;
     }
 
-    _implPtr->seekUnlocked(offset);
+    std::ignore = _implPtr->trySeekUnlocked(offset, std::nullopt);
+  }
+
+  bool Engine::trySeek(PlaybackItemId const expectedItemId, std::chrono::milliseconds offset)
+  {
+    auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return false;
+    }
+
+    return _implPtr->trySeekUnlocked(offset, expectedItemId);
+  }
+
+  bool Engine::isCurrentPlaybackItem(PlaybackItemId const expectedItemId)
+  {
+    auto const controlLock = _implPtr->lockControl();
+
+    if (!controlLock || expectedItemId.value == 0)
+    {
+      return false;
+    }
+
+    auto const* const activeNode = _implPtr->timeline.activeNode();
+    return activeNode != nullptr && activeNode->item.id == expectedItemId;
   }
 
   Result<> Engine::setVolume(float volume)

@@ -2406,6 +2406,45 @@ namespace ao::tui::test
     CHECK(snapshots[0].transport.elapsed == duration);
   }
 
+  TEST_CASE("EventController - replacement makes a held seek inert until a fresh gesture",
+            "[tui][regression][event][concurrency]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
+    auto& playback = fixture.runtimePtr->playback();
+    auto& hitRegions = fixture.hitRegions;
+    hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
+    auto previews = std::vector<std::chrono::milliseconds>{};
+    auto const previewSub = playback.events().onSeekPreview(
+      [&previews](std::chrono::milliseconds const elapsed) noexcept { previews.push_back(elapsed); });
+    auto controller = fixture.makeEvents(library);
+    auto const trackId = playback.snapshot().transport.nowPlaying.trackId;
+    auto const firstOccurrenceId = playback.snapshot().transport.occurrenceId;
+
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 1})));
+    REQUIRE(previews.size() == 1);
+    REQUIRE(playback.commands().startFromView(library.activeViewId(), trackId));
+    REQUIRE(fixture.tryWaitForPlayback(trackId));
+    auto const replacement = playback.snapshot().transport;
+    REQUIRE(replacement.occurrenceId != firstOccurrenceId);
+
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Moved, .x = 30, .y = 1})));
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 30, .y = 1})));
+    CHECK(previews.size() == 1);
+    CHECK(playback.snapshot().transport.finalSeekRevision == replacement.finalSeekRevision);
+
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1})));
+    REQUIRE(controller.tryHandleEvent(
+      ftxui::Event::Mouse("", {.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 20, .y = 1})));
+    REQUIRE(previews.size() == 2);
+    CHECK(playback.snapshot().transport.finalSeekRevision.value == replacement.finalSeekRevision.value + 1);
+  }
+
   TEST_CASE("EventController - seek drag releases over the docked Lists pane", "[tui][regression][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};

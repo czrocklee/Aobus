@@ -678,6 +678,11 @@ namespace
 
 - (void)emptyAction:(id) [[maybe_unused]] sender
 {
+  if (_closing != NO || !_sessionPtr)
+  {
+    return;
+  }
+
   if (_sessionPtr->state().filter.entryText.empty())
   {
     if ([self activeListId] == ao::rt::kAllTracksListId)

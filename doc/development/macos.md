@@ -152,11 +152,23 @@ the same retained session. Closing the window keeps the session alive; reopening
 uses that session. Quit drains runtime callbacks before teardown, and switching
 libraries releases the old graph before starting a successor process.
 
+The session publishes title, artist, album, duration, elapsed time, playback
+state, and available artwork through MediaPlayer. System commands support Play,
+Pause, Toggle Play/Pause, Previous, Next, Stop, and absolute position changes.
+Closing or hiding the window keeps this integration active. Accepted Quit and
+library switching retire command admission and clear Now Playing before
+releasing the old session. Repeated Play/Pause commands are idempotent; a queued
+position change is rejected when its playback occurrence has been replaced,
+including replay of the same track.
+Valid position deliveries join the runtime FIFO rather than being dropped by an orthogonal backlog; adapter retirement fences native callbacks, while already submitted commands remain runtime-owned until execution or runtime shutdown.
+Ordinary Next commands instead navigate from the execution-time subject, as on Windows SMTC and Linux MPRIS; commands outside the supported MediaPlayer surface are disabled.
+The adapter does not create a separate playback engine or poll native windows.
+
 The deployment baseline remains macOS 15. Newer native split-view materials use
 availability checks and fall back on older macOS versions. Native shell and
 editor copy use the startup-selected MessageCatalog; missing AppKit translations
-fall back to English root. Custom layouts, complete preferences, system media controls,
-signing and distribution remain outside this development slice.
+fall back to English root. Custom layouts, complete preferences, signing and
+distribution remain outside this development slice.
 
 The Window menu retains a Show Aobus Window command (Command-0) after closing the
 window. Properties uses Command-I, Inspector uses Option-Command-I, and Sidebar
@@ -194,7 +206,32 @@ against the same production objects as the shipping desktop. The shipping
 ./ao test --appkit --scenario desktop --state-root /tmp/aobus-desktop-state --library /tmp/aobus-desktop-music
 ./ao test --appkit --scenario authoring --state-root /tmp/aobus-authoring-state --library /tmp/aobus-authoring-music
 ./ao test --appkit --scenario presentation --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
+./ao test --appkit --scenario media --state-root /tmp/aobus-media-state --library /tmp/aobus-media-music
 ```
+
+The media scenario exercises the production adapter and native Now Playing
+center with a hidden window. It checks each native command's enabled state
+against its logical command identity, including distinct final-track navigation
+and transport availability, and verifies that unsupported commands remain disabled.
+It covers foreign-thread admission and main-thread delivery, idempotent transport, two queued Next commands advancing across three tracks, invalid positions, stale seeks across Stop and same-track replay, consecutive valid seeks, and queued and retained callbacks after retirement.
+An occupied run-loop executor holds a mute backlog while main-queue position callbacks submit their captured targets; the scenario asserts FIFO final effects both with the adapter live and retired after handoff.
+A controlled clock checks metadata-only anchor retention, and native observation checks that a synchronous artwork cache hit publishes Now Playing exactly once.
+It invokes the same owned handler installed at the framework
+boundary; it does not synthesize physical media keys or prove Control Center
+interaction. Validate those OS surfaces separately in a logged-in desktop.
+
+For an optional runtime UI-thread diagnostic, use a full Xcode installation:
+
+```bash
+./ao run appkit --main-thread-checker
+```
+
+The portal locates `libMainThreadChecker.dylib` through `DEVELOPER_DIR` (an Xcode
+bundle or Developer directory) or `xcode-select --print-path`, and augments the
+child process environment without replacing existing injected libraries. It
+rejects missing Xcode diagnostics before building or launching. Command Line
+Tools alone do not provide Main Thread Checker; this diagnostic is independent
+of normal builds, clang-tidy, the static analyzer, and sanitizers.
 
 Do not pre-populate the fixture directories; successful preparation is part of
 the native scenario contract and failures are reported before AppKit creates a

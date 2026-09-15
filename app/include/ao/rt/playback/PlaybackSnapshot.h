@@ -48,6 +48,7 @@ namespace ao::rt
   {
     audio::Transport transport = audio::Transport::Idle;
     bool ready = false;
+    PlaybackOccurrenceId occurrenceId{};
     PlaybackPositionRevision positionRevision{};
     PlaybackFinalSeekRevision finalSeekRevision{};
     std::chrono::milliseconds elapsed{0};
@@ -63,10 +64,10 @@ namespace ao::rt
      */
     bool operator==(PlaybackTransportSnapshot const& other) const
     {
-      return transport == other.transport && ready == other.ready && positionRevision == other.positionRevision &&
-             finalSeekRevision == other.finalSeekRevision && duration == other.duration &&
-             nowPlaying == other.nowPlaying && volume == other.volume && output == other.output &&
-             quality == other.quality;
+      return transport == other.transport && ready == other.ready && occurrenceId == other.occurrenceId &&
+             positionRevision == other.positionRevision && finalSeekRevision == other.finalSeekRevision &&
+             duration == other.duration && nowPlaying == other.nowPlaying && volume == other.volume &&
+             output == other.output && quality == other.quality;
     }
   };
 

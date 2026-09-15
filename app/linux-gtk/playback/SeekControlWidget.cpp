@@ -8,18 +8,22 @@
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
+#include <gdkmm/event.h>
 #include <gdkmm/frameclock.h>
+#include <gdkmm/surface.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/gestureclick.h>
+#include <gtkmm/eventcontroller.h>
+#include <gtkmm/eventcontrollerlegacy.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <tuple>
+#include <optional>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -38,16 +42,29 @@ namespace ao::gtk
     _scale.set_draw_value(false);
     _scale.add_css_class("ao-seekbar");
 
-    _scale.signal_value_changed().connect(sigc::mem_fun(*this, &SeekControlWidget::handleScaleValueChanged));
+    _valueChangedConnection =
+      _scale.signal_value_changed().connect(sigc::mem_fun(*this, &SeekControlWidget::handleScaleValueChanged));
 
-    // Connect user interaction gestures to debounce and prevent jumping during drag
-    auto clickControllerPtr = Gtk::GestureClick::create();
-    clickControllerPtr->signal_pressed().connect(
-      [this](std::int32_t, double, double) { beginUserInteraction(); }, false);
-    clickControllerPtr->signal_released().connect(
-      [this](std::int32_t, double, double) { endUserInteraction(); }, false);
-    clickControllerPtr->signal_stopped().connect(sigc::mem_fun(*this, &SeekControlWidget::endUserInteraction));
-    _scale.add_controller(clickControllerPtr);
+    // GtkRange claims its own drag and cancels competing GestureClick observers.
+    // Observe physical input without participating in that gesture arbitration.
+    auto pointerControllerPtr = Gtk::EventControllerLegacy::create();
+    pointerControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    _pointerEventConnection = pointerControllerPtr->signal_event().connect(
+      [this](Glib::RefPtr<Gdk::Event const> const& eventPtr)
+      {
+        handlePointerEvent(eventPtr);
+        return false;
+      },
+      false);
+    _scale.add_controller(pointerControllerPtr);
+    _stateFlagsConnection = _scale.signal_state_flags_changed().connect(
+      [this](Gtk::StateFlags)
+      {
+        if (!_scale.is_sensitive())
+        {
+          endUserInteraction();
+        }
+      });
 
     _mapConnection = _scale.signal_map().connect(
       [this]
@@ -58,8 +75,9 @@ namespace ao::gtk
     _unmapConnection = _scale.signal_unmap().connect(
       [this]
       {
-        stopTick();
         _isMapped = false;
+        stopTick();
+        endUserInteraction();
       });
 
     // Nothing to install here: the view model already delivered the current
@@ -69,13 +87,20 @@ namespace ao::gtk
 
   SeekControlWidget::~SeekControlWidget()
   {
+    _pointerEventConnection.disconnect();
+    _valueChangedConnection.disconnect();
+    _stateFlagsConnection.disconnect();
+    _mapConnection.disconnect();
+    _unmapConnection.disconnect();
+    _pointerPressEventPtr.reset();
     stopTick();
     _debounceConnection.disconnect();
   }
 
   void SeekControlWidget::startTickIfNeeded()
   {
-    if (!_isMapped || !_interpolator.isPlaying() || _interaction.isPointerActive() || _tickId != 0)
+    if (!_isMapped || !_interpolator.isPlaying() || _interaction.isPointerActive() || _optPendingFinalSeek ||
+        _tickId != 0)
     {
       return;
     }
@@ -102,7 +127,7 @@ namespace ao::gtk
 
   void SeekControlWidget::updateTickState()
   {
-    if (_isMapped && _interpolator.isPlaying() && !_interaction.isPointerActive())
+    if (_isMapped && _interpolator.isPlaying() && !_interaction.isPointerActive() && !_optPendingFinalSeek)
     {
       startTickIfNeeded();
       return;
@@ -118,9 +143,18 @@ namespace ao::gtk
 
   void SeekControlWidget::applyState(ao::uimodel::PlaybackPositionViewState const& view)
   {
-    if (view.duration == std::chrono::milliseconds{0})
+    if (view.occurrenceId != _presentedOccurrenceId)
     {
-      _interaction.applyViewState(view.duration, view.seekable);
+      _debounceConnection.disconnect();
+      _optPendingFinalSeek.reset();
+      _presentedOccurrenceId = view.occurrenceId;
+    }
+
+    if (view.duration <= std::chrono::milliseconds{0})
+    {
+      _debounceConnection.disconnect();
+      _optPendingFinalSeek.reset();
+      _interaction.applyViewState(view.duration, view.seekable, view.occurrenceId);
       setScaleRange(std::chrono::milliseconds{0});
       setScaleValue(std::chrono::milliseconds{0});
       _scale.set_sensitive(false);
@@ -130,14 +164,52 @@ namespace ao::gtk
     }
 
     setScaleRange(view.duration);
-    _interaction.applyViewState(view.duration, view.seekable);
+    _interaction.applyViewState(view.duration, view.seekable, view.occurrenceId);
     _scale.set_sensitive(view.seekable);
     _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
     updateTickState();
 
-    if (view.immediateUpdate && !_interaction.isPointerActive())
+    if (view.immediateUpdate && !_interaction.isPointerActive() && !_optPendingFinalSeek)
     {
       setScaleValue(view.elapsed);
+    }
+  }
+
+  void SeekControlWidget::handlePointerEvent(Glib::RefPtr<Gdk::Event const> const& eventPtr)
+  {
+    auto const matchesPointer = _pointerPressEventPtr &&
+                                eventPtr->get_device() == _pointerPressEventPtr->get_device() &&
+                                eventPtr->get_event_sequence() == _pointerPressEventPtr->get_event_sequence();
+
+    switch (eventPtr->get_event_type())
+    {
+      case Gdk::Event::Type::BUTTON_PRESS:
+      case Gdk::Event::Type::TOUCH_BEGIN: beginUserInteraction(eventPtr); break;
+      case Gdk::Event::Type::BUTTON_RELEASE:
+        if (matchesPointer && _pointerPressEventPtr->get_event_type() == Gdk::Event::Type::BUTTON_PRESS &&
+            eventPtr->get_button() == _pointerPressEventPtr->get_button())
+        {
+          endUserInteraction();
+        }
+
+        break;
+      case Gdk::Event::Type::TOUCH_END:
+      case Gdk::Event::Type::TOUCH_CANCEL:
+        if (matchesPointer && _pointerPressEventPtr->get_event_type() == Gdk::Event::Type::TOUCH_BEGIN)
+        {
+          endUserInteraction();
+        }
+
+        break;
+      case Gdk::Event::Type::GRAB_BROKEN:
+        if (_pointerPressEventPtr && eventPtr->get_device() == _pointerPressEventPtr->get_device() &&
+            eventPtr->get_grab_broken_grab_surface() != _pointerPressEventPtr->get_surface())
+        {
+          endUserInteraction();
+        }
+
+        break;
+      default: break;
     }
   }
 
@@ -151,15 +223,40 @@ namespace ao::gtk
     applySeekUpdate(_interaction.valueChanged(scaleElapsed()));
   }
 
-  void SeekControlWidget::beginUserInteraction()
+  void SeekControlWidget::beginUserInteraction(Glib::RefPtr<Gdk::Event const> const& eventPtr)
   {
-    std::ignore = _interaction.tryBeginPointerInteraction();
+    auto const optEarlyUpdate = _optPendingFinalSeek;
+
+    if (_pointerPressEventPtr || !_interaction.tryBeginPointerInteraction())
+    {
+      return;
+    }
+
+    _pointerPressEventPtr = eventPtr;
+    _debounceConnection.disconnect();
+    _optPendingFinalSeek.reset();
+
+    if (optEarlyUpdate && optEarlyUpdate->occurrenceId == _interaction.occurrenceId())
+    {
+      applySeekUpdate(_interaction.valueChanged(optEarlyUpdate->elapsed));
+    }
+
     updateTickState();
   }
 
   void SeekControlWidget::endUserInteraction()
   {
-    applySeekUpdate(_interaction.endPointerInteraction(scaleElapsed()));
+    auto const wasPointerActive = _interaction.isPointerActive();
+    _pointerPressEventPtr.reset();
+    auto const update = _interaction.endPointerInteraction(scaleElapsed());
+    applySeekUpdate(update);
+
+    if (wasPointerActive && update.action == uimodel::SeekSliderAction::None && !_interpolator.isPlaying())
+    {
+      // A paused replacement has no frame tick to retire the old drag's value.
+      setScaleValue(_interpolator.interpolateElapsed(uimodel::FrameClock::TimePoint{}));
+    }
+
     updateTickState();
   }
 
@@ -169,9 +266,9 @@ namespace ao::gtk
     {
       case uimodel::SeekSliderAction::Preview:
         _interpolator.updateState(update.elapsed, _interaction.duration(), false);
-        _seekViewModel.seekPreview(update.elapsed);
+        _seekViewModel.seekPreview(update.occurrenceId, update.elapsed);
         break;
-      case uimodel::SeekSliderAction::Commit: commitSeekFromScale(); break;
+      case uimodel::SeekSliderAction::Commit: scheduleFinalSeek(update); break;
       case uimodel::SeekSliderAction::None: break;
     }
   }
@@ -179,21 +276,25 @@ namespace ao::gtk
   void SeekControlWidget::executeDebouncedFinalSeek()
   {
     _debounceConnection.disconnect();
+    auto const optUpdate = std::exchange(_optPendingFinalSeek, std::nullopt);
 
-    if (_interaction.duration() > std::chrono::milliseconds{0})
+    if (optUpdate)
     {
-      _seekViewModel.seekFinal(scaleElapsed());
+      _seekViewModel.seekFinal(optUpdate->occurrenceId, optUpdate->elapsed);
     }
+
+    updateTickState();
   }
 
-  void SeekControlWidget::commitSeekFromScale()
+  void SeekControlWidget::scheduleFinalSeek(uimodel::SeekSliderUpdate update)
   {
-    if (_interaction.duration() == std::chrono::milliseconds{0})
+    if (update.occurrenceId.value == 0)
     {
       return;
     }
 
     _debounceConnection.disconnect();
+    _optPendingFinalSeek = update;
 
     _debounceConnection = Glib::signal_timeout().connect(
       [this] -> bool
@@ -202,6 +303,7 @@ namespace ao::gtk
         return false;
       },
       kSeekDebounceInterval.count());
+    updateTickState();
   }
 
   void SeekControlWidget::setScaleRange(std::chrono::milliseconds duration)

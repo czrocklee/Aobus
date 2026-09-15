@@ -85,7 +85,7 @@ SUITES = {
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }
 
-APPKIT_SCENARIOS = ("desktop", "authoring", "presentation")
+APPKIT_SCENARIOS = ("desktop", "authoring", "presentation", "media")
 APPKIT_SUCCESSOR_TIMEOUT_SECONDS = 60.0
 APPKIT_PARENT_TIMEOUT_SECONDS = 120.0
 APPKIT_PARENT_TERMINATE_SECONDS = 5.0
@@ -151,6 +151,7 @@ def _gtk_display_environment(display: str) -> dict[str, str]:
     # child process rather than relying on GtkTestMain's fallback defaults.
     return {
         "DISPLAY": display,
+        "AOBUS_OWNED_GTK_DISPLAY": "1",
         "GTK_A11Y": "test",
         "GTK_IM_MODULE": "simple",
         "GDK_BACKEND": "x11",
@@ -479,9 +480,10 @@ def _repro_command(shard: _Shard) -> str:
     The shard's environment is carried along, because part of it decides whether
     the failure reproduces at all rather than merely how the run is configured:
     on an ASan tree UBSAN_OPTIONS is what makes undefined behaviour halt instead
-    of log and continue. DISPLAY is the deliberate exception -- it names an Xvfb
-    that this run tears down on the way out, so the rerun picks up whatever
-    display the caller has.
+    of log and continue. DISPLAY and its ownership marker are deliberate
+    exceptions: they describe an Xvfb that this run tears down on the way out.
+    Omitting both makes native-input tests skip rather than target the caller's
+    desktop.
     """
     argv = list(shard.argv)
     kept = [
@@ -497,7 +499,9 @@ def _repro_command(shard: _Shard) -> str:
         # as a program named "'C:\...'".
         return subprocess.list2cmdline(kept)
 
-    exported = {key: value for key, value in shard.environment.items() if key != "DISPLAY"}
+    exported = {
+        key: value for key, value in shard.environment.items() if key not in {"DISPLAY", "AOBUS_OWNED_GTK_DISPLAY"}
+    }
     prefix = ["env", *(f"{key}={value}" for key, value in sorted(exported.items()))] if exported else []
     return shlex.join([*prefix, *kept])
 

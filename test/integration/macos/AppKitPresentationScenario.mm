@@ -28,24 +28,37 @@
 #include <string>
 #include <vector>
 
+@interface AobusPresentationDraggingInfo : NSObject
+@property (nonatomic, strong) NSPasteboard* draggingPasteboard;
+@end
+
+@implementation AobusPresentationDraggingInfo
+@end
+
 @interface AobusPresentationBrowserDelegate : NSObject<AobusLibraryBrowserDelegate>
+@property (nonatomic) BOOL closing;
+@property (nonatomic) BOOL sheetBlocked;
 - (NSUInteger)selectionChangeCount;
 - (NSUInteger)membershipRequestCount;
+- (std::vector<ao::TrackId>)membershipTrackIds;
+- (ao::ListId)membershipListId;
 @end
 
 @implementation AobusPresentationBrowserDelegate {
   NSUInteger _selectionChangeCount;
   NSUInteger _membershipRequestCount;
+  std::vector<ao::TrackId> _membershipTrackIds;
+  ao::ListId _membershipListId;
 }
 
 - (BOOL)isLibraryBrowserClosing:(AobusLibraryBrowser*) [[maybe_unused]] browser
 {
-  return NO;
+  return _closing;
 }
 
 - (BOOL)isLibraryBrowserSheetBlocked:(AobusLibraryBrowser*) [[maybe_unused]] browser
 {
-  return NO;
+  return _sheetBlocked;
 }
 
 - (void)libraryBrowserSelectionDidChange:(AobusLibraryBrowser*) [[maybe_unused]] browser
@@ -60,6 +73,8 @@
   AO_INVARIANT(!trackIds.empty(), "library membership request must contain tracks");
   AO_INVARIANT(listId != ao::kInvalidListId, "library membership request must target a list");
   ++_membershipRequestCount;
+  _membershipTrackIds = trackIds;
+  _membershipListId = listId;
   return YES;
 }
 
@@ -71,6 +86,16 @@
 - (NSUInteger)membershipRequestCount
 {
   return _membershipRequestCount;
+}
+
+- (std::vector<ao::TrackId>)membershipTrackIds
+{
+  return _membershipTrackIds;
+}
+
+- (ao::ListId)membershipListId
+{
+  return _membershipListId;
 }
 @end
 
@@ -568,10 +593,91 @@ namespace
     return selectedId;
   }
 
+  ao::ListId exerciseBrowserDrops(ao::appkit::LibrarySession& session,
+                                  AobusLibraryBrowser* browser,
+                                  AobusPresentationBrowserDelegate* delegate,
+                                  id<NSDraggingInfo> info,
+                                  ao::TrackId const trackId)
+  {
+    auto& model = session.editor();
+    auto const admissionRes = model.beginList();
+    AO_INVARIANT(admissionRes, "The drop scenario must begin a writable List draft");
+    model.editList("Drop target", "", "#appkit_drop_membership");
+    auto const initialRevision = session.state().listRevision;
+    model.save();
+    ao::appkit::test::requireWaitUntil(
+      [&] { return model.state().completed && session.state().listRevision != initialRevision; },
+      "The drop target List must be saved and published");
+    auto const listId = model.state().savedListId;
+    AO_INVARIANT(listId != ao::kInvalidListId, "The drop target must have a durable List identity");
+    model.cancel();
+    [browser refresh];
+
+    auto const writer = [browser tableView:browser.tracks pasteboardWriterForRow:browser.tracks.selectedRow];
+    AO_INVARIANT(writer != nil, "The selected track must expose its native drag payload");
+    auto const written = [info.draggingPasteboard writeObjects:@[writer]];
+    AO_INVARIANT(written != NO, "The isolated drag pasteboard must accept the native track payload");
+    auto* const item = @(listId.raw());
+    auto const operation = [browser outlineView:browser.lists
+                                   validateDrop:info
+                                   proposedItem:item
+                             proposedChildIndex:NSOutlineViewDropOnItemIndex];
+    auto const accepted = [browser outlineView:browser.lists
+                                    acceptDrop:info
+                                          item:item
+                                    childIndex:NSOutlineViewDropOnItemIndex];
+    AO_INVARIANT(operation == NSDragOperationCopy && accepted != NO && delegate.membershipRequestCount == 1 &&
+                   delegate.membershipTrackIds == std::vector{trackId} && delegate.membershipListId == listId,
+                 "A writable List drop must request membership exactly once with the captured track and List IDs");
+
+    auto const requireRejected = [&](char const* obligation)
+    {
+      auto const rejectedOperation = [browser outlineView:browser.lists
+                                             validateDrop:info
+                                             proposedItem:item
+                                       proposedChildIndex:NSOutlineViewDropOnItemIndex];
+      auto const rejected = [browser outlineView:browser.lists
+                                      acceptDrop:info
+                                            item:item
+                                      childIndex:NSOutlineViewDropOnItemIndex];
+      AO_INVARIANT(rejectedOperation == NSDragOperationNone && rejected == NO && delegate.membershipRequestCount == 1,
+                   "{}",
+                   obligation);
+    };
+    delegate.sheetBlocked = YES;
+    requireRejected("A sheet-blocked browser must reject validation and acceptance without a membership request");
+    delegate.sheetBlocked = NO;
+    delegate.closing = YES;
+    requireRejected("A closing browser must reject validation and acceptance without a membership request");
+    delegate.closing = NO;
+
+    auto const renameAdmissionRes = model.beginList(listId);
+    AO_INVARIANT(renameAdmissionRes, "The drop target List must reopen for a revision change");
+    model.editList("Renamed drop target", "", "#appkit_drop_membership");
+    auto const listRevision = session.state().listRevision;
+    model.save();
+    ao::appkit::test::requireWaitUntil(
+      [&] { return model.state().completed && session.state().listRevision != listRevision; },
+      "The changed drop target must publish a new List revision");
+    model.cancel();
+    requireRejected("A stale browser must reject validation and acceptance until its List projection is refreshed");
+    [browser refresh];
+    auto const refreshedOperation = [browser outlineView:browser.lists
+                                            validateDrop:info
+                                            proposedItem:item
+                                      proposedChildIndex:NSOutlineViewDropOnItemIndex];
+    AO_INVARIANT(refreshedOperation == NSDragOperationCopy,
+                 "Refreshing the List projection must restore admission for the same writable target");
+    return listId;
+  }
+
   void exerciseDetachedBrowser(AobusLibraryBrowser* browser,
                                AobusPresentationBrowserDelegate* delegate,
-                               NSUInteger const selectionChangeCount)
+                               NSUInteger const selectionChangeCount,
+                               id<NSDraggingInfo> info,
+                               ao::ListId const dropListId)
   {
+    auto const membershipRequestCount = delegate.membershipRequestCount;
     AO_INVARIANT(browser.tracks.delegate == nil && browser.tracks.dataSource == nil && browser.tracks.target == nil &&
                    browser.lists.delegate == nil && browser.lists.dataSource == nil,
                  "library detach must revoke native callbacks and targets");
@@ -612,7 +718,18 @@ namespace
                  "detached library public state must be neutral");
     AO_INVARIANT(
       [browser prepareContextMenu:[[NSMenu alloc] init]] == 0, "detached library must reject context menu preparation");
-    AO_INVARIANT(delegate.selectionChangeCount == selectionChangeCount && delegate.membershipRequestCount == 0,
+    auto const operation = [browser outlineView:browser.lists
+                                   validateDrop:info
+                                   proposedItem:@(dropListId.raw())
+                             proposedChildIndex:NSOutlineViewDropOnItemIndex];
+    auto const accepted = [browser outlineView:browser.lists
+                                    acceptDrop:info
+                                          item:@(dropListId.raw())
+                                    childIndex:NSOutlineViewDropOnItemIndex];
+    AO_INVARIANT(operation == NSDragOperationNone && accepted == NO,
+                 "A detached browser must reject a formerly valid track drop after session release");
+    AO_INVARIANT(delegate.selectionChangeCount == selectionChangeCount &&
+                   delegate.membershipRequestCount == membershipRequestCount,
                  "late native callbacks after session release must not reach the delegate");
   }
 } // namespace
@@ -638,6 +755,10 @@ namespace ao::appkit::test
     activityAnchor.frame = NSMakeRect(20, 660, 120, 30);
     [root addSubview:activityAnchor];
     auto* const browserDelegate = [[AobusPresentationBrowserDelegate alloc] init];
+    auto* const draggingInfo = [[AobusPresentationDraggingInfo alloc] init];
+    draggingInfo.draggingPasteboard = [NSPasteboard pasteboardWithUniqueName];
+    id<NSDraggingInfo> const info = static_cast<id>(draggingInfo);
+    auto dropListId = kInvalidListId;
     AobusLibraryBrowser* browser = nil;
 
     [window center];
@@ -655,6 +776,7 @@ namespace ao::appkit::test
       [root addSubview:browser.listScroll];
       [root addSubview:browser.trackScroll];
       auto const selectedId = exerciseBrowser(session, browser, browserDelegate);
+      dropListId = exerciseBrowserDrops(session, browser, browserDelegate, info, selectedId);
       exerciseActivity(session, window, activityAnchor, stateRoot);
       exerciseInspector(session, window, selectedId, stateRoot);
       exercisePlaybackPresentation(session, window, root, stateRoot);
@@ -663,7 +785,8 @@ namespace ao::appkit::test
     }
 
     auto const selectionChangeCount = browserDelegate.selectionChangeCount;
-    exerciseDetachedBrowser(browser, browserDelegate, selectionChangeCount);
+    exerciseDetachedBrowser(browser, browserDelegate, selectionChangeCount, info, dropListId);
+    [draggingInfo.draggingPasteboard releaseGlobally];
     [window orderOut:nil];
     [window close];
     settleNativeCallbacks();

@@ -12,6 +12,7 @@ namespace ao::appkit
   // A gesture belongs to the displayed timeline, including replay of the same track.
   struct PlaybackSeekTarget final
   {
+    rt::PlaybackOccurrenceId occurrenceId{};
     rt::PlaybackPositionRevision revision{};
     std::chrono::milliseconds duration{0};
   };

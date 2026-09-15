@@ -56,10 +56,10 @@ No runtime or core header exports these protocol names.
 | `Play` | `PlaybackCommand::Play` |
 | `Pause` | `PlaybackCommand::Pause` |
 | `Stop` | `PlaybackCommand::Stop` |
-| `Next` | `PlaybackCommand::Next` |
+| `Next` | `PlaybackCommand::Next` through the ordinary capability-gated command path |
 | `Previous` | `PlaybackCommand::Previous` |
-| `Seek(offset)` | relative `PlaybackService::seek`; past known end executes `Next` |
-| `SetPosition(track, position)` | absolute seek only for current track and valid range |
+| `Seek(offset)` | queued occurrence-guarded relative positioning; execution-time live elapsed determines final seek or guarded past-end Next |
+| `SetPosition(track, position)` | queued final seek for the current occurrence-qualified track path and valid range, revalidated at execution |
 
 ### Player properties
 
@@ -71,14 +71,14 @@ No runtime or core header exports these protocol names.
 | `Shuffle` | read/write | sequence shuffle off/on |
 | `Metadata` | read | metadata map below |
 | `Volume` | read/write | `PlaybackState::volume.level` / `PlaybackService::setVolume` |
-| `Position` | read | elapsed microseconds |
+| `Position` | read | occurrence-correlated live `PlaybackService::elapsed()` converted to microseconds |
 | `MinimumRate` | read | `1.0` |
 | `MaximumRate` | read | `1.0` |
 | `CanGoNext` | read | `isCapable(Next)` |
 | `CanGoPrevious` | read | `isCapable(Previous)` |
 | `CanPlay` | read | `isCapable(Play)` |
 | `CanPause` | read | `isCapable(Pause)` |
-| `CanSeek` | read | current track id is valid |
+| `CanSeek` | read | current track id and occurrence are valid, with a known positive duration |
 | `CanControl` | read | `true` |
 
 Transport mapping:
@@ -104,7 +104,7 @@ Present non-empty values use:
 
 | Key | Value |
 | --- | --- |
-| `mpris:trackid` | `/org/mpris/MediaPlayer2/Track/<TrackId>` |
+| `mpris:trackid` | `/org/mpris/MediaPlayer2/Track/<TrackId>_<PlaybackOccurrenceId>` |
 | `xesam:title` | current title string |
 | `xesam:artist` | one-element artist string array |
 | `xesam:album` | current album string |
@@ -113,16 +113,19 @@ Present non-empty values use:
 
 ### Signals
 
-The bridge emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields.
+The bridge emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields, including `Metadata` when playback occurrence changes with otherwise repeated track metadata.
 It emits `org.mpris.MediaPlayer2.Player.Seeked(position)` in microseconds for non-preview runtime seek updates.
 For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful current-resource file export emits a later `Metadata` change containing it.
 
 ## Validation rules
 
-- Track object paths are empty for the invalid id and stable for a valid `TrackId`.
+- Track object paths are empty for an invalid track or zero occurrence and stable for one valid `(TrackId, PlaybackOccurrenceId)` pair.
 - Microsecond conversion saturates at signed 64-bit bounds and truncates to milliseconds on input.
-- Relative seek clamps at zero and known duration.
-- Absolute `SetPosition` ignores stale track paths, negative positions, and positions beyond a known duration.
+- Relative seek captures the current occurrence and offset, but samples position and decides past-end Next at execution. A positive offset strictly past the known end advances only with a successor and matching runtime/audio occurrence; otherwise it is a successful no-op. Standalone `Next` retains the ordinary capability-gated command path.
+- Other relative seek clamps at zero and known duration without overflow; exact end remains a final seek.
+- Absolute `SetPosition` ignores stale occurrence-qualified track paths, negative positions, and positions beyond a known duration.
+- Busy positioning joins the runtime FIFO. A stale occurrence at execution is a successful no-op, with no final seek signal; success is not an audio-completion guarantee.
+- `Position` uses the committed clock anchor when the live audio item no longer matches the published occurrence, rather than reporting a successor's position under old metadata.
 - Non-finite `Rate` writes are invalid.
 - Unsupported loop strings and writable property names are rejected.
 
@@ -133,7 +136,7 @@ Changing a name, type, access mode, or mapping requires updating the introspecti
 
 ## Examples
 
-The current track id `42` maps to `/org/mpris/MediaPlayer2/Track/42`.
+Track id `42` at playback occurrence `7` maps to `/org/mpris/MediaPlayer2/Track/42_7`.
 A duration of 125 seconds maps to `125000000` microseconds.
 
 ## Implementation authority

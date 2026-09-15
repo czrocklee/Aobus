@@ -5,6 +5,7 @@
 
 #include "LibraryEditorModel.h"
 #include "MainRunLoopExecutor.h"
+#include "MediaPlayerAdapter.h"
 #include "PlaybackSeekTarget.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -102,6 +103,7 @@ namespace ao::appkit
     std::vector<TrackId> selectedTrackIds;
     std::unique_ptr<LibraryEditorModel> editorPtr;
     std::unique_ptr<uimodel::PlaybackActions> actionsPtr;
+    std::unique_ptr<MediaPlayerAdapter> mediaPlayerPtr;
     std::array<std::unique_ptr<uimodel::TransportViewModel>, kPlaybackCommandCapacity> transportPtrs;
     std::unique_ptr<uimodel::NowPlayingViewModel> nowPlayingPtr;
     std::unique_ptr<uimodel::AobusSoulViewModel> soulPtr;
@@ -240,6 +242,9 @@ namespace ao::appkit
           play(projectionPtr->trackIdAt(0));
         }
       });
+
+    storage.mediaPlayerPtr =
+      std::make_unique<MediaPlayerAdapter>(runtime.playback(), *storage.actionsPtr, runtime.resourceBytes());
 
     auto const commands = uimodel::playbackCommands();
     AO_INVARIANT(commands.size() == kPlaybackCommandCapacity);
@@ -395,6 +400,12 @@ namespace ao::appkit
   {
     return _storagePtr->catalog;
   }
+  MediaPlayerAdapter& LibrarySession::mediaPlayer() const noexcept
+  {
+    AO_INVARIANT(_storagePtr->mediaPlayerPtr);
+    return *_storagePtr->mediaPlayerPtr;
+  }
+
   uimodel::TrackDisplayIndex const& LibrarySession::displayIndex() const noexcept
   {
     return _storagePtr->displayIndex;
@@ -600,14 +611,17 @@ namespace ao::appkit
   {
     auto const& current = runtime().playback().snapshot().transport;
 
-    if (target.duration <= std::chrono::milliseconds{0} || target.revision != current.positionRevision ||
+    if (target.occurrenceId.value == 0 || target.duration <= std::chrono::milliseconds{0} ||
+        target.occurrenceId != current.occurrenceId || target.revision != current.positionRevision ||
         current.duration <= std::chrono::milliseconds{0})
     {
       return;
     }
 
-    _storagePtr->positionPtr->seekFinal(std::chrono::milliseconds{
-      static_cast<std::int64_t>(std::clamp(fraction, 0.0, 1.0) * static_cast<double>(target.duration.count()))});
+    _storagePtr->positionPtr->seekFinal(
+      target.occurrenceId,
+      std::chrono::milliseconds{
+        static_cast<std::int64_t>(std::clamp(fraction, 0.0, 1.0) * static_cast<double>(target.duration.count()))});
   }
 
   void LibrarySession::setVolume(float volume)
@@ -652,9 +666,18 @@ namespace ao::appkit
     runtime().workspace().saveSession(runtime().workspaceConfigStore());
   }
 
+  void LibrarySession::sealMediaPlayerAdmission() noexcept
+  {
+    if (_storagePtr->mediaPlayerPtr)
+    {
+      _storagePtr->mediaPlayerPtr->retire();
+    }
+  }
+
   bool LibrarySession::canClose() const noexcept
   {
-    return _storagePtr->executor == nullptr || !_storagePtr->executor->isPerforming();
+    return (_storagePtr->executor == nullptr || !_storagePtr->executor->isPerforming()) &&
+           (!_storagePtr->mediaPlayerPtr || !_storagePtr->mediaPlayerPtr->isPerforming());
   }
 
   void LibrarySession::close() noexcept
@@ -669,6 +692,7 @@ namespace ao::appkit
     AO_EXPECTS(canClose());
     storage.closing = true;
     storage.scanStop.request_stop();
+    storage.mediaPlayerPtr.reset();
 
     if (storage.editorPtr)
     {

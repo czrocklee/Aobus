@@ -27,6 +27,11 @@
 #include <string>
 #include <vector>
 
+namespace ao::rt
+{
+  class PlaybackService;
+}
+
 namespace ao::audio::test
 {
   struct BlockingPreparationGate;
@@ -100,6 +105,7 @@ namespace ao::rt::test::playback_succession
     PlaybackSuccessionTransportFixture& operator=(PlaybackSuccessionTransportFixture&&) = delete;
 
     LibraryCommands& commands();
+    PlaybackService createPlayback();
     TrackId addPlayableTrack(std::string title);
     void openManualView(std::span<TrackId const> trackIds);
     void buildThreeTrackManualView();

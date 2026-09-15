@@ -44,6 +44,7 @@ examples:
   ./ao run cli release      # build and run the CLI client with IPO/LTO
   ./ao run gtk --clang      # build and run the GTK client built using clang compiler
   ./ao run appkit           # build and run the native macOS desktop
+  ./ao run appkit --main-thread-checker  # requires full Xcode on macOS
   ./ao run tui -- --library ~/Music   # forward option flags to the application after --
 """
 
@@ -71,11 +72,44 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     build.add_build_arguments(parser)
     parser.add_argument("-n", "--no-build", action="store_true", help="skip building the target")
     parser.add_argument(
+        "--main-thread-checker",
+        action="store_true",
+        help="inject Xcode's Main Thread Checker into a macOS AppKit application (diagnostic only)",
+    )
+    parser.add_argument(
         "app_args",
         nargs="*",
         help="arguments forwarded to the application; put option flags after `--`",
     )
     parser.set_defaults(func=run_command)
+
+
+def _main_thread_checker_environment() -> dict[str, str]:
+    """Keep the caller's environment and add the explicitly requested Xcode diagnostic."""
+    env = os.environ.copy()
+    developer = env.get("DEVELOPER_DIR")
+    if not developer:
+        try:
+            developer = subprocess.check_output(
+                ["xcode-select", "--print-path"], text=True, stderr=subprocess.STDOUT
+            ).strip()
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise die("--main-thread-checker requires a full Xcode installation selected by xcode-select.") from exc
+    developer_dir = Path(developer)
+    # DEVELOPER_DIR also accepts an Xcode.app bundle, like Apple's tools do.
+    if developer_dir.suffix == ".app":
+        developer_dir = developer_dir / "Contents" / "Developer"
+    library = developer_dir / "usr" / "lib" / "libMainThreadChecker.dylib"
+    if not library.is_file():
+        raise die(
+            f"Main Thread Checker not found at {library}. Select a full Xcode installation with "
+            "DEVELOPER_DIR; Command Line Tools alone do not provide it."
+        )
+    libraries = env.get("DYLD_INSERT_LIBRARIES", "").split(":")
+    if str(library) not in libraries:
+        libraries.append(str(library))
+    env["DYLD_INSERT_LIBRARIES"] = ":".join(part for part in libraries if part)
+    return env
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -85,6 +119,11 @@ def run_command(args: argparse.Namespace) -> int:
         raise die(f"application '{args.app}' is unavailable on {profile.name}. Available applications: {available}.")
 
     app = APPS[args.app]
+    checker_env = None
+    if args.main_thread_checker:
+        if profile.name != "macos" or args.app != "appkit":
+            raise die("--main-thread-checker is available only for the macOS appkit application.")
+        checker_env = _main_thread_checker_environment()
 
     if not args.no_build:
         build.do_build(args, [app.target])
@@ -126,4 +165,8 @@ def run_command(args: argparse.Namespace) -> int:
                     raise interrupt from exc
                 return 130
     # Replaces the current process with the target executable
-    os.execvp(str(executable), [str(executable), *args.app_args])
+    arguments = [str(executable), *args.app_args]
+    if checker_env is not None:
+        os.execvpe(str(executable), arguments, checker_env)
+    else:
+        os.execvp(str(executable), arguments)

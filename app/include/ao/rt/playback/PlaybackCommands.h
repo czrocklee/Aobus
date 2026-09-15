@@ -8,6 +8,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 
 #include <chrono>
@@ -19,6 +20,12 @@ namespace ao::rt
   {
     Final,
     Preview,
+  };
+
+  enum class PlaybackRelativeSeekEndBehavior : std::uint8_t
+  {
+    Clamp,
+    Next,
   };
 
   /**
@@ -45,6 +52,12 @@ namespace ao::rt
     virtual Result<> startFromView(ViewId viewId, TrackId startTrackId) = 0;
 
     virtual void next() = 0;
+    /**
+     * Admits Next only while the expected playback occurrence is still the
+     * runtime subject and, for active audio, Engine's current item. A matching
+     * deferred Idle restore is also admissible. Rejection never queues.
+     */
+    virtual bool tryNext(PlaybackOccurrenceId expectedOccurrenceId) = 0;
     virtual void previous() = 0;
     virtual void clearSequence() = 0;
     virtual void setPlaybackMode(ShuffleMode shuffle, RepeatMode repeat) = 0;
@@ -55,6 +68,31 @@ namespace ao::rt
     virtual void resume() = 0;
     virtual void stop() = 0;
     virtual void seek(std::chrono::milliseconds elapsed, PlaybackSeekMode mode = PlaybackSeekMode::Final) = 0;
+    /**
+     * Queues or synchronously executes a seek whose occurrence is validated at
+     * execution. A stale request issues no seek and publishes no seek update.
+     */
+    virtual void seek(PlaybackOccurrenceId expectedOccurrenceId,
+                      std::chrono::milliseconds elapsed,
+                      PlaybackSeekMode mode = PlaybackSeekMode::Final) = 0;
+
+    /**
+     * Queues a guarded final seek relative to the execution-time live position.
+     * The captured occurrence must still be current when the command executes.
+     * Next advances only for a positive offset strictly past the live endpoint;
+     * without an admissible successor it does nothing. Clamp is the UI default.
+     */
+    virtual void seekBy(PlaybackOccurrenceId expectedOccurrenceId,
+                        std::chrono::milliseconds delta,
+                        PlaybackRelativeSeekEndBehavior endBehavior = PlaybackRelativeSeekEndBehavior::Clamp) = 0;
+
+    /**
+     * Issues a final seek only when the expected playback occurrence is still
+     * current. This synchronous-only command rejects rather than queues while
+     * another command or publication is active.
+     */
+    virtual bool trySeek(PlaybackOccurrenceId expectedOccurrenceId, std::chrono::milliseconds elapsed) = 0;
+
     virtual void setOutputDevice(audio::BackendId const& backendId,
                                  audio::DeviceId const& deviceId,
                                  audio::ProfileId const& profileId) = 0;

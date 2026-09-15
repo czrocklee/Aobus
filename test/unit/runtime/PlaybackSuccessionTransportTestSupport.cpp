@@ -3,6 +3,7 @@
 
 #include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 
+#include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -23,6 +24,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -273,6 +275,13 @@ namespace ao::rt::test::playback_succession
     REQUIRE(transport.renderTarget != nullptr);
     auto output = std::array<std::byte, 4096>{};
     REQUIRE(tryDriveRenderUntilTaskQueued(*transport.renderTarget, transport.executor, output));
+  }
+
+  PlaybackService PlaybackSuccessionTransportFixture::createPlayback()
+  {
+    REQUIRE(successionPtr);
+    return PlaybackBootstrap{transport.playbackTransport}.createPlaybackService(
+      transport.executor, *successionPtr, transport.libraryFixture.library(), changes);
   }
 
   Result<> PlaybackSuccessionTransportFixture::playAndWait(TrackId const trackId)

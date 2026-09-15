@@ -497,6 +497,7 @@ namespace ao::rt
     PlaybackTransport::PlaybackRequest currentRequest;
     audio::Engine::PlaybackItemId currentPlaybackItemId;
     std::uint64_t currentPlaybackGeneration = 0;
+    PlaybackOccurrenceId currentOccurrenceId{};
     std::string lastPlaybackError{};
     std::optional<PlaybackFailureReport> optLastPlaybackFailureReport;
     std::uint64_t nextPlaybackFailureReportKey = 0;
@@ -505,6 +506,7 @@ namespace ao::rt
     std::optional<DeferredResumeRequest> optDeferredResume;
     std::optional<PlaybackTransportSessionState> optLastRestorableSession;
     std::uint64_t nextPlaybackItemId = 1;
+    std::uint64_t nextOccurrenceId = 1;
     std::uint64_t nextPreparedTokenValue = 1;
     std::deque<OutboundEvent> outboundEvents;
     bool drainingOutboundEvents = false;
@@ -714,6 +716,7 @@ namespace ao::rt
       auto const status = playerPtr->status();
 
       state = buildPlaybackState(status);
+      state.occurrenceId = currentOccurrenceId;
       state.nowPlaying = currentRequest.item;
 
       if (optDeferredResume && state.transport == audio::Transport::Idle)
@@ -766,10 +769,12 @@ namespace ao::rt
                                audio::Engine::PlaybackItemId itemId,
                                std::uint64_t const generation)
     {
+      AO_INVARIANT(nextOccurrenceId != 0, "Playback occurrence identity space exhausted");
       currentRequest = request;
       currentRequest.item.sourceListId = sourceListId;
       currentPlaybackItemId = itemId;
       currentPlaybackGeneration = generation;
+      currentOccurrenceId = PlaybackOccurrenceId{.value = nextOccurrenceId++};
     }
 
     audio::Engine::PlaybackItem makePlaybackItem(audio::PlaybackInput input)
@@ -1170,6 +1175,12 @@ namespace ao::rt
 
       if (isTerminalTrackTransport(state.transport))
       {
+        if (state.transport == audio::Transport::Idle && !optDeferredResume)
+        {
+          currentOccurrenceId = {};
+          state.occurrenceId = {};
+        }
+
         enqueueOutbound(IdleEvent{});
       }
     }
@@ -1848,6 +1859,7 @@ namespace ao::rt
     impl->currentRequest = PlaybackRequest{};
     impl->currentPlaybackItemId = {};
     impl->currentPlaybackGeneration = 0;
+    impl->currentOccurrenceId = {};
     impl->optDeferredResume.reset();
 
     if (impl->isClosing())
@@ -1863,6 +1875,25 @@ namespace ao::rt
       .sourceListId = kInvalidListId,
     });
     return barrier;
+  }
+
+  bool PlaybackTransport::canAdvanceFrom(PlaybackOccurrenceId const expectedOccurrenceId)
+  {
+    auto* const impl = checkedImpl();
+
+    if (impl->isClosing() || expectedOccurrenceId.value == 0 || expectedOccurrenceId != impl->currentOccurrenceId ||
+        impl->currentRequest.item.trackId == kInvalidTrackId)
+    {
+      return false;
+    }
+
+    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
+    {
+      return true;
+    }
+
+    return impl->currentPlaybackItemId.value != 0 &&
+           impl->playerPtr->isCurrentPlaybackItem(impl->currentPlaybackItemId);
   }
 
   void PlaybackTransport::seek(std::chrono::milliseconds const elapsed, SeekMode const mode)
@@ -1899,6 +1930,56 @@ namespace ao::rt
     }
 
     impl->enqueueOutbound(SeekUpdate{.elapsed = elapsed, .mode = mode});
+  }
+
+  bool PlaybackTransport::trySeek(PlaybackOccurrenceId const expectedOccurrenceId,
+                                  std::chrono::milliseconds const elapsed,
+                                  SeekMode const mode)
+  {
+    auto* const impl = checkedImpl();
+
+    if (auto const duration = impl->state.duration;
+        impl->isClosing() || expectedOccurrenceId.value == 0 || expectedOccurrenceId != impl->currentOccurrenceId ||
+        impl->currentRequest.item.trackId == kInvalidTrackId || duration <= std::chrono::milliseconds{0} ||
+        elapsed < std::chrono::milliseconds{0} || elapsed > duration)
+    {
+      return false;
+    }
+
+    if (mode == SeekMode::Preview)
+    {
+      impl->enqueueOutbound(SeekUpdate{.elapsed = elapsed, .mode = mode});
+      return true;
+    }
+
+    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
+    {
+      auto const clampedElapsed = clampSessionElapsed(elapsed, impl->optDeferredResume->request.input.duration);
+      impl->optDeferredResume->elapsed = clampedElapsed;
+      impl->state.elapsed = clampedElapsed;
+      impl->enqueueOutbound(SeekUpdate{.elapsed = clampedElapsed, .mode = SeekMode::Final});
+      return true;
+    }
+
+    // Preserve the runtime token handshake before issuing the guarded audio
+    // command. A splice already consumed by Engine returns no disarm id, so its
+    // prepared metadata remains available for the pending advance callback.
+    // Rejection may therefore retire the active-slot marker without issuing a
+    // seek. Clearing after trySeek would lose the disarmed item's receipt.
+    std::ignore = impl->clearPreparedNext();
+
+    if (!impl->playerPtr->trySeek(impl->currentPlaybackItemId, elapsed))
+    {
+      return false;
+    }
+
+    if (!impl->isClosing())
+    {
+      impl->refreshState();
+      impl->enqueueOutbound(SeekUpdate{.elapsed = elapsed, .mode = SeekMode::Final});
+    }
+
+    return true;
   }
 
   void PlaybackTransport::setOutputDevice(audio::BackendId const& backendId,

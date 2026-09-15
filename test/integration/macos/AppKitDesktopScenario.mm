@@ -57,6 +57,9 @@ namespace
     ShowCompactInspector,
     WaitForCompactInspector,
     DismissCompactInspector,
+    ReopenCompactInspector,
+    EditInspectorProperties,
+    WaitForInspectorProperties,
     RestoreWindowSize,
     CloseWindow,
     WaitForClosedWindow,
@@ -87,6 +90,7 @@ namespace
   NSWindow* _window;
   NSWindow* _occluder;
   NSTableView* _table;
+  NSControl* _emptyAction;
   NSString* _selectedIdentity;
   NSString* _idleTransportText;
   NSString* _playingTransportText;
@@ -109,6 +113,7 @@ namespace
 - (void)start;
 - (void)stop;
 - (BOOL)completed;
+- (void)verifyStoppedEmptyAction;
 @end
 
 @implementation AobusDesktopScenarioDriver
@@ -200,6 +205,14 @@ namespace
   AO_INVARIANT(control.enabled != 0, "Native control is disabled for {}", obligation.UTF8String);
   auto const sent = [NSApp sendAction:control.action to:control.target from:control];
   AO_INVARIANT(sent != 0, "Native control action failed for {}", obligation.UTF8String);
+}
+
+- (void)verifyStoppedEmptyAction
+{
+  AO_INVARIANT(_emptyAction.target != nil, "The stopped desktop must retain its native empty-state action target");
+  [self activateControl:_emptyAction obligation:@"ignore an empty-state action after shutdown"];
+  AO_INVARIANT(_window.visible == NO && _window.attachedSheet == nil,
+               "A late empty-state action must not reopen the stopped desktop or present a sheet");
 }
 
 - (BOOL)driveSearch
@@ -367,6 +380,8 @@ namespace
       _initialContentSize = _window.contentView.bounds.size;
       _table = findTrackTable(_window.contentView);
       AO_INVARIANT(_table != nil, "The production window must expose its native track table");
+      _emptyAction = findActionControl(_window.contentView, ::NSSelectorFromString(@"emptyAction:"));
+      AO_INVARIANT(_emptyAction != nil, "The production window must expose its native empty-state action");
       _stage = Stage::WaitForLibrary;
     }
 
@@ -695,7 +710,7 @@ namespace
       case Stage::DismissCompactInspector:
         if (auto* const sheet = _window.attachedSheet; sheet == nil)
         {
-          _stage = Stage::RestoreWindowSize;
+          _stage = Stage::ReopenCompactInspector;
         }
         else if (sheet.keyWindow != NO)
         {
@@ -710,6 +725,31 @@ namespace
                              charactersIgnoringModifiers:@"\x1b"
                                                isARepeat:NO
                                                  keyCode:53]];
+        }
+
+        break;
+      case Stage::ReopenCompactInspector:
+        activateMenuItem([self menuItem:@"toggleInspector:"], @"reopen compact inspector");
+        _stage = Stage::EditInspectorProperties;
+        break;
+      case Stage::EditInspectorProperties:
+        if (auto* const sheet = _window.attachedSheet; sheet != nil && sheet.keyWindow != NO)
+        {
+          auto* const properties = findActionControl(sheet.contentView, ::NSSelectorFromString(@"editProperties:"));
+          [self activateControl:properties obligation:@"edit properties from compact inspector"];
+          _stage = Stage::WaitForInspectorProperties;
+        }
+
+        break;
+      case Stage::WaitForInspectorProperties:
+        if (auto* const sheet = _window.attachedSheet;
+            sheet != nil && ao::appkit::test::findControl(sheet.contentView, @"genre") != nil)
+        {
+          AO_INVARIANT([rowIdentity(_table, _table.selectedRow) isEqual:_selectedIdentity] != NO,
+                       "Opening Properties from the compact inspector must preserve the selected track");
+          auto* const cancel = findActionControl(sheet.contentView, ::NSSelectorFromString(@"cancel:"));
+          [self activateControl:cancel obligation:@"close properties opened from compact inspector"];
+          _stage = Stage::RestoreWindowSize;
         }
 
         break;
@@ -865,6 +905,7 @@ namespace ao::appkit::test
                 {
                   // AppKit termination can exit without returning from -run. The
                   // production delegate has released its session before this notification.
+                  [driver verifyStoppedEmptyAction];
                   writeMarker(stateRoot / "successor-pass.txt", markerContents);
                 }
               }];

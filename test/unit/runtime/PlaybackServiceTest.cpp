@@ -30,6 +30,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -195,6 +196,7 @@ namespace ao::rt::test
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.back().transport.occurrenceId.value != 0);
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(snapshots.size() == 2);
@@ -208,7 +210,92 @@ namespace ao::rt::test
     fixture.commands().stop();
     REQUIRE(snapshots.size() == 3);
     CHECK(snapshots.back().transport.transport == audio::Transport::Idle);
+    CHECK(snapshots.back().transport.occurrenceId == PlaybackOccurrenceId{});
     CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
+  }
+
+  TEST_CASE("PlaybackCommands tryNext - matched occurrence advances and invalid identity is inert",
+            "[runtime][unit][playback][next]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
+    auto const occurrenceId = fixture.playback().snapshot().transport.occurrenceId;
+    REQUIRE(occurrenceId.value != 0);
+
+    CHECK_FALSE(fixture.commands().tryNext({}));
+    CHECK_FALSE(fixture.commands().tryNext(PlaybackOccurrenceId{.value = occurrenceId.value + 1}));
+    CHECK(fixture.playback().snapshot().transport.nowPlaying.trackId == fixture.firstTrackId);
+
+    CHECK(fixture.commands().tryNext(occurrenceId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.secondTrackId));
+    CHECK(fixture.playback().snapshot().succession.currentTrackId == fixture.secondTrackId);
+  }
+
+  TEST_CASE("PlaybackCommands tryNext - backlog rejection does not execute or cancel queued navigation",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
+    auto const occurrenceId = fixture.playback().snapshot().transport.occurrenceId;
+    bool queuedNext = false;
+    bool acceptedInsidePublication = true;
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&](PlaybackSnapshot const&) noexcept
+      {
+        if (!queuedNext)
+        {
+          queuedNext = true;
+          fixture.commands().next();
+          acceptedInsidePublication = fixture.commands().tryNext(occurrenceId);
+        }
+      });
+
+    fixture.commands().setVolume(0.5F);
+    REQUIRE(queuedNext);
+    CHECK_FALSE(acceptedInsidePublication);
+    CHECK_FALSE(fixture.commands().tryNext(occurrenceId));
+
+    REQUIRE(fixture.tryWaitForTrack(fixture.secondTrackId));
+    CHECK(fixture.playback().snapshot().succession.currentTrackId == fixture.secondTrackId);
+  }
+
+  TEST_CASE("PlaybackCommands guarded seek - queued same-track replay retires stale preview and final",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
+    auto const before = fixture.playback().snapshot().transport;
+    auto previews = std::vector<std::chrono::milliseconds>{};
+    auto const previewSubscription = fixture.playback().events().onSeekPreview(
+      [&previews](std::chrono::milliseconds const elapsed) noexcept { previews.push_back(elapsed); });
+    bool queuedStaleSeeks = false;
+    auto const snapshotSubscription = fixture.playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot) noexcept
+      {
+        if (!queuedStaleSeeks && snapshot.transport.occurrenceId != before.occurrenceId)
+        {
+          queuedStaleSeeks = true;
+          fixture.commands().seek(before.occurrenceId, std::chrono::milliseconds{50}, PlaybackSeekMode::Preview);
+          fixture.commands().seek(before.occurrenceId, std::chrono::milliseconds{100});
+        }
+      });
+
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.tryWaitForTrack(fixture.firstTrackId));
+    REQUIRE(queuedStaleSeeks);
+    fixture.application.executor.drain();
+
+    auto const after = fixture.playback().snapshot().transport;
+    CHECK(after.occurrenceId != before.occurrenceId);
+    CHECK(after.finalSeekRevision == before.finalSeekRevision);
+    CHECK(after.elapsed != std::chrono::milliseconds{100});
+    CHECK(previews.empty());
   }
 
   TEST_CASE("PlaybackService - paired mode command publishes only the final snapshot",
@@ -271,6 +358,10 @@ namespace ao::rt::test
 
     CHECK(after == before);
 
+    after.transport.occurrenceId = PlaybackOccurrenceId{.value = 1};
+    CHECK_FALSE(after == before);
+
+    after = before;
     after.transport.positionRevision = PlaybackPositionRevision{.value = 1};
     CHECK_FALSE(after == before);
   }

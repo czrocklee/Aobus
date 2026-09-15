@@ -12,6 +12,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -114,6 +115,7 @@ namespace ao::gtk::platform
         .snapshot = [&playback] -> rt::PlaybackSnapshot const& { return playback.snapshot(); },
         .onSnapshot = [&playback](rt::PlaybackSnapshotObserver observer)
         { return playback.events().onSnapshot(std::move(observer)); },
+        .elapsed = [&playback] { return playback.elapsed(); },
       };
     }
 
@@ -270,6 +272,10 @@ namespace ao::gtk::platform
               snapshot.transport.duration != lastSnapshot.transport.duration)
           {
             refreshArt(snapshot.transport);
+          }
+
+          if (MprisBridge::shouldEmitMetadataChanged(lastSnapshot.transport, snapshot.transport))
+          {
             emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
           }
 
@@ -307,11 +313,11 @@ namespace ao::gtk::platform
       return endpoint.tryDispatchRootMethod(methodName);
     }
 
-    bool tryHandleSeek(std::int64_t const offsetUs) { return endpoint.tryHandleSeek(offsetUs); }
+    void handleSeek(std::int64_t const offsetUs) { endpoint.handleSeek(offsetUs); }
 
-    bool tryHandleSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
+    void handleSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
     {
-      return endpoint.tryHandleSetPosition(requestedTrackObjectPath, positionUs);
+      endpoint.handleSetPosition(requestedTrackObjectPath, positionUs);
     }
 
     bool tryDispatchSetRate(double const rate) const { return endpoint.tryDispatchSetRate(rate); }
@@ -325,9 +331,10 @@ namespace ao::gtk::platform
       return endpoint.tryDispatchSetLoopStatus(loopStatus);
     }
 
-    std::optional<bool> playerCapabilityProperty(std::string_view const propertyName) const
+    std::optional<bool> playerCapabilityProperty(std::string_view const propertyName,
+                                                 rt::PlaybackTransportSnapshot const& state) const
     {
-      return endpoint.playerCapabilityProperty(propertyName);
+      return endpoint.playerCapabilityProperty(propertyName, state);
     }
 
     std::string artUrlForState(rt::PlaybackTransportSnapshot const& state) const
@@ -423,11 +430,6 @@ namespace ao::gtk::platform
         return Glib::Variant<bool>::create(snapshot.succession.shuffle == rt::ShuffleMode::On);
       }
 
-      if (propertyName == "CanSeek")
-      {
-        return Glib::Variant<bool>::create(state.nowPlaying.trackId != kInvalidTrackId);
-      }
-
       if (propertyName == "Metadata")
       {
         return metadataVariant(MprisBridge::metadataForState(state, artUrlForState(state)));
@@ -435,10 +437,10 @@ namespace ao::gtk::platform
 
       if (propertyName == "Position")
       {
-        return Glib::Variant<std::int64_t>::create(MprisBridge::microsecondsFromMilliseconds(state.elapsed));
+        return Glib::Variant<std::int64_t>::create(MprisBridge::microsecondsFromMilliseconds(playbackSource.elapsed()));
       }
 
-      if (auto const optCapability = playerCapabilityProperty(propertyName); optCapability)
+      if (auto const optCapability = playerCapabilityProperty(propertyName, state); optCapability)
       {
         return Glib::Variant<bool>::create(*optCapability);
       }
@@ -674,13 +676,8 @@ namespace ao::gtk::platform
         auto offsetUsVariant = Glib::Variant<std::int64_t>{};
         parameters.get_child(offsetUsVariant, 0);
 
-        if (auto const offsetUs = offsetUsVariant.get(); tryHandleSeek(offsetUs))
-        {
-          invocationPtr->return_value({});
-          return;
-        }
-
-        invocationPtr->return_dbus_error(kMprisError, "No active track to seek");
+        handleSeek(offsetUsVariant.get());
+        invocationPtr->return_value({});
         return;
       }
 
@@ -692,14 +689,8 @@ namespace ao::gtk::platform
         parameters.get_child(positionUsVariant, 1);
         auto const requestedTrackObjectPath = requestedTrackObjectPathVariant.get();
 
-        if (auto const positionUs = positionUsVariant.get();
-            tryHandleSetPosition(requestedTrackObjectPath.raw(), positionUs))
-        {
-          invocationPtr->return_value({});
-          return;
-        }
-
-        invocationPtr->return_dbus_error(kMprisError, "No active track to seek");
+        handleSetPosition(requestedTrackObjectPath.raw(), positionUsVariant.get());
+        invocationPtr->return_value({});
         return;
       }
 
@@ -785,6 +776,11 @@ namespace ao::gtk::platform
     _implPtr->start();
   }
 
+  Glib::VariantBase MprisBridge::playerProperty(std::string_view const propertyName) const
+  {
+    return _implPtr->playerProperty(propertyName);
+  }
+
   bool MprisBridge::isActive() const noexcept
   {
     return _implPtr->nameAcquired;
@@ -868,70 +864,39 @@ namespace ao::gtk::platform
     return std::chrono::milliseconds{value / 1000};
   }
 
-  std::chrono::milliseconds MprisBridge::clampElapsed(rt::PlaybackTransportSnapshot const& state,
-                                                      std::chrono::milliseconds const elapsed) noexcept
-  {
-    if (elapsed < std::chrono::milliseconds{0})
-    {
-      return std::chrono::milliseconds{0};
-    }
-
-    if (state.duration > std::chrono::milliseconds{0} && elapsed > state.duration)
-    {
-      return state.duration;
-    }
-
-    return elapsed;
-  }
-
-  std::chrono::milliseconds MprisBridge::seekTargetElapsed(rt::PlaybackTransportSnapshot const& state,
-                                                           std::int64_t const offsetUs) noexcept
-  {
-    auto const offset = fromMprisMicroseconds(offsetUs).count();
-    auto const elapsed = state.elapsed.count();
-    std::int64_t target = 0;
-
-    if (offset > 0 && elapsed > std::numeric_limits<std::int64_t>::max() - offset)
-    {
-      target = std::numeric_limits<std::int64_t>::max();
-    }
-    else if (offset < 0 && elapsed < std::numeric_limits<std::int64_t>::min() - offset)
-    {
-      target = std::numeric_limits<std::int64_t>::min();
-    }
-    else
-    {
-      target = static_cast<std::int64_t>(elapsed) + offset;
-    }
-
-    return clampElapsed(state, std::chrono::milliseconds{target});
-  }
-
   bool MprisBridge::shouldEmitSeeked(rt::PlaybackTransportSnapshot const& before,
                                      rt::PlaybackTransportSnapshot const& after) noexcept
   {
     return after.finalSeekRevision != before.finalSeekRevision;
   }
 
-  std::string MprisBridge::trackObjectPath(TrackId const trackId)
+  bool MprisBridge::shouldEmitMetadataChanged(rt::PlaybackTransportSnapshot const& before,
+                                              rt::PlaybackTransportSnapshot const& after) noexcept
   {
-    if (trackId == kInvalidTrackId)
+    return after.occurrenceId != before.occurrenceId || after.nowPlaying != before.nowPlaying ||
+           after.duration != before.duration;
+  }
+
+  std::string MprisBridge::trackObjectPath(TrackId const trackId, rt::PlaybackOccurrenceId const occurrenceId)
+  {
+    if (trackId == kInvalidTrackId || occurrenceId.value == 0)
     {
       return {};
     }
 
-    return std::string{kTrackObjectPathPrefix} + std::to_string(trackId.raw());
+    return std::string{kTrackObjectPathPrefix} + std::to_string(trackId.raw()) + "_" +
+           std::to_string(occurrenceId.value);
   }
 
   MprisBridge::MetadataSnapshot MprisBridge::metadataForState(rt::PlaybackTransportSnapshot const& state,
                                                               std::string artUrl)
   {
-    if (state.nowPlaying.trackId == kInvalidTrackId)
+    if (state.nowPlaying.trackId == kInvalidTrackId || state.occurrenceId.value == 0)
     {
       return {};
     }
 
-    return MetadataSnapshot{.trackObjectPath = trackObjectPath(state.nowPlaying.trackId),
+    return MetadataSnapshot{.trackObjectPath = trackObjectPath(state.nowPlaying.trackId, state.occurrenceId),
                             .title = state.nowPlaying.title,
                             .artist = state.nowPlaying.artist,
                             .album = state.nowPlaying.album,

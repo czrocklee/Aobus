@@ -570,9 +570,11 @@ namespace
   _duration.stringValue = nativeText(
     ao::uimodel::formatPlaybackTime(ao::uimodel::PlaybackTimeMode::Duration, std::chrono::milliseconds{}, duration));
   _seek.enabled = static_cast<BOOL>(state.position.seekable);
-  [_seek presentSeekTarget:state.position.seekable ? std::optional{ao::appkit::PlaybackSeekTarget{
-                                                       .revision = state.positionRevision, .duration = duration}}
-                                                   : std::nullopt];
+  [_seek presentSeekTarget:state.position.seekable
+                             ? std::optional{ao::appkit::PlaybackSeekTarget{.occurrenceId = state.position.occurrenceId,
+                                                                            .revision = state.positionRevision,
+                                                                            .duration = duration}}
+                             : std::nullopt];
   _volume.enabled = static_cast<BOOL>(state.volume.visible);
   _volumeButton.enabled = _volume.enabled;
   _volumeButton.image =
