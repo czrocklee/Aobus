@@ -154,7 +154,10 @@ The helper validates structural membership only; it does not require allowlisted
 
 `appendChild(node, key)` creates a child and copies the key into the owning tree arena.
 `writeScalar()` writes strings, booleans, and arithmetic values.
-String bytes are copied into the arena and marked double-quoted so values such as `null`, `true`, and `42` remain strings after emission and parsing; booleans use canonical lower-case text, and numeric formatting is delegated to RapidYAML/c4.
+String bytes are copied into the arena and marked double-quoted so values such as `null`, `true`, and `42` remain strings after emission and parsing; booleans use canonical lower-case text, and integral formatting is delegated to RapidYAML/c4.
+Finite floating values use the shortest locale-independent `std::format` representation, copied into the arena without marking the value as a string.
+Finite `float` and `double` values round-trip through their corresponding scalar readers without losing precision, including the sign of zero; emission must not inherit the platform-dependent precision of RapidYAML/c4's default floating formatter.
+Nonfinite values retain RapidYAML's `.inf`, `-.inf`, and `.nan` spellings, which the strict scalar reader rejects with `FormatRejected`; finite precision handling does not change that existing rejection boundary.
 
 `MapWriter(node)` establishes `node` as a mapping.
 `scalar(key, value)` appends one arena-owned scalar field; `value()`, `sequence()`, and `scalarSequence()` append an explicitly named nested value through the caller-selected writer.
@@ -251,7 +254,7 @@ A frontend file adapter may log or fall back only according to the specification
 ## Test map
 
 - [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, parser-result diagnostics, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
-- [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects quoted string type preservation, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
+- [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects quoted string type preservation, exact finite float/double round trips at adjacent and representational boundaries, signed zero, unchanged nonfinite spelling and rejection, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
 - Library transfer, layout model, and component-state tests protect their domain-specific use of the adapter without making those schemas part of this contract.
 
