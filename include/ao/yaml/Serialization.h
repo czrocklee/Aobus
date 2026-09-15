@@ -9,10 +9,12 @@
 
 #include <ryml.hpp>
 
+#include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -45,6 +47,16 @@ namespace ao::yaml
     requires(std::is_arithmetic_v<T> && !std::same_as<T, bool>)
   inline void writeScalar(ryml::NodeRef node, T value)
   {
+    if constexpr (std::floating_point<T>)
+    {
+      if (std::isfinite(value))
+      {
+        // ryml's printf fallback can discard precision. Keep finite values locale-independent and lossless.
+        setValue(node, std::format("{}", value));
+        return;
+      }
+    }
+
     node << value;
   }
 

@@ -7,12 +7,15 @@
 #include <ao/yaml/Serialization.h>
 
 #include <catch2/catch_message.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ryml.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <map>
 #include <string>
 #include <string_view>
@@ -322,6 +325,65 @@ namespace ao::test
 
       REQUIRE_FALSE(readRes);
       CHECK(readRes.error().code == Error::Code::FormatRejected);
+    }
+  }
+
+  TEMPLATE_TEST_CASE("YamlSerialization - floating scalars round trip exactly without string quoting",
+                     "[core][regression][yaml]",
+                     float,
+                     double)
+  {
+    auto const values = std::array{TestType{0},
+                                   -TestType{0},
+                                   TestType{1},
+                                   std::nextafter(TestType{1}, TestType{0}),
+                                   std::nextafter(TestType{1}, TestType{2}),
+                                   std::nextafter(-TestType{1}, TestType{0}),
+                                   static_cast<TestType>(0.999),
+                                   std::numeric_limits<TestType>::epsilon(),
+                                   std::numeric_limits<TestType>::denorm_min(),
+                                   std::numeric_limits<TestType>::min(),
+                                   std::numeric_limits<TestType>::max(),
+                                   std::numeric_limits<TestType>::lowest()};
+
+    for (auto const value : values)
+    {
+      CAPTURE(value);
+      auto tree = ryml::Tree{yaml::callbacks()};
+      yaml::writeScalar(tree.rootref(), value);
+      auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+      CAPTURE(encoded);
+      CHECK_FALSE(tree.rootref().is_val_quoted());
+      auto parsed = parseYaml(encoded);
+      auto const decodedRes = yaml::scalarAs<TestType>(parsed.rootref(), "floating value");
+
+      REQUIRE(decodedRes);
+      CHECK(*decodedRes == value);
+      CHECK(std::signbit(*decodedRes) == std::signbit(value));
+    }
+  }
+
+  TEMPLATE_TEST_CASE("YamlSerialization - nonfinite scalars retain native spelling and strict rejection",
+                     "[core][regression][yaml]",
+                     float,
+                     double)
+  {
+    auto const cases = std::array{std::pair{std::numeric_limits<TestType>::infinity(), std::string_view{".inf"}},
+                                  std::pair{-std::numeric_limits<TestType>::infinity(), std::string_view{"-.inf"}},
+                                  std::pair{std::numeric_limits<TestType>::quiet_NaN(), std::string_view{".nan"}}};
+
+    for (auto const& [value, expected] : cases)
+    {
+      CAPTURE(expected);
+      auto tree = ryml::Tree{yaml::callbacks()};
+      yaml::writeScalar(tree.rootref(), value);
+      CHECK(yaml::scalarView(tree.rootref()) == expected);
+      CHECK_FALSE(tree.rootref().is_val_quoted());
+      auto parsed = parseYaml(ryml::emitrs_yaml<std::string>(tree));
+      auto const decodedRes = yaml::scalarAs<TestType>(parsed.rootref(), "nonfinite value");
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
     }
   }
 } // namespace ao::test

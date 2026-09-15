@@ -209,6 +209,101 @@ namespace ao::rt::test
     CHECK(lastMutedState == true);
   }
 
+  TEST_CASE("PlaybackTransport control - backend fallback capability is projected without notifications",
+            "[runtime][regression][playback][control]")
+  {
+    bool muteControl = false;
+    bool controlFails = false;
+
+    SECTION("volume control succeeds")
+    {
+    }
+
+    SECTION("volume control fails")
+    {
+      controlFails = true;
+    }
+
+    SECTION("mute control succeeds")
+    {
+      muteControl = true;
+    }
+
+    SECTION("mute control fails")
+    {
+      muteControl = true;
+      controlFails = true;
+    }
+
+    bool hardwareAssisted = true;
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+    audio::test::SpyBackend<>& backend = *fixture.spyBackendPtr;
+    auto& backendMock = backend.mock();
+
+    fakeit::When(Method(backendMock, property))
+      .AlwaysDo(
+        [muteControl](audio::PropertyId id) -> Result<audio::PropertyValue>
+        {
+          if (id == audio::PropertyId::Volume)
+          {
+            return muteControl ? 0.4F : 1.0F;
+          }
+
+          if (id == audio::PropertyId::Muted)
+          {
+            return false;
+          }
+
+          return makeError(Error::Code::NotSupported);
+        });
+    fakeit::When(Method(backendMock, queryProperty))
+      .AlwaysDo(
+        [&](audio::PropertyId id) -> audio::PropertyInfo
+        {
+          if (id != audio::PropertyId::Volume)
+          {
+            return {};
+          }
+
+          return {.canRead = true,
+                  .canWrite = true,
+                  .isAvailable = true,
+                  .emitsChangeNotifications = false,
+                  .isHardwareAssisted = hardwareAssisted};
+        });
+    fakeit::When(Method(backendMock, setProperty))
+      .AlwaysDo(
+        [&](audio::PropertyId, audio::PropertyValue const&) -> Result<>
+        {
+          hardwareAssisted = false;
+
+          if (controlFails)
+          {
+            return makeError(Error::Code::IoError, "simulated control failure");
+          }
+
+          return {};
+        });
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    REQUIRE(fixture.playbackTransport.state().volume.hardwareAssisted);
+
+    if (muteControl)
+    {
+      fixture.playbackTransport.setMuted(true);
+    }
+    else
+    {
+      fixture.playbackTransport.setVolume(0.4F);
+    }
+
+    auto const& volume = fixture.playbackTransport.state().volume;
+    CHECK(volume.level == 0.4F);
+    CHECK(volume.muted == muteControl);
+    CHECK(volume.available);
+    CHECK_FALSE(volume.hardwareAssisted);
+  }
+
   TEST_CASE("PlaybackTransport control - backend volume is normalized before publication",
             "[runtime][regression][playback][control]")
   {
