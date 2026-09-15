@@ -11,6 +11,7 @@
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -149,6 +150,82 @@ namespace ao::audio::backend::test
     CHECK(swapStatusReadCount > 0U);
     CHECK(observedControls.size() >= openStatusReadCount + stopStatusReadCount + swapStatusReadCount);
     CHECK(nextMixerStatePtr->writeCount == 0U);
+  }
+
+  TEST_CASE("Engine - ALSA stop preserves successful volume and application mute without another mixer write",
+            "[audio][regression][alsa]")
+  {
+    bool const hardware = GENERATE(false, true);
+    bool const muted = GENERATE(false, true);
+    auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
+    mixerStatePtr->openSucceeds = hardware;
+    mixerStatePtr->hardwareElements.push_back(
+      {.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 100L}, .rawLevels = {100L}});
+    auto registry = detail::AlsaGraphRegistry{};
+    auto const device = ::ao::audio::test::makeEngineTestDevice("hw:test,0");
+    auto engine =
+      Engine{std::make_unique<detail::test::AlsaControlBackend>(device, registry.publisher(), mixerStatePtr),
+             device,
+             ::ao::audio::test::makeScriptedEngineDecoderFactory()};
+    engine.play(::ao::audio::test::makePlaybackItem(PlaybackInput{.filePath = "volume-stop.flac"}));
+    REQUIRE(engine.status().volumeAvailable);
+    REQUIRE(engine.status().volumeIsHardwareAssisted == hardware);
+    REQUIRE(engine.setVolume(0.25F));
+    REQUIRE(engine.setMuted(muted));
+    REQUIRE(engine.volume() == 0.25F);
+    REQUIRE(engine.isMuted() == muted);
+    auto const writesBeforeStop = mixerStatePtr->writeCount;
+    REQUIRE(writesBeforeStop == (hardware ? 1U : 0U));
+
+    engine.stop();
+
+    auto const stopped = engine.status();
+    CHECK(stopped.volume == 0.25F);
+    CHECK(engine.volume() == 0.25F);
+    CHECK(stopped.muted == muted);
+    CHECK(engine.isMuted() == muted);
+    CHECK_FALSE(stopped.volumeAvailable);
+    CHECK_FALSE(stopped.volumeIsHardwareAssisted);
+    CHECK(mixerStatePtr->writeCount == writesBeforeStop);
+    CHECK(mixerStatePtr->hardwareElements.front().rawLevels == std::vector<long>{hardware ? 25L : 100L});
+
+    engine.stop();
+    CHECK(engine.volume() == 0.25F);
+    CHECK(engine.isMuted() == muted);
+    CHECK(mixerStatePtr->writeCount == writesBeforeStop);
+  }
+
+  TEST_CASE("Engine - ALSA stop preserves rejected volume intent without another hardware write",
+            "[audio][regression][alsa]")
+  {
+    auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
+    mixerStatePtr->hardwareElements.push_back(
+      {.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 100L}, .rawLevels = {100L, 80L}});
+    auto registry = detail::AlsaGraphRegistry{};
+    auto const device = ::ao::audio::test::makeEngineTestDevice("hw:test,0");
+    auto engine =
+      Engine{std::make_unique<detail::test::AlsaControlBackend>(device, registry.publisher(), mixerStatePtr),
+             device,
+             ::ao::audio::test::makeScriptedEngineDecoderFactory()};
+    engine.play(::ao::audio::test::makePlaybackItem(PlaybackInput{.filePath = "volume-failure.flac"}));
+    REQUIRE(engine.status().volumeIsHardwareAssisted);
+    REQUIRE(engine.setMuted(true));
+    mixerStatePtr->writeSucceeds = false;
+    mixerStatePtr->applyFirstChannelBeforeWriteFailure = true;
+
+    auto const volumeRes = engine.setVolume(0.25F);
+
+    REQUIRE_FALSE(volumeRes);
+    CHECK(engine.volume() == 0.25F);
+    CHECK(engine.isMuted());
+    CHECK(engine.status().volumeAvailable);
+    CHECK_FALSE(engine.status().volumeIsHardwareAssisted);
+    engine.stop();
+    CHECK(engine.volume() == 0.25F);
+    CHECK(engine.isMuted());
+    CHECK_FALSE(engine.status().volumeAvailable);
+    CHECK(mixerStatePtr->writeCount == 1U);
+    CHECK((mixerStatePtr->hardwareElements.front().rawLevels == std::vector<long>{25L, 80L}));
   }
 
   TEST_CASE("Engine - ALSA property refresh fallback publishes a graph and current capability",

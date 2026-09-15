@@ -810,21 +810,6 @@ namespace ao::audio
       drainEpoch.fetch_add(1, std::memory_order_acq_rel);
     }
 
-    void resetEngine(BackendIdentity const& identity, BackendControlObservation const& controls)
-    {
-      optCurrentItem.reset();
-      timeline.retireCursor();
-      backendStarted = false;
-      cancelPendingDrainSignal();
-      status = {};
-      applyBackendIdentity(identity);
-      applyBackendControls(controls);
-      accumulatedFrames.store(0, std::memory_order_relaxed);
-      engineSampleRate.store(0, std::memory_order_relaxed);
-      engineFrameBytes.store(0, std::memory_order_relaxed);
-      routeTracker.clear();
-    }
-
     // Non-RT event producers (backend / route / format / property / source
     // errors). Allowed to allocate and lock; must never be called from the RT
     // render thread.
@@ -2250,10 +2235,14 @@ namespace ao::audio
     closeBackendPlayback();
 
     auto const identity = observeBackendIdentity();
-    auto const controls = observeBackendControls();
+    auto const volumeProperty = backendPtr->queryProperty(PropertyId::Volume);
     {
       auto const lock = std::scoped_lock{stateMutex};
-      resetEngine(identity, controls);
+      // Closed-backend gain is not application intent, including after a rejected setter.
+      resetPlaybackStatePreservingOutput();
+      applyBackendIdentity(identity);
+      status.volumeAvailable = volumeProperty.isAvailable;
+      status.volumeIsHardwareAssisted = volumeProperty.isHardwareAssisted;
     }
   }
 

@@ -498,6 +498,46 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
+  TEST_CASE("AlsaMixerSession - successful hardware attenuation is not replayed as software gain after failed reopen",
+            "[audio][regression][alsa-mixer]")
+  {
+    auto fixture = MixerFixture{};
+    fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 100L}, .rawLevels = {100L}});
+    fixture.initialize();
+    REQUIRE(fixture.session.setVolume(0.25F));
+    REQUIRE(fixture.session.stateSnapshot().volume == 0.25F);
+    REQUIRE(fixture.session.renderGain() == 1.0F);
+    fixture.session.close();
+
+    SECTION("mixer open fails")
+    {
+      fixture.statePtr->openSucceeds = false;
+    }
+
+    SECTION("initial refresh fails")
+    {
+      fixture.statePtr->refreshSucceeds = false;
+    }
+
+    SECTION("selected element is no longer readable")
+    {
+      fixture.statePtr->hardwareElements.front().readable = false;
+    }
+
+    CHECK_FALSE(fixture.session.tryInit(nullptr));
+
+    CHECK(fixture.session.volumeMode() == AlsaVolumeControlMode::SoftwareGain);
+    CHECK(fixture.session.stateSnapshot().volume == 1.0F);
+    CHECK(fixture.session.renderGain() == 1.0F);
+    CHECK(fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{25L});
+    CHECK(fixture.statePtr->writtenLevels == std::vector<long>{25L});
+    CHECK(fixture.statePtr->writeCount == 1U);
+    CHECK(fixture.session.setMuted(true).applicationMuted);
+    CHECK(fixture.session.renderGain() == 0.0F);
+    CHECK_FALSE(fixture.session.setMuted(false).applicationMuted);
+    CHECK(fixture.session.renderGain() == 1.0F);
+  }
+
   TEST_CASE("AlsaMixerSession - hardware write failure preserves mute in the published render gain",
             "[audio][regression][alsa-mixer]")
   {
