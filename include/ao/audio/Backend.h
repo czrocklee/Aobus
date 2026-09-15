@@ -89,6 +89,14 @@ namespace ao::audio
     virtual void close() = 0;
 
     virtual Result<> setProperty(PropertyId id, PropertyValue const& value) = 0;
+
+    /**
+     * @brief Observes one property value.
+     *
+     * A concrete backend may refresh native state and synchronously publish the
+     * corresponding provider graph before returning. Callers must not hold a
+     * state lock that graph subscribers may re-enter.
+     */
     virtual Result<PropertyValue> property(PropertyId id) const = 0;
     virtual PropertyInfo queryProperty(PropertyId id) const noexcept = 0;
 

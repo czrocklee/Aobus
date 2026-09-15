@@ -565,6 +565,7 @@ add_executable(ao_core_test
     unit/runtime/PlaybackSuccessionAdvanceTest.cpp
     unit/runtime/PlaybackSuccessionFailureTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
+    unit/runtime/PlaybackSessionVolumeTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourcePublicationTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
@@ -709,15 +710,19 @@ if(NOT WIN32)
 endif()
 if(LINUX)
   target_sources(ao_core_test PRIVATE
+    unit/audio/backend/AlsaMixerTestSupport.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
+    unit/audio/backend/AlsaEnginePropertyTest.cpp
     unit/audio/backend/AlsaExclusiveBackendTest.cpp
     unit/audio/backend/AlsaProviderTest.cpp
     unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+    unit/audio/backend/detail/AlsaMixerSessionTest.cpp
     unit/audio/backend/detail/AlsaModeSelectorTest.cpp
     unit/audio/backend/detail/AlsaPcmErrorTest.cpp
     unit/audio/backend/detail/AlsaPcmFormatTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
+    unit/runtime/PlaybackSessionAlsaMuteTest.cpp
   )
 endif()
 if(APPLE)

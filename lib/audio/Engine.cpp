@@ -29,6 +29,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -526,7 +527,7 @@ namespace ao::audio
     Impl(std::unique_ptr<Backend> backendPtr, Device device, DecoderFactoryFn decoderFactory)
       : currentDevice{std::move(device)}, decoderFactory{std::move(decoderFactory)}, backendPtr{std::move(backendPtr)}
     {
-      syncBackendIdentity();
+      applyBackendIdentity(observeBackendIdentity());
     }
 
     void startEventWorker()
@@ -754,28 +755,53 @@ namespace ao::audio
     }
 
     // ── Helpers ────────────────────────────────────────────────────
-    void syncBackendIdentity()
+    struct BackendIdentity final
     {
-      status.backendId = backendPtr->backendId();
-      status.profileId = backendPtr->profileId();
-      status.currentDeviceId = currentDevice.id;
+      BackendId backendId;
+      ProfileId profileId;
+      DeviceId deviceId;
+    };
+
+    struct BackendControlObservation final
+    {
+      Result<float> volumeRes;
+      Result<bool> mutedRes;
+      PropertyInfo volumeProperty;
+    };
+
+    BackendIdentity observeBackendIdentity() const
+    {
+      return {.backendId = backendPtr->backendId(), .profileId = backendPtr->profileId(), .deviceId = currentDevice.id};
     }
 
-    void syncBackendStatus()
+    BackendControlObservation observeBackendControls() const
     {
-      if (auto const volRes = backendPtr->get(props::kVolume); volRes)
+      return {.volumeRes = backendPtr->get(props::kVolume),
+              .mutedRes = backendPtr->get(props::kMuted),
+              .volumeProperty = backendPtr->queryProperty(PropertyId::Volume)};
+    }
+
+    void applyBackendIdentity(BackendIdentity const& identity)
+    {
+      status.backendId = identity.backendId;
+      status.profileId = identity.profileId;
+      status.currentDeviceId = identity.deviceId;
+    }
+
+    void applyBackendControls(BackendControlObservation const& observation)
+    {
+      if (observation.volumeRes)
       {
-        status.volume = *volRes;
+        status.volume = *observation.volumeRes;
       }
 
-      if (auto const muteRes = backendPtr->get(props::kMuted); muteRes)
+      if (observation.mutedRes)
       {
-        status.muted = *muteRes;
+        status.muted = *observation.mutedRes;
       }
 
-      auto const volProp = backendPtr->queryProperty(PropertyId::Volume);
-      status.volumeAvailable = volProp.isAvailable;
-      status.volumeIsHardwareAssisted = volProp.isHardwareAssisted;
+      status.volumeAvailable = observation.volumeProperty.isAvailable;
+      status.volumeIsHardwareAssisted = observation.volumeProperty.isHardwareAssisted;
     }
 
     void cancelPendingDrainSignal() noexcept
@@ -784,15 +810,15 @@ namespace ao::audio
       drainEpoch.fetch_add(1, std::memory_order_acq_rel);
     }
 
-    void resetEngine()
+    void resetEngine(BackendIdentity const& identity, BackendControlObservation const& controls)
     {
       optCurrentItem.reset();
       timeline.retireCursor();
       backendStarted = false;
       cancelPendingDrainSignal();
       status = {};
-      syncBackendIdentity();
-      syncBackendStatus();
+      applyBackendIdentity(identity);
+      applyBackendControls(controls);
       accumulatedFrames.store(0, std::memory_order_relaxed);
       engineSampleRate.store(0, std::memory_order_relaxed);
       engineFrameBytes.store(0, std::memory_order_relaxed);
@@ -1889,11 +1915,13 @@ namespace ao::audio
     stopUnlocked();
     backendPtr = std::move(nextBackendPtr);
     currentDevice = device;
+    auto const identity = observeBackendIdentity();
+    auto const controls = observeBackendControls();
     {
       auto const lock = std::scoped_lock{stateMutex};
       status = {};
-      syncBackendIdentity();
-      syncBackendStatus();
+      applyBackendIdentity(identity);
+      applyBackendControls(controls);
     }
 
     if (state.optItem)
@@ -2006,7 +2034,7 @@ namespace ao::audio
       status.transport = Transport::Opening;
       status.statusText.clear();
       optCurrentItem = item;
-      syncBackendIdentity();
+      applyBackendIdentity(observeBackendIdentity());
     }
 
     auto& renderTarget = createRenderTarget(*backendPtr, playbackGeneration);
@@ -2098,11 +2126,12 @@ namespace ao::audio
     accumulatedFrames.store(
       durationToSamples(initialOffset, openedTrackRes->info.outputFormat.sampleRate), std::memory_order_relaxed);
 
+    auto const controls = observeBackendControls();
     {
       auto const lock = std::scoped_lock{stateMutex};
       status.elapsed = initialOffset;
       status.transport = Transport::Buffering;
-      syncBackendStatus();
+      applyBackendControls(controls);
     }
 
     auto openedNodePtr = std::make_unique<TrackNode>(std::move(*openedTrackRes));
@@ -2220,9 +2249,11 @@ namespace ao::audio
 
     closeBackendPlayback();
 
+    auto const identity = observeBackendIdentity();
+    auto const controls = observeBackendControls();
     {
       auto const lock = std::scoped_lock{stateMutex};
-      resetEngine();
+      resetEngine(identity, controls);
     }
   }
 
@@ -2333,22 +2364,33 @@ namespace ao::audio
 
   Result<> Engine::Impl::setVolumeUnlocked(float volume)
   {
-    // The requested value is the engine's intent regardless of whether the
-    // backend accepted it, so cache it either way and hand the backend failure
-    // back to the caller to report.
+    if (std::isnan(volume))
+    {
+      return makeError(Error::Code::InvalidInput, "Engine volume request must not be NaN");
+    }
+
+    // A valid requested value remains the engine's intent even when the backend
+    // reports an I/O failure. Refresh capability separately so backend fallback
+    // cannot replace that intent with its software-unity readback.
     auto res = backendPtr->set(props::kVolume, volume);
+    auto const volumeProperty = backendPtr->queryProperty(PropertyId::Volume);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.volume = volume;
+    status.volumeAvailable = volumeProperty.isAvailable;
+    status.volumeIsHardwareAssisted = volumeProperty.isHardwareAssisted;
     return res;
   }
 
   Result<> Engine::Impl::setMutedUnlocked(bool muted)
   {
     auto res = backendPtr->set(props::kMuted, muted);
+    auto const volumeProperty = backendPtr->queryProperty(PropertyId::Volume);
 
     auto const lock = std::scoped_lock{stateMutex};
     status.muted = muted;
+    status.volumeAvailable = volumeProperty.isAvailable;
+    status.volumeIsHardwareAssisted = volumeProperty.isHardwareAssisted;
     return res;
   }
 
@@ -2357,7 +2399,8 @@ namespace ao::audio
   Engine::Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory)
     : _implPtr{std::make_unique<Impl>(std::move(backendPtr), device, std::move(decoderFactory))}
   {
-    _implPtr->syncBackendStatus();
+    auto const controls = _implPtr->observeBackendControls();
+    _implPtr->applyBackendControls(controls);
     _implPtr->startEventWorker();
   }
 
