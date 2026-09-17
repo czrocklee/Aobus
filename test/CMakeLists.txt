@@ -513,6 +513,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibrarySnapshotTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/completion/CompletionTextTest.cpp
+    unit/runtime/completion/CompletionVocabularyTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp

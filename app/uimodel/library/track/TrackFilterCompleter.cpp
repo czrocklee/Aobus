@@ -8,6 +8,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/CompletionText.h>
+#include <ao/rt/completion/CompletionVocabulary.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
 #include <algorithm>
@@ -70,15 +71,15 @@ namespace ao::uimodel
       }
 
       auto matches = std::move(directMatches);
+      auto appendBucket = [&](std::vector<rt::VocabularyEntry const*> const& bucket)
+      {
+        auto const count = std::min(bucket.size(), limit - matches.size());
+        matches.insert(matches.end(), bucket.begin(), bucket.begin() + static_cast<std::ptrdiff_t>(count));
+      };
 
       if (matches.size() < limit)
       {
-        auto const wordCount = std::min(wordMatches.size(), limit - matches.size());
-
-        for (std::size_t index = 0; index < wordCount; ++index)
-        {
-          matches.push_back(wordMatches[index]);
-        }
+        appendBucket(wordMatches);
       }
 
       if (matches.size() >= limit)
@@ -86,9 +87,9 @@ namespace ao::uimodel
         return matches;
       }
 
-      auto const optAliasPrefix = rt::makeCompletionAliasPrefixKey(prefix);
+      auto const optAliasKey = rt::makeCompletionAliasPrefixKey(prefix);
 
-      if (!optAliasPrefix)
+      if (!optAliasKey)
       {
         return matches;
       }
@@ -99,18 +100,13 @@ namespace ao::uimodel
 
       for (auto const& entry : vocabulary)
       {
-        if (entry.aliases.empty() ||
-            std::ranges::none_of(
-              entry.aliases, [&](std::string_view const alias) { return alias.starts_with(*optAliasPrefix); }) ||
-            rt::findCompletionWordPrefixInsensitive(entry.value, prefix))
+        if (rt::matchesCompletionVocabularyAlias(entry, prefix, *optAliasKey))
         {
-          continue;
+          insertRanked(aliasMatches, entry, aliasLimit);
         }
-
-        insertRanked(aliasMatches, entry, aliasLimit);
       }
 
-      matches.insert(matches.end(), aliasMatches.begin(), aliasMatches.end());
+      appendBucket(aliasMatches);
       return matches;
     }
   } // namespace

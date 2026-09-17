@@ -125,7 +125,19 @@ The limit applies after tiering, and each tier retains the vocabulary's existing
 Word-prefix matching deliberately does not perform fuzzy correction or Unicode word segmentation: `pinnock` may select `Trevor Pinnock`, while `innock` and misspelled `pinnok` do not.
 The typed alias prefix is compacted without ICU by lowercasing ASCII letters, retaining digits, and discarding every other ASCII character; any non-ASCII byte or fewer than three retained characters disables alias matching for that request.
 
-Its frontend provider clamps the cursor to the input length and matches the text before that cursor.
+### Which ranking rule should a consumer use?
+
+Metadata items and WinUI tag/custom-key suggestions call `selectCompletionVocabularyEntries()` when their source vocabulary is already in the desired order.
+It preserves input order within the direct, word-prefix, and alias tiers and applies the result limit only after tiering.
+Temporary word matches are bounded, and alias work runs only if direct and word matches leave capacity.
+An alias-only value is emitted once, while distinct values that happen to share an alias remain distinct.
+The returned pointers borrow the supplied vocabulary and must be consumed before that vocabulary is invalidated.
+
+Quick Filter has a different input contract: its aggregate vocabulary is intentionally unordered.
+It reuses the direct/word predicate and alias-exclusion rule, but scans all matching entries and retains the frequency-ranked top N.
+It must not call the input-order helper to truncate the aggregate before ranking.
+
+The metadata frontend provider clamps the cursor to the input length and matches the text before that cursor.
 When matches exist, the returned replacement range covers the complete original entry, including any text after the cursor.
 When no matches exist, the provider returns no result.
 
@@ -163,6 +175,7 @@ The runtime provider contains no GTK types.
 - [`FieldCatalog.h`](../../../include/ao/query/FieldCatalog.h) defines typed query-variable descriptors.
 - [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) defines the public capability flag and typed query bridge.
 - [`CompletionService.h`](../../../app/include/ao/rt/completion/CompletionService.h) defines vocabulary ownership.
+- [`CompletionVocabulary.h`](../../../app/include/ao/rt/completion/CompletionVocabulary.h) defines alias exclusion and bounded input-order selection.
 - [`CompletionAliasPolicy.h`](../../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the optional ICU-free derivation seam.
 - [`IcuCompletionAliases.cpp`](../../../app/i18n/IcuCompletionAliases.cpp) owns the interactive Kana and explicitly Mandarin Han transforms.
 - [`CompletionService.cpp`](../../../app/runtime/completion/CompletionService.cpp) owns the shared scan, source frequencies, materialization, ordering-policy replacement, caching, and thread confinement.
@@ -175,6 +188,8 @@ The runtime provider contains no GTK types.
 
 - [`CompletionServiceTest.cpp`](../../../test/unit/runtime/completion/CompletionServiceTest.cpp) protects shared-snapshot coherence, alias reuse and lifetime, tag/custom/field/aggregate materialization, frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation.
 - [`MetadataValueCompleterTest.cpp`](../../../test/unit/runtime/completion/MetadataValueCompleterTest.cpp) protects whole-value/word/alias tiering, source-text insertion, field gating, prefix matching, limits, and whole-entry replacement.
+- [`CompletionVocabularyTest.cpp`](../../../test/unit/runtime/completion/CompletionVocabularyTest.cpp) protects bounded input-order tiering, duplicate-value suppression, shared-alias handling, and the runtime item-adapter path.
+- [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects Quick Filter's full-match frequency ranking independently from input-order selection.
 - [`CompletionVocabularyBaselineTest.cpp`](../../../test/perf/CompletionVocabularyBaselineTest.cpp) records shared rebuild, in-memory materialization, and cached Quick-filter lookup latency at representative cardinalities without a machine-dependent pass threshold.
 - GTK completion-controller tests protect frontend application of the neutral result.
 

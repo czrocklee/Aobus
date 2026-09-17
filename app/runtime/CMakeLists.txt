@@ -23,6 +23,7 @@ add_library(ao_app_runtime STATIC
     library/LibraryYamlExporter.cpp
     completion/CompletionService.cpp
     completion/CompletionText.cpp
+    completion/CompletionVocabulary.cpp
     completion/QueryExpressionCompleter.cpp
     completion/MetadataValueCompleter.cpp
     source/AllTracksSource.cpp

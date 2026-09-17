@@ -111,6 +111,27 @@ namespace ao::uimodel::test
     CHECK(optResult->items[1].rank == 1);
   }
 
+  TEST_CASE("TrackFilterCompleter - prefers frequent values with a one-item result bound",
+            "[uimodel][unit][track-filter-completion][ranking]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Match Alpha", .album = ""});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Match Zulu", .album = ""});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Match Zulu", .album = ""});
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
+    auto completer = TrackFilterCompleter{vocabulary};
+
+    auto const optResult = completer.complete("Match", 5, 1);
+
+    REQUIRE(optResult);
+    CHECK(displayTexts(*optResult) == std::vector<std::string>{"Match Zulu"});
+    CHECK(optResult->items.front().detail.frequency == 2);
+  }
+
   TEST_CASE("TrackFilterCompleter - replaces only the current Quick-filter term",
             "[uimodel][unit][track-filter-completion][replacement]")
   {

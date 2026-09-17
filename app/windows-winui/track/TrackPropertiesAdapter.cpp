@@ -7,13 +7,12 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/CompletionText.h>
+#include <ao/rt/completion/CompletionVocabulary.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <span>
@@ -67,67 +66,13 @@ namespace ao::winui
                                                               std::string_view const prefix,
                                                               std::size_t const limit)
   {
+    auto const matches = rt::selectCompletionVocabularyEntries(vocabulary, prefix, limit);
     auto suggestions = std::vector<std::string>{};
+    suggestions.reserve(matches.size());
 
-    if (limit == 0)
-    {
-      return suggestions;
-    }
-
-    suggestions.reserve(std::min(limit, vocabulary.size()));
-    auto wordMatches = std::vector<rt::VocabularyEntry const*>{};
-    auto const optAliasPrefix = rt::makeCompletionAliasPrefixKey(prefix);
-
-    for (auto const& entry : vocabulary)
-    {
-      auto const optMatchOffset = rt::findCompletionWordPrefixInsensitive(entry.value, prefix);
-
-      if (optMatchOffset && *optMatchOffset == 0)
-      {
-        suggestions.push_back(entry.value);
-      }
-      else if (optMatchOffset)
-      {
-        wordMatches.push_back(&entry);
-      }
-
-      if (suggestions.size() >= limit)
-      {
-        return suggestions;
-      }
-    }
-
-    for (auto const* const entry : wordMatches)
+    for (auto const* const entry : matches)
     {
       suggestions.push_back(entry->value);
-
-      if (suggestions.size() >= limit)
-      {
-        return suggestions;
-      }
-    }
-
-    if (!optAliasPrefix)
-    {
-      return suggestions;
-    }
-
-    for (auto const& entry : vocabulary)
-    {
-      if (entry.aliases.empty() ||
-          std::ranges::none_of(
-            entry.aliases, [&](std::string_view const alias) { return alias.starts_with(*optAliasPrefix); }) ||
-          std::ranges::contains(suggestions, entry.value))
-      {
-        continue;
-      }
-
-      suggestions.push_back(entry.value);
-
-      if (suggestions.size() >= limit)
-      {
-        break;
-      }
     }
 
     return suggestions;
