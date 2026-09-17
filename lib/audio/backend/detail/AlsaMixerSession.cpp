@@ -96,6 +96,16 @@ namespace ao::audio::backend::detail
                                          static_cast<UnsignedMixerLevel>(roundedOffset));
     }
 
+    std::optional<AlsaMixerLevelRange> usableDecibelRange(AlsaMixerElementSnapshot const& snapshot) noexcept
+    {
+      if (snapshot.optDecibelRange && snapshot.optDecibelRange->min != SND_CTL_TLV_DB_GAIN_MUTE)
+      {
+        return snapshot.optDecibelRange;
+      }
+
+      return std::nullopt;
+    }
+
     float normalizedLevel(AlsaMixerLevelRange const& range, AlsaMixerLevel level) noexcept
     {
       if (level <= range.min)
@@ -352,6 +362,11 @@ namespace ao::audio::backend::detail
 
     for (auto const& id : ids)
     {
+      if (std::ranges::contains(_failedElementIds, id))
+      {
+        continue;
+      }
+
       if (_ioPtr->inspect(id))
       {
         _optElementId = id;
@@ -403,11 +418,13 @@ namespace ao::audio::backend::detail
                        "software fallback");
     }
 
+    // Allocate the failure record before touching hardware; discard it only after a successful write.
+    _failedElementIds.push_back(optSnapshot->id);
     bool written = false;
 
-    if (optSnapshot->optDecibelRange)
+    if (auto const optRange = usableDecibelRange(*optSnapshot); optRange)
     {
-      long const level = quantizedLevel(*optSnapshot->optDecibelRange, normalized);
+      long const level = quantizedLevel(*optRange, normalized);
       written = _ioPtr->trySetDecibelVolume(optSnapshot->id, level);
     }
     else
@@ -424,6 +441,7 @@ namespace ao::audio::backend::detail
         "ALSA mixer volume write failed; hardware state may have changed partially; using unity software fallback");
     }
 
+    _failedElementIds.pop_back();
     return {};
   }
 
@@ -498,9 +516,9 @@ namespace ao::audio::backend::detail
 
     float volume = normalizedLevel(optSnapshot->rawRange, optSnapshot->rawLevels.front());
 
-    if (optSnapshot->optDecibelRange && !optSnapshot->decibelLevels.empty())
+    if (auto const optRange = usableDecibelRange(*optSnapshot); optRange && !optSnapshot->decibelLevels.empty())
     {
-      volume = normalizedLevel(*optSnapshot->optDecibelRange, optSnapshot->decibelLevels.front());
+      volume = normalizedLevel(*optRange, optSnapshot->decibelLevels.front());
     }
 
     return {.volume = volume,

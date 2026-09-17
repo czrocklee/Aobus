@@ -8,8 +8,14 @@
 #include <ao/Error.h>
 #include <ao/utility/ThreadName.h>
 
+extern "C"
+{
+#include <alsa/asoundlib.h>
+}
+
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <chrono>
@@ -17,6 +23,7 @@
 #include <future>
 #include <latch>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <thread>
@@ -118,6 +125,11 @@ namespace ao::audio::backend::detail::test
     CHECK((fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{110L, 110L}));
     CHECK(fixture.session.stateSnapshot().volume == 1.0F);
     CHECK(fixture.statePtr->refreshCount == 5U);
+
+    fixture.session.close();
+    REQUIRE(fixture.session.tryInit(nullptr));
+    CHECK(fixture.session.stateSnapshot().volume == 1.0F);
+    CHECK(fixture.statePtr->writeCount == 3U);
   }
 
   TEST_CASE("AlsaMixerSession - explicit decibel volume writes use the readable decibel scale",
@@ -136,6 +148,33 @@ namespace ao::audio::backend::detail::test
 
     CHECK((fixture.statePtr->writtenLevels == std::vector<long>{-6000L, -4500L, 0L}));
     CHECK(fixture.statePtr->hardwareElements.front().decibelLevels == std::vector<long>{0L});
+    CHECK(fixture.session.stateSnapshot().volume == 1.0F);
+
+    fixture.session.close();
+    REQUIRE(fixture.session.tryInit(nullptr));
+    CHECK(fixture.session.stateSnapshot().volume == 1.0F);
+    CHECK(fixture.statePtr->writeCount == 3U);
+  }
+
+  TEST_CASE("AlsaMixerSession - mute-sentinel decibel ranges use the raw scale for reads and writes",
+            "[audio][regression][alsa-mixer]")
+  {
+    auto fixture = MixerFixture{};
+    fixture.addElement({.id = {.name = "PCM", .index = 0U},
+                        .rawRange = {.min = 0L, .max = 100L},
+                        .rawLevels = {25L},
+                        .optDecibelRange = AlsaMixerLevelRange{.min = SND_CTL_TLV_DB_GAIN_MUTE, .max = 0L},
+                        .decibelLevels = {-1200L}});
+    fixture.initialize();
+
+    CHECK(fixture.session.stateSnapshot().volume == 0.25F);
+    REQUIRE(fixture.session.setVolume(0.0F));
+    REQUIRE(fixture.session.setVolume(0.5F));
+    REQUIRE(fixture.session.setVolume(1.0F));
+
+    CHECK((fixture.statePtr->writtenLevels == std::vector<long>{0L, 50L, 100L}));
+    CHECK(fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{100L});
+    CHECK(fixture.statePtr->hardwareElements.front().decibelLevels == std::vector<long>{-1200L});
     CHECK(fixture.session.stateSnapshot().volume == 1.0F);
   }
 
@@ -321,6 +360,118 @@ namespace ao::audio::backend::detail::test
     CHECK((fixture.statePtr->hardwareElements.front().decibelLevels == std::vector<long>{-4500L, -1800L}));
     CHECK(fixture.session.volumeMode() == AlsaVolumeControlMode::SoftwareGain);
     CHECK(fixture.session.renderGain() == 1.0F);
+  }
+
+  TEST_CASE("AlsaMixerSession - failed hardware element remains excluded across close and reopen",
+            "[audio][regression][alsa-mixer]")
+  {
+    bool const decibels = GENERATE(false, true);
+    auto fixture = MixerFixture{};
+    auto element = FakeMixerElement{.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L}};
+
+    if (decibels)
+    {
+      element.optDecibelRange = AlsaMixerLevelRange{.min = -6000L, .max = 0L};
+      element.decibelLevels = {-600L};
+    }
+
+    fixture.addElement(std::move(element));
+    fixture.initialize();
+    fixture.statePtr->writeSucceeds = false;
+
+    REQUIRE_FALSE(fixture.session.setVolume(0.25F));
+    REQUIRE(fixture.session.setVolume(0.3F));
+    fixture.session.close();
+    fixture.statePtr->writeSucceeds = true;
+
+    CHECK_FALSE(fixture.session.tryInit(nullptr));
+    CHECK(fixture.session.volumeMode() == AlsaVolumeControlMode::SoftwareGain);
+    CHECK(fixture.session.stateSnapshot().volume == 0.3F);
+    CHECK(fixture.session.renderGain() == 0.3F);
+    CHECK(fixture.statePtr->openCount == 2U);
+    CHECK(fixture.statePtr->closeCount == 2U);
+    CHECK(fixture.statePtr->writeCount == 1U);
+  }
+
+  TEST_CASE("AlsaMixerSession - failed element identity does not exclude another candidate",
+            "[audio][regression][alsa-mixer]")
+  {
+    auto const alternativeId =
+      GENERATE(AlsaMixerElementId{.name = "Master", .index = 1U}, AlsaMixerElementId{.name = "PCM", .index = 0U});
+    CAPTURE(alternativeId.name, alternativeId.index);
+    auto fixture = MixerFixture{};
+    fixture.addElement({.id = {.name = "Master", .index = 0U}, .rawLevels = {90L}});
+    fixture.addElement({.id = alternativeId, .rawLevels = {80L}});
+    fixture.initialize();
+    fixture.statePtr->writeSucceeds = false;
+    REQUIRE_FALSE(fixture.session.setVolume(0.25F));
+    fixture.statePtr->writeSucceeds = true;
+    fixture.session.close();
+
+    REQUIRE(fixture.session.tryInit(nullptr));
+    REQUIRE(fixture.session.setVolume(0.4F));
+
+    CHECK(fixture.statePtr->hardwareElements[0].rawLevels == std::vector<long>{90L});
+    CHECK(fixture.statePtr->hardwareElements[1].rawLevels == std::vector<long>{40L});
+    CHECK(fixture.statePtr->writeCount == 2U);
+
+    // A successful write must not discard another element's earlier failure.
+    fixture.session.close();
+    REQUIRE(fixture.session.tryInit(nullptr));
+    CHECK(fixture.session.stateSnapshot().volume == 0.4F);
+    REQUIRE(fixture.session.setVolume(0.6F));
+
+    CHECK(fixture.statePtr->hardwareElements[0].rawLevels == std::vector<long>{90L});
+    CHECK(fixture.statePtr->hardwareElements[1].rawLevels == std::vector<long>{60L});
+    CHECK(fixture.statePtr->writeCount == 3U);
+  }
+
+  TEST_CASE("AlsaMixerSession - failed element identity is local to one session", "[audio][regression][alsa-mixer]")
+  {
+    auto statePtr = std::make_shared<FakeMixerState>();
+    statePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L}});
+    auto factory = FakeMixerOpenFactory{statePtr};
+    {
+      auto firstSession = AlsaMixerSession{factory};
+      REQUIRE(firstSession.tryInit(nullptr));
+      statePtr->writeSucceeds = false;
+      REQUIRE_FALSE(firstSession.setVolume(0.25F));
+    }
+    statePtr->writeSucceeds = true;
+    auto secondSession = AlsaMixerSession{factory};
+
+    REQUIRE(secondSession.tryInit(nullptr));
+    REQUIRE(secondSession.setVolume(0.4F));
+
+    CHECK(statePtr->hardwareElements.front().rawLevels == std::vector<long>{40L});
+    CHECK(statePtr->writeCount == 2U);
+  }
+
+  TEST_CASE("AlsaMixerSession - refresh and read failures do not exclude an element on reopen",
+            "[audio][regression][alsa-mixer]")
+  {
+    bool const refreshFails = GENERATE(false, true);
+    auto fixture = MixerFixture{};
+    fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {70L}});
+    fixture.initialize();
+
+    if (refreshFails)
+    {
+      fixture.statePtr->refreshSucceeds = false;
+    }
+    else
+    {
+      fixture.statePtr->hardwareElements.front().readable = false;
+    }
+
+    REQUIRE_FALSE(fixture.session.setVolume(0.4F));
+    fixture.statePtr->refreshSucceeds = true;
+    fixture.statePtr->hardwareElements.front().readable = true;
+    fixture.session.close();
+
+    CHECK(fixture.session.tryInit(nullptr));
+    CHECK(fixture.session.volumeMode() == AlsaVolumeControlMode::HardwareMixer);
+    CHECK(fixture.statePtr->writeCount == 0U);
   }
 
   TEST_CASE("AlsaMixerSession - external mute changes only effective state and pure application reads do not refresh",

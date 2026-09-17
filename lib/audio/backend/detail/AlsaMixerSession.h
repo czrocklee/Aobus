@@ -109,7 +109,7 @@ namespace ao::audio::backend::detail
   AlsaMixerOpenFactory& nativeAlsaMixerOpenFactory();
 
   /**
-   * @brief Owns safe volume state for one ALSA backend open/close lifetime.
+   * @brief Owns safe volume state across one ALSA backend's PCM open/close cycles.
    *
    * Initialization and close are read-only with respect to shared mixer
    * controls. Hardware reads and writes refresh events and relocate the chosen
@@ -145,6 +145,8 @@ namespace ao::audio::backend::detail
     mutable std::mutex _handleMutex;
     std::unique_ptr<AlsaMixerIo> _ioPtr;
     std::optional<AlsaMixerElementId> _optElementId;
+    // A setter failure makes this stable element identity unsafe for the rest of the backend lifetime.
+    std::vector<AlsaMixerElementId> _failedElementIds;
 
     // Control values are protected by _handleMutex; render never reads them directly.
     float _softwareVolume = 1.0F;
