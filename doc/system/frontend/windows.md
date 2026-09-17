@@ -151,7 +151,18 @@ ordinary settings checkpoint persists the preference without replacing it with
 the engine-confirmed Runtime snapshot. Presentation rows and operating-system
 device names are not persisted.
 
-SMTC commands route through the shared playback command surface. Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
+### How SMTC availability follows playback
+
+The native SMTC session starts disabled.
+It subscribes to playback and attempts to apply the initial snapshot before enabling the session.
+Failure of an optional availability or status/metadata update does not prevent enablement.
+Each later snapshot advertises Play and Pause from `PlaybackActions::isCapable()` because those buttons describe protocol support; invoking either repeatedly may validly leave transport unchanged.
+Stop, Next, and Previous instead use `isEnabled()` because their availability depends on current playback state.
+Buttons outside this supported command set are ignored.
+
+A button press is dispatched through the shared playback command surface, whose `tryExecute()` rechecks availability on the execution turn rather than trusting the earlier native button state.
+Availability and playback-status/metadata updates use independent optional-WinRT boundaries: failure to update one does not suppress the other.
+Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
 
 ## Failure and cancellation
 
