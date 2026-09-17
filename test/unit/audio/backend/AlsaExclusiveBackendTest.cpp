@@ -202,6 +202,45 @@ namespace ao::audio::backend::test
     CHECK(graph.nodes.empty());
   }
 
+  TEST_CASE("AlsaExclusiveBackend - software fallback survives close and reopen after a mixer write failure",
+            "[audio][regression][alsa-mixer]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
+    mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L}});
+    auto registry = detail::AlsaGraphRegistry{};
+    auto graph = flow::Graph{};
+    auto graphSub = registry.subscribe("hw:test,0", [&graph](flow::Graph const& nextGraph) { graph = nextGraph; });
+    auto const device = Device{
+      .id = DeviceId{"hw:test,0"}, .displayName = "Test card", .description = "hw:test,0", .backendId = kBackendAlsa};
+    auto backend = detail::test::AlsaControlBackend{device, registry.publisher(), mixerStatePtr};
+    mixerStatePtr->writeSucceeds = false;
+
+    REQUIRE_FALSE(backend.set(props::kVolume, 0.25F));
+    REQUIRE(backend.set(props::kVolume, 0.3F));
+    backend.close();
+    REQUIRE(graph.nodes.empty());
+    mixerStatePtr->writeSucceeds = true;
+    REQUIRE(backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16}, target));
+
+    CHECK_FALSE(backend.isMixerInitialized());
+    auto const volumeRes = backend.property(PropertyId::Volume);
+    REQUIRE(volumeRes);
+    CHECK(std::get<float>(*volumeRes) == 0.3F);
+    CHECK(backend.queryProperty(PropertyId::Volume).isAvailable);
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
+    REQUIRE(graph.nodes.size() == 2U);
+    auto const& sink = graph.nodes.back();
+    CHECK(sink.softwareVolumeNotUnity);
+    CHECK_FALSE(sink.hardwareVolumeNotUnity);
+    CHECK_FALSE(sink.unclassifiedVolumeNotUnity);
+    CHECK(sink.minSoftwareGain == 0.3F);
+    CHECK(sink.maxSoftwareGain == 0.3F);
+    CHECK(mixerStatePtr->openCount == 2U);
+    CHECK(mixerStatePtr->closeCount == 2U);
+    CHECK(mixerStatePtr->writeCount == 1U);
+  }
+
   TEST_CASE("AlsaExclusiveBackend - every graph callback reads volume without nested delivery",
             "[audio][regression][alsa][concurrency]")
   {

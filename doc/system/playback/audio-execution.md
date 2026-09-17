@@ -492,11 +492,20 @@ Application mute always silences the application's PCM samples, independently of
 A cached application mute therefore remains effective on the first playback open, including with hardware volume control.
 When unmuted and using hardware volume, the software gain is unity and PCM bytes are unchanged.
 
+#### What happens when observation or a write fails?
+
 If refresh fails or the selected element becomes unusable, the backend switches to software control with unity gain.
 When that observation failure occurs before an explicit volume write, the request reports an I/O error that states no volume write was attempted.
-A failed explicit hardware volume setter reports an I/O error that identifies possible partial hardware effects and makes the same transition, without applying the requested gain a second time in software.
-Hardware writes may have partially succeeded: there is no compensating write, rollback guarantee, or automatic restoration to maximum volume.
-The next explicit volume request controls software gain.
+Refresh and read failures do not exclude the element: the same stable name-and-index identity may be reconsidered after a later PCM reopen.
+
+Immediately before calling a hardware setter, the backend records that element identity while it still holds the mixer mutex.
+This allocation must happen before the hardware write because allocation failure cannot be allowed after a setter may already have changed one or more channels.
+A successful setter removes the provisional record.
+A failed setter leaves the identity excluded for this backend's lifetime, including PCM close/reopen, but does not exclude another readable candidate; a newly constructed backend starts with no exclusions.
+The error reports that hardware may have changed partially, switches to unity software fallback, and does not apply the requested attenuation again in software.
+There is no compensating write, rollback guarantee, or automatic restoration to maximum volume.
+The next explicit volume request controls software gain, which remains cached across a reopen that finds no other hardware candidate.
+
 Each published mixer graph takes volume, effective mute, and control mechanism from one mutex-consistent snapshot.
 A Volume-property observation that changes or loses the selected element updates the registry's corresponding fallback graph before returning its scalar value and capability can be queried.
 Observer delivery follows the [backend graph delivery contract](#backend-graph-delivery), so a change discovered inside a graph callback is delivered after that callback returns rather than recursively.
@@ -506,8 +515,14 @@ Explicit control requests can still publish their state before PCM open; only un
 Control mutations derive and atomically publish the complete software render gain while holding the mixer mutex; the render loop loads that single value once per PCM batch rather than combining independent mute, mode, and gain observations.
 Application mute publishes its render gain before refreshing hardware observations, so mixer I/O cannot delay that publication.
 An in-flight render batch may retain an earlier complete gain, and already queued PCM is not rewritten; no one-period audible-response guarantee is implied.
-Raw and dB volume mappings select their exact endpoints for zero and unity rather than rounding a scaled offset at those boundaries.
-Integer offsets preserve narrow ranges near native integer limits; NaN requests return `InvalidInput` before mixer locking, refresh, graph publication, or gain and intent mutation, while infinities clamp to their respective endpoints.
+
+#### Which scale maps normalized volume?
+
+Raw and dB mappings select their exact endpoints for zero and unity rather than rounding a scaled offset at those boundaries.
+An ordinary readable dB range uses dB mapping.
+If its minimum is ALSA's `SND_CTL_TLV_DB_GAIN_MUTE` sentinel, however, that minimum is not a finite gain suitable for interpolation; reads and writes therefore use the element's raw scale instead.
+Integer-offset arithmetic preserves narrow ranges near native integer limits.
+NaN requests return `InvalidInput` before mixer locking, refresh, graph publication, or gain and intent mutation, while infinities clamp to their respective endpoints.
 
 ### Shutdown
 
@@ -593,9 +608,9 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
 - [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.
-- [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, scalar-observation graph publication, closed-graph retirement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
+- [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp), [`AlsaModeSelectorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaModeSelectorTest.cpp), [`AlsaPcmFormatTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmFormatTest.cpp), and [`AlsaPcmErrorTest.cpp`](../../../test/unit/audio/backend/detail/AlsaPcmErrorTest.cpp) protect direct-hardware enforcement, scalar-observation graph publication, software fallback retention across reopen after a mixer write failure, closed-graph retirement, strict lossless selection, significant-bit evidence, exact native format mapping, and open-error classification.
 - [`StreamingSourceTest.cpp`](../../../test/unit/audio/StreamingSourceTest.cpp), [`PcmRingBufferTest.cpp`](../../../test/unit/audio/PcmRingBufferTest.cpp), and [`StreamingBufferPolicyTest.cpp`](../../../test/unit/audio/detail/StreamingBufferPolicyTest.cpp) protect decode-worker lifetime, bounded producer admission, oversized blocks, constant-time reset reuse, and source retirement.
-- [`AlsaMixerSessionTest.cpp`](../../../test/unit/audio/backend/detail/AlsaMixerSessionTest.cpp) protects zero-write lifecycle/mute operations, refreshed hardware state, element replacement/removal, volume failures, and numeric endpoints.
+- [`AlsaMixerSessionTest.cpp`](../../../test/unit/audio/backend/detail/AlsaMixerSessionTest.cpp) protects zero-write lifecycle/mute operations, refreshed hardware state, element replacement/removal, volume failures, numeric endpoints, mute-sentinel raw-scale mapping, successful-write eligibility after reopen, failed-element exclusion across reopen, independent candidate and session identities, and refresh/read failures without exclusion.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects deferred cold restore without opening output; [`PlaybackSessionVolumeTest.cpp`](../../../test/unit/runtime/PlaybackSessionVolumeTest.cpp) checks exact unity and near-unity YAML round trips; Linux-only [`PlaybackSessionAlsaMuteTest.cpp`](../../../test/unit/runtime/PlaybackSessionAlsaMuteTest.cpp) protects application-mute save/restore against external ALSA switch state and exact hardware-volume intent through public stop snapshots, checkpoint, shutdown, and restore.
 - Runtime playback tests under [`test/unit/runtime/`](../../../test/unit/runtime) protect executor-affine publication and application metadata.
 
