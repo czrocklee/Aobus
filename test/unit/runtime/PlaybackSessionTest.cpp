@@ -797,6 +797,44 @@ namespace ao::rt::test
     CHECK(advancedSnapshot.transport.nowPlaying.trackId == advancedSnapshot.succession.currentTrackId);
   }
 
+  TEST_CASE("PlaybackSession - cold restore keeps output unopened until explicit playback",
+            "[runtime][regression][playback-session]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
+    auto captureStatePtr = std::make_shared<RenderCaptureState>();
+    runtimePtr->addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    executor->drain();
+    auto const trackId = addPlayableTrack(*runtimePtr, *executor, "Deferred output");
+    auto const viewId = createView(*runtimePtr);
+    auto const session = PlaybackSessionState{
+      .sourceListId = kAllTracksListId,
+      .currentTrackId = trackId,
+      .positionMs = 250,
+      .volume = 0.999F,
+      .muted = true,
+    };
+    storeSession(playbackSessionStore, session);
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    executor->drain();
+
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    auto const snapshot = runtimePtr->playback().snapshot();
+    CHECK(snapshot.transport.transport == audio::Transport::Idle);
+    CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{250});
+    CHECK(snapshot.transport.volume.level == session.volume);
+    CHECK(snapshot.transport.volume.muted);
+    // The capture backend records its render target only when open is called.
+    CHECK(captureStatePtr->renderTarget == nullptr);
+
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    CHECK(captureStatePtr->renderTarget != nullptr);
+  }
+
   TEST_CASE("PlaybackSession - explicit checkpoint starts event-driven debounce",
             "[runtime][unit][playback-session][timing]")
   {

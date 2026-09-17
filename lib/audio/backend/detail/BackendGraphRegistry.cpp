@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -29,8 +30,22 @@ namespace ao::audio::backend::detail
       Callback callback{};
     };
 
+    struct Delivery final
+    {
+      std::string routeAnchor{};
+      // Initial subscription snapshots precede later publications and have no route revision.
+      std::uint64_t revision = 0;
+      flow::Graph graph{};
+      std::vector<Subscriber> subscribers{};
+      char const* context = "audio backend graph observer";
+    };
+
     std::mutex mutex{};
     std::recursive_mutex callbackMutex{};
+    // Only the callback-gate owner may enqueue or drain reentrant delivery.
+    // Other publishing threads retain their own delivery while waiting for the gate.
+    std::deque<Delivery> pendingDeliveries{};
+    bool delivering = false;
     std::unordered_map<std::string, flow::Graph> graphs{};
     std::unordered_map<std::string, std::uint64_t> revisions{};
     std::vector<Subscriber> subscribers{};
@@ -60,16 +75,10 @@ namespace ao::audio::backend::detail
       }
     }
 
-    void publishToSubscribers(auto const& statePtr,
-                              auto const& subscribers,
-                              std::string const& routeAnchor,
-                              std::uint64_t const revision,
-                              flow::Graph const& graph)
+    void publishToSubscribers(auto const& statePtr, auto const& delivery)
     {
-      for (auto const& subscriber : subscribers)
+      for (auto const& subscriber : delivery.subscribers)
       {
-        auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
-
         {
           auto const lock = std::scoped_lock{statePtr->mutex};
 
@@ -78,9 +87,10 @@ namespace ao::audio::backend::detail
             return;
           }
 
-          auto const revisionIt = statePtr->revisions.find(routeAnchor);
+          auto const revisionIt = statePtr->revisions.find(delivery.routeAnchor);
 
-          if (revisionIt == statePtr->revisions.end() || revisionIt->second != revision)
+          if (delivery.revision != 0 &&
+              (revisionIt == statePtr->revisions.end() || revisionIt->second != delivery.revision))
           {
             return;
           }
@@ -91,8 +101,31 @@ namespace ao::audio::backend::detail
           }
         }
 
-        invokeGraphCallback(subscriber.callback, graph, "audio backend graph observer");
+        invokeGraphCallback(subscriber.callback, delivery.graph, delivery.context);
       }
+    }
+
+    void deliverGraph(auto const& statePtr, auto delivery)
+    {
+      auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
+      statePtr->pendingDeliveries.push_back(std::move(delivery));
+
+      if (statePtr->delivering)
+      {
+        return;
+      }
+
+      statePtr->delivering = true;
+
+      while (!statePtr->pendingDeliveries.empty())
+      {
+        auto nextDelivery = std::move(statePtr->pendingDeliveries.front());
+        statePtr->pendingDeliveries.pop_front();
+        // Revision checks discard superseded reentrant snapshots before their callbacks run.
+        publishToSubscribers(statePtr, nextDelivery);
+      }
+
+      statePtr->delivering = false;
     }
   } // namespace
 
@@ -118,6 +151,7 @@ namespace ao::audio::backend::detail
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
     std::uint64_t subscriberId = 0;
+    auto delivery = State::Delivery{.routeAnchor = anchor, .context = "audio backend initial graph observer"};
     auto const callbackLock = std::scoped_lock{statePtr->callbackMutex};
 
     {
@@ -135,23 +169,12 @@ namespace ao::audio::backend::detail
       {
         initialGraph = it->second;
       }
+
+      delivery.graph = std::move(initialGraph);
+      delivery.subscribers.push_back(statePtr->subscribers.back());
     }
 
-    auto initialCallback = Callback{};
-
-    {
-      auto const lock = std::scoped_lock{statePtr->mutex};
-      auto const it = std::ranges::find(statePtr->subscribers, subscriberId, &State::Subscriber::id);
-
-      if (statePtr->shutdown || it == statePtr->subscribers.end())
-      {
-        return {};
-      }
-
-      initialCallback = it->callback;
-    }
-
-    invokeGraphCallback(initialCallback, initialGraph, "audio backend initial graph observer");
+    deliverGraph(statePtr, std::move(delivery));
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -188,8 +211,7 @@ namespace ao::audio::backend::detail
   {
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
-    auto pendingSubscribers = std::vector<State::Subscriber>{};
-    std::uint64_t revision = 0;
+    auto delivery = State::Delivery{.routeAnchor = anchor, .graph = std::move(graph)};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -199,28 +221,32 @@ namespace ao::audio::backend::detail
         return;
       }
 
-      statePtr->graphs[anchor] = graph;
-      revision = statePtr->nextRevision++;
-      statePtr->revisions[anchor] = revision;
+      if (auto const it = statePtr->graphs.find(anchor); it != statePtr->graphs.end() && it->second == delivery.graph)
+      {
+        return;
+      }
+
+      statePtr->graphs[anchor] = delivery.graph;
+      delivery.revision = statePtr->nextRevision++;
+      statePtr->revisions[anchor] = delivery.revision;
 
       for (auto const& subscriber : statePtr->subscribers)
       {
         if (subscriber.routeAnchor == anchor)
         {
-          pendingSubscribers.push_back(subscriber);
+          delivery.subscribers.push_back(subscriber);
         }
       }
     }
 
-    publishToSubscribers(statePtr, pendingSubscribers, anchor, revision, graph);
+    deliverGraph(statePtr, std::move(delivery));
   }
 
   void BackendGraphRegistry::clear(std::string_view const routeAnchor)
   {
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
-    auto pendingSubscribers = std::vector<State::Subscriber>{};
-    std::uint64_t revision = 0;
+    auto delivery = State::Delivery{.routeAnchor = anchor};
 
     {
       auto const lock = std::scoped_lock{statePtr->mutex};
@@ -231,19 +257,19 @@ namespace ao::audio::backend::detail
       }
 
       statePtr->graphs.erase(anchor);
-      revision = statePtr->nextRevision++;
-      statePtr->revisions[anchor] = revision;
+      delivery.revision = statePtr->nextRevision++;
+      statePtr->revisions[anchor] = delivery.revision;
 
       for (auto const& subscriber : statePtr->subscribers)
       {
         if (subscriber.routeAnchor == anchor)
         {
-          pendingSubscribers.push_back(subscriber);
+          delivery.subscribers.push_back(subscriber);
         }
       }
     }
 
-    publishToSubscribers(statePtr, pendingSubscribers, anchor, revision, {});
+    deliverGraph(statePtr, std::move(delivery));
   }
 
   void BackendGraphRegistry::shutdown() noexcept
@@ -264,6 +290,9 @@ namespace ao::audio::backend::detail
       statePtr->revisions.clear();
     }
 
+    // Retirement is synchronous even on a callback stack. Do not defer final
+    // empties: the caller may destroy its observer state as soon as shutdown returns.
+    statePtr->pendingDeliveries.clear();
     auto const emptyGraph = flow::Graph{};
 
     while (true)

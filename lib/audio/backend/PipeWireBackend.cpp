@@ -566,14 +566,14 @@ namespace ao::audio::backend
     }
 
     auto vol = volume.load(std::memory_order_relaxed);
-    // PipeWire's stream-control setter is a variadic C API.
+    // PipeWire's variadic control list ends with a zero property-id sentinel.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_volume, 1, &vol);
+    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_volume, 1, &vol, 0U);
 
     auto mutedFloat = muted.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
     // PipeWire's stream-control setter is a variadic C API.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat);
+    ::pw_stream_set_control(streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat, 0U);
   }
 
   PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile)
@@ -869,7 +869,7 @@ namespace ao::audio::backend
 
         // PipeWire's stream-control setter is a variadic C API.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-        ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_volume, 1, &vol);
+        ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_volume, 1, &vol, 0U);
       }
       return {};
     }
@@ -890,7 +890,7 @@ namespace ao::audio::backend
 
         // PipeWire's stream-control setter is a variadic C API.
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-        ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat);
+        ::pw_stream_set_control(_implPtr->streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat, 0U);
       }
       return {};
     }

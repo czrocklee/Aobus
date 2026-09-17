@@ -53,9 +53,16 @@ namespace ao::audio
      * safe to call concurrently, but are not linearized with in-flight control
      * commands.
      *
+     * Synchronous backend/provider graph subscribers may use these state-only
+     * queries, but must not call status(), control methods, shutdown(), or
+     * synchronously destroy Engine or wait for those operations. Such work must
+     * be deferred until after the graph callback returns; graph delivery can
+     * run under control serialization or a provider callback gate.
+     *
      * User callbacks registered through setOnStateChanged(), setOnTrackEnded(),
      * setOnTrackAdvanced(), setOnPlaybackFailure(), and setOnRouteChanged() are
-     * delivered from Engine's internal event worker, not from backend or decoder callback stacks.
+     * delivered from Engine's internal event worker, not from backend or
+     * decoder callback stacks.
      * setOnStateChanged() reports asynchronous backend/source state changes;
      * synchronous control commands publish their result by returning. Callbacks
      * may call back into Engine control methods. They must return promptly;
@@ -252,10 +259,13 @@ namespace ao::audio
     void pause();
     void resume();
     void stop();
+    /// Does not seek or restart a playback whose transport is already Error.
+    /// Recovery requires a new playback start, not a seek on the failed source.
     void seek(std::chrono::milliseconds offset);
     /// Returns true when the expected current item matched and the seek was
     /// issued. Audio failures remain observable through transport status;
-    /// false means rejection, never queued work. Acquiring control may still
+    /// false means rejection, never queued work. Error rejects before source,
+    /// backend, or lookahead mutation, as for seek(). Acquiring control may still
     /// settle an already-consumed realtime transition before rejection.
     bool trySeek(PlaybackItemId expectedItemId, std::chrono::milliseconds offset);
     /// Returns whether the settled realtime timeline still has the expected

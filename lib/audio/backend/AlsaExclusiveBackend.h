@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -23,6 +23,7 @@ namespace ao::audio
 namespace ao::audio::backend::detail
 {
   class AlsaGraphPublisher;
+  class AlsaMixerSession;
 }
 
 namespace ao::audio::backend
@@ -37,6 +38,11 @@ namespace ao::audio::backend
     explicit AlsaExclusiveBackend(Device const& device,
                                   ProfileId const& profile,
                                   detail::AlsaGraphPublisher graphPublisher);
+    /// The injected session is mandatory and retains its mixer-open factory borrow.
+    AlsaExclusiveBackend(Device const& device,
+                         ProfileId const& profile,
+                         detail::AlsaGraphPublisher graphPublisher,
+                         std::unique_ptr<detail::AlsaMixerSession> mixerPtr);
     ~AlsaExclusiveBackend() override;
 
     AlsaExclusiveBackend(AlsaExclusiveBackend const&) = delete;
