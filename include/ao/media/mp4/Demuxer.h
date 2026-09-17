@@ -42,7 +42,7 @@ namespace ao::media::mp4
      *
      * Error model: the media decode entry returns Result (it sits on the audio open/seek path);
      * malformed required MP4 structures return Error::Code::FormatRejected here.
-     * See doc/spec/media/file-reading.md.
+     * See doc/system/media/file-reading.md.
      */
     static Result<Demuxer> parse(std::span<std::byte const> fileData, std::string_view targetFormat);
 

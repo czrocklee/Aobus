@@ -1,21 +1,41 @@
 ---
 name: write-documentation
-description: Create or revise Aobus documentation, including ownership changes, migrations, ADRs, and RFCs.
+description: Create, refresh, or rewrite Aobus documentation for its reader role, including navigation, topic boundaries, design notes, and decision records.
 ---
 
 # Write Aobus documentation
 
-`doc/README.md` owns taxonomy, lifecycle, templates, and migration policy.
-For a small correction, read the affected claim, its fact owner, and applicable
-policy. For a new document or structural change, use the owner-selection rules,
-matching `doc/template/` template, and nearest index.
+Use `doc/development/documentation.md` for file boundaries, evidence, proposals,
+and validation. `doc/README.md` is the reader entrance; `doc/system/README.md`
+routes current product contracts by topic.
+For a small correction, read the affected claim, its factual source, and the
+relevant policy rather than every neighboring document.
 
-When moving or splitting legacy material, use the fact-ledger contract before
-removing its source. Update affected inbound links and indexes. For code-boundary
-claims, consult `doc/architecture/system-overview.md` and the owning subsystem
-architecture. Apply the RFC/decision lifecycle in `doc/README.md`; keep current
-behavior in its authoritative document and durable rationale in decisions.
+Choose the reader's question and the page's role before drafting, using the
+roles in `doc/development/documentation.md`. Make the body serve that question.
+Rewrite when needed, but preserve accurate, useful content rather than chasing
+uniformity. Choose file boundaries by independently useful reader questions
+and contracts; structure and behavior may share a page.
 
-Run `./ao docs check`. Additional completion validation follows
-`doc/development/test/validation-and-review.md`. Report unresolved ownership or
-migration gaps that affect the requested result.
+Verify changed factual claims and examples against current source, tests,
+assets, tools, or policy. Keep observed implementation, intended contract,
+and decision rationale distinct; report conflicts rather than silently
+turning a possible implementation defect into a weaker guarantee. Preserve
+independently useful compatibility and safety contracts, and link headers
+or source assets instead of copying declarations or message inventories.
+
+Before removing material in a structural migration, keep temporary fact and
+inbound-link evidence outside the repository. Preserve unique facts or explain
+why they are incorrect, obsolete, or proposal-only. Update links in documents,
+repository instructions, skills, and tooling consumers.
+Use `doc/system/overview.md` and the affected topic for code boundaries.
+Distinguish current behavior, proposals, and decision rationale. Check decision
+status and current-contract links separately from the recorded reasons.
+Create a decision only when its rationale has independent long-term value.
+
+Run `./ao docs check`; it does not establish freshness or reader-role fit.
+Re-read the completed page for its task, factual evidence, and removed facts.
+Try representative reading paths when changing navigation or task routing.
+Additional completion validation follows
+`doc/development/test/validation-and-review.md`; report unresolved migration
+facts or validation boundaries.

@@ -1,21 +1,19 @@
 ---
 id: decision.index
-type: index
-status: current
-domain: documentation
-summary: Defines and indexes durable Aobus architectural decision records.
 ---
 # Architectural decisions
 
 Decision records preserve why a consequential choice was made, the alternatives considered, and the accepted consequences.
-They do not own current behavior; architecture, specifications, and reference remain the current sources of truth.
+They do not own current behavior; [system topics](../system/README.md) and [references](../reference/README.md) remain the current sources of truth.
 
 Use a decision record when reversing the choice would be expensive or when future maintainers are likely to revisit the rejected alternatives.
 Do not create retroactive decisions merely to fill this directory.
 
 File names use a four-digit sequence and a concise noun phrase, for example `0001-runtime-uimodel-separation.md`.
 Accepted decisions are immutable except for status and links that mark them superseded.
-Use the [decision template](../template/decision.md).
+A normal change requires neither a proposal nor a decision record.
+A short local rationale may remain with its current topic; use a separate record only when future readers benefit from revisiting the choice.
+See [documentation maintenance](../development/documentation.md#proposals-and-decisions) for proposals and historical context.
 
 ## Accepted decisions
 

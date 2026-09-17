@@ -23,7 +23,7 @@ namespace clang::tidy::readability
     finder->addMatcher(cxxStaticCastExpr().bind("cast"), this);
 
     // std::ignore assigned from a pure variable read: the discard idiom is
-    // misused as an unused-declaration suppression (Rule 3.2.8.2 territory).
+    // misused as an unused-declaration suppression.
     finder->addMatcher(
       cxxOperatorCallExpr(hasOverloadedOperatorName("="),
                           hasArgument(0, declRefExpr(to(varDecl(hasName("ignore"), isInStdNamespace())))),
@@ -122,7 +122,7 @@ namespace clang::tidy::readability
     }
 
     // No declaration to attach an attribute to: the cast discards a computed
-    // value, which Rule 3.2.8.3 spells as a std::ignore assignment.
+    // value, which must use a std::ignore assignment.
     diag(loc, "void cast %0 discards a value; use 'std::ignore = ...' instead") << castSpelling;
   }
 } // namespace clang::tidy::readability

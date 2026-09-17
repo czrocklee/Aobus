@@ -1,38 +1,24 @@
 # Aobus clang-tidy checks
 
-This directory owns the `aobus-*` clang-tidy checks and their registration
-module. Use `./ao tidy` or `ao.bat tidy`; the portal owns check selection,
-compile databases, tool discovery, and diagnostic handling.
+This directory owns the `aobus-*` checks, their AST helpers, and registration.
+Use `./ao tidy` or `ao.bat tidy`; the portal selects checks, discovers tools, prepares compile commands, and handles diagnostics.
 
-Linux builds `libAobusLintPlugin.so` against the Nix-provided LLVM development
-packages and loads it into the matching `clang-tidy` process.
+## Change a checker
 
-Official Windows LLVM binaries do not export the symbols needed by an
-out-of-tree DLL plugin. The `windows-tidy` preset therefore downloads the pinned
-official development archive and builds `AobusClangTidy.exe`, linking the same
-check sources directly with `clangTidyMain`. This keeps upstream and Aobus check
-registries in one process without relying on an unstable cross-package C++ ABI.
+- [`check/`](check/) contains implementations and local AST helpers.
+- [`AobusLintModule.cpp`](AobusLintModule.cpp) owns command aliases and registration; [`CMakeLists.txt`](CMakeLists.txt) owns source membership and native linkage.
+- [Checker development](../../doc/development/lint/checker-development.md) explains symbol identity, macro safety, diagnostics, FixIts, and fixture design.
+- [Linting](../../doc/development/linting.md) is the starting point for investigating a finding rather than modifying a checker.
 
-CMake serializes access to the shared SDK below the local
-`AOBUS_LLVM_SDK_CACHE_ROOT` and reuses it only when its required files and
-version-plus-SHA completion marker validate. The default cache is
-`%LOCALAPPDATA%\Aobus\cache\llvm`, independent of the source checkout and shared
-by its Windows build trees. See
-[Windows development](../../doc/development/windows.md) for the full state
-layout, mapped-source rules, overrides, and migration guidance.
+Fixtures live under `test/integration/lint/fixture/`.
+`./ao test --lint` runs diagnostic, FixIt, and fixed-output compilation assertions on Linux and macOS.
+A focused `tidy --check` invocation inspects diagnostics; it does not replace those assertions.
 
-For an offline configure, extract the exact pinned archive first and run the
-following from an initialized Visual Studio x64 developer prompt with
-`VCPKG_ROOT` set (`start-msbuild-env.bat cmd` opens one):
+## Native tool boundary
 
-```bat
-cmake -S . --preset windows-tidy -B C:\local\aobus-build\windows-tidy ^
-  -DAOBUS_LLVM_SDK_ROOT=C:/path/to/clang+llvm-22.1.8-x86_64-pc-windows-msvc
-```
+Linux and macOS build a module loaded by the matching native `clang-tidy` executable.
+Windows builds `AobusClangTidy.exe`, linking the same checks with `clangTidyMain` from the pinned official development SDK rather than loading an external C++ DLL into the official executable.
 
-`AOBUS_LLVM_SDK_CACHE_ROOT` relocates the automatically managed cache.
-`AOBUS_LLVM_SDK_ROOT` instead names one complete pre-provisioned SDK; it is a
-CMake cache option, is validated, and is never modified.
-
-Checker behavior is covered by fixtures under
-`test/integration/lint/fixture/`; run them with `./ao test --lint` on Linux.
+The [Windows SDK guide](../../doc/development/windows.md#llvm-sdk-and-native-lint-tools) owns automatic cache validation and locking, offline provisioning, and the distinction between `AOBUS_LLVM_SDK_CACHE_ROOT` and `AOBUS_LLVM_SDK_ROOT`.
+The version, archive, hash, and required-file checks are defined in [`LlvmSdk.cmake`](../../cmake/LlvmSdk.cmake).
+Use the [macOS guide](../../doc/development/macos.md) for its native LLVM environment.

@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 2.5.2: access sections must appear in
+  /// Enforces the access-section ordering rule: sections must appear in
   /// public → protected → private order. Diagnostic-only, no auto-fix.
   class MemberOrderCheck : public ClangTidyCheck
   {

@@ -1,9 +1,6 @@
 ---
 id: decision.0016.compose-interactive-runtime
-type: decision
 status: accepted
-domain: system
-summary: Composes the interactive runtime over a hidden core runtime and rejects inheritance and service-location wiring.
 ---
 # Decision 0016: compose the interactive runtime
 
@@ -88,9 +85,9 @@ dependency and lifetime set is visible at compile time.
 
 ## Current authorities
 
-- [System architecture](../architecture/system-overview.md)
-- [Interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md)
-- [Application shell architecture](../architecture/application-shell.md)
+- [System architecture](../system/overview.md)
+- [Interactive session lifecycle architecture](../system/session-lifecycle.md)
+- [Application shell architecture](../system/shell/README.md)
 - [Application-layer review](../development/application-layer-review.md)
 
 ## Supersession

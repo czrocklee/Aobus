@@ -1,0 +1,130 @@
+---
+id: query.format-evaluation
+---
+# Format expression evaluation
+
+## Scope
+
+This specification defines how a parsed format expression becomes a `FormatPlan` and how that plan produces one string from one `library::TrackView`.
+The exact grammar and supported fields belong to the [format language reference](../../reference/query/format-language.md).
+
+This contract does not define `TrackPresentationSpec`, projected rows, UI columns, export paths, filename safety, or collision handling.
+
+## Code boundary
+
+This contract belongs to the **core libraries** layer in the [system architecture](../overview.md) and is refined by the [track expression architecture](README.md).
+The compiler and evaluator are public under `include/ao/query/` and implemented under `lib/query/`.
+The CLI reads core tracks and prints the resulting strings; the TUI evaluates the playing track through its runtime library snapshot before applying terminal-title policy.
+
+## Terminology
+
+- **Format plan** is an ordered runtime-only sequence of append-literal and append-field instructions.
+- **Format binding** resolves one plan's owned dictionary symbols for one bounded evaluation batch.
+- **Scalar field** is a field with one string, numeric, codec, or custom value per track.
+- **Missing value** is a supported scalar field whose stored value is absent or its numeric sentinel is zero.
+
+## Invariants
+
+- A successful plan produces a string, never a predicate or presentation spec.
+- Evaluation appends instructions from left to right without implicit separators.
+- Constants append their canonical or literal text.
+- String literals are scalar-valid UTF-8 and byte-preserved; custom-key symbols are NFC in a successful plan.
+- Missing supported fields append an empty string.
+- A plan owns custom-key symbol text and captures no dictionary or library pointer.
+- Dictionary fields and custom keys are resolved through an explicit bounded dictionary context/binding.
+- A plan reports the union of hot and cold track data it requires.
+- Evaluation does not mutate track, dictionary, library, runtime, or frontend state.
+
+## Compilation
+
+Text input passes through the shared parser's
+[complexity admission](../../reference/query/predicate-language.md#complexity-admission)
+before constructing an AST.
+
+`compileFormat(ast)` returns `Result<FormatPlan>` without reading or mutating a dictionary.
+Compilation flattens grouping and concatenation into ordered append instructions and deduplicates repeated literal storage without changing output order.
+
+String literals are validated and retained byte-exactly; custom key names are normalized to NFC. Both are retained as deduplicated plan-owned values.
+Dictionary-backed fields mark the plan as requiring a dictionary context for evaluation.
+
+The plan access profile is:
+
+- `NoTrackData` when every instruction is literal;
+- `HotOnly` when every field comes from hot track data;
+- `ColdOnly` when every field comes from cold track data;
+- `HotAndCold` when both tiers are needed.
+
+## Evaluation
+
+For a dictionary-using plan, `FormatBinding(plan, context)` resolves all custom-key symbols under one committed dictionary lock and retains the context for id-to-text reads.
+Callers normally create one binding per output batch and reuse it for the tracks in that batch.
+A later binding can resolve a custom key introduced by a newer committed dictionary generation without recompiling the plan.
+When the batch evaluates transaction-backed track views, the caller opens the read transaction before creating the binding so the binding cannot be older than the evaluated storage snapshot.
+
+Supplying every tier required by the plan is a caller precondition of `FormatEvaluator::evaluate(binding, track, output)`.
+The evaluator enforces that contract before clearing caller-owned output or appending any instruction.
+
+Otherwise, it appends each instruction:
+
+- literal instructions append the indexed literal when the index is valid;
+- dictionary fields append resolved text or empty text when unresolved;
+- title and custom fields append their stored text, while an unresolved or absent custom key appends empty text;
+- numeric fields append decimal text or empty text for zero;
+- codec appends its canonical name or empty text for `UNKNOWN`.
+
+A missing value contributes no characters, but adjacent literal separators remain.
+For example, an absent album artist in `"[" + $albumArtist + "]"` produces `[]`.
+
+## Failure and cancellation
+
+Invalid subset shapes, unknown fields, and non-scalar fields return `Error::Code::FormatRejected` from the public compile boundary.
+Malformed UTF-8 or text beyond the Unicode operation limit also returns `FormatRejected` without a partial plan.
+Private compiler recursion may use an internal exception, but no exception escapes for user input.
+
+Plans with no dictionary access may use `FormatBinding(plan)` without a dictionary context.
+A plan whose `requiresDictionary` flag is true requires `FormatBinding(plan, dictionary)` with an explicit `DictionaryReadContext`.
+Evaluation uses the binding and caller-owned output storage in both cases.
+
+Evaluation is synchronous and non-throwing for ordinary missing track values.
+It has no cancellation point.
+Malformed internal instruction indices are ignored defensively rather than exposing user input as memory access.
+Evaluation has no insufficient-data result: a missing required hot/cold tier is a caller contract failure, while an ordinary missing value inside a present tier still contributes empty text.
+
+## Persistence and versioning
+
+`FormatPlan`, instructions, opcodes, literal indexes, and field ids are in-memory implementation details.
+The CLI accepts expression text for one invocation and does not persist the plan.
+The TUI persists `terminalTitleFormat` expression text in its preferences, recompiles it when preferences are validated or applied, and treats an empty expression as disabling the custom title.
+
+Scripts and TUI preferences may therefore retain expression text. Changes to accepted syntax or output semantics remain user-facing compatibility changes and require reference plus consumer-test updates.
+
+## Frontend observations
+
+Plain CLI output from `track show --format` is one consumer.
+Using `--format` with JSON or YAML output is rejected by the CLI command boundary, and each selected track that can be read produces one output line.
+
+The TUI terminal-title preference is the other consumer.
+It uses the same parser and plan, evaluates the current playing track through `LibrarySnapshot::formatTrack()`, and refreshes after library changes.
+Terminal-title code separately validates the result, replaces single-line control sequences with spaces, limits it to 512 display columns, composes optional Soul animation text, and owns terminal escape output; those steps are not format-language semantics.
+
+Interactive GTK and TUI track-list organization uses the separate [track-list presentation](../presentation/track-presentation.md) contract.
+
+## Implementation map
+
+- [`FormatExpression.h`](../../../include/ao/query/FormatExpression.h) defines the public compilation function plus plan, binding, and evaluator values.
+- [`FormatExpression.cpp`](../../../lib/query/FormatExpression.cpp) owns compilation and evaluation.
+- [`TrackCommand.cpp`](../../../app/cli/TrackCommand.cpp) owns the CLI adaptation.
+- [`TerminalTitleFormat.cpp`](../../../app/tui/TerminalTitleFormat.cpp) and [`TerminalTitle.cpp`](../../../app/tui/TerminalTitle.cpp) own TUI preference compilation, runtime evaluation, title sanitization, and terminal publication.
+
+## Test map
+
+- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) proves compilation, output, missing values, access profiles, failures, and field coverage.
+- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) proves plain-output integration and structured-output rejection.
+- [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) proves shared-language compilation, runtime formatting, library-change refresh, sanitization, and terminal-title lifetime behavior.
+
+## Related documents
+
+- [Track expression architecture](README.md)
+- [Format language](../../reference/query/format-language.md)
+- [Predicate evaluation](predicate-evaluation.md)
+- [Track-list presentation](../presentation/track-presentation.md)

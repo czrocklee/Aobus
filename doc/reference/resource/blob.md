@@ -1,16 +1,12 @@
 ---
 id: resource.blob
-type: reference
-status: current
-domain: resource
-summary: Enumerates ResourceId derivation, the descriptor row, digest-keyed creation, collision probing, and the runtime byte-read surface.
 ---
 # Resource descriptors
 
 ## Scope and version
 
 This reference owns the exact logical surface of library resource identities and descriptor operations.
-The library database reference owns the physical LMDB database and raw record placement; the [cover-art delivery specification](../../spec/resource/cover-art-delivery.md) owns end-to-end behavior.
+The library database reference owns the physical LMDB database and raw record placement; the [cover-art delivery specification](../../system/resource/cover-art-delivery.md) owns end-to-end behavior.
 
 The library stores no cover bytes. A resource row describes content and never holds it.
 
@@ -18,7 +14,7 @@ There is no independent resource schema version; compatibility follows the libra
 
 ## Code boundary
 
-`ResourceId`, `ResourceDescriptor`, `ObservedResourceDescriptor`, and `ResourceStore` belong to the **Core libraries** layer in the [system architecture](../../architecture/system-overview.md), under the [resource delivery](../../architecture/resource-delivery.md) and [library](../../architecture/library.md) architectures.
+`ResourceId`, `ResourceDescriptor`, `ObservedResourceDescriptor`, and `ResourceStore` belong to the **Core libraries** layer in the [system architecture](../../system/overview.md), under the [resource delivery](../../system/resource/README.md) and [library](../../system/library/structure.md) architectures.
 The runtime reader exposes owned bytes after closing its read transaction.
 
 ## Identity surface
@@ -141,8 +137,8 @@ If a `full` document declares length `1024` for a digest whose row already holds
 
 ## Related documents
 
-- [Resource delivery architecture](../../architecture/resource-delivery.md)
-- [Cover-art resource delivery](../../spec/resource/cover-art-delivery.md)
-- [Library architecture](../../architecture/library.md)
+- [Resource delivery architecture](../../system/resource/README.md)
+- [Cover-art resource delivery](../../system/resource/cover-art-delivery.md)
+- [Library architecture](../../system/library/structure.md)
 - [Library database](../library/storage/database.md)
 - [Track model](../library/model/track.md)

@@ -1,20 +1,16 @@
 ---
 id: linux-gtk.mpris-surface
-type: reference
-status: current
-domain: presentation
-summary: Enumerates the GTK MPRIS bus identity, interfaces, methods, properties, metadata keys, mappings, and signals.
 ---
 # GTK MPRIS reference
 
 ## Scope and version
 
 This reference enumerates the currently exported MPRIS surface.
-Behavioral ownership, failure, and lifetime belong to the [GTK MPRIS specification](../../spec/linux-gtk/mpris.md).
+Behavioral ownership, failure, and lifetime belong to the [GTK MPRIS specification](../../system/frontend/gtk/mpris.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places the protocol adapter in the GTK frontend.
+The [system architecture](../../system/overview.md) places the protocol adapter in the GTK frontend.
 The exact introspection authority is `app/linux-gtk/platform/MprisBridge.cpp`.
 Command mapping authority is `MprisPlaybackEndpoint.h`.
 No runtime or core header exports these protocol names.
@@ -143,13 +139,16 @@ A duration of 125 seconds maps to `125000000` microseconds.
 
 - [`MprisBridge.cpp`](../../../app/linux-gtk/platform/MprisBridge.cpp) contains the introspection XML and D-Bus encoding.
 - [`MprisPlaybackEndpoint.h`](../../../app/linux-gtk/platform/MprisPlaybackEndpoint.h) contains method, property-write, and capability mapping.
+- [`MprisArtUrlSession.h`](../../../app/linux-gtk/platform/MprisArtUrlSession.h) owns current-resource correlation and invalidation of asynchronous art-URL completion.
 
 ## Test authority
 
-- [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects the listed mappings and constraints.
+- [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects the listed surface mappings and constraints.
+- [`MprisPlaybackPositionTest.cpp`](../../../test/unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp) protects queued occurrence-guarded relative and absolute positioning.
+- [`MprisArtUrlSessionTest.cpp`](../../../test/unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp) protects replacement, synchronous completion, cancellation ordering, destruction, and requester-exception cleanup.
 
 ## Related documents
 
-- [GTK MPRIS specification](../../spec/linux-gtk/mpris.md)
-- [Playback architecture](../../architecture/playback.md)
-- [Cover-art resource delivery specification](../../spec/resource/cover-art-delivery.md)
+- [GTK MPRIS specification](../../system/frontend/gtk/mpris.md)
+- [Playback architecture](../../system/playback/README.md)
+- [Cover-art resource delivery specification](../../system/resource/cover-art-delivery.md)

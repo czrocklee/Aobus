@@ -1,7 +1,7 @@
 # Aobus Agent Guide
 
-Aobus is a C++26 music application with GTK4, TUI, and CLI frontends over a
-shared core. Work from the repository root through `./ao`; on Windows use
+Aobus is a C++26 music application with GTK4, TUI, CLI, WinUI, and an incremental
+AppKit frontend over shared Core and application runtime libraries. Work from the repository root through `./ao`; on Windows use
 `ao.bat`. The portal owns CMake, tools, dependencies, and build-tree selection.
 `./ao help` and `./ao <command> --help` describe the available native commands.
 
@@ -23,7 +23,8 @@ sections relevant to the change; reuse material already read in this session.
 |---|---|
 | Contributor or Git workflow | `CONTRIBUTING.md`; `doc/development/commit-message.md` before committing |
 | C++ implementation | `doc/development/coding-style.md`; `doc/development/naming-convention.md` |
-| Documentation ownership, templates, or migration | `doc/README.md` |
+| Find product contracts or subsystem code | `doc/system/README.md` and the relevant topic |
+| Write, review, or reorganize documentation | `doc/development/documentation.md` |
 | Finding dependency headers, libraries, tools, or SDKs | `doc/development/dependency-governance.md#locating-an-existing-dependency` |
 | Test design and fixtures | `doc/development/test.md` and the linked task-specific reference |
 | Lint findings or suppressions | `doc/development/linting.md` |

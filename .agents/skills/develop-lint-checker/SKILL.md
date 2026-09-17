@@ -19,8 +19,10 @@ Extend the owning fixture for new behavior; wording-only edits can reuse it and
 inspect the emitted text because markers do not assert diagnostic wording.
 
 For symbol identity, macro safety, and uncertain AST shapes, consult
-`doc/development/linting.md` under **Custom checker development**. Use the native
-compile database and toolchain; the portal's `--no-build --check <alias>` route
-allows focused fixture diagnosis with an already prepared plugin.
+`doc/development/lint/checker-development.md`; naming-proof details are in
+`doc/development/lint/naming-checks.md`. Use the native
+compile database and toolchain. `./ao tidy --no-build --check <alias> <source>`
+allows focused diagnostic inspection with a prepared plugin and compile database;
+it does not run the fixture's diagnostic, FixIt, or compilation assertions.
 
 Completion follows `doc/development/test/validation-and-review.md`.

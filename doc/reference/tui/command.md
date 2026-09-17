@@ -1,16 +1,12 @@
 ---
 id: tui.command-surface
-type: reference
-status: current
-domain: presentation
-summary: Enumerates TUI startup options, command prefixes and aliases, keyboard shortcuts, overlays, mouse targets, and default paths.
 ---
 # TUI command reference
 
 ## Scope and version
 
 This reference enumerates the current Aobus TUI startup and interactive input surface.
-The surface is unversioned; modal and rendering behavior belongs to the [TUI interaction specification](../../spec/tui/interaction.md).
+The surface is unversioned; modal and rendering behavior belongs to the [TUI interaction specification](../../system/frontend/tui.md).
 
 ## Code boundary
 
@@ -28,7 +24,7 @@ The replaceable plan value built there is read by `EventController.cpp` for root
 
 | Option | Default/meaning |
 | --- | --- |
-| `-l, --library <root>` | music library root; normalized absolute path |
+| `-l, --library <root>` | music library root; default current directory; normalized absolute path |
 | `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
 | `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
 | `--cover-art-mode <auto|kitty|blocks|off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
@@ -280,7 +276,7 @@ Hover uses localized names instead of these codes.
 | `SEQ1` | Sequential | One track |
 | `SHF1` | Shuffle | One track |
 
-The [playback-mode interaction specification](../../spec/tui/interaction.md#playback-modes) owns the mouse cycle and how independent shuffle/repeat commands interact with it.
+The [playback-mode interaction specification](../../system/frontend/tui.md#playback-modes) owns the mouse cycle and how independent shuffle/repeat commands interact with it.
 
 ### Mouse targets
 
@@ -294,7 +290,7 @@ All track-table gestures below remain available while the detail inspector is op
 | group header click | select first track in section |
 | seek rail press/drag/release | preview/final seek |
 | playback mode button hover | show the localized current mode and click destination in the status bar; narrow windows prioritize the current mode |
-| playback mode button click | advance to the next preset in the [playback-mode cycle](../../spec/tui/interaction.md#playback-modes) |
+| playback mode button click | advance to the next preset in the [playback-mode cycle](../../system/frontend/tui.md#playback-modes) |
 | Soul button click | toggle playback |
 | Soul button hover | show quality hover panel |
 | playback title click | reveal the current track |
@@ -364,6 +360,6 @@ Changing a default key, alias, option, or default path requires updating this re
 
 ## Related documents
 
-- [TUI interaction specification](../../spec/tui/interaction.md)
+- [TUI interaction specification](../../system/frontend/tui.md)
 - [Predicate language reference](../query/predicate-language.md)
 - [Track preset reference](../presentation/track-preset.md)

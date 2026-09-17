@@ -27,7 +27,7 @@ The name **Aobus** comes from *"Ao-bu"*, an early, deliberate syllable spoken by
 | Radiant purple | `#A855F7` | Radiant aura; reserved for the top verified signal state |
 | Flowing green | `#10B981` | Flowing aura; preserved-signal states |
 | Turbulent orange | `#F59E0B` | Turbulent aura; linear intervention state |
-| Burning red | `#EF4444` | Burning aura; clipped or error state |
+| Burning red | `#EF4444` | Burning aura; clipped signal state |
 | Veiled gray | `#6B7280` | Veiled aura; lossy, unknown, partially verified, or unavailable state |
 | Night field | `#111827` | Dark icon tile and presentation background |
 
@@ -49,7 +49,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 | File | Role |
 | :--- | :--- |
-| `Soul.svg` | The animated, theme-adaptive master asset. Used as the primary hero visual. |
+| `Soul.svg` | The animated master asset on a fixed night-field tile. Used as the primary hero visual. |
 | `SoulMark.svg` | Static full-color mark on a transparent background. |
 | `SoulSymbol.svg` | Static soul-only symbol for tiny or square placements. |
 | `SoulMono.svg` | Single-color transparent mark for one-color applications. |
@@ -57,7 +57,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 ## Usage
 
-- Use `Soul.svg` as the hero asset in GitHub READMEs and primary documentation to showcase the brand's living animation. Its design naturally adapts to both light and dark environments.
+- Use `Soul.svg` as the hero asset in GitHub READMEs and primary documentation to showcase the brand's living animation. Its dark tile remains the same on light and dark pages.
 - Use `SoulMark.svg` when a static lockup is required (e.g., standard web headers, print drafts).
 - Use `SoulSymbol.svg` below `24px` or whenever the slot is square and the full lockup feels cramped.
 - Use `SoulMono.svg` for engraving, embossing, monochrome print, or single-ink assets.
@@ -66,7 +66,9 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 
 ## Technical Note
 
-`Soul.svg` is the visual source of truth. Runtime UI code uses the shared Soul color and motion recipe in `app/uimodel/playback/soul/AobusSoulViewModel.cpp`, while GTK and TUI reconstruct their own platform-specific shapes from that same model so the brand mark can stay sharp, lightweight, and responsive.
+`Soul.svg` is the visual source of truth. Runtime UI code uses the shared Soul palette and motion constants in [`AobusSoulViewModel.h`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) and the state mapping in [`AobusSoulViewModel.cpp`](../../app/uimodel/playback/soul/AobusSoulViewModel.cpp), while frontend renderers construct platform-specific shapes from that model.
+The SVG uses the rounded periods listed above; runtime derives its longer periods from the golden ratio.
+Transport errors select the dormant aura rather than the clipped-signal color.
 
 The macOS icon contains the standard 16, 32, 128, 256, and 512 point iconset entries,
 each at 1x and 2x resolution. Render each PNG directly from `SoulSymbol.svg` at its

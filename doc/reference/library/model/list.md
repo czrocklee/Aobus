@@ -1,20 +1,16 @@
 ---
 id: library.list-model
-type: reference
-status: current
-domain: library
-summary: Enumerates saved List identifiers, fields, hierarchy, local expressions, and optional order ranks.
 ---
 # List model
 
 ## Scope and version
 
 This reference defines the exact logical surface of a stored library list.
-Mutation behavior belongs to [library access and mutation](../../../spec/library/runtime/mutation.md), and effective membership belongs to [track sources](../../../spec/library/source/track-source.md).
+Mutation behavior belongs to [library access and mutation](../../../system/library/mutation.md), and effective membership belongs to [track sources](../../../system/library/track-source.md).
 
 ## Code boundary
 
-The persisted list model belongs to the **core libraries** layer in the [system architecture](../../../architecture/system-overview.md), with builders/views under `include/ao/library/` and storage under `lib/library/`.
+The persisted list model belongs to the **core libraries** layer in the [system architecture](../../../system/overview.md), with builders/views under `include/ao/library/` and storage under `lib/library/`.
 `ao::rt::ListNode` is an application-runtime value projection of that model, not a second persistence authority.
 
 ## Surface
@@ -40,7 +36,7 @@ Its optional ranks then place currently matching ranked ids first in stored orde
 An id in `orderTrackIds` that does not currently match is a hidden rank: it is absent from effective membership but resumes its stored position if it matches again.
 A child consumes the parent's complete effective order, so hierarchy always denotes source derivation rather than display-only organization.
 
-The exact filter text surface belongs to the [predicate language](../../../reference/query/predicate-language.md), and its runtime membership belongs to [track sources](../../../spec/library/source/track-source.md).
+The exact filter text surface belongs to the [predicate language](../../query/predicate-language.md), and its runtime membership belongs to [track sources](../../../system/library/track-source.md).
 
 ## Validation rules
 
@@ -56,7 +52,7 @@ Runtime mutation and YAML import require resolved order ids to identify existing
 Parent relationships must identify an allowed root or existing list and must not create a cycle.
 Those reference and topology rules belong above the local row validator.
 The core List builder and Store preserve every filter string byte-exactly within the byte-size limit without parsing or compiling it.
-Application authoring may reject an invalid expression for immediate feedback, while materializing invalid stored text exposes the empty-membership expression-error state defined by [track sources](../../../spec/library/source/track-source.md).
+Application authoring may reject an invalid expression for immediate feedback, while materializing invalid stored text exposes the empty-membership expression-error state defined by [track sources](../../../system/library/track-source.md).
 
 ## Compatibility and versioning
 
@@ -74,7 +70,7 @@ Changing hierarchy or rank-overlay persistence semantics remains a storage compa
 
 ## Test authority
 
-- List builder, layout, store, and view tests under [`test/unit/library/`](../../../../test/unit/library/) lock the persisted surface.
+- List builder, layout, store, and view tests under [`test/unit/library/`](../../../../test/unit/library) lock the persisted surface.
 - [`LibraryCommandsListOrderTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListOrderTest.cpp) and [`LibraryCommandsListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListMembershipTest.cpp) lock rank and tag-backed editing semantics.
 - [`ListOrderSourceTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceTest.cpp), [`ListOrderSourceObserverTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp), and predicate-source tests lock effective membership and ordering.
 
@@ -82,5 +78,5 @@ Changing hierarchy or rank-overlay persistence semantics remains a storage compa
 
 - [Library database](../storage/database.md)
 - [Library YAML format](../format/yaml.md)
-- [Predicate language](../../../reference/query/predicate-language.md)
-- [Track expression architecture](../../../architecture/track-expression.md)
+- [Predicate language](../../query/predicate-language.md)
+- [Track expression architecture](../../../system/query/README.md)

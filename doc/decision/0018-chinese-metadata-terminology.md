@@ -1,9 +1,6 @@
 ---
 id: decision.0018.chinese-metadata-terminology
-type: decision
 status: accepted
-domain: presentation
-summary: Records the choice of consistent Chinese metadata terminology across frontends.
 ---
 # Decision 0018: choose consistent Chinese metadata terminology
 
@@ -41,5 +38,5 @@ Future messages for the same concepts need terminology review against the canoni
 
 ## Current authorities
 
-- [Chinese metadata terminology](../reference/presentation/text-catalog.md#chinese-metadata-terminology)
-- [Interactive localization](../spec/presentation/localization.md)
+- [Chinese metadata terminology](../system/presentation/text-catalog.md#chinese-metadata-terminology)
+- [Interactive localization](../system/presentation/localization.md)

@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 2.6.4: C standard library functions and types available in
+  /// Enforces standard-library qualification: C functions and types available in
   /// C++ use std:: qualification (e.g. std::memcpy(), std::size_t).
   class StdCLibraryQualificationCheck : public ClangTidyCheck
   {

@@ -1,9 +1,6 @@
 ---
 id: decision.0001.unified-list-ordering
-type: decision
 status: accepted
-domain: library
-summary: Unifies saved Lists around predicate membership plus optional rank, preserves hidden rank, and uses committed revision as order-write authority.
 ---
 # Decision 0001: unify saved Lists with an independent order overlay
 
@@ -125,16 +122,16 @@ Redundant offsets add validation and corruption states without adding capability
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
-- [Track expression architecture](../architecture/track-expression.md)
-- [Presentation architecture](../architecture/presentation.md)
+- [Library architecture](../system/library/structure.md)
+- [Track expression architecture](../system/query/README.md)
+- [Presentation architecture](../system/presentation/README.md)
 - [List model](../reference/library/model/list.md)
 - [Library database](../reference/library/storage/database.md)
 - [Library YAML format](../reference/library/format/yaml.md)
-- [Track sources](../spec/library/source/track-source.md)
-- [Library mutations](../spec/library/runtime/mutation.md)
-- [Track-list presentation](../spec/presentation/track-presentation.md)
-- [List presentation preference](../spec/presentation/list-preference.md)
+- [Track sources](../system/library/track-source.md)
+- [Library mutations](../system/library/mutation.md)
+- [Track-list presentation](../system/presentation/track-presentation.md)
+- [List presentation preference](../system/presentation/list-preference.md)
 - [Organize music with Lists and Playlists](../user/organize-with-lists.md)
 
 ## Supersession

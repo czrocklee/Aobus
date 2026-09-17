@@ -1,16 +1,12 @@
 ---
 id: development.application-layer-review
-type: development
-status: current
-domain: development
-summary: Defines the contributor review workflow for runtime, UIModel, and frontend ownership boundaries.
 ---
 # Application-layer review
 
 ## Scope
 
 This guide defines how contributors review changes that cross runtime, UIModel, GTK, TUI, or CLI.
-Architectural authority remains in the [system](../architecture/system-overview.md), [runtime execution](../architecture/runtime-execution.md), and [presentation](../architecture/presentation.md) documents; this guide turns those boundaries into a review workflow.
+Architectural authority remains in the [system](../system/overview.md), [runtime execution](../system/execution/README.md), and [presentation](../system/presentation/README.md) documents; this guide turns those boundaries into a review workflow.
 
 ## Policy
 
@@ -66,13 +62,13 @@ During review, reject these shapes unless an owning architecture explicitly docu
 - provider registration, restoration, or observer binding before final runtime placement;
 - a weak admission token presented as proof that raw owner memory remains alive.
 
-Known direct-library migration seams are documented in the [presentation architecture](../architecture/presentation.md); their presence is not permission to add new seams.
+Known direct-library migration seams are documented in the [presentation architecture](../system/presentation/README.md); their presence is not permission to add new seams.
 
 ## Validation
 
 Run the narrow tests for the changed owner and adapter, then the repository validation required by [validation and review](test/validation-and-review.md).
-The completion `./ao check` gate explicitly builds `aobus_guardrails`, which owns the application architecture audit declared in [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake).
-Ordinary application builds leave those repository-wide scans to that gate.
+The `./ao check` stage explicitly builds `aobus_guardrails`, which owns the application architecture audit declared in [`ArchitectureAudit.cmake`](../../app/cmake/ArchitectureAudit.cmake).
+Ordinary application builds leave those repository-wide scans to that stage; complete the remaining validation selected by the policy above.
 
 Review evidence should identify:
 
@@ -90,9 +86,9 @@ If a guardrail blocks a legitimate dependency, update the architecture and guard
 
 ## Related documents
 
-- [System architecture](../architecture/system-overview.md)
-- [Runtime execution architecture](../architecture/runtime-execution.md)
-- [Presentation architecture](../architecture/presentation.md)
-- [Failure and reporting architecture](../architecture/failure-and-reporting.md)
+- [System architecture](../system/overview.md)
+- [Runtime execution architecture](../system/execution/README.md)
+- [Presentation architecture](../system/presentation/README.md)
+- [Failure and reporting architecture](../system/failure/README.md)
 - [UIModel organization](uimodel-organization.md)
 - [Design review](design-review.md) guides comparisons of alternatives and refactor evidence.

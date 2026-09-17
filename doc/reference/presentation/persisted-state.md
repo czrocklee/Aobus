@@ -1,9 +1,5 @@
 ---
 id: presentation.persisted-state
-type: reference
-status: current
-domain: presentation
-summary: Enumerates versioned interactive presentation documents, stable token authorities, exact fields, validation, and compatibility behavior.
 ---
 # Persisted presentation state
 
@@ -23,7 +19,7 @@ There is no migration from earlier or unversioned payloads.
 
 ## Code boundary
 
-This surface spans the application runtime, UIModel, and interactive-frontend persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
+This surface spans the application runtime, UIModel, and interactive-frontend persistence-adapter layers from the [system architecture](../../system/overview.md), as refined by the [presentation architecture](../../system/presentation/README.md) and [persistence and managed-state architecture](../../system/persistence/README.md).
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
 The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
 `GtkLayoutStateStore`, `LayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
@@ -88,12 +84,12 @@ trackView.columnLayouts:
 | `weight` | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value. |
 | `visible` | Boolean. | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it. |
 
-Exactly one canonical dimension form is accepted:
+Exactly one canonical dimension form is accepted, and it must match the field's sizing role from `TrackColumnDefaults`:
 
-- fixed: `width > 0` and `weight == -1`;
-- flexible: `width == -1` and finite `weight > 0`.
+- a fixed field uses `width > 0` and `weight == -1`;
+- a flexible field uses `width == -1` and finite `weight > 0`.
 
-The shared payload accepts every positive signed 32-bit fixed width. When this payload is contained by `tui_layout.yaml`, the terminal adapter projects fixed values into its supported 8-through-160-cell range; desktop adapters retain their own geometry policy.
+A fixed field's shared payload accepts every positive signed 32-bit width. When this payload is contained by `tui_layout.yaml`, the terminal adapter projects fixed values into its supported 8-through-160-cell range; desktop adapters retain their own geometry policy. A document that assigns the fixed form to a flexible field, or the flexible form to a fixed field, rejects the complete group.
 
 ## List-presentation preference group
 
@@ -122,7 +118,7 @@ trackView.presentations:
 | `listId` | Unsigned 32-bit integer. | Required, nonzero, and unique in the document. |
 | `presentationId` | String. | Required and nonempty. It need not resolve in the current catalog. |
 
-An unavailable `presentationId` survives deserialization and follows the recommendation fallback in the [list-preference specification](../../spec/presentation/list-preference.md).
+An unavailable `presentationId` survives deserialization and follows the recommendation fallback in the [list-preference specification](../../system/presentation/list-preference.md).
 This extensible-reference rule does not apply to closed field, sort, group, or direction tokens.
 
 ## Workspace relationship
@@ -155,11 +151,13 @@ text ids and canonical member names.
 Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
 Future versions return `NotSupported` before version-specific sibling fields are interpreted.
 
+This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. Playback-session version 4 separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
+
 Changing a stable token's meaning or spelling requires an explicit compatibility decision.
 Adding a token does not change the meaning of existing documents, but older
 readers reject a document that uses the new unknown value.
 
-The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `winui_layout.yaml` files have no shared envelope version. The TUI file also has a frontend-only `navigation` visibility group (version 1), documented in [application configuration](../persistence/application-config.md); it is not a shared presentation preference.
+The surrounding `gtk_layout.yaml`, `tui_layout.yaml`, and `winui_layout.yaml` files have no shared envelope version. The TUI file also has frontend-only `navigation` visibility and `panels` width groups (both version 1), documented in [application configuration](../persistence/application-config.md); neither is a shared presentation preference.
 Each literal group carries and gates its own payload version.
 
 ## Implementation authority
@@ -182,10 +180,10 @@ Each literal group carries and gates its own payload version.
 
 ## Related documents
 
-- [Presentation architecture](../../architecture/presentation.md)
-- [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
-- [Track-column layout](../../spec/presentation/track-column-layout.md)
-- [List presentation preference](../../spec/presentation/list-preference.md)
+- [Presentation architecture](../../system/presentation/README.md)
+- [Persistence and managed-state architecture](../../system/persistence/README.md)
+- [Track-column layout](../../system/presentation/track-column-layout.md)
+- [List presentation preference](../../system/presentation/list-preference.md)
 - [Runtime track-field catalog](../library/model/track-field.md)
 - [Track presentation presets](track-preset.md)
 - [Workspace session state](../workspace/session-state.md)

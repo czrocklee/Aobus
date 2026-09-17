@@ -1,9 +1,5 @@
 ---
 id: user.edit-metadata
-type: user-guide
-status: current
-domain: presentation
-summary: Edits built-in fields, custom metadata, and tags for one or more tracks.
 ---
 # Edit track metadata
 
@@ -64,8 +60,8 @@ Use an explicit track id instead of `--filter` when the change must target one k
 
 ## Related documents
 
-- [Metadata-editing specification](../spec/presentation/metadata-editing.md)
-- [GTK track-detail specification](../spec/linux-gtk/track-detail.md)
-- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
+- [Metadata-editing specification](../system/presentation/metadata-editing.md)
+- [GTK track-detail specification](../system/frontend/gtk/track-detail.md)
+- [Windows desktop shell specification](../system/frontend/windows.md)
 - [Track field reference](../reference/library/model/track-field.md)
 - [CLI command reference](../reference/cli/command.md)

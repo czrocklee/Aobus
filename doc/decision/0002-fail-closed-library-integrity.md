@@ -1,9 +1,6 @@
 ---
 id: decision.0002.fail-closed-library-integrity
-type: decision
 status: superseded
-domain: library
-summary: Rejects safely detected persisted dictionary, Track, and manifest corruption at open or operation boundaries instead of exposing salvage rows or degraded runtime state.
 ---
 # Decision 0002: fail closed at the library integrity boundary
 
@@ -62,13 +59,13 @@ Safe repair requires format-specific authority over which facts may be discarded
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
+- [Library architecture](../system/library/structure.md)
 - [Library database](../reference/library/storage/database.md)
-- [Library mutations](../spec/library/runtime/mutation.md)
-- [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
-- [Library YAML transfer](../spec/library/runtime/yaml-transfer.md)
-- [Track sources](../spec/library/source/track-source.md)
-- [CLI execution](../spec/cli/execution.md)
+- [Library mutations](../system/library/mutation.md)
+- [Library scan and audio identity](../system/library/scan-and-identity.md)
+- [Library YAML transfer](../system/library/yaml-transfer.md)
+- [Track sources](../system/library/track-source.md)
+- [CLI execution](../system/frontend/cli.md)
 
 ## Supersession
 

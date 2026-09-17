@@ -1,9 +1,5 @@
 ---
 id: development.test.fixture-and-helper
-type: development
-status: current
-domain: development
-summary: Defines test fixture, helper, fake, test-data, and filesystem practices.
 ---
 # Fixtures, helpers, fakes, and test data
 

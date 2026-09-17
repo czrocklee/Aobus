@@ -1,9 +1,5 @@
 ---
 id: user.backup-and-restore
-type: user-guide
-status: current
-domain: library
-summary: Exports a portable library backup, previews an import, and chooses restore or merge deliberately.
 ---
 # Back up and restore library data
 
@@ -84,6 +80,6 @@ A cover with neither a cached copy nor a music file that carries it shows no ima
 
 ## Related documents
 
-- [Library YAML transfer specification](../spec/library/runtime/yaml-transfer.md)
+- [Library YAML transfer specification](../system/library/yaml-transfer.md)
 - [Library YAML format reference](../reference/library/format/yaml.md)
 - [CLI command reference](../reference/cli/command.md)

@@ -1,9 +1,5 @@
 ---
 id: development.concept-metrics
-type: development
-status: current
-domain: development
-summary: Defines how contributors measure public concepts, construction hops, and include fan-out.
 ---
 # Concept metrics
 
@@ -19,8 +15,8 @@ The report answers four primary questions from one configured debug build:
 3. How many API boundaries a named frontend leaf crosses before it is usable?
 4. How heavy each public header is to include, and how many translation units Ninja invalidates when it changes?
 
-Header counts, role suffixes, and `*Context` / `*Dependencies` field counts are
-secondary. Primary metrics are decision evidence, not independent vetoes: a
+Header counts, role suffixes, and collaborator-aggregate field counts
+(`*Context`, `*Dependencies`, and `*Collaborators`) are secondary. Primary metrics are decision evidence, not independent vetoes: a
 small local increase is acceptable when the change removes a false abstraction,
 closes an ownership boundary, or makes a capability exact. Record the cause and
 judge the complete metric vector together with the behavioral result.

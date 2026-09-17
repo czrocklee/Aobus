@@ -1,9 +1,5 @@
 ---
 id: development.test.validation-and-review
-type: development
-status: current
-domain: development
-summary: Defines test-file integration, regression expectations, validation gates, and review checks.
 ---
 # Test validation and review
 
@@ -11,7 +7,7 @@ summary: Defines test-file integration, regression expectations, validation gate
 
 When creating a new test file:
 
-1. Place it under the matching existing `test/unit/...` module or layer directory, such as `runtime`, `uimodel`, `linux-gtk`, `library`, `query`, `tag`, `audio`, or `utility`.
+1. Place it under the matching existing `test/unit/...` module or layer directory, such as `runtime`, `uimodel`, `linux-gtk`, `library`, `query`, `audio`, `utility`, `cli`, `tui`, or `winui`.
 2. Add it to the correct target in `test/CMakeLists.txt`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.
@@ -73,7 +69,7 @@ combine routes when a change spans several rows.
 | Python portal or automation scripts | `./ao test --tooling` on Linux, `ao.bat test --tooling` on Windows for affected Windows behavior, and scoped `hygiene`. Exercise changed shell/bootstrap/process boundaries on their native hosts. macOS has no tooling suite; use native portal probes and scoped hygiene there. |
 | C++ implementation, headers, or tests | One full native `check`, then scoped `hygiene`. Add affected native hosts when their implementation, toolchain, or frontend is involved. |
 | Build configuration, dependencies, native test orchestration, or CI | Tooling checks plus the affected native build/test matrix. Include Release or sanitizers when the changed configuration or behavior requires them. |
-| Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run `./ao test --core "[catalog]"` and any affected message-specific tests identified by the [text-catalog reference](../../reference/presentation/text-catalog.md#test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
+| Catalog-only wording in an existing maintained locale | Build affected frontends to regenerate catalogs, run `./ao test --core "[catalog]"` and any affected message-specific tests identified by the [text-catalog reference](../../system/presentation/text-catalog.md#compatibility-and-test-authority), and inspect the changed UI at normal and constrained widths. Native Windows UI evidence is needed when WinUI consumes the changed text; unchanged projection rules do not independently require the full Windows parity gate. |
 | UI, localization, or audio behavior | The applicable implementation route plus focused visual, catalog, or audible evidence for the changed user-facing behavior. New locales or changes to locale selection, signatures, or WinUI projection rules include native Windows parity validation. |
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
@@ -87,7 +83,12 @@ For changes requiring the full native gate, run it in this order:
 ```
 
 `check` builds the enabled graph, verifies dependency resolution, and runs
-every suite in the native `all` group. `hygiene` is check-only and validates
+every suite in the native `all` group. Repository documentation validation is
+owned separately by `./ao docs check`; neither `check` nor `test --tooling`
+scans the live documentation tree. The tooling suite still tests the document
+checker against isolated fixtures. Run the separate documentation gate for
+documentation changes; CI runs it unconditionally before native jobs.
+`hygiene` is check-only and validates
 formatting, source audits for files in scope, Python files in scope, and native
 clang-tidy coverage for changed files. Keeping the stages explicit lets
 sanitizer and release checks retain their own build trees without implicitly
@@ -144,11 +145,14 @@ If the task is explicitly about coverage percentage or missing lines, use `cover
 ### Continuous integration
 
 The existing Linux, macOS Intel/ARM64, and Windows check identities are retained.
-CI resolves the event's verified comparison base once, then validates a nonempty
-Markdown-only change in the repository documentation or Skills paths with the
-`ao docs check` command before skipping native jobs. That gate includes the
-documented naming vocabulary and referenced lint-check contracts, so prose
-changes cannot bypass their semantic validation.
+CI resolves the event's verified comparison base once, then runs `ao docs check`
+for documentation-only, code-only, and mixed changes before native build work.
+A successful, nonempty Markdown-only change in the recognized root-document,
+`doc/`, `.agents/skills/`, `tool/`, `app/`, or `asset/` paths skips native jobs.
+The documentation gate includes naming vocabulary and referenced lint-check
+contracts, so prose changes cannot bypass their semantic validation.
+The ignored local `doc/plan/` tree remains outside documentation discovery;
+its path classification does not make it a supported tracked-document location.
 The documentation job prepares only the Python version from
 `script/ao/toolchain.json` and invokes `python -m ao docs check` with
 `PYTHONPATH=script`; it does not enter the C++ Nix development environment.
@@ -157,7 +161,8 @@ Unknown paths, script or workflow changes, empty comparisons, and manual
 Renames are compared as deletion plus addition so moving code into a Markdown
 path cannot bypass native validation.
 If classification or documentation validation fails, the existing native jobs
-run a failing prerequisite step rather than appearing successfully skipped.
+are still scheduled and run a failing prerequisite step before native setup or
+compilation, rather than appearing successfully skipped.
 This changes workflow routing without changing repository branch-protection rules.
 
 ## Common smells to fix while writing tests

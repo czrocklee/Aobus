@@ -1,9 +1,5 @@
 ---
 id: user.organize-with-lists
-type: user-guide
-status: current
-domain: library
-summary: Creates expression-backed Lists and Playlists, edits membership, arranges Manual Order, and manages nested List lifecycles.
 ---
 # Organize music with Lists and Playlists
 

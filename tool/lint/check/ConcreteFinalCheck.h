@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 4.2.1: concrete classes not designed for inheritance should
+  /// Enforces the concrete-class design rule: classes not designed for inheritance should
   /// be marked `final`.  Starts conservative — anonymous-namespace and private
   /// nested records only.
   class ConcreteFinalCheck : public ClangTidyCheck

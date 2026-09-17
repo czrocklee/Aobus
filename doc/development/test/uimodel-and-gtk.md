@@ -1,9 +1,5 @@
 ---
 id: development.test.uimodel-and-gtk
-type: development
-status: current
-domain: development
-summary: Defines UIModel and GTK test placement, fixture, lifecycle, and assertion practices.
 ---
 # UIModel and GTK testing
 
@@ -11,9 +7,7 @@ UI behavior should be tested at the lowest layer that can express the contract.
 Most semantic behavior belongs in `uimodel`; GTK tests should stay thin and
 prove adapter behavior, lifecycle behavior, or targeted geometry regressions.
 
-The reference implementation of this style is
-`test/unit/linux-gtk/playback/TransportButtonTest.cpp`: the logic is proven in
-the view model with `RenderLog`, and the widget gets a small smoke test.
+The transport controls show this split: `test/unit/uimodel/playback/transport/TransportViewModelTest.cpp` proves policy and command routing with `RenderLog`, while `test/unit/linux-gtk/playback/TransportButtonTest.cpp` keeps focused widget binding, click, and accessibility checks.
 
 ## Layering rule
 

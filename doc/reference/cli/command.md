@@ -1,20 +1,16 @@
 ---
 id: cli.command-surface
-type: reference
-status: current
-domain: presentation
-summary: Enumerates the Aobus CLI global options, commands, arguments, output fields, dry-run coverage, streams, and exit codes.
 ---
 # CLI command reference
 
 ## Scope and version
 
-This reference enumerates the current `aobus` command surface and machine-readable DTOs.
-The surface has no explicit schema version; behavioral guarantees belong to the [CLI execution specification](../../spec/cli/execution.md).
+This reference enumerates the current `aobus` command surface and machine-readable output shapes.
+The surface has no explicit schema version; behavioral guarantees belong to the [CLI execution specification](../../system/frontend/cli.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places command parsing and output in the CLI frontend.
+The [system architecture](../../system/overview.md) places command parsing and output in the CLI frontend.
 Command registration and DTO authority live in `app/cli/`.
 CLI11 help is the executable syntax authority; this document is the durable repository lookup surface kept in sync by CLI smoke tests.
 
@@ -24,7 +20,7 @@ CLI11 help is the executable syntax authority; this document is the durable repo
 
 | Option | Meaning |
 | --- | --- |
-| `-C, --root <dir>` | music root; falls back to `AOBUS_ROOT`; database is `<root>/.aobus/library` |
+| `-C, --root <dir>` | music root; falls back to `AOBUS_ROOT`, then the current directory; database is `<root>/.aobus/library` |
 | `-O, --output <plain|yaml|json>` | output format; default `plain`; names are case-insensitive |
 | `--help-all` | recursive complete command help |
 | `--version` | application version |
@@ -44,7 +40,7 @@ Exactly one top-level command is required.
 | `track dump` | `[--id <id>] [--raw]` |
 | `list show` | `[<id>]` |
 | `list create` | `-n, --name <name> [-f, --filter <expr>] [-d, --desc <text>] [-p, --parent <id>] [--dry-run]` |
-| `list update` | `<id> [--name] [--desc] [--filter] [--parent] [--dry-run]` |
+| `list update` | `<id> [--name <name>] [--desc <text>] [--filter <expr>] [--parent <id>] [--dry-run]` |
 | `list add` | `<listId> <trackId>... [--dry-run]` |
 | `list remove` | `<listId> <trackId>... [--dry-run]` |
 | `list order move` | `<listId> <trackId>... [--before <trackId>]` |
@@ -91,7 +87,10 @@ It does not change a persisted List kind because no such kind exists.
 YAML and JSON use identical field names.
 Strings are double-quoted; numbers and booleans are scalars; empty containers are present; absent optionals are omitted.
 
-Track records are wrapped as `tracks` and contain:
+Most commands emit one YAML or JSON document.
+`track show -O yaml` emits a document with a `tracks` sequence, including an empty sequence when there are no results.
+`track show -O json` is the exception: it emits one JSON object per track (JSON Lines), and emits no bytes for an empty result.
+Each track record contains:
 
 ```text
 id, title, artist, album, albumArtist, genre, composer, conductor,
@@ -221,7 +220,7 @@ aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 
 ## Related documents
 
-- [CLI execution specification](../../spec/cli/execution.md)
+- [CLI execution specification](../../system/frontend/cli.md)
 - [Predicate language reference](../query/predicate-language.md)
 - [Format language reference](../query/format-language.md)
 - [Library YAML format reference](../library/format/yaml.md)

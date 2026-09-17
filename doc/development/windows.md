@@ -1,69 +1,98 @@
 ---
 id: development.windows
-type: development
-status: current
-domain: development
-summary: Defines the native Windows setup, build, test, and local-state workflow.
 ---
 # Windows development
 
-The native Windows build provides the CLI and FTXUI terminal applications, the
-native WinUI 3 desktop frontend, the shared core libraries, native tests, and a
-dedicated clang-tidy configuration. The GTK frontend is not
-available in the Windows development profile.
+The native Windows profile builds the shared core, CLI, FTXUI terminal frontend,
+WinUI 3 desktop, native tests, and a dedicated clang-tidy executable. GTK is not
+available.
 
-The source checkout may live on a local disk, a mapped drive such as `Y:`, or a
-network-backed workspace. Build trees and managed development tools are kept on
-the local Windows disk by default. This avoids putting vcpkg, Ninja/MSVC output,
-Python virtual environments, or the multi-gigabyte LLVM SDK on a mapped
-filesystem.
+This page owns host setup, portal commands, local state, WinUI build/runtime
+requirements, native lint provisioning, and offline LLVM SDK setup. Observable
+WinUI behavior belongs to the [Windows frontend contract](../system/frontend/windows.md).
 
 ## Prerequisites
 
-- Visual Studio Build Tools with the components declared by
-  `config/windows-build-tools.vsconfig`. This includes the desktop C++ and
-  Universal Windows build workloads, x64 compiler toolset, NuGet Build Tools,
-  Windows SDK 10.0.26100, and the C++ WinUI application build tools. Install the
-  optional **C++ AddressSanitizer** component for sanitizer gates. The Visual
-  Studio IDE and Visual Studio Clang component are not required. Visual Studio
-  Enterprise is also supported when its equivalent desktop C++, Universal
-  Windows, and Windows app development workloads provide the same concrete
-  components.
-- Git with long-path support, recommended for vcpkg build trees.
-- Network access for the first managed Python and dependency bootstrap. A valid
-  local state directory is reused on later runs.
+Install Visual Studio Build Tools with
+`config/windows-build-tools.vsconfig`. It declares the required desktop C++,
+Universal Windows, x64 toolset, NuGet, Windows SDK, and WinUI build components.
+Install the optional **C++ AddressSanitizer** component before running the ASan
+gate. The full IDE and Visual Studio Clang component are not required.
 
-Visual Studio's bundled vcpkg is used by default. If a different vcpkg checkout
-is required, set `VCPKG_ROOT` before invoking the portal.
+```cmd
+vs_buildtools.exe --config config\windows-build-tools.vsconfig --passive
+```
 
-A separate Python installation is not required for the normal portal path. On
-first use, `ao.bat` uses the Visual Studio vcpkg installation to obtain NuGet,
-installs the official CPython distribution pinned in
-`script/ao/toolchain.json` under the local Aobus state directory, and creates a
-checkout-specific virtual environment. The pinned Ruff and mypy releases and
-their locked dependencies are installed in that environment. The base Python is
-shared across checkouts; the virtual environment is not. Neither the Windows
-Store `python.exe` alias nor an unrelated Python from `PATH` is used.
+Or import `config/windows-build-tools.vsconfig` through the Visual Studio
+Installer UI (**More** → **Import configuration**).
 
-The exact Python, Ruff, and mypy policy is shared with Linux in
-`script/ao/toolchain.json`. `script/ao/windows-requirements.txt` separately
-locks the accepted Windows artifacts and hashes; tooling tests require the two
-files to agree.
+Git with long-path support is recommended for vcpkg build trees. Enable it for
+the current user:
 
-`AOBUS_PYTHON` is an advanced escape hatch for supplying an explicit Python
-executable. It must match the pinned Python patch release and support
-`venv` and `ensurepip`; the portal validates it before use. It does not disable
-the locked checkout-specific tooling environment.
+```cmd
+git config --global core.longpaths true
+```
+
+Use `--system` instead only for a machine-wide setting from an elevated terminal.
+
+The first portal invocation needs network access to provision managed Python and native
+dependencies; valid local state is reused later.
+
+Visual Studio's bundled vcpkg is the default. `VCPKG_ROOT` may select another
+complete checkout for diagnosis, but the repository registry and manifest locks
+still apply.
+
+Do not install a separate Python for the normal path. `ao.bat` obtains NuGet
+through the Visual Studio vcpkg installation, installs the exact CPython release
+from `script/ao/toolchain.json`, and creates a checkout-specific environment
+from the hashed Windows requirements lock. It does not use the Windows Store
+alias or ambient `PATH` Python.
+
+`AOBUS_PYTHON` is an advanced override for an explicit interpreter. It must
+match the exact policy version and provide `venv` and `ensurepip`; the portal
+still creates and validates the locked checkout environment.
+
+## Use the portal
+
+Run commands from the repository root:
+
+```bat
+ao.bat build
+ao.bat build release
+ao.bat build --target aobus-tui
+ao.bat run cli
+ao.bat run tui
+ao.bat test
+ao.bat test --all
+ao.bat check
+ao.bat check release
+ao.bat check --asan
+ao.bat format --check
+ao.bat tidy
+ao.bat hygiene
+ao.bat deps report
+ao.bat deps verify
+```
+
+Use
+`ao.bat <command> --help` for current options rather than treating this list as
+a complete CLI reference.
+
+Build-capable commands initialize the Visual Studio x64 environment only when
+the command needs it. Help, tooling-only tests, and Python-only source scopes
+skip native setup. `ao.bat run <app> --no-build` launches an existing executable
+without preparing a build environment.
+
+`start-msbuild-env.bat <command> [args...]` is available when another tool needs
+the same Visual Studio environment. It preserves an explicit `VCPKG_ROOT` and
+otherwise selects Visual Studio's bundled vcpkg.
+
+The completion `check` builds the `aobus_guardrails` aggregate. Incremental
+`build` and `run` commands do not repeat repository-wide source scans.
 
 ## Local state and build trees
 
-The default state root is:
-
-```text
-%LOCALAPPDATA%\Aobus
-```
-
-Its relevant layout is:
+Managed state defaults to `%LOCALAPPDATA%\Aobus`:
 
 ```text
 %LOCALAPPDATA%\Aobus\
@@ -77,165 +106,67 @@ Its relevant layout is:
     venvs\<checkout-key>\<tool-fingerprint>\
 ```
 
-The managed base interpreter is
-`%LOCALAPPDATA%\Aobus\tools\python\<version>\python.exe` with the default state
-root, where `<version>` is the pinned release from `script/ao/toolchain.json`.
+The checkout key combines a canonicalized filesystem identity with an opaque ID
+stored in the checkout's private Git directory. This isolates clones and linked
+worktrees while allowing mapped-drive, UNC, and junction aliases for one
+checkout to reuse state. If that private Git directory is unavailable or
+read-only, set one stable, unique `AOBUS_CHECKOUT_ID` for the checkout.
 
-The checkout key is stable for one checkout and keeps two clones or linked worktrees from sharing CMake and vcpkg state.
-The portal resolves mapped drives, UNC spellings, and local junctions to their final filesystem path before deriving the key.
-Entering the same checkout through an alias or through different temporary drive letters therefore reuses one build tree and Python environment.
-An unresolvable local or mapped path retains its normalized absolute spelling in the identity.
-The first portal run after this canonical identity scheme is introduced may select a new key and perform one full build; earlier key directories remain local and can be removed after the new tree is validated.
-LLVM downloads and verified SDKs are intentionally shared.
-The tool fingerprint changes when the managed Python or locked requirements change, allowing a new virtual environment to be built before the portal switches to it.
-Build, run, test, and check commands share the `windows-debug` or `windows-release` flavor directory.
-MSVC AddressSanitizer uses the separate `windows-debug-asan` directory.
-Tests and their vcpkg dependencies are part of the normal development graph; selecting a CMake target limits what is compiled without changing presets.
-The complete `windows-release` graph uses IPO/LTCG as defined by [Optimized builds](optimized-builds.md).
-`tidy` uses the separate `windows-tidy` directory.
-WinUI uses a dedicated multi-config Visual Studio generator tree named `windows-winui`; it cannot share a Ninja flavor tree.
-Its Release configuration uses IPO/LTCG, while its Debug configuration does not.
-Its short `n\<lock-id>\p` NuGet cache avoids deep package paths even when the
-host has not enabled Windows long-path support.
+Debug and Release use `windows-debug` and `windows-release`; MSVC ASan uses
+`windows-debug-asan`; tidy uses `windows-tidy`; WinUI uses the separate
+multi-config `windows-winui` Visual Studio tree. A Visual Studio tree cannot
+share the Ninja build directory.
 
-The portal normally stores an opaque ID in the checkout's private Git directory.
-For a read-only checkout or a linked worktree whose Git directory is not visible
-from Windows, set a stable, unique `AOBUS_CHECKOUT_ID` for that checkout before
-running `ao.bat`.
+Overrides apply in this order:
 
-The following overrides have distinct scopes:
+1. command-line `-p <dir>` or `BUILD_DIR` selects one exact primary tree;
+2. `AOBUS_BUILD_ROOT` replaces only the build base;
+3. `AOBUS_STATE_ROOT` replaces the complete managed-state base;
+4. otherwise `%LOCALAPPDATA%\Aobus` is used.
 
-| Setting | Meaning |
-|---|---|
-| `AOBUS_STATE_ROOT` | Replaces `%LOCALAPPDATA%\Aobus` for managed Windows state, including default builds, tools, and caches. |
-| `AOBUS_BUILD_ROOT` | Replaces only the `build` base; checkout and preset directories are still appended. |
-| `BUILD_DIR` | Selects one exact primary build tree. This is useful for a one-off command but should not be reused across incompatible presets. |
-| `AOBUS_MSBUILD_CL_TOOL_EXE` | Names an absolute, host-local `cl.exe`-compatible compiler-cache wrapper for the Visual Studio WinUI tree. |
-| `AOBUS_LLVM_SDK_CACHE_ROOT` | Relocates the automatically managed LLVM cache containing `toolchains`, `downloads`, and its lock. It is available as both an environment setting and a CMake cache option. |
-| `AOBUS_LLVM_SDK_ROOT` | CMake cache option naming one complete, pre-extracted LLVM SDK. It is validated and never modified; it is not the automatic cache root. |
+A composite `ao.bat check` derives `<primary>-winui` when the primary path is
+explicit. Keep build, tool, and cache overrides on a local Windows disk; mapped
+drives are not reliably distinguishable from local disks and drive mappings are
+login-session scoped.
 
-An explicit command-line `-p <dir>` selects that command's exact primary build tree.
-Otherwise `BUILD_DIR`, `AOBUS_BUILD_ROOT`, and `AOBUS_STATE_ROOT` are applied in
-that order before the `%LOCALAPPDATA%` default.
-The composite `ao.bat check` command uses an exact override for its Ninja tree and derives a sibling named `<dir>-winui` for the required Visual Studio build.
+Portal build-tree writers use a persistent lock beside the tree. This prevents
+concurrent mutation but does not make a stable snapshot for a simultaneously
+running application, test, or analyzer.
 
-Those build overrides are portal settings. A direct `cmake --preset` invocation
-uses a local, name-based fallback under `%LOCALAPPDATA%`; it does not have the
-portal's checkout key. Use `ao.bat`, or pass an explicit local `-B` directory as
-shown in the offline example, when more than one checkout is present.
+## Build and run WinUI
 
-Keep all override paths for builds, tools, and caches on a local Windows disk.
-Windows can report some mapped drives as fixed disks, so the portal cannot
-reliably reject every remote override. Drive-letter mappings are also scoped to
-the Windows login session; make sure the source drive is visible in the shell
-or SSH session that invokes `ao.bat`.
-
-Portal commands that mutate one native build tree serialize through an
-exclusive lock file beside the tree and report when they wait for another
-writer. The persistent `.ao-build.lock` file remains outside the tree so
-`ao.bat build --clean` cannot remove it. This is writer serialization rather
-than a stable read snapshot for running applications, tests, or analysis tools.
-
-## Portal commands
-
-Run all commands from the repository root, including when that root is mapped:
+Check prerequisites and install the governed runtime explicitly when needed:
 
 ```bat
-ao.bat build                 rem debug build of all enabled targets
-ao.bat build release         rem Release build of the full graph with IPO/LTCG
-ao.bat build --target aobus-tui  rem build only the TUI target
-ao.bat doctor winui          rem inspect WinUI build/runtime prerequisites
-ao.bat doctor winui --build-only  rem inspect build prerequisites without the launch runtime
-ao.bat setup winui-runtime   rem install the governed runtime when missing
-ao.bat build --target winui  rem build WinUI with CMake-generated MSBuild
-ao.bat build release --target winui  rem build the WinUI Release configuration with IPO/LTCG
-ao.bat run cli               rem incrementally build and run the CLI
-ao.bat run tui               rem incrementally build and run the TUI
-ao.bat run winui             rem build and launch WinUI in an interactive session
-ao.bat run winui release     rem build and launch the WinUI Release configuration
-ao.bat test                  rem core and TUI tests
-ao.bat test --all            rem all Windows suites, including tooling
-ao.bat check                 rem full Windows gate
-ao.bat check --asan          rem full Windows gate with MSVC AddressSanitizer
-ao.bat deps report           rem show governed versions and vcpkg identities
-ao.bat deps report --concepts rem write concept-report.json from public headers
-ao.bat deps verify           rem reject stale or mismatched dependency evidence
-ao.bat format --check        rem check changed C++/Python formatting
-ao.bat tidy                  rem lint changed files with the native compile database
-ao.bat hygiene               rem check formatting, audits, and lint
+ao.bat doctor winui
+ao.bat doctor winui --build-only
+ao.bat setup winui-runtime
 ```
 
-The completion `check` command explicitly builds the aggregate `aobus_guardrails` source-policy target.
-Ordinary incremental `build` and `run` commands compile their requested product graph without repeating those repository-wide scans.
+The Windows App SDK development closure is restored from
+`app/windows-winui/packages.config` and `NuGet.Config`. The Windows App Runtime
+is separate user/host state. `setup winui-runtime` verifies the governed SHA-256
+and Microsoft Authenticode signature before installation; normal build and
+doctor commands never install it.
 
-The portal initializes the Visual Studio x64 environment when a build-capable
-command is selected; each command declares that need in its module under
-`script/ao/command/`, and Visual Studio discovery is shared with
-`start-msbuild-env.bat` through `script/ao/windows-vsenv.bat`.
-Help, tooling-only tests, and Python-only format/tidy/hygiene scopes skip this
-C++ environment preparation. Managed Python/tool provisioning remains separate.
-Source-check preflight passes the selected files through a temporary invocation
-file so the command reuses the same scope without rescanning Git. The portal
-removes the file when the command or environment preparation finishes.
-`ao.bat run <app> --no-build` skips that native build-environment setup and launches an existing executable through the managed portal directly.
-`start-msbuild-env.bat <command> [args...]` remains useful when another
-development tool needs to run inside that environment; it honors a preset
-`VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.
+Build or launch the dedicated tree with:
 
-Every native Aobus console, test, probe, benchmark, and developer-tool
-executable embeds `app/windows/utf8-process.manifest`. Its UTF-8 active code
-page makes narrow CRT `argv` and audited narrow library boundaries UTF-8, while
-filesystem paths still use explicit native or UTF-8 conversion at each API
-boundary. Each target's post-link step extracts PE manifest resource `#1` with
-the Windows SDK manifest tool and fails the build unless the UTF-8 declaration
-is present; listing a manifest source without verifying the produced executable
-is not sufficient. Configure also rejects any first-party executable that does
-not register this verification. WinUI owns and verifies its separate application
-manifest through the same post-link check.
+```bat
+ao.bat build --target winui
+ao.bat build release --target winui
+ao.bat run winui
+ao.bat run winui release
+```
 
-## Windows App SDK and WinUI
+The current app is unpackaged and framework-dependent; Developer Mode is not
+required. Launch requires an interactive RDP/local desktop. An SSH service
+session can build and verify but cannot display WinUI.
 
-The Windows App SDK is a repository dependency, not a machine-wide development
-SDK. `app/windows-winui/packages.config` locks the complete NuGet closure;
-`app/windows-winui/NuGet.Config` restricts restore to nuget.org, maps every
-package to that source, requires signed packages, and pins the accepted
-nuget.org repository signing certificates. CMake provisions NuGet through the
-bundled vcpkg, restores the exact closure to local state, and generates the
-MSBuild imports needed by the C++/WinRT and XAML compiler. No IDE restore step
-is required.
+`ao.bat check` builds Debug WinUI after the native Debug graph except under
+MSVC ASan. `ao.bat check release` validates the native IPO graph and builds the
+WinUI Release configuration with LTCG.
 
-The Windows App Runtime is different: framework-dependent WinUI executables need
-the matching runtime installed for the current user. Its version, installer URL,
-and SHA-256 are governed by `dependency-contract.json`. `ao.bat setup
-winui-runtime` is explicit and idempotent; it verifies both the file hash and
-Microsoft Authenticode signer before running the installer. Normal build and
-doctor commands never modify the host.
-
-`ao.bat build --target winui` configures `windows-winui` with the Visual Studio
-generator and builds `aobus-winui` through `cmake --build`; direct `msbuild`
-invocations and Visual Studio are unnecessary.
-`ao.bat build release --target winui` selects the Release configuration in the same tree and enables IPO/LTCG.
-`ao.bat check` builds the Debug WinUI configuration after the normal Windows Debug graph, except in the MSVC AddressSanitizer profile.
-`ao.bat check release` builds the IPO/LTCG-enabled WinUI Release configuration after validating the complete native Release graph.
-
-The WinUI graph has one Windows-only static frontend library, `aobus-winui-lib`, which owns all compiled C++, XAML, IDL, and generated C++/WinRT implementation.
-The thin `aobus-winui` executable owns the final link, manifest, string resources, and deployed assets.
-Canonical ICU catalog sources generate `en`, `de`, `zh-Hans`, `zh-Hant`, `ja`, `es`, `fr`, and `qps-ploc`
-`.resw` inputs in the build tree. MakePri compiles them into the unpackaged
-application PRI with `en` as the default language. The neutral English output
-also contains the checked-in WinUI-only definitions for native strings that have
-not migrated; one `en/Resources.resw` therefore owns each neutral resource id.
-Region-specific Chinese requests use the matching script-qualified resource;
-emitting both forms would create duplicate MRT candidates.
-The application binds C++ lookup to its startup locale through an explicit MRT
-resource context. A small native post-link probe compares MRT and ICU fallback
-for English, German, Simplified Chinese, Traditional Chinese, Japanese, Spanish, French, unsupported locales, and pseudo-locales;
-a WinUI build fails if the two adapters diverge.
-WinUI-owned rules that need native types — XAML elements, C++/WinRT projections, resource dictionaries — are included in `ao_core_test` only by the normal native Windows profile.
-WinUI-owned rules that name no platform API are compiled into `ao_core_test` on every host instead, so the settings schema, output-preference resolution, root-commit transaction, restart sequencing, and shell-state vocabulary are gated by the Linux run as well.
-Neither case exports a second cross-platform WinUI model library: the sources stay Windows-owned in `aobus-winui-lib`, and the test executable compiles them directly.
-
-The portal uses one concurrency limit for both CMake's project scheduling and
+The portal uses one concurrency limit for both CMake project scheduling and
 MSBuild's cross-project C++ compiler scheduling. By default it leaves one
 logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
 integer to override both limits:
@@ -245,81 +176,80 @@ $env:CMAKE_BUILD_PARALLEL_LEVEL = 12
 ao.bat build --target winui
 ```
 
-The WinUI build enables MSBuild MultiToolTask with a process-count semaphore, so
-the limit applies to concurrent `cl.exe` work across generated projects rather
-than multiplying project-level and translation-unit-level parallelism.
+The WinUI build enables MSBuild MultiToolTask with a process-count semaphore,
+so this single limit controls concurrent `cl.exe` work across generated
+projects instead of multiplying project-level and translation-unit-level
+parallelism.
 
-Run `ao.bat setup compiler-cache` to download and verify the governed ccache archive and enable the shared 20 GB host-local store.
-See [Compiler cache](compiler-cache.md) for state paths, capacity, override precedence, and the optional fixed compiler views available in isolated Windows SSH logons.
+A current CMake/MSBuild limitation means WinUI may not relink when only a
+linked library changed. If shared code outside `app/windows-winui/` changed,
+delete the WinUI executable before rebuilding or pass `--clean`; otherwise a
+successful library build can leave stale executable contents.
 
-The normal Windows Ninja trees honor CMake's standard `CMAKE_C_COMPILER_LAUNCHER` and `CMAKE_CXX_COMPILER_LAUNCHER` settings.
-The Visual Studio generator does not honor those launchers, so an automated host may instead set `AOBUS_MSBUILD_CL_TOOL_EXE` to an absolute, host-local compiler-cache wrapper whose file name is `cl.exe`.
-The managed setup copies its verified ccache executable to that wrapper path without adding its directory to `PATH`; the real MSVC `cl.exe` remains discoverable in the initialized Visual Studio environment.
-The portal applies the wrapper to every generated WinUI C++ project and emits embedded debug information for cacheable Debug and RelWithDebInfo compilation.
-It retains normal compiler file tracking only after verifying that cache-owned writes are excluded from MSBuild project outputs; other wrappers and unverified cache paths use the legacy tracking behavior described in [Compiler cache](compiler-cache.md#windows-compiler-file-tracking).
-CMake regeneration, ICU resources, and other custom commands keep normal file tracking and dependency ordering.
-Without managed setup or an explicit wrapper, ordinary local builds remain uncached.
+All first-party Windows executables verify their UTF-8 process manifest after
+link. Narrow `argv` and audited narrow process boundaries are UTF-8, but
+filesystem paths still require the project's explicit native/UTF-8 conversion
+facades.
 
-The current target is unpackaged and framework-dependent. Developer Mode is not
-required. Launch must occur in an interactive desktop session: SSH service
-session 0 can build and verify the executable but cannot display it, and the
-portal asks the developer to run `ao.bat run winui` inside the active RDP
-session.
+## Compiler cache
 
-The generated WinUI project does not relink when only a library it depends on
-changed. Editing shared code such as `app/uimodel/` recompiles that library and
-reports success, but `Aobus.exe` keeps its previous contents, so the running app
-still shows the old behaviour. Delete the executable before rebuilding when a
-change lands outside `app/windows-winui/`, or pass `--clean`. Only the WinUI
-project is affected: the test trees `ao.bat check` builds relink normally.
+Run `ao.bat setup compiler-cache` to install and verify governed ccache and
+activate the host-local shared store. The Ninja trees use CMake compiler
+launchers. The Visual Studio generator uses the managed host-local `cl.exe`
+wrapper selected by `AOBUS_MSBUILD_CL_TOOL_EXE`; its directory is not added to
+`PATH`.
 
-The repository's `vcpkg-configuration.json` selects both the default registry
-snapshot and the Boost-scoped snapshot. `dependency-contract.json` owns the
-accepted upstream versions. Do not edit one resolver input in isolation; use
-the procedure in `doc/development/dependency-upgrade.md` and validate a new local build
-tree so an old `vcpkg_installed` directory cannot mask the selection change.
+See [compiler cache](compiler-cache.md) for override precedence, file-tracking
+safety, and the optional fixed `S:`/`B:` compiler views available only in
+isolated Windows SSH logons.
 
-The default Windows test group is `core` and `tui`. The Windows `all` group and
-`ao.bat check` add CLI, integration, and the Python `tooling` suite. Catch2
-executables are resolved with the `.exe` suffix automatically. The managed
-checkout environment supplies the pinned Ruff and mypy tools used by formatting,
-tidy, hygiene, and tooling tests; these commands do not depend on ambient
-`PATH` tools.
+## Native tests and sanitizers
 
-`ao.bat check --asan` builds and runs the same native suite group under MSVC
-AddressSanitizer. It instruments Aobus translation units; dependencies from the
-normal vcpkg triplet remain uninstrumented, so MSVC STL container annotations
-are disabled across that binary boundary. MSVC provides neither
-UndefinedBehaviorSanitizer nor ThreadSanitizer, and resumable coroutine bodies
-are not fully instrumented; the Linux ASan/UBSan and TSan gates remain
-complementary coverage. Windows `--tsan` and application-build `--clang`
-selections fail before configuration instead of depending on an ambient Visual
-Studio component. The independently managed LLVM SDK described below remains
-available for format and tidy.
+The default test group is core and TUI. Windows `all` and `ao.bat check` add
+CLI, integration, and tooling. The `--lint` suite is Linux and macOS only;
+Windows runs native lint verification via `ao.bat tidy` and `ao.bat format --check`.
+The managed environment owns Ruff and mypy; ambient tools are not used.
+
+`ao.bat check --asan` runs the native suite group with MSVC AddressSanitizer.
+Third-party vcpkg libraries are not instrumented, so cross-boundary STL
+container annotations are disabled. MSVC provides neither UBSan nor TSan, and
+resumable coroutine instrumentation is incomplete; Linux ASan/UBSan and TSan
+remain complementary. Windows `--tsan` and application `--clang` selections
+fail before configuration.
+
+Source inspection and portal tests do not certify native builds, GUI behavior,
+audio, or sanitizer results. Run the opt-in WASAPI endpoint and playback probe
+on a host with an active render endpoint:
+
+```bat
+ao.bat test --integration "[wasapi][.manual]"
+```
+
+The probe skips when there are no active endpoints; inspect the test summary
+rather than treating a skipped run as playback evidence. It checks enumeration,
+frame advancement, and drain completion, not whether a listener heard sound.
+Use an interactive audio session and listen separately when audibility is part
+of acceptance. Record the checks performed and remaining limits with the change.
 
 ## LLVM SDK and native lint tools
 
-On the first C++ format or tidy configure, CMake downloads the official
-`clang+llvm` 22.1.8 Windows development archive (version and SHA-256 pinned in
-`cmake/LlvmSdk.cmake`), verifies the hash, and extracts about 3.8 GiB below
-`%LOCALAPPDATA%\Aobus\cache\llvm\toolchains` by default. Downloads live in the
-sibling `downloads` directory. Later configure runs and other checkouts reuse
-the shared cache, including after a tidy build tree is cleaned. Concurrent
-configure runs serialize access to it.
+Windows format/tidy uses the official LLVM development archive pinned by
+`cmake/LlvmSdk.cmake`. On first native C++ format or tidy configure, CMake
+downloads it, verifies SHA-256, and extracts it below
+`%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later trees reuse the verified
+cache. Concurrent provisioning is locked, and incomplete or stale SDKs are not
+accepted.
 
-CMake considers an automatically managed SDK complete only when all required
-files exist and its completion marker matches both the pinned version and
-SHA-256. An incomplete or stale SDK at the selected cache location is not
-reused. Changing the cache location does not move or delete a repository's old
-`out` directory.
+`AOBUS_LLVM_SDK_CACHE_ROOT` relocates the managed cache. For an existing CMake
+tree, reconfigure with the corresponding CMake option or create a new tree.
+`AOBUS_LLVM_SDK_ROOT` instead names one complete pre-extracted SDK; it is
+validated and never modified.
 
-The `AOBUS_LLVM_SDK_CACHE_ROOT` environment setting initializes a new CMake
-tree. To redirect an existing tree, reconfigure it with
-`-DAOBUS_LLVM_SDK_CACHE_ROOT=<local-path>` or create a fresh build tree.
+### Offline SDK setup
 
-On an offline machine, extract the exact archive in advance. From an initialized
-Visual Studio x64 developer prompt with `VCPKG_ROOT` set, configure a local tidy
-tree explicitly:
+On an offline machine, extract the exact pinned archive in advance. From an
+initialized Visual Studio x64 developer prompt with `VCPKG_ROOT` set, configure
+a local tidy tree explicitly:
 
 ```bat
 cmake -S . --preset windows-tidy -B C:\local\aobus-build\windows-tidy ^
@@ -327,65 +257,58 @@ cmake -S . --preset windows-tidy -B C:\local\aobus-build\windows-tidy ^
 ```
 
 Use `start-msbuild-env.bat cmd` to open such a prompt from an ordinary terminal.
-The configured value persists in that build tree. Configure it again with
-`-DAOBUS_LLVM_SDK_ROOT=` to return the tree to the verified automatic cache. A
-pre-provisioned root is never modified; configuration fails with the missing
-path when it is incomplete.
+The value persists in that build tree. Reconfigure with
+`-DAOBUS_LLVM_SDK_ROOT=` to return to the automatic verified cache. A
+pre-provisioned root is never repaired in place; configuration names any missing
+required path and fails.
 
-The official Windows `clang-tidy.exe` cannot load external C++ plugins. Aobus
-therefore builds `tool/lint/AobusClangTidy.exe`, a self-contained executable
-that statically links both the upstream checks and every `aobus-*` check from
-the same SDK. The portal validates that the custom checks are registered before
-scanning source files and never falls back to an unrelated tool from `PATH`.
-`--no-build` requires this executable, the compile database, and the configured
-SDK to exist already; it performs no download or configure step.
+The official `clang-tidy.exe` cannot load Aobus's out-of-tree C++ plugin.
+Therefore the project builds `tool/lint/AobusClangTidy.exe`, statically linking
+upstream and `aobus-*` checks from the same SDK. The portal verifies registration
+and never falls back to Visual Studio or `PATH`. `--no-build` requires the
+executable, compile database, and configured SDK to exist already.
 
-For analysis only, the portal passes `_USE_STD_VECTOR_ALGORITHMS=0` while Clang
-parses the Visual Studio 18 standard-library headers. This isolates
-[microsoft/STL#6294](https://github.com/microsoft/STL/issues/6294), an STL
-vectorized-find bug for three-byte element types. LLVM 22 itself is supported;
-normal MSVC builds keep their standard-library vectorization settings.
+Windows tidy replays exact Windows compile commands, including a companion WinUI
+command database when needed. It reports and defers platform-incompatible files
+for batch scopes; an explicitly named uncovered file fails. Complete shared C++
+coverage still requires the affected Linux, macOS, and Windows native tidy
+passes. See [checker development](lint/checker-development.md#native-replay-and-header-diagnostics)
+for replay mechanics.
 
-Clang-format is source based and can run on the same files on either host.
-Windows resolves `clang-format.exe` from the same pinned LLVM SDK and never
-falls back to Visual Studio or `PATH`. Clang-tidy is compile-command based, so
-complete C++ hygiene is a host matrix:
+## Migrating a repository-local `out` tree
 
-- Windows checks WASAPI, `AtomicFileWindows`, `SignalExitWatcherWindows`, and
-  shared translation units using the Windows compile database.
-- Linux checks PipeWire, ALSA, POSIX, GTK, and shared translation units using
-  the Linux compile database.
+The portal does not move or delete an old `out` directory. Run a normal portal
+command to create fresh local state. Do not copy CMake caches, build trees,
+`vcpkg_installed`, or Python virtual environments; they contain absolute or
+checkout-specific paths.
 
-For changed-file, folder, and `--all` scopes, the portal reports and defers a
-translation unit that the current host does not build. Naming such a file
-explicitly is an error instead of silently borrowing unrelated compiler flags.
-Run hygiene on both hosts before treating cross-platform C++ coverage as
-complete.
+A complete previously verified LLVM SDK may be copied into the automatic cache
+only with its `.aobus-llvm-sdk-complete` marker. Without that marker, select the
+old directory through `AOBUS_LLVM_SDK_ROOT` instead. Validate a build or hygiene
+run from new state before manually removing old files.
 
-## Migrating an existing `out` directory
+## Troubleshooting
 
-The portal does not move or remove an existing repository-local `out`
-directory. Start a normal portal command to create fresh local build and Python
-state. Do not copy any of these directories into the new state root:
-
-- `out/build` or any `CMakeCache.txt`;
-- a build tree's `vcpkg_installed` directory;
-- an old Python virtual environment.
-
-They contain absolute paths or checkout-specific state and must be configured
-again. To avoid downloading and extracting LLVM again, copy only a complete,
-previously verified SDK directory, including its
-`.aobus-llvm-sdk-complete` marker, into the new automatic cache. For example:
-
-```bat
-set "OLD_SDK=%CD%\out\toolchains\llvm-<version>-x86_64-windows-msvc"
-set "NEW_SDK=%LOCALAPPDATA%\Aobus\cache\llvm\toolchains\llvm-<version>-x86_64-windows-msvc"
-robocopy "%OLD_SDK%" "%NEW_SDK%" /E /COPY:DAT /DCOPY:DAT /R:2 /W:1
-ao.bat tidy
-```
-
-`robocopy` return codes from 0 through 7 indicate success or copied differences.
-If the old directory is complete but has no automatic-cache marker, use it as
-`AOBUS_LLVM_SDK_ROOT` instead of placing it in the automatic cache. Verify a
-build or hygiene run from the new local state before deciding whether to remove
-the old `out` directory manually.
+- **LLVM SDK provisioning failure**: `llvm-<version>.lock` is a coordination
+  file used by CMake's `file(LOCK ... GUARD FUNCTION)`, not an existence-based
+  stale-lock marker. If lock acquisition times out, check whether another CMake
+  process is still provisioning the SDK. Do not delete lock or cache files while
+  a writer may be active. After interruption, rerun configuration: it validates
+  the SDK and completion marker and re-extracts an invalid cache. For offline
+  provisioning, use the complete extracted SDK and `AOBUS_LLVM_SDK_ROOT`
+  procedure under [offline SDK setup](#offline-sdk-setup).
+- **WinUI relinking staleness**: repeating an ordinary target build does not
+  force a missed link. Follow the executable-removal or `--clean` procedure in
+  [Build and run WinUI](#build-and-run-winui), selecting the same configuration
+  and build tree as the application being tested.
+- **`vswhere` or toolset discovery failure**: install or repair Visual Studio
+  Build Tools with the required `.vsconfig`, including
+  `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. Both `ao.bat` and
+  `start-msbuild-env.bat` use the same discovery script, so opening the latter
+  cannot repair missing discovery tools or components. Use
+  `start-msbuild-env.bat cmd` when a separate tool needs an initialized x64
+  environment after discovery succeeds.
+- **Windows Store Python interception**: running python commands directly outside
+  `ao.bat` may trigger the Windows Store app execution alias. Disable the
+  "App execution aliases" for `python.exe` and `python3.exe` in Windows Settings
+  or run all commands through `ao.bat`.

@@ -1,23 +1,19 @@
 ---
 id: shell.layout-document
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates the version 1 shell layout document, node, value, template, tooltip, resource-limit, and managed-file surface.
 ---
 # Shell layout document
 
 ## Scope and version
 
 This reference owns the exact serialized surface of `uimodel::LayoutDocument` version `1` and its `LayoutNode` and `LayoutValue` members.
-Template expansion, build, editor, and fallback behavior belong to the [shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md).
+Template expansion, build, editor, and fallback behavior belong to the [shell layout lifecycle specification](../../system/shell/layout-lifecycle.md).
 
 The `version` field is required, emitted as `1`, and only version `1` is accepted.
 An unsupported version returns `NotSupported` before the root or templates are interpreted.
 
 ## Code boundary
 
-This surface belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
+This surface belongs to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md).
 The model and YAML schema are under `app/include/ao/uimodel/layout/document/` and `app/uimodel/layout/document/`; GTK owns built-in documents, stores, and widget factories.
 
 ## Document surface
@@ -189,8 +185,8 @@ There is no automatic migration, quarantine, or normalization policy.
 
 ## Related documents
 
-- [Application shell architecture](../../architecture/application-shell.md)
-- [Shell layout lifecycle](../../spec/shell/layout-lifecycle.md)
+- [Application shell architecture](../../system/shell/README.md)
+- [Shell layout lifecycle](../../system/shell/layout-lifecycle.md)
 - [GTK layout schema and action reference](layout-schema.md)
 - [Layout component-state reference](layout-state.md)
 - [Application managed-state surface](../persistence/application-config.md)

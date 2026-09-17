@@ -1,9 +1,6 @@
 ---
 id: decision.0013.adopt-icu-collation
-type: decision
 status: accepted
-domain: presentation
-summary: Records transient ICU collation keys as the locale-aware ordering policy for interactive text.
 ---
 # Decision 0013: adopt ICU collation
 
@@ -105,11 +102,11 @@ and create larger keys without a selected product requirement.
 
 ## Current authorities
 
-- [Presentation architecture](../architecture/presentation.md)
-- [Track-list presentation](../spec/presentation/track-presentation.md)
-- [Track-list projection](../spec/library/projection/track-list.md)
-- [Track-field value completion](../spec/presentation/field-completion.md)
-- [Metadata editing](../spec/presentation/metadata-editing.md)
+- [Presentation architecture](../system/presentation/README.md)
+- [Track-list presentation](../system/presentation/track-presentation.md)
+- [Track-list projection](../system/library/track-list-projection.md)
+- [Track-field value completion](../system/presentation/field-completion.md)
+- [Metadata editing](../system/presentation/metadata-editing.md)
 - [Performance review](../development/test/performance.md)
 
 ## Supersession

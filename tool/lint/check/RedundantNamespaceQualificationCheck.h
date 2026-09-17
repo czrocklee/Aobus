@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 2.6.5: avoid redundant namespace qualification when the
+  /// Enforces the namespace-qualification style: avoid redundant qualification when the
   /// reference is already within that namespace (or a sub-namespace).
   class RedundantNamespaceQualificationCheck : public ClangTidyCheck
   {

@@ -1,9 +1,5 @@
 ---
 id: development.managed-state-schemas
-type: development
-status: current
-domain: persistence
-summary: Defines how contributors add and review explicit owner-local schemas for application-managed YAML state.
 ---
 # Managed-state schemas
 
@@ -45,7 +41,7 @@ A compatibility reader or migration is product behavior and requires an explicit
 Work from the repository root.
 
 1. Identify the semantic owner, writer authority, logical document, literal group, seeded defaults, and restore commit point.
-2. Read the current domain specification and reference. Update those authorities when behavior or serialized shape changes.
+2. Read the current topic contract and any independently maintained format reference. Update the affected facts when behavior or serialized shape changes.
 3. Define an owner-local schema satisfying `ao::rt::ConfigSchema<T>` when the payload uses `ConfigStore`:
 
    ```cpp
@@ -58,7 +54,7 @@ Work from the repository root.
 6. Read a version field before version-specific siblings and return `NotSupported` for an unsupported future version unless the owning specification defines another outcome.
 7. Return one complete candidate. Never mutate the caller's live state during partial deserialization.
 8. Pass the schema explicitly to `ConfigStore::load()` or `save()`. Use `saveTogether(configWrite(...), configWrite(...))` when sibling groups must be replaced atomically.
-9. Update the managed-state registry and the domain-owned specification/reference. Mark an implementing RFC terminal only after code, tests, guardrails, and current documentation agree.
+9. Update the managed-state registry and the affected topic/format documentation. A proposal is not current behavior until code, tests, guardrails, and the current contract agree.
 
 `ConfigStore::load()` returns `Result<bool>`: `false` means the group is absent and the seeded value is unchanged; `true` means the schema accepted a candidate and the store installed it.
 Schema failures preserve their error code with group context.
@@ -90,22 +86,25 @@ Keep the guardrail source scopes aligned when adding a new application subtree.
 
 ## Validation
 
-Run focused owner tests while developing, then complete the repository validation gate from the root:
+Run focused owner tests while developing, then complete the C++ validation gate from the root.
+Run the documentation check because a managed-state change must update its current contract or exact format reference:
 
 ```bash
 ./ao check
+./ao hygiene
 ./ao docs check
 ```
 
+`hygiene` is check-only; it does not authorize a standalone lint campaign or unrelated cleanup.
 Do not run formatting or lint-fix commands merely as part of this workflow; follow the repository's explicit formatting and linting policy.
 Useful review searches are:
 
 ```bash
 rg -n "ConfigTraits|loadExact|ao/yaml/Reflect|boost/pfr/core|namespace ao::yaml" app test CMakeLists.txt
-rg -n "ConfigTraits|loadExact|reflection-based|ordinary deserialize|exact deserialize" doc --glob '!doc/rfc/**'
+rg -n "ConfigTraits|loadExact|reflection-based|ordinary deserialize|exact deserialize" doc --glob '!doc/plan/**'
 ```
 
-Historical RFC text may describe a removed mechanism; current architecture, specifications, references, development guides, and production code may not.
+Historical decisions and explicitly non-current design notes may describe removed mechanisms; current contracts, references, development guides, and production code must not present them as supported behavior.
 
 ## Troubleshooting
 
@@ -118,9 +117,9 @@ Historical RFC text may describe a removed mechanism; current architecture, spec
 
 ## Related documents
 
-- [Persistence and managed-state architecture](../architecture/persistence-and-managed-state.md)
-- [Grouped configuration store specification](../spec/persistence/config-store.md)
-- [Reusable YAML adapter specification](../spec/persistence/yaml-adapter.md)
+- [Persistence and managed-state architecture](../system/persistence/README.md)
+- [Grouped configuration store specification](../system/persistence/config-store.md)
+- [Reusable YAML adapter specification](../system/persistence/yaml-adapter.md)
 - [Application managed-state surface](../reference/persistence/application-config.md)
 - [Documentation system](../README.md)
 - [Testing policy](test.md)

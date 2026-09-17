@@ -245,7 +245,7 @@ namespace clang::tidy::readability
                          .bind("var"),
                        this);
 
-    // Primitive initialization (Rule 3.4.5: primitives use assignment-style).
+    // Primitive initialization uses assignment style.
     // unless(isImplicit()) skips compiler-synthesized VarDecls such as the
     // coroutine parameter-move copies, whose location lands on the first
     // coroutine keyword of the body and which have no stylable spelling.

@@ -1,9 +1,6 @@
 ---
 id: decision.0007.unify-fatal-diagnostics-and-abort
-type: decision
 status: accepted
-domain: system
-summary: Unifies caller contracts, postconditions, invariants, realtime faults, and terminal infrastructure failures behind one diagnostic abort facility.
 ---
 # Decision 0007: unify fatal diagnostics and abort
 
@@ -73,10 +70,10 @@ Rejected because it tests different control flow, permits RAII unwind that produ
 
 ## Current authorities
 
-- [Failure and reporting architecture](../architecture/failure-and-reporting.md)
-- [Runtime execution architecture](../architecture/runtime-execution.md)
-- [Outcome channel specification](../spec/failure/outcome-channel.md)
-- [Fatal facility reference](../reference/failure/fatal.md)
+- [Failure and reporting architecture](../system/failure/README.md)
+- [Runtime execution architecture](../system/execution/README.md)
+- [Outcome channel specification](../system/failure/outcome-channel.md)
+- [Fatal facility reference](../system/failure/fatal.md)
 
 ## Supersession
 

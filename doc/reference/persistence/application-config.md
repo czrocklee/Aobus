@@ -1,9 +1,5 @@
 ---
 id: persistence.application-config
-type: reference
-status: current
-domain: persistence
-summary: Enumerates Aobus managed YAML documents, registered groups, payload authorities, schemas, and version markers.
 ---
 # Application managed-state surface
 
@@ -11,9 +7,9 @@ summary: Enumerates Aobus managed YAML documents, registered groups, payload aut
 
 This reference owns the exact registry of application-managed YAML documents and `ConfigStore` groups.
 For each entry it identifies the logical document, literal top-level group, C++ payload type, explicit schema, writer, and current version marker.
-It also owns the complete field surface for the small global `window`, `runtime`, `session`, `preferences`, and `shortcuts` groups used by the interactive frontends.
+It also owns the complete field surface for the small global `window`, `runtime`, `session`, `preferences`, and `shortcuts` groups used by the interactive frontends, and their frontend policy when no persistent application location is available.
 
-It does not own platform paths, store state transitions, restore/save behavior, the nested [workspace](../workspace/session-state.md) or playback schemas, presentation semantics, shell-layout node grammar, or component-state lifecycle.
+It does not own platform paths, generic store state transitions, domain restore/checkpoint lifecycles, the nested [workspace](../workspace/session-state.md) or playback schemas, presentation semantics, shell-layout node grammar, or component-state lifecycle.
 Those facts belong to the linked location reference, store specification, and domain owners.
 
 There is no shared application-config schema version.
@@ -21,13 +17,15 @@ Version authority is per payload and is listed in the registry.
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places generic grouped-file mechanics in application runtime, platform-neutral payload models in runtime or UIModel, and file/path composition in frontends.
-The [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md) owns semantic and writer authority for every managed-state family.
+The [system architecture](../../system/overview.md) places generic grouped-file mechanics in application runtime, platform-neutral payload models in runtime or UIModel, and file/path composition in frontends.
+The [persistence and managed-state architecture](../../system/persistence/README.md) owns semantic and writer authority for every managed-state family.
 
 The runtime [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides the common top-level group container.
-Runtime and UIModel payload owners define their types and schemas; GTK and TUI
-select concrete store files according to the [managed file locations
-reference](location.md), while the Windows state reference owns the WinUI path.
+Runtime and UIModel payload owners define their types and schemas; frontend
+composition selects files according to the [managed file locations
+reference](location.md). AppKit uses the ordinary workspace and playback-session
+schemas in one per-library `ConfigStore`; its native `desktop.plist` settings
+are outside this YAML registry.
 The standalone shell component-state store uses the shared YAML and atomic-file mechanisms directly and is included here so the managed-document registry is complete.
 
 ## Surface
@@ -35,7 +33,7 @@ The standalone shell component-state store uses the shared YAML and atomic-file 
 ### Logical documents
 
 Logical names in this reference identify schemas independently of their platform paths.
-The location reference owns the exact mapping from these names to Linux defaults and command-line overrides.
+The location reference owns platform paths and command-line overrides.
 
 | Logical document | Composition | Container | Registered top-level surface |
 |---|---|---|---|
@@ -45,6 +43,7 @@ The location reference owns the exact mapping from these names to Linux defaults
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | TUI library presentation | One per-library TUI file. | `LayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts`, `trackView.presentations`, `navigation`, and `panels`. |
 | Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop` and `shortcuts`. |
+| Windows playback session | One application-global WinUI file, kept separate from desktop settings. | The `ConfigStore` borrowed by `AppRuntime` from `LibrarySession`. | `playback-session`. |
 | WinUI library presentation | One per-library WinUI file. | `LibrarySession` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
 | Shell component state | One runtime-state file per preset id. | `ShellLayoutComponentStateStore` uses a standalone YAML document. | Document root; it has no `ConfigStore` group. |
@@ -66,21 +65,23 @@ It does not denote nested mappings.
 | Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
 | Global TUI config | `preferences` | `ao::tui::Preferences` | TUI-local `PreferencesSchema`. | Required `version`; current value `1`. | TUI Settings through the App-owned `ConfigStore`. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
-| Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
+| Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
 | TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `LayoutStateStore`. |
 | TUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `LayoutStateStore`. |
 | TUI library presentation | `navigation` | Boolean `enabled`. | TUI-local `NavigationSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
+| TUI library presentation | `panels` | `ao::tui::PanelWidths`. | TUI-local `PanelWidthsSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
 | Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
 | WinUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
 | WinUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
 | Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | UIModel `LayoutComponentStateYamlSchema`. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
-The injected playback-session document is the global GTK config in GTK composition.
+The playback-session document is the global GTK config in GTK composition.
 It is the runtime workspace config in the current TUI composition because TUI does not inject a separate playback store.
+WinUI injects the separate global `windows-playback.yaml` store so playback retirement and write sealing do not rewrite desktop settings.
 
 The `session` and `playback-session` groups are unrelated payloads.
 `session` records application reopen state and the last engine-confirmed output route, while `playback-session` records restorable listening intent paired with one library.
@@ -197,10 +198,10 @@ The registry fixes the group-to-type association, but these domain owners define
 
 | Payload | Current schema authority |
 |---|---|
-| `PlaybackSessionState` | [Playback session persistence specification](../../spec/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h). |
+| `PlaybackSessionState` | [Playback session persistence specification](../../system/playback/session-persistence.md), [state reference](../playback/session-state.md), and [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h). |
 | `WorkspaceSessionDocument` / `WorkspaceSessionState` | [Workspace session state](../workspace/session-state.md). |
 | `TrackColumnLayoutDocument` / `TrackColumnLayouts::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md) and [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h). |
-| `ListPresentationPreferenceDocument` / `ListPresentations::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../spec/presentation/list-preference.md), and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h). |
+| `ListPresentationPreferenceDocument` / `ListPresentations::Snapshot` | [Persisted presentation state](../presentation/persisted-state.md), [list presentation preference specification](../../system/presentation/list-preference.md), and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h). |
 | `LayoutDocument` | [Shell layout document](../shell/layout-document.md) and its model-specific YAML schema. |
 | `LayoutComponentStateDocument` | [Shell layout component state](../shell/layout-state.md) and its model-specific YAML schema. |
 
@@ -211,7 +212,7 @@ The registry fixes the group-to-type association, but these domain owners define
 - A conforming `ConfigStore` file has a top-level mapping; each registered group is one unique keyed direct child, and duplicate group keys reject initialization.
 - Unregistered top-level groups have no application consumer even though a loaded `ConfigStore` can retain them while rewriting another group.
 - Every registered payload uses an explicit owner-local schema; no field, enum, id, container, or aggregate schema is inferred from its C++ type.
-- The [grouped configuration store specification](../../spec/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
+- The [grouped configuration store specification](../../system/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
 - `playback-session` accepts only schema version `4`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
 - `workspace` accepts only presentation version `1` and validates its complete stable presentation vocabulary before view creation.
 - Interactive column-layout groups accept only version `2`; interactive
@@ -224,22 +225,22 @@ The registry fixes the group-to-type association, but these domain owners define
 The domain owner decides whether a syntactically deserialized identity, enum ordinal, version marker, or nested value is usable.
 This registry does not convert schema membership into restore success.
 
-### Sessions with nowhere to keep anything
+### Frontend policy without a persistent application location
 
-`utility::applicationConfigDirectory` reports `NotFound` only when the platform names no home or profile location at all.
-What a frontend does then depends on what it keeps there.
+The [grouped configuration store specification](../../system/persistence/config-store.md#sessions-with-no-location) owns the `NoLocation` mechanism: empty initial groups, same-instance live writes, candidate isolation and exception behavior, successful generic saves with no filesystem access, and the prohibition on an empty-path working-directory fallback.
+This section owns only frontend choices layered over that mechanism.
 
-GTK opens its global `AppConfigStore` and shell-layout stores with `rt::ConfigStore::NoLocation` rather than refusing to start.
-TUI likewise uses a no-location store for its separate global application preferences and shortcut overrides; its command-line-selected per-library workspace/playback path is not derived from this platform directory.
-The Windows shell does not degrade this way: it keeps its settings, playback state, and fallback library root under that directory, so without one it has no library to show and reports a startup failure.
+`utility::applicationConfigDirectory` returns `NotFound` only when the platform names no home or profile location.
+GTK then opens its global `AppConfigStore` and shell-layout stores without a location and continues with survivable defaults.
+TUI does the same for its separate global application store both when that resolver fails and when creating the resolved application's configuration directory fails.
+Its command-line-selected per-library workspace/playback path is independent: failure to prepare that path is a startup failure, not a no-location application-preference session.
+The Windows shell does not degrade this way because its application directory also owns required settings, playback state, and the fallback library root; failure to resolve or prepare it rejects startup.
 
-A store with no location behaves as follows:
-
-- Every registered group reads as absent, so each owner keeps its defaults.
-- Every write succeeds having stored nothing on disk. Success is deliberate: the session never promised to keep anything, so reporting a failure at each checkpoint would describe a fault that does not exist. Later reads in the same session see what was written, so nothing inside the session behaves inconsistently.
-- Nothing is written relative to the working directory, which is what an empty path would otherwise resolve against.
-
-The frontend says so once, at its composition root, where the reason is still known.
+TUI distinguishes passive checkpoints from an explicit Settings acknowledgement.
+Its `preferences` save and `shortcuts` save both check `hasLocation()` and return `NotFound` before serialization when the application store has no location; Settings therefore does not claim that the user's requested change was persisted or publish that candidate as live behavior.
+Other owners that call generic store saves retain the store-level success and same-instance visibility contract.
+This is an intentional policy difference, not a requirement to weaken explicit Settings saves into volatile success.
+The composition root logs the degraded application-preference session once, where its cause is known; an explicit Settings save still reports its own rejected acknowledgement.
 
 ## Compatibility and versioning
 
@@ -247,9 +248,11 @@ The frontend says so once, at its composition root, where the reason is still kn
 |---|---|
 | `window`, `runtime`, and `session` | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields. |
 | `shortcuts` | No explicit version or migration. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. |
+| TUI `preferences` | Required payload version `1`, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. |
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
 | `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
+| TUI `navigation` and `panels` | Independent payload version `1` for each group, strict field membership, and no earlier-version migration. Invalid navigation falls back to enabled; invalid panel widths fall back to automatic sizing at the owning workflow. |
 | Windows `desktop` | Explicit version, currently `3`, read down to the oldest this schema ever wrote (`2`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
 | `playback-session` | Explicit schema version `4`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
@@ -291,11 +294,11 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 - [`Preferences.h`](../../../app/tui/Preferences.h) owns the TUI preference payload and defaults; [`Preferences.cpp`](../../../app/tui/Preferences.cpp) owns the `preferences` schema, version gate, and group reads and writes.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp), [`WindowState.h`](../../../app/linux-gtk/app/WindowState.h), and [`AppState.h`](../../../app/include/ao/rt/AppState.h) own the global GTK groups and their frontend-local schemas; [`WindowState.cpp`](../../../app/linux-gtk/app/WindowState.cpp) owns the geometry accumulation rule and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) owns when a checkpoint is taken.
-- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns `NoLocation` and what a store with nowhere to keep anything does; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns when a frontend reaches for it.
+- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) owns the generic `NoLocation` mechanism; [`PlatformDirectories.h`](../../../include/ao/utility/PlatformDirectories.h) owns application-directory resolution. [`Preferences.cpp`](../../../app/tui/Preferences.cpp) and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own the stricter explicit TUI Settings saves and the TUI's additional no-location fallback when application-directory creation fails.
 - [`KeymapStore.h`](../../../app/include/ao/uimodel/input/KeymapStore.h) and [`KeymapModel.h`](../../../app/include/ao/uimodel/input/KeymapModel.h) own the shortcut group name and mapping payload; [`Keymap.h`](../../../app/tui/Keymap.h) owns the terminal defaults supplied when the TUI reads it.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h), [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h), [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp), and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own the playback group, explicit schema, payload marker, and injected-store use.
 - [`WorkspaceSessionYamlSchema.h`](../../../app/runtime/WorkspaceSessionYamlSchema.h), [`WorkspaceSessionYamlSchema.cpp`](../../../app/runtime/WorkspaceSessionYamlSchema.cpp), and [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) own the workspace group and payload conversion.
-- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp), [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) own their independent library-presentation file boundaries.
+- [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp), [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp), and [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) own their independent library-presentation file boundaries; the TUI store also owns the `navigation` and `panels` schemas.
 - [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own the shared literal group names and exact presentation payloads.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) owns the layout-preset group and file boundary.
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h), [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own the standalone component-state envelope and markers.
@@ -324,14 +327,14 @@ No single test currently enumerates every registered group across all logical do
 
 ## Related documents
 
-- [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
-- [Grouped configuration store specification](../../spec/persistence/config-store.md)
-- [Atomic file replacement specification](../../spec/persistence/atomic-replacement.md)
+- [Persistence and managed-state architecture](../../system/persistence/README.md)
+- [Grouped configuration store specification](../../system/persistence/config-store.md)
+- [Atomic file replacement specification](../../system/persistence/atomic-replacement.md)
 - [Managed file locations reference](location.md)
 - [Workspace session state](../workspace/session-state.md)
-- [Workspace session specification](../../spec/workspace/session.md)
-- [List presentation preference specification](../../spec/presentation/list-preference.md)
+- [Workspace session specification](../../system/workspace/session.md)
+- [List presentation preference specification](../../system/presentation/list-preference.md)
 - [Persisted presentation state](../presentation/persisted-state.md)
-- [Application shell architecture](../../architecture/application-shell.md)
-- [Shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md)
-- [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
+- [Application shell architecture](../../system/shell/README.md)
+- [Shell layout lifecycle specification](../../system/shell/layout-lifecycle.md)
+- [Keyboard shortcut specification](../../system/shell/keyboard-shortcut.md)

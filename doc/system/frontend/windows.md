@@ -1,0 +1,270 @@
+---
+id: shell.windows-desktop
+---
+# Windows desktop shell
+
+## Scope
+
+This specification owns the native WinUI 3 shell and session: Modern and Classic presentation, library-switch adaptation, track-table interaction and Properties, output, Soul, theme reload, and Windows media integration.
+[Windows library workflows](windows-library-workflows.md) owns active-session scanning, YAML transfer, List authoring, membership, saved order, and their modal lifetimes.
+
+It does not redefine the [shared desktop library lifecycle](../desktop-library-lifecycle.md), its [private successor arguments](../../reference/application/desktop-successor-protocol.md), library scan semantics, playback engine behavior, or the exact Windows YAML fields. Those remain with their shared owners and the [Windows desktop state reference](../../reference/windows/desktop-state.md).
+
+## Code boundary
+
+The [system architecture](../overview.md) defines the runtime-to-UIModel-to-frontend dependency direction. The [application shell architecture](../shell/README.md) owns shell composition. Cross-desktop root, startup, protocol, and detached-launch rules live in `ao_desktop_launch`; shared presentation policy lives under `app/include/ao/uimodel/`. Windows-only lifecycle effects, policy, XAML, controls, and adapters live in the Windows-only `aobus-winui-lib` under `app/windows-winui/`, while `aobus-winui` is the thin final-link and deployed-resource target.
+
+## Terminology
+
+- **Library session**: the library-bound owner of one runtime, settings, scan workflow, and playback-command surface; one process-lifetime `LibraryWindowSession` owns it together with its `MainWindow`.
+- **Modern**: the default integrated-title-bar shell with navigation, track list, inspector, and persistent Now Playing area.
+- **Classic**: the system-title-bar, high-density shell with menus, toolbar, library tree, property panel with artwork, status bar, and GTK-compatible playback-strip order.
+
+## Invariants
+
+- One process owns at most one `LibrarySession`, one unique runtime, and one main window; opening a different root replaces the process rather than adding another graph.
+- A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
+- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot and permanently seals playback writes.
+- Switching shells changes presentation only; it neither scans the library nor interrupts playback or an admitted library task.
+- The current output route remains Runtime state. Both shells select it through
+  the same UIModel output-device model used by GTK and TUI.
+- All runtime and UIModel callbacks that touch XAML state execute through the window dispatcher.
+- Replacing track-table items suppresses native selection publication, restores the Runtime-owned selection, and keeps the top visible track anchored by stable id whenever it survives the replacement.
+- The window detaches its observers and controllers before its session destroys the unique runtime.
+- Modern is the first-run shell. Both shells follow the effective Windows light or dark theme unless semantic theme tokens override their surfaces.
+- Authored Windows shell copy, dynamic status templates, presentation labels, and column labels resolve through the WinUI resource system. Library metadata, device names, paths, and diagnostics supplied by lower layers remain data rather than resource identifiers.
+- The track table remains usable at every supported width. The inspector collapses before navigation; narrow layouts also collapse navigation.
+- Soul radius, anchor geometry, brand colors, aura interpretation, gradient stops, and animation periods come from shared UIModel constants. Theme YAML cannot replace them.
+- A shell mode may apply a positive stroke width and inner-glyph scale to fit its allocated control size without changing those shared brand and motion constants.
+- One main window presents at most one track-properties dialog, and the dialog never retargets its captured selection after it opens.
+- The window admits one modal workflow across Properties, List authoring, and library transfer, and blocks workspace-history gestures while it is active; the [workflow contract](windows-library-workflows.md#shared-workflow-and-modal-admission) owns the exact admission and cancellation rules.
+- A callback-admission token reports only whether its generation is current; it does not retain raw window, session, coordinator, or dialog memory.
+
+## State model
+
+The shell mode is `modern` or `classic`.
+Responsive state is derived from the current client width.
+Below 720 effective pixels navigation uses the minimal overlay presentation and the inspector is available as an explicit overlay.
+From 720 through 1119 navigation uses the compact presentation and the inspector remains an explicit overlay.
+At 1120 or wider navigation is expanded and the inspector is inline.
+Below the wide tier the browser summary yields its space to the filter. At the
+narrow tier the Now Playing artwork and text yield their space to transport,
+time, volume, and overflow commands.
+
+Library reads, playback, runtime resources, commands, and activity status always derive from the same active runtime.
+After audio providers are registered, startup resolves and resubmits the stored
+desktop output preference before controllers bind. The shared pure UIModel policy
+requires non-empty backend and profile ids and rejects a profile known to be
+unsupported by a published backend. A non-empty device may be submitted before
+catalog publication or while temporarily unavailable so Runtime can retain
+pending intent; an empty device is valid only when the published catalog
+advertises a compatible empty-id default. WASAPI therefore requires a concrete device id. Intent that cannot be
+submitted leaves the stored preference intact and the runtime-selected default
+in effect; either outcome is non-fatal.
+An ordinary startup starts playback-session observation and restores listening
+intent after workspace and providers are ready but before controllers bind. A
+successor startup instead begins in `AwaitingRootCommit`; commit success moves
+it to ready observation, commit failure moves it to the runtime write seal, and
+terminal parent preparation moves it to retired.
+
+Soul frame updates run only while the control is loaded, its app window is
+visible and not minimized, and playback requires animation. Window focus alone
+does not pause an otherwise visible animation.
+Modern applies the compact control-local values `strokeWidth: 5.0` and `glyphScale: 0.85`, and renders the Play/Pause glyph independently of the rotating ring so it remains upright.
+Classic renders a 32 by 32 glyph-free Soul with the shared default stroke width independently from its ordinary Play/Pause and Stop buttons.
+
+## Commands and transitions
+
+Selecting Modern or Classic saves the selection and updates title-bar ownership before showing the selected shell. Existing list selection, library data, and playback continue.
+
+Track Details shows the inspector and, given again, hides it. Both shells offer
+it: Modern in the browser summary bar, Classic in the View menu. Until it is
+given, each presentation answers for itself: an inline inspector shows and an
+overlay stays hidden. Once given, the request holds across width changes and
+shell selection for as long as the window lives, and is not persisted. A hidden
+inspector returns its width to the workspace. A shown overlay covers the
+workspace at the inspector's persisted width without taking width from it, does
+not take the pointer, and keeps following the selection underneath.
+
+Open Library uses the Windows folder picker initialized from the current `AppWindow` id.
+Selecting the already active filesystem directory, including an equivalent
+alias, is a no-op.
+A different-root request is accepted once and posted to the application dispatcher; the picker coroutine returns before destructive work begins.
+That dispatcher turn runs the [shared parent preparation and release](../desktop-library-lifecycle.md#prepare-and-release-the-parent): Windows captures window and workspace state best effort, and a terminal-retirement failure is reported in the still-usable window before returning to the running phase. Successful release destroys `MainWindow`, `LibrarySession`, its runtime, and application-state stores before launching the exact current executable and exiting.
+
+In the successor, native window and process-wide playback adapters become active before the copied desktop-settings candidate is saved and installed. This is WinUI's effect boundary for the shared [strict startup and durable-root gate](../desktop-library-lifecycle.md#launch-and-activate-the-successor); target construction, idle startup, permanent playback-write sealing on commit failure, and no rollback follow that contract.
+There is no live-runtime exchange inside `LibrarySession`. Initial scan, Rescan, and scan cancellation during a root switch follow the [active-session scan workflow](windows-library-workflows.md#scan); scan failure does not roll back an active root.
+
+Both shells expose the same [import/export](windows-library-workflows.md#import-and-export), [List tree and navigation](windows-library-workflows.md#list-tree-and-navigation), and [List authoring](windows-library-workflows.md#create-and-edit-lists) workflows. Shell switching preserves admitted work, and committed library publication—not an optimistic native refresh—updates their results.
+
+The track list supports extended selection, keyboard navigation supplied by
+`ListView`, double-click playback, native recycling, and sortable headers backed
+by sortable runtime fields. Double-click playback targets the row under the
+gesture regardless of any existing multi-row selection.
+Headers and row cells are generated from the active
+presentation; width, order, and visibility are shared per-list state. A header
+edge resizes its column, a header context menu moves it, and the Columns menu
+toggles fields while retaining at least one visible field.
+The active primary sort is marked in its generated header. Clicking that header
+reverses the persisted workspace direction; clicking another sortable header
+starts that field in ascending order.
+The shared width solver uses the current viewport, and a single horizontal
+surface keeps headers and rows aligned when minimum widths overflow.
+Viewport, column, and projection refreshes restore the selected rows and the prior top-visible track after replacing the native item source; an explicit reveal request takes precedence over that scroll anchor.
+Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
+The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
+It saves a per-List preference only after the complete selected specification is accepted by Runtime.
+The existing `Ctrl+L` keymap action and native Now Playing/menu command submit a playback reveal request; WinUI follows its preferred view/List hints, selects and scrolls the visible row, and does nothing when the track remains hidden by the active projection or was removed.
+
+Quick Filter adapts the shared completion and filtering policy. Its [Create List action](windows-library-workflows.md#create-and-edit-lists) enters the ordinary List workflow with the resolved expression.
+
+Properties is available for a non-empty track selection from the row context menu, the Modern overflow menu, the Classic View menu, and the fixed window-local `Alt+Enter` accelerator.
+Right-clicking an unselected track selects it before presenting the row menu; group headings do not expose track authoring.
+Opening Properties captures the current stable track ids and begins one revision-bound `TrackAuthoringSession`.
+The native dialog projects the shared compact form: built-in metadata and common custom values are editable, mixed values are identified without becoming replacement text, tags common to all targets can be added or removed, new custom keys can be added, and technical audio properties remain read-only.
+Metadata, tag, and custom-key suggestions use the active runtime completion vocabulary.
+Save is disabled for an unchanged or invalid draft, prevents the dialog's default synchronous close while work is pending, and closes only after the combined metadata/tag Properties submission is accepted.
+`Busy` and recoverable failures keep the draft open with an actionable message; stale or unavailable bindings disable submission and require reopening from the current selection.
+Window retirement closes the dialog and suppresses late completion before releasing its runtime and selection owners.
+
+The selected-row menu also offers [membership and saved-order actions](windows-library-workflows.md#membership-and-saved-order) over a captured stable selection.
+
+The native item view reports the complete display count while materializing rows
+on demand; its row-model least-recently-used cache holds at most 2048 entries.
+Cover art is asynchronous and ignores results from superseded selections.
+Both shells pin the selection's artwork above the inspector's fields, where it stays put as those fields scroll. Classic caps it smaller than Modern does; neither cap changes what is shown.
+One active-runtime loader coalesces group-heading, Inspector, Now Playing, and SMTC requests and holds at most 128 encoded-byte cache entries.
+An invalid cover resource id displays `monogram` for a realized group heading, `vinyl` in Inspector, and `equalizer` in Now Playing.
+Now Playing continues to display `equalizer` before playback starts and after transport returns to idle.
+Windows exposes no placeholder preference in this version.
+A valid resource id hides its placeholder while loading; absence or decode failure remains empty rather than being presented as confirmed no-cover.
+When no group-heading or Inspector entity exists, both placeholder and decoded cover are hidden.
+
+The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
+
+Modern Soul answers the same right-click, hold, and hover, and its click plays or pauses because Modern offers no separate Play/Pause button. Hovering either Soul describes the audio pipeline.
+
+Selecting an output row in either shell submits its backend, device, and profile
+ids through the shared UIModel selector and updates that exact requested tuple
+in memory. The selector performs no synchronous settings write; the next
+ordinary settings checkpoint persists the preference without replacing it with
+the engine-confirmed Runtime snapshot. Presentation rows and operating-system
+device names are not persisted.
+
+SMTC commands route through the shared playback command surface. Playback observations update transport state and asynchronously replace system title, artist, album, and artwork metadata.
+
+## Failure and cancellation
+
+Folder-picker cancellation makes no change.
+Before terminal playback retirement succeeds, a preparation failure leaves the
+old process as the active retry target. Once preparation succeeds and release
+begins, the old process is not a rollback target.
+The restart coordinator attempts the successor launch after an explicit release operation either completes or throws an ordinary exception: the parent is exiting either way, so a half-released dying parent is not observable while a successor that never starts costs the user their session.
+If the user closes the old window after restart is queued, the already-retired window/session pair counts as completed quiescence; the queued coordinator still launches the successor and exits the parent.
+An exception that violates a destructor or other no-throw teardown boundary is instead an invariant fault and enters the process terminate boundary before successor launch; it is not a recoverable release result.
+Native process-creation failure is reported by the already-retired parent,
+which then exits. The shared launcher does not inherit unrelated handles and
+preserves UTF-8 arguments across native quoting, including whitespace, quotes,
+Unicode, and trailing backslashes.
+Target validation, open, and window-activation failures are reported by the successor, which exits without changing the prior durable root.
+A later ordinary launch may therefore reopen that prior root.
+Scan and library-modal failures follow [Windows library workflows](windows-library-workflows.md). Retirement closes callback admission before requesting cancellation and retains callback dependencies through settlement; cancellation alone never proves that owners can be destroyed.
+
+WinUI lifecycle cleanup calls window close, timer stop, routed-handler removal, popup or flyout retirement, and property detachment directly on the owning dispatcher thread.
+The frontend does not catch those calls merely because teardown is in progress: a failed HRESULT after the owners have met their thread and lifetime contracts is an invariant or native-runtime fault, and continuing through a partially retired graph is not a supported recovery path.
+
+An optional WinRT operation may degrade only when its fallback is already complete and the failed operation leaves no callback or lifetime obligation behind.
+That boundary catches `winrt::hresult_error`, records its message and HRESULT in the application log, and preserves the fallback; allocation failure and non-WinRT C++ exceptions continue to the ordinary exception boundary.
+Mica uses the solid theme as its fallback, while final SMTC metadata disablement may be abandoned after command admission, subscriptions, and artwork work have already been retired.
+If application logging itself is unavailable, the diagnostic boundary writes a debugger fallback; terminal application exit separately falls back to posting the native quit message.
+
+Theme reload parses and validates a complete candidate before applying resources. A missing theme file uses built-in/system values. Any other read, syntax, token, type, or color failure keeps the last valid theme and displays the exact diagnostic.
+
+Late cover-art results, late runtime events, and callbacks delivered after shell teardown are suppressed by generation, cancellation, or subscription lifetime.
+
+## Persistence and versioning
+
+Window placement, shell mode, library root, and pane sizes belong to the versioned Windows `desktop` group. Inline navigation and inspector boundaries are draggable, save their widths after a completed drag, and reuse those widths in both shells.
+Window placement saves the native restored rectangle independently from the
+maximized state, so saving while maximized does not replace the normal bounds.
+Per-list presentation choice and column state use the shared `trackView.presentations` and `trackView.columnLayouts` groups.
+Track-property drafts and dialog state are not persisted; accepted metadata, custom metadata, and tags use ordinary library mutation. [Library workflows](windows-library-workflows.md#persistence) owns List and transfer state and their persistence boundaries.
+The global `desktop` group and the two per-library presentation groups have separate writers and save boundaries. Each presentation store saves only its own group in `winui_layout.yaml`, preserving siblings; a desktop-settings checkpoint does not atomically commit all three groups. `windows-theme.yaml` remains independent.
+Workspace owns the active view's current presentation and sorting.
+`LibrarySession` restores that per-library workspace before controllers bind and checkpoints it with Windows settings changes and at shutdown.
+The process-global `windows-playback.yaml` store is injected into `AppRuntime`, independently from desktop settings. Its ordinary restore, successor durability gate, and parent retirement follow [desktop library lifecycle](../desktop-library-lifecycle.md). After a failed selected-root commit, later ordinary Windows settings checkpoints retain the prior root rather than retrying the failed target.
+Exact paths, fields, defaults, validation, and versioning are defined by the [Windows desktop state reference](../../reference/windows/desktop-state.md).
+
+## Frontend observations
+
+Modern uses an integrated title bar, navigation, primary table, optional inspector, and persistent Now Playing surface. Classic uses a system title bar and dense desktop chrome. Neither visual treatment changes the runtime meaning of playback, output, selection, quality, or Soul aura.
+WinUI packages the shared `note`, `vinyl`, and `equalizer` SVG sources plus the Soul brand mark and its license, even though the fixed Windows slot mapping currently selects only `monogram`, `vinyl`, and `equalizer`.
+UIModel supplies style, monogram, and deterministic monogram foreground-color values; WinUI owns transparent XAML foreground rendering, responsive vinyl geometry, its current-theme-accent outer ring and one-third-diameter muted center label, and asset decoding.
+
+## Implementation map
+
+- [`app/windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) owns the `aobus-winui-lib` static-library and thin `aobus-winui` executable boundary.
+- [`App`](../../../app/windows-winui/App.xaml.h) owns the dispatcher, queued restart state, and [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.h).
+- [`LibraryWindowSession`](../../../app/windows-winui/app/LibraryWindowSession.cpp) owns one immutable window/session relationship and window-before-session release; [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns one nested runtime graph, playback restore/admission, transactional selected-root commit, and the [active-session scan workflow](windows-library-workflows.md#scan). [`CallbackAdmissionGate`](../../../app/windows-winui/include/ao/winui/CallbackAdmissionGate.h) names dispatcher-confined owner/workflow generation admission without claiming owner lifetime.
+- [`ao_desktop_launch`](../../../app/desktop) owns common root, startup, protocol,
+  and detached-launch rules. [`ProcessLauncher`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
+  owns real Win32 argument extraction and exact-executable discovery before
+  delegating process creation.
+- [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines the window frame, its resources, its modal-owner admission rule, and the single region a shell is built into; [`ShellState`](../../../app/windows-winui/include/ao/winui/layout/ShellState.h) resolves its Windows-only responsive state, and the two shipped preset documents under [`app/windows-winui/layout/`](../../../app/windows-winui/layout) define both native shells.
+- [`MainWindowShell.cpp`](../../../app/windows-winui/shell/MainWindowShell.cpp), [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp), and [`MainWindowPlayback.cpp`](../../../app/windows-winui/playback/MainWindowPlayback.cpp) partition code-behind behavior by owner; XAML and generated code-behind declarations remain at the target root because WinUI generated-file association requires them.
+- [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table, selection reveal, and display/source index boundary.
+- [`MainWindow.xaml.cpp`](../../../app/windows-winui/MainWindow.xaml.cpp) adapts playback reveal events to the window's own track list. Navigation and List-tree adapters are mapped in [library workflows](windows-library-workflows.md#implementation-map).
+- [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native properties workflow, while [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) keeps shared form and vocabulary mapping WinRT-free.
+- [`TrackTable`](../../../app/windows-winui/layout/component/track/TrackTable.cpp), [`ShellBuilder`](../../../app/windows-winui/layout/ShellBuilder.cpp), and [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp) own the row menu, ordinary menu/action route, captured selection, and window-local dialog lifetime.
+- [`CoverArtPlaceholder`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h), [`ResourceByteMemoryCache`](../../../app/include/ao/rt/resource/ResourceByteMemoryCache.h), and [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) own shared placeholder policy, runtime byte delivery, and WinUI presentation respectively.
+- [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
+- [`OutputDeviceControl`](../../../app/windows-winui/playback/OutputDeviceControl.h)
+  adapts shared [`OutputDeviceViewModel`](../../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h)
+  rows; [`OutputSelection`](../../../app/include/ao/uimodel/playback/output/OutputSelection.h)
+  owns pure restore admission and fallback resolution;
+  [`DesktopOutputSelection`](../../../app/windows-winui/include/ao/winui/app/DesktopOutputSelection.h)
+  adapts that rule to Windows settings, while `LibrarySession` submits the
+  resolved runtime command and checkpoints requested intent.
+- [`SmtcBridge`](../../../app/windows-winui/platform/SmtcBridge.h) and [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.h) own Windows media and theme adapters.
+- [`StringResources`](../../../app/windows-winui/platform/StringResources.h) resolves dynamic authored copy from the same PRI resource system used by XAML `x:Uid`.
+- [`WinUiErrorBoundary`](../../../app/windows-winui/include/ao/winui/WinUiErrorBoundary.h) owns optional-WinRT degradation and terminal diagnostic fallbacks; ordinary UI teardown does not use it.
+
+## Test map
+
+- [`ShellStateTest.cpp`](../../../test/unit/winui/layout/ShellStateTest.cpp) protects Windows breakpoints and shell-mode behavior.
+- [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
+- [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
+- [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
+  protects catalog-aware persisted-route admission and fallback resolution.
+- [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
+  protects Windows startup resolution and the deferred-checkpoint preference update.
+- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
+- [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
+- [Library workflow tests](windows-library-workflows.md#test-map) cover scan decisions, transfer reports, committed List refresh, and native saved-order accelerators.
+- Tests under [`test/unit/desktop/`](../../../test/unit/desktop) protect shared
+  successor arguments, strict root planning, same-root identity, detached
+  launch, native quoting, and handle inheritance on both hosts.
+- [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
+  and [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+  protect preparation failure, release-before-launch ordering, and fail-closed
+  root candidate mutation.
+- [`CallbackAdmissionGateTest.cpp`](../../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) protects idempotent retirement and proves that renewing a workflow cannot make an old generation token admissible again.
+- [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
+- WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui) that
+  need a native host are compiled only by the native Windows profile. Windows
+  shell policy carrying no WinRT dependency - settings compatibility,
+  output-preference resolution, root-commit sequencing, the component schema,
+  and the keyboard-accelerator plan - compiles into `ao_core_test` on every
+  host, as do the shared desktop rule tests.
+- Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
+
+## Related documents
+
+- [Windows library workflows](windows-library-workflows.md)
+- [Interactive session lifecycle architecture](../session-lifecycle.md)
+- [Desktop library lifecycle specification](../desktop-library-lifecycle.md)
+- [Desktop successor protocol reference](../../reference/application/desktop-successor-protocol.md)
+- [Playback session persistence specification](../playback/session-persistence.md)
+- [Presentation architecture](../presentation/README.md)
+- [Windows desktop state reference](../../reference/windows/desktop-state.md)
+- [Use the Windows desktop](../../user/use-windows-desktop.md)

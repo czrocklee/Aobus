@@ -30,7 +30,7 @@ namespace ao::winui
    * must not be routed through it. Non-WinRT exceptions, including
    * std::bad_alloc, deliberately propagate.
    *
-   * @see doc/spec/shell/windows-desktop.md#failure-and-cancellation
+   * @see doc/system/frontend/windows.md#failure-and-cancellation
    */
   template<typename Operation>
     requires std::invocable<Operation&&>

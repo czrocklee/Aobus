@@ -1,16 +1,12 @@
 ---
 id: development.uimodel-organization
-type: development
-status: current
-domain: development
-summary: Defines UIModel namespace, feature-capsule, role-name, dependency, and test-organization rules.
 ---
 # UIModel organization
 
 ## Scope
 
 This guide owns contributor-facing organization and naming rules for `ao_app_uimodel`.
-Behavioral ownership belongs to the [presentation architecture](../architecture/presentation.md); general identifiers and file names belong to the [naming convention](naming-convention.md).
+Behavioral ownership belongs to the [presentation architecture](../system/presentation/README.md); general identifiers and file names belong to the [naming convention](naming-convention.md).
 
 ## Policy
 
@@ -126,8 +122,8 @@ If a name is generic only because the folder supplies context, add the domain pr
 
 ## Related documents
 
-- [Presentation architecture](../architecture/presentation.md)
+- [Presentation architecture](../system/presentation/README.md)
 - [Application-layer review](application-layer-review.md)
-- [Application shell architecture](../architecture/application-shell.md)
-- [Activity-status specification](../spec/presentation/activity-status.md)
-- [Presentation text catalog reference](../reference/presentation/text-catalog.md)
+- [Application shell architecture](../system/shell/README.md)
+- [Activity-status specification](../system/presentation/activity-status.md)
+- [Presentation text catalog reference](../system/presentation/text-catalog.md)

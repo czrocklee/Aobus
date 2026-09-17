@@ -9,12 +9,14 @@ Review is read-only unless fixes are requested. For the affected messages, read
 `app/i18n/catalog/root.txt`, the target catalog, and call sites needed to resolve
 UI meaning.
 
-Read by contract:
+Read the sections needed for the task:
 
-- `doc/reference/presentation/text-catalog.md`: message ownership, signatures,
-  external values, and locale-neutral formatting.
-- `doc/spec/presentation/localization.md`: adding a locale, fallback rules,
-  frontend admission, generated resources, and native parity.
+- `doc/development/localization.md`: authoring, translation, locale-addition,
+  and validation workflows.
+- `doc/system/presentation/text-catalog.md`: domain mapping, external values,
+  terminology, and locale-neutral formatting.
+- `doc/system/presentation/localization.md`: argument signatures, lifetimes,
+  fallback, frontend admission, generated resources, and native parity.
 - [Music and audio terminology](references/music-audio-terminology.md): translating
   metadata, library/List, playback, routing, or quality-analysis vocabulary.
 

@@ -20,7 +20,7 @@ namespace ao::utility
    *
    * Success means the platform replacement call succeeded; it does not promise
    * absolute power-loss durability. See
-   * doc/spec/persistence/atomic-replacement.md for the exact boundary.
+   * doc/system/persistence/atomic-replacement.md for the exact boundary.
    */
   Result<> writeAtomically(std::filesystem::path const& targetPath, std::string_view data);
 

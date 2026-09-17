@@ -1,9 +1,6 @@
 ---
 id: decision.0008.close-library-admission-and-trust-live-storage
-type: decision
 status: accepted
-domain: library
-summary: Closes current-schema admission before exposure and aborts on storage facts that fail after that trust boundary.
 ---
 # Decision 0008: close library admission and trust live storage
 
@@ -79,10 +76,10 @@ After acquiring that writer, the transaction reads the durable revision in its n
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
-- [LMDB operation specification](../spec/storage/lmdb-operation.md)
+- [Library architecture](../system/library/structure.md)
+- [LMDB operation specification](../system/persistence/lmdb-operation.md)
 - [Library database reference](../reference/library/storage/database.md)
-- [Outcome channel specification](../spec/failure/outcome-channel.md)
+- [Outcome channel specification](../system/failure/outcome-channel.md)
 
 ## Supersession
 

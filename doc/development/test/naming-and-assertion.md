@@ -1,9 +1,5 @@
 ---
 id: development.test.naming-and-assertion
-type: development
-status: current
-domain: development
-summary: Defines test names, tags, structure, assertions, and expected-value policy.
 ---
 # Test naming, tags, and assertions
 
@@ -47,7 +43,7 @@ The testing layers from `layer-selection.md` map to first tags like this:
 
 | Testing layer | First tag |
 |---|---|
-| `lib` | The owning module: `[core]`, `[library]`, `[query]`, `[audio]`, `[tag]`, `[media]`, `[lmdb]`, or `[utility]` |
+| `lib` | The owning module: `[core]`, `[library]`, `[query]`, `[audio]`, `[media]`, `[lmdb]`, or `[utility]` |
 | `runtime` | `[runtime]` |
 | `uimodel` | `[uimodel]` |
 | `linux-gtk` | `[gtk]` |
@@ -66,7 +62,6 @@ Recommended layer tags:
 - `[gtk]`
 - `[winui]`
 - `[audio]`
-- `[tag]`
 - `[utility]`
 - `[cli]`
 - `[lmdb]`
@@ -84,6 +79,7 @@ Recommended type tags:
 
 Recommended component/domain tags:
 
+- `[tag]`
 - `[notification]`
 - `[activity-status]`
 - `[track-store]`
@@ -117,7 +113,9 @@ tags for tests that require real hardware or deliberate manual execution; do
 not hide ordinary unit or regression coverage.
 
 Use the advisory audit when reviewing naming/tag cleanup or checking a focused
-directory:
+directory. The current auditor also accepts `tag` as a first-position layer,
+although this guide treats it as a component tag; a clean audit does not prove
+that distinction was respected.
 
 ```bash
 ./ao test-audit test/unit/query

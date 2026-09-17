@@ -7,7 +7,7 @@
 <h1 align="center">Aobus</h1>
 
 <p align="center">
-  <strong>A high-performance, Bit-Perfect audio engine and music library built with C++26.</strong>
+  <strong>A C++26 music player with a shared audio engine and music library.</strong>
 </p>
 
 <p align="center">
@@ -18,120 +18,38 @@
 
 ---
 
-Aobus (pronounced /'eɪ.oʊ.bʌs/) is a modern music application designed for audiophiles who demand uncompromising sound quality and architectural elegance. Combining the robustness of **LMDB** storage with the power of **C++26**, Aobus bridges the gap between low-level audio engineering and high-level library management.
+Aobus (pronounced /'eɪ.oʊ.bʌs/) combines an LMDB-backed music library with platform audio output and graphical, terminal, and command-line frontends.
 
-## 🌟 Key Features
+## What it does
 
-- **Bit-Perfect Pipeline**: Ensuring every sample reaches your hardware exactly as intended.
-- **Ultra-Fast Library Indexing**: Powered by LMDB for instantaneous search and filtering.
-- **Reactive Architecture**: Modern C++ patterns for low-latency UI and audio synchronization.
-- **Industrial Minimalist Design**: A UI that respects your music and your desktop.
+- **Organize music:** index audio files, author Playlists and Smart Lists, and edit library metadata without writing back to the audio files.
+- **Find and present tracks:** use filter expressions, grouping, sorting, and configurable columns.
+- **Inspect playback quality:** select output routes and distinguish verified sample preservation from resampling, gain changes, or unavailable evidence. Bit-perfect output depends on the active path and device; a lossless source alone does not guarantee it.
+- **Choose an interface:** use GTK on Linux, WinUI on Windows, or the TUI and CLI. The native AppKit frontend is an incremental macOS development slice.
 
-## 🛠 Building
+## Documentation
 
-Aobus uses CMake with platform-specific development profiles: pinned Nix
-dependencies on Linux and governed vcpkg manifests on macOS and Windows.
+- **Use Aobus:** [get started](doc/user/get-started.md), [play music](doc/user/play-music.md), [manage your library](doc/user/manage-library.md), and [back up your data](doc/user/backup-and-restore.md).
+- **Choose a frontend:** [Windows desktop](doc/user/use-windows-desktop.md), [TUI](doc/user/use-tui.md), or [CLI](doc/user/use-cli.md); [GTK customization](doc/user/customize-application.md) covers the Linux desktop.
+- **Understand the system:** [system overview](doc/system/overview.md), [subsystem contracts](doc/system/README.md), and [exact reference](doc/reference/README.md).
+- **Contribute:** [contributor workflow](CONTRIBUTING.md) and [development tasks](doc/development/README.md).
 
-### Linux
+The [documentation home](doc/README.md) connects these reading paths.
 
-```bash
-# Debug build + full native test suites
-./ao check
+## Build and run
 
-# Check-only formatting, source audits, and lint for changed files
-./ao hygiene
-
-# Incremental debug build only
-./ao build
-
-# Clean rebuild
-./ao build debug --clean
-
-# Release build for production
-./ao build release
-```
-
-The portal re-enters the pinned `nix-shell` automatically. Linux build trees
-default to `/tmp/build/<project-directory>` (for example, `/tmp/build/Aobus`),
-using only the source directory's final name. Set `AOBUS_BUILD_ROOT` to replace
-the `/tmp/build` base while retaining that project-directory component.
-The normal shell uses Nixpkgs' cached GTK build. Set
-`AOBUS_NIX_UNSTRIPPED_GTK=1` only when stepping into GTK internals with a
-debugger; that opt-in forces Nix to build an unstripped GTK locally.
-Portal commands that mutate one build tree serialize through a persistent
-exclusive lock beside that tree and report when they wait for another writer.
-The adjacent `.ao-build.lock` file survives `--clean`; it does not reserve a
-stable read snapshot for running applications, tests, or analysis tools.
-Governed dependency versions and native resolver identities can be inspected
-with `./ao deps report`. Public-concept metrics use
-`./ao deps report --concepts`; the procedure is in the
-[concept metrics guide](doc/development/concept-metrics.md). Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
-when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
-
-### macOS
-
-The native macOS profile builds the shared core, CLI, and TUI with Core Audio
-output. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice)
-is available via `./ao run appkit`; it is still under development. Install the Xcode Command Line
-Tools and the documented Homebrew host tools; the `./ao` portal bootstraps a
-pinned vcpkg checkout and resolves the shared manifest.
+Aobus uses CMake with pinned Nix dependencies on Linux and the shared governed vcpkg manifest on macOS and Windows.
+On Linux, the portal selects the development environment automatically:
 
 ```bash
 ./ao build
-./ao run cli
 ./ao run tui
-./ao test --all
-./ao check
-./ao hygiene
 ```
 
-GitHub Actions runs `./ao check` and changed-file hygiene natively on both
-Intel (`macos-15-intel`) and Apple Silicon (`macos-15`) runners.
+See [build and setup](doc/development/build.md) for build trees and tooling, or the native [macOS](doc/development/macos.md) and [Windows](doc/development/windows.md) guides for prerequisites.
+Use `ao.bat` on Windows. The [native AppKit desktop](doc/development/macos.md#native-desktop-development-slice) is available through `./ao run appkit` and remains under development.
 
-See [macOS development](doc/development/macos.md) for the validated host,
-local-state paths, SMB workflow, supported suites, and known limitations.
-
-### Windows
-
-Install Visual Studio Build Tools with the C++ x64 toolset, then use the Windows
-portal from a Command Prompt or PowerShell terminal. The portal provisions its
-pinned Python environment on first use:
-
-```bat
-ao.bat build
-ao.bat run tui
-ao.bat test
-ao.bat check
-```
-
-`ao.bat` initializes the Visual Studio environment and uses the vcpkg bundled
-with Visual Studio. See [Windows development](doc/development/windows.md)
-for prerequisites, build trees, and suite availability.
-
-## 🧪 Running Tests
-
-Aobus takes stability seriously. We maintain a comprehensive suite of unit and integration tests. All suites run through the development portal:
-
-```bash
-# Run the native default fast loop
-./ao test
-
-# Run every registered suite
-./ao test --all
-
-# Run tests for the development tooling (Linux only; use ao.bat on Windows)
-./ao test --tooling
-
-# Build/test half of the completion gate
-./ao check
-
-# Check-only hygiene half of the completion gate
-./ao hygiene
-```
-
-The portal resolves the correct build tree, including when
-`AOBUS_BUILD_ROOT` relocates it. Invoking Catch2 binaries directly from the
-build tree is a debugging technique, not the supported workflow.
+For testing, start with the [testing guide](doc/development/test.md); [validation and review](doc/development/test/validation-and-review.md) selects the required checks for a change.
 
 ## 🤖 AI Agents
 

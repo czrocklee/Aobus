@@ -12,7 +12,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 3.4.5: non-primitive locals use auto x = Type{args},
+  /// Enforces the local-initialization style: non-primitive locals use auto x = Type{args},
   /// primitives use T x = val (no braces).
   class LocalInitializationStyleCheck : public ClangTidyCheck
   {

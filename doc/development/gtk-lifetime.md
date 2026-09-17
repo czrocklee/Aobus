@@ -1,9 +1,5 @@
 ---
 id: development.gtk-lifetime
-type: development
-status: current
-domain: linux-gtk
-summary: Defines lifetime-aligned GTK ownership, signal wiring, replaceable-source rebinding, view generations, and transient attachment policy.
 ---
 # GTK lifetime and wiring
 
@@ -12,8 +8,8 @@ summary: Defines lifetime-aligned GTK ownership, signal wiring, replaceable-sour
 This guide owns contributor policy for GTK object ownership, signal connections, replaceable dependencies, rebuildable widget generations, transient parenting, and delayed callbacks.
 It applies to code under `app/linux-gtk/` and its GTK tests.
 
-The [presentation architecture](../architecture/presentation.md) owns the runtime, UIModel, and frontend boundary.
-The [application shell architecture](../architecture/application-shell.md) owns declarative shell construction and teardown.
+The [presentation architecture](../system/presentation/README.md) owns the runtime, UIModel, and frontend boundary.
+The [application shell architecture](../system/shell/README.md) owns declarative shell construction and teardown.
 This guide does not redefine those boundaries or own user-visible behavior.
 
 ## Policy
@@ -157,6 +153,6 @@ If teardown is safe only because several move assignments or destructors run in 
 - [UIModel and GTK testing](test/uimodel-and-gtk.md)
 - [Runtime and asynchronous testing](test/runtime-and-async.md)
 - [Concurrency and sanitizer validation](test/concurrency-and-sanitizer.md)
-- [Presentation architecture](../architecture/presentation.md)
-- [Application shell architecture](../architecture/application-shell.md)
-- [GTK dialog lifecycle](../spec/linux-gtk/dialog-lifecycle.md)
+- [Presentation architecture](../system/presentation/README.md)
+- [Application shell architecture](../system/shell/README.md)
+- [GTK dialog lifecycle](../system/frontend/gtk/dialog-lifecycle.md)

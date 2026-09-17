@@ -1,37 +1,25 @@
 ---
 id: reference.application.desktop-successor-protocol
-type: reference
-status: current
-domain: application
-summary: Enumerates the private GTK and WinUI successor-process argument grammar and validation rules.
 ---
 # Desktop successor protocol
 
 ## Scope and version
 
 This reference is the exhaustive command-line surface carried from an Aobus
-GTK or WinUI parent to its successor process. It describes arguments after
+GTK, WinUI, or AppKit parent to its successor process. It describes arguments after
 `argv[0]`.
 
 The protocol is private to one installed build and has no external compatibility
 version. The owning behavior is the
-[desktop library lifecycle specification](../../spec/application/desktop-library-lifecycle.md).
+[desktop library lifecycle specification](../../system/desktop-library-lifecycle.md).
 
 ## Code boundary
 
 `ao_desktop_launch` owns parsing and encoding through
 [`LibrarySuccessorProtocol.h`](../../../app/include/ao/desktop/LibrarySuccessorProtocol.h).
-The [system architecture](../../architecture/system-overview.md) and
-[interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md)
+The [system architecture](../../system/overview.md) and
+[interactive session lifecycle architecture](../../system/session-lifecycle.md)
 own its dependency and composition placement.
-
-The target deliberately keeps `LibraryPath`, `LibrarySwitch`,
-`LibraryStartupPlanner`, and `LibrarySuccessorProtocol` as separate headers.
-Path identity has narrower consumers than startup planning, while protocol
-parsing alone needs span, string, and argument-container vocabulary. Merging
-them would increase invalidation and transitive includes for those narrow
-consumers without removing a behavioral boundary; the public concept report
-is the regression gate for that split.
 
 ## Surface
 
@@ -53,8 +41,13 @@ the optional scan argument's order, are not significant. The encoder always
 emits the canonical split root form in the order shown above.
 
 The shared parser consumes only these arguments and preserves every other
-argument in original order. GTK passes the remainder to its Aobus/GTK option
-partition. WinUI accepts no remainder and reports its first unknown argument.
+argument in original order. Consumers handle that remainder separately:
+
+- GTK passes it to its Aobus/GTK option partition.
+- WinUI accepts no remainder and reports its first unknown argument.
+- AppKit accepts `--state-root <path>` to select its native application-state root. Its parent appends that option to preserve the same state root in the successor. AppKit also accepts `--library <path>` only when no request has already been selected; it cannot override or accompany a parsed successor request. Other or incomplete native options fail startup.
+
+AppKit's native options are not shared protocol tokens. Their paths are resolved to absolute paths by the AppKit entry point; the shared `--library-root` still requires an absolute value at parsing.
 
 ## Validation rules
 
@@ -75,7 +68,7 @@ partition. WinUI accepts no remainder and reports its first unknown argument.
 
 The surface coordinates two processes from the same Aobus installation. It is
 not a user command-line API, serialized state, IPC compatibility boundary, or
-multi-version handshake. Changes must update both desktop consumers, this
+multi-version handshake. Changes must update all three desktop consumers, this
 reference, and parser/encoder round-trip tests atomically.
 
 ## Examples
@@ -84,6 +77,12 @@ Canonical GTK/Linux request:
 
 ```text
 --aobus-successor --library-root /home/listener/Music --scan-after-open
+```
+
+AppKit request preserving its native state root (shown as shell-quoted arguments):
+
+```text
+--aobus-successor --library-root /Users/listener/Music --state-root '/Users/listener/Library/Application Support/Aobus/macos'
 ```
 
 Canonical WinUI request before native UTF-16 command-line escaping:
@@ -106,6 +105,7 @@ Accepted equals spelling with an unrelated GTK argument preserved:
   the shared parse while preserving GTK arguments.
 - [`ProcessLauncher.cpp`](../../../app/windows-winui/platform/ProcessLauncher.cpp)
   converts the native Win32 command line to UTF-8 and rejects parser remainder.
+- AppKit [`DesktopMain.mm`](../../../app/macos-appkit/DesktopMain.mm) parses the shared request and native remainder; [`DesktopApplication.mm`](../../../app/macos-appkit/DesktopApplication.mm) encodes the request and appends the state root after releasing the session and application-state lease.
 
 ## Test authority
 
@@ -117,9 +117,10 @@ Accepted equals spelling with an unrelated GTK argument preserved:
 - [`DetachedProcessLauncherWindowsTest.cpp`](../../../test/unit/desktop/DetachedProcessLauncherWindowsTest.cpp)
   protects exact UTF-8-to-Windows argv transport for spaces, quotes, trailing
   backslashes, and Unicode.
+- [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) exercises successor reentry through production startup and launcher invocation under the native supervisor; it is not an exhaustive malformed-native-option test.
 
 ## Related documents
 
-- [Desktop library lifecycle specification](../../spec/application/desktop-library-lifecycle.md)
-- [GTK active-library lifecycle specification](../../spec/linux-gtk/active-library-lifecycle.md)
-- [Windows desktop shell specification](../../spec/shell/windows-desktop.md)
+- [Desktop library lifecycle specification](../../system/desktop-library-lifecycle.md)
+- [GTK active-library lifecycle specification](../../system/frontend/gtk/active-library-lifecycle.md)
+- [Windows desktop shell specification](../../system/frontend/windows.md)

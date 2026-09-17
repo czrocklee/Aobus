@@ -1,9 +1,5 @@
 ---
 id: shell.component-vocabulary
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates the layout component types more than one shell presents, the properties whose authored value means the same thing in each, and the rule for shell-owned extensions.
 ---
 # Shared component vocabulary
 
@@ -16,7 +12,7 @@ A shell's full inventory - the shared types it registers plus the types only it 
 
 ## Code boundary
 
-The vocabulary belongs to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
+The vocabulary belongs to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md).
 
 Membership is a claim about a concept both shells present, not about how either presents it.
 A shared entry decides the type id, the display name, the category, the child range, the action slots, whether runtime component state is persistent, and the properties whose authored value means the same thing everywhere.
@@ -177,7 +173,7 @@ The same soul button, with each shell's own extension alongside the shared prope
 - [`LayoutSchema.cpp`](../../../app/uimodel/layout/component/LayoutSchema.cpp) owns the canonical shared schema table.
 - [`PlaybackCommand.h`](../../../app/include/ao/uimodel/playback/command/PlaybackCommand.h) owns the `command` ids.
 - [`PlaybackPositionInteraction.h`](../../../app/include/ao/uimodel/playback/seek/PlaybackPositionInteraction.h) owns the `mode` readings.
-- Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component/) and [`LayoutSchema.cpp`](../../../app/windows-winui/layout/LayoutSchema.cpp) build each shell's schema from those entries.
+- Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component) and [`LayoutSchema.cpp`](../../../app/windows-winui/layout/LayoutSchema.cpp) build each shell's schema from those entries.
 
 ## Test authority
 
@@ -191,4 +187,4 @@ The same soul button, with each shell's own extension alongside the shared prope
 - [Shell layout document](layout-document.md)
 - [GTK layout schema and actions](layout-schema.md)
 - [Windows layout schema](../windows/layout-schema.md)
-- [Application shell architecture](../../architecture/application-shell.md)
+- [Application shell architecture](../../system/shell/README.md)

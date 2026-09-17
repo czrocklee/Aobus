@@ -1,15 +1,13 @@
 ---
 id: user.get-started
-type: user-guide
-status: current
-domain: workspace
-summary: Opens a music root, builds its library index, and starts playback in the GTK application.
 ---
-# Get started with Aobus
+# Get started with the Linux GTK application
 
 ## Outcome
 
-You have one music folder open as the active Aobus library, its supported audio files appear in the track view, and you can start playback.
+You have one music folder open in the Linux GTK application, its supported audio files appear in the track view, and you can start playback.
+
+For the native Windows application, follow [Use the Windows desktop](use-windows-desktop.md). For terminal-only use, follow [Use the CLI](use-cli.md) or [Use the terminal frontend](use-tui.md).
 
 ## Before you start
 
@@ -19,7 +17,7 @@ The current scan recognizes the formats listed in the [audio-file reference](../
 
 ## Steps
 
-1. Start the GTK application:
+1. On Linux, start the GTK application:
 
    ```bash
    aobus-gtk
@@ -40,11 +38,11 @@ The current scan recognizes the formats listed in the [audio-file reference](../
 - Starting a track updates the now-playing surface and transport controls.
 
 Files with unsupported extensions are skipped rather than reported as tracks.
-For scan classification and metadata-refresh behavior, see [library scan and audio identity](../spec/library/runtime/scan-and-identity.md).
+For scan classification and metadata-refresh behavior, see [library scan and audio identity](../system/library/scan-and-identity.md).
 
 ## Related documents
 
 - [Manage a library](manage-library.md)
 - [Play music](play-music.md)
-- [Active-library lifecycle](../spec/linux-gtk/active-library-lifecycle.md)
+- [Active-library lifecycle](../system/frontend/gtk/active-library-lifecycle.md)
 - [Library database location](../reference/persistence/location.md)

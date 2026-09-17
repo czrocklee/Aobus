@@ -1,0 +1,198 @@
+---
+id: playback.audio-quality
+---
+# Audio quality analysis
+
+## Scope
+
+This specification defines how Aobus analyzes the active audio delivery path, separates source fidelity from pipeline intervention, and proves or refuses bit-transparent conversions.
+[Quality values and presentation](quality-values.md) owns the semantic value tables, headline precedence, visual categories, and Soul policy; declarations own field types and catalogs own exact copy.
+
+Quality evidence ownership, graph composition, publication, and layer dependencies belong to the [audio quality architecture](quality.md) within the broader [playback architecture](README.md).
+Decoder output guarantees belong to the [decoder session specification](decoder-session.md); this document begins with the formats and evidence reported by the assembled playback graph.
+
+## Code boundary
+
+This contract spans the Core audio, application runtime, and UIModel layers from the [system architecture](../overview.md) under the ownership and dependency rules in the [audio quality architecture](quality.md).
+Its behavioral implementation is centered on [`QualityAnalyzer.cpp`](../../../lib/audio/QualityAnalyzer.cpp). Runtime carries the accepted result in `QualityState`; UIModel interprets that evidence for presentation without redefining analyzer severity.
+
+## Terminology
+
+- **Playback graph** is the merged Core and platform-provider graph for the accepted route generation.
+- **Playback path** is the active node chain beginning at `ao-source` and following active delivery connections.
+- **Source axis** classifies whether the encoded source is known lossless or lossy.
+- **Pipeline axis** classifies conversions and interventions after source identity.
+- **Assessment** is the ordered quality record for one node on the playback path.
+- **Finding** is one analyzer-owned observation attached to the node that owns or receives it.
+- **Fully verified** means the analyzed path reaches a Sink and every path node reports a format.
+- **Logical source precision** is `SignalFormat::precisionBits` and is owned only by the inspected signal.
+- **PCM nominal precision** and **representation width** come from a concrete `PcmFormat`'s `SampleEncoding`; they describe the encoded scale and container, not how many source-information bits survive.
+- **Round-trip proof** is evidence that an integer source can pass through float and return to an integer representation without losing its proven source precision.
+
+## Invariants
+
+- `analyzeAudioQuality` is a pure function of one `flow::Graph` snapshot.
+- Analysis begins at the node identified by `ao-source`; disconnected graph content is not treated as part of the playback path.
+- When active connections branch, a Sink-reaching chain takes precedence over branches from which no Sink is reachable, regardless of their relative connection order.
+- When multiple branches reach Sinks, depth-first traversal in stored connection order selects the first Sink-reaching chain.
+- Every node on the analyzed path produces exactly one ordered assessment, including nodes whose format is unknown.
+- Source lossiness affects only the source axis; every other finding affects only the pipeline axis.
+- `overall` is the worse analyzer severity across the two axes and is not the sole input to the user-facing headline.
+- A missing Sink or any missing path-node format clears full-verification confidence without fabricating a conversion finding.
+- A conversion finding is attached to the destination node because that node receives the changed representation.
+- Sample rate, channel count, and precision are evaluated independently, so one transition may produce multiple findings.
+- The analyzer owns the finding-to-severity mapping; runtime, UIModel, and frontend consumers use that severity instead of redefining it.
+- Software amplification is clipping-risk evidence, not proof that samples clipped.
+
+## State model
+
+An empty graph or a graph without `ao-source` produces Unknown axes and no assessments.
+The analyzer searches active connections for a Sink-reaching chain before falling back to an incomplete path, and it visits each node at most once during that search.
+Branches from which no Sink is reachable therefore remain graph evidence without replacing a reachable delivery path.
+If no Sink is reachable, the fallback path follows the first active outgoing connection in stored order at each node.
+It stops at a missing node, a node with no active outgoing connection, or immediately before the first repeated node; the resulting path is analyzed and remains partially verified.
+
+### Result axes and confidence
+
+When the playback path begins with a reported format, the source axis starts bitwise-perfect; an explicit lossy-source property changes only that axis to lossy.
+The pipeline axis starts bitwise-perfect and accumulates every non-source finding by analyzer severity.
+`overall` retains the worse of source and pipeline for compatibility, sorting, simple styling, and consumers that cannot show both axes.
+
+`fullyVerified` is independent confidence evidence.
+It is false when the path terminates before a Sink or any path node omits its format.
+Missing evidence does not by itself downgrade the pipeline axis because Aobus cannot claim that an unreported conversion occurred.
+
+Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
+A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.
+
+## Commands and transitions
+
+### Node properties
+
+The analyzer derives self-property findings from graph evidence:
+
+- a lossy source marks the source assessment and source axis;
+- non-unity software attenuation is a linear intervention and carries reported gain when available;
+- software gain above unity is a linear intervention with a distinct amplification finding used for clipping-risk presentation;
+- non-unity hardware volume is neutral to the digital-path rating;
+- non-unity volume whose hardware/software location is unknown is conservatively a linear intervention and carries a representative reported gain when available;
+- mute is a linear intervention;
+- an external active input into a path node is mixed-source intervention, with sorted unique application names when the provider supplies them. An unnamed external source still produces `MixedSources` with an empty name list.
+
+The software-amplification threshold is reported maximum software gain greater than `1.0F + 1e-4F`. Software attenuation carries positive minimum gain when reported, otherwise maximum gain.
+
+Hardware volume does not block a bit-perfect headline when it is the only non-BitPerfect detail.
+The runtime volume snapshot independently exposes whether control is hardware-assisted; current shared volume presentation annotates that state in its tooltip rather than making a quality finding responsible for volume-control UI.
+
+### Format transitions
+
+Transition findings carry source and destination formats. For each adjacent pair with reported formats, the analyzer compares:
+
+- sample rate, producing Resampling when it changes;
+- channel count, producing ChannelMapping when it changes;
+- signal/encoding domain, nominal bit count, and concrete representation width, producing lossless padding, lossless float mapping, proven lossless round trip, or truncation.
+
+Integer representation widening within the integer domain is lossless when the destination encoding's nominal precision is not smaller.
+Integer narrowing back to a precision that is still at least the proven source precision is a proven lossless round trip, because the discarded bits were only padding added upstream: a 24-bit source widened into a 32-bit container and delivered to a 24-bit endpoint loses nothing.
+Any earlier truncation, gain, mix, or resampling clears that proof, after which the same narrowing is truncation.
+Float representation widening within the float domain is lossless float mapping when destination nominal precision is not smaller; nominal narrowing is truncation.
+Integer-to-32-bit-float mapping is lossless only through 24 proven source bits.
+Other integer-to-float changes are quantizing truncation.
+Float-to-integer changes are truncation unless round-trip proof remains valid and the destination encoding can contain the proven source precision.
+
+The analyzer never derives alignment or container width from source precision.
+`Signed24PackedLe`, `Signed24In32Le`, and `Signed32Le` therefore remain distinguishable representation evidence.
+
+### Round-trip proof
+
+Proof starts only from an integer source with a reported format and records its logical precision.
+It survives bit-transparent padding and float mapping.
+It is invalidated by a missing format or any software/unclassified volume change, amplification, mute, resampling, channel mapping, truncation, or external mixing.
+
+A float source never establishes integer round-trip proof.
+Writing arbitrary float source samples to integer PCM therefore remains truncation even when the destination container is wide.
+
+### ALSA volume fallback
+
+ALSA mixer selection, explicit-write failures, and software-only application mute follow the [audio execution contract](audio-execution.md#alsa-mixer-controls).
+Hardware-assisted volume identifies a readable selected mixer control; initialization does not perform a write/readback probe or certify writability.
+Each graph publication takes volume, effective mute, and hardware/software control mode from one coherent mixer snapshot.
+Effective mute combines application intent with the observed hardware switch only for graph evidence; the Backend Muted property and playback-session persistence retain application intent alone.
+Application software mute and observed external hardware mute both produce mute evidence, without reclassifying hardware volume itself as software gain.
+
+A Volume-property observation may refresh native evidence and publish a read-triggered software fallback after releasing the mixer lock; the pure application-mute getter performs no hardware refresh.
+The fallback's reported gain describes the PCM gain actually applied, not the previously observed hardware volume or a rejected write request, and does not prove that shared hardware controls were restored.
+Player re-runs analysis on accepted graph evidence. Non-unity software gain is software-volume intervention; reported amplification follows the [node-property threshold](#node-properties).
+Explicit control requests can publish before PCM open, but a scalar observation during graph clear or after close cannot recreate the retired route.
+
+The shared [backend graph delivery contract](audio-execution.md#backend-graph-delivery) owns equal-graph suppression, non-nested ordinary and initial delivery, and synchronous retirement.
+Graph subscribers may re-enter read-only backend properties and Engine's state-only getters, but complete `status()`, control, and shutdown work must be deferred according to the [control and query serialization contract](audio-execution.md#control-and-query-serialization).
+Engine refreshes Volume capability metadata synchronously after valid volume or mute requests even when the backend reports failure; this does not depend on property-change notifications or read fallback gain over requested intent.
+The application snapshot therefore stops claiming hardware-assisted volume after fallback. NaN rejection precedes observation and publication and leaves that capability unchanged.
+
+### Core Audio route evidence
+
+The Core Audio shared backend publishes the exact client PCM stream separately
+from the device-side AUHAL signal description. That downstream description can
+prove resampling or channel/domain changes in the shared path, but it is not a
+direct-hardware endpoint claim. The per-instance AUHAL volume parameter is
+classified as software gain; non-unity gain or mute therefore invalidates
+bit-perfect and integer round-trip proof in the same way as other software
+volume intervention.
+
+## Failure and cancellation
+
+Unknown or incomplete provider evidence is not an analyzer failure.
+It produces Unknown state when no playback path exists, or a partially verified analyzed path when nodes exist but endpoint/format evidence is incomplete.
+The analyzer never invents sample rate, channel, precision, volume provenance, or external application names.
+
+Route-generation rejection, callback marshalling, and publication lifetime belong to the [audio quality architecture](quality.md).
+Provider graph changes may publish intermediate results while a route settles; behaviorally, `QualityChanged.ready` distinguishes whether Player currently has a usable selected output, and every accepted event agrees with the refreshed runtime snapshot.
+
+Software amplification remains `LinearIntervention` in analysis and becomes a Warning in UIModel.
+`Quality::Clipped` is reserved for independently observed sample-level clipping; the current graph analyzer does not emit it merely from gain metadata.
+
+## Persistence and versioning
+
+Quality analysis is derived live state.
+Graphs, assessments, findings, confidence, verdicts, and categories are not persisted in the playback session and are recomputed after route, track, or provider evidence changes.
+
+Classification or proof changes require analyzer tests and affected UIModel regressions. Changes to value interpretation, headline precedence, or Soul policy follow the [presentation compatibility boundary](quality-values.md#compatibility-and-evidence); translated copy remains catalog-owned.
+
+## Frontend observations
+
+`PlaybackState::quality` mirrors source axis, pipeline axis, overall severity, confidence, and ordered assessments.
+`PlaybackService::QualityChanged` publishes that same state plus route readiness on the callback executor.
+Consumers may observe more than one event during route settlement and must render the latest accepted snapshot rather than rely on an exact event count.
+
+UIModel derives a delivery-focused headline from the separate source, pipeline, and confidence evidence rather than using `overall` alone. The detailed [headline precedence](quality-values.md#structured-headline-precedence) and [Soul aura and motion](quality-values.md#soul-aura-and-motion) rules have one presentation owner.
+Frontend panels consume the ordered assessments and shared presentation rather than reanalyzing the graph; publication and lifetime belong to [quality ownership](quality.md).
+
+## Implementation map
+
+- [`QualityAnalyzer.h`](../../../include/ao/audio/QualityAnalyzer.h) defines result, assessment, and finding values.
+- [`QualityAnalyzer.cpp`](../../../lib/audio/QualityAnalyzer.cpp) owns graph traversal, evidence classification, proof, and severity aggregation.
+- [`Player.cpp`](../../../lib/audio/Player.cpp) builds the merged graph, gates route generations, and publishes accepted quality results.
+- Backend graph adapters under [`lib/audio/backend/`](../../../lib/audio/backend) provide platform route evidence.
+- [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) and [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) own internal runtime transport state; [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h) and [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) own coherent public publication.
+- [`AudioQualityFormatter`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h) and [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) own shared presentation derivation.
+
+## Test map
+
+- [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation.
+- [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) proves merged-graph handling, generation gating, incomplete provider evidence, callback marshalling, and readiness.
+- [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication; [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp) proves the concrete property-to-graph observation wiring and closed-state non-publication.
+- [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) proves Core Audio client/device format separation and software-gain evidence.
+- [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
+- [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
+- [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) proves transport-aware aura and motion policy.
+- [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) prove frontend consumption of shared presentation state.
+
+## Related documents
+
+- [Audio quality architecture](quality.md)
+- [Playback architecture](README.md)
+- [Audio quality surface reference](quality-values.md)
+- [PCM format surface](pcm-format.md)
+- [Decoder session](decoder-session.md)
+- [Audio execution and concurrency](audio-execution.md)

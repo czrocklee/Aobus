@@ -1,9 +1,6 @@
 ---
 id: decision.0009.gtk-process-library-restart
-type: decision
 status: accepted
-domain: application-shell
-summary: Uses a destructive successor-process restart for GTK library switching and GApplication replacement only for bus-name takeover.
 ---
 # Decision 0009: use process restart for GTK library switching
 
@@ -163,11 +160,11 @@ work.
 
 ## Current authorities
 
-- [Interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md)
-- [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
-- [Runtime execution architecture](../architecture/runtime-execution.md)
-- [Playback architecture](../architecture/playback.md)
-- [Persistence and managed-state architecture](../architecture/persistence-and-managed-state.md)
+- [Interactive session lifecycle architecture](../system/session-lifecycle.md)
+- [GTK active-library lifecycle specification](../system/frontend/gtk/active-library-lifecycle.md)
+- [Runtime execution architecture](../system/execution/README.md)
+- [Playback architecture](../system/playback/README.md)
+- [Persistence and managed-state architecture](../system/persistence/README.md)
 - [Decision 0005: use process restart for WinUI library switching](0005-use-process-restart-for-winui-library-switching.md)
 
 ## Supersession

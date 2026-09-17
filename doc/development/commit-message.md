@@ -1,9 +1,5 @@
 ---
 id: development.commit-message
-type: development
-status: current
-domain: development
-summary: Defines the commit structure and message rules for Aobus changes.
 ---
 # Commit message guidelines
 

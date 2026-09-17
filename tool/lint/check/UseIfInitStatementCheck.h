@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 3.2.6: Use init-statements in if and switch when they keep
+  /// Enforces init-statements in if and switch when they keep
   /// temporary scope local.
   class UseIfInitStatementCheck : public ClangTidyCheck
   {

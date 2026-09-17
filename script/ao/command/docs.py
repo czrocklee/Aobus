@@ -1,11 +1,11 @@
-"""ao docs — validate and manage the Aobus documentation system."""
+"""ao docs — check documentation integrity and semantic references."""
 
 import argparse
 import sys
 
 from ..core import doccheck
 
-HELP = "Validate the Aobus documentation structure and internal links"
+HELP = "Check documentation links, reachability, and semantic references"
 NAME = "docs"
 REQUIRES_BUILD_ENV = False
 
@@ -15,7 +15,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     actions = parser.add_subparsers(dest="docs_action", metavar="<action>", required=True)
 
     check = actions.add_parser(
-        "check", help="validate metadata, RFC dependencies, links, anchors, and index reachability"
+        "check", help="check optional metadata, links, anchors, reachability, and naming vocabulary"
     )
     check.set_defaults(func=run_check)
 

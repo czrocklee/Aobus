@@ -1,86 +1,33 @@
-# Aobus Contributor Guide
+# Contribute to Aobus
 
-This file is the human entry point for contribution rules. Detailed, numbered
-rules live in focused docs so review references stay stable without making this
-page hard to scan.
+Work from the repository root through `./ao` on Linux/macOS or `ao.bat` on Windows.
+Start with [build and setup](doc/development/build.md); read the [macOS](doc/development/macos.md) or [Windows](doc/development/windows.md) guide before native work.
 
-## Reference Documents
+## Make a change
 
-| Document | Scope |
-|---|---|
-| `doc/README.md` | Documentation tree organization and update expectations |
-| `doc/development/coding-style.md` | C++ standard, formatting, includes, language idioms, class design, const/threading rules |
-| `doc/development/naming-convention.md` | Identifier, type/contract, vocabulary, file, helper, and support naming |
-| `doc/development/commit-message.md` | Commit message format, scopes, subject/body guidance, and examples |
-| `doc/development/linting.md` | Lint policy: warning triage, suppression rules, cleanup playbook, Python hygiene, automatic-fix guidance |
-| `doc/development/compiler-cache.md` | Compiler-cache setup, shared host state, capacity, overrides, and CI integration |
-| `doc/development/macos.md` | Native macOS prerequisites, portal bootstrap, local state, supported commands, and current limitations |
-| `doc/development/windows.md` | Native Windows portal, local state and tool bootstrap, mapped-source workflow, and migration guidance |
-| `doc/architecture/failure-and-reporting.md` | Failure ownership, recovery, reporting, and presentation boundaries |
-| `doc/development/test.md` | Testing policy and detailed test-writing references |
+1. Find the affected topic in the [system guide](doc/system/README.md), or use the task links in [development](doc/development/README.md).
+2. Follow [coding style](doc/development/coding-style.md) and [naming](doc/development/naming-convention.md) for code you touch. Do not perform unrelated cleanup.
+3. Add tests at the lowest layer that proves the changed behavior; the [testing guide](doc/development/test.md) routes fixtures and task-specific advice.
+4. Update the current contract or user task when it changes. See [documentation maintenance](doc/development/documentation.md) when reorganizing knowledge; ordinary changes require neither an RFC nor an ADR.
+5. Select completion checks and native hosts from [validation and review](doc/development/test/validation-and-review.md). Include remaining gaps in the review description.
 
-## Development Workflow
+[Design review](doc/development/design-review.md) helps when changing ownership or public boundaries.
+The [linting guide](doc/development/linting.md) explains diagnosis and justified suppressions; checker implementation details are not prerequisite reading for ordinary feature work.
 
-Run repository operations through `./ao` on Linux or macOS and `ao.bat` on
-Windows from the project root. macOS and Windows source checkouts may be
-network-backed, but generated state must remain on the native host's local
-disk. Read `doc/development/macos.md` or `doc/development/windows.md` before
-overriding platform state locations.
+## Prepare a review
 
-Select completion checks by the changed behavior using
-[validation and review](doc/development/test/validation-and-review.md).
+Use the [commit-message guide](doc/development/commit-message.md) for the project's Conventional Commit format and scope selection.
+Explain motivation, consequential tradeoffs, and validation rather than duplicating the diff.
+Keep a proposal only when unresolved design choices benefit from written comparison, and retain a separate decision only when its reasons are worth revisiting.
 
-To enable the shared compiler cache, run `./ao setup compiler-cache` once for each native host user (`ao.bat setup compiler-cache` on Windows).
-Builds also work without compiler caching.
-Add `--shared-workspaces` to opt into the [supported shared-workspace layouts](doc/development/compiler-cache.md); this preference is disabled by default.
-Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` exports override the shared-store and capacity defaults, including values inherited from an older shell session.
-See [compiler-cache setup and migration](doc/development/compiler-cache.md) before adopting the managed defaults.
+## Optional local setup
 
-Install the repository's commit hooks explicitly with `./ao setup git-hooks`
-(`ao.bat setup git-hooks` on Windows).
-This assigns `core.hooksPath=script/git-hook` in the repository's local Git
-configuration, replacing any previous hook path; linked worktrees share that
-local configuration and resolve the relative hook path from their own checkout.
-Ordinary portal commands leave hook configuration unchanged.
-The Git environment must provide Python 3 to execute the commit-message hook.
-Hook installation is optional local setup. Repository rules still apply when
-hooks are absent; a local hook is not a server-side enforcement boundary.
+`./ao setup compiler-cache` enables the shared compiler cache for the host user; builds also work without it.
+Use `--shared-workspaces` only after reading the [cache setup and migration guide](doc/development/compiler-cache.md).
+Existing `CCACHE_DIR` and `CCACHE_MAXSIZE` environment overrides take precedence.
 
-## Coding Style Highlights
+`./ao setup git-hooks` explicitly installs the repository's commit hooks (`ao.bat setup git-hooks` on Windows).
+It replaces the repository's `core.hooksPath` with `script/git-hook`; linked worktrees share that configuration and resolve the relative path from their own checkout.
+The Git environment must provide Python 3. Hook installation is optional local setup, not a server-side enforcement boundary; ordinary portal commands do not change hook configuration.
 
-- Target `C++26` without modules.
-- Use `clang-format`; do not hand-format against the formatter.
-- Use `PascalCase` for types and classes, `camelCase` for functions and
-  variables, `_camelCase` for non-static class data members, and `kCamelCase` for
-  constants.
-- Use `doc/development/naming-convention.md` for type/contract names, vocabulary,
-  pointer/optional naming, file names, and helper/support allocation.
-- Prefer modern C++ library facilities when they clarify intent; use ordinary
-  loops when ranges obscure control flow, side effects, allocation, or debugging.
-- Prefer `ao::Result<T>` for recoverable failures, exceptions for programmer
-  errors or impossible states, and `std::optional<T>` for legitimate absence.
-- See `doc/development/coding-style.md` and `doc/development/naming-convention.md` for the
-  rules used in reviews.
-
-## Commit Message Highlights
-
-- Use Conventional Commits: `type(scope): imperative summary`.
-- Prefer the narrowest useful scope, such as `docs`, `gtk`, `runtime`, `test`,
-  `ao`, or the subsystem being changed.
-- Keep the subject focused on the primary technical contribution.
-- Use the body only when the motivation, tradeoff, or validation is not obvious
-  from the diff.
-- Do not mention AI tools, internal plans, or co-author signatures.
-- See `doc/development/commit-message.md` for examples and review rules.
-
-## Testing Highlights
-
-- Tests are behavior contracts, not coverage probes.
-- Prove observable behavior at the lowest layer that can express the contract:
-  `lib` -> `runtime` -> `uimodel` -> `linux-gtk`.
-- Name tests as `"Component - behavior under condition"` and tag them as
-  `[layer][type][subsystem]`.
-- Assert observable outcomes and postconditions, not just `called == true` or
-  `has_value()`.
-- See `doc/development/test.md` for testing policy, GTK guidance, coverage workflow,
-  and suite organization.
+AI agents also follow [AGENTS.md](AGENTS.md).

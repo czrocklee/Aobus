@@ -31,7 +31,7 @@ fi
 while IFS= read -r -d '' path; do
   file_count=$((file_count + 1))
   case "$path" in
-    AGENTS.md|CLAUDE.md|GEMINI.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md) ;;
+    AGENTS.md|CLAUDE.md|GEMINI.md|CONTRIBUTING.md|README.md|doc/*.md|.agents/skills/*.md|tool/*.md|app/*.md|asset/*.md) ;;
     *) docs_only=false ;;
   esac
 done < "$changed_files"

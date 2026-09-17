@@ -37,7 +37,7 @@ namespace clang::tidy::readability
       return;
     }
 
-    // Rule 3.4.7: Omit empty parameter list '()'
+    // Enforce the empty-parameter-list omission for no-argument lambdas.
     if (lambda->hasExplicitParameters() && lambda->getCallOperator()->getNumParams() == 0)
     {
       // We found a lambda with explicit but empty parameters.

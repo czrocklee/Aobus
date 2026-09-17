@@ -1,9 +1,5 @@
 ---
 id: workspace.session-state
-type: reference
-status: current
-domain: workspace
-summary: Enumerates the strict workspace group, versioned presentation vocabulary, exact fields, validation, and remaining compatibility limits.
 ---
 # Workspace session state
 
@@ -16,12 +12,12 @@ The required `presentationVersion` is currently `1`.
 It versions the nested presentation vocabulary, not the complete workspace document.
 The payload has no root workspace schema version or resource budget.
 
-The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, exact focus selection, commit, and failures after deserialization.
+The [workspace session specification](../../system/workspace/session.md) owns capture, candidate creation, exact focus selection, commit, and failures after deserialization.
 The [application managed-state surface](../persistence/application-config.md) owns document and writer registration.
 
 ## Code boundary
 
-This surface belongs to the application runtime layer from the [system architecture](../../architecture/system-overview.md), as refined by the [workspace architecture](../../architecture/workspace.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
+This surface belongs to the application runtime layer from the [system architecture](../../system/overview.md), as refined by the [workspace architecture](../../system/workspace/README.md) and [persistence and managed-state architecture](../../system/persistence/README.md).
 `WorkspaceSessionState` remains the runtime semantic candidate.
 Its `activeViewIndex` is a `std::size_t`; the private persistence DTO stores the field as `std::uint32_t`.
 The private `WorkspaceSessionDocument` and nested stored DTOs in `app/runtime/WorkspaceSessionYamlSchema.h` are the exact YAML model.
@@ -107,9 +103,8 @@ Every `customPresets` entry contains:
 - Closed field, sort, group, and direction tokens must resolve exactly and case-sensitively.
 - Duplicate sort fields and duplicate values within either field collection reject the document.
 - Presentation ids must be nonempty and deserialized presentations must have at least one visible field.
-- Serialization requires the semantic active-view index to fit the unsigned 32-bit DTO and satisfy the empty/nonempty bounds; violations return `InvalidState`.
-- Serialization requires every live view to supply an exact presentation and rejects invalid enum values, duplicate sort fields, invalid list ids, and empty ids as `InvalidState`.
-- Serialization normalizes permitted live defaults, deduplicates field collections, and supplies `title` for an empty visible set, so canonical output always has a nonempty `visibleFields` sequence.
+- Serialization has caller preconditions: the semantic active-view index must fit the unsigned 32-bit DTO and satisfy the empty/nonempty bounds; every view must have a nonzero list id and an exact presentation with valid enum values and identity. These are live workspace invariants, and violating them is a contract failure rather than a recoverable `InvalidState` result.
+- Before emission, serialization normalizes permitted presentation defaults, deduplicates `visibleFields` and `redundantFields`, and supplies `title` for an empty visible set. It does not deduplicate `sortBy`: duplicate sort fields violate a serialization precondition enforced by `AO_EXPECTS`. Canonical output therefore has unique sort and field entries and a nonempty `visibleFields` sequence.
 - Structural and semantic deserialize completes before `WorkspaceService` creates or installs candidate views.
 
 There is no schema-level limit for view count, preset count, string length, sort-term count, or field count.
@@ -191,11 +186,11 @@ Mapping order is not semantically significant; canonical explicit emission follo
 
 ## Related documents
 
-- [Workspace architecture](../../architecture/workspace.md)
-- [Workspace session specification](../../spec/workspace/session.md)
-- [Workspace navigation specification](../../spec/workspace/navigation.md)
+- [Workspace architecture](../../system/workspace/README.md)
+- [Workspace session specification](../../system/workspace/session.md)
+- [Workspace navigation specification](../../system/workspace/navigation.md)
 - [Persisted presentation state](../presentation/persisted-state.md)
 - [Application managed-state surface](../persistence/application-config.md)
-- [Grouped configuration store](../../spec/persistence/config-store.md)
+- [Grouped configuration store](../../system/persistence/config-store.md)
 - [Runtime track field catalog](../library/model/track-field.md)
 - [Track presentation presets](../presentation/track-preset.md)

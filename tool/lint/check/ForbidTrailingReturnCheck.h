@@ -10,8 +10,8 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 3.4.6: non-lambda functions must use traditional return type
-  /// syntax, not trailing return type.
+  /// Enforces traditional return-type syntax for non-lambda functions, rather
+  /// than trailing return-type syntax.
   class ForbidTrailingReturnCheck : public ClangTidyCheck
   {
   public:

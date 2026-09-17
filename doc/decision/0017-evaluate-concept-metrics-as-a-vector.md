@@ -1,9 +1,6 @@
 ---
 id: decision.0017.evaluate-concept-metrics-as-a-vector
-type: decision
 status: accepted
-domain: development
-summary: Records why concept-debloat metrics are evaluated together rather than as independent vetoes.
 ---
 # Decision 0017: evaluate concept metrics as a vector
 

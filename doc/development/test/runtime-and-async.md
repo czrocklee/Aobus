@@ -1,9 +1,5 @@
 ---
 id: development.test.runtime-and-async
-type: development
-status: current
-domain: development
-summary: Defines deterministic asynchronous, coroutine, callback, and runtime-service testing.
 ---
 # Runtime and asynchronous testing
 

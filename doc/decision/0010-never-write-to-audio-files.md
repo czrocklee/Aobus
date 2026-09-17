@@ -1,9 +1,6 @@
 ---
 id: decision.0010.never-write-audio-files
-type: decision
 status: accepted
-domain: library
-summary: Records that Aobus only ever reads audio files, which is the premise that makes cover-art re-extraction sound.
 ---
 # Decision 0010: never write to an audio file
 
@@ -77,10 +74,10 @@ while the same content already sat in the music files.
 
 ## Current authorities
 
-- [Cover-art delivery specification](../spec/resource/cover-art-delivery.md)
-- [Scan and identity specification](../spec/library/runtime/scan-and-identity.md)
-- [Media file reading specification](../spec/media/file-reading.md)
-- [Resource delivery architecture](../architecture/resource-delivery.md)
+- [Cover-art delivery specification](../system/resource/cover-art-delivery.md)
+- [Scan and identity specification](../system/library/scan-and-identity.md)
+- [Media file reading specification](../system/media/file-reading.md)
+- [Resource delivery architecture](../system/resource/README.md)
 
 ## Supersession
 

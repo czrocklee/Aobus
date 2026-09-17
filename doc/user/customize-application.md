@@ -1,9 +1,5 @@
 ---
 id: user.customize-application
-type: user-guide
-status: current
-domain: application-shell
-summary: Changes the GTK theme, layout preset, panel state, output preference, and keyboard bindings.
 ---
 # Customize the GTK application
 
@@ -49,5 +45,5 @@ Panel state and authored layout are different authorities: ordinary resizing cha
 - [Keymap reference](../reference/shell/keymap.md)
 - [GTK layout schema reference](../reference/shell/layout-schema.md)
 - [Layout state reference](../reference/shell/layout-state.md)
-- [Shell layout lifecycle](../spec/shell/layout-lifecycle.md)
-- [Shell layout adaptation](../spec/shell/layout-adaptation.md)
+- [Shell layout lifecycle](../system/shell/layout-lifecycle.md)
+- [Shell layout adaptation](../system/shell/layout-adaptation.md)
