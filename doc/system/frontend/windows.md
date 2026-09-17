@@ -123,8 +123,8 @@ Right-clicking an unselected track selects it before presenting the row menu; gr
 Opening Properties captures the current stable track ids and begins one revision-bound `TrackAuthoringSession`.
 The native dialog projects the shared compact form: built-in metadata and common custom values are editable, mixed values are identified without becoming replacement text, tags common to all targets can be added or removed, new custom keys can be added, and technical audio properties remain read-only.
 Metadata, tag, and custom-key suggestions use the active runtime completion vocabulary.
-Save is disabled for an unchanged or invalid draft, prevents the dialog's default synchronous close while work is pending, and closes only after the combined metadata/tag Properties submission is accepted.
-`Busy` and recoverable failures keep the draft open with an actionable message; stale or unavailable bindings disable submission and require reopening from the current selection.
+Save is disabled for an unchanged or invalid draft and prevents the dialog's default synchronous close while work is pending. Submitting freezes every mutable built-in, tag, custom-metadata, and suggestion control and rejects repeated Save routing; accepted submission stays frozen through the native deferred close.
+`Busy` and recoverable failures keep the draft open with an actionable message and restore each control's original editable, mixed, or read-only constraint without resetting the draft. Stale or unavailable bindings keep all mutation disabled and require reopening from the current selection.
 Window retirement closes the dialog and suppresses late completion before releasing its runtime and selection owners.
 
 The selected-row menu also offers [membership and saved-order actions](windows-library-workflows.md#membership-and-saved-order) over a captured stable selection.

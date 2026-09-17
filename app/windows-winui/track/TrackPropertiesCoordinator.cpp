@@ -163,6 +163,7 @@ namespace ao::winui
     _originalTags.clear();
     _currentTags.clear();
     _sessionInvalid = false;
+    _interactionState = InteractionState::Editing;
 
     auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
 
@@ -447,14 +448,14 @@ namespace ao::winui
       winrt::auto_revoke, [this](AutoSuggestBox const&, AutoSuggestBoxQuerySubmittedEventArgs const&) { addTag(); });
     addRow.Children().Append(_tagInput);
 
-    auto addButton = Button{};
-    addButton.Content(
+    _tagAddButton = Button{};
+    _tagAddButton.Content(
       winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
-    addButton.IsEnabled(_optSession && !_sessionInvalid);
+    _tagAddButton.IsEnabled(_optSession && !_sessionInvalid);
     _tagAddClickRevoker =
-      addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addTag(); });
-    Grid::SetColumn(addButton, 1);
-    addRow.Children().Append(addButton);
+      _tagAddButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addTag(); });
+    Grid::SetColumn(_tagAddButton, 1);
+    addRow.Children().Append(_tagAddButton);
     content.Children().Append(addRow);
   }
 
@@ -465,6 +466,7 @@ namespace ao::winui
       return;
     }
 
+    _tagRemoveButtons.clear();
     _tagRemoveClickRevokers.clear();
     _tagRows.Children().Clear();
 
@@ -486,16 +488,23 @@ namespace ao::winui
       auto remove = Button{};
       remove.Content(winrt::box_value(
         winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesDelete))));
-      remove.IsEnabled(_optSession && !_sessionInvalid && !_saving);
+      remove.IsEnabled(_optSession && !_sessionInvalid && _interactionState == InteractionState::Editing);
       _tagRemoveClickRevokers.push_back(remove.Click(winrt::auto_revoke,
                                                      [this, tag](IInspectable const&, RoutedEventArgs const&)
                                                      {
+                                                       if (_interactionState != InteractionState::Editing ||
+                                                           _sessionInvalid)
+                                                       {
+                                                         return;
+                                                       }
+
                                                        std::erase(_currentTags, tag);
                                                        rebuildTagRows();
                                                        updateSaveEnabled();
                                                      }));
       Grid::SetColumn(remove, 1);
       row.Children().Append(remove);
+      _tagRemoveButtons.push_back(remove);
       _tagRows.Children().Append(row);
     }
   }
@@ -515,7 +524,7 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::addTag()
   {
-    if (!_tagInput || _sessionInvalid || _saving)
+    if (!_tagInput || _sessionInvalid || _interactionState != InteractionState::Editing)
     {
       return;
     }
@@ -586,14 +595,14 @@ namespace ao::winui
     Grid::SetColumn(_customValueInput, 1);
     addRow.Children().Append(_customValueInput);
 
-    auto addButton = Button{};
-    addButton.Content(
+    _customAddButton = Button{};
+    _customAddButton.Content(
       winrt::box_value(winrt::to_hstring(i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesAdd))));
-    addButton.IsEnabled(_optSession && !_sessionInvalid);
-    _customAddClickRevoker =
-      addButton.Click(winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addCustomMetadata(); });
-    Grid::SetColumn(addButton, 2);
-    addRow.Children().Append(addButton);
+    _customAddButton.IsEnabled(_optSession && !_sessionInvalid);
+    _customAddClickRevoker = _customAddButton.Click(
+      winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { addCustomMetadata(); });
+    Grid::SetColumn(_customAddButton, 2);
+    addRow.Children().Append(_customAddButton);
     content.Children().Append(addRow);
   }
 
@@ -642,6 +651,7 @@ namespace ao::winui
       .optOriginalValue = editable ? item.value.optValue : std::nullopt,
       .panel = panel,
       .value = value,
+      .remove = remove,
       .valueChangedRevoker = std::move(valueChangedRevoker),
       .deleteClickRevoker = std::move(deleteClickRevoker),
       .existed = true,
@@ -684,7 +694,7 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::addCustomMetadata()
   {
-    if (!_customKeyInput || !_customValueInput || _sessionInvalid || _saving)
+    if (!_customKeyInput || !_customValueInput || _sessionInvalid || _interactionState != InteractionState::Editing)
     {
       return;
     }
@@ -706,7 +716,7 @@ namespace ao::winui
       existing->deleted = false;
       existing->editable = true;
       existing->panel.Visibility(Visibility::Visible);
-      existing->value.IsEnabled(_optSession && !_sessionInvalid);
+      updateEditorEnabled();
       existing->value.Text(_customValueInput.Text());
       _customKeyInput.Text(L"");
       _customValueInput.Text(L"");
@@ -734,7 +744,7 @@ namespace ao::winui
 
   void TrackPropertiesCoordinator::deleteCustomMetadata(std::size_t const index)
   {
-    if (index >= _customEditors.size() || _sessionInvalid || _saving)
+    if (index >= _customEditors.size() || _sessionInvalid || _interactionState != InteractionState::Editing)
     {
       return;
     }
@@ -742,6 +752,7 @@ namespace ao::winui
     auto& editor = _customEditors[index];
     editor.deleted = true;
     editor.panel.Visibility(Visibility::Collapsed);
+    updateEditorEnabled();
     updateSaveEnabled();
   }
 
@@ -852,6 +863,88 @@ namespace ao::winui
     return result;
   }
 
+  void TrackPropertiesCoordinator::setInteractionState(InteractionState const state)
+  {
+    _interactionState = state;
+
+    if (state != InteractionState::Editing)
+    {
+      for (auto const& editor : _fieldEditors)
+      {
+        if (editor.suggestBox)
+        {
+          editor.suggestBox.IsSuggestionListOpen(false);
+        }
+      }
+
+      if (_tagInput)
+      {
+        _tagInput.IsSuggestionListOpen(false);
+      }
+
+      if (_customKeyInput)
+      {
+        _customKeyInput.IsSuggestionListOpen(false);
+      }
+    }
+
+    updateEditorEnabled();
+    updateSaveEnabled();
+  }
+
+  void TrackPropertiesCoordinator::updateEditorEnabled()
+  {
+    auto const canEdit = _interactionState == InteractionState::Editing && _optSession && !_sessionInvalid;
+
+    for (auto const& editor : _fieldEditors)
+    {
+      if (editor.suggestBox)
+      {
+        editor.suggestBox.IsEnabled(canEdit && editor.enabled);
+      }
+      else if (editor.textBox)
+      {
+        editor.textBox.IsEnabled(canEdit && editor.enabled);
+      }
+    }
+
+    if (_tagInput)
+    {
+      _tagInput.IsEnabled(canEdit);
+    }
+
+    if (_tagAddButton)
+    {
+      _tagAddButton.IsEnabled(canEdit);
+    }
+
+    for (auto const& remove : _tagRemoveButtons)
+    {
+      remove.IsEnabled(canEdit);
+    }
+
+    if (_customKeyInput)
+    {
+      _customKeyInput.IsEnabled(canEdit);
+    }
+
+    if (_customValueInput)
+    {
+      _customValueInput.IsEnabled(canEdit);
+    }
+
+    if (_customAddButton)
+    {
+      _customAddButton.IsEnabled(canEdit);
+    }
+
+    for (auto const& editor : _customEditors)
+    {
+      editor.value.IsEnabled(canEdit && editor.editable && !editor.deleted);
+      editor.remove.IsEnabled(canEdit && !editor.deleted);
+    }
+  }
+
   void TrackPropertiesCoordinator::updateSaveEnabled()
   {
     if (_building || !_dialog)
@@ -859,8 +952,14 @@ namespace ao::winui
       return;
     }
 
+    if (_interactionState != InteractionState::Editing)
+    {
+      _dialog.IsPrimaryButtonEnabled(false);
+      return;
+    }
+
     auto const valid = !_sessionInvalid && _optSession && _optSession->isCurrent() && trySynchronizeFieldEdits();
-    _dialog.IsPrimaryButtonEnabled(valid && !_saving && hasPendingChanges());
+    _dialog.IsPrimaryButtonEnabled(valid && hasPendingChanges());
   }
 
   void TrackPropertiesCoordinator::setError(std::string text)
@@ -894,6 +993,7 @@ namespace ao::winui
 
     _sessionInvalid = true;
     setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
+    updateEditorEnabled();
     updateSaveEnabled();
   }
 
@@ -904,7 +1004,8 @@ namespace ao::winui
     // dialog open until the callback-executor completion says it was accepted.
     args.Cancel(true);
 
-    if (_saving || _sessionInvalid || !_optSession || !trySynchronizeFieldEdits() || !hasPendingChanges())
+    if (_interactionState != InteractionState::Editing || _sessionInvalid || !_optSession ||
+        !trySynchronizeFieldEdits() || !hasPendingChanges())
     {
       updateSaveEnabled();
       return;
@@ -914,10 +1015,8 @@ namespace ao::winui
     auto addTags = tagsToAdd();
     auto removeTags = tagsToRemove();
 
-    _saving = true;
     clearError();
-    updateSaveEnabled();
-    rebuildTagRows();
+    setInteractionState(InteractionState::Submitting);
 
     auto submission = submitChangesAsync(_optSession->submitPropertiesAsync(rt::TrackPropertiesPatch{
       .metadata = std::move(metadataPatch),
@@ -969,12 +1068,9 @@ namespace ao::winui
       return;
     }
 
-    _saving = false;
-
     if (!res)
     {
-      updateSaveEnabled();
-      rebuildTagRows();
+      setInteractionState(InteractionState::Editing);
       setError(i18n::requiredFormat(
         _textCatalog, i18n::MessageId::WinUiTrackPropertiesSaveFailed, {{"detail", res.error().message}}));
       return;
@@ -983,6 +1079,8 @@ namespace ao::winui
     switch (*res)
     {
       case TrackPropertiesCommitState::Accepted:
+        setInteractionState(InteractionState::Closing);
+
         if (_dialog)
         {
           _dialog.Hide();
@@ -990,16 +1088,14 @@ namespace ao::winui
 
         return;
       case TrackPropertiesCommitState::Busy:
-        updateSaveEnabled();
-        rebuildTagRows();
+        setInteractionState(InteractionState::Editing);
         setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::LibraryBusyTryAgain)});
         return;
       case TrackPropertiesCommitState::Stale:
       case TrackPropertiesCommitState::Unavailable:
         _sessionInvalid = true;
+        setInteractionState(InteractionState::Editing);
         setError(std::string{i18n::requiredText(_textCatalog, i18n::MessageId::WinUiTrackPropertiesStale)});
-        updateSaveEnabled();
-        rebuildTagRows();
         return;
     }
   }
@@ -1007,7 +1103,7 @@ namespace ao::winui
   void TrackPropertiesCoordinator::handleClosed()
   {
     _active = false;
-    _saving = false;
+    _interactionState = InteractionState::Closing;
     _ownerCallbackGate.retire();
     _tasks.cancelAll();
     _sessionInvalidatedSub.reset();
@@ -1017,6 +1113,7 @@ namespace ao::winui
     _tagTextChangedRevoker.revoke();
     _tagSubmittedRevoker.revoke();
     _tagAddClickRevoker.revoke();
+    _tagRemoveButtons.clear();
     _tagRemoveClickRevokers.clear();
     _customKeyChangedRevoker.revoke();
     _customAddClickRevoker.revoke();
@@ -1025,9 +1122,11 @@ namespace ao::winui
     _errorText = nullptr;
     _tagRows = nullptr;
     _tagInput = nullptr;
+    _tagAddButton = nullptr;
     _customRows = nullptr;
     _customKeyInput = nullptr;
     _customValueInput = nullptr;
+    _customAddButton = nullptr;
     _fieldEditors.clear();
     _customEditors.clear();
   }
@@ -1035,7 +1134,7 @@ namespace ao::winui
   void TrackPropertiesCoordinator::retire() noexcept
   {
     _active = false;
-    _saving = false;
+    _interactionState = InteractionState::Closing;
     _ownerCallbackGate.retire();
     _tasks.cancelAll();
     _sessionInvalidatedSub.reset();
@@ -1046,6 +1145,7 @@ namespace ao::winui
     _tagTextChangedRevoker.revoke();
     _tagSubmittedRevoker.revoke();
     _tagAddClickRevoker.revoke();
+    _tagRemoveButtons.clear();
     _tagRemoveClickRevokers.clear();
     _customKeyChangedRevoker.revoke();
     _customAddClickRevoker.revoke();
@@ -1062,9 +1162,11 @@ namespace ao::winui
     _errorText = nullptr;
     _tagRows = nullptr;
     _tagInput = nullptr;
+    _tagAddButton = nullptr;
     _customRows = nullptr;
     _customKeyInput = nullptr;
     _customValueInput = nullptr;
+    _customAddButton = nullptr;
     _fieldEditors.clear();
     _customEditors.clear();
   }
