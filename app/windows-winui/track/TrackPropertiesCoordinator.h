@@ -13,6 +13,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
@@ -99,7 +100,6 @@ namespace ao::winui
 
     Result<> prepareSession();
     void buildDialog();
-    void buildFieldModel();
     void buildMetadataSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTechnicalSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTagsSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
@@ -145,6 +145,7 @@ namespace ao::winui
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackId> _trackIds;
     uimodel::TrackPropertiesFormModel _formModel;
+    uimodel::TrackPropertiesFormSpec _formSpec;
     rt::TrackDetailSnapshot _snapshot;
     std::optional<uimodel::TrackAuthoringSession> _optSession;
     async::Subscription _sessionInvalidatedSub;

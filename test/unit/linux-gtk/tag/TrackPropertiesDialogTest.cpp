@@ -121,7 +121,7 @@ namespace ao::gtk::test
       CHECK(mixedCount >= 1);
     }
 
-    SECTION("missing authoring targets show why editing is unavailable")
+    SECTION("an incomplete selection shows no partial writable baseline")
     {
       auto dialog = TrackPropertiesDialog{window,
                                           runtime.async(),
@@ -129,7 +129,7 @@ namespace ao::gtk::test
                                           runtime.completion(),
                                           ao::test::englishMessageCatalog(),
                                           cache,
-                                          {TrackId{999999}}};
+                                          {trackId1, TrackId{999999}}};
 
       auto const labels = collectAll<Gtk::Label>(dialog);
       auto const errorLabelIter = std::ranges::find_if(
@@ -141,6 +141,11 @@ namespace ao::gtk::test
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(saveButton != nullptr);
       CHECK_FALSE(saveButton->get_sensitive());
+
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      CHECK(
+        std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; }));
+      CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_sensitive(); }));
     }
 
     SECTION("a busy save tells the user to retry")

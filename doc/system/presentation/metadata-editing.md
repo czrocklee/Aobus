@@ -35,7 +35,8 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 
 ## Invariants
 
-- `TrackDetailSnapshot` contains one coherent selection kind, id set, aggregate field array, custom metadata set, common-tag ids, and single-selection cover id.
+- `TrackDetailSnapshot` contains one coherent selection kind, id set, aggregate field array, custom metadata set, common-tag ids, single-selection cover id, and `libraryRevision`.
+  The revision follows the [captured-read revision semantics](../library/track-detail-projection.md#which-revision-does-a-snapshot-represent), not a guarantee of the latest library revision.
 - Synthetic display fields and tags are excluded from the built-in field grid; tags have their own editing surface.
 - Technical fields are never editable through metadata UI policy.
 - Mixed built-in/custom values display the shared `<Multiple Values>` marker, and that literal cannot be committed as a custom value.
@@ -73,6 +74,23 @@ An applied submission replaces the retained binding with that next-revision bind
 Operational failure, stale or unavailable status, maintenance observed during submission, or mismatched post-submit availability also invalidates it.
 
 ## Commands and transitions
+
+### Preparing a coherent Properties baseline
+
+A frontend must prepare the form from the same target sequence and committed revision that its authoring session bound:
+
+1. Bind the exact non-empty target sequence, preserving order and duplicate ids.
+2. Open a short-lived `LibrarySnapshot` and require its revision to equal the session's bound revision.
+3. Call `loadTrackPropertiesFormBaseline()` with that snapshot and the shared form specification.
+   The loader validates every target before aggregating values; success replaces the complete supplied form, while an empty or incomplete target set fails without changing it.
+4. Read any editable shared tags from that same snapshot.
+   Custom metadata uses its separate projection only when both the projection's exact target sequence and library revision match the binding.
+5. Release the read snapshot before publishing native UI state, attach the session invalidation observer, and perform the final `isCurrent()` check before installing the baseline.
+
+The form specification, not the frontend, decides each row's editor kind.
+Read-only rows remain visible baseline values but never enter the mutation patch, even if an adapter attempts to set an explicit edit.
+A preparation failure installs no writable or surviving-subset baseline: GTK and WinUI keep their dialog long enough to present the error, while AppKit and TUI reject opening their editors.
+Session ownership, subscriptions, native installation, and teardown remain frontend responsibilities.
 
 ### Built-in metadata
 
@@ -161,7 +179,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackDetailProjection.cpp`](../../../app/runtime/projection/TrackDetailProjection.cpp) builds and observes live snapshots.
 - [`TrackFieldGrid.cpp`](../../../app/uimodel/library/detail/TrackFieldGrid.cpp) and [`TrackFieldGrid.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGrid.h) own field selection and visibility.
 - [`TrackAuthoring.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoring.h) owns edit decoding, writable-field classification, patch construction, and inline mixed-value protection.
-- [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, mixed-value policy, explicit replacement intent, editor kinds, and patch construction.
+- [`TrackPropertiesFormModel.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormModel.h) and [`TrackPropertiesFormSpec.h`](../../../app/include/ao/uimodel/library/property/TrackPropertiesFormSpec.h) own compact form state, all-or-none standard-field baseline loading, mixed-value policy, explicit replacement intent, editor kinds, and patch construction.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
 - [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) owns the move-only value facade, stable targets, and bound revision; [`TrackAuthoringSession.cpp`](../../../app/uimodel/library/track/TrackAuthoringSession.cpp) owns shared asynchronous State, current-binding lifetime, invalidation, and result mapping.
@@ -175,6 +193,7 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 - [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridVisibilityTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp) protect field/visibility policy.
 - [`TrackAuthoringTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
 - [`TrackPropertiesFormModelTest.cpp`](../../../test/unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp) protects mixed-value omission, explicit mixed-field replacement, and common no-op omission.
+- [`TrackPropertiesFormBaselineTest.cpp`](../../../test/unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp) protects all-target validation, unchanged output on failure, ordered duplicate targets, empty and numeric-zero values, mixed aggregation, and read-only exclusion from patches.
 - [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, mixed values, and undo eligibility; GTK [`SemanticLayoutComponentsTest.cpp`](../../../test/unit/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp) protects pending-action timeout, stale and rejected terminal replay, and destruction during replay.
 - [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
 - [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, bound revision, no-op reuse, successful binding advancement, invalidation after another commit, move-only facade semantics, and a pending submission settling after moved and destroyed facades.

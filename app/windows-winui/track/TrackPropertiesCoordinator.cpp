@@ -102,6 +102,7 @@ namespace ao::winui
     , _textCatalog{std::move(config.textCatalog)}
     , _trackIds{std::move(config.trackIds)}
     , _formModel{_textCatalog}
+    , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
   {
   }
 
@@ -155,70 +156,63 @@ namespace ao::winui
 
   Result<> TrackPropertiesCoordinator::prepareSession()
   {
+    _sessionInvalidatedSub.reset();
+    _optSession.reset();
+    _formModel = uimodel::TrackPropertiesFormModel{_textCatalog};
+    _snapshot = {};
+    _originalTags.clear();
+    _currentTags.clear();
+    _sessionInvalid = false;
+
     auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
 
     if (!sessionRes)
     {
-      buildFieldModel();
-      auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
-      _snapshot = projectionPtr->snapshot();
-      _originalTags = _library.snapshot().selectionTags(_trackIds);
-      _currentTags = _originalTags;
       return std::unexpected{sessionRes.error()};
     }
 
-    _optSession.reset();
-    _optSession.emplace(std::move(*sessionRes));
-    _sessionInvalidatedSub = _optSession->onInvalidated([this] { handleSessionInvalidated(); });
-    auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
-    _snapshot = projectionPtr->snapshot();
-    _originalTags = _library.snapshot().selectionTags(_trackIds);
-    _currentTags = _originalTags;
-    buildFieldModel();
-    return {};
-  }
+    auto session = std::move(*sessionRes);
+    auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
+    auto tags = std::vector<std::string>{};
 
-  void TrackPropertiesCoordinator::buildFieldModel()
-  {
-    _formModel.clear();
-    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
-
-    for (auto const& row : spec.metadataRows)
     {
-      _formModel.addField(row.field, true);
-    }
+      auto snapshot = _library.snapshot();
 
-    for (auto const& row : spec.propertyRows)
-    {
-      _formModel.addField(row.field, false);
-    }
-
-    auto reader = _library.snapshot();
-    bool firstTrack = true;
-
-    for (auto const trackId : _trackIds)
-    {
-      if (!reader.containsTrack(trackId))
+      if (snapshot.revision() != session.boundRevision())
       {
-        continue;
+        return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
       }
 
-      auto const loadRow = [&](uimodel::TrackPropertiesFormRow const& row)
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
       {
-        if (auto const rawValue = reader.trackField(trackId, row.field); firstTrack)
-        {
-          _formModel.loadFirstTrackField(row.field, rawValue);
-        }
-        else
-        {
-          std::ignore = _formModel.tryMergeTrackField(row.field, rawValue);
-        }
-      };
-
-      std::ranges::for_each(spec.metadataRows, loadRow);
-      std::ranges::for_each(spec.propertyRows, loadRow);
-      firstTrack = false;
+        return std::unexpected{res.error()};
+      }
+      tags = snapshot.selectionTags(_trackIds);
     }
+
+    auto projectionPtr = _workspace.detailProjection(rt::ExplicitSelectionTarget{_trackIds});
+    auto detailSnapshot = projectionPtr->snapshot();
+
+    if (detailSnapshot.libraryRevision != session.boundRevision())
+    {
+      return makeError(Error::Code::InvalidState, "Track Properties detail data is not from the bound selection");
+    }
+
+    auto invalidatedSub = session.onInvalidated([this] { handleSessionInvalidated(); });
+
+    if (!session.isCurrent())
+    {
+      return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
+    }
+
+    _optSession.reset();
+    _optSession.emplace(std::move(session));
+    _sessionInvalidatedSub = std::move(invalidatedSub);
+    _formModel = std::move(baseline);
+    _snapshot = std::move(detailSnapshot);
+    _originalTags = std::move(tags);
+    _currentTags = _originalTags;
+    return {};
   }
 
   void TrackPropertiesCoordinator::buildDialog()
@@ -277,9 +271,7 @@ namespace ao::winui
   {
     content.Children().Append(
       makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackMetadataHeading)));
-    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
-
-    for (auto const& row : spec.metadataRows)
+    for (auto const& row : _formSpec.metadataRows)
     {
       appendFieldEditor(content, row);
     }
@@ -289,9 +281,7 @@ namespace ao::winui
   {
     content.Children().Append(
       makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackAudioPropertiesHeading)));
-    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
-
-    for (auto const& row : spec.propertyRows)
+    for (auto const& row : _formSpec.propertyRows)
     {
       appendFieldEditor(content, row);
     }

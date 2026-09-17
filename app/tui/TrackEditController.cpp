@@ -85,23 +85,6 @@ namespace ao::tui
       return row.optUriPath ? utility::pathToUtf8(*row.optUriPath) : std::string{};
     }
 
-    void loadFormField(uimodel::TrackPropertiesFormModel& form,
-                       rt::LibrarySnapshot const& snapshot,
-                       TrackId const trackId,
-                       rt::TrackField const field,
-                       bool const first)
-    {
-      auto rawValue = snapshot.trackField(trackId, field);
-
-      if (first)
-      {
-        form.loadFirstTrackField(field, std::move(rawValue));
-        return;
-      }
-
-      std::ignore = form.tryMergeTrackField(field, rawValue);
-    }
-
     /**
      * @brief Re-sorts @p tags so equal-frequency names follow the locale's collation.
      *
@@ -225,14 +208,12 @@ namespace ao::tui
                                                             : uimodel::TrackPropertiesFormSpec{};
       auto baseline = uimodel::TrackPropertiesFormModel{textCatalog};
 
-      for (auto const& row : spec.metadataRows)
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, targetIds, spec, baseline); !res)
       {
-        baseline.addField(row.field, true);
-      }
-
-      for (auto const& row : spec.propertyRows)
-      {
-        baseline.addField(row.field, false);
+        return std::unexpected{PreparationError{.messageId = res.error().code == Error::Code::NotFound
+                                                               ? MessageId::TuiEditorOpenIncomplete
+                                                               : MessageId::TuiEditorOpenUnavailable,
+                                                .detail = res.error().message}};
       }
 
       auto targets = std::vector<TrackEditorTarget>{};
@@ -249,19 +230,8 @@ namespace ao::tui
           return std::unexpected{PreparationError{.messageId = MessageId::TuiEditorOpenIncomplete}};
         }
 
-        auto const first = targets.empty();
         targets.push_back(
           TrackEditorTarget{.id = trackId, .title = identityTitle(*optRow), .path = identityPath(*optRow)});
-
-        for (auto const& row : spec.metadataRows)
-        {
-          loadFormField(baseline, snapshot, trackId, row.field, first);
-        }
-
-        for (auto const& row : spec.propertyRows)
-        {
-          loadFormField(baseline, snapshot, trackId, row.field, first);
-        }
       }
 
       auto tagCounts = snapshot.selectionTagCounts(targetIds);

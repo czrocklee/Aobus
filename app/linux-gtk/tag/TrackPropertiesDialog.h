@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -35,7 +36,6 @@ namespace ao::rt
 {
   class CompletionService;
   class Library;
-  class LibrarySnapshot;
 }
 
 namespace ao::async
@@ -81,9 +81,8 @@ namespace ao::gtk
     void buildUi();
     void buildMetadataTab();
     void buildPropertiesTab();
-    void loadSelectedTrackFields();
-    void loadFirstTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
-    void loadSubsequentTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
+    Result<> prepareEditing();
+    void applyLoadedFields();
     void handleSaveClicked();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
@@ -104,6 +103,7 @@ namespace ao::gtk
     async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;
+    uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
 
     Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};

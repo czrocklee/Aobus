@@ -41,6 +41,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -80,6 +81,7 @@ namespace ao::gtk
     , _trackIds{std::move(trackIds)}
     , _multipleTracks{_trackIds.size() > 1}
     , _formModel{_textCatalog}
+    , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
   {
     auto const title =
       _multipleTracks
@@ -91,19 +93,11 @@ namespace ao::gtk
     set_default_size(-1, -1);
 
     buildUi();
-    loadSelectedTrackFields();
 
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
-
-    if (sessionRes)
-    {
-      _optEditSession.emplace(std::move(*sessionRes));
-      _editSessionInvalidatedSubscription = _optEditSession->onInvalidated([this] { updateSaveEnabled(); });
-    }
-    else
+    if (auto const prepareRes = prepareEditing(); !prepareRes)
     {
       _sessionErrorLabel.set_text(i18n::requiredFormat(
-        _textCatalog, MessageId::GtkTrackEditingUnavailable, {{"detail", sessionRes.error().message}}));
+        _textCatalog, MessageId::GtkTrackEditingUnavailable, {{"detail", prepareRes.error().message}}));
       _sessionErrorLabel.set_visible(true);
 
       for (auto const& editor : _editors)
@@ -163,11 +157,8 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
-
-    for (auto const& row : spec.metadataRows)
+    for (auto const& row : _formSpec.metadataRows)
     {
-      _formModel.addField(row.field, true);
       auto* const widget = createEditorWidget(row.field, row.editorKind);
       list->addRow(std::string{row.label}, *widget);
 
@@ -195,11 +186,8 @@ namespace ao::gtk
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    auto const spec = uimodel::buildTrackPropertiesFormSpec(_textCatalog);
-
-    for (auto const& row : spec.propertyRows)
+    for (auto const& row : _formSpec.propertyRows)
     {
-      _formModel.addField(row.field, false);
       auto* const widget = createReadonlyWidget(row.field);
       list->addRow(std::string{row.label}, *widget);
 
@@ -252,73 +240,54 @@ namespace ao::gtk
     return label;
   }
 
-  void TrackPropertiesDialog::loadSelectedTrackFields()
+  Result<> TrackPropertiesDialog::prepareEditing()
   {
-    if (_trackIds.empty())
+    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
+
+    if (!sessionRes)
     {
-      return;
+      return std::unexpected{sessionRes.error()};
     }
 
-    auto scope = _library.snapshot();
+    auto session = std::move(*sessionRes);
 
-    bool first = true;
-
-    for (auto const trackId : _trackIds)
     {
-      if (!scope.trackRow(trackId))
+      auto snapshot = _library.snapshot();
+
+      if (snapshot.revision() != session.boundRevision())
       {
-        continue;
+        return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
       }
 
-      if (first)
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, _formModel); !res)
       {
-        loadFirstTrack(scope, trackId);
-        first = false;
-      }
-      else
-      {
-        loadSubsequentTrack(scope, trackId);
+        return res;
       }
     }
+
+    auto invalidatedSub = session.onInvalidated([this] { updateSaveEnabled(); });
+
+    if (!session.isCurrent())
+    {
+      return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
+    }
+
+    _optEditSession.emplace(std::move(session));
+    _editSessionInvalidatedSubscription = std::move(invalidatedSub);
+    applyLoadedFields();
+    return {};
   }
 
-  void TrackPropertiesDialog::loadFirstTrack(rt::LibrarySnapshot const& scope, TrackId trackId)
+  void TrackPropertiesDialog::applyLoadedFields()
   {
     for (auto& editor : _editors)
     {
-      auto const rawValue = scope.trackField(trackId, editor.field);
-      _formModel.loadFirstTrackField(editor.field, rawValue);
       applyRowView(editor.widget, _formModel.rowView(editor.field));
     }
 
     for (auto& row : _readonlyRows)
     {
-      auto const rawValue = scope.trackField(trackId, row.field);
-      _formModel.loadFirstTrackField(row.field, rawValue);
       applyRowView(row.widget, _formModel.rowView(row.field));
-    }
-
-    updateSaveEnabled();
-  }
-
-  void TrackPropertiesDialog::loadSubsequentTrack(rt::LibrarySnapshot const& scope, TrackId trackId)
-  {
-    for (auto& editor : _editors)
-    {
-      if (auto const rawValue = scope.trackField(trackId, editor.field);
-          _formModel.tryMergeTrackField(editor.field, rawValue))
-      {
-        applyRowView(editor.widget, _formModel.rowView(editor.field));
-      }
-    }
-
-    for (auto& row : _readonlyRows)
-    {
-      if (auto const rawValue = scope.trackField(trackId, row.field);
-          _formModel.tryMergeTrackField(row.field, rawValue))
-      {
-        applyRowView(row.widget, _formModel.rowView(row.field));
-      }
     }
 
     updateSaveEnabled();

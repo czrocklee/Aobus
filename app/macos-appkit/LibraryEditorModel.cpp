@@ -12,12 +12,12 @@
 #include <ao/query/Parser.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <expected>
 #include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -64,48 +65,68 @@ namespace ao::appkit
       return std::unexpected{sessionRes.error()};
     }
 
-    _state = {
-      .kind = LibraryEditorKind::Properties,
-      .title = i18n::requiredFormat(_catalog, i18n::MessageId::AppKitPropertiesSelection, {{"count", ids.size()}}),
-      .trackIds = std::move(ids)};
-    _optTrackSession.emplace(std::move(*sessionRes));
-    _form.clear();
-    auto spec = uimodel::buildTrackPropertiesFormSpec(_catalog);
-    spec.metadataRows.append_range(spec.propertyRows);
-    auto snapshot = _runtime.library().snapshot();
+    auto session = std::move(*sessionRes);
+    auto const spec = uimodel::buildTrackPropertiesFormSpec(_catalog);
+    auto baseline = uimodel::TrackPropertiesFormModel{_catalog};
+    auto fields = std::vector<LibraryEditorField>{};
+    auto tags = std::vector<std::string>{};
 
-    for (auto const& row : spec.metadataRows)
     {
-      _form.addField(row.field, row.editorKind != uimodel::TrackPropertiesFormEditorKind::ReadonlyText);
-      bool first = true;
+      auto snapshot = _runtime.library().snapshot();
 
-      for (auto id : _state.trackIds)
+      if (snapshot.revision() != session.boundRevision())
       {
-        if (auto value = snapshot.trackField(id, row.field); first)
-        {
-          _form.loadFirstTrackField(row.field, std::move(value));
-          first = false;
-        }
-        else
-        {
-          std::ignore = _form.tryMergeTrackField(row.field, value);
-        }
+        return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
       }
 
-      auto value = _form.rowView(row.field);
-      _state.fields.push_back({.spec = row, .text = value.mixed ? "" : value.text, .mixed = value.mixed});
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, ids, spec, baseline); !res)
+      {
+        return res;
+      }
+
+      auto rows = spec.metadataRows;
+      rows.append_range(spec.propertyRows);
+      fields.reserve(rows.size());
+
+      for (auto const& row : rows)
+      {
+        auto const value = baseline.rowView(row.field);
+        fields.push_back({.spec = row, .text = value.mixed ? "" : value.text, .mixed = value.mixed});
+      }
+
+      tags = snapshot.selectionTags(ids);
     }
 
-    _originalTags = snapshot.selectionTags(_state.trackIds);
-    _state.tags = _originalTags;
-    _invalidatedSub = _optTrackSession->onInvalidated(
+    auto invalidatedSub = session.onInvalidated(
       [this]
       {
+        if (_state.kind != LibraryEditorKind::Properties)
+        {
+          return;
+        }
+
         _state.stale = true;
         _state.optInvalidField.reset();
         _state.error = std::string{i18n::requiredText(_catalog, i18n::MessageId::AppKitPropertiesStale)};
         publishChange();
       });
+
+    if (!session.isCurrent())
+    {
+      return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
+    }
+
+    _state = {
+      .kind = LibraryEditorKind::Properties,
+      .title = i18n::requiredFormat(_catalog, i18n::MessageId::AppKitPropertiesSelection, {{"count", ids.size()}}),
+      .fields = std::move(fields),
+      .tags = tags,
+      .trackIds = std::move(ids),
+    };
+    _form = std::move(baseline);
+    _originalTags = std::move(tags);
+    _optTrackSession.emplace(std::move(session));
+    _invalidatedSub = std::move(invalidatedSub);
     publishChange();
     return {};
   }

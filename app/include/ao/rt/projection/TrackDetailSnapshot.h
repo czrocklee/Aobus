@@ -42,6 +42,7 @@ namespace ao::rt
   struct TrackDetailSnapshot final
   {
     SelectionKind selectionKind = SelectionKind::None;
+    std::uint64_t libraryRevision = 0;
     std::vector<TrackId> trackIds{};
 
     ResourceId singleCoverArtId{kInvalidResourceId};

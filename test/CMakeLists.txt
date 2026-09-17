@@ -473,6 +473,7 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TagEditTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp
     unit/uimodel/library/task/LibraryScanOutcomeTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
     unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp

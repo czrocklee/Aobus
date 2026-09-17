@@ -3,17 +3,27 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
+#include <span>
 #include <string>
 #include <vector>
 
+namespace ao::rt
+{
+  class LibrarySnapshot;
+}
+
 namespace ao::uimodel
 {
+  struct TrackPropertiesFormSpec;
+
   struct TrackPropertiesFormFieldState final
   {
     rt::TrackField field = rt::TrackField::Title;
@@ -52,10 +62,27 @@ namespace ao::uimodel
     rt::MetadataPatch buildPatch() const;
 
   private:
+    friend Result<> loadTrackPropertiesFormBaseline(rt::LibrarySnapshot const& snapshot,
+                                                    std::span<TrackId const> targetIds,
+                                                    TrackPropertiesFormSpec const& spec,
+                                                    TrackPropertiesFormModel& form);
+
     TrackPropertiesFormFieldState* findField(rt::TrackField field);
     TrackPropertiesFormFieldState const* findField(rt::TrackField field) const;
 
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackPropertiesFormFieldState> _fields;
   };
+
+  /**
+   * Replaces @p form with one standard-field baseline read from @p snapshot.
+   *
+   * The target sequence must be non-empty and every occurrence must name an
+   * existing track. Validation finishes before the form is changed; duplicate
+   * targets retain their input order and participate in aggregation.
+   */
+  Result<> loadTrackPropertiesFormBaseline(rt::LibrarySnapshot const& snapshot,
+                                           std::span<TrackId const> targetIds,
+                                           TrackPropertiesFormSpec const& spec,
+                                           TrackPropertiesFormModel& form);
 } // namespace ao::uimodel
