@@ -22,6 +22,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -66,6 +67,13 @@ namespace ao::gtk
     TrackPropertiesDialog& operator=(TrackPropertiesDialog&&) = delete;
 
   private:
+    enum class InteractionState : std::uint8_t
+    {
+      Editing,
+      Submitting,
+      Closing,
+    };
+
     struct FieldEditor final
     {
       rt::TrackField field = rt::TrackField::Title;
@@ -84,6 +92,8 @@ namespace ao::gtk
     Result<> prepareEditing();
     void applyLoadedFields();
     void handleSaveClicked();
+    void setInteractionState(InteractionState state);
+    void updateEditorSensitivity();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
 
@@ -105,6 +115,7 @@ namespace ao::gtk
     uimodel::TrackPropertiesFormModel _formModel;
     uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
+    InteractionState _interactionState = InteractionState::Editing;
 
     Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};
     Gtk::Label _sessionErrorLabel;

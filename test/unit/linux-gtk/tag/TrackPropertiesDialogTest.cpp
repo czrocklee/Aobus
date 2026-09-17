@@ -9,6 +9,7 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -16,18 +17,221 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <giomm/listmodel.h>
+#include <glib-object.h>
+#include <glibmm/main.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
+#include <gtkmm/object.h>
+#include <gtkmm/spinbutton.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    class [[nodiscard]] FinalizationObserver final
+    {
+    public:
+      explicit FinalizationObserver(GObject* const object) { ::g_weak_ref_init(&_weakRef, object); }
+      ~FinalizationObserver() { ::g_weak_ref_clear(&_weakRef); }
+
+      FinalizationObserver(FinalizationObserver const&) = delete;
+      FinalizationObserver& operator=(FinalizationObserver const&) = delete;
+      FinalizationObserver(FinalizationObserver&&) = delete;
+      FinalizationObserver& operator=(FinalizationObserver&&) = delete;
+
+      bool isFinalized()
+      {
+        auto* const object = ::g_weak_ref_get(&_weakRef);
+
+        if (object == nullptr)
+        {
+          return true;
+        }
+
+        ::g_object_unref(object);
+        return false;
+      }
+
+    private:
+      GWeakRef _weakRef{};
+    };
+  } // namespace
+
+  TEST_CASE("TrackPropertiesDialog - pending Save freezes the draft and commits before closing",
+            "[gtk][regression][dialog][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Before Save"}); }};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto parent = Gtk::Window{};
+    parent.present();
+
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(parent,
+                                                                  runtime.async(),
+                                                                  runtime.library(),
+                                                                  runtime.completion(),
+                                                                  ao::test::englishMessageCatalog(),
+                                                                  cache,
+                                                                  std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+
+    auto const entries = collectAll<Gtk::Entry>(*dialog);
+    auto const titleEntryIter =
+      std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Before Save"; });
+    REQUIRE(titleEntryIter != entries.end());
+    (*titleEntryIter)->set_text("After Save");
+    auto* const saveButton = findButtonByLabel(*dialog, "Save");
+    REQUIRE(saveButton != nullptr);
+    auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+
+    emitClicked(*saveButton);
+
+    auto const spinButtons = collectAll<Gtk::SpinButton>(*dialog);
+    CHECK_FALSE(saveButton->get_sensitive());
+    CHECK((*titleEntryIter)->get_text().raw() == "After Save");
+    CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_sensitive(); }));
+    CHECK(std::ranges::none_of(spinButtons, [](Gtk::SpinButton const* spin) { return spin->get_sensitive(); }));
+
+    REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId]
+                                  { return rt::test::runtimeTrackSpec(runtime, trackId).title == "After Save"; }));
+    CHECK(tryPumpGtkEventsUntil([&finalization] { return finalization.isFinalized(); }, std::chrono::seconds{2}));
+
+    parent.close();
+    drainGtkEvents();
+  }
+
+  TEST_CASE("TrackPropertiesDialog - stale managed Save keeps the editor open", "[gtk][regression][tag][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Stale Save"}); }};
+    auto& runtime = fixture.runtime();
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), textCatalog};
+    auto parent = Gtk::Window{};
+    parent.present();
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      parent, runtime.async(), runtime.library(), runtime.completion(), textCatalog, cache, std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+
+    auto const entries = collectAll<Gtk::Entry>(*dialog);
+    auto const titleEntryIter =
+      std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Stale Save"; });
+    REQUIRE(titleEntryIter != entries.end());
+    (*titleEntryIter)->set_text("Stale Replacement");
+    updateRuntimeTrack(runtime, trackId, [](library::test::TrackSpec& spec) { spec.title = "External Change"; });
+
+    dialog->response(Gtk::ResponseType::OK);
+
+    AppDialog* staleDialog = nullptr;
+    auto const staleMessage = std::string{i18n::requiredText(textCatalog, i18n::MessageId::GtkTrackSaveStale)};
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&staleDialog, dialog, &staleMessage]
+      {
+        for (auto* const topLevel : Gtk::Window::list_toplevels())
+        {
+          if (topLevel == dialog || findLabelByText(*topLevel, staleMessage) == nullptr)
+          {
+            continue;
+          }
+
+          staleDialog = dynamic_cast<AppDialog*>(topLevel);
+          return staleDialog != nullptr;
+        }
+
+        return false;
+      }));
+
+    CHECK(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
+    CHECK(dialog->get_visible());
+    CHECK((*titleEntryIter)->get_text().raw() == "Stale Replacement");
+    CHECK_FALSE((*titleEntryIter)->get_sensitive());
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "External Change");
+
+    staleDialog->response(Gtk::ResponseType::CLOSE);
+    dialog->response(Gtk::ResponseType::CLOSE);
+    parent.close();
+    drainGtkEvents();
+  }
+
+  TEST_CASE("TrackPropertiesDialog - post-publication owner teardown does not cancel an admitted Save",
+            "[gtk][regression][dialog][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "Owner Before"}); }};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto parentPtr = std::make_unique<Gtk::Window>();
+    parentPtr->present();
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(*parentPtr,
+                                                                  runtime.async(),
+                                                                  runtime.library(),
+                                                                  runtime.completion(),
+                                                                  ao::test::englishMessageCatalog(),
+                                                                  cache,
+                                                                  std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+
+    auto const entries = collectAll<Gtk::Entry>(*dialog);
+    auto const titleEntryIter =
+      std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Owner Before"; });
+    REQUIRE(titleEntryIter != entries.end());
+    (*titleEntryIter)->set_text("Owner After");
+    auto* const saveButton = findButtonByLabel(*dialog, "Save");
+    REQUIRE(saveButton != nullptr);
+
+    bool commitPublished = false;
+    auto destroyOwnerConnection = sigc::scoped_connection{};
+    [[maybe_unused]] auto const changeSub = runtime.library().changes().onChanged(
+      [&](rt::LibraryChangeSet const& changeSet)
+      {
+        if (std::ranges::contains(changeSet.tracksMutated, trackId))
+        {
+          commitPublished = true;
+          destroyOwnerConnection = Glib::signal_idle().connect(
+            [&parentPtr]
+            {
+              parentPtr.reset();
+              return false;
+            });
+        }
+      });
+
+    emitClicked(*saveButton);
+
+    REQUIRE(tryPumpGtkEventsUntil([&commitPublished, &parentPtr] { return commitPublished && !parentPtr; }));
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "Owner After");
+    CHECK_FALSE(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
+    drainGtkEvents();
+  }
+
   TEST_CASE("TrackPropertiesDialog - renders metadata fields for the selected tracks", "[gtk][unit][tag][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -123,13 +327,14 @@ namespace ao::gtk::test
 
     SECTION("an incomplete selection shows no partial writable baseline")
     {
+      auto const targetIds = GENERATE_COPY(std::vector{TrackId{999999}}, std::vector{trackId1, TrackId{999999}});
       auto dialog = TrackPropertiesDialog{window,
                                           runtime.async(),
                                           runtime.library(),
                                           runtime.completion(),
                                           ao::test::englishMessageCatalog(),
                                           cache,
-                                          {trackId1, TrackId{999999}}};
+                                          targetIds};
 
       auto const labels = collectAll<Gtk::Label>(dialog);
       auto const errorLabelIter = std::ranges::find_if(
@@ -148,7 +353,7 @@ namespace ao::gtk::test
       CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_sensitive(); }));
     }
 
-    SECTION("a busy save tells the user to retry")
+    SECTION("a repeated Save while submitting is rejected")
     {
       auto dialog = TrackPropertiesDialog{window,
                                           runtime.async(),
@@ -157,39 +362,32 @@ namespace ao::gtk::test
                                           ao::test::englishMessageCatalog(),
                                           cache,
                                           {trackId1}};
+      dialog.present();
       drainGtkEvents();
 
       auto const entries = collectAll<Gtk::Entry>(dialog);
       auto const titleEntryIter =
         std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; });
       REQUIRE(titleEntryIter != entries.end());
-      (*titleEntryIter)->set_text("Concurrent save");
+      (*titleEntryIter)->set_text("One submitted draft");
       auto* const saveButton = findButtonByLabel(dialog, "Save");
       REQUIRE(saveButton != nullptr);
+      std::size_t createdWindowCount = 0;
+      auto const topLevelsPtr = Gtk::Window::get_toplevels();
+      // The list model records creation before a transient can be destroyed with its owner.
+      [[maybe_unused]] auto const topLevelsConnection =
+        sigc::scoped_connection{topLevelsPtr->signal_items_changed().connect(
+          [&createdWindowCount](::guint, ::guint, ::guint const added) { createdWindowCount += added; })};
 
       emitClicked(*saveButton);
+      // Reflection deliberately bypasses GTK sensitivity to exercise the handler guard.
       emitClicked(*saveButton);
 
-      AppDialog* busyDialog = nullptr;
       REQUIRE(tryPumpGtkEventsUntil(
-        [&busyDialog, &dialog]
-        {
-          for (auto* const topLevel : Gtk::Window::list_toplevels())
-          {
-            if (topLevel == &dialog || findLabelByText(*topLevel, "Library is busy. Try again.") == nullptr)
-            {
-              continue;
-            }
-
-            busyDialog = dynamic_cast<AppDialog*>(topLevel);
-            return busyDialog != nullptr;
-          }
-
-          return false;
-        }));
-
-      busyDialog->response(Gtk::ResponseType::CLOSE);
-      drainGtkEvents();
+        [&runtime, trackId1] { return rt::test::runtimeTrackSpec(runtime, trackId1).title == "One submitted draft"; }));
+      CHECK(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+      CHECK(createdWindowCount == 0);
+      CHECK(rt::test::runtimeTrackSpec(runtime, trackId1).title == "One submitted draft");
     }
   }
 } // namespace ao::gtk::test

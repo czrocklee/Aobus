@@ -25,6 +25,7 @@
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
+#include <glibmm/main.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
@@ -37,6 +38,7 @@
 #include <gtkmm/spinbutton.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
+#include <sigc++/adaptors/track_obj.h>
 
 #include <algorithm>
 #include <charconv>
@@ -106,9 +108,23 @@ namespace ao::gtk
       }
     }
 
+    updateEditorSensitivity();
     updateSaveEnabled();
 
-    signal_response().connect([this](std::int32_t) { close(); });
+    signal_response().connect(
+      [this](std::int32_t const responseId)
+      {
+        if (responseId == Gtk::ResponseType::OK)
+        {
+          handleSaveClicked();
+          return;
+        }
+
+        if (responseId == Gtk::ResponseType::CLOSE || responseId == Gtk::ResponseType::CANCEL)
+        {
+          close();
+        }
+      });
   }
 
   TrackPropertiesDialog::~TrackPropertiesDialog() = default;
@@ -118,7 +134,6 @@ namespace ao::gtk
     addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonClose), Gtk::ResponseType::CLOSE);
     _saveButton = addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
     _saveButton->set_sensitive(false);
-    _saveButton->signal_clicked().connect([this] { handleSaveClicked(); });
 
     _notebook.add_css_class("ao-properties-notebook");
     _notebook.set_vexpand(true);
@@ -250,6 +265,7 @@ namespace ao::gtk
     }
 
     auto session = std::move(*sessionRes);
+    auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
 
     {
       auto snapshot = _library.snapshot();
@@ -259,13 +275,18 @@ namespace ao::gtk
         return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
       }
 
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, _formModel); !res)
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
       {
         return res;
       }
     }
 
-    auto invalidatedSub = session.onInvalidated([this] { updateSaveEnabled(); });
+    auto invalidatedSub = session.onInvalidated(
+      [this]
+      {
+        updateEditorSensitivity();
+        updateSaveEnabled();
+      });
 
     if (!session.isCurrent())
     {
@@ -274,6 +295,7 @@ namespace ao::gtk
 
     _optEditSession.emplace(std::move(session));
     _editSessionInvalidatedSubscription = std::move(invalidatedSub);
+    _formModel = std::move(baseline);
     applyLoadedFields();
     return {};
   }
@@ -290,12 +312,13 @@ namespace ao::gtk
       applyRowView(row.widget, _formModel.rowView(row.field));
     }
 
+    updateEditorSensitivity();
     updateSaveEnabled();
   }
 
   void TrackPropertiesDialog::handleSaveClicked()
   {
-    if (_trackIds.empty())
+    if (_interactionState != InteractionState::Editing || _trackIds.empty())
     {
       return;
     }
@@ -312,19 +335,19 @@ namespace ao::gtk
       return;
     }
 
-    _saveButton->set_sensitive(false);
+    auto submission = _optEditSession->submitMetadataAsync(std::move(patch));
+    setInteractionState(InteractionState::Submitting);
     spawnUiTask(
       _asyncRuntime,
       _tasks,
       *this,
       "track properties save",
-      _optEditSession->submitMetadataAsync(std::move(patch)),
+      std::move(submission),
       [](TrackPropertiesDialog* owner, Result<uimodel::TrackMetadataSubmitResult> replyRes)
       {
-        owner->updateSaveEnabled();
-
         if (!replyRes)
         {
+          owner->setInteractionState(InteractionState::Editing);
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
                                     replyRes.error().message,
@@ -337,6 +360,7 @@ namespace ao::gtk
 
         if (replyRes->status == rt::AuthoringStatus::Busy)
         {
+          owner->setInteractionState(InteractionState::Editing);
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveFailed),
                                     gtkText(owner->_textCatalog, MessageId::LibraryBusyTryAgain),
@@ -349,6 +373,7 @@ namespace ao::gtk
 
         if (replyRes->status != rt::AuthoringStatus::Applied && replyRes->status != rt::AuthoringStatus::NoOp)
         {
+          owner->setInteractionState(InteractionState::Editing);
           AppDialog::presentMessage(*owner,
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStaleTitle),
                                     gtkText(owner->_textCatalog, MessageId::GtkTrackSaveStale),
@@ -363,7 +388,38 @@ namespace ao::gtk
         {
           owner->_rowCache.invalidate(change.trackId);
         }
+
+        owner->setInteractionState(InteractionState::Closing);
+        Glib::signal_idle().connect_once(sigc::track_object([owner] { owner->close(); }, *owner));
       });
+  }
+
+  void TrackPropertiesDialog::setInteractionState(InteractionState const state)
+  {
+    _interactionState = state;
+
+    if (state != InteractionState::Editing)
+    {
+      for (auto const& binding : _completionControllers)
+      {
+        binding.controllerPtr->hide();
+      }
+    }
+
+    updateEditorSensitivity();
+    updateSaveEnabled();
+  }
+
+  void TrackPropertiesDialog::updateEditorSensitivity()
+  {
+    auto const sessionCanEdit = _optEditSession && _optEditSession->isCurrent();
+    auto const interactionCanEdit = _interactionState == InteractionState::Editing;
+
+    for (auto const& editor : _editors)
+    {
+      auto const view = _formModel.rowView(editor.field);
+      editor.widget->set_sensitive(sessionCanEdit && interactionCanEdit && view.editable && !view.mixed);
+    }
   }
 
   void TrackPropertiesDialog::updateSaveEnabled()
@@ -371,12 +427,18 @@ namespace ao::gtk
     if (_saveButton != nullptr)
     {
       auto const sessionCanSave = _optEditSession && _optEditSession->isCurrent();
-      _saveButton->set_sensitive(sessionCanSave && _formModel.canSave());
+      _saveButton->set_sensitive(_interactionState == InteractionState::Editing && sessionCanSave &&
+                                 _formModel.canSave());
     }
   }
 
   void TrackPropertiesDialog::updateEditorValue(rt::TrackField field, Gtk::Widget* widget)
   {
+    if (_interactionState != InteractionState::Editing)
+    {
+      return;
+    }
+
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
       _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
