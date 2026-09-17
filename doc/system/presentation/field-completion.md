@@ -1,0 +1,186 @@
+---
+id: presentation.field-completion
+---
+# Track-field value completion
+
+## Scope
+
+This specification defines live library vocabularies, their use while editing a single metadata field, and the aggregate vocabulary used by Quick-filter completion.
+It also owns the shared cache behavior consumed by query-value completion.
+
+Query cursor analysis, operators, and query-string insertion belong to [query expression completion](../query/expression-completion.md).
+Quick-filter field selection, ranking, replacement, and insertion belong to [track filtering](track-filter.md).
+The exact application field capabilities belong to the [track field catalog](../../reference/library/model/track-field.md).
+
+## Code boundary
+
+This contract belongs primarily to the **application runtime** and frontend adaptation layers from the [system architecture](../overview.md), as refined by the [library](../library/structure.md) and [presentation](README.md) architectures.
+`CompletionService` and `MetadataValueCompleter` are public under `app/include/ao/rt/completion/`; frontends consume their value types without reading the library directly.
+
+## Terminology
+
+- **Vocabulary entry** is a distinct non-empty value plus its library frequency.
+- **Value-completable field** is a runtime `TrackFieldDefinition` whose capability flag and dictionary-backed typed query bridge allow live-value suggestions.
+- **Vocabulary snapshot** is the source-preserving title, tag, custom-key, and dictionary-field frequency state captured by one track-store traversal.
+- **Aggregate specification** is a caller-provided unique set of title or dictionary-backed `TrackField` values plus optional tags.
+- **Materialization** converts selected snapshot frequencies into text entries and applies the ordering required by that consumer without reading track storage.
+- **Completion alias** is a transient lowercase ASCII spelling derived from admitted source text and used only to select that source value.
+
+## Invariants
+
+- The runtime field catalog is the only authority for the value-completable field set.
+- Every field carrying the value-completion flag has a resolvable typed query-field bridge to a dictionary-backed field; the completion service enforces that contract and derives value extraction from the bridge.
+- After one invalidation, every live vocabulary is derived from one shared snapshot until the next qualifying library change.
+- Vocabulary values are distinct and non-empty.
+- Tag, custom-key, and individual-field entries sort by descending frequency.
+  Interactive runtimes break equal-frequency ties by the current injected locale key and
+  then raw NFC bytes; runtimes without an ordering policy use raw NFC bytes.
+- Aggregate entries are intentionally unordered; their consumer selects and ranks only the matching top results.
+- Direct source-text matching has two strict tiers: a whole-value prefix, then a prefix beginning after an ASCII non-alphanumeric delimiter. Comparisons are ASCII-case-insensitive.
+- An injected interactive policy may add still-lower-ranked completion-alias prefix matches; runtimes without that policy preserve the two direct tiers and their order.
+- Alias matching never changes display text, insertion text, frequency identity, query truth, grouping, ordering, or durable library data.
+- Metadata value completion is unavailable for fields without the capability flag.
+- Applying a metadata-editor suggestion replaces the entire entry, not only the prefix before the cursor.
+- Query completion may reuse the vocabulary but serializes the selected value according to query syntax.
+- Aggregate values include only live track contributions, merge identical text across requested fields and tags, and never expose unused historical dictionary entries.
+- Frontend adapters own popover and input behavior, not vocabulary state.
+
+## State model
+
+`CompletionService` owns one source-preserving frequency snapshot plus separately materialized tag, custom-key, per-track-field, and aggregate results.
+The snapshot begins dirty and materialized results begin unavailable.
+
+Any committed track insertion, mutation, deletion, or library reset received through `LibraryChanges` marks the shared snapshot dirty.
+List-only changes leave the caches unchanged.
+
+The next non-empty supported live-vocabulary access rebuilds lazily by traversing `TrackStore` once with both hot and cold data available.
+That traversal counts:
+
+- inline titles by owned text;
+- tags and custom metadata keys by dictionary id; and
+- every dictionary-backed runtime track field by its typed query-field extractor.
+
+The service counts only dictionary ids with live contributions, compresses those
+counts by source, and discards the traversal working storage. Title reservations
+follow the current track count; per-source count reservations may reuse the prior
+snapshot's live cardinality as a hint. Unused append-only dictionary history does
+not size completion counters or alias records. Aggregate reservations follow the
+selected live source cardinalities, and equal text is merged directly without an
+additional dictionary-wide frequency array.
+No tag, custom-key, field, or aggregate access scans track storage again until another qualifying library change invalidates the snapshot.
+Individual result vectors remain lazy: tags, custom keys, and requested fields resolve their retained ids and sort in memory only when consumed.
+Locale keys are materialized once per value before that sort; comparators never
+invoke the ordering policy. Equal locale keys retain a raw NFC byte fallback so
+width, kana, or other secondary-strength ties remain deterministic without
+merging vocabulary entries. Replacing the injected ordering policy marks every
+materialized result vector stale, including the intentionally unordered aggregate.
+Retained frequencies and lazy alias records stay valid; later accesses rematerialize,
+and sorted vocabularies use the new policy.
+
+The aggregate cache retains only the most recently requested specification and copies its field identities rather than borrowing the caller's span.
+Changing that specification replaces only the materialized aggregate, not the shared frequency snapshot.
+Aggregate materialization combines the retained sources selected by the specification, resolves only ids with live contributions, and merges equal title/dictionary text.
+When equal text merges an inline title with a dictionary-backed source, the aggregate retains the dictionary alias handle deterministically while accumulating both frequencies.
+Materialization does not sort the complete aggregate because Quick-filter completion scans it once and retains only the requested top matches.
+An empty aggregate specification returns an empty result without forcing a snapshot rebuild.
+
+When a completion-alias policy is present, the snapshot owns one lazy alias record per live dictionary id and one per compacted title slot.
+Dictionary-backed field, tag, custom-key, and aggregate materializations borrow the same dictionary record, so repeated consumers and aggregate-specification changes do not repeat transliteration.
+Snapshot rebuilds deduplicate live dictionary ids with a temporary index and
+store the shared alias-record slot in each source frequency. Materialization
+addresses those slots directly without retaining or consulting a dictionary-id
+map. Both dictionary and title record vectors are allocated to the new snapshot's
+record counts before any materialization borrows aliases, releasing their previous
+buffers even when the vocabulary shrinks. Materialization never resizes these
+vectors while entries borrow their alias ranges.
+A snapshot rebuild clears every borrowing materialization before replacing the records, then derives aliases lazily for the new generation.
+
+## Alias derivation
+
+Completion aliases are available to every interactive user and do not depend on the presentation locale.
+The first implementation recognizes these source shapes:
+
+| Source shape | Derived spelling |
+|---|---|
+| ASCII or non-CJK text | None. |
+| Hiragana or Katakana | Each useful contiguous Kana run is romanized. |
+| Mixed Han and Kana | Only Kana runs are romanized; the Han portion receives no inferred reading. |
+| Han with no Kana | The complete value receives one explicitly Mandarin-pinyin alias. |
+
+Kana runs separated only by whitespace or punctuation also produce one concatenated whole-value alias; significant Han or Latin text prevents that concatenation.
+Aliases shorter than three ASCII letters/digits are discarded, equal aliases for one source are deduplicated, and a spelling equal to the compact direct source is removed.
+For example, `zhoujielun` may select `周杰倫`, and `hikaru` may select `宇多田ヒカル`.
+The code points in `久石譲` do not carry a Japanese reading: the first slice may expose the explicit Mandarin `jiushirang` alias but does not fabricate `hisaishijoe`.
+
+The policy does not infer whether Han text is Chinese, Japanese, Korean, or another language, and it does not consume a UI-locale hint.
+Japanese Kanji readings, morphological analysis, user-authored aliases, imported sort/furigana tags, and direct transliteration-aware query matching require separate contracts.
+Aliases are snapshot-only memory and never enter LMDB, YAML, configuration, workspace/session state, source expressions, query plans, or audio-file writes.
+
+## Commands and transitions
+
+`MetadataValueCompleter::complete(prefix, limit)` returns at most `limit` matching entries.
+A zero limit or unsupported field returns an empty result.
+Whole-value prefix matches form the first result tier, interior ASCII-delimited word-prefix matches the second, and alias matches not already present the third.
+The limit applies after tiering, and each tier retains the vocabulary's existing frequency and tie order.
+Word-prefix matching deliberately does not perform fuzzy correction or Unicode word segmentation: `pinnock` may select `Trevor Pinnock`, while `innock` and misspelled `pinnok` do not.
+The typed alias prefix is compacted without ICU by lowercasing ASCII letters, retaining digits, and discarding every other ASCII character; any non-ASCII byte or fewer than three retained characters disables alias matching for that request.
+
+Its frontend provider clamps the cursor to the input length and matches the text before that cursor.
+When matches exist, the returned replacement range covers the complete original entry, including any text after the cursor.
+When no matches exist, the provider returns no result.
+
+Bulk vocabulary ordering is retained through item creation, and frequency is carried as a typed `CompletionDetailKind::Frequency` count.
+UIModel's presentation catalog formats that count; runtime does not author the secondary label.
+
+`CompletionService::aggregateValues(spec)` returns the cached live aggregate for a validated specification.
+The service does not decide which fields form a product search surface or how aggregate values are matched, ranked, or inserted.
+
+## Failure and cancellation
+
+Completion is synchronous and has no cancellation point.
+The shared rebuild uses one active library read transaction; expected storage failures follow the runtime library error policy rather than becoming a second frontend storage path.
+Failure to derive a key from already-admitted library text is an invariant
+failure; one result never falls back midway and mixes locale and byte keys.
+The same rule applies to completion-alias derivation.
+The concrete policy constructs its reusable Kana and Han transforms lazily on first relevant use; ASCII values return before ICU normalization or transliteration.
+
+The caches contain no synchronization.
+Construction records the owner thread, and every cache access, dirty notification, and lazy rebuild asserts that same thread.
+`LibraryChanges` delivery must therefore remain marshalled onto the callback/owner executor before invalidation.
+
+## Frontend observations
+
+Metadata editors display the raw vocabulary value and insert the same value, including when a romanized alias found it.
+The typed frequency detail may be rendered as secondary text after catalog resolution.
+
+Interactive Quick filters consume aggregate values through the UIModel `TrackFilterCompleter`; frontends do not request storage fields independently.
+
+GTK's shared entry controller owns list model, popover, keyboard, pointer, and widget lifetime behavior.
+The runtime provider contains no GTK types.
+
+## Implementation map
+
+- [`FieldCatalog.h`](../../../include/ao/query/FieldCatalog.h) defines typed query-variable descriptors.
+- [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) defines the public capability flag and typed query bridge.
+- [`CompletionService.h`](../../../app/include/ao/rt/completion/CompletionService.h) defines vocabulary ownership.
+- [`CompletionAliasPolicy.h`](../../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the optional ICU-free derivation seam.
+- [`IcuCompletionAliases.cpp`](../../../app/i18n/IcuCompletionAliases.cpp) owns the interactive Kana and explicitly Mandarin Han transforms.
+- [`CompletionService.cpp`](../../../app/runtime/completion/CompletionService.cpp) owns the shared scan, source frequencies, materialization, ordering-policy replacement, caching, and thread confinement.
+- [`MetadataValueCompleter.cpp`](../../../app/runtime/completion/MetadataValueCompleter.cpp) adapts one field to completion items.
+- [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) adapts an aggregate vocabulary according to Quick-filter policy.
+- [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves typed completion detail for interactive frontends.
+- [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK entry adapter.
+
+## Test map
+
+- [`CompletionServiceTest.cpp`](../../../test/unit/runtime/completion/CompletionServiceTest.cpp) protects shared-snapshot coherence, alias reuse and lifetime, tag/custom/field/aggregate materialization, frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation.
+- [`MetadataValueCompleterTest.cpp`](../../../test/unit/runtime/completion/MetadataValueCompleterTest.cpp) protects whole-value/word/alias tiering, source-text insertion, field gating, prefix matching, limits, and whole-entry replacement.
+- [`CompletionVocabularyBaselineTest.cpp`](../../../test/perf/CompletionVocabularyBaselineTest.cpp) records shared rebuild, in-memory materialization, and cached Quick-filter lookup latency at representative cardinalities without a machine-dependent pass threshold.
+- GTK completion-controller tests protect frontend application of the neutral result.
+
+## Related documents
+
+- [Presentation architecture](README.md)
+- [Library architecture](../library/structure.md)
+- [Query expression completion](../query/expression-completion.md)
+- [Track field catalog](../../reference/library/model/track-field.md)

@@ -1,57 +1,47 @@
 ---
 id: development.index
-type: index
-status: current
-domain: documentation
-summary: Routes contributor setup, standards, testing, tooling, and repository workflow.
 ---
-# Development documentation
+# Develop Aobus
 
-This area tells contributors how to work in the Aobus repository.
-It owns platform setup, coding and naming standards, testing, validation, linting, dependency governance, design and application-layer review, and project tooling.
+Use the [contributor workflow](../../CONTRIBUTING.md) to begin a change, then choose only the references needed for the task.
+Product structure and behavior live in the [system guide](../system/README.md), not in a second copy here.
 
-Product behavior does not belong here even when contributors are the primary readers.
-Link to architecture, specifications, and reference for the contract being implemented.
+## Build and setup
 
-Use the [development guide template](../template/development.md) for a new contributor policy or workflow.
+- [Build and run](build.md): Linux quick start, portal commands, build-tree selection, locks, and dependency inspection.
+- [macOS](macos.md) and [Windows](windows.md): native bootstrap, toolchains, state, platform commands, and limitations. Use `ao.bat` on Windows.
+- [Compiler cache](compiler-cache.md): optional setup, shared workspaces, and cache ownership.
+- [Optimized builds](optimized-builds.md): Release, IPO/LTO, profiling, and performance investigation.
 
-## Repository workflow
+## Implement a change
 
-- [C++ coding style](coding-style.md) defines language, formatting, include, class-design, const, and threading rules.
-- [Design review](design-review.md) guides proportionate review of ownership, public boundaries, abstractions, and structural refactors.
-- [Naming convention](naming-convention.md) owns identifiers, type and contract roles, vocabulary, files, and support-code allocation.
-- [Commit message](commit-message.md) defines commit structure, scopes, subjects, bodies, and review expectations.
-- [Linting](linting.md) defines warning triage, suppression, cleanup, Python hygiene, and automatic-fix policy.
-- [Dependency governance](dependency-governance.md) owns cross-platform dependency policy, reproducibility, and exceptions.
-- [Dependency upgrade](dependency-upgrade.md) gives the supported procedure for changing dependency and tool pins.
-- [Compiler cache](compiler-cache.md) defines explicit setup, shared host state, capacity, overrides, and CI integration.
-- [Concept metrics](concept-metrics.md) owns `./ao deps report --concepts` and its measurement denominator.
-- [Optimized builds](optimized-builds.md) defines Release, IPO/LTO, and sampling-oriented profiling roles and workflows.
-- [macOS development](macos.md) covers native prerequisites, portal bootstrap, local state, supported commands, and current limitations.
-- [Windows development](windows.md) covers the native Windows portal, local state, tool bootstrap, and mapped-source workflow.
-- [macOS portability compromises](macos-portability.md) registers every macOS-driven deviation with the condition and procedure for removing it.
-- [Managed-state schemas](managed-state-schemas.md) defines owner-local YAML schema policy, implementation workflow, test evidence, and schema guardrails.
+| Task | Guidance |
+|---|---|
+| Write ordinary C++ | [Coding style](coding-style.md) and [naming](naming-convention.md) |
+| Change ownership, a boundary, or an abstraction | [Design review](design-review.md) and the relevant [system topic](../system/README.md) |
+| Place runtime, UIModel, or frontend behavior | [Application-layer review](application-layer-review.md) and [UIModel organization](uimodel-organization.md) |
+| Change GTK signal wiring, binding, or teardown | [GTK lifetime](gtk-lifetime.md) |
+| Change GTK appearance | [GTK style](gtk-style.md) |
+| Add messages, translations, or a locale | [Localization workflow](localization.md) |
+| Change a managed payload | [Managed-state schemas](managed-state-schemas.md) |
+| Write or reorganize documentation | [Documentation maintenance](documentation.md) |
 
-## Testing
+## Test and validate
 
-- [Testing policy](test.md) is the contributor entry point and default test design contract.
-- [Layer selection](test/layer-selection.md) chooses the lowest test layer that can prove a behavior.
-- [Naming and assertions](test/naming-and-assertion.md) defines Catch2 names, tags, structure, and assertion quality.
-- [Fixtures and helpers](test/fixture-and-helper.md) defines fixtures, fakes, test data, testability seams, and filesystem setup.
-- [Runtime and asynchronous testing](test/runtime-and-async.md) defines deterministic executors, callbacks, coroutines, and lifetime checks.
-- [Concurrency and sanitizer validation](test/concurrency-and-sanitizer.md) defines race matrices and sanitizer gates.
-- [UIModel and GTK testing](test/uimodel-and-gtk.md) defines policy-versus-adapter placement, fixtures, lifecycle, and geometry checks.
-- [Coverage workflow](test/coverage-workflow.md) defines measurement, analysis, test selection, and verification.
-- [Validation and review](test/validation-and-review.md) defines file integration, regression expectations, gates, smells, and review checks.
-- [Test suites](test/test-suite.md) enumerates the `./ao test` suites and suite groups.
-- [Performance review](test/performance.md) defines the standalone sampled benchmark and structured evidence workflow.
+The [testing guide](test.md) routes layer selection, fixtures, assertions, async, concurrency, UIModel/GTK, coverage, and performance tasks.
+[Validation and review](test/validation-and-review.md) chooses completion checks and native hosts from the changed behavior; [test suites](test/test-suite.md) explains the available portal suites.
+Do not read every testing topic before making an ordinary change.
 
-## Application layers
+## Diagnose or maintain tools
 
-- [Application-layer review](application-layer-review.md) turns runtime, UIModel, and frontend ownership into a contributor review workflow.
-- [UIModel organization](uimodel-organization.md) defines namespaces, feature capsules, role names, dependencies, authored-copy classification, and mirrored tests.
+- [Linting](linting.md): investigate findings, scope checks, and decide whether a suppression is justified.
+- [Naming checker semantics](lint/naming-checks.md): framework exceptions and the bounded automatic proofs behind diagnostics.
+- [Checker development](lint/checker-development.md): AST identity, fixture design, registration, and fixes.
+- [Dependency governance](dependency-governance.md) and [dependency upgrade](dependency-upgrade.md): locate existing dependencies or change their pins.
+- [Concept metrics](concept-metrics.md): understand dependency measurements rather than treating one number as a verdict.
+- [macOS portability compromises](macos-portability.md): current deviations and their removal conditions.
 
-## Linux GTK
+## Prepare a review
 
-- [GTK style](gtk-style.md) defines theme tokens, structural variants, shared component CSS, motion, and visual-complexity policy.
-- [GTK lifetime and wiring](gtk-lifetime.md) defines signal ownership, replaceable-source rebinding, disposable view generations, transient parenting, and callback-lifetime policy.
+Use the change-specific validation above and the [commit-message guide](commit-message.md).
+[Decisions](../decision/README.md) preserve important historical reasons; a normal change does not require a proposal or a new decision record.

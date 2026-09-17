@@ -1,15 +1,11 @@
 ---
 id: development.test.coverage-workflow
-type: development
-status: current
-domain: development
-summary: Defines the coverage measurement, analysis, and verification workflow.
 ---
 # Coverage workflow
 
 ## Generating and inspecting coverage
 
-Do not blindly guess which lines are uncovered, and do not manually run gcov or cmake. Run the coverage script with an optional test filter:
+Coverage measurement is supported on Linux only because the portal uses GCC and gcov. Do not blindly guess which lines are uncovered, and do not manually run gcov or CMake. Run the coverage command with an optional Catch2 filter:
 
 ```bash
 ./ao coverage "SmartListEvaluator*"
@@ -17,14 +13,15 @@ Do not blindly guess which lines are uncovered, and do not manually run gcov or 
 
 This script will automatically:
 
-1. Ensure the coverage build tree (`/tmp/build/<project-directory>/coverage`) is initialized.
+1. Ensure the coverage build tree is initialized (normally `/tmp/build/<project-directory>/coverage`, or under `AOBUS_BUILD_ROOT` when overridden).
 2. Build the tests.
 3. Run the coverage test target with the provided filter.
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).
 5. Output the exact missing lines with 6 lines of surrounding context.
 
-Select `--cli`, `--tui`, or `--gtk` for a frontend suite; `--all` runs core, CLI, TUI, and GTK.
-Coverage extraction includes test objects so production headers instantiated only in tests contribute; reports retain only `app/`, `lib/`, and `include/` sources.
+Select `--cli`, `--tui`, or `--gtk` for a frontend suite; the default is core, and `--all` runs core, TUI, CLI, and GTK. Use repeatable `--scope <repository-relative-prefix>` options to limit the reported source set without changing which tests run. An explicitly requested scope with no measurable lines fails rather than reporting a vacuous percentage.
+
+Coverage extraction includes test objects so production headers instantiated only in tests contribute; reports retain only `app/`, `lib/`, and `include/` sources. Coverage runs are deliberately unsharded because multiple test processes would write the same gcov counters.
 
 The command may still print a partial report after a test failure, but it
 returns the first failing suite's non-zero status. A partial report is never a

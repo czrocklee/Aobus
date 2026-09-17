@@ -1,21 +1,17 @@
 ---
 id: presentation.track-preset
-type: reference
-status: current
-domain: presentation
-summary: Enumerates built-in track-presentation preset identities, menu order, structural intent, and defaults.
 ---
 # Track presentation presets
 
 ## Scope and version
 
-This reference enumerates the runtime built-in `TrackPresentationPreset` structural catalog.
-Preset ids are persistence-facing identifiers.
-Exact built-in labels and descriptions belong to the [presentation text catalog](text-catalog.md).
+This reference enumerates the runtime built-in `TrackPresentationPreset` identities, menu order, and structural intent.
+Preset ids are persistence-facing identifiers; the exact field, grouping, and sort vectors remain source-owned by `TrackPresentation.cpp` rather than duplicated here.
+Exact built-in labels and descriptions belong to the [presentation text catalog](../../system/presentation/text-catalog.md).
 
 ## Code boundary
 
-The stable ids and structural specs belong to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md) and are consumed through the [presentation architecture](../../architecture/presentation.md).
+The stable ids and structural specs belong to the **application runtime** layer in the [system architecture](../../system/overview.md) and are consumed through the [presentation architecture](../../system/presentation/README.md).
 Their public values live in `app/include/ao/rt/TrackPresentation.h` and their authoritative definitions live in `app/runtime/TrackPresentation.cpp`.
 UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`; frontends do not redefine ids, shapes, or shared authored copy.
 
@@ -45,7 +41,7 @@ All Tracks does not own such an overlay, so frontends disable `list-order` for t
 
 ## Validation rules
 
-`normalizeTrackPresentationSpec` removes duplicate field entries and replaces an empty id with the default `library` id.
+`normalizeTrackPresentationSpec` removes duplicate visible and redundant field entries, replaces an empty id with the default `library` id, and supplies `Title` when the visible-field vector is empty.
 Persisted selection must resolve by id; unknown ids fall back through the owning preference contract.
 
 ## Compatibility and versioning
@@ -62,13 +58,13 @@ Labels and descriptions may evolve only with matching UIModel catalog tests and 
 
 ## Test authority
 
-- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks the established catalog ids and most preset shapes; `classical-conductors` still needs its own focused shape assertion.
+- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks most established ids and preset shapes; `classical-conductors` currently has neither an id-presence check nor a focused shape assertion.
 - [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
 
 ## Related documents
 
-- [Track-list presentation](../../spec/presentation/track-presentation.md)
-- [List presentation preference](../../spec/presentation/list-preference.md)
+- [Track-list presentation](../../system/presentation/track-presentation.md)
+- [List presentation preference](../../system/presentation/list-preference.md)
 - [Track model](../library/model/track.md)
 - [Runtime track field catalog](../library/model/track-field.md)
-- [Presentation text catalog](text-catalog.md)
+- [Presentation text catalog](../../system/presentation/text-catalog.md)

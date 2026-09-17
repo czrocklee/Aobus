@@ -1,9 +1,6 @@
 ---
 id: decision.0006.validate-open-fail-fast-live-iterator
-type: decision
 status: superseded
-domain: library
-summary: Validates every structured iterable store before exposure and treats a later iterator integrity breach as an infrastructure fault.
 ---
 # Decision 0006: validate before exposure and fail fast on live iterator faults
 
@@ -57,12 +54,12 @@ Rejected because throwing the project's general invariant exception preserves RA
 
 ## Current authorities
 
-- [Failure and reporting architecture](../architecture/failure-and-reporting.md)
-- [Library architecture](../architecture/library.md)
-- [Outcome channel specification](../spec/failure/outcome-channel.md)
-- [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
+- [Failure and reporting architecture](../system/failure/README.md)
+- [Library architecture](../system/library/structure.md)
+- [Outcome channel specification](../system/failure/outcome-channel.md)
+- [Library scan and audio identity](../system/library/scan-and-identity.md)
 - [Library database](../reference/library/storage/database.md)
-- [LMDB operation specification](../spec/storage/lmdb-operation.md)
+- [LMDB operation specification](../system/persistence/lmdb-operation.md)
 
 ## Supersession
 

@@ -1,9 +1,5 @@
 ---
 id: shell.layout-schema
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates layout schema shapes, registered GTK component type ids, action ids, categories, capabilities, and binding slots.
 ---
 # GTK layout schema and actions
 
@@ -18,7 +14,7 @@ This document enumerates all registered type and action ids and the common schem
 
 ## Code boundary
 
-Schema values belong to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
+Schema values belong to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md).
 The GTK `ComponentRegistry` and `ActionRegistry` attach concrete factories and handlers without changing the stable schema identities.
 
 ## Component schema surface
@@ -120,21 +116,21 @@ Adding a component or action requires registration, schema and behavior tests, e
 ## Implementation authority
 
 - [`LayoutSchema.h`](../../../app/include/ao/uimodel/layout/component/LayoutSchema.h) defines component and action schema values, shared component entries, lookup, and action validation.
-- Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component/) own per-type metadata and factories.
+- Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component) own per-type metadata and factories.
 - [`LayoutDialect.cpp`](../../../app/linux-gtk/layout/document/LayoutDialect.cpp) owns GTK-specific styling and authored-tooltip validation.
 - [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns the action inventory and handlers.
 
 ## Test authority
 
 - [`LayoutSchemaTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutSchemaTest.cpp) protects schema lookup, duplicates, action-slot resolution and validation, and the generated shared-vocabulary block.
-- GTK component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components/) protect factory metadata and behavior.
-- Action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect registration, validation, activation, and Gio export.
-- Editor schema tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect schema-driven editing.
+- GTK component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components) protect factory metadata and behavior.
+- Action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime) protect registration, validation, activation, and Gio export.
+- Editor schema tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor) protect schema-driven editing.
 
 ## Related documents
 
-- [Application shell architecture](../../architecture/application-shell.md)
-- [Shell layout lifecycle](../../spec/shell/layout-lifecycle.md)
+- [Application shell architecture](../../system/shell/README.md)
+- [Shell layout lifecycle](../../system/shell/layout-lifecycle.md)
 - [Layout document reference](layout-document.md)
 - [Shared component vocabulary](component-vocabulary.md)
 - [Keyboard map reference](keymap.md)

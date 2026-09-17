@@ -1,9 +1,5 @@
 ---
 id: library.yaml-format
-type: reference
-status: current
-domain: library
-summary: Defines version 5 of the portable, fail-closed YAML library interchange format.
 ---
 # Library YAML format
 
@@ -12,12 +8,12 @@ summary: Defines version 5 of the portable, fail-closed YAML library interchange
 This reference defines the exact version 5 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
-Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md).
+Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../system/library/yaml-transfer.md).
 CLI commands and output conventions belong to the [CLI command reference](../../cli/command.md).
 
 ## Code boundary
 
-This interchange surface belongs to the **application runtime** boundary in the [system architecture](../../../architecture/system-overview.md).
+This interchange surface belongs to the **application runtime** boundary in the [system architecture](../../../system/overview.md).
 Producer and consumer code lives under `app/runtime/library/`; the format translates core library values but is independent of the host-local `ao::library` storage layout.
 
 ## Document root
@@ -129,6 +125,10 @@ These names come from `rt::trackFieldId()` and use hyphens rather than underscor
 
 ### Technical properties
 
+**Current duration limitation:** the importer parses `duration` as unsigned 32-bit milliseconds, but [`TrackBuilder`](../../../../lib/library/TrackBuilder.cpp) narrows it to signed 32-bit `TrackDuration` without an explicit range rejection on that conversion.
+The full unsigned YAML range therefore does not have a faithful end-to-end Track representation. Values above `2147483647` ms must not be assumed to round-trip correctly.
+This is an implementation/format-domain discrepancy, not a change to the version-5 scalar grammar below.
+
 | Field | Type | Units or accepted values |
 |---|---|---|
 | `duration` | Unsigned 32-bit integer. | Milliseconds. |
@@ -236,7 +236,7 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
 Version 5 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
-The observable failure and rollback contract is defined by the [transfer specification](../../../spec/library/runtime/yaml-transfer.md#failure-and-cancellation).
+The observable failure and rollback contract is defined by the [transfer specification](../../../system/library/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
@@ -324,8 +324,8 @@ library:
 
 ## Related documents
 
-- [Library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md)
-- [Reusable YAML adapter specification](../../../spec/persistence/yaml-adapter.md)
-- [Library architecture](../../../architecture/library.md)
+- [Library YAML transfer specification](../../../system/library/yaml-transfer.md)
+- [Reusable YAML adapter specification](../../../system/persistence/yaml-adapter.md)
+- [Library architecture](../../../system/library/structure.md)
 - [Predicate language](../../query/predicate-language.md)
 - [Track model](../model/track.md)

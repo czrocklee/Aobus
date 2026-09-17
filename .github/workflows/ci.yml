@@ -35,16 +35,13 @@ jobs:
         uses: ./.github/actions/resolve-hygiene-base
       - name: Read documentation Python version
         id: python-version
-        if: ${{ steps.scope.outputs.docs-only == 'true' }}
         run: |
           python3 -c 'import json; print("version=" + json.load(open("script/ao/toolchain.json"))["python"])' >> "$GITHUB_OUTPUT"
       - name: Set up documentation Python
-        if: ${{ steps.scope.outputs.docs-only == 'true' }}
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
           python-version: ${{ steps.python-version.outputs.version }}
       - name: Check documentation
-        if: ${{ steps.scope.outputs.docs-only == 'true' }}
         env:
           PYTHONPATH: script
         run: python -m ao docs check

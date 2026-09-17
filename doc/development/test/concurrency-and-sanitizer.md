@@ -1,9 +1,5 @@
 ---
 id: development.test.concurrency-and-sanitizer
-type: development
-status: current
-domain: development
-summary: Defines concurrency review, race testing, and sanitizer validation practice.
 ---
 # Concurrency and sanitizer validation
 

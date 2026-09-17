@@ -1,22 +1,17 @@
 ---
 id: user.index
-type: index
-status: current
-domain: documentation
-summary: Routes task-oriented documentation for people using Aobus.
 ---
 # User documentation
 
-This area explains how to accomplish tasks with the GTK application, TUI, and CLI without requiring knowledge of Aobus internals.
+This area explains how to accomplish tasks with the Linux GTK application, Windows desktop, TUI, and CLI without requiring knowledge of Aobus internals.
 
 Guides are organized by user goal rather than implementation subsystem.
 
 User guides may link to exact CLI or configuration reference, but they must not duplicate complete option or schema inventories.
-Use the [user guide template](../template/user-guide.md) for a new task.
 
 ## Start and manage a library
 
-- [Get started](get-started.md) opens a music root, builds its index, and starts the first track in GTK.
+- [Get started](get-started.md) opens a music root, builds its index, and starts the first track in the Linux GTK application.
 - [Manage a library](manage-library.md) reconciles files, previews scans, filters tracks, and creates saved Lists.
 - [Back up and restore](backup-and-restore.md) exports portable library data and chooses restore or merge deliberately.
 

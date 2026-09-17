@@ -265,6 +265,23 @@ class GitWorkflowFixtureTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output["docs-only"], "false")
 
+    def test_ci_component_documentation_mixed_with_code_requires_native_validation(self):
+        (self.root / "README.md").write_text("base\n", encoding="utf-8")
+        self.commit("base")
+        for folder, filename in (("tool", "check.py"), ("app", "Runtime.cpp"), ("asset", "icon.svg")):
+            with self.subTest(folder=folder):
+                base = self.git("rev-parse", "HEAD")
+                directory = self.root / folder / "nested"
+                directory.mkdir(parents=True)
+                (directory / "README.md").write_text("documentation\n", encoding="utf-8")
+                (directory / filename).write_text("non-documentation\n", encoding="utf-8")
+                self.commit("mixed documentation and native input")
+
+                result, output = self.ci_scope(base)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output["docs-only"], "false")
+
     def test_ci_nested_documentation_and_skill_routes(self):
         (self.root / "README.md").write_text("base\n", encoding="utf-8")
         self.commit("base")
@@ -272,6 +289,13 @@ class GitWorkflowFixtureTest(unittest.TestCase):
             ("doc/development/naming-convention.md", "true"),
             (".agents/skills/example/SKILL.md", "true"),
             (".agents/skills/example/scripts/check.py", "false"),
+            ("tool/lint/nested/README.md", "true"),
+            ("tool/lint/check.py", "false"),
+            ("app/runtime/nested/README.md", "true"),
+            ("app/runtime/Runtime.cpp", "false"),
+            ("asset/brand/nested/Soul.md", "true"),
+            ("asset/brand/Soul.svg", "false"),
+            ("doc/plan/nested/draft.md", "true"),
         ):
             with self.subTest(name=name):
                 base = self.git("rev-parse", "HEAD")

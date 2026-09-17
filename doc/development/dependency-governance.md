@@ -1,182 +1,116 @@
 ---
 id: development.dependency-governance
-type: development
-status: current
-domain: development
-summary: Defines cross-platform dependency version ownership, reproducibility, and audit policy.
 ---
 # Dependency version governance
 
-This document describes the current dependency-version policy for Aobus. The
-developer procedure for changing pins is in the
-[dependency upgrade workflow](dependency-upgrade.md).
+This page explains how to identify the authoritative dependency input, inspect a
+resolved dependency, and decide whether a pin belongs in the shared contract.
+Use the [dependency upgrade workflow](dependency-upgrade.md) to change pins.
 
-## Goals
+## Policy goal
 
-Aobus resolves dependencies through different native ecosystems:
+Aobus resolves native dependencies through different ecosystems:
 
 - a pinned Nixpkgs package set on Linux;
 - shared versioned vcpkg registries on macOS and Windows;
-- an exact, signed NuGet closure for Windows App SDK/MSBuild dependencies;
-- a managed Python environment for repository tooling.
+- a signed, exact NuGet closure for Windows App SDK/MSBuild dependencies; and
+- managed Python environments for repository tooling.
 
-The ecosystems are not expected to produce identical transitive graphs. The
-governance goal is narrower: selected direct dependencies must satisfy one
-project contract on every supported host, and every platform-specific
-resolution must remain reproducible and auditable.
+Those ecosystems need not produce identical transitive graphs or binaries. The
+contract instead aligns selected direct dependencies and behavior-affecting
+capabilities, while preserving enough native identity to reproduce and audit
+each platform's resolution.
 
-## Sources of truth
+Linux Nix is the normal lead resolver for routine updates, not the policy source
+of truth. A resolved version becomes project policy only through an explicit
+`dependency-contract.json` change and the affected native validation.
 
-Each file owns a distinct question:
+## Find the source of truth
 
-| Question | Source of truth |
+Use the owner for the question being asked:
+
+| Question | Owner |
 |---|---|
-| Which C++ dependency versions and capabilities does Aobus accept? | `dependency-contract.json` |
-| Which Nixpkgs package set does Linux resolve from? | `nixpkgs.json` |
-| Which vcpkg registry snapshots do macOS and Windows resolve from? | `vcpkg-configuration.json` |
-| Which vcpkg ports and features does Aobus consume? | `vcpkg.json` |
-| Which macOS host compiler and vcpkg tool revision does the portal select? | `script/ao/macos-toolchain.json` |
-| Which Windows App SDK packages and signing source does MSBuild consume? | `app/windows-winui/packages.config` and `app/windows-winui/NuGet.Config` |
-| Which Python, Ruff, and mypy versions does repository tooling require? | `script/ao/toolchain.json` |
-| Which Windows Python artifacts and transitive packages are accepted? | `script/ao/windows-requirements.txt` |
-| Which macOS Python artifacts and transitive packages are accepted? | `script/ao/macos-requirements.txt` |
-| Did the configured build satisfy the contract? | CMake dependency checks and `./ao deps verify` |
-| How many public concepts does a configured debug build expose? | [Concept metrics](concept-metrics.md) and `./ao deps report --concepts` |
+| Accepted cross-platform C++/Windows SDK versions, required targets, capabilities, and temporary exceptions | `dependency-contract.json` |
+| Linux package-set revision and source hash | `nixpkgs.json` |
+| vcpkg registry snapshots | `vcpkg-configuration.json` |
+| vcpkg ports, features, and exact overrides | `vcpkg.json` |
+| macOS compiler, deployment target, and vcpkg tool archive | `script/ao/macos-toolchain.json` |
+| WinUI NuGet closure and trusted source | `app/windows-winui/packages.config`, `app/windows-winui/NuGet.Config` |
+| Python, Ruff, and mypy policy | `script/ao/toolchain.json` |
+| Accepted native Python artifacts | `script/ao/windows-requirements.txt`, `script/ao/macos-requirements.txt` |
+| Configured native resolution | `<build>/aobus-dependencies.json`, verified by `./ao deps report` or `./ao deps verify` |
 
-Linux Nix is the normal **lead resolver**, not the policy source of truth. A
-routine upgrade normally starts by evaluating the Linux Nixpkgs pin, but
-resolved versions become project policy only after an explicit
-`dependency-contract.json` change is reviewed and every affected native build
-passes. macOS and Windows then consume the same vcpkg registry and manifest
-locks with platform-specific triplets.
+Do not copy a current version from this guide. Read the owning file or a verified
+build report.
 
 ## Locating an existing dependency
 
-Start with the selected checkout, target platform, and build configuration; a dependency's provider may live in the native VM rather than on the machine hosting the source.
+Start with the checkout, target platform, configuration, and the build tree that
+actually consumed the dependency. A native VM may own the provider even when
+the source is mounted from another host.
 
-1. Inspect the existing build's `CMakeCache.txt`, `aobus-dependencies.json`, and `build.log` for package directories, include paths, toolchain files, and SDK roots.
-   `./ao deps report` reports and verifies an already configured tree; it does not configure one or search machine-wide packages.
-2. Identify the provider through the sources of truth above and the relevant `CMakeLists.txt` or `cmake/` module.
-   Search these repository paths for the package or imported target before looking outside the checkout.
-3. Ask that provider for its resolved paths in the target environment:
-   Linux dependencies come from the pinned `nix-shell`; macOS/Windows C++ libraries normally come from the configured vcpkg installation and triplet.
-   Windows WinUI/MSBuild packages use the governed NuGet closure; platform tools and SDKs come from the selected native toolchain.
-   Use compiler/package metadata, package-manager reports, and SDK discovery commands, following the [macOS](macos.md) or [Windows](windows.md) guide where applicable.
-4. Search only the resulting include, library, source, or installation directories, using file indexes or `rg --files` first.
-   Keep any recursive traversal rooted there and within the intended filesystem; `/`, unrelated home directories, and mounted storage are not fallback search roots.
-5. If the provider is missing, report the target, resolver, and paths checked, then follow its documented setup procedure.
-   Do not substitute an ambient package or change dependency pins just to make discovery succeed.
+1. Inspect the build's `CMakeCache.txt`, `aobus-dependencies.json`, and
+   `build.log`. `./ao deps report` verifies and reports an already configured
+   tree; it does not configure one or search the host.
+2. Identify the resolver in the table above and inspect the relevant
+   `CMakeLists.txt` or `cmake/` module for the package or imported target.
+3. Ask that resolver for paths in the target environment. Linux inspection runs
+   inside the pinned Nix shell. macOS and Windows C++ libraries normally come
+   from the selected vcpkg installation and triplet. WinUI uses the governed
+   NuGet closure; SDK and compiler paths come from the native toolchain.
+4. Restrict searches to the resulting include, library, source, or installation
+   directories. Do not recursively search `/`, unrelated home directories, or
+   mounted storage as a fallback.
+5. If the provider is absent, report the target, resolver, build tree, and paths
+   checked, then follow the owning platform setup. Do not substitute an ambient
+   package or change a pin merely to make discovery succeed.
 
-## Governed dependencies
+## What belongs in the shared contract
 
-The governed set is deliberately small:
+The current governed dependency names and policies are enumerated by
+`dependency-contract.json`; do not maintain a second list here. Promote another
+dependency only when an explicit contract is cheaper and safer than recurring
+diagnosis, for example when:
 
-- Boost;
-- fast_float;
-- FTXUI;
-- ICU;
-- spdlog;
-- Windows App SDK;
-- C++/WinRT.
+- observed API or behavior drift caused cross-platform failures;
+- templates, macros, public types, or build options create ABI/ODR risk;
+- the dependency is security-sensitive; or
+- persisted or user-visible semantics depend on one implementation or data set.
 
-The contract records the alignment policy, native package mappings, required
-CMake targets, build-option condition, and behavior-affecting capabilities.
-CMake reads the contract before dependency discovery and fails during configure
-when an active governed package does not satisfy it. A conditionally disabled
-dependency is reported as `not-applicable`, not as verified or missing.
+A matching upstream version is not proof of build, ABI, or behavioral identity.
+CMake also checks declared imported targets and capabilities. Native reports
+retain resolver evidence such as Nix output identities or vcpkg registry,
+triplet, features, tool version, and `version#port-version`.
 
-Other direct and transitive dependencies are reported for visibility but are
-not required to have the same upstream version across operating systems. A
-dependency should be promoted into the governed set only when at least one of
-these conditions applies:
+Conditionally disabled dependencies are `not-applicable`; they are not reported
+as verified or missing.
 
-- observed API or behavior drift has caused cross-platform failures;
-- templates, configuration macros, or public types create an ABI or ODR risk;
-- the dependency is security-sensitive;
-- the cost of maintaining an explicit contract is lower than the recurring
-  diagnosis cost.
-
-## Alignment is not build identity
-
-Cross-platform alignment compares normalized upstream versions and required
-capabilities. It does not claim that Nix and vcpkg build identical artifacts.
-
-Platform build identity includes additional information:
-
-- Nixpkgs revision, Nix output path, compiler, overlays, and downstream patches;
-- vcpkg registry baseline, upstream version, port version, features, triplet,
-  overlays, and tool version.
-
-For example, vcpkg `spdlog 1.17.0#1` satisfies an upstream version contract of
-`1.17.0`; the `#1` port revision remains part of the native vcpkg build identity
-and must still appear in the dependency report.
-
-Version equality is never used as proof of ABI or behavior equality. The build
-also verifies required imported targets and behavior-affecting options. In
-particular, Aobus requires spdlog to advertise `SPDLOG_USE_STD_FORMAT` and to
-avoid `SPDLOG_FMT_EXTERNAL`.
-
-fast_float is exact-version governed because it defines locale-independent
-decimal-to-binary conversion for persisted YAML and layout values on every
-platform. The Aobus wrapper supports `float` and `double`, preserves the output
-on errors, and relies on one implementation for rounding, subnormal, overflow,
-and input-prefix semantics instead of accepting standard-library drift.
-
-ICU is exact-version governed because its Unicode data affects NFC, case-fold,
-grapheme, message formatting, catalog fallback, and future derived-key behavior.
-The Core Unicode facade links only ICU `uc` and `data`; the interactive
-localization leaf additionally links `i18n`, while CLI excludes that leaf.
-Aobus calls ICU directly behind its own facades; it does not discover or link
-Boost.Locale merely because the Boost distribution contains that optional
-component.
-
-Canonical localization assets are compiled by the same ICU release that the
-application links. CMake locates and version-checks `genrb` and `pkgdata` at
-configure time. The vcpkg manifest enables ICU's `tools` feature explicitly on
-macOS and Windows; those build-host executables are never deployment artifacts.
-
-## Native resolution
+## Native resolution rules
 
 ### Linux
 
-`shell.nix` imports the exact Nixpkgs revision and source hash from
-`nixpkgs.json`. The shell exposes a generated dependency report containing the
-selected pin, governed versions, and Nix store identities. A dependency
-supplied by a project derivation, such as `aobus-fast-float`, remains governed
-by the same source hash and exact version checks as a package selected directly
-from Nixpkgs.
+`shell.nix` imports the exact revision and hash in `nixpkgs.json` and rejects
+ambient `NIX_PATH`, channel, or `PATH` packages as substitutes. Project
+derivations remain governed by their own source hashes and the shared contract.
+Nix evaluation also checks applicable Python, Ruff, mypy, and compiler-cache
+pins.
 
-An unrelated package from `PATH`, a channel, or `NIX_PATH` is not an accepted
-substitute for the environment entered by `./ao`.
+### macOS and Windows vcpkg
 
-Linux also verifies during Nix evaluation that Python, Ruff, and mypy match
-`script/ao/toolchain.json`.
+`vcpkg-configuration.json` owns registry identity; `vcpkg.json` owns requested
+ports, features, and any exact override. macOS bootstraps the verified vcpkg
+archive in `script/ao/macos-toolchain.json`; Windows uses Visual Studio's
+bundled vcpkg tool. Project triplets own platform linkage and deployment flags.
 
-### macOS and Windows
+A package family that must remain coherent, such as split Boost ports, uses a
+package-scoped registry rather than one top-level port override. An override
+ignores other version constraints and therefore needs a reason and removal
+condition in the upgrade review.
 
-`vcpkg-configuration.json` owns registry identities. Its default registry
-selects the normal port graph. Dependencies that need a coherent historical
-family can use a package-scoped registry baseline.
+Repository overlay ports are exceptional and temporary.
 
-macOS bootstraps the vcpkg tool revision and verified archive from
-`script/ao/macos-toolchain.json`. Project-owned x64 and arm64 triplets select
-static libraries, the native architecture, and the macOS 15.0 deployment
-target. Windows uses the vcpkg tool bundled with Visual Studio and its native
-Windows triplet. Both hosts resolve the same manifest and registry snapshots.
-
-Boost uses a scoped registry because vcpkg publishes Boost as many related
-`boost-*` ports. Pinning only one Boost port with a manifest override would
-allow mixed Boost release families. The scoped registry keeps every selected
-Boost port on one release. Its package selection also includes the
-`vcpkg-boost` helper used by current Boost releases. Recipe helpers remain
-pinned by that registry but are excluded from Boost library release-family
-equality because they use their own version schemes.
-
-Manifest overrides are reserved for a small number of single-port, exact pins.
-An override ignores other version constraints and therefore requires an
-explicit reason and removal condition. It is not the default update mechanism.
-
-### Temporary overlay ports
+#### Temporary overlay ports
 
 The `cmake/vcpkg-ports/stb` overlay is an active, short-lived exception to the
 normal resolver order. The official vcpkg `stb` port at the approved baseline
@@ -188,17 +122,17 @@ source-hash-verified v2.18 revision already pinned by `shell.nix`. Future
 changes to the official port recipe or its other headers are not inherited
 while the overlay remains active.
 
-The first five mechanisms in the
+When the overlay was adopted, the first five mechanisms in the
 [dependency upgrade resolver order](dependency-upgrade.md#3-resolve-it-on-macos-and-windows)
 were rejected for explicit reasons:
 
-1. The approved default baseline contains only the affected v2.10 header.
-2. A direct `version>=` constraint cannot select a revision absent from the
-   official `stb` versions database.
-3. An exact manifest override has the same limitation.
-4. A package-scoped official registry has no newer maintained `stb` port to
+1. The approved default baseline contained only the affected v2.10 header.
+2. A direct `version>=` constraint could not select the fixed revision because
+   it was absent from the official `stb` versions database.
+3. An exact manifest override had the same limitation.
+4. A package-scoped official registry had no newer maintained `stb` port to
    select.
-5. No maintained versioned custom registry supplies this header, and creating a
+5. No maintained versioned custom registry supplied this header, and creating a
    permanent project registry for one temporary header replacement would add a
    second dependency authority without an independent contract.
 
@@ -211,111 +145,64 @@ TUI tests, and both platforms' full checks with the official port. Do not let
 the overlay become an untracked fork or intentionally change unrelated stb
 headers in its frozen payload.
 
-Each vcpkg dependency report preserves the complete
-`version#port-version`, selected features, target triplet, registry baselines,
-and vcpkg tool version.
+### Windows App SDK and C++/WinRT
 
-Windows-only MSBuild dependencies use the same contract with a Windows platform
-scope, an exact NuGet package, and an `AOBUS_BUILD_WINUI` condition. The
-packages lock owns the complete transitive closure rather than letting Visual
-Studio restore an ambient version. NuGet source mapping limits the closure to
-nuget.org, required repository signatures authenticate that source, and
-dependency verification inspects each restored archive's nuspec identity.
+WinUI's top-level package versions are governed by the shared contract. The
+checked-in NuGet files own the exact transitive closure, source mapping, and
+required repository signatures. Dependency verification inspects restored
+archive identity.
 
-The Windows App Runtime installer is governed separately because it is host
-state. The contract records its exact runtime identity, URL, and SHA-256, while
-setup also verifies Microsoft Authenticode.
+The Windows App Runtime is host state, not the NuGet development closure. Its
+identity, installer URL, and SHA-256 are governed separately, and setup also
+checks Microsoft Authenticode.
 
-## Tooling contract
+### Repository tooling
 
-`script/ao/toolchain.json` is the shared tooling policy. Linux Nix evaluation
-and the Windows checkout environment must match its exact Python, Ruff, and
-mypy versions. The macOS managed environment matches Ruff and mypy exactly but
-accepts the selected Homebrew Python at the contracted major/minor version; the
-macOS profile therefore does not own the exact Python patch-level tooling suite.
+`script/ao/toolchain.json` is policy. Linux and Windows match its exact Python,
+Ruff, and mypy versions. macOS matches Ruff and mypy exactly but accepts the
+contracted Homebrew Python major/minor rather than an exact patch.
 
-`script/ao/windows-requirements.txt` is an artifact lock rather than a second
-policy file. It pins Windows wheels and transitive packages by hash. Tooling
-tests verify that its Ruff and mypy entries agree with the toolchain contract.
-`script/ao/macos-requirements.txt` plays the same role for x86_64 and arm64
-macOS wheels used by format, tidy, and hygiene commands.
-
-The Ruff target version and mypy `python_version` in `pyproject.toml` describe
-the Python language compatibility target. They do not need to equal the exact
-development interpreter patch release.
+The native requirements files are artifact locks with hashes, not alternative
+policy files. Ruff's target version and mypy's `python_version` in
+`pyproject.toml` describe supported language syntax; they need not equal the
+managed interpreter's patch release.
 
 ## Enforcement
 
-The enforcement path is layered:
+The normal enforcement path is:
 
-1. Linux Nix evaluation and the native managed Python bootstraps validate their
-   applicable tooling contract. macOS does not claim exact Python patch parity.
-2. CMake reads `dependency-contract.json`, selects the effective host policy or
-   active platform exception, rejects expired exceptions, and performs
-   exact/range package discovery.
-3. CMake validates required imported targets and dependency capabilities.
-4. CMake writes `aobus-dependencies.json`, including the contract SHA-256 and
-   active/not-applicable state, in the build directory.
-5. `./ao deps verify` checks report freshness, native resolver identity, and
-   active exception policy.
-6. `./ao check` runs dependency verification after the build and before native
-   and tooling tests.
+1. the native bootstrap validates its applicable tool contract;
+2. CMake reads `dependency-contract.json`, rejects expired exceptions, discovers
+   active packages, and checks versions, targets, and capabilities;
+3. CMake writes `aobus-dependencies.json` with contract and resolver identity;
+4. `./ao deps verify` checks that report against current source inputs; and
+5. `./ao check` verifies dependencies after building and before test suites.
 
-Generated reports are build artifacts. They are not committed to the source
-tree. CI retains the full JSON report for dependency-changing pull requests and
-prints a concise before/after summary for review.
+Reports are build artifacts, not source files. Preserve before/after reports as
+CI or review evidence for dependency changes; summarize governed changes rather
+than pasting the complete transitive graph into a pull request.
 
-## Exceptions
+## Temporary exceptions and security response
 
-Silent version skew is not allowed. A temporary platform difference must be an
-entry in `dependency-contract.json` with:
+Silent skew is not allowed. A temporary platform exception is a narrow entry in
+`dependency-contract.json` naming one dependency and platform, allowed version,
+technical reason and risk, owner, issue, creation and expiry dates, and exit
+condition. Expiry is a UTC calendar date and fails closed. A normal ecosystem
+availability exception should not exceed 30 days; security-driven skew should
+normally reconcile within 14 days unless security policy is stricter.
 
-- a unique ID;
-- one dependency and one platform;
-- the temporarily allowed version;
-- a technical reason and risk statement;
-- an owner and reviewing issue;
-- creation and expiry dates;
-- an exit condition.
+Security response need not wait for the routine Nix lead order. Land the fix on
+the first viable platform, then update the contract or add a bounded exception
+for a lagging platform with compensating controls. Emergency work still uses
+immutable sources and hashes and runs the minimum clean build and smoke tests.
 
-Expiry uses a UTC calendar date and fails closed. A normal ecosystem-availability
-exception should not exceed 30 days. Security-driven platform skew should be
-reconciled within 14 days unless the security policy requires a shorter window.
-
-An exception may narrow one dependency check. It may not disable dependency
-verification for an entire platform.
-
-## Security updates
-
-Nix leads routine upgrades, not emergency response. A security fix may land on
-the first platform that can consume it. The same change must update the contract
-or add a bounded exception for the lagging platform, include compensating
-controls when applicable, and open the reconciliation work.
-
-Urgency does not permit mutable sources, missing hashes, or skipping the minimum
-clean build and smoke tests.
-
-## Upgrade atomicity
-
-There are three update classes:
-
-- A Nixpkgs pin update is a Linux batch change by nature. It must update the
-  pin file and include a generated diff for governed and monitored dependencies.
-- A normal cross-platform governed-dependency update changes the contract and
-  every affected native resolution path in one pull request.
-- An emergency platform-first update may use a bounded exception and is not
-  blocked by the normal Nix lead order.
-
-Atomicity means the default branch remains in one verified state. It does not
-require unrelated tool upgrades or code formatting changes to share one commit.
+Atomicity means the default branch remains in one verifiable state. A normal
+governed update changes policy and every affected resolver path together; a
+security-first update may use the bounded exception mechanism. It does not mean
+unrelated tool updates or formatting changes belong in the same change.
 
 ## Non-goals
 
-This policy does not:
-
-- require identical Linux, macOS, and Windows transitive dependency graphs;
-- compare vcpkg port revisions with Nix package metadata;
-- promise cross-operating-system ABI identity;
-- promise bit-for-bit reproducible binaries;
-- require every dependency to become governed;
-- require flakes or a particular CI provider.
+This policy does not require identical transitive graphs, compare vcpkg port
+revisions with Nix package metadata, promise cross-OS ABI or bit-for-bit binary
+identity, govern every dependency, or require a particular CI provider.

@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rules 3.2.8 / 3.2.8.1 / 3.2.8.2 / 3.2.8.3:
+  /// Enforces the unused-value suppression style:
   /// - No void casts to suppress unused warnings (use [[maybe_unused]] or
   ///   anonymous parameters instead).
   /// - Void casts that discard a computed value must use 'std::ignore = expr'.

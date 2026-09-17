@@ -1,9 +1,5 @@
 ---
 id: development.gtk-style
-type: development
-status: current
-domain: development
-summary: Defines GTK theme-token, structural-variant, shared-component, transition, and visual-complexity contributor rules.
 ---
 # GTK style
 
@@ -14,8 +10,9 @@ It does not define semantic UI behavior or shell structure; those belong to pres
 
 ## Policy
 
-Classic is the default dense theme and establishes semantic tokens in `css/_variables.css`.
-Modern overrides visual tokens under the `ao-theme-modern` root class.
+Classic is the default dense theme. Shared fallback tokens live in `css/_variables.css`;
+Classic and Modern apply their theme-specific overrides under the `ao-theme-classic`
+and `ao-theme-modern` root classes.
 
 Use a theme token when widget structure is shared and only color, radius, spacing, shadow, opacity, typography, or motion differs.
 Use a classic/modern variant class only when the built widget/layout structure is genuinely different.
@@ -59,7 +56,7 @@ If a transient window misses theme classes, register its top-level lifetime with
 ## Related documents
 
 - [GTK lifetime and wiring](gtk-lifetime.md)
-- [Presentation architecture](../architecture/presentation.md)
-- [Application shell architecture](../architecture/application-shell.md)
-- [Shell layout adaptation](../spec/shell/layout-adaptation.md)
-- [GTK dialog lifecycle](../spec/linux-gtk/dialog-lifecycle.md)
+- [Presentation architecture](../system/presentation/README.md)
+- [Application shell architecture](../system/shell/README.md)
+- [Shell layout adaptation](../system/shell/layout-adaptation.md)
+- [GTK dialog lifecycle](../system/frontend/gtk/dialog-lifecycle.md)

@@ -1,9 +1,5 @@
 ---
 id: library.database
-type: reference
-status: current
-domain: library
-summary: Defines the version 7 host-local LMDB environment, named databases, keys, records, and validation gates.
 ---
 # Library database
 
@@ -13,11 +9,11 @@ This reference defines physical library format version `7`, gated by `ao::librar
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
-Scan and identity behavior belongs to the [scan and audio identity specification](../../../spec/library/runtime/scan-and-identity.md).
+Scan and identity behavior belongs to the [scan and audio identity specification](../../../system/library/scan-and-identity.md).
 
 ## Code boundary
 
-This surface belongs to the **core libraries** layer in the [system architecture](../../../architecture/system-overview.md).
+This surface belongs to the **core libraries** layer in the [system architecture](../../../system/overview.md).
 `ao::library::MusicLibrary`, its stores, builders, views, and LMDB adapter dependencies live under `include/ao/library/` and `lib/library/`; application-runtime commands may coordinate them but do not own or redefine this format.
 
 ## Environment
@@ -29,8 +25,8 @@ Independent processes may open the same environment under LMDB's normal locking 
 That option is a requested table size, defaults to `512`, and skips `mdb_env_set_maxreaders` when zero.
 The effective capacity comes from the persistent LMDB lock file: an opener that acquires the exclusive environment lock may grow a smaller table to the requested size, a concurrent opener adopts the existing size, and no opener shrinks a larger table.
 Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot until destruction under `MDB_NOTLS`.
-Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../architecture/library.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
-That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../spec/storage/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
+Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../system/library/structure.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
+That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../system/persistence/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
 `MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
 Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, and `.aobus-writer.lock`, excluding frontend state and unrelated descendants.
 
@@ -61,36 +57,36 @@ shares are unsupported because neither the writer lease nor LMDB's mapped-file
 locking provides cross-host safety for this database.
 Integer keys use LMDB native word order and record structs are host-endian; [library YAML](../format/yaml.md) is the portable interchange surface.
 
-## Transaction access
+## Library transaction consequences
 
-`MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot plus the header and revision values read from that snapshot.
-Failure to begin the native transaction is fatal because a live library has no recoverable storage-snapshot alternative.
-`WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability whose `writeTransaction()` factory returns a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
-After native begin has acquired LMDB's single-writer snapshot, the factory reads that snapshot's durable header and revision and computes the transaction's one in-memory candidate revision before exposing the wrapper.
-Either failure releases the process writer gate and discards the transaction's lease-anchor reference, then fails fatally instead of creating a recoverable authoring result.
-The originating writable capability continues to hold its process session lease.
-The write wrapper owns one native transaction, the transaction-local dictionary writer hidden behind Track preparation, the process writer gate, a shared anchor to the writable capability's lease, and one lazily opened physical writer per touched Store.
-Repeated logical operations and successive successful `apply()` callbacks reuse those writers and their native cursors until commit or abort.
-It exposes logical Track, List, and identity mutation authority only through the callback-scoped `LibraryWrite` supplied by `WriteTransaction::apply()`.
+The [LMDB operation specification](../../../system/persistence/lmdb-operation.md) owns generic transaction begin, commit, abort, cursor lifetime, mutation-failure channels, and copied-data operations.
+The [library architecture](../../../system/library/structure.md#physical-storage-and-capabilities) owns the root `WriteTransaction::apply()` procedure, writer capability, process lease, candidate revision, and publication boundary.
+This reference records the format-specific consequences.
 
-The specialized stores are const read service handles.
-Their readers accept a read transaction, a write transaction for pre-operation inspection, or the active `LibraryWrite` context for a coherent in-operation snapshot.
-Production mutation does not obtain a physical Store writer: `LibraryWrite::tracks()` and `LibraryWrite::lists()` return callback-scoped logical writers, and `LibraryWrite::restoreLibraryIdentity()` is the only metadata mutation exposed inside the root operation.
-Physical Track, manifest, List, Resource, Dictionary, and metadata writer factories remain inaccessible to production callers; representation, corruption, and isolated Store-backed tests use one source-private access seam.
+`MusicLibrary::readTransaction()` returns a move-only coherent LMDB snapshot carrying the metadata header and committed revision read from that snapshot.
+The specialized stores are const read services: their readers use a read transaction, a write transaction for pre-operation inspection, or the active `LibraryWrite` context for one coherent in-operation view.
 `MusicLibrary` exposes logical metadata-header values rather than a physical Metadata Store handle.
-Every overload that reads a transaction-local metadata header or library revision validates the transaction's stable `MusicLibrary` identity before returning the fact; cross-library fact reads fail before exposing either value.
-Native LMDB transaction handles remain private implementation details of `MusicLibrary` and the stores; the wrappers add semantic capability boundaries but no additional storage transaction or heap allocation on the read path.
+A store accepts only a transaction minted by the same stable `MusicLibrary`; cross-library metadata, revision, or record access fails before exposing a fact.
+Mapped record views borrow bytes from that transaction and follow the [view safety rules](#view-safety). Committed dictionary text instead has the store-owned lifetime described by the [library architecture](../../../system/library/structure.md#physical-storage-and-capabilities).
+These semantic wrappers add no second storage transaction or read-path heap allocation.
+A failure to begin a snapshot is fatal for an already admitted live library because no recoverable alternate snapshot exists.
 
-The logical Track writer has these operation groups:
+`MusicLibrary` exposes no public write-transaction factory.
+A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track, List, and identity ports through `LibraryWrite`.
+Physical Store writers, native transaction handles, and mutable LMDB reservations remain inaccessible to production callers except for the source-private Track encoder described below.
+An active transaction keeps the non-blocking `<database-path>/.aobus-writer.lock` lease alive even if the originating writable capability is destroyed.
+The lock file has no governed payload and is not part of format version `7`; it must not be removed while a writable process is active.
 
-- validate a `TrackBuilder` for representability and existing Resource references without writing dictionary or Resource rows;
-- create one hot/cold Track pair together with its manifest row;
-- update complete, hot-only, or cold-only Track data while retaining its existing URI;
-- replace Track data and its existing manifest facts together;
-- update only file status or audio identity while retaining the existing URI-to-Track binding;
-- relink by changing the cold URI, removing the old manifest key, and creating the new binding as one operation;
-- delete one Track together with its manifest row; and
-- clear Tracks and the manifest together.
+The logical Track writer preserves the format's hot/cold, manifest, dictionary, and Resource relationships while it:
+
+- validates a `TrackBuilder` for representability and existing Resource references without writing dictionary or Resource rows;
+- creates one hot/cold Track pair together with its manifest row;
+- updates complete, hot-only, or cold-only Track data while retaining its existing URI;
+- replaces Track data and its existing manifest facts together;
+- updates only file status or audio identity while retaining the existing URI-to-Track binding;
+- relinks by changing the cold URI, removing the old manifest key, and creating the new binding as one operation;
+- deletes one Track together with its manifest row; or
+- clears Tracks and the manifest together.
 
 The logical List writer accepts `ListBuilder`, prepares its physical row internally, and creates or updates it only after validating the live parent chain.
 Update first proves that its target exists, so the physical LMDB upsert primitive cannot create a caller-selected List id.
@@ -98,10 +94,6 @@ An ordinary delete returns `NotFound` for an absent id and `Conflict` while a ch
 Explicit subtree deletion discovers the complete live subtree, deletes children before parents, and returns the deleted ids in root-first discovery order.
 Clear removes the complete List graph coherently.
 Filter bytes remain opaque throughout these storage operations.
-
-Writable-capability acquisition non-blockingly locks `<database-path>/.aobus-writer.lock` for the capability lifetime.
-An active write transaction retains the lock after its originating capability is destroyed and releases it on commit, failure, abort-by-destruction, or transaction destruction.
-The lock file has no governed payload and is not part of format version `7`, but it must not be removed while a writable process is active.
 
 ## Named databases
 
@@ -188,23 +180,15 @@ Prepared writes fill and validate transaction-owned storage entirely inside the 
 A canonical post-fill validation failure violates the encoder's `AO_ENSURES` postcondition and aborts immediately.
 
 Create requires both canonical payloads and allocates the identity by appending to `tracks_hot`, then creates the same key in `tracks_cold`.
-After open proves matching key sets, a cold-key conflict after hot allocation violates the
-Track-pair invariant and aborts; supported writers cannot create that state. Other native
-failure after the hot reservation uses the private transaction carrier so the root aborts the
-whole write before returning its typed storage error.
-After open establishes the exact-pair invariant, update helpers do not rescan the opposite database as a recovery check.
-A `Both` point lookup still probes both sides so it can distinguish a normal miss, where neither row exists, from a post-open invariant breach, where exactly one row exists.
-A single-side update checks its target row and returns `NotFound` without terminating the transaction when that row is absent.
-The private complete-update encoder checks the hot target once before its first mutation, then relies on the established pair invariant for the cold replacement.
-It changes both sides as one logical operation.
-If any multi-side mutation reaches its first successful storage update and a later storage step fails, the mutation raises `lmdb::detail::TransactionFailure`; the root operation owner explicitly aborts before translating the failure to its enclosing `Result` boundary.
+After open proves matching key sets, a cold-key conflict after hot allocation is an invariant breach and aborts immediately; supported writers cannot create that state.
+Update helpers rely on that admitted exact-pair invariant rather than rescanning the opposite database as recovery.
+A `Both` point lookup still probes both sides so it distinguishes a normal miss, where neither row exists, from an invariant breach, where exactly one row exists.
+A single-side update checks its target row and returns `NotFound` without mutating when that row is absent.
+A complete update checks the hot target before its first mutation and changes both sides as one logical operation.
 
-Expected no-mutation outcomes (`NotFound`, `Conflict` from an exclusive create, and integer-key exhaustion) are returned as `Result` values and leave the lower store transaction mechanically usable.
-When such an error is the result of a root `WriteTransaction::apply()` body, root policy still aborts the complete transaction before returning it.
-An LMDB fault from a mutation path is carried by `lmdb::detail::TransactionFailure` because continuing or committing could expose only a successful prefix of the logical operation.
-`WriteTransaction::apply()` catches that marker, explicitly aborts every uncommitted row, terminalizes the wrapper, and returns the carried error.
-`WriteTransaction::commit()` provides the same containment for a mutation fault during dictionary preparation.
-No public runtime writer exposes a transaction that may be continued after either failure.
+`NotFound`, exclusive-create `Conflict`, and integer-key exhaustion are no-mutation outcomes at the physical operation that reports them.
+A later failure after any part of a logical multi-store mutation has been staged aborts the complete library root; no public runtime writer may continue or commit a failed root.
+The [LMDB operation specification](../../../system/persistence/lmdb-operation.md#writes) owns the private mutation-fault carrier and adapter failure channels, while the [library architecture](../../../system/library/structure.md#physical-storage-and-capabilities) owns whole-root rollback.
 
 The logical Track delete first proves the complete Track and matching manifest binding, then deletes the manifest and both physical Track keys.
 An absent Track returns successful `false`; a present Track with missing or mismatched
@@ -279,7 +263,7 @@ Parent existence and parent-cycle checks are cross-row logical-writer rules and 
 
 A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the machine's own byte order.
 Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding; a database file is bound to the architecture that created it either way.
-The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../spec/resource/cover-art-delivery.md) owns how it is read and verified.
+The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../system/resource/cover-art-delivery.md) owns how it is read and verified.
 The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
 Rows a track no longer references are retained and remain valid.
 
@@ -349,6 +333,8 @@ The admission algorithm is linear in the number and total byte size of persisted
 Track-to-manifest closure adds one manifest point lookup per Track and constant Track-sized auxiliary storage; List topology adds linear auxiliary storage in the number of Lists.
 Tests lock the operation-count slope from `N` to `2N`, and a manual 100,000-Track evidence run records wall time and peak resident memory without imposing a machine-dependent CI time threshold.
 
+### View safety
+
 Directly constructed read views perform one constant-time structural gate that proves the fixed header and all derived slices remain inside the record.
 `TrackView` gates its hot and cold sides independently because callers may deliberately load only one side.
 `isHotValid()` and `isColdValid()` are always legal and report whether the corresponding loaded side passed its gate.
@@ -374,12 +360,12 @@ Its `hot()` and `cold()` ranges are explicit projections over one physical side 
 A loaded but structurally invalid hot or cold side after successful open fails through `AO_INVARIANT`; it is not returned as a poisoned live Store row.
 Directly constructed `TrackView` remains available for bounded binary diagnostics and preserves its independent validity queries.
 
-Every store view borrows its bytes from the active LMDB transaction.
+Mapped Store record views borrow their bytes from the active LMDB transaction.
 It must not outlive that transaction.
 Within a write transaction, a subsequent database mutation may invalidate an earlier borrowed value even when the C++ `ListView` object is still in scope.
 Code that writes after reading a List must first copy every needed scalar, string, rank vector, or serialized payload, or reacquire the List after the intervening write; it must never dereference the old view afterward.
 
-Record validation operates inside the mapped-storage fault-containment limit defined by the [LMDB operation specification](../../../spec/storage/lmdb-operation.md#failure-and-cancellation).
+Record validation operates inside the mapped-storage fault-containment limit defined by the [LMDB operation specification](../../../system/persistence/lmdb-operation.md#failure-and-cancellation).
 It cannot turn an underlying mapped-file fault into a recoverable record-validation result.
 
 ## Compatibility and versioning
@@ -392,7 +378,7 @@ The Track write sequencing, validation, and return-value contracts do not change
 
 Version `7` gates scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excludes filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
-The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).
+The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
 A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
@@ -415,7 +401,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) and [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) own the public transaction capabilities; [`LibraryWrite.h`](../../../../include/ao/library/LibraryWrite.h) owns the callback-scoped mutation capability.
 - [`TrackWriter.h`](../../../../include/ao/library/TrackWriter.h), [`TrackWriter.cpp`](../../../../lib/library/TrackWriter.cpp), [`ListWriter.h`](../../../../include/ao/library/ListWriter.h), and [`ListWriter.cpp`](../../../../lib/library/ListWriter.cpp) own logical cross-Store and cross-row mutation invariants.
 - [`TrackWrite.cpp`](../../../../lib/library/TrackWrite.cpp) and [`ReservationWriterAccess.h`](../../../../lib/lmdb/detail/ReservationWriterAccess.h) own the source-private path from prepared hot/cold Track values to callback-scoped integer-key reservations.
-- Store and builder implementations under [`lib/library/`](../../../../lib/library/) own key allocation, private preparation, and physical write validation.
+- Store and builder implementations under [`lib/library/`](../../../../lib/library) own key allocation, private preparation, and physical write validation.
 - [`lib/library/CMakeLists.txt`](../../../../lib/library/CMakeLists.txt) enforces that production code cannot include, define, or invoke the source-private physical access seam or call internal Track encoder helpers.
 
 ## Test authority
@@ -434,15 +420,15 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, the complete Reader range and count surface, physical-side projections, retained point and batch load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.
 - [`DatabaseWriterTest.cpp`](../../../../test/unit/lmdb/DatabaseWriterTest.cpp) locks the copied-data-only public LMDB writer surface and the source-private reservation encoder constraints and failure paths.
-- Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library/) lock the remaining record sizes, alignment, validation, and store behavior.
+- Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library) lock the remaining record sizes, alignment, validation, and store behavior.
 
 ## Related documents
 
 - [Resource descriptors](../../resource/blob.md)
-- [Library architecture](../../../architecture/library.md)
-- [LMDB operation specification](../../../spec/storage/lmdb-operation.md)
-- [Library access and mutation](../../../spec/library/runtime/mutation.md)
-- [Library scan and audio identity](../../../spec/library/runtime/scan-and-identity.md)
+- [Library architecture](../../../system/library/structure.md)
+- [LMDB operation specification](../../../system/persistence/lmdb-operation.md)
+- [Library access and mutation](../../../system/library/mutation.md)
+- [Library scan and audio identity](../../../system/library/scan-and-identity.md)
 - [List model](../model/list.md)
 - [Predicate language](../../query/predicate-language.md)
-- [Persistence and managed-state architecture](../../../architecture/persistence-and-managed-state.md)
+- [Persistence and managed-state architecture](../../../system/persistence/README.md)

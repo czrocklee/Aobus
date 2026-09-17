@@ -1,0 +1,116 @@
+---
+id: reporting.notification-feed
+---
+# Notification feed
+
+## Scope
+
+This specification owns the in-memory feed exposed by `rt::NotificationService`: posting, keyed replacement, bounded retention, transient expiry, and observation.
+
+It does not decide which application event deserves a notification, perform recovery, or define activity-status presentation.
+Those responsibilities belong to the [failure and reporting architecture](README.md), the producing subsystem, and the [activity-status specification](../presentation/activity-status.md).
+The [state](../../../app/include/ao/rt/NotificationState.h) and [service](../../../app/include/ao/rt/NotificationService.h) headers own exact declarations, defaults, and limits; this page owns their shared behavior.
+
+## Code boundary
+
+This behavior belongs to `NotificationService` in the **application runtime**
+layer of the [system architecture](../overview.md), under
+the [failure and reporting architecture](README.md).
+Public declarations live in `app/include/ao/rt/`, and implementation lives in
+`app/runtime/NotificationService.cpp`; neither depends on UIModel or frontend
+types. Construction, destruction, reads, commands, subscription changes, and
+observer callbacks are confined to the runtime callback executor.
+The asynchronous runtime must outlive the service; releasing a subscription obeys the same executor affinity as registration.
+
+## Invariants
+
+- One service owns one ordered feed and one monotonically increasing id sequence.
+- Accepted posts append; keyed updates preserve the existing id and position.
+- Every effective mutation publishes one `NotificationFeedUpdate` with a complete immutable post-mutation snapshot.
+- A semantically unchanged keyed request publishes nothing and does not restart its lifetime.
+- Commands return `void`. Invalid or over-capacity requests leave the feed unchanged and write an application-log diagnostic.
+- Every request explicitly chooses `Transient(duration)`, `History`, or `Pinned`; severity does not imply lifetime.
+- `Transient` entries expire authoritatively after a positive duration. `History` entries are retained but may be evicted for capacity. `Pinned` entries are retained and never evicted automatically.
+- Every live entry has an expiry registration. Expiry removes a transient entry only when its id and registration identity are still current.
+- Observer-initiated mutations are queued until the current update completes delivery to its contract-fulfilling observers, so nested publication cannot change an earlier snapshot.
+- Feed observers are ordinary callables behind the owning `Signal::emit` boundary (see [signal delivery](../execution/signal.md)). Publication is already committed when they run, so a failure cannot roll it back; an escaping exception enters AO fatal handling at the emission boundary, with no later-observer guarantee.
+- The service does not infer domain failures, aggregate unrelated reports, or resolve presentation text.
+
+## State
+
+The service retains:
+
+- an immutable shared `NotificationFeedState` containing ordered entries;
+- the next notification id;
+- construction-time `NotificationFeedLimits`;
+- one expiry slot per live entry;
+- a synchronous observer set;
+- a FIFO queue used only while publishing reentrant updates.
+
+The first accepted id is `1`; id `0` is invalid.
+Rejected posts do not consume an id.
+`feed()` returns a value copy, while each service-produced update carries a non-null shared immutable snapshot.
+The update reference is callback-scoped; consumers copy `feedPtr` to retain that snapshot.
+Timer generations remain private control state, not snapshot fields.
+Ids have service-lifetime scope; enum ordinals and C++ layouts are not persistence guarantees.
+
+## Commands
+
+| Command | Effect |
+|---|---|
+| `post(severity, message, lifetime)` | Builds a request and applies `post(request)`. |
+| `post(request)` | Validates the request, evicts oldest eligible history if required, appends a new entry, schedules transient expiry when applicable, and publishes `Posted`. |
+| `createOrUpdate(key, request)` | Updates the entry with that key without reordering it, or performs a keyed post when absent. An effective replacement publishes `ReportUpdated`. |
+| Scheduled expiry | Removes the matching transient id and current registration, then publishes `Expired`. Stale callbacks do nothing. |
+
+The update identifies the command target with one `id`.
+Its immutable snapshot is the authority for any history eviction caused by that commit.
+
+## Bounds and rejection
+
+Each report key, plain message, and structured report subject/detail must fit `maxTextBytes`.
+The complete feed must fit `maxEntries`.
+A report key must be non-empty and a transient duration must be positive.
+
+Before commit, the service removes oldest `History` entries other than the command target until the candidate fits the entry-count bound.
+If only transient, pinned, or protected entries remain, the candidate is rejected without partial mutation.
+Structured playback reports remain structured; their subject and detail count toward the same text bounds.
+
+## Publication and failure safety
+
+Candidate state, update storage, expiry scheduling, and the next-id watermark are prepared before the authoritative feed changes.
+After commit, observer delivery is synchronous and has no recoverable failure channel.
+Observers are ordinary callables behind the owning `Signal::emit` boundary; a contract-fulfilling observer completes
+normally, while an escaping exception enters AO fatal handling immediately.
+A mutation requested by an observer appends a later immutable update to the publication queue and is drained only after the current emission returns.
+Validation and capacity rejection occur before commit and preserve the previous feed.
+Allocation failure is an exceptional process-resource failure; the service does not attempt allocator rollback or promise continued usability afterward.
+
+Expiry waits are cancellable tasks, but cancellation is only an optimization.
+The id-registration identity check is the correctness guard when a timer callback was already queued.
+Expiry returns through the cancellation-checked callback-executor hop and retains only weak owner-control and registration references; service teardown retires those references before cancelling timers, so late callbacks become no-ops.
+
+## Frontend boundary
+
+Runtime expiry changes the feed for every consumer.
+UIModel may hide compact or detail presentation locally, but that does not mutate the feed.
+The feed contains no frontend actions, icons, progress widgets, presentation modes, or dismissal commands.
+A message is either already resolved text or a structured report carrying semantic identity and raw arguments.
+UIModel resolves structured reports through the [text catalog](../presentation/text-catalog.md); runtime must not parse resolved text to recover those meanings.
+
+## Implementation map
+
+- [`NotificationIds.h`](../../../app/include/ao/rt/NotificationIds.h) defines strong ids and report keys.
+- [`NotificationState.h`](../../../app/include/ao/rt/NotificationState.h) defines requests, entries, lifetimes, limits, and updates.
+- [`NotificationService.h`](../../../app/include/ao/rt/NotificationService.h) defines the service surface.
+- [`NotificationService.cpp`](../../../app/runtime/NotificationService.cpp) owns validation, commit, publication, and expiry.
+
+## Test map
+
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, observer delivery, and reentrant FIFO delivery.
+- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, registration-identity checks, cancellation, and teardown safety.
+
+## Related documents
+
+- [Failure and reporting architecture](README.md)
+- [Activity-status specification](../presentation/activity-status.md)

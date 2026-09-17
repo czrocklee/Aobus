@@ -18,6 +18,7 @@ from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import build as build_command
 from ao.command import check as check_command
 from ao.command import coverage as coverage_command
+from ao.command import docs as docs_command
 from ao.command import perf as perf_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
@@ -806,6 +807,35 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["docs", "check"])
 
         self.assertEqual(args.docs_action, "check")
+
+    def test_docs_check_failure_reports_issues_and_returns_failure(self):
+        args = self.parse(["docs", "check"])
+        issue = docs_command.doccheck.Issue(Path("doc/system/example.md"), 7, "broken-link", "missing target")
+        output = io.StringIO()
+        with (
+            mock.patch.object(docs_command.doccheck, "check_tree", return_value=[issue]) as check,
+            contextlib.redirect_stderr(output),
+        ):
+            status = args.func(args)
+
+        check.assert_called_once_with()
+        self.assertEqual(status, 1)
+        self.assertIn("broken-link: missing target", output.getvalue())
+        self.assertIn("Documentation check failed: 1 issue(s).", output.getvalue())
+
+    def test_docs_check_success_scans_once_and_reports_document_count(self):
+        args = self.parse(["docs", "check"])
+        output = io.StringIO()
+        with (
+            mock.patch.object(docs_command.doccheck, "check_tree", return_value=[]) as check,
+            mock.patch.object(docs_command.doccheck, "discover_markdown", return_value=[Path("doc/README.md")]),
+            contextlib.redirect_stdout(output),
+        ):
+            status = args.func(args)
+
+        check.assert_called_once_with()
+        self.assertEqual(status, 0)
+        self.assertEqual(output.getvalue(), "Documentation check passed (1 Markdown files).\n")
 
     def test_winui_host_commands_parse(self):
         doctor = self.parse(["doctor", "winui"])

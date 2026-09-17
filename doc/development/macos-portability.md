@@ -1,9 +1,5 @@
 ---
 id: development.macos-portability
-type: development
-status: current
-domain: development
-summary: Registers every deviation the macOS build requires, with the condition and procedure for removing each one.
 ---
 # macOS portability compromises
 

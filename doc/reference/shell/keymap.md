@@ -1,22 +1,18 @@
 ---
 id: shell.keymap
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates neutral chord syntax, modifier aliases, shipped action bindings, override shape, shortcut eligibility, and what each shell can carry out.
 ---
 # Keyboard map
 
 ## Scope and version
 
 This reference owns the exact neutral `KeyChord` string surface, shipped application defaults, terminal defaults, persisted override shape, and the rules deciding which bindings a shell installs.
-Merge, conflict, editor, and shell-projection behavior belongs to the [keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md).
+Merge, conflict, editor, and shell-projection behavior belongs to the [keyboard shortcut specification](../../system/shell/keyboard-shortcut.md).
 
 The surface has no explicit schema version.
 
 ## Code boundary
 
-Neutral chord and keymap values belong to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
+Neutral chord and keymap values belong to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md).
 Each shell owns its own translation to executable input: GTK the GDK keysyms and accel syntax, Windows the virtual-key codes and `KeyboardAccelerator`, and TUI the FTXUI terminal events its protocol can distinguish safely.
 The keymap is written once for the whole application, so most of what it names is not something any one shell can run; deciding which bindings survive is that shell's own, and it is decided in plain C++ rather than at the toolkit boundary.
 
@@ -275,8 +271,8 @@ There is no explicit migration table for renamed actions or key tokens.
 
 ## Related documents
 
-- [Application shell architecture](../../architecture/application-shell.md)
-- [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
+- [Application shell architecture](../../system/shell/README.md)
+- [Keyboard shortcut specification](../../system/shell/keyboard-shortcut.md)
 - [GTK layout schema and action reference](layout-schema.md)
 - [Application managed-state surface](../persistence/application-config.md)
 

@@ -1,0 +1,100 @@
+---
+id: presentation.list-tree
+---
+# List-navigation tree specification
+
+## Scope
+
+This specification owns the platform-neutral projection of a runtime list snapshot into the hierarchy consumed by interactive frontends.
+It defines the independent system root, saved-root forest, effective parent relationships, malformed-parent recovery, sibling order, and the structure available to frontend adapters.
+
+It does not own persisted list relationships, list mutation validation, native tree objects, terminal labels, selection, or workspace navigation.
+Those facts belong to the [library list model](../../reference/library/model/list.md), [library mutation specification](../library/mutation.md), [presentation architecture](README.md), and frontend specifications.
+
+## Code boundary
+
+The [system architecture](../overview.md) places shared interactive projection in UIModel, and the [presentation architecture](README.md) defines its runtime and frontend dependencies.
+`ListTreeProjection` under `app/include/ao/uimodel/library/list/` consumes frontend-neutral `rt::ListNode` values and contains no GTK, WinUI, or terminal types.
+GTK, WinUI, and TUI consume the resulting roots, rows, and child edges without reconstructing list parentage or sibling order.
+
+## Terminology
+
+- The **source parent** is the `parentId` supplied by the runtime snapshot.
+- The **effective parent** is the parent used by the presentation tree after validation and recovery.
+- The **system root** is the permanent All Tracks row identified by `rt::kAllTracksListId`.
+- A **saved root** is a saved List whose effective navigation parent is invalid.
+  Its source still derives from All Tracks, but it is a sibling of the system root in navigation rather than a child row beneath it.
+- A **parent cycle** is a closed chain of two or more list parent relationships.
+
+## Invariants
+
+- Every projection contains exactly one independent All Tracks system root, including for an empty snapshot.
+- All Tracks has invalid navigation parent and no saved-List children.
+- Root order is All Tracks first, followed by saved roots in ascending List id; frontends may render a physical section separator between those two root classes.
+- Every retained snapshot row preserves its list id, name, and local filter expression.
+- A source parent becomes the effective parent only when it names another retained row and is not the row itself.
+- A missing, invalid, virtual, or self parent becomes an invalid effective navigation parent, making that row a saved root.
+- Each parent cycle is broken deterministically by making the lowest list id in that cycle a saved root; every other edge in the cycle remains intact.
+- For every non-root saved row, `ListTreeProjectionRow::parentId` agrees with the corresponding saved parent row's `childIds` entry.
+- Saved roots occur in `rootIds` and in no row's `childIds`; the All Tracks system root obeys the same root reciprocity.
+- Siblings are ordered by ascending list id independently of snapshot order and display name.
+- A retained row occurs at most once in the effective tree.
+
+## State model
+
+`ListTreeProjection` is an owned value containing ordered root ids and a row map keyed by list id.
+Each row contains its effective parent, display name, system-row marker, local expression, and ordered child ids.
+Saved Lists have one shared row shape; hierarchy is expressed only by `parentId`, not by a persisted Folder or List kind.
+
+The projection is disposable presentation state.
+Runtime list storage and mutation remain authoritative for the source snapshot.
+
+## Commands and transitions
+
+`buildListTreeProjection(snapshot)` performs one synchronous projection.
+It installs the independent All Tracks root, retains one row per unique snapshot id, derives effective parents, breaks cycles, records saved roots beside All Tracks, and then builds reciprocal saved-List child edges in stable id order.
+
+Rebuilding from a later snapshot replaces the complete value.
+The projection does not publish incremental changes or mutate the runtime snapshot.
+
+## Failure and cancellation
+
+Projection exposes no recoverable error or cancellation channel.
+Malformed parent relationships use the deterministic recovery rules above instead of producing a partial tree or entering an unbounded traversal.
+
+## Persistence and versioning
+
+The projection is not persisted and has no independent compatibility version.
+Persisted parent validation and format compatibility belong to the library model and transfer contracts.
+
+## Frontend observations
+
+GTK builds native tree nodes from the effective parent/child edges and uses root sections to render All Tracks separately from the saved-List forest.
+TUI walks the same roots and child edges in preorder, then adds terminal-specific indentation, one shared List icon, and expression detail.
+WinUI rebuilds its Modern `NavigationView` or Classic `TreeView` only after a committed library reset, List upsert, or List deletion; track-only and saved-order publications do not replace the tree.
+During replacement it suppresses selection callbacks, preserves expansion for surviving ids, expands every ancestor needed to reveal the active saved List, and selects All Tracks when the active List no longer exists.
+A later workspace selection also reveals its ancestor chain, including when the parent survived in a collapsed state.
+None of the frontends independently sorts the snapshot or follows source-parent chains.
+
+## Implementation map
+
+- [`ListTreeProjection.h`](../../../app/include/ao/uimodel/library/list/ListTreeProjection.h) defines the shared value surface.
+- [`ListTreeProjection.cpp`](../../../app/uimodel/library/list/ListTreeProjection.cpp) owns effective-parent recovery and stable child construction.
+- GTK [`ListTreeModelBuilder.cpp`](../../../app/linux-gtk/list/ListTreeModelBuilder.cpp) adapts the projection to Gio/GTK tree objects.
+- WinUI [`ListAuthoringAdapter.cpp`](../../../app/windows-winui/list/ListAuthoringAdapter.cpp) owns committed-change filtering and replacement-state restoration, while [`NavigationPane.cpp`](../../../app/windows-winui/layout/component/shell/NavigationPane.cpp) adapts that plan to both native navigation components.
+- TUI [`ListNavigationModel.cpp`](../../../app/tui/ListNavigationModel.cpp) adapts it to terminal navigation rows.
+
+## Test map
+
+- [`ListTreeProjectionTest.cpp`](../../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects nested rows, unified row data, invalid-parent recovery, deterministic cycle breaking, and sibling order.
+- [`ListTreeModelBuilderTest.cpp`](../../../test/unit/linux-gtk/list/ListTreeModelBuilderTest.cpp) protects GTK tree adaptation.
+- [`ListAuthoringAdapterTest.cpp`](../../../test/unit/winui/list/ListAuthoringAdapterTest.cpp) protects WinUI invalidation filtering, stable fallback, surviving expansion, and active-ancestor reveal without naming WinRT types.
+- [`ListNavigationModelTest.cpp`](../../../test/unit/tui/ListNavigationModelTest.cpp) protects TUI preorder, expansion, cursor reconciliation, search, and malformed-parent adaptation.
+
+## Related documents
+
+- [Presentation architecture](README.md)
+- [Library architecture](../library/structure.md)
+- [Library list model](../../reference/library/model/list.md)
+- [Library mutation specification](../library/mutation.md)
+- [TUI interaction specification](../frontend/tui.md)

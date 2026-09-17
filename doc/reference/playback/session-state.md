@@ -1,20 +1,16 @@
 ---
 id: playback.session-state
-type: reference
-status: current
-domain: playback
-summary: Enumerates the exact playback-session group, version 4 fields, types, defaults, transient exclusions, and compatibility gate.
 ---
 # Playback session state
 
 ## Scope and version
 
 This reference owns the exact serialized `PlaybackSessionState` payload in schema version `4`.
-Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../spec/playback/session-persistence.md).
+Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../system/playback/session-persistence.md).
 
 ## Code boundary
 
-The payload belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [playback](../../architecture/playback.md) and [persistence](../../architecture/persistence-and-managed-state.md) architectures.
+The payload belongs to the **application runtime** layer in the [system architecture](../../system/overview.md), under the [playback](../../system/playback/README.md) and [persistence](../../system/persistence/README.md) architectures.
 `PlaybackSessionYamlSchema` explicitly maps and validates the payload before `PlaybackSessionPersistence` installs it through the runtime grouped configuration store.
 
 ## Surface
@@ -93,7 +89,7 @@ The successor admits future playback writes only after the matching root is dura
 playback-session:
   schemaVersion: 4
   sourceListId: 1
-  quickFilterExpression: "artist = 'Example'"
+  quickFilterExpression: "$artist = 'Example'"
   sortBy: []
   currentTrackId: 42
   anchorIndex: 7
@@ -119,9 +115,9 @@ The runtime schema writes strong ids through their explicit unsigned raw values 
 
 ## Related documents
 
-- [Playback session persistence](../../spec/playback/session-persistence.md)
-- [Playback architecture](../../architecture/playback.md)
-- [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
+- [Playback session persistence](../../system/playback/session-persistence.md)
+- [Playback architecture](../../system/playback/README.md)
+- [Persistence and managed-state architecture](../../system/persistence/README.md)
 - [Application managed-state surface](../persistence/application-config.md)
 - [Predicate language](../query/predicate-language.md)
 - [Runtime track-field catalog](../library/model/track-field.md)

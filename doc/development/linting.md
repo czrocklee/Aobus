@@ -1,646 +1,213 @@
 ---
 id: development.linting
-type: development
-status: current
-domain: development
-summary: Defines lint triage, suppression, cleanup, and validation policy.
 ---
 # Linting policy
 
-This document is the contributor policy for lint findings in Aobus. It defines
-how to triage `clang-tidy`, Ruff, and mypy findings, when suppressions are
-acceptable, and how to clean up existing suppressions without changing behavior.
+This guide tells contributors how to handle `clang-tidy`, Ruff, and mypy findings.
+Checker internals, fixture design, AST proof, and native replay mechanics are in [checker development](lint/checker-development.md); naming-specific proof is in [naming checks](lint/naming-checks.md).
 
 Use project commands as the public entry points:
 
-- `./ao tidy` runs C++ `clang-tidy` plus Python Ruff and mypy for files in
-  scope.
+- `./ao tidy` runs C++ clang-tidy plus Python Ruff and mypy for files in scope.
 - `./ao hygiene` is the check-only commit gate: format check first, then tidy.
-- `./ao test --lint` tests the Aobus `clang-tidy` plugin fixtures; it is not the
-  Python lint command.
+- `./ao test --lint` tests the Aobus clang-tidy plugin fixtures; it is not the Python lint command.
 
-On native Windows use the corresponding `ao.bat` commands. The scope and policy
-are the same; the portal selects host-specific tools and build trees.
-
-Do not call `clang-tidy`, Ruff, or mypy directly during normal repository work.
-The `./ao` commands own scope discovery, strict/relaxed check modes, plugin
-loading, include paths, fix filtering, and diagnostic de-duplication. Keep lint
-work scoped to the task; do not turn a feature, bug fix, or test change into a
-drive-by lint sweep.
+Use the corresponding `ao.bat` commands on native Windows.
+Do not call clang-tidy, Ruff, or mypy directly during normal repository work.
+The portal owns scope discovery, strict and relaxed modes, plugin loading, include paths, fix filtering, and diagnostic de-duplication.
+Keep lint work scoped to the task; do not turn another change into a drive-by cleanup campaign.
 
 ## Scope behavior
 
-- With no explicit scope, compare the topic to its merge base with local `main`,
-  then include working-tree, staged, and untracked sources. On `main` (or when
-  local `main` is unavailable), use `HEAD~1`. An explicit `--commit <rev>` keeps
-  endpoint comparison semantics against that revision.
-- Hygiene resolves the source scope once for format, applicable naming/test
-  audits, and tidy. Empty subsets are skipped; a formatting failure stops before
-  later stages. Repository-wide guardrails remain part of `check`.
-- `STRICT` checks apply to production C++ under `lib/`, `app/`, `include/`, and
-  `tool/`.
-- `RELAXED` checks apply to C++ tests under `test/`. Test mode keeps the same
-  baseline but disables test-noisy checks such as unchecked optional access,
-  discarded return values, designated
-  initializers for positional expected-data tables, cognitive complexity,
-  identifier length, magic numbers, C arrays, C varargs, and test-only casts.
-- Non-fixture files under `test/integration/lint/` are ignored by normal tidy
-  runs.
-- Lint checker fixtures under `test/integration/lint/fixture/` are skipped in
-  batch scans and checked only when named explicitly. The `./ao test --lint`
-  suite owns fixture diagnostic and auto-fix coverage.
-- Python files in scope are checked by Ruff and mypy through `./ao tidy` using
-  `pyproject.toml`.
+With no explicit scope, the portal compares the topic to its merge base with local `main`, then includes working-tree, staged, and untracked sources.
+On `main`, or when local `main` is unavailable, it uses `HEAD~1`.
+An explicit `--commit <rev>` compares the endpoint against that revision.
+
+Hygiene resolves source scope once for formatting, applicable naming and test audits, and tidy.
+Empty subsets are skipped, a formatting failure stops later stages, and repository-wide guardrails remain part of `check`.
+
+- `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
+- `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
+- Non-fixture files under `test/integration/lint/` are ignored by normal tidy runs.
+- Fixtures under `test/integration/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics and FixIts.
+- Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
 
 ## Objective-C diagnostics
 
-Objective-C++ (`.mm`) production files remain `STRICT`. The shared formatter
-supports Objective-C syntax, and native tidy uses the exact Objective-C++
-compile command, including ARC and the macOS SDK. C++ checks still apply to
-C++ declarations; framework signatures and ARC ownership follow the
-[Cocoa boundary](coding-style.md#7-objective-c-boundary).
+Objective-C++ (`.mm`) production files remain `STRICT`.
+The shared formatter supports Objective-C syntax, and native tidy uses the exact Objective-C++ command, including ARC and the macOS SDK.
+C++ checks still apply to C++ declarations; framework signatures and ARC ownership follow the [Cocoa boundary](coding-style.md#objective-c-boundary).
 
-The curated tidy baseline adds `objc-avoid-nserror-init`,
-`objc-dealloc-in-category`, `objc-forbidden-subclassing`, `objc-missing-hash`,
-`objc-nsinvocation-argument-lifetime`, `objc-property-declaration`,
-`objc-super-self`, and `google-objc-avoid-throwing-exception`.
-These complement the C++ rules rather than replacing them with a foreign
-naming style. Checker regressions must distinguish Objective-C methods and
-ivars from C++ methods and record fields; a clean unmatched AST is not coverage.
+The curated baseline adds `objc-avoid-nserror-init`, `objc-dealloc-in-category`, `objc-forbidden-subclassing`, `objc-missing-hash`, `objc-nsinvocation-argument-lifetime`, `objc-property-declaration`, `objc-super-self`, and `google-objc-avoid-throwing-exception`.
+These checks complement the C++ rules rather than imposing a foreign naming style.
+Checker regressions must distinguish Objective-C methods and ivars from C++ methods and record fields; a clean unmatched AST is not coverage.
 
-`./ao analyze` includes the stable `clang-analyzer-osx.*` family for Cocoa and
-Core Foundation path analysis. It remains report-only unless
-`--fail-on-diagnostics` is selected; tool failures always fail. Select an
-explicit source scope on its native host so the analyzer uses the matching
-compile command and SDK.
-Objective-C++ translation units without an exact compile command fail analysis.
-Batch scopes explicitly report incompatible platform files as not analyzed;
-selecting such a file explicitly fails.
-The `.mm` suffix selects a language, not a platform owner. Add a new native
-target's source tree to platform coverage with the target itself.
+`./ao analyze` includes stable `clang-analyzer-osx.*` checks for Cocoa and Core Foundation path analysis.
+It is report-only unless `--fail-on-diagnostics` is selected; tool failures always fail.
+Select an explicit native source scope so analysis uses the matching compile command and SDK.
+An Objective-C++ unit without an exact command fails analysis.
+Batch scopes report incompatible platform files as not analyzed; explicit selection fails.
+The `.mm` suffix selects a language, not a platform owner, so add a new native target's source tree to platform coverage with the target itself.
 
-For the native desktop media adapter, select the build directory whose
-`compile_commands.json` includes that translation unit:
+For the native media adapter, select the build containing its compile command:
 
 ```bash
 ./ao analyze app/macos-appkit/MediaPlayerAdapter.mm --path /path/to/native/build --fail-on-diagnostics
 ```
 
-The [LLVM check catalog](https://releases.llvm.org/22.1.0/tools/clang/tools/extra/docs/clang-tidy/checks/list.html)
-and [analyzer catalog](https://clang.llvm.org/docs/analyzer/checkers.html)
-define the upstream checks. Runtime evidence and the Main Thread Checker
-remain separate from static analysis; see [macOS development](macos.md).
+The [LLVM check catalog](https://releases.llvm.org/22.1.0/tools/clang/tools/extra/docs/clang-tidy/checks/list.html) and [analyzer catalog](https://clang.llvm.org/docs/analyzer/checkers.html) define upstream checks.
+Runtime evidence and Main Thread Checker remain separate; see [macOS development](macos.md).
 
 ## Platform coverage
 
-Clang-format does not depend on a compile database, so the same source can be
-formatted on any native host. Linux gets clang-format from Nix, macOS gets it
-from the `llvm@22` formula selected by the portal, and Windows resolves it from
-the pinned LLVM SDK used by tidy (version pinned in `cmake/LlvmSdk.cmake`).
-Clang-tidy must use compiler flags, defines, generated headers, and SDK headers
-from a real native compile command. Complete cross-platform C++ lint coverage
-is therefore the combination of Linux, macOS, and Windows runs:
+Clang-format is source-based and may run on any native host.
+Linux obtains it from Nix, macOS from the portal-selected `llvm@22`, and Windows from the pinned LLVM SDK in `cmake/LlvmSdk.cmake`.
+Clang-tidy must replay a real native compile command with its flags, defines, generated headers, and SDK:
 
 - Linux owns PipeWire, ALSA, POSIX, and GTK translation units.
-- macOS owns Darwin translation units and independently covers POSIX and shared translation units.
-- Windows owns WASAPI and other Windows-only translation units.
-- Shared translation units are intentionally checked on every host that builds them.
+- macOS owns Darwin translation units and independently covers POSIX and shared units.
+- Windows owns WASAPI and other Windows-only units.
+- Shared units are intentionally checked on every host that builds them.
 
-The macOS managed environment pins Ruff and mypy but accepts the Homebrew
-Python at the contracted major/minor version instead of the exact patch. It
-checks changed Python during hygiene without establishing the complete tooling
-contract; the `tooling` suite on Linux and Windows owns that version and
-behavior gate.
-
-Changed-file, folder, and `--all` scopes may defer only files that are incompatible with the current host, such as WinUI or WASAPI code on Linux and GTK, ALSA, or PipeWire code on Windows.
-The portal prints those platform deferrals and continues with the native files.
+Changed-file, folder, and `--all` scopes may defer only files incompatible with the current host, and the portal reports every deferral.
 An explicitly selected uncovered file always fails.
-If any project file is compatible with the current host but lacks an exact translation-unit command or proven header consumer, every scope fails before running a partial tidy pass.
-Run the normal `./ao build` or `./ao check` workflow (`ao.bat` on Windows) to refresh the debug compilation database and Ninja dependencies, then rerun tidy.
+If a compatible project file lacks an exact translation-unit command or a proved header consumer, the whole requested scope fails before a partial tidy pass.
+Run the normal `./ao build` or `./ao check` workflow (`ao.bat` on Windows) to refresh the debug compilation database and Ninja dependencies, then retry.
+Header consumer selection, WinUI command merging, and Windows flag replay are specified in [native replay and header diagnostics](lint/checker-development.md#native-replay-and-header-diagnostics).
 
-A header first uses a same-component implementation with the same stem, including a recognized platform suffix such as `Windows`, `Linux`, or `Posix`.
-When no paired implementation exists, the portal reads the native Ninja dependency graph and selects the lexicographically first repository translation unit that actually consumed the header.
-With the default build selection, this read-only lookup consults the dedicated tidy Ninja tree and an existing normal debug tree: `debug` on Linux and macOS, or `windows-debug` on Windows.
-Each dependency tree uses its own `compile_commands.json` output-to-translation-unit mapping, including when an MSVC dependency record names only an object output and omits the source.
-The selected consumer must also exist in the primary tidy compilation database, and the header always borrows the exact command from that primary database rather than flags from the dependency-only tree.
-The portal never builds the full product graph merely to populate dependency records.
+The managed macOS environment pins Ruff and mypy but accepts the contracted Homebrew Python major/minor rather than an exact patch.
+It checks changed Python during hygiene without claiming the full tooling contract.
+The `tooling` suite on Linux and Windows owns the version and behavior gate.
 
-`-p` and `BUILD_DIR` keep dependency lookup scoped to the selected build state instead of silently consulting the default debug tree.
-The audited Visual Studio WinUI companion tree remains the existing exception: an explicit Windows tidy tree uses its `-winui` sibling.
-Visual Studio-only WinUI headers use a small audited companion map because that generator does not provide the Ninja dependency graph.
+## Policy-specific diagnostics
 
-## Fatal-contract source guardrails
+The coding and product contracts remain authoritative when a custom check reports them:
 
-The `aobus_guardrails` target scans production C++ under `app/`, `include/`, `lib/`, and `tool/`
-and fails when a source uses the C `assert` macro or raw gsl-lite contract
-spelling (`gsl_Expects`, `gsl_Ensures`, or `gsl_Assert`).
-The normal completion `./ao check` gate builds this target explicitly; ordinary incremental application builds do not rerun repository-wide source scans.
-Production runtime contracts use the AO macros so category, source location,
-diagnostic context, and abort behavior remain project-owned and consistent.
-Compile-time `static_assert` and third-party or test-source assertions are not
-part of this guardrail.
+| Diagnostic area | Contributor action | Technical reference |
+| --- | --- | --- |
+| Semantic naming | Apply the [naming conventions](naming-convention.md); rename the complete declaration and consumer set. | [Naming checks](lint/naming-checks.md) |
+| Header definitions | Move a disallowed definition to its owning `.cpp`; do not infer an exception from size, accessor intent, or `inline`. | [Header function definitions](lint/checker-development.md#header-function-definitions) |
+| AO fatal and exception boundaries | Use the owned AO contract or exception-carrier surface; do not suppress the raw-fatal and raw-throw checks. | [Fatal-contract source guardrails](lint/checker-development.md#fatal-contract-source-guardrails) |
+| Broad coroutine catches | Transfer cancellation first through one of the approved forms; later disposition remains the workflow owner's invariant. | [Cancellation handling](lint/checker-development.md#cancellation-handling-in-coroutine-catches) |
+| Filesystem path text | Use `pathToUtf8()`, `pathToGenericUtf8()`, `pathFromUtf8()`, `pathFromNative()`, or `path::native()` at the appropriate boundary. | [Filesystem path text boundaries](lint/checker-development.md#filesystem-path-text-boundaries) |
 
-CMake automatically adds `ao_` custom targets ending in `_audit`, `_check`,
-`_guardrail`, or `_boundary_report` to `aobus_guardrails`. Use one of those suffixes for a new
-completion guardrail; conditional frontend targets are discovered only when
-their owning frontend is enabled.
-
-The check is intentionally lexical and admits no per-file production
-allowlist. If foreign code must retain a raw spelling, keep that code outside
-the production source roots or isolate it behind the owning adapter rather
-than suppressing the repository rule.
-
-The same check-owned guardrail rejects the removed general exception surface
-(`ao/Exception.h`, `ExceptionFormat`, and `throwException`) and raw fatal
-call spellings (`std::terminate`, `std::abort`, `std::quick_exit`, `std::_Exit`,
-their explicitly global forms, and `_Exit`).
-It also rejects `AO_EXPECTS(false, ...)`, `AO_ENSURES(false, ...)`,
-`AO_INVARIANT(false, ...)`, and production `std::unreachable()` so an
-unconditional terminal branch has the explicit `AO_FATAL` category.
-Tests remain outside that production scan because category death probes and
-exhaustive-switch fixtures deliberately exercise those spellings.
-Only the Core fatal implementation may invoke the final abort primitive.
-Normal CLI parser exits remain `std::exit` and are not fatal-contract calls.
-
-The `aobus-readability-forbid-raw-fatal` AST check is the semantic authority
-for that rule. It resolves the standard/global `abort`, `terminate`,
-`quick_exit`, and `_Exit` declarations, including imported unqualified calls
-and address-taking, while ignoring unrelated project members with the same
-leaf name. It also rejects direct production references to the `ao::detail::abortFatal` and `ao::detail::abortRealtime` implementation entry points; public Contract macro expansions are the only exception. The one process-termination backend helper must begin with the exact
-`AO_RAW_FATAL_BACKEND()` macro expansion. A direct call to the marker helper,
-a nested marker, or a later marker does not qualify. Ordinary tests are outside
-production policy; the check's integration fixture remains covered. Do not
-suppress this check with `NOLINT`.
-
-The lexical build guard remains as an early failure for common call spellings;
-it is intentionally not the source of symbol resolution or the backend
-exception policy.
-
-The `aobus-readability-forbid-raw-throw` AST check enforces the
-[exception-carrier reference](../reference/failure/exception-carriers.md)
-without copying its whitelist here.
-In production source, a non-rethrowing `throw` expression is valid only when
-its enclosing helper begins with `AO_EXCEPTION_CARRIER(reason)` and that helper
-is inventoried by the reference.
-The checker recognizes the exact first-statement macro pattern rather than
-function or file names; a direct call to its implementation helper, a nested
-marker, or a later marker does not qualify.
-A `catch (...)`, `catch (std::exception const&)`, or
-`catch (std::bad_alloc const&)` must rethrow, enter AO fatal handling, or
-explicitly capture the current exception for a later owning boundary with
-`std::current_exception()`.
-Termination or transfer inside a nested catch, lambda, or only one branch of a
-conditional does not discharge the outer catch; every continuation path must
-transfer, terminate, or retain the current exception itself.
-An adapter that can name a narrower foreign exception catches that exact type.
-Ordinary test sources may inject arbitrary exceptions; the check's own
-integration fixture remains covered so the production rule cannot regress.
-
-An exceptional boundary that is allowed to continue begins its catch body with
-`AO_AUDITED_CATCH(reason)`. The reason identifies exception classification,
-best-effort diagnostics during already-safe cleanup, fatal-sink rejection,
-platform fallback, or preservation of an active primary exception. The checker
-recognizes only that exact first-statement macro pattern; it has no function-name
-or file allowlist, and a nested or later marker does not qualify. Every production
-use is inventoried in the exception-carrier reference. Do not suppress this check
-with `NOLINT`.
-
-The portal copies the selected native compiler flags into a temporary compilation database and checks the header itself as the main file.
-On Windows, it removes the translation unit's `/TP` after replacing the input because the header invocation supplies `-x c++-header` explicitly.
-A platform-incompatible header without a safe paired implementation, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
-A compatible header without that evidence fails closed and reports that the normal build or check must refresh dependency data.
-These rules cover main-file-only checks and prevent clang-tidy's fallback to a nearby but unrelated compile command from producing a false green result.
-
-Windows tidy uses the checkout-specific `windows-tidy` tree below the local
-Windows build root and the pinned official LLVM development archive. By
-default, build state and the shared verified SDK cache live below
-`%LOCALAPPDATA%\Aobus`, even when the source checkout is on a mapped drive. See
-`doc/development/windows.md` for the state layout, overrides, and migration
-instructions. CMake verifies the archive SHA-256 and builds
-`tool/lint/AobusClangTidy.exe` by statically linking the Aobus checks with that
-SDK's `clangTidyMain`. The official Windows `clang-tidy.exe` does not export the
-symbols required by an out-of-tree DLL, so it cannot load the Linux-style
-plugin. Do not substitute `clang-tidy.exe` from Visual Studio or `PATH`; it
-would omit every `aobus-*` check.
-
-The Windows portal composes its temporary Clang compilation database from two
-native build trees.
-The `windows-tidy` Ninja tree owns shared code, the TUI, and the CLI, while the
-`windows-winui` Visual Studio tree owns WinUI and its generated C++/WinRT
-headers.
-WinUI deliberately remains disabled in the Ninja tree because CMake's WinUI
-integration requires the Visual Studio generator.
-When the selected tidy scope contains a WinUI file, the portal incrementally
-builds the Debug WinUI target already exercised by `ao.bat check`, asks
-MSBuild's `GetCompileCommands` target for the exact compiler state, validates
-that every selected WinUI translation unit is present, and merges those
-commands with the Ninja database.
-Generated translation units outside the repository source tree are excluded.
-`--no-build` skips the incremental WinUI build and requires an already
-configured, generated Visual Studio tree.
-With `-p` or `BUILD_DIR`, the companion Visual Studio tree is the sibling whose
-name appends `-winui`; the default paths remain the checkout-specific
-`windows-tidy` and `windows-winui` trees.
-
-Before Clang replay, the portal removes only the exact `/Zc:preprocessor`, `/c`, `/ZW:nostdlib`, and `/GL` driver tokens from the temporary merged database.
-The first flag enables the standards-conforming MSVC preprocessor in real product builds, where it remains required.
-The next two describe MSVC compile behavior that the clang-tidy driver already establishes.
-The Windows tidy host tree is a Release/IPO build, but clang-cl replays one translation unit for analysis and cannot consume the `/GL` link-time code-generation request from the real compile command.
-Clang rejects or reports these exact tokens as unused driver arguments during analysis.
-Related spellings such as `/Zc:preprocessor-` are not removed.
-
-Header checks reuse the exact native implementation command but remove the
-CMake-generated forced PCH before replacing the input with the header.
-This avoids redeclaring headers that the PCH itself aggregates.
-The portal keeps other forced includes, supplies `-x c++-header`, and suppresses
-only the nonportable-include-path compiler diagnostic for WinUI because
-generated C++/WinRT headers preserve schema casing while Windows resolves paths
-case-insensitively.
-Intentional WinUI header-only support files have audited implementation
-companions in the portal so the complete WinUI source folder has no deferred
-headers.
-
-The Windows analysis command also defines `_USE_STD_VECTOR_ALGORITHMS=0` for
-clang-tidy only. This works around
-[microsoft/STL#6294](https://github.com/microsoft/STL/issues/6294), where the
-Visual Studio 18 STL sends three-byte element types to a vectorized helper that
-supports only one-, two-, four-, and eight-byte elements. It is an MSVC STL
-header issue, not an LLVM 22 incompatibility, and the define does not affect any
-Aobus product build. Remove the workaround after the corresponding STL fix is
-available in the required Build Tools baseline.
-
-Set `AOBUS_LLVM_SDK_CACHE_ROOT` to relocate the automatically managed shared
-cache. Set the distinct `AOBUS_LLVM_SDK_ROOT` CMake cache option at configure
-time to use one already extracted copy of the exact archive, for example on an
-offline machine. A pre-extracted root must contain the LLVM and Clang CMake
-packages, static libraries, tools, and resource headers; configuration fails
-closed when any required SDK file is missing.
-
-## Filesystem path text boundaries
-
-`aobus-portability-explicit-path-conversion` rejects
-ambient narrow conversions in both directions: `path::string()` /
-`path::generic_string()` and construction of a path from narrow text. Text and
-durable interchange use `pathToUtf8()`, `pathToGenericUtf8()`, or
-`pathFromUtf8()`. POSIX APIs that supply native filename bytes enter through
-`pathFromNative()`, while calls back into a native filesystem API use
-`path::native()`. A narrow-only process API receives explicit UTF-8 under the
-Windows executable manifest contract. These boundaries use the facade rather
-than site-local `NOLINT` approvals.
-
-Ordinary tests remain outside this policy. Shared, POSIX, and Windows-only
-production translation units are all covered; host-specific tidy runs provide
-the compile commands for their respective sources.
-
-## Semantic function and value naming
-
-The [naming conventions](naming-convention.md) own the vocabulary enforced by
-`aobus-readability-async-function-naming`,
-`aobus-readability-bool-function-naming`, and
-`aobus-readability-result-naming-convention`.
-The task and result checks use declaration and canonical type identity through
-aliases, deduced types, and supported templates; they never classify a type by
-a source-text substring. Resolved Task function-template instantiations map
-back to one diagnostic on their shared source declaration; a mixed-return
-deduced Task template remains a semantic naming decision rather than a blanket
-checker exemption. Bool eligibility instead requires the source-fixed direct
-bool contract described in the naming conventions: incidental bool payload
-instantiations of generic APIs are not evidence. Explicit dependent `ao::Result<T>` declarations,
-including references, are checked at template definition time.
-Deduced Result locals in templates and generic lambdas require source evidence:
-a Result-typed initializer, or a resolved function named in the source lookup
-whose source return type promises Result. Instantiations map to one source diagnostic.
-An unconstrained `T`, its `auto` copies, and calls through arbitrary callable
-parameters do not acquire a Result naming requirement merely because a caller
-instantiates them with Result. Other unresolved dependent initializer shapes
-remain outside this bounded proof; they are not blanket template exemptions.
-The bool check inspects explicit/aliased direct bool returns and bounded
-source-proved deduced returns, not nested lambda or local-class bodies. It
-checks all source return branches, maps redeclarations/instantiations to one
-source diagnostic, and preserves independently written explicit specializations.
-It does not treat bool references, `Task<bool>`, or `Result<bool>` as direct-bool
-functions. Initial-capital predicate vocabulary does not relax built-in casing;
-only exact `asBool` and `readBoolOr` conversion names are value API exceptions. Framework exceptions
-require a proved foreign override or exact supported customization
-identity/signature; owner, filename, capitalization, and broad prefixes are not
-proof. A generated non-virtual boundary that the AST cannot prove uses only an
-explained, check-specific source-local suppression.
-All three checks are diagnostic-only because a correct rename must update the
-whole declaration and consumer set and may require semantic judgment.
-Keep the repository at zero findings after the corresponding migration; do not
-add a legacy baseline or per-file exception list.
-
-## Header function definitions
-
-`aobus-readability-header-function-definition` keeps concrete implementation out of headers so ordinary builds, tests, and lint runs do not repeatedly parse and instantiate the same implementation.
-The [C++ coding style](coding-style.md) owns the exact pure-AST contract.
-The checker does not infer getters or setters, count source lines or tokens, or treat explicit `inline` as permission.
-
-The checker diagnoses definitions in the selected project header while ignoring system and generated headers, implicit compiler declarations, and lambda call operators.
-Included headers are not diagnosed as though they were the selected main file.
-Moving a definition also requires choosing an owning implementation target, so the checker is diagnostic-only and does not offer an automatic fix.
-
-Keep the repository at zero findings rather than adding a baseline allowlist.
-A function does not receive an exception merely because it appears small or is assumed to be performance-sensitive.
-Move it to the owning implementation file and validate optimized behavior with the `release` workflow in [Optimized builds](optimized-builds.md).
-Suppress this checker only after a stable benchmark demonstrates a material regression that IPO does not recover.
-Such a suppression must name the benchmark and summarize the measured result in an adjacent English comment; file-level suppression and project allowlists are not acceptable.
+The raw contract lexical guard remains an early failure for common spellings; AST checks own symbol resolution and narrow implementation-marker exceptions.
+A new completion guardrail target uses the `ao_` prefix and one of `_audit`, `_check`, `_guardrail`, or `_boundary_report` so CMake adds it to `aobus_guardrails`.
+The completion `./ao check` builds that aggregate; ordinary incremental product builds do not rerun repository-wide scans.
 
 ## Triage
 
-Start by deciding whether the warning points at a real code issue, a project
-style issue, a tool false positive, or an unavoidable external API shape.
+First classify the warning as a real code issue, a project-style issue, a tool false positive, or an unavoidable external API shape.
+Treat correctness, lifetime, ownership, optional access, and special-member diagnostics as real unless local code proves otherwise.
 
-LLVM upgrades can add checks to an enabled wildcard family, rename checks from
-another policy family into one Aobus enables, or broaden an existing check.
-Review the release notes and the resulting diagnostic classes as a policy
-change: explicitly disable rules that conflict with project architecture, tune
-new options that restore the intended scope, and fix findings that match Aobus
-policy. Do not convert a toolchain-wide policy mismatch into repeated local
-suppressions.
+- Fix readability findings when the result is clearer to a future reader. Prefer named constants, early returns, clear expressions, or a small local helper over mechanical churn.
+- Add the direct header that provides a used symbol; do not rely on transitive includes.
+- For RAII guards, explicitly delete copy and move or define the required operations.
+- For naming, use the [naming conventions](naming-convention.md); for language and style, use the [C++ coding style](coding-style.md). Do not rename public API, framework-required names, or boundary vocabulary merely to satisfy a generic rule.
+- If a tool is consistently wrong for a reusable project pattern, narrow its configuration or refine the custom check. Do not scatter identical suppressions.
 
-- Treat correctness, lifetime, ownership, optional access, and special-member
-  warnings as real problems unless the local code proves otherwise.
-- Fix readability findings when the change makes the code clearer to a future
-  reader. Prefer named constants, early returns, clearer expressions, or a small
-  local helper over mechanical churn.
-- Fix include findings by adding the direct header that provides the used
-  symbol. Do not rely on transitive includes.
-- For RAII guards, explicitly delete copy/move or define the needed operations.
-- For naming findings, follow `doc/development/naming-convention.md`; for language and
-  style findings, follow `doc/development/coding-style.md`. Do not rename public API,
-  framework-required names, or vocabulary names just to appease a generic rule.
-- If the tool is consistently wrong for a project pattern, consider narrowing
-  the check configuration or custom rule. Do not scatter many identical
-suppressions across the tree.
-
-### Cancellation handling in coroutine catches
-
-The `aobus-async-cancellation-guard` check protects broad handlers in
-coroutines from turning cancellation into failure. A broad coroutine handler
-must begin with one of three forms:
-
-1. Call `ao::async::rethrowIfOperationCancelled(error)` before handling the
-   remaining exception.
-2. At a boundary that owns mandatory terminal bookkeeping, use an exhaustive
-   `if (ao::async::isOperationCancelled(error)) { ... } else { ... }` as the
-   first statement. Both branches must be non-empty, and the predicate must
-   inspect that handler's catch variable.
-3. Assign `std::current_exception()` to `std::exception_ptr` state declared
-   outside the handler when cleanup must finish before propagation. Use
-   separate state for separate cleanup stages when failure priority matters.
-   The owner must subsequently call `ao::async::rethrowException()`, or pass
-   the retained exception to a fatal terminal boundary.
-
-The check validates only that the handler immediately transfers ownership of
-the active exception. It does not perform cross-statement dataflow to prove the
-later rethrow or fatal disposition; that remains an invariant of the owning
-workflow and its review.
-
-The second form is for workflows that must retain cancellation as local state
-long enough to publish a terminal event, retire an in-flight request, or reset
-owner state before cancellation propagates. It is not permission to swallow
-cancellation or continue normal work.
-
-A `catch (...)` has no typed catch variable to classify, so it must begin with
-either `ao::async::rethrowIfOperationCancelled()` or the deferred-exception
-form. A sibling catch cannot receive an exception rethrown from another
-handler; use local classification or deferral when the same workflow owns
-cleanup that cannot be skipped.
-
-`bugprone-throwing-static-initialization` and `bugprone-exception-escape` are
-disabled for all source modes. On MSVC they are dominated by standard-library
-implementation details such as `std::map` allocating its sentinel node, while
-explicit `noexcept` paths also report every potentially allocating error or
-buffer operation. These diagnostics are not actionable enough to justify local
-suppressions or data-structure churn. Review and tests remain responsible for
-the project's intentional fail-fast boundaries.
+An LLVM upgrade may add checks through a wildcard family, move checks into an enabled family, or broaden existing behavior.
+Treat the resulting diagnostic classes as a policy change: review release notes, explicitly disable rules that conflict with Aobus architecture, tune options that restore intended scope, and fix findings that match policy.
+Do not turn a toolchain-wide mismatch into repeated local suppressions.
 
 ## Suppressions
 
-Use `NOLINT` only when the warning is caused by an external API shape, a clear
-false positive, or a test-only pattern where the fix would be worse than the
-warning.
+Use `NOLINT` only for an external API shape, a clear false positive, or a test-only pattern where a fix would be worse than the warning.
 
-- Prefer `NOLINTNEXTLINE(check-name)` or inline `NOLINT(check-name)` at the
-  exact expression.
-- Include the specific check name. Avoid bare `NOLINT`.
-- Add a short English reason when the boundary is not obvious from the code.
-- Use `NOLINTBEGIN/END` only for a compact, contiguous region that cannot be
-  made clearer locally.
+- Prefer `NOLINTNEXTLINE(check-name)` or inline `NOLINT(check-name)` at the exact expression.
+- Always name the check; avoid bare `NOLINT`.
+- Add a short English reason when the boundary is not obvious.
+- Use `NOLINTBEGIN/END` only for a compact contiguous region that cannot be clarified locally.
 
-Common acceptable cases include GTKmm ownership handoff such as
-`Glib::make_refptr_for_instance(new T)`, GLib/GTK macros, C varargs or C arrays
-at an API boundary, unavoidable `reinterpret_cast` in tests, framework-required
-method names, and `clang-tidy` false positives around framework or template
-code.
+Acceptable cases include GTKmm ownership handoff such as `Glib::make_refptr_for_instance(new T)`, GLib or GTK macros, C varargs or arrays at an API boundary, unavoidable test `reinterpret_cast`, framework-required method names, and genuine template or framework false positives.
 
-`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's
-`STRICT` or `RELAXED` mode. Such a directive cannot suppress a diagnostic and
-is stale by definition. When a check is disabled or moved out of a mode, remove
-the corresponding local suppressions in the same change.
+`./ao tidy` rejects a named `NOLINT` when that check is disabled for the file's `STRICT` or `RELAXED` mode.
+Because it cannot suppress a diagnostic, such a directive is stale.
+Remove local suppressions in the same change that disables a check or removes it from a mode.
 
 ## Repository-wide suppression governance
 
-Classify every suppression in this order:
+Classify each suppression in this order:
 
-1. **Stale:** the configured mode cannot emit the diagnostic, or the current
-   code no longer triggers it. Delete the directive without changing code.
-2. **Code issue:** a local, behavior-preserving edit expresses the contract more
-   clearly. Fix the code and remove the directive.
-3. **Aobus checker mismatch:** an `aobus-*` rule misunderstands a reusable
-   project pattern. Refine the checker and add a lint integration fixture that
-   proves both the positive and negative boundary.
-4. **Upstream policy mismatch:** an upstream check is systematically wrong for
-   a project-wide pattern. Prefer the narrowest supported check option. Disable
-   the check only when the whole diagnostic class conflicts with Aobus design;
-   add a configuration test and rationale.
-5. **Necessary local boundary:** an external ABI, platform API, framework macro,
-   implementation-dependent standard-library type, or deliberate contract test
-   requires the construct. Keep the smallest named suppression and explain the
-   boundary when it is not evident.
+1. **Stale:** the configured mode cannot emit the diagnostic or current code no longer triggers it. Delete the directive without changing code.
+2. **Code issue:** a local behavior-preserving edit states the contract more clearly. Fix the code and remove the directive.
+3. **Aobus checker mismatch:** an `aobus-*` rule misunderstands a reusable pattern. Refine it and add an integration fixture proving both sides of the boundary.
+4. **Upstream policy mismatch:** an upstream check is systematically wrong for a project pattern. Prefer the narrowest supported option; disable the check only when its whole diagnostic class conflicts with Aobus design, with a configuration test and rationale.
+5. **Necessary local boundary:** an external ABI, platform API, framework macro, implementation-dependent standard-library type, or deliberate contract test requires the construct. Keep the smallest named suppression and explain a non-obvious boundary.
 
-Current policy examples follow this split. Cognitive-complexity analysis ignores
-macro expansions because the caller does not own the macro's control flow, while
-ordinary function bodies remain checked. The derived-method-shadowing diagnostic
-is disabled because Aobus uses CRTP customization points from LLVM
-`RecursiveASTVisitor` and standard range view interfaces; those methods refine a
-non-virtual fallback by design. Neither policy should be represented by repeated
-local suppressions.
+Cognitive-complexity analysis ignores macro expansions because callers do not own macro control flow; ordinary function bodies remain checked.
+Derived-method-shadowing is disabled because LLVM `RecursiveASTVisitor` and standard range-view CRTP customization points intentionally refine a non-virtual fallback.
+Neither policy should become repeated local suppressions.
 
-## Things to avoid
-
-- Do not disable checks directory-wide or file-wide.
-- Do not add umbrella includes to satisfy include-cleaner unless the external
-  library requires that umbrella header.
-- Do not add global constants for one-use literals.
-- Do not hide a one-off C API warning behind an abstraction that has no design
-  value.
-- Do not split clear local logic into many single-use functions just to reduce a
-  metric.
-- Do not mix include cleanup with behavioral lint cleanup unless the task
-  explicitly asks for both.
+Do not disable checks directory-wide or file-wide.
+Do not add umbrella includes merely to satisfy include-cleaner, add global constants for one-use literals, hide a one-off C API warning behind an abstraction with no design value, or split clear local logic into many single-use functions only to reduce a metric.
+Keep include cleanup separate from behavioral lint cleanup unless the task explicitly combines them.
 
 ## NOLINT cleanup playbook
 
-When reducing existing suppressions, use the smallest semantic-preserving edit
-and re-run tidy on the touched files before widening scope.
+Use the smallest behavior-preserving edit and rerun tidy on touched files before widening scope:
 
-1. Delete stale suppressions first. If the line no longer warns, keep only the
-   deletion.
-2. Keep include-cleaner work separate when the task excludes include cleanup.
-3. Replace a suppression with clearer code when the fix is local and
-   behavior-preserving.
-4. Keep a targeted suppression when the clean code would be less readable or
-   would obscure an external API contract.
+1. Delete stale suppressions first; if the line no longer warns, keep only the deletion.
+2. Keep include-cleaner work separate when excluded from the task.
+3. Replace a suppression with clearer local code when that preserves behavior.
+4. Keep a targeted suppression when cleaner-looking code would reduce readability or obscure an external contract.
 
-Useful cleanup patterns:
+Useful patterns:
 
-- Replace unexplained protocol, binary-layout, or UI-policy literals with named
-  `constexpr` values when the name carries real domain meaning.
-- For binary-layout assertions, prefer a named byte-count constant on the layout
-  type over suppressing a raw size literal.
-- For unused overload parameters, use comment names such as `Type& /*value*/`
-  instead of suppressing `readability-named-parameter`.
-- For strict full-string unsigned parsing, prefer `std::from_chars` over
-  `strtoul`; it avoids C output-parameter suppressions and preserves
-  no-leading-space behavior.
-- At C API pointer boundaries in tests, prefer existing helpers such as
-  `utility::layout::asLegacyPtr<T>(ptr)` when they express the boundary
-  directly. Otherwise keep a narrow suppression at the boundary.
-- For C structs used by framework tests, prefer `std::array`, `std::to_array`,
-  `std::span`, or a tiny local designated-initializer helper when that is
-  clearer than raw arrays and macro initializers.
-- Iterator trait aliases such as `value_type`, `difference_type`, `reference`,
-  `pointer`, and `iterator_category` are STL vocabulary names. Keep them
-  allowlisted in lint configuration instead of suppressing each alias.
-- GTKmm/glibmm ownership boundaries are usually acceptable suppressions. Do not
-  hide them behind helpers unless the local class design already supports that
-  helper cleanly.
-- Binary or protocol literals can be cleaned with named constants, but if the
-  named constant reads worse than the documented format literal, keep a narrow
-  suppression or revisit the rule.
+- Give protocol, binary-layout, or UI-policy literals a named `constexpr` only when the name carries domain meaning. For layout assertions, prefer a byte-count constant on the layout type.
+- Mark an unused overload parameter as `Type& /*value*/` rather than suppressing `readability-named-parameter`.
+- Prefer `std::from_chars` for strict whole-string unsigned parsing; it avoids C output-parameter suppressions and preserves no-leading-space behavior.
+- At test C API pointer boundaries, use an existing helper such as `utility::layout::asLegacyPtr<T>(ptr)` when it directly expresses the boundary; otherwise retain a narrow suppression.
+- For C structs in framework tests, prefer `std::array`, `std::to_array`, `std::span`, or a small designated-initializer helper when clearer than raw arrays or macro initializers.
+- STL iterator aliases (`value_type`, `difference_type`, `reference`, `pointer`, and `iterator_category`) belong in lint configuration rather than repeated local suppressions.
+- GTKmm and glibmm ownership boundaries are usually acceptable suppression sites. Do not hide them behind a helper unless local design already supports it.
+- When a format literal is clearer than a named constant, keep a narrow suppression or revisit the rule.
 
 ## Include-Cleaner triage
 
-Add the direct include where the symbol is used.
+Add the direct provider include where the symbol is used.
+A public header includes providers for its public symbols; a `.cpp` includes providers for symbols used only there rather than relying on its paired header.
+Use the standard header that owns a standard-library symbol.
 
-- If a symbol appears in a public header, the public header must include the
-  provider.
-- If a symbol is used only in a `.cpp`, add the provider include to the `.cpp`
-  instead of relying on a paired header's transitive includes.
-- For standard library symbols, include the standard header that owns the symbol.
-- For GTKmm, GLib, PipeWire, LLVM, and other Linux Nix-provided libraries, use
-  the package's headers and build configuration to find the provider. From the
-  repo root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for
-  libraries that publish pkg-config metadata. On macOS, inspect the active
-  vcpkg installation recorded in the dependency report.
-- For Clang/LLVM internals, inspect the compile database under
-  `/tmp/build/<project-directory>/debug-clang-tidy/compile_commands.json` on
-  Linux or the resolved checkout-specific `windows-tidy` build tree on Windows.
-  The Windows portal prints that local path. On Linux,
-  `llvm-config --cxxflags` is also useful.
+For GTKmm, GLib, PipeWire, LLVM, and other Nix-provided libraries, inspect package headers and build configuration.
+From the repository root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for pkg-config packages.
+On macOS, inspect the active vcpkg installation from the dependency report.
+For Clang and LLVM internals, inspect the native compile database: `/tmp/build/<project-directory>/debug-clang-tidy/compile_commands.json` on Linux, or the checkout-specific `windows-tidy` tree printed by the Windows portal.
+`llvm-config --cxxflags` is also useful on Linux.
 
-Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
-provider, such as required umbrella headers or C macros from framework headers.
-When a required header is consumed only through a specialization or registration
-side effect that include-cleaner cannot observe, keep the include and add the
-narrowest project-level `IgnoreHeaders` entry instead of repeated local suppressions.
+Suppress `misc-include-cleaner` only when it genuinely cannot model a provider, such as a required umbrella header or C macro.
+When a required include exists solely for specialization or registration side effects, keep it and add the narrowest project-level `IgnoreHeaders` entry rather than repeated local suppressions.
 
 ## Python hygiene
 
-Ruff and mypy findings should be fixed with the same bias as C++ lint: prefer a
-local code or typing improvement, keep the public shape stable unless the task
-requires an API change, and avoid broad ignores.
+Fix Ruff and mypy findings with the same bias as C++ lint: prefer a local code or typing improvement, keep public shape stable unless the task changes it, and avoid broad ignores.
+Linux uses the project shell.
+Windows uses the checkout-specific managed environment and never ambient `PATH` tools.
+Both supported tooling environments must match exact versions in `script/ao/toolchain.json`; Nix checks this during evaluation, while Windows bootstrap and tooling tests probe the managed environment.
 
-Linux runs Ruff and mypy from the project shell. Windows uses the locked tools
-in the checkout-specific environment bootstrapped by `ao.bat`; it does not use
-ambient `PATH` installations. The selected Python files and project
-configuration are otherwise the same on both hosts. Both environments must
-match the exact versions in `script/ao/toolchain.json`: Nix checks this during
-evaluation, while the Windows bootstrap and tooling tests probe the managed
-environment.
-
-- Use `./ao format` for Python formatting changes. `./ao tidy --fix` applies
-  only exported `clang-tidy` replacements.
-- Use targeted `# noqa: RULE` or `# type: ignore[code]` only when the tool cannot
-  express the real contract. Add a short reason when it is not obvious.
-- Do not silence mypy by widening types to `Any` unless the value is genuinely
-  dynamic at that boundary.
+- Use `./ao format` for Python formatting. `./ao tidy --fix` exports only clang-tidy replacements.
+- Use targeted `# noqa: RULE` or `# type: ignore[code]` only when the tool cannot express the real contract; explain a non-obvious reason.
+- Do not silence mypy by widening to `Any` unless the boundary is genuinely dynamic.
 
 ## Automatic fixes
 
-Automatic fixes can be useful, but they can also leave the working tree in a
-large or confusing state. Treat them as an optional recovery-friendly shortcut,
-not as the normal lint workflow.
+Automatic fixes are an optional, recovery-friendly shortcut, not the normal workflow.
+Use them only with a clean or easily reverted tree and a mechanical diagnostic whose diff is straightforward to review.
+They are most defensible for simple repeated edits, checker fixtures, obvious local modernization, or a low-judgment batch that is more error-prone by hand.
 
-This section addresses human contributors. Agent sessions do not run
-`./ao tidy --fix` or apply exported replacements at all; agents make explicit,
-reviewable hand edits (see the `use-clang-tidy` skill). The lint integration
-suite's fixture auto-fix stage is separate and unaffected.
-
-Consider automatic fixes only when the working tree is clean or otherwise easy
-to revert, and when the diagnostic is mechanical enough that the generated diff
-will be straightforward to review. They are most defensible for simple repeated
-edits, checker fixtures, obvious local modernization, or a large batch of
-low-judgment changes that would be more error-prone to perform by hand.
-
-Prefer hand edits when the warning involves ownership, public API shape,
-behavior, naming, readability tradeoffs, or framework boundaries. Never run
-automatic fixes across the whole repository. After any automatic fix, review the
-diff before continuing and run the same verification you would run for a manual
-edit.
-
-## Custom checker development
-
-Checkers live in `tool/lint/check/`; follow the owning check's namespace and
-register new sources in `tool/lint/AobusLintModule.cpp` and
-`tool/lint/CMakeLists.txt`. The fixture contract and runner are described in
-[test suites](test/test-suite.md). Use `./ao test --lint` for the integration
-gate and `./ao tidy --no-build --check <alias> <fixture>` for focused diagnosis
-with a prepared native plugin and compile database.
-
-For FixIt changes, cover macro boundaries, same-named foreign symbols, and
-cross-object cases where relevant. Identify symbols by declarations and qualified
-names rather than source-text substrings; identify objects by canonical declarations
-or bound nodes rather than spelling. A macro diagnostic may be valid while its
-replacement is unsafe; use `aobus::isInMacro` and omit an unsafe FixIt.
-
-Existing helpers in `AstHelpers.h`, `CalleeQualificationHelpers.h`, and
-`RaiiHeuristics.h` own shared AST operations. Keep a new helper local until at
-least two current checks need the same stable contract.
-
-Use `clang-query` or a raw AST dump when the matcher shape is uncertain, with
-the affected native compile database and toolchain. Linux tools come from the
-project Nix environment; macOS uses portal-selected LLVM and Windows the governed
-LLVM SDK. An unchanged matcher already exercised by fixtures does not require
-another AST investigation for a diagnostic-text correction.
-
-Common AST traps when extending these checks:
-
-- `ignoringParenImpCasts` does not unwrap constructor or materialization nodes;
-  inspect the actual implicit-node chain before selecting a traversal.
-- The node bound by a matcher must match the type used with `getNodeAs`.
-- `DeclRefExpr` nodes for the same object differ; compare their declarations.
-- Ranges algorithms may be function objects with implementation inline namespaces.
-  Their calls use `CXXOperatorCallExpr`, whose first argument is the callee object.
-- Argument counts include default arguments; count explicit arguments when that
-  is the contract being checked.
-- C++20 rewritten comparisons contain synthesized operators. Use
-  `aobus::isWithinRewrittenOperator` or match the source comparison to avoid
-  duplicate or inverted diagnostics.
-- Initializer-list constructor detection uses the first parameter's type;
-  parent traversal requires `clang/AST/ParentMapContext.h`.
+Prefer hand edits for ownership, public API, behavior, naming, readability tradeoffs, and framework boundaries.
+Never apply automatic fixes repository-wide.
+Review every resulting diff and run the same verification required for a hand edit.
+Agent sessions do not run `./ao tidy --fix` or apply exported replacements; agents make explicit reviewable edits under the `use-clang-tidy` skill.
+The lint fixture suite's own auto-fix stage is separate.
 
 ## Verification
 
-After C++ lint edits, re-run the narrowest `./ao tidy` scope that covers the
-modified C++ files. After Python hygiene edits, re-run `./ao tidy` for the
-modified Python files and `./ao test --tooling` when tooling behavior changed.
-Run focused build or test validation when a lint fix changes behavior,
-ownership, public API shape, or test semantics.
+After C++ lint edits, rerun the narrowest `./ao tidy` scope covering modified C++ files.
+After Python hygiene edits, rerun `./ao tidy` for modified Python and `./ao test --tooling` when tooling behavior changed.
+Run focused build or test validation when a lint fix changes behavior, ownership, public API, or test semantics.
 
-For a change that touches platform-specific C++, run the corresponding native
-tidy pass. Cross-platform C++ changes need the affected Linux, macOS, and Windows
-passes; each host can validate only translation units generated by its own build.
+Platform-specific C++ requires its native tidy pass.
+Cross-platform C++ requires affected Linux, macOS, and Windows passes because each host validates only translation units generated by its build.
+Checker changes additionally follow [checker development validation](lint/checker-development.md#validation).
 Use [validation and review](test/validation-and-review.md) for completion scope and result reuse.

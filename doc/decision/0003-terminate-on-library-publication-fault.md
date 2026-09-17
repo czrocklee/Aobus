@@ -1,9 +1,6 @@
 ---
 id: decision.0003.terminate-on-library-publication-fault
-type: decision
 status: accepted
-domain: library
-summary: Terminates a live process when mandatory publication fails after durable library commit instead of exposing a recoverable Faulted or committed-but-unpublished state.
 ---
 # Decision 0003: terminate on live library publication fault
 
@@ -62,12 +59,12 @@ An owner-thread publication runs inline; a foreign producer admits publication b
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
-- [Runtime execution architecture](../architecture/runtime-execution.md)
-- [Library change publication](../spec/library/runtime/change-publication.md)
-- [Library mutations](../spec/library/runtime/mutation.md)
-- [Library task execution](../spec/library/runtime/task-execution.md)
-- [Library YAML transfer](../spec/library/runtime/yaml-transfer.md)
+- [Library architecture](../system/library/structure.md)
+- [Runtime execution architecture](../system/execution/README.md)
+- [Library change publication](../system/library/change-publication.md)
+- [Library mutations](../system/library/mutation.md)
+- [Library task execution](../system/library/task-execution.md)
+- [Library YAML transfer](../system/library/yaml-transfer.md)
 
 ## Supersession
 

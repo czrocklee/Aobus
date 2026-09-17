@@ -1,9 +1,5 @@
 ---
 id: reference.windows-desktop-state
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates the native Windows desktop settings and theme YAML surfaces.
 ---
 # Windows desktop state
 
@@ -16,7 +12,7 @@ The theme document is strict and unversioned.
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md), [application shell architecture](../../architecture/application-shell.md), and [Windows desktop shell specification](../../spec/shell/windows-desktop.md) define ownership and behavior. The Windows-only `aobus-winui-lib` owns both schemas; the WinUI composition root owns their platform location and application.
+The [system architecture](../../system/overview.md), [application shell architecture](../../system/shell/README.md), and [Windows desktop shell specification](../../system/frontend/windows.md) define ownership and behavior. The Windows-only `aobus-winui-lib` owns both schemas; the WinUI composition root owns their platform location and application.
 
 ## Surface
 
@@ -156,6 +152,6 @@ classic:
 
 ## Related documents
 
-- [Windows desktop shell specification](../../spec/shell/windows-desktop.md)
-- [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
+- [Windows desktop shell specification](../../system/frontend/windows.md)
+- [Persistence and managed-state architecture](../../system/persistence/README.md)
 - [Use the Windows desktop](../../user/use-windows-desktop.md)

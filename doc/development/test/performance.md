@@ -1,9 +1,5 @@
 ---
 id: development.test.performance
-type: development
-status: current
-domain: development
-summary: Defines the reproducible performance-review workflow and report contract.
 ---
 # Performance review
 
@@ -103,11 +99,11 @@ Keep before/after reports outside the repository, normally under `/tmp` on Linux
 Review both absolute latency and the relative delta.
 Binary or dependency size may be reported alongside the timings, but it does not override correctness or an observed latency regression.
 
-When a performance result justifies a code or architecture choice, summarize the stable workload and both platform results in the owning RFC or review record.
+When a performance result justifies a code or architecture choice, summarize the stable workload and both platform results in the proposal or review record.
 Do not check machine-specific raw reports into the repository.
 
-Proposal-specific thresholds remain owned by their in-review RFC.
-Before that RFC is deleted, an accepted long-term upgrade gate moves into one scoped section of this guide; its decision record links here and retains rationale rather than duplicating the threshold table.
+Proposal-specific thresholds remain with that proposal while it is being evaluated.
+An accepted long-term upgrade gate belongs in a scoped section of this guide; any separate decision record links here and retains rationale rather than duplicating the threshold table.
 
 ## Design-audit workloads
 

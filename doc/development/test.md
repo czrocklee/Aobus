@@ -1,9 +1,5 @@
 ---
 id: development.test
-type: development
-status: current
-domain: development
-summary: Routes the layered Aobus testing policy and its detailed contributor guidance.
 ---
 # Testing policy
 
@@ -38,7 +34,7 @@ Choose the lowest layer that proves the behavior:
 - `lib`: pure algorithms, storage, parsing, serialization, query evaluation, audio primitives, and utility behavior.
 - `runtime`: service contracts, runtime state transitions, projections, subscriptions, callbacks, and async lifecycle.
 - `uimodel`: UI policy, view-state projection, menu models, editor models, validation, field formatting, and presentation decisions.
-- `linux-gtk`: GTK construction, render binding, event-to-action routing, CSS, popovers/dialogs, lifecycle cleanup, and targeted layout regressions.
+- Frontend layers (`linux-gtk`, `tui`, `cli`, and `winui`): construction or formatting, render binding, event/command routing, platform lifecycle, and targeted frontend regressions.
 
 When choosing between `uimodel` and GTK, prefer `uimodel` if the behavior can be
 expressed as input state to view state. GTK tests should stay thin and prove only

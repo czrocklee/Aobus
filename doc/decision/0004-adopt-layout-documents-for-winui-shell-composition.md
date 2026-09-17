@@ -1,9 +1,6 @@
 ---
 id: decision.0004.winui-layout-documents
-type: decision
 status: accepted
-domain: application-shell
-summary: Adopts the shared layout-document language for WinUI shell composition while retaining Windows-owned presets, construction, policy, resources, and state.
 ---
 # Decision 0004: adopt layout documents for WinUI shell composition
 
@@ -116,10 +113,10 @@ model. That migration would add a second independent behavior change.
 
 ## Current authorities
 
-- [System architecture](../architecture/system-overview.md)
-- [Application shell architecture](../architecture/application-shell.md)
-- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
-- [Layout lifecycle specification](../spec/shell/layout-lifecycle.md)
+- [System architecture](../system/overview.md)
+- [Application shell architecture](../system/shell/README.md)
+- [Windows desktop shell specification](../system/frontend/windows.md)
+- [Layout lifecycle specification](../system/shell/layout-lifecycle.md)
 - [Layout document reference](../reference/shell/layout-document.md)
 - [Windows desktop state reference](../reference/windows/desktop-state.md)
 

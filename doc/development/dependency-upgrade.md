@@ -1,9 +1,5 @@
 ---
 id: development.dependency-upgrade
-type: development
-status: current
-domain: development
-summary: Defines the workflow for upgrading governed dependencies and development tools.
 ---
 # Dependency upgrade workflow
 
@@ -158,7 +154,9 @@ Git clone is not an equivalent supply-chain check.
 
 An override ignores other version constraints. Every new override needs a
 reason and an exit condition in the pull-request description. Remove an
-override when the normal baseline satisfies the contract.
+override when the normal baseline satisfies the contract. The active `stb`
+overlay has additional source and native-check retirement requirements in
+[dependency governance](dependency-governance.md#temporary-overlay-ports).
 
 ### Boost
 

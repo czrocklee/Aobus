@@ -1,9 +1,6 @@
 ---
 id: decision.0014.admit-scan-plans-by-item-evidence
-type: decision
 status: accepted
-domain: library
-summary: Admits prepared scan items by commit-time evidence while preserving one atomic scan transaction.
 ---
 # Decision 0014: admit scan plans by item evidence
 
@@ -129,10 +126,10 @@ partially accepted relink decision.
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
-- [Library scan and audio identity specification](../spec/library/runtime/scan-and-identity.md)
-- [Library task execution specification](../spec/library/runtime/task-execution.md)
-- [Library change publication specification](../spec/library/runtime/change-publication.md)
+- [Library architecture](../system/library/structure.md)
+- [Library scan and audio identity specification](../system/library/scan-and-identity.md)
+- [Library task execution specification](../system/library/task-execution.md)
+- [Library change publication specification](../system/library/change-publication.md)
 
 ## Supersession
 

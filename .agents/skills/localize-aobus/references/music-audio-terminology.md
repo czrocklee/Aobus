@@ -2,19 +2,21 @@
 
 Use this reference to establish the English concept before choosing an idiomatic target-language term. It is not a table of mandatory literal translations: grammar, platform convention, and established music-player vocabulary in the target language still decide the final wording.
 
-Project-specific terminology decisions take precedence over the general guidance here. For Chinese metadata copy, follow the canonical terms and scope in the [text-catalog reference](../../../../doc/reference/presentation/text-catalog.md#chinese-metadata-terminology).
+Project-specific terminology decisions take precedence over the general guidance here. For Chinese metadata copy, follow the canonical terms and scope in the [text semantics](../../../../doc/system/presentation/text-catalog.md#chinese-metadata-terminology).
 
 ## Library and organization
 
 | Concept | Meaning in Aobus | Avoid confusing it with |
 |---|---|---|
 | Library | The user's indexed music collection and its database-backed views. | A software/code library or one playlist. |
-| List | A saved user-authored collection. Some messages distinguish a regular Playlist from a rule-driven Smart List. | The entire Library, the playback queue, or a generic visual list widget. |
-| Playlist | A List whose membership/order is explicitly authored. | The transient playback queue. |
+| List | A saved user-authored collection. Some messages distinguish a regular Playlist from a rule-driven Smart List. | The entire Library, the active playback source, or a generic visual list widget. |
+| Playlist | A saved List used for direct membership or order authoring. | The captured source of an ongoing playback conversation. |
 | Smart List | A saved List whose membership is produced by a filter expression. | A manually ordered Playlist. |
-| Queue | The transient playback sequence. | A saved List or the Library's current sort order. |
+| Playback source / succession | The captured live source and presentation order, advanced by cursor, repeat, and shuffle policy. | A saved List definition or an explicitly authored queue of pending tracks. |
 | Presentation / view | A named arrangement of grouping, sorting, and visible columns. | The underlying tracks or a persisted translation identity. |
 | Tag | User/library classification metadata attached to tracks. | An ID3 container generally, a filename token, or a UI label. |
+
+Aobus does not currently expose an enqueue/dequeue track queue. Prepared-next audio and the internal FIFO of playback commands are different concepts; do not describe either as a restorable user queue.
 
 Retain the project's capitalized `List` terminology only where the English product vocabulary uses it as the Aobus domain object. Choose a natural equivalent rather than reproducing unusual English capitalization when the target language does not support that distinction.
 
@@ -57,12 +59,12 @@ Retain the project's capitalized `List` terminology only where the English produ
 | Lossless | Encoding or processing that preserves the represented audio samples. | Bit-perfect output through the complete playback path. |
 | Bit-perfect | The output path preserves the relevant digital sample values and format without modifying stages. | Merely using a lossless source codec. |
 
-Follow each consumer's owning section in the [text-catalog reference](../../../../doc/reference/presentation/text-catalog.md) for locale-neutral notation; track-field formatting rules are not automatically global.
+Follow each consumer's owning section in the [text semantics](../../../../doc/system/presentation/text-catalog.md) for locale-neutral notation; track-field formatting rules are not automatically global.
 
 ## Wording checks
 
 - Use the target language's normal music-player term, not whichever source-language cognate looks closest.
 - Keep labels concise, but do not erase distinctions such as Album Artist versus Artist to save width.
 - Prefer verbs for actions and nouns for states/headings according to the target platform's convention.
-- Keep repeated concepts consistent across GTK, TUI, and WinUI even when sentence structure differs.
+- Keep repeated concepts consistent across affected frontends even when sentence structure differs.
 - Preserve external names and metadata values exactly when they arrive as message arguments.

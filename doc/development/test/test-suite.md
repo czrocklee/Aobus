@@ -1,9 +1,5 @@
 ---
 id: development.test.test-suite
-type: development
-status: current
-domain: development
-summary: Defines the test suites, suite groups, filters, and supported portal commands.
 ---
 # Test suites
 
@@ -12,13 +8,14 @@ helper boundaries, see `doc/development/test.md`.
 
 The `./ao test` command exposes individual suites and four suite groups:
 
-- `core`: core library Catch2 tests (`ao_core_test`).
+- `core`: shared core, runtime, UIModel, portable frontend policy, and host-native Catch2 tests (`ao_core_test`).
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
 - `integration`: standalone integration tests (`ao_integration_test`).
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
+- `appkit`: an opt-in native macOS GUI smoke harness with scenario selection and required disposable library and isolated state-root inputs; it is not part of a suite group.
 - `default`: the native fast-loop group. Linux runs core and GTK; macOS and Windows run core and TUI.
 - `all`: every suite enabled by the native build profile.
 - `tsan`: suites with a clean ThreadSanitizer baseline.
@@ -96,32 +93,9 @@ diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expe
 `FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage. This keeps
 checker execution policy in `ao tidy` and avoids a second shell-based test orchestration layer.
 
-Place fixtures in `test/integration/lint/fixture/<check-alias>/`; the directory
-selects the check. Put each marker immediately before the source line:
-`// POSITIVE` requires a diagnostic, `// NEGATIVE` forbids one, and
-`// POSITIVE: FIX-TO: <fixed line>` also specifies the replacement.
-The runner syntax-checks fixed temporary copies.
-Objective-C++ `.mm` fixtures enable blocks for diagnostics, FixIts, and fixed-output
-syntax checks. Headers in the fixture's directory participate in diagnostics.
-Diagnostic identity includes the normalized file path and line; a header warning
-cannot satisfy or hide a source-file expectation. Context `.h` headers with markers
-must be reached through unconditional literal quoted includes or imports within
-the fixture directory. The runner follows these includes recursively and checks
-each file's own markers; unrelated sibling fixtures are not required to emit
-diagnostics. Keep conditional or generated include graphs out of marker-bearing
-context headers. Header `FIX-TO` markers require a standalone fixture; context
-headers support `POSITIVE` and `NEGATIVE` markers. FixIt verification snapshots
-the copied source and context headers before clang-tidy can change their lines.
-Fixed Objective-C++ copies use `OBJCXX` when provided, otherwise `clang++` from
-the managed toolchain; they do not inherit a C++-only GCC selection from `CXX`.
-No Foundation link is required for declaration-only checker fixtures.
-Markers assert locations and FixIt output, not diagnostic wording; a wording-only
-correction can reuse the existing fixture and inspect the emitted message.
-Extend an owning fixture for new behavior rather than creating a parallel case
-for an already covered contract.
+For fixture placement, marker semantics, context-header constraints, Objective-C++ handling, and FixIt authoring, use [checker development](../lint/checker-development.md#fixture-contract). Those are fixture-authoring rules rather than suite-selection rules.
 
-Coverage keeps its narrower `all` definition of core, TUI, and GTK because tooling and standalone integration
-tests are not part of the application source coverage calculation.
+Coverage has a separate `--all` selection of core, TUI, CLI, and GTK. It excludes standalone integration, tooling, and lint suites from the application-source coverage run.
 
 ## Sharded Catch2 execution
 

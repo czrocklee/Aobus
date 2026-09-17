@@ -251,21 +251,21 @@ namespace clang::tidy::readability
   {
     using namespace clang::ast_matchers;
 
-    // Match std::thread usages (Rule 4.4.2)
+    // Match std::thread usages that should use std::jthread.
     finder->addMatcher(
       varDecl(hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(cxxRecordDecl(hasName("::std::thread")))))),
               unless(hasAncestor(functionDecl(isDefinition(), isMain()))))
         .bind("threadVar"),
       this);
 
-    // Match std::unique_lock that could be std::scoped_lock (Rule 4.4.3)
+    // Match std::unique_lock that could be std::scoped_lock.
     finder->addMatcher(varDecl(hasType(hasUnqualifiedDesugaredType(recordType(
                                  hasDeclaration(anyOf(classTemplateSpecializationDecl(hasName("::std::unique_lock")),
                                                       cxxRecordDecl(hasName("::std::unique_lock"))))))))
                          .bind("uniqueLock"),
                        this);
 
-    // Match volatile variables (Rule 4.4.4)
+    // Match volatile-qualified variable declarations without inferring cross-thread use.
     finder->addMatcher(varDecl(hasType(isVolatileQualified())).bind("volatileVar"), this);
   }
 
@@ -274,11 +274,10 @@ namespace clang::tidy::readability
     if (auto const* threadVar = result.Nodes.getNodeAs<VarDecl>("threadVar"); threadVar != nullptr)
     {
       diag(threadVar->getLocation(),
-           "prefer std::jthread over std::thread (Rule 4.4.2); std::jthread provides automatic joining and stop_token "
-           "support");
+           "prefer std::jthread over std::thread; std::jthread provides automatic joining and stop_token support");
       diag(threadVar->getLocation(),
-           "prefer std::jthread over std::thread for %0 (Rule 4.4.2); std::jthread provides automatic joining and "
-           "stop_token support",
+           "prefer std::jthread over std::thread for %0; std::jthread provides automatic joining and stop_token "
+           "support",
            DiagnosticIDs::Note)
         << threadVar;
     }
@@ -289,15 +288,14 @@ namespace clang::tidy::readability
       {
         diag(lockVar->getLocation(),
              "prefer std::scoped_lock over std::unique_lock for %0 unless you need deferred locking, early unlock, or "
-             "condition_variable integration (Rule 4.4.3)")
+             "condition_variable integration")
           << lockVar;
       }
     }
 
     if (auto const* volatileVar = result.Nodes.getNodeAs<VarDecl>("volatileVar"); volatileVar != nullptr)
     {
-      diag(volatileVar->getLocation(),
-           "%0 is volatile; use std::atomic<> for inter-thread communication instead (Rule 4.4.4)")
+      diag(volatileVar->getLocation(), "%0 is volatile; use std::atomic<> for inter-thread communication instead")
         << volatileVar;
     }
   }

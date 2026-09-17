@@ -10,10 +10,10 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces threading rules 4.4.1-4.4.4:
-  /// - Prefer std::jthread over std::thread (4.4.2)
-  /// - Prefer std::scoped_lock over std::unique_lock where possible (4.4.3)
-  /// - Avoid volatile for shared state (4.4.4)
+  /// Enforces the threading policy:
+  /// - Prefer std::jthread over std::thread.
+  /// - Prefer std::scoped_lock over std::unique_lock where possible.
+  /// - Avoid volatile for shared state.
   /// Warning-only, never auto-fix.
   class ThreadingPolicyCheck : public ClangTidyCheck
   {

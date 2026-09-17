@@ -1,9 +1,5 @@
 ---
 id: library.track-field
-type: reference
-status: current
-domain: library
-summary: Enumerates runtime track fields, capabilities, sort and group mappings, query bridges, and stable persistence ids.
 ---
 # Runtime track field catalog
 
@@ -14,11 +10,11 @@ The persisted logical values behind these fields belong to the [track model](tra
 
 The catalog is an application-facing adaptation of library data.
 It is not a second persistence model and does not define query truth or authored labels.
-The Label columns below cross-reference the current UIModel English catalog for lookup convenience; the [presentation text catalog](../../presentation/text-catalog.md) is their authority.
+The Label columns below cross-reference the current UIModel English catalog for lookup convenience; the [presentation text catalog](../../../system/presentation/text-catalog.md) is their authority.
 
 ## Code boundary
 
-The catalog belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md), at the seam described by the [library](../../../architecture/library.md), [track expression](../../../architecture/track-expression.md), and [presentation](../../../architecture/presentation.md) architectures.
+The catalog belongs to the **application runtime** layer in the [system architecture](../../../system/overview.md), at the seam described by the [library](../../../system/library/structure.md), [track expression](../../../system/query/README.md), and [presentation](../../../system/presentation/README.md) architectures.
 Its public values live in `app/include/ao/rt/TrackField.h` and its definitions live in `app/runtime/TrackField.cpp`; UIModel and frontends consume the catalog without redefining it.
 
 ## Surface
@@ -169,8 +165,8 @@ Adding a field requires coordinated decisions about persistence source, projecti
 
 - [Track model](track.md)
 - [Predicate language](../../query/predicate-language.md)
-- [Track-list presentation](../../../spec/presentation/track-presentation.md)
-- [Track-field value completion](../../../spec/presentation/field-completion.md)
-- [Track-list projection](../../../spec/library/projection/track-list.md)
+- [Track-list presentation](../../../system/presentation/track-presentation.md)
+- [Track-field value completion](../../../system/presentation/field-completion.md)
+- [Track-list projection](../../../system/library/track-list-projection.md)
 - [Persisted presentation state](../../presentation/persisted-state.md)
-- [Presentation text catalog](../../presentation/text-catalog.md)
+- [Presentation text catalog](../../../system/presentation/text-catalog.md)

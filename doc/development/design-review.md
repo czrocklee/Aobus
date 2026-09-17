@@ -1,9 +1,5 @@
 ---
 id: development.design-review
-type: development
-status: current
-domain: development
-summary: Defines proportionate design review for boundaries, abstractions, ownership, and structural refactors.
 ---
 # Design review
 
@@ -45,7 +41,7 @@ Ownership and lifetime should be explainable from creation through shutdown.
 Identify who starts work, who can cancel it, what completion means, where failure is observed, and which object or executor must remain alive.
 Borrowing relationships must state the lifetime that makes them safe.
 Shutdown obligations do not disappear when an operation is hidden behind an interface.
-Follow the class-design and threading rules in [C++ coding style](coding-style.md) (4.2 and 4.4), and the applicable [concurrency validation](test/concurrency-and-sanitizer.md).
+Follow the [ownership](coding-style.md#ownership-and-class-design) and [threading](coding-style.md#threading-and-callbacks) rules in the C++ coding style, and the applicable [concurrency validation](test/concurrency-and-sanitizer.md).
 
 ### Responsibility and boundaries
 
@@ -133,6 +129,6 @@ The dependency is removed only when consumers no longer rely on its contract or 
 
 ## Related documents
 
-- [System architecture](../architecture/system-overview.md) owns the top-level layer and dependency model.
+- [System architecture](../system/overview.md) owns the top-level layer and dependency model.
 - [Application-layer review](application-layer-review.md) applies ownership review to runtime, UIModel, and frontends.
 - [Validation and review](test/validation-and-review.md) selects completion evidence for the changed execution boundary.

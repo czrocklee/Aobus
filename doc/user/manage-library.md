@@ -1,9 +1,5 @@
 ---
 id: user.manage-library
-type: user-guide
-status: current
-domain: library
-summary: Reconciles music files, filters tracks, and creates reusable saved Lists.
 ---
 # Manage a music library
 
@@ -47,7 +43,7 @@ Windows runs the same transactional reconciliation as GTK. A failed scan keeps t
 
 ### Filter and save a List on the desktop
 
-1. In GTK or the Windows desktop, enter words in the quick-filter field for a broad search, or enter a query expression for exact matching.
+1. In GTK or the Windows desktop, enter words in the quick-filter field for a broad search, or enter a query expression for field-specific conditions.
 2. Check that the visible rows are the intended result.
 3. Use **Create List from current filter**, or right-click All Tracks or a saved source List and choose **New List...**.
 4. Give the list a name, adjust its filter or presentation, review the preview, and choose **Create**.
@@ -58,6 +54,18 @@ When the source is a saved List, the new List is derived from that parent; creat
 Saved Lists keep a predicate rather than a copied membership list, so their results follow later library mutations.
 They may also retain an independent manual rank; see [Organize music with Lists and Playlists](organize-with-lists.md).
 
+### Understand filtering and suggestions
+
+The same search-text rules apply to GTK, Windows, and the TUI's track filter:
+
+- Plain text uses Quick mode. `Bach cello` requires both terms, but they may match different common metadata fields or tags. Quote a phrase such as `"Massive Attack"` to keep it one term.
+- A leading query variable (`$`, `@`, `#`, or `%`) selects Expression mode; opening parentheses and `not` or `!` may precede it. For example, `$composer ~ "Bach"` searches only the composer field. Punctuation inside ordinary names, such as `P!nk`, does not switch modes.
+- Quick mode matches metadata substrings without regard to Unicode case differences, but accents remain significant; tags use their exact stored identity. An empty suggestion list does not mean that the filter has no matching tracks.
+
+Suggestions select existing library text. An ASCII prefix of at least three letters or digits can also find supported romanized aliases: typing `zhoujielun` may suggest `周杰倫` when that value exists in the library. Accept the suggestion to insert the original text. Submitting `zhoujielun` without accepting it searches that literal text; filtering itself does not transliterate.
+
+Kana suggestions use romanized Kana; Han-only values use a Mandarin-pinyin alias, not an inferred Japanese Kanji reading. These aliases help selection without changing metadata or saved predicates. Consult the [predicate language](../reference/query/predicate-language.md) for exact operators and field syntax.
+
 ## Verify the result
 
 - A second dry-run scan reports no actionable file changes after a successful apply.
@@ -67,7 +75,7 @@ They may also retain an independent manual rank; see [Organize music with Lists 
 ## Related documents
 
 - [CLI command reference](../reference/cli/command.md)
-- [Track-filter specification](../spec/presentation/track-filter.md)
+- [Track-filter specification](../system/presentation/track-filter.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
-- [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
+- [Library scan and audio identity](../system/library/scan-and-identity.md)
 - [Organize music with Lists and Playlists](organize-with-lists.md)

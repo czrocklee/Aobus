@@ -15,7 +15,8 @@ The lint suite's temporary fixture fixes are a separate validation mechanism.
 
 Use explicit paths, `--folder`, or `--commit` for a limited request. `--all` is
 for requested whole-repository linting. `--no-build --check <name>` reuses a
-prepared compile database and plugin for checker/fixture diagnosis.
+prepared compile database and plugin for focused diagnostic inspection; it does
+not run the lint suite's fixture assertions.
 
 Validate the requested scope and report remaining diagnostics or suppressions.
 Completion gates and result reuse are owned by

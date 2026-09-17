@@ -1,20 +1,16 @@
 ---
 id: shell.layout-state
-type: reference
-status: current
-domain: application-shell
-summary: Enumerates the version 1 per-preset component-state document, entry guards, current stateful types, and promoted fields.
 ---
 # Shell layout component state
 
 ## Scope and version
 
 This reference owns the exact standalone YAML surface of `LayoutComponentStateDocument` version `1` and `LayoutComponentStateEntry` version `1`.
-Restoration, pruning, reset, promotion, and rebuild behavior belong to the [shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md).
+Restoration, pruning, reset, promotion, and rebuild behavior belong to the [shell layout lifecycle specification](../../system/shell/layout-lifecycle.md).
 
 ## Code boundary
 
-The model and policy belong to the **UIModel** layer in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
+The model and policy belong to the **UIModel** layer in the [system architecture](../../system/overview.md), under the [application shell architecture](../../system/shell/README.md).
 The concrete file, locking, and atomic-write adapter belongs to the GTK frontend.
 
 ## Document surface
@@ -104,8 +100,8 @@ It is stored under the platform state location rather than configuration.
 
 ## Related documents
 
-- [Application shell architecture](../../architecture/application-shell.md)
-- [Shell layout lifecycle](../../spec/shell/layout-lifecycle.md)
+- [Application shell architecture](../../system/shell/README.md)
+- [Shell layout lifecycle](../../system/shell/layout-lifecycle.md)
 - [Layout document reference](layout-document.md)
 - [Managed file locations](../persistence/location.md)
 - [Application managed-state surface](../persistence/application-config.md)

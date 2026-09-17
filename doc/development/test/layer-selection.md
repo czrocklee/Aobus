@@ -1,9 +1,5 @@
 ---
 id: development.test.layer-selection
-type: development
-status: current
-domain: development
-summary: Defines how tests are placed across library, runtime, UIModel, frontend, and integration layers.
 ---
 # Test layer selection
 
@@ -86,11 +82,15 @@ Appropriate contracts:
 - A detail popover closes when compact status becomes hidden.
 - A layout regression keeps columns stable after section collapse.
 
+## CLI and TUI frontend tests
+
+Use `test/unit/cli/...Test.cpp` and `test/unit/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`; use `[workflow]` when a frontend case intentionally crosses several production components.
+
 ## WinUI frontend tests
 
 Use `test/unit/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
 
-Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper.
+Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
 
 ## Workflow, integration, and regression placement
 
@@ -103,6 +103,6 @@ Use `[regression]` when the test protects a known bug or fragile invariant. Add 
 Useful existing samples:
 
 - Runtime service contract style: `test/unit/runtime/NotificationServiceTest.cpp`.
-- UI policy style: `test/unit/uimodel/status/activity/ActivityStatusFeedProjection*Test.cpp` and `test/unit/uimodel/track/TrackPresentationWorkflowTest.cpp`.
+- UI policy style: `test/unit/uimodel/status/activity/ActivityStatusFeedProjection*Test.cpp` and `test/unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp`.
 - Pure helper style: `test/unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp`.
 - Thin GTK adapter style: `test/unit/linux-gtk/track/TrackPresentationButtonTest.cpp`.

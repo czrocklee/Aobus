@@ -1,9 +1,6 @@
 ---
 id: decision.0012.adopt-icu-resource-catalogs
-type: decision
 status: accepted
-domain: presentation
-summary: Records ICU resource bundles and classic MessageFormat as the single interactive localization stack.
 ---
 # Decision 0012: adopt ICU resource catalogs
 
@@ -68,10 +65,10 @@ The stable classic API supplies the required named arguments, plural, select, an
 
 ## Current authorities
 
-- [Presentation architecture](../architecture/presentation.md)
-- [Interactive localization specification](../spec/presentation/localization.md)
-- [Presentation text catalog reference](../reference/presentation/text-catalog.md)
-- [Unicode text operations](../spec/text/unicode-text.md)
+- [Presentation architecture](../system/presentation/README.md)
+- [Interactive localization specification](../system/presentation/localization.md)
+- [Presentation text catalog reference](../system/presentation/text-catalog.md)
+- [Unicode text operations](../system/unicode-text.md)
 
 ## Supersession
 

@@ -1,9 +1,5 @@
 ---
 id: user.windows-desktop
-type: user-guide
-status: current
-domain: application-shell
-summary: Opens, browses, edits, and plays a music library with the native Windows desktop frontend.
 ---
 # Use the Windows desktop
 
@@ -15,7 +11,9 @@ You will open an indexed music folder in the native Windows application, browse,
 
 - Windows 11 24H2 or Windows Server 2025 on x64.
 - The unpackaged, framework-dependent Aobus WinUI build and its Windows App Runtime dependency.
-- A local or reachable folder containing supported music files.
+- A folder containing supported music files on a filesystem local to this Windows host.
+
+The Windows frontend keeps its database beneath the selected music root. Network shares, including mapped network drives and UNC shares, are not supported database locations: reaching the files does not establish safe database locking. Copy the library to local storage before opening it; the [database reference](../reference/library/storage/database.md#environment) explains the storage boundary.
 
 ## Steps
 
@@ -43,6 +41,7 @@ You will open an indexed music folder in the native Windows application, browse,
    ordering, and double-click a track row to start playback. Drag a header's
    right edge to resize it, right-click a header to move it, and use **More >
    Columns** in Modern or **View > Columns** in Classic to show or hide fields.
+   See [filtering and suggestions](manage-library.md#understand-filtering-and-suggestions) for Quick versus Expression mode and why romanized suggestions must be accepted to search their original text.
    When the current filter is non-empty and valid, choose **Create List from current filter** to open the List editor with the resolved expression already filled in.
    Right-click a selected row and choose **Properties...**, choose the same command from **More** or Classic's **View** menu, or press `Alt+Enter` to edit built-in metadata, tags, and custom metadata for the captured selection.
    Technical audio properties remain read-only, and Save becomes available only after a valid change.
@@ -62,7 +61,7 @@ You will open an indexed music folder in the native Windows application, browse,
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.
-   In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline.
+   In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline. See [interpreting playback quality](play-music.md#inspect-playback-quality) to distinguish source fidelity, pipeline changes, and incomplete evidence.
 9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts nothing; choosing a different library instead closes the current process and cancels its work during teardown.
 10. To back up portable library data, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode, select Delta, Metadata, Full, or List Only, and save a `.yaml` file.
     To import one, use the matching **Import Library Data...** command and choose Merge to retain records outside the backup or Restore to replace the reported scope.
@@ -77,8 +76,7 @@ The status area reports the selected library as ready, rows remain keyboard navi
 ## Troubleshooting
 
 - If a selected folder cannot be opened, the successor process reports startup failure and exits; start Aobus normally to return to the previously saved library. A scan failure instead leaves the selected library open and retryable.
-- A mapped drive must be visible in the same interactive Windows sign-in that launches Aobus.
-  If a service or SSH session cannot see the drive letter, select the equivalent UNC path instead.
+- If the root is on a network share, switching between a mapped drive letter and UNC spelling does not make it a supported database location. Use local storage; a remote desktop connection to Windows does not itself make that host's local disk a network filesystem.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.
 - If an import is rejected, review the notification detail for malformed YAML, an unsupported version, an unsafe path, or source/target evidence that changed after preview. The target remains unchanged when import fails before commit.
 - If no audio device appears, confirm that Windows Audio is running and that the desired endpoint is enabled.
@@ -87,6 +85,6 @@ The status area reports the selected library as ready, rows remain keyboard navi
 ## Related reference
 
 - [Windows desktop state](../reference/windows/desktop-state.md)
-- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
+- [Windows desktop shell specification](../system/frontend/windows.md)
 - [Back up and restore library data](backup-and-restore.md)
 - [Supported audio files](../reference/media/audio-file.md)

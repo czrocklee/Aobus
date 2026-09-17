@@ -1,9 +1,6 @@
 ---
 id: decision.0015.sequence-live-runtime-library-writes
-type: decision
 status: accepted
-domain: library
-summary: Sequences every live-runtime library transaction and its publication through one coroutine lane.
 ---
 # Decision 0015: sequence live-runtime library writes
 
@@ -88,13 +85,13 @@ CLI preserves a synchronous process-command surface by pumping its existing call
 
 ## Current authorities
 
-- [Library architecture](../architecture/library.md)
-- [Runtime execution architecture](../architecture/runtime-execution.md)
-- [Library access and mutation](../spec/library/runtime/mutation.md)
-- [Library change publication](../spec/library/runtime/change-publication.md)
-- [Library task execution](../spec/library/runtime/task-execution.md)
-- [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
-- [Library YAML transfer](../spec/library/runtime/yaml-transfer.md)
+- [Library architecture](../system/library/structure.md)
+- [Runtime execution architecture](../system/execution/README.md)
+- [Library access and mutation](../system/library/mutation.md)
+- [Library change publication](../system/library/change-publication.md)
+- [Library task execution](../system/library/task-execution.md)
+- [Library scan and audio identity](../system/library/scan-and-identity.md)
+- [Library YAML transfer](../system/library/yaml-transfer.md)
 
 ## Supersession
 

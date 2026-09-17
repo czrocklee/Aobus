@@ -1,9 +1,5 @@
 ---
 id: query.format-language
-type: reference
-status: current
-domain: query
-summary: Defines the exact string-producing format expression grammar and supported scalar fields.
 ---
 # Format expression language
 
@@ -11,14 +7,14 @@ summary: Defines the exact string-producing format expression grammar and suppor
 
 This reference defines the current string-producing subset accepted by `ao::query::compileFormat()`.
 It shares lexical parsing and field names with the [predicate language](predicate-language.md) but has a distinct result type and validation surface.
-Evaluation behavior belongs to the [format evaluation specification](../../spec/query/format-evaluation.md).
+Evaluation behavior belongs to the [format evaluation specification](../../system/query/format-evaluation.md).
 
 The current product consumers are plain `aobus track show --format` output and the TUI terminal-title setting.
 Format expressions are not track-list presentation specs, column definitions, or filesystem path templates.
 
 ## Code boundary
 
-The language belongs to the **core libraries** layer in the [system architecture](../../architecture/system-overview.md) and is refined by the [track expression architecture](../../architecture/track-expression.md).
+The language belongs to the **core libraries** layer in the [system architecture](../../system/overview.md) and is refined by the [track expression architecture](../../system/query/README.md).
 Its public API is `include/ao/query/FormatExpression.h`, its implementation is `lib/query/FormatExpression.cpp`, and the CLI adapter and TUI terminal title consume it. The TUI evaluates one playing track through `rt::LibrarySnapshot::formatTrack()`, keeping storage access in the runtime.
 
 ## Surface
@@ -144,10 +140,11 @@ Representative invalid forms are:
 
 - [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) locks supported fields, concatenation, literals, missing values, pure compilation, explicit binding, access profiles, and rejected forms.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) locks the `track show --format` workflow.
+- [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) locks TUI preference compilation and terminal-title evaluation through the same language.
 
 ## Related documents
 
-- [Track expression architecture](../../architecture/track-expression.md)
-- [Format evaluation](../../spec/query/format-evaluation.md)
+- [Track expression architecture](../../system/query/README.md)
+- [Format evaluation](../../system/query/format-evaluation.md)
 - [Predicate language](predicate-language.md)
 - [Track field catalog](../library/model/track-field.md)

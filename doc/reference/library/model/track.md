@@ -1,9 +1,5 @@
 ---
 id: library.track-model
-type: reference
-status: current
-domain: library
-summary: Enumerates persisted track metadata, technical properties, codec values, cover entries, tags, and custom metadata.
 ---
 # Track model
 
@@ -14,10 +10,11 @@ Physical byte placement belongs to [library database version 7](../storage/datab
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
+The signed storage type of duration does not define negative values as meaningful playback lengths. The current builder narrows its wider duration input without an explicit range check; see the [YAML duration limitation](../format/yaml.md#technical-properties) before assuming that the interchange and stored ranges are equivalent.
 
 ## Code boundary
 
-The persisted model belongs to the **core libraries** layer in the [system architecture](../../../architecture/system-overview.md) and the [library architecture](../../../architecture/library.md): core builders/views live under `include/ao/library/` and `lib/library/`.
+The persisted model belongs to the **core libraries** layer in the [system architecture](../../../system/overview.md) and the [library architecture](../../../system/library/structure.md): core builders/views live under `include/ao/library/` and `lib/library/`.
 Runtime and presentation consumers adapt these values without changing their storage authority.
 
 ## Curated metadata
@@ -61,7 +58,7 @@ Tag names and custom-metadata keys are normalized to NFC before dictionary ident
 Canonically equivalent spellings therefore share one dictionary id while the persisted NFC spelling remains suitable for display.
 
 `MetadataPatch` may set or clear curated metadata and custom metadata.
-Tag additions/removals use the separate tag command contract in [library access and mutation](../../../spec/library/runtime/mutation.md).
+Tag additions/removals use the separate tag command contract in [library access and mutation](../../../system/library/mutation.md).
 
 ## Technical properties
 
@@ -128,7 +125,7 @@ Portable YAML names and runtime field ids are separate compatibility surfaces ow
 
 ## Test authority
 
-- Track builder/view/layout tests under [`test/unit/library/`](../../../../test/unit/library/) lock serialization, validation, covers, tags, and custom metadata.
+- Track builder/view/layout tests under [`test/unit/library/`](../../../../test/unit/library) lock serialization, validation, covers, tags, and custom metadata.
 
 ## Related documents
 
@@ -136,5 +133,5 @@ Portable YAML names and runtime field ids are separate compatibility surfaces ow
 - [Supported audio files](../../media/audio-file.md)
 - [Library YAML format](../format/yaml.md)
 - [Runtime track field catalog](track-field.md)
-- [Track sources](../../../spec/library/source/track-source.md)
-- [Track-list projection](../../../spec/library/projection/track-list.md)
+- [Track sources](../../../system/library/track-source.md)
+- [Track-list projection](../../../system/library/track-list-projection.md)

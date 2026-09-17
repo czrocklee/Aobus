@@ -1,16 +1,12 @@
 ---
 id: query.predicate-language
-type: reference
-status: current
-domain: query
-summary: Defines the exact predicate expression grammar, variables, aliases, operators, literals, and units.
 ---
 # Predicate expression language
 
 ## Scope and version
 
 This reference defines the current text surface accepted by `ao::query::parse()` and the predicate subset accepted by `ao::query::compileQuery()`.
-Predicate evaluation behavior belongs to the [predicate evaluation specification](../../spec/query/predicate-evaluation.md).
+Predicate evaluation behavior belongs to the [predicate evaluation specification](../../system/query/predicate-evaluation.md).
 
 Expressions are persisted as saved List filter text without a separate language version number.
 The in-memory AST and execution bytecode are not persisted surfaces.
@@ -19,7 +15,7 @@ Saved Lists and other retained or automated expressions use the interpretation a
 
 ## Code boundary
 
-The language belongs to the **core libraries** layer in the [system architecture](../../architecture/system-overview.md) and is refined by the [track expression architecture](../../architecture/track-expression.md).
+The language belongs to the **core libraries** layer in the [system architecture](../../system/overview.md) and is refined by the [track expression architecture](../../system/query/README.md).
 Its public API is under `include/ao/query/`, its implementation is under `lib/query/`, and it depends on core library track and dictionary values without depending on runtime, UIModel, or frontends.
 
 ## Surface
@@ -190,7 +186,7 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 It uses Unicode default full case folding, so expansions such as `Straße` matching `STRASSE` are supported, while accents remain significant.
 Its left operand must be a direct text or URI field and its right operand must be a direct string constant.
 Title, custom metadata, and dictionary-backed metadata use the Unicode-caseless semantic; filesystem URI values retain byte-exact containment without Unicode normalization.
-The [predicate evaluation specification](../../spec/query/predicate-evaluation.md) owns normalization, caching, and truth behavior.
+The [predicate evaluation specification](../../system/query/predicate-evaluation.md) owns normalization, caching, and truth behavior.
 
 ## Validation rules
 
@@ -212,7 +208,7 @@ Saved Lists persist expression text and recompile it when materialized.
 Removing or renaming a variable, alias, operator, literal form, or unit can invalidate stored lists.
 Changing binding or truth semantics can change their membership without changing the list-record byte layout.
 
-The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), define current application interpretation rather than storage validity.
+The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../system/query/predicate-evaluation.md), define current application interpretation rather than storage validity.
 Changing them does not by itself increment the library database version.
 If retained saved-List text no longer parses or compiles, source materialization reports an expression error and exposes empty membership; the database remains structurally valid.
 
@@ -266,14 +262,14 @@ Representative invalid forms are:
 ## Test authority
 
 - [`ParserTest.cpp`](../../../test/unit/query/ParserTest.cpp) and [`ExpressionTest.cpp`](../../../test/unit/query/ExpressionTest.cpp) lock grammar and AST shape.
-- Execution-plan tests under [`test/unit/query/`](../../../test/unit/query/) lock variables, operators, lists, ranges, units, and invalid forms.
+- Execution-plan tests under [`test/unit/query/`](../../../test/unit/query) lock variables, operators, lists, ranges, units, and invalid forms.
 - [`CompletionVariableTest.cpp`](../../../test/unit/query/CompletionVariableTest.cpp) locks the shared descriptor, variable, alias, and lookup catalog.
 
 ## Related documents
 
-- [Track expression architecture](../../architecture/track-expression.md)
-- [Predicate evaluation](../../spec/query/predicate-evaluation.md)
-- [Expression completion](../../spec/query/expression-completion.md)
+- [Track expression architecture](../../system/query/README.md)
+- [Predicate evaluation](../../system/query/predicate-evaluation.md)
+- [Expression completion](../../system/query/expression-completion.md)
 - [Format language](format-language.md)
 - [Track field catalog](../library/model/track-field.md)
 - [Library database](../library/storage/database.md)

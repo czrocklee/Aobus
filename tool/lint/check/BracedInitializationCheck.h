@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Rule 3.4.1 & 3.4.3: prefer brace initialization for all types.
+  /// Enforces the brace-initialization requirements of the local-initialization style.
   class BracedInitializationCheck : public ClangTidyCheck
   {
   public:

@@ -8,19 +8,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ao.core import tooltest
+from ao.core import doccheck, tooltest
 
 
 class ToolTestRunnerTest(unittest.TestCase):
     def _run(self, completed, *, static_status=0, log=None):
         with mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=static_status) as static:
-            with mock.patch.object(tooltest.doccheck, "check_tree", return_value=[]) as docs:
-                with mock.patch.object(tooltest.subprocess, "run", return_value=completed):
-                    output = io.StringIO()
-                    with contextlib.redirect_stdout(output):
-                        status = tooltest.run(log=log)
+            with mock.patch.object(tooltest.subprocess, "run", return_value=completed):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    status = tooltest.run(log=log)
         static.assert_called_once_with([], log=log)
-        docs.assert_called_once_with()
         return status, output.getvalue()
 
     def test_success_prints_only_a_concise_summary(self):
@@ -57,20 +55,14 @@ class ToolTestRunnerTest(unittest.TestCase):
 
         self.assertEqual(status, 2)
 
-    def test_documentation_failure_fails_the_suite_and_prints_issues(self):
+    def test_tooling_runner_does_not_repeat_the_documentation_gate(self):
         completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 1 test in 0.001s\n\nOK\n")
-        issue = tooltest.doccheck.Issue(Path("doc/spec/example.md"), 7, "broken-link", "missing target")
 
-        with mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0):
-            with mock.patch.object(tooltest.doccheck, "check_tree", return_value=[issue]):
-                with mock.patch.object(tooltest.subprocess, "run", return_value=completed):
-                    output = io.StringIO()
-                    with contextlib.redirect_stdout(output):
-                        status = tooltest.run()
+        with mock.patch.object(doccheck, "check_tree") as docs:
+            status, _ = self._run(completed)
 
-        self.assertEqual(status, 1)
-        self.assertIn("Documentation checks failed.", output.getvalue())
-        self.assertIn("broken-link: missing target", output.getvalue())
+        self.assertEqual(status, 0)
+        docs.assert_not_called()
 
     def test_captured_output_is_appended_to_the_gate_log(self):
         completed = tooltest.subprocess.CompletedProcess([], 0, stdout="Ran 2 tests in 0.001s\n\nOK\n")
@@ -92,7 +84,6 @@ class ToolTestRunnerTest(unittest.TestCase):
         with (
             mock.patch.dict(os.environ, inherited, clear=False),
             mock.patch.object(tooltest.pythoncheck, "run_paths", return_value=0),
-            mock.patch.object(tooltest.doccheck, "check_tree", return_value=[]),
             mock.patch.object(tooltest.subprocess, "run", return_value=completed) as run,
         ):
             self.assertEqual(tooltest.run(), 0)

@@ -1,9 +1,6 @@
 ---
 id: decision.0011.adopt-icu-for-unicode-text
-type: decision
 status: accepted
-domain: utility
-summary: Adopts an exact, cross-platform ICU release behind an Aobus-owned UTF-8 text facade.
 ---
 # Decision 0011: adopt ICU for Unicode text
 
@@ -96,9 +93,9 @@ nondeterministic at exactly the boundary being repaired.
 
 ## Current authorities
 
-- [Unicode text operations specification](../spec/text/unicode-text.md)
+- [Unicode text operations specification](../system/unicode-text.md)
 - [Dependency version governance](../development/dependency-governance.md)
-- [TUI interaction specification](../spec/tui/interaction.md)
+- [TUI interaction specification](../system/frontend/tui.md)
 
 ## Supersession
 

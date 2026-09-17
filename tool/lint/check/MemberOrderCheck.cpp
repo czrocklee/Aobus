@@ -80,7 +80,7 @@ namespace clang::tidy::readability
           {
             check.diag(as->getLocation(),
                        "'%0' access section appears after '%1'; "
-                       "expected public before protected before private (Rule 2.5.2)")
+                       "expected public before protected before private")
               << accessName(as->getAccess()) << accessName(static_cast<AccessSpecifier>(lastAccessValue));
             reported = true;
           }

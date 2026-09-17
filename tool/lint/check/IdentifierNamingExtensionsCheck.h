@@ -10,7 +10,7 @@
 
 namespace clang::tidy::readability
 {
-  /// Enforces Aobus Rule 2.2.4 member naming beyond what built-in
+  /// Enforces the project member-naming convention beyond what built-in
   /// readability-identifier-naming can express:
   /// - class non-static data members use _camelCase
   /// - struct/POD/Impl/helper members use camelCase (no underscore)

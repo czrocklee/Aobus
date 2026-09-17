@@ -1,9 +1,6 @@
 ---
 id: decision.0005.winui-process-library-restart
-type: decision
 status: accepted
-domain: application-shell
-summary: Uses a destructive successor-process restart for WinUI library switching instead of overlapping two library-bound graphs in one process.
 ---
 # Decision 0005: use process restart for WinUI library switching
 
@@ -106,11 +103,11 @@ remaining alive long enough to call `CreateProcessW` directly.
 
 ## Current authorities
 
-- [System architecture](../architecture/system-overview.md)
-- [Interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md)
-- [Application shell architecture](../architecture/application-shell.md)
-- [Persistence and managed-state architecture](../architecture/persistence-and-managed-state.md)
-- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
+- [System architecture](../system/overview.md)
+- [Interactive session lifecycle architecture](../system/session-lifecycle.md)
+- [Application shell architecture](../system/shell/README.md)
+- [Persistence and managed-state architecture](../system/persistence/README.md)
+- [Windows desktop shell specification](../system/frontend/windows.md)
 - [Windows desktop state reference](../reference/windows/desktop-state.md)
 
 ## Supersession

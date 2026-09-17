@@ -1,19 +1,15 @@
 ---
 id: media.audio-file-library-surface
-type: reference
-status: current
-domain: media
-summary: Enumerates recognized audio files, visitor fields, source mappings, cover roles, codecs, and encoded payload ranges.
 ---
 # Supported audio files
 
 ## Scope and version
 
-This reference defines the exact audio-file surface consumed by library scanning, initial metadata import, and audio identity. Behavior belongs to the [media file reading specification](../../spec/media/file-reading.md); PCM behavior belongs to the [decoder session specification](../../spec/playback/decoder-session.md).
+This reference defines the exact audio-file surface consumed by library scanning, initial metadata import, and audio identity. Behavior belongs to the [media file reading specification](../../system/media/file-reading.md); PCM behavior belongs to the [decoder session specification](../../system/playback/decoder-session.md).
 
 ## Code boundary
 
-The public Core surface is `ao::media::file::File`, `Visitor`, and `PayloadView` under `include/ao/media/file/`. Format readers live under `lib/media/file/`; both are part of the `ao_media` target. The [encoded media architecture](../../architecture/encoded-media.md) owns the target boundary and borrowed-data lifetimes, the [system architecture](../../architecture/system-overview.md) owns top-level dependency direction, and application runtime owns the one visitor-to-library adapter described by [library architecture](../../architecture/library.md).
+The public Core surface is `ao::media::file::File`, `Visitor`, and `PayloadView` under `include/ao/media/file/`. Format readers live under `lib/media/file/`; both are part of the `ao_media` target. The [encoded media architecture](../../system/media/README.md) owns the target boundary and borrowed-data lifetimes, the [system architecture](../../system/overview.md) owns top-level dependency direction, and application runtime owns the one visitor-to-library adapter described by [library architecture](../../system/library/structure.md).
 
 ## Supported extensions and codecs
 
@@ -119,23 +115,23 @@ Adding an extension requires the single dispatch entry plus parser, scan, payloa
 ## Implementation authority
 
 - [`File.h`](../../../include/ao/media/file/File.h) and [`Visitor.h`](../../../include/ao/media/file/Visitor.h) define the public surface.
-- Format readers under [`lib/media/file/`](../../../lib/media/file/) own source mapping and payload boundaries.
+- Format readers under [`lib/media/file/`](../../../lib/media/file) own source mapping and payload boundaries.
 - [`PictureType.h`](../../../include/ao/PictureType.h) owns cover-role values.
 - [`AudioCodec.h`](../../../include/ao/AudioCodec.h) owns codec values.
 
 ## Test authority
 
-- Format tests under [`test/unit/media/file/`](../../../test/unit/media/file/) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
+- Format tests under [`test/unit/media/file/`](../../../test/unit/media/file) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
 - [`FileTest.cpp`](../../../test/integration/media/file/FileTest.cpp) locks real fixtures.
 - [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) locks recognition.
 - [`AudioIdentityTest.cpp`](../../../test/unit/library/AudioIdentityTest.cpp) locks payload hashing.
 
 ## Related documents
 
-- [System architecture](../../architecture/system-overview.md)
-- [Encoded media architecture](../../architecture/encoded-media.md)
-- [Library architecture](../../architecture/library.md)
-- [Media file reading specification](../../spec/media/file-reading.md)
+- [System architecture](../../system/overview.md)
+- [Encoded media architecture](../../system/media/README.md)
+- [Library architecture](../../system/library/structure.md)
+- [Media file reading specification](../../system/media/file-reading.md)
 - [Track model](../library/model/track.md)
-- [Library scan and audio identity](../../spec/library/runtime/scan-and-identity.md)
-- [Decoder session](../../spec/playback/decoder-session.md)
+- [Library scan and audio identity](../../system/library/scan-and-identity.md)
+- [Decoder session](../../system/playback/decoder-session.md)
