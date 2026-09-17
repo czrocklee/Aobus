@@ -17,6 +17,7 @@
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/uimodel/library/presentation/LibraryTransferPresentation.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/library/LibraryTransferAdapter.h>
@@ -27,6 +28,7 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <functional>
@@ -175,15 +177,13 @@ namespace ao::winui
         winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::LibraryInclude))));
       modeInput.HorizontalAlignment(HorizontalAlignment::Stretch);
 
-      for (auto const id : {i18n::MessageId::LibraryExportModeDelta,
-                            i18n::MessageId::LibraryExportModeMetadata,
-                            i18n::MessageId::LibraryExportModeFull,
-                            i18n::MessageId::LibraryExportModeListOnly})
+      for (auto const& option : uimodel::kLibraryExportOptions)
       {
-        modeInput.Items().Append(winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, id))));
+        modeInput.Items().Append(
+          winrt::box_value(winrt::to_hstring(i18n::requiredText(textCatalog, option.messageId))));
       }
 
-      modeInput.SelectedIndex(2);
+      modeInput.SelectedIndex(static_cast<std::int32_t>(uimodel::kLibraryExportDefaultIndex));
       content.Children().Append(modeInput);
       dialog.Content(content);
       showExportModeDialog();
@@ -458,7 +458,7 @@ namespace ao::winui
         return;
       }
 
-      auto const preview = makeLibraryRestorePreviewState(textCatalog, res->report());
+      auto const presentation = uimodel::libraryRestorePresentation(textCatalog, res->report());
       optPendingImportPlan.emplace(std::move(*res));
       auto const root = xamlRoot ? xamlRoot() : XamlRoot{nullptr};
 
@@ -471,11 +471,11 @@ namespace ao::winui
       dialog = ContentDialog{};
       dialog.XamlRoot(root);
       dialog.MinWidth(kDialogMinWidth);
-      dialog.Title(winrt::box_value(winrt::to_hstring(preview.title)));
-      dialog.PrimaryButtonText(winrt::to_hstring(preview.primaryActionText));
+      dialog.Title(winrt::box_value(winrt::to_hstring(presentation.title)));
+      dialog.PrimaryButtonText(winrt::to_hstring(presentation.action));
       dialog.CloseButtonText(winrt::to_hstring(i18n::requiredText(textCatalog, i18n::MessageId::WinUiCommonCancel)));
       dialog.DefaultButton(ContentDialogButton::Close);
-      dialog.Content(wrappedText(preview.message));
+      dialog.Content(wrappedText(presentation.message));
       showRestoreConfirmation();
     }
 

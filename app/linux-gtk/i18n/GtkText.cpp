@@ -4,7 +4,6 @@
 #include "i18n/GtkText.h"
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/library/LibraryTransfer.h>
 
 #include <cstddef>
 #include <string>
@@ -14,7 +13,6 @@ namespace ao::gtk
 {
   using i18n::MessageId;
   using i18n::requiredFormat;
-  using i18n::requiredText;
 
   std::string deleteListQuestion(i18n::MessageCatalog const& catalog, std::string_view const name)
   {
@@ -54,23 +52,6 @@ namespace ao::gtk
     return requiredFormat(catalog,
                           MessageId::ListRemoveFromCurrent,
                           {i18n::MessageArgument{"name", name}, i18n::MessageArgument{"tag", tag}});
-  }
-
-  std::string libraryRestoreConfirmation(i18n::MessageCatalog const& catalog, rt::ImportReport const& report)
-  {
-    auto const scopeId = report.targetScope == rt::ImportTargetScope::Library ? MessageId::LibraryRestoreScopeLibrary
-                                                                              : MessageId::LibraryRestoreScopeLists;
-    return requiredFormat(catalog,
-                          MessageId::LibraryRestoreConfirmation,
-                          {i18n::MessageArgument{"scope", requiredText(catalog, scopeId)},
-                           i18n::MessageArgument{"version", report.payloadVersion},
-                           i18n::MessageArgument{"mode", rt::exportModeName(report.payloadMode)},
-                           i18n::MessageArgument{"tracksCreated", report.tracksCreated},
-                           i18n::MessageArgument{"tracksUpdated", report.tracksUpdated},
-                           i18n::MessageArgument{"tracksDeleted", report.tracksDeleted},
-                           i18n::MessageArgument{"listsCreated", report.listsCreated},
-                           i18n::MessageArgument{"listsDeleted", report.listsDeleted},
-                           i18n::MessageArgument{"dangling", report.danglingReferencesIgnored}});
   }
 
   std::string fileSelectionError(i18n::MessageCatalog const& catalog,

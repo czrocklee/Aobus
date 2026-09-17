@@ -14,6 +14,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/uimodel/library/presentation/LibraryTransferPresentation.h>
 #include <ao/utility/Path.h>
 
 #include <giomm/asyncresult.h>
@@ -111,14 +112,12 @@ namespace ao::gtk::portal
 
     rt::ExportMode exportModeForSelection(std::uint32_t const selectedIndex) noexcept
     {
-      switch (selectedIndex)
+      if (selectedIndex < uimodel::kLibraryExportOptions.size())
       {
-        case 0U: return rt::ExportMode::Delta;
-        case 1U: return rt::ExportMode::Metadata;
-        case 2U: return rt::ExportMode::Full;
-        case 3U: return rt::ExportMode::ListOnly;
-        default: return rt::ExportMode::Metadata;
+        return uimodel::kLibraryExportOptions[selectedIndex].mode;
       }
+
+      return rt::ExportMode::Metadata;
     }
   } // namespace detail
 
@@ -213,13 +212,16 @@ namespace ao::gtk::portal
     box->append(*label);
 
     auto* modeCombo = Gtk::make_managed<Gtk::DropDown>();
-    auto modeStringsPtr = Gtk::StringList::create({gtkText(_textCatalog, i18n::MessageId::LibraryExportModeDelta),
-                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeMetadata),
-                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeFull),
-                                                   gtkText(_textCatalog, i18n::MessageId::LibraryExportModeListOnly)});
+    auto modeStringsPtr = Gtk::StringList::create();
+
+    for (auto const& option : uimodel::kLibraryExportOptions)
+    {
+      modeStringsPtr->append(gtkText(_textCatalog, option.messageId));
+    }
+
     modeCombo->set_model(modeStringsPtr);
     modeCombo->set_factory(exportModeFactory());
-    modeCombo->set_selected(2); // Default to Full
+    modeCombo->set_selected(static_cast<std::uint32_t>(uimodel::kLibraryExportDefaultIndex));
     modeCombo->set_hexpand(true);
     modeCombo->set_halign(Gtk::Align::FILL);
     setAccessibleLabel(*modeCombo, gtkText(_textCatalog, i18n::MessageId::LibraryInclude));
@@ -330,23 +332,20 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::presentLibraryRestoreConfirmation(rt::ImportReport const& report,
                                                                   std::function<void(bool)> completion)
   {
-    auto const actionId = report.targetScope == rt::ImportTargetScope::Library ? i18n::MessageId::LibraryRestoreLibrary
-                                                                               : i18n::MessageId::LibraryRestoreLists;
-    auto const message = libraryRestoreConfirmation(_textCatalog, report);
+    auto const presentation = uimodel::libraryRestorePresentation(_textCatalog, report);
 
-    auto* const dialog =
-      AppDialog::presentMessage(_parent,
-                                gtkText(_textCatalog, i18n::MessageId::LibraryConfirmRestore),
-                                message,
-                                {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel),
-                                                 .responseId = Gtk::ResponseType::CANCEL,
-                                                 .role = AppDialogActionRole::Cancel},
-                                 AppDialogAction{.label = gtkText(_textCatalog, actionId),
-                                                 .responseId = Gtk::ResponseType::OK,
-                                                 .role = AppDialogActionRole::Primary}},
-                                Gtk::ResponseType::CANCEL,
-                                _callbackScope.guard([completion = std::move(completion)](std::int32_t const responseId)
-                                                     { completion(responseId == Gtk::ResponseType::OK); }));
+    auto* const dialog = AppDialog::presentMessage(
+      _parent,
+      presentation.title,
+      presentation.message,
+      {AppDialogAction{.label = gtkText(_textCatalog, i18n::MessageId::GtkCommonCancel),
+                       .responseId = Gtk::ResponseType::CANCEL,
+                       .role = AppDialogActionRole::Cancel},
+       AppDialogAction{
+         .label = presentation.action, .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+      Gtk::ResponseType::CANCEL,
+      _callbackScope.guard([completion = std::move(completion)](std::int32_t const responseId)
+                           { completion(responseId == Gtk::ResponseType::OK); }));
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }

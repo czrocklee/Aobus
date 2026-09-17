@@ -248,6 +248,16 @@ A version-3 document's embedded cover bytes are therefore never read: the import
 CLI, GTK, and WinUI use the same plan-producing runtime operation and one-shot apply operation.
 No frontend may commit a restore from a bare path or reinterpret scope, counts, matching, or publication.
 
+### Building an interactive transfer surface
+
+GTK and WinUI build their export selectors from one UIModel definition ordered as Delta, Metadata, Full, and List Only.
+Both default to Full.
+An invalid native selector index remains an adapter concern: GTK conservatively falls back to Metadata, while WinUI returns no mode and does not reinterpret the selection.
+
+Restore confirmation is also shared presentation policy.
+Given the structured `ImportReport`, UIModel selects the Library- or Lists-scoped action and formats the complete version, scope, counts, and ignored-reference summary.
+The displayed payload mode argument is the report's stable machine token (`delta`, `metadata`, `full`, or `listOnly`), not the localized export-selector label; display text is never parsed back into transfer identity.
+
 GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, and ignored references, and applies only after an explicit positive response.
 Closing or rejecting the confirmation drops the plan.
 
@@ -263,13 +273,14 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 ## Implementation map
 
 - [`LibraryTransfer.h`](../../../app/include/ao/rt/library/LibraryTransfer.h) defines the public transfer modes and reports.
+- [`LibraryTransferPresentation.h`](../../../app/include/ao/uimodel/library/presentation/LibraryTransferPresentation.h) and [`LibraryTransferPresentation.cpp`](../../../app/uimodel/library/presentation/LibraryTransferPresentation.cpp) own shared selector ordering, the Full export default, and restore-confirmation presentation.
 - Source-private [`LibraryYamlExporter`](../../../app/runtime/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
 - Source-private [`LibraryYamlImporter`](../../../app/runtime/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
 - [`LibraryImportPlan`](../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryJobs`](../../../app/include/ao/rt/library/LibraryJobs.h) define preview-bound application authorization.
 - [`LibraryWriteLane`](../../../app/runtime/library/LibraryWriteLane.h) owns sequenced Maintenance entry, generation-bound preview/apply turns, revision settlement, and workflow exit.
 - [`LibraryUri`](../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.
 - [`LibraryChanges`](../../../app/include/ao/rt/library/LibraryChanges.h) defines published change values.
-- [`LibraryTransferCoordinator`](../../../app/windows-winui/library/LibraryTransferCoordinator.h) owns Windows pickers, native confirmation, notifications, and window-lifetime cancellation; [`LibraryTransferAdapter`](../../../app/windows-winui/include/ao/winui/library/LibraryTransferAdapter.h) maps stable selector rows and shared report data without WinRT types.
+- [`LibraryTransferCoordinator`](../../../app/windows-winui/library/LibraryTransferCoordinator.h) owns Windows pickers, native confirmation, notifications, and window-lifetime cancellation; [`LibraryTransferAdapter`](../../../app/windows-winui/include/ao/winui/library/LibraryTransferAdapter.h) maps stable selector rows and restore-only destructive admission without WinRT types.
 
 ## Test map
 
@@ -280,7 +291,8 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryYamlSchemaTest.cpp`](../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
 - [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
-- [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping, restore-only destructive admission, and the complete native preview projection.
+- [`LibraryTransferPresentationTest.cpp`](../../../test/unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp) proves export-option order and the Full default, both restore scopes, complete report arguments, and stable payload-mode tokens.
+- [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping and restore-only destructive admission.
 - [`LibraryImportExportWorkflowTest.cpp`](../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.
 

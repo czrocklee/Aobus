@@ -459,6 +459,7 @@ add_executable(ao_core_test
     unit/uimodel/library/list/SmartListEditingTest.cpp
     unit/uimodel/library/list/SmartListPresentationTest.cpp
     unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
+    unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp
     unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp
     unit/uimodel/library/presentation/ListPresentationsTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp
