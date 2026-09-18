@@ -3,9 +3,10 @@
 
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
-#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/uimodel/library/presentation/LibraryTransferPresentation.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -13,14 +14,12 @@ namespace ao::winui
 {
   std::optional<rt::ExportMode> libraryExportModeForSelection(std::int32_t const selection) noexcept
   {
-    switch (selection)
+    if (selection < 0 || static_cast<std::size_t>(selection) >= uimodel::kLibraryExportOptions.size())
     {
-      case 0: return rt::ExportMode::Delta;
-      case 1: return rt::ExportMode::Metadata;
-      case 2: return rt::ExportMode::Full;
-      case 3: return rt::ExportMode::ListOnly;
-      default: return std::nullopt;
+      return std::nullopt;
     }
+
+    return uimodel::kLibraryExportOptions[static_cast<std::size_t>(selection)].mode;
   }
 
   std::optional<rt::ImportMode> libraryImportModeForSelection(std::int32_t const selection) noexcept
@@ -36,31 +35,5 @@ namespace ao::winui
   bool needsLibraryImportDestructiveConfirmation(rt::ImportMode const mode) noexcept
   {
     return mode == rt::ImportMode::Restore;
-  }
-
-  LibraryRestorePreviewState makeLibraryRestorePreviewState(i18n::MessageCatalog const& textCatalog,
-                                                            rt::ImportReport const& report)
-  {
-    using i18n::MessageId;
-    auto const libraryScope = report.targetScope == rt::ImportTargetScope::Library;
-    auto const scope = i18n::requiredText(
-      textCatalog, libraryScope ? MessageId::LibraryRestoreScopeLibrary : MessageId::LibraryRestoreScopeLists);
-
-    return {
-      .title = std::string{i18n::requiredText(textCatalog, MessageId::LibraryConfirmRestore)},
-      .message = i18n::requiredFormat(textCatalog,
-                                      MessageId::LibraryRestoreConfirmation,
-                                      {{"scope", scope},
-                                       {"version", report.payloadVersion},
-                                       {"mode", rt::exportModeName(report.payloadMode)},
-                                       {"tracksCreated", report.tracksCreated},
-                                       {"tracksUpdated", report.tracksUpdated},
-                                       {"tracksDeleted", report.tracksDeleted},
-                                       {"listsCreated", report.listsCreated},
-                                       {"listsDeleted", report.listsDeleted},
-                                       {"dangling", report.danglingReferencesIgnored}}),
-      .primaryActionText = std::string{i18n::requiredText(
-        textCatalog, libraryScope ? MessageId::LibraryRestoreLibrary : MessageId::LibraryRestoreLists)},
-    };
   }
 } // namespace ao::winui

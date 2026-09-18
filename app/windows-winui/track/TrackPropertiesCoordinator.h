@@ -13,6 +13,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
@@ -21,6 +22,7 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <cstdint>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -73,6 +75,13 @@ namespace ao::winui
     void retire() noexcept;
 
   private:
+    enum class InteractionState : std::uint8_t
+    {
+      Editing,
+      Submitting,
+      Closing,
+    };
+
     struct FieldEditor final
     {
       rt::TrackField field = rt::TrackField::Title;
@@ -90,6 +99,7 @@ namespace ao::winui
       std::optional<std::string> optOriginalValue;
       winrt::Microsoft::UI::Xaml::Controls::Grid panel{nullptr};
       winrt::Microsoft::UI::Xaml::Controls::TextBox value{nullptr};
+      winrt::Microsoft::UI::Xaml::Controls::Button remove{nullptr};
       winrt::Microsoft::UI::Xaml::Controls::TextBox::TextChanged_revoker valueChangedRevoker{};
       winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker deleteClickRevoker{};
       bool existed = false;
@@ -99,7 +109,6 @@ namespace ao::winui
 
     Result<> prepareSession();
     void buildDialog();
-    void buildFieldModel();
     void buildMetadataSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTechnicalSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTagsSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
@@ -121,6 +130,8 @@ namespace ao::winui
     rt::MetadataPatch buildMetadataPatch() const;
     std::vector<std::string> tagsToAdd() const;
     std::vector<std::string> tagsToRemove() const;
+    void setInteractionState(InteractionState state);
+    void updateEditorEnabled();
     void updateSaveEnabled();
     void setError(std::string text);
     void clearError();
@@ -145,6 +156,7 @@ namespace ao::winui
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackId> _trackIds;
     uimodel::TrackPropertiesFormModel _formModel;
+    uimodel::TrackPropertiesFormSpec _formSpec;
     rt::TrackDetailSnapshot _snapshot;
     std::optional<uimodel::TrackAuthoringSession> _optSession;
     async::Subscription _sessionInvalidatedSub;
@@ -155,14 +167,17 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _errorText{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _tagRows{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox _tagInput{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button _tagAddButton{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _customRows{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox _customKeyInput{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBox _customValueInput{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button _customAddButton{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog::PrimaryButtonClick_revoker _primaryClickRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog::Closed_revoker _closedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker _tagTextChangedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::QuerySubmitted_revoker _tagSubmittedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _tagAddClickRevoker{};
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::Button> _tagRemoveButtons;
     std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _tagRemoveClickRevokers;
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker _customKeyChangedRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _customAddClickRevoker{};
@@ -174,7 +189,7 @@ namespace ao::winui
     std::vector<std::string> _originalTags;
     std::vector<std::string> _currentTags;
     bool _building = false;
-    bool _saving = false;
+    InteractionState _interactionState = InteractionState::Editing;
     bool _sessionInvalid = false;
     bool _active = false;
   };

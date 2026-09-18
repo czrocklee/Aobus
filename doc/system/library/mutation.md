@@ -122,6 +122,8 @@ Binding from inside the matching `Available` notification is valid, but committi
 
 Metadata updates apply one patch to the complete bound target sequence.
 Binding first validates every requested id and returns `NotFound` when a target is absent.
+Duplicate target ids retain their input order and are not silently deduplicated.
+Editable surface preparation follows the [metadata-editing baseline contract](../presentation/metadata-editing.md#preparing-a-coherent-properties-baseline).
 Submission then uses this precedence: transient lane contention is `Busy`; a foreign runtime binding is `Stale`; Maintenance/lifetime rejection is `Unavailable`; and a superseded revision is `Stale`.
 Because the coordinator serializes mutation and publication, disappearance under an accepted exact-revision binding is an invariant violation rather than a recoverable authoring outcome.
 None of these outcomes commits a subset.

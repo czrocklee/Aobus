@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -21,6 +22,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -35,7 +37,6 @@ namespace ao::rt
 {
   class CompletionService;
   class Library;
-  class LibrarySnapshot;
 }
 
 namespace ao::async
@@ -66,6 +67,13 @@ namespace ao::gtk
     TrackPropertiesDialog& operator=(TrackPropertiesDialog&&) = delete;
 
   private:
+    enum class InteractionState : std::uint8_t
+    {
+      Editing,
+      Submitting,
+      Closing,
+    };
+
     struct FieldEditor final
     {
       rt::TrackField field = rt::TrackField::Title;
@@ -81,10 +89,11 @@ namespace ao::gtk
     void buildUi();
     void buildMetadataTab();
     void buildPropertiesTab();
-    void loadSelectedTrackFields();
-    void loadFirstTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
-    void loadSubsequentTrack(rt::LibrarySnapshot const& scope, TrackId trackId);
+    Result<> prepareEditing();
+    void applyLoadedFields();
     void handleSaveClicked();
+    void setInteractionState(InteractionState state);
+    void updateEditorSensitivity();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
 
@@ -104,7 +113,9 @@ namespace ao::gtk
     async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;
+    uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
+    InteractionState _interactionState = InteractionState::Editing;
 
     Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};
     Gtk::Label _sessionErrorLabel;

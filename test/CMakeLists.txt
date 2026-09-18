@@ -459,6 +459,7 @@ add_executable(ao_core_test
     unit/uimodel/library/list/SmartListEditingTest.cpp
     unit/uimodel/library/list/SmartListPresentationTest.cpp
     unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
+    unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp
     unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp
     unit/uimodel/library/presentation/ListPresentationsTest.cpp
     unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp
@@ -472,6 +473,7 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TagEditTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp
     unit/uimodel/library/task/LibraryScanOutcomeTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
     unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp
@@ -513,6 +515,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibrarySnapshotTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/completion/CompletionTextTest.cpp
+    unit/runtime/completion/CompletionVocabularyTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp

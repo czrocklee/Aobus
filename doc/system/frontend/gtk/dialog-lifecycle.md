@@ -32,6 +32,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - Preferences has one application-owned instance and is non-modal.
 - Object editors do not commit a draft on cancel or ordinary close.
 - Saved-List create/edit dialogs remain open with their draft intact when submission fails and close only after success or cancellation.
+- Track Properties routes its Save response into one asynchronous submission. From submission through deferred successful close, every mutable metadata control and completion surface is frozen and repeated Save responses are rejected. Busy, stale, or failed outcomes keep the draft open and restore only the field sensitivity allowed by the original mixed/editable state and the current authoring session; Applied or NoOp stays frozen and queues closing for the next GTK main-context turn.
 - Native chooser cancellation is a no-op.
 - The export-mode response and native folder, open, and save completions can access `ImportExportCoordinator` only while its callback scope remains live.
 - Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root requests a destructive successor-process restart.
@@ -92,6 +93,7 @@ A persistence failure presents a transient error message; partial multi-preset p
 
 Destroying a parent window also destroys its application-owned child dialogs and releases their signal connections; a native file dialog can retain its GTK-owned async state until the toolkit completion runs.
 Object-editor cancellation is explicit draft abandonment, not runtime cancellation of an already committed command.
+Destroying Track Properties retires result presentation but does not revoke a metadata write already admitted by the runtime; committed data still publishes through `LibraryChanges`.
 Destroying `ImportExportCoordinator` first invalidates its callback scope and then requests cancellation through its shared `Gio::Cancellable`.
 A custom export-mode response or native completion delivered after invalidation is a no-op and cannot launch, finish, or hand a selected path through the destroyed coordinator.
 Cancellation is best-effort cleanup rather than the memory-safety proof.
@@ -119,6 +121,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`MainContextCallbackScope.h`](../../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
 - [`main.cpp`](../../../../app/linux-gtk/main.cpp) owns the active-library restart handoff.
 - [`LayoutEditorDialog.cpp`](../../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.
+- [`TrackPropertiesDialog.cpp`](../../../../app/linux-gtk/tag/TrackPropertiesDialog.cpp) owns revision-bound metadata Save routing, outcome presentation, and deferred successful close.
 
 ## Test map
 
@@ -127,6 +130,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`MainContextCallbackScopeTest.cpp`](../../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
 - [`ImportExportCoordinatorTest.cpp`](../../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
 - Layout-editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../../test/unit/linux-gtk/layout/editor) protect draft, preview, and action behavior.
+- [`TrackPropertiesDialogTest.cpp`](../../../../test/unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, and post-publication owner teardown around admitted completion.
 - [`ShellLayoutControllerTest.cpp`](../../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
 
 ## Related documents

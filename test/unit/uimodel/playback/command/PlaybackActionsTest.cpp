@@ -182,14 +182,19 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    auto const trackId = fixture.addPlayableTrack("Capability Track");
+    auto const firstTrack = fixture.addPlayableTrack("Capability First");
+    fixture.addPlayableTrack("Capability Second");
     auto actions = PlaybackActions{fixture.runtime().playback(), [] {}};
 
-    REQUIRE(fixture.playFromView(trackId));
+    REQUIRE(fixture.playFromView(firstTrack));
 
     CHECK_FALSE(actions.isEnabled(PlaybackCommand::Play));
     CHECK(actions.isCapable(PlaybackCommand::Play));
+    CHECK(actions.isEnabled(PlaybackCommand::Pause));
     CHECK(actions.isCapable(PlaybackCommand::Pause));
+    CHECK(actions.isCapable(PlaybackCommand::Stop) == actions.isEnabled(PlaybackCommand::Stop));
+    CHECK(actions.isCapable(PlaybackCommand::Next) == actions.isEnabled(PlaybackCommand::Next));
+    CHECK(actions.isCapable(PlaybackCommand::Previous) == actions.isEnabled(PlaybackCommand::Previous));
   }
 
   TEST_CASE("PlaybackActions - emits availability when playback becomes ready", "[uimodel][unit][playback][command]")

@@ -64,6 +64,18 @@ namespace ao::uimodel::test
     CHECK(fixture.title(targetIds[0]) == "Applied");
   }
 
+  TEST_CASE("TrackAuthoringSession - preserves duplicate targets and their captured order",
+            "[uimodel][unit][library-authoring]")
+  {
+    auto fixture = TrackAuthoringFixture{2};
+    auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0], fixture.trackIds()[1]};
+    auto sessionRes = TrackAuthoringSession::begin(fixture.library(), targetIds);
+
+    REQUIRE(sessionRes);
+    CHECK(std::ranges::equal(sessionRes->targetIds(), targetIds));
+    CHECK(sessionRes->isCurrent());
+  }
+
   TEST_CASE("TrackAuthoringSession - semantic no-op keeps the binding usable", "[uimodel][unit][library-authoring]")
   {
     auto fixture = TrackAuthoringFixture{1};

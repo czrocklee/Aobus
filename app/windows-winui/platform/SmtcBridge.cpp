@@ -23,6 +23,7 @@
 #include <winrt/Windows.Media.h>
 
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <utility>
 
@@ -49,7 +50,8 @@ namespace ao::winui
       return Status::Closed;
     }
 
-    uimodel::PlaybackCommand commandForButton(winrt::Windows::Media::SystemMediaTransportControlsButton const button)
+    std::optional<uimodel::PlaybackCommand> commandForButton(
+      winrt::Windows::Media::SystemMediaTransportControlsButton const button)
     {
       using Button = winrt::Windows::Media::SystemMediaTransportControlsButton;
 
@@ -60,7 +62,7 @@ namespace ao::winui
         case Button::Stop: return uimodel::PlaybackCommand::Stop;
         case Button::Next: return uimodel::PlaybackCommand::Next;
         case Button::Previous: return uimodel::PlaybackCommand::Previous;
-        default: return uimodel::PlaybackCommand::PlayPause;
+        default: return std::nullopt;
       }
     }
   } // namespace
@@ -123,12 +125,12 @@ namespace ao::winui
     _nativeSessionRetirement =
       utility::ScopedRegistration{[statePtr = _statePtr] { SmtcBridge::retireNativeSession(*statePtr); }};
 
-    _statePtr->controls.IsEnabled(true);
-    _statePtr->controls.IsPlayEnabled(true);
-    _statePtr->controls.IsPauseEnabled(true);
-    _statePtr->controls.IsStopEnabled(true);
-    _statePtr->controls.IsNextEnabled(true);
-    _statePtr->controls.IsPreviousEnabled(true);
+    _statePtr->controls.IsEnabled(false);
+    _statePtr->controls.IsPlayEnabled(false);
+    _statePtr->controls.IsPauseEnabled(false);
+    _statePtr->controls.IsStopEnabled(false);
+    _statePtr->controls.IsNextEnabled(false);
+    _statePtr->controls.IsPreviousEnabled(false);
 
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     _statePtr->buttonRevoker = _statePtr->controls.ButtonPressed(
@@ -136,12 +138,17 @@ namespace ao::winui
       [weakStatePtr](winrt::Windows::Media::SystemMediaTransportControls const&,
                      winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
       {
-        auto const command = commandForButton(args.Button());
+        auto const optCommand = commandForButton(args.Button());
+
+        if (!optCommand)
+        {
+          return;
+        }
 
         if (auto statePtr = weakStatePtr.lock(); statePtr)
         {
           statePtr->dispatcher.TryEnqueue(
-            [weakStatePtr, command]
+            [weakStatePtr, command = *optCommand]
             {
               if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->actions != nullptr)
               {
@@ -154,6 +161,7 @@ namespace ao::winui
     _snapshotSub =
       playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     handleSnapshot(playback.snapshot());
+    _statePtr->controls.IsEnabled(true);
   }
 
   SmtcBridge::~SmtcBridge()
@@ -173,6 +181,19 @@ namespace ao::winui
     {
       return;
     }
+
+    runOptionalWinRt("updating SMTC command availability",
+                     [this]
+                     {
+                       auto const& actions = *_statePtr->actions;
+                       // Play/Pause advertise protocol support, not whether the
+                       // command would change the current transport state.
+                       _statePtr->controls.IsPlayEnabled(actions.isCapable(uimodel::PlaybackCommand::Play));
+                       _statePtr->controls.IsPauseEnabled(actions.isCapable(uimodel::PlaybackCommand::Pause));
+                       _statePtr->controls.IsStopEnabled(actions.isEnabled(uimodel::PlaybackCommand::Stop));
+                       _statePtr->controls.IsNextEnabled(actions.isEnabled(uimodel::PlaybackCommand::Next));
+                       _statePtr->controls.IsPreviousEnabled(actions.isEnabled(uimodel::PlaybackCommand::Previous));
+                     });
 
     runOptionalWinRt("updating the SMTC playback snapshot",
                      [this, &snapshot]

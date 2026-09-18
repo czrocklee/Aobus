@@ -15,8 +15,10 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -90,7 +92,9 @@ namespace ao::rt::test
     auto projPtr = env.workspace.detailProjection(ExplicitViewTarget{reply});
 
     auto snap = projPtr->snapshot();
+    auto const expectedRevision = env.commandsFixture.library().snapshot().revision();
     CHECK(snap.selectionKind == SelectionKind::Single);
+    CHECK(snap.libraryRevision == expectedRevision);
     auto const& titleAgg = snap.fields[static_cast<std::size_t>(F::Title)];
     REQUIRE(titleAgg.optValue);
     CHECK(aggregateString(titleAgg) == "Before");
@@ -106,6 +110,8 @@ namespace ao::rt::test
 
     snap = projPtr->snapshot();
     CHECK(aggregateString(snap.fields[static_cast<std::size_t>(F::Title)]) == "After");
+    CHECK(snap.libraryRevision == env.commandsFixture.library().snapshot().revision());
+    CHECK(snap.libraryRevision > expectedRevision);
   }
 
   TEST_CASE("TrackDetailProjection - ignores non-intersecting TracksMutated", "[runtime][unit][projection][detail]")
@@ -141,6 +147,8 @@ namespace ao::rt::test
 
     {
       auto projectionPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{}});
+      auto const emptySnapshot = projectionPtr->snapshot();
+      CHECK(emptySnapshot.libraryRevision == env.commandsFixture.library().snapshot().revision());
       subscription = projectionPtr->subscribe([&](TrackDetailSnapshot const&) noexcept { ++publicationCount; });
       CHECK(publicationCount == 1);
     }
@@ -213,6 +221,9 @@ namespace ao::rt::test
             "[runtime][regression][projection][lifecycle]")
   {
     auto env = TrackDetailProjectionFixture{};
+    [[maybe_unused]] auto const committedTrackId = env.addTrack("Committed");
+    auto const committedRevision = env.commandsFixture.library().snapshot().revision();
+    REQUIRE(committedRevision > 0);
     auto const viewId = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
     REQUIRE(env.workspace.closeView(viewId));
 
@@ -220,6 +231,7 @@ namespace ao::rt::test
 
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
     CHECK(projPtr->snapshot().trackIds.empty());
+    CHECK(projPtr->snapshot().libraryRevision == 0);
   }
 
   TEST_CASE("TrackDetailProjection - explicit view target clears when its view closes",
@@ -227,6 +239,8 @@ namespace ao::rt::test
   {
     auto env = TrackDetailProjectionFixture{};
     auto const trackId = env.addTrack("Selected");
+    auto const committedRevision = env.commandsFixture.library().snapshot().revision();
+    REQUIRE(committedRevision > 0);
     auto const viewId = ao::test::requireValue(env.workspace.navigate({.target = kAllTracksListId}));
     REQUIRE(env.views.setSelection(viewId, {trackId}));
     auto const projPtr = env.workspace.detailProjection(ExplicitViewTarget{viewId});
@@ -240,7 +254,9 @@ namespace ao::rt::test
     REQUIRE(snapshots.size() == 2);
     CHECK(snapshots.back().selectionKind == SelectionKind::None);
     CHECK(snapshots.back().trackIds.empty());
+    CHECK(snapshots.back().libraryRevision == committedRevision);
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
+    CHECK(projPtr->snapshot().libraryRevision == committedRevision);
   }
 
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",

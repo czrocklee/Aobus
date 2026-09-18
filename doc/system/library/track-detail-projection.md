@@ -30,6 +30,13 @@ The snapshot retains requested ids even when some or all no longer resolve to st
 One read transaction supplies all stored fields for a rebuilt snapshot.
 Synthetic fields and the tag-list field are not part of generic field aggregation.
 
+### Which revision does a snapshot represent?
+
+`TrackDetailSnapshot::libraryRevision` is the committed revision of the read transaction that built the snapshot, not a claim that the snapshot follows every later library commit.
+A rebuild with an empty selection still performs a library read and carries that read's revision.
+By contrast, an explicit view target that cannot be resolved during initial construction retains the default empty snapshot at revision zero; that zero means no current library read was captured.
+Unrelated commits need not rebuild the projection, so consumers must use this revision as evidence for the captured data rather than as the latest global revision.
+
 For each non-synthetic field, identical loaded values produce one `optValue`; differing values produce `mixed = true` with no value.
 If no requested track resolves, aggregate fields remain empty.
 
@@ -67,7 +74,7 @@ Its observer signal weak-invalidates outstanding subscriptions when the projecti
 
 ## Test map
 
-- [`TrackDetailProjectionTest.cpp`](../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, and custom metadata aggregation.
+- [`TrackDetailProjectionTest.cpp`](../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, custom metadata aggregation, and the distinction between read-backed empty snapshots and unresolved revision-zero snapshots.
 
 ## Related documents
 

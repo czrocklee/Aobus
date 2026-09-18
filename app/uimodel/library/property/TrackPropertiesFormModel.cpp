@@ -3,15 +3,20 @@
 
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -98,6 +103,14 @@ namespace ao::uimodel
     {
       auto patch = rt::MetadataPatch{};
       return tryWriteTrackPropertiesFormEdit(patch, state);
+    }
+
+    void addBaselineRows(TrackPropertiesFormModel& form, std::span<TrackPropertiesFormRow const> const rows)
+    {
+      for (auto const& row : rows)
+      {
+        form.addField(row.field, row.editorKind != TrackPropertiesFormEditorKind::ReadonlyText);
+      }
     }
   } // namespace
 
@@ -209,5 +222,59 @@ namespace ao::uimodel
     }
 
     return &*iter;
+  }
+
+  Result<> loadTrackPropertiesFormBaseline(rt::LibrarySnapshot const& snapshot,
+                                           std::span<TrackId const> const targetIds,
+                                           TrackPropertiesFormSpec const& spec,
+                                           TrackPropertiesFormModel& form)
+  {
+    if (targetIds.empty())
+    {
+      return makeError(Error::Code::InvalidInput, "Track properties require at least one target");
+    }
+
+    for (auto const trackId : targetIds)
+    {
+      if (!snapshot.containsTrack(trackId))
+      {
+        return makeError(Error::Code::NotFound, "Track properties target not found");
+      }
+    }
+
+    auto baseline = TrackPropertiesFormModel{form._textCatalog};
+    addBaselineRows(baseline, spec.metadataRows);
+    addBaselineRows(baseline, spec.propertyRows);
+
+    bool first = true;
+    auto loadRows = [&](TrackId const trackId, std::span<TrackPropertiesFormRow const> const rows)
+    {
+      for (auto const& row : rows)
+      {
+        if (auto const* const state = baseline.findField(row.field); !first && state != nullptr && state->mixed)
+        {
+          continue;
+        }
+
+        if (auto rawValue = snapshot.trackField(trackId, row.field); first)
+        {
+          baseline.loadFirstTrackField(row.field, std::move(rawValue));
+        }
+        else
+        {
+          std::ignore = baseline.tryMergeTrackField(row.field, rawValue);
+        }
+      }
+    };
+
+    for (auto const trackId : targetIds)
+    {
+      loadRows(trackId, spec.metadataRows);
+      loadRows(trackId, spec.propertyRows);
+      first = false;
+    }
+
+    form = std::move(baseline);
+    return {};
   }
 } // namespace ao::uimodel

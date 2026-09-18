@@ -350,12 +350,14 @@ namespace ao::rt
       .trackIds = {ids.begin(), ids.end()},
     };
 
+    auto const transaction = _implPtr->library.readTransaction();
+    snap.libraryRevision = _implPtr->library.libraryRevision(transaction);
+
     if (ids.empty())
     {
       return snap;
     }
 
-    auto const transaction = _implPtr->library.readTransaction();
     auto const trackReader = _implPtr->library.tracks().reader(transaction);
     auto const manifestReader = _implPtr->library.manifest().reader(transaction);
     auto const& dictionary = _implPtr->library.dictionary();

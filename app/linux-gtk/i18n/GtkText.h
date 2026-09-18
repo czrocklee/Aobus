@@ -9,11 +9,6 @@
 #include <string>
 #include <string_view>
 
-namespace ao::rt
-{
-  struct ImportReport;
-}
-
 namespace ao::gtk
 {
   /// Owning GTK boundary adapter for an argument-free message; invalid selections fail closed.
@@ -29,7 +24,6 @@ namespace ao::gtk
                                              std::string_view tag,
                                              std::string_view references);
   std::string removeFromCurrentList(i18n::MessageCatalog const& catalog, std::string_view name, std::string_view tag);
-  std::string libraryRestoreConfirmation(i18n::MessageCatalog const& catalog, rt::ImportReport const& report);
   std::string fileSelectionError(i18n::MessageCatalog const& catalog,
                                  std::string_view operation,
                                  std::string_view message);

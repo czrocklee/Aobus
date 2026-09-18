@@ -3,7 +3,6 @@
 
 #include <ao/winui/library/LibraryTransferAdapter.h>
 
-#include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -30,44 +29,5 @@ namespace ao::winui::test
   {
     CHECK_FALSE(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Merge));
     CHECK(needsLibraryImportDestructiveConfirmation(rt::ImportMode::Restore));
-  }
-
-  TEST_CASE("Library restore preview - preserves every shared dry-run field", "[winui][unit][library-transfer]")
-  {
-    auto const state = makeLibraryRestorePreviewState(ao::test::englishMessageCatalog(),
-                                                      rt::ImportReport{
-                                                        .payloadVersion = 5,
-                                                        .payloadMode = rt::ExportMode::Full,
-                                                        .targetScope = rt::ImportTargetScope::Library,
-                                                        .tracksCreated = 2,
-                                                        .tracksUpdated = 3,
-                                                        .tracksDeleted = 4,
-                                                        .listsCreated = 5,
-                                                        .listsDeleted = 6,
-                                                        .danglingReferencesIgnored = 7,
-                                                      });
-
-    CHECK(state.title == "Confirm Restore");
-    CHECK(state.primaryActionText == "Restore Library");
-    CHECK(state.message ==
-          "This restore will replace the current library tracks and Lists.\n\nPayload: YAML v5, mode 'full'.\nPreview: "
-          "2 created, "
-          "3 updated, 4 deleted; 5 Lists created, 6 deleted; 7 dangling references ignored.\n\nContinue only if "
-          "this matches the selected backup.");
-  }
-
-  TEST_CASE("Library restore preview - list-only payload names the narrower destructive scope",
-            "[winui][unit][library-transfer]")
-  {
-    auto const state = makeLibraryRestorePreviewState(ao::test::englishMessageCatalog(),
-                                                      rt::ImportReport{
-                                                        .payloadVersion = 5,
-                                                        .payloadMode = rt::ExportMode::ListOnly,
-                                                        .targetScope = rt::ImportTargetScope::Lists,
-                                                      });
-
-    CHECK(state.primaryActionText == "Restore Lists");
-    CHECK(state.message.starts_with("This restore will replace the current Lists."));
-    CHECK(state.message.contains("mode 'listOnly'"));
   }
 } // namespace ao::winui::test
