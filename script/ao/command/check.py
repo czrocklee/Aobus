@@ -2,8 +2,9 @@
 
 import argparse
 import copy
+from pathlib import Path
 
-from ..core import builddir, dependency_policy
+from ..core import builddir, compiler_cache, dependency_policy
 from ..core.proc import die
 from . import build, perf, test
 
@@ -32,6 +33,32 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser.set_defaults(func=run_command, target=[])
 
 
+def _tsan_build_suites(args: argparse.Namespace) -> tuple[str, ...]:
+    suites = test.suites_for("all", tsan=True)
+    if "gtk" not in suites:
+        return suites
+
+    # A TSan check builds individual suite targets. Reused trees retain their
+    # feature configuration when no switch is passed; a clean tree uses defaults.
+    build_dir = (
+        Path(args.path)
+        if args.path
+        else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
+    )
+    cache = compiler_cache.read_cmake_cache(build_dir / "CMakeCache.txt") if not args.clean else {}
+    if "AOBUS_BUILD_TESTS" in cache and not test.cmake_option_enabled(cache, "AOBUS_BUILD_TESTS", build_dir):
+        raise die(f"Test targets are not enabled in {build_dir} (AOBUS_BUILD_TESTS=ON is required).")
+    if args.gtk is not None:
+        gtk_enabled = args.gtk == "on"
+    elif "AOBUS_BUILD_GTK" in cache:
+        gtk_enabled = test.cmake_option_enabled(cache, "AOBUS_BUILD_GTK", build_dir)
+    else:
+        gtk_enabled = True
+    if not gtk_enabled:
+        return tuple(suite for suite in suites if suite != "gtk")
+    return suites
+
+
 def run_command(args: argparse.Namespace) -> int:
     if args.flavor not in ("debug", "release"):
         print(f"Note: tests only run for debug/release; use ./ao build for {args.flavor}.")
@@ -39,9 +66,9 @@ def run_command(args: argparse.Namespace) -> int:
         profile_args.target = ["all", GUARDRAIL_TARGET]
         return build.run_command(profile_args)
 
-    suites = test.suites_for("all", tsan=args.tsan)
+    build_suites = _tsan_build_suites(args) if args.tsan else test.suites_for("all")
     if args.tsan:
-        targets = [target for suite in suites if (target := test.SUITES[suite].target) is not None]
+        targets = [target for suite in build_suites if (target := test.SUITES[suite].target) is not None]
         targets.append(GUARDRAIL_TARGET)
     else:
         targets = ["all", GUARDRAIL_TARGET, perf.TARGET]

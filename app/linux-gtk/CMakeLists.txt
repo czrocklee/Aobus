@@ -39,10 +39,6 @@ add_library(aobus-gtk-lib STATIC
     app/AppConfigStore.cpp
     app/ShellLayoutStore.cpp
     app/GtkLayoutStateStore.cpp
-    platform/MprisArtUrlCache.cpp
-    platform/MprisArtUrlSession.cpp
-    platform/MprisBridge.cpp
-    platform/MprisPlaybackEndpoint.cpp
     platform/SuccessorProcessLauncher.cpp
 
     i18n/GtkText.cpp
@@ -186,8 +182,12 @@ add_library(aobus-gtk-lib STATIC
 )
 
 target_link_libraries(aobus-gtk-lib PUBLIC ao_desktop_launch ao_app_uimodel ao_app_runtime)
-target_link_libraries(aobus-gtk-lib PRIVATE ao ao_app_i18n ao_audio PkgGTKMM glibmm-2.68 Boost::process)
+target_link_libraries(aobus-gtk-lib PRIVATE ao ao_app_i18n ao_audio PkgGTKMM PkgGLIBMM Boost::process)
 target_include_directories(aobus-gtk-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+    target_link_libraries(aobus-gtk-lib PRIVATE ao_system_media_linux)
+    target_compile_definitions(aobus-gtk-lib PRIVATE AOBUS_HAS_SYSTEM_MEDIA=1)
+endif()
 
 
 # aobus-gtk executable
@@ -199,7 +199,7 @@ target_link_libraries(aobus-gtk PRIVATE
     ao_app_i18n
     ao
     PkgGTKMM
-    glibmm-2.68
+    PkgGLIBMM
     mimalloc
     -Wl,-u,aobus_get_resource)
 target_include_directories(aobus-gtk PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

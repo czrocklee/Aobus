@@ -15,6 +15,7 @@ class NameAuditTest(unittest.TestCase):
                 "app/include/ao/uimodel/FooViewModel.h": "class FooViewModel final {};",
                 "app/runtime/FooService.cpp": "class FooService final {};",
                 "app/linux-gtk/FooController.h": "class FooController final {};",
+                "app/platform/media/linux/ProtocolBridge.h": "class ProtocolBridge final {};",
                 "app/linux-gtk/layout/component/FooComponent.cpp": "class FooComponent final {};",
                 "test/unit/winui/layout/FooComponentTest.cpp": "class FooComponent final {};",
                 "test/unit/runtime/FakeService.cpp": "class FakeService final {};",
@@ -66,6 +67,17 @@ class NameAuditTest(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_shared_media_bridge_location_does_not_admit_runtime_bridges(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "app/runtime/ProtocolBridge.h"
+            path.parent.mkdir(parents=True)
+            path.write_text("class ProtocolBridge final {};", encoding="utf-8")
+
+            issues = nameaudit.audit_paths([], root)
+
+        self.assertEqual([(issue.path, issue.kind) for issue in issues], [(path, "role-location")])
 
     def test_ignores_lint_fixtures(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -6,13 +6,17 @@ This page routes platform-specific behavior rather than duplicating runtime or U
 
 | Frontend | Product and adapter contracts | Development and user tasks |
 |---|---|---|
-| GTK | [Active library](gtk/active-library-lifecycle.md), [dialogs](gtk/dialog-lifecycle.md), [track detail](gtk/track-detail.md), [MPRIS](gtk/mpris.md), and [shared shell](../shell/README.md) | [GTK lifetime](../../development/gtk-lifetime.md), [GTK style](../../development/gtk-style.md), [get started](../../user/get-started.md) |
+| GTK | [Active library](gtk/active-library-lifecycle.md), [dialogs](gtk/dialog-lifecycle.md), [track detail](gtk/track-detail.md), [Linux MPRIS](mpris.md), and [shared shell](../shell/README.md) | [GTK lifetime](../../development/gtk-lifetime.md), [GTK style](../../development/gtk-style.md), [get started](../../user/get-started.md) |
 | WinUI | [Windows desktop](windows.md), [library workflows](windows-library-workflows.md), [layout schema](../../reference/windows/layout-schema.md), [desktop state](../../reference/windows/desktop-state.md) | [Windows development](../../development/windows.md), [use the desktop](../../user/use-windows-desktop.md) |
 | AppKit | [Native shell composition](../shell/README.md#appkit-shell-owner), [shared desktop lifecycle](../desktop-library-lifecycle.md), and [session lifecycle](../session-lifecycle.md) | [macOS development](../../development/macos.md) |
-| TUI | [Interaction](tui.md), [track authoring](tui-track-authoring.md), and [commands](../../reference/tui/command.md) | [Use the TUI](../../user/use-tui.md) |
+| TUI | [Interaction](tui.md), [track authoring](tui-track-authoring.md), [Linux MPRIS](mpris.md), and [commands](../../reference/tui/command.md) | [Use the TUI](../../user/use-tui.md) |
 | CLI | [Execution](cli.md) and [commands/output](../../reference/cli/command.md) | [Use the CLI](../../user/use-cli.md) |
 
 ## Native target and test boundaries
+
+On Linux, `ao_system_media_linux` is an application platform adapter shared by GTK and TUI.
+It owns GIO/D-Bus MPRIS mechanics over frontend-injected runtime, UIModel actions, executors, and host callbacks; it contains no GTK or terminal UI dependency.
+Disabling the system-media build feature removes this target and both frontend integrations without changing Core, runtime, or UIModel.
 
 WinUI owns Windows App SDK application/window lifetime, XAML resources, dispatcher adaptation, native pickers, SMTC, and its Modern and Classic shells.
 Its Windows-only `aobus-winui-lib` owns compiled frontend implementation, including the shell's schema, dialect, element lattice, style resolution, responsive policy, and native adapters.
@@ -30,7 +34,7 @@ TUI and CLI do not link it.
 
 ## Code and evidence
 
-- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) and [`desktop/CMakeLists.txt`](../../../app/desktop/CMakeLists.txt) define the composition targets and shared desktop support.
+- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt), [`app/platform/media/CMakeLists.txt`](../../../app/platform/media/CMakeLists.txt), and [`desktop/CMakeLists.txt`](../../../app/desktop/CMakeLists.txt) define frontend composition, shared Linux system media, and shared desktop support.
 - [`windows-winui/CMakeLists.txt`](../../../app/windows-winui/CMakeLists.txt) defines the WinUI implementation and executable boundary.
 - [`macos-appkit/CMakeLists.txt`](../../../app/macos-appkit/CMakeLists.txt) defines the AppKit bundle and native test composition.
 - [`ArchitectureAudit.cmake`](../../../app/cmake/ArchitectureAudit.cmake) enforces the application-layer dependency and capability constraints.

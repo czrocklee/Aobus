@@ -25,7 +25,7 @@
 
 namespace ao::gtk
 {
-  Result<std::unique_ptr<MainWindow>> prepareLibraryWindow(
+  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -71,14 +71,21 @@ namespace ao::gtk
       appRuntimePtr->addAudioProvider(std::move(providerPtr));
     }
 
-    auto windowPtr = std::make_unique<MainWindow>(
-      *appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr);
+    struct WindowOwner final
+    {
+      // Reverse destruction retires the window, runtime, then the borrowed store.
+      std::shared_ptr<AppConfigStore> configStorePtr;
+      std::unique_ptr<rt::AppRuntime> runtimePtr;
+      std::unique_ptr<MainWindow> windowPtr;
+    };
 
-    // The unmanaged C++ window has an explicit owner. Its destructor releases
-    // frontend observers before GTK base teardown releases the attached runtime.
-    // A GObject-only RefPtr would leave the C++ window and its observers alive.
-    windowPtr->set_data(
-      "app-runtime", appRuntimePtr.release(), [](void* data) { delete static_cast<rt::AppRuntime*>(data); });
+    auto mainWindowPtr = std::make_unique<MainWindow>(
+      *appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr);
+    auto ownerPtr =
+      std::make_shared<WindowOwner>(std::move(appConfigStorePtr), std::move(appRuntimePtr), std::move(mainWindowPtr));
+    // RefPtr aliases shared_ptr. Own the unmanaged C++ wrapper, not merely a
+    // GObject reference: C finalization alone does not destroy its observers.
+    auto windowPtr = Glib::RefPtr<MainWindow>{ownerPtr, ownerPtr->windowPtr.get()};
 
     if (auto const preparedRes = windowPtr->prepareSession(); !preparedRes)
     {
@@ -89,7 +96,7 @@ namespace ao::gtk
   }
 
   Result<> activateLibraryWindow(Gtk::Application& app,
-                                 std::unique_ptr<MainWindow> const& windowPtr,
+                                 Glib::RefPtr<MainWindow> const& windowPtr,
                                  MainWindow::PlaybackRestoreMode const restoreMode)
   {
     app.add_window(*windowPtr);

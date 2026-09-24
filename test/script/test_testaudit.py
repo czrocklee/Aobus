@@ -52,6 +52,18 @@ class TestAuditTest(unittest.TestCase):
 
         self.assertEqual(testaudit._audit_case(case), [])
 
+    def test_audit_accepts_application_platform_layer_independent_of_scope(self):
+        for scope in ("unit", "integration"):
+            with self.subTest(scope=scope):
+                case = testaudit.TestCase(
+                    path=Path("/repo/test/integration/linux/media/MprisBridgeTest.cpp"),
+                    line=12,
+                    name="MprisBridge - exposes root metadata",
+                    tags=("platform", scope, "mpris"),
+                )
+
+                self.assertEqual(testaudit._audit_case(case), [])
+
     def test_audit_accepts_function_level_name(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/utility/Base64Test.cpp"),

@@ -31,10 +31,10 @@ namespace ao::async
   class Runtime;
 }
 
-namespace ao::gtk::platform
+namespace ao::media
 {
   // Exports library cover-art resources as file:// URLs for MPRIS clients.
-  // Public methods are expected to run on the GTK main thread.
+  // Public methods are confined to the host callback executor.
   class MprisArtUrlCache final
   {
   public:
@@ -82,12 +82,8 @@ namespace ao::gtk::platform
                                               rt::ResourceBytes bytes,
                                               std::stop_token stopToken);
     static std::optional<CacheEntry> exportResource(std::filesystem::path const& cacheDir,
-                                                    ResourceId resourceId,
                                                     std::span<std::byte const> bytes);
     static bool isCacheEntryValid(CacheEntry const& entry) noexcept;
-    static void removeStaleResourceFiles(std::filesystem::path const& cacheDir,
-                                         ResourceId resourceId,
-                                         std::filesystem::path const& keepPath);
     static std::string fileUriForPath(std::filesystem::path const& path);
 
     rt::ResourceByteMemoryCache& _byteCache;
@@ -97,4 +93,4 @@ namespace ao::gtk::platform
     std::unordered_map<ResourceId, CacheEntry> _cache;
     Requests _requests;
   };
-} // namespace ao::gtk::platform
+} // namespace ao::media

@@ -16,6 +16,30 @@ The portal re-enters the pinned `nix-shell` automatically.
 
 `build` performs an incremental debug build. `check` builds and runs the enabled suites in the native `all` group; `hygiene` separately checks the selected source scope.
 Choose completion checks from [validation and review](test/validation-and-review.md), not from a second gate list here.
+
+### Linux frontend features
+
+Linux builds enable GTK and native system-media support by default.
+Select them independently when constructing a feature matrix:
+
+```bash
+./ao build --gtk off --system-media on --target aobus-tui
+./ao build --gtk on --system-media off --target aobus-gtk
+```
+
+`--gtk on|off` controls `AOBUS_BUILD_GTK`; `--system-media on|off` controls `AOBUS_BUILD_SYSTEM_MEDIA` and the shared `ao_system_media_linux` target used by GTK and TUI.
+The same configure options are accepted by `./ao check` and by `./ao run` when those commands build a tree.
+`./ao test` does not accept them: it requires an existing configured tree and selects suites enabled there, so use `build`, `check`, or `run` to establish the intended feature tree first. An explicit request for a disabled suite fails rather than running a leftover binary.
+Enabling either Linux-only feature on another platform is rejected.
+
+Build selection is separate from the TUI runtime option.
+Arguments after `--` belong to the application, for example:
+
+```bash
+./ao run tui -- --system-media=off
+```
+
+That runtime setting leaves an already built adapter unused; it does not reconfigure the build tree.
 Use `./ao build release` for an optimized build; [optimized builds](optimized-builds.md) explains Release, IPO/LTO, and profiling.
 `./ao build debug --clean` requests a clean rebuild; preserve a failing tree and its `build.log` when diagnosing a problem.
 

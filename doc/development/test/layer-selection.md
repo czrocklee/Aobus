@@ -61,6 +61,13 @@ Appropriate contracts:
 - LayoutTemplateExpander prop merge and recursive template protection.
 - KeymapModel conflict detection and override behavior.
 
+## Application-platform adapter tests
+
+Use `[platform]` for frontend-independent native adapters under `app/platform`, such as the shared Linux MPRIS adapter.
+Controlled command, metadata, and lifecycle rules can remain `[unit]`; results obtained through a real bus or another production boundary are `[integration]`.
+Tests of a frontend's composition with that adapter retain the frontend layer, such as `[tui]` or `[gtk]`.
+Native availability belongs to the conditional source registration; it does not require a platform-name tag or determine unit/integration scope.
+
 ## `linux-gtk` tests
 
 Use `test/unit/linux-gtk/...Test.cpp` for GTK adapter behavior: widget construction, render binding, event-to-action routing, lifecycle cleanup, CSS class application, popovers/dialogs, and small targeted layout regressions.

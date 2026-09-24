@@ -154,6 +154,25 @@ function(_aobus_architecture_audit_self_test)
   endforeach()
   _aobus_adjudicate_architecture_rule(
     uimodel_core "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
+  _aobus_adjudicate_architecture_rule(
+    system_media_gui "#include <gtkmm/widget.h>" "#include <giomm/file.h>")
+  foreach(_sample IN ITEMS
+      "#include <gtkmm.h>"
+      "#import \"gdkmm.h\""
+      "#include <gtk.h>"
+      "#include <gdk.h>"
+      "#include <gdk/gdk.h>"
+      "#include \"linux-gtk/app/MainWindow.h\""
+      "/* comment */ #include <gtkmm.h>")
+    _aobus_assert_architecture_rejects(system_media_gui "${_sample}")
+  endforeach()
+  foreach(_sample IN ITEMS
+      "#include <giomm.h>"
+      "#include <glibmm.h>"
+      "// #include <gtkmm.h>"
+      "/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n*/")
+    _aobus_assert_architecture_allows(system_media_gui "${_sample}")
+  endforeach()
 
   _aobus_adjudicate_architecture_rule(
     frontend_core "runtime.library().commands()" "runtime.playback().commands()")
@@ -222,6 +241,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/platform/media
       app/macos-appkit
       app/tui
       app/windows-winui
@@ -250,6 +270,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/platform/media
       app/macos-appkit
       app/tui
       app/windows-winui
@@ -275,13 +296,18 @@ function(_aobus_run_architecture_audit)
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${_forbidden_audio_control}))|${_forbidden_write_authority}")
+  _aobus_register_architecture_rule(system_media_gui
+    ROOTS app/platform/media
+    FORBIDDEN
+      "#[ \t]*(include|import)[ \t]*[<\"]((gtkmm|gdkmm|gtk|gdk)(/|[.]h[>\"])|linux-gtk/)"
+    ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
   _aobus_register_architecture_rule(frontend_core
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui
+    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/platform/media app/macos-appkit app/windows-winui app/tui
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/rt/CoreRuntime[.]h|ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${_forbidden_write_authority}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${_forbidden_frontend_commands}"
     ALLOWED "${_allowed_playback_commands}")
   _aobus_register_architecture_rule(frontend_library_path
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui app/cli
+    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/platform/media app/macos-appkit app/windows-winui app/tui app/cli
     FORBIDDEN "\"([.]aobus|data[.]mdb)")
   _aobus_register_architecture_rule(cli_localization
     ROOTS app/cli

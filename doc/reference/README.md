@@ -24,7 +24,7 @@ For internal object declarations, use the linked headers. Cross-object behavior 
 
 ## Protocols and product vocabularies
 
-- [MPRIS interfaces and mappings](linux-gtk/mpris.md)
+- [Linux MPRIS interfaces and mappings](linux/mpris.md)
 - [Desktop successor-process protocol](application/desktop-successor-protocol.md)
 - [Supported audio files and imported metadata](media/audio-file.md)
 - [Runtime track-field vocabulary](library/model/track-field.md)

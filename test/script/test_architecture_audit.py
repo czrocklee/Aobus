@@ -73,6 +73,7 @@ class ArchitectureAuditTest(unittest.TestCase):
                 "app/desktop",
                 "app/runtime",
                 "app/linux-gtk",
+                "app/platform/media",
                 "app/macos-appkit",
                 "app/windows-winui",
                 "app/tui",
@@ -96,6 +97,15 @@ class ArchitectureAuditTest(unittest.TestCase):
             violation = source_root / "app/tui/Violation.cpp"
             violation.write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
             violation.with_suffix(".mm").write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
+            (source_root / "app/platform/media/Gui.cpp").write_text("#include <gtkmm/widget.h>\n", encoding="utf-8")
+            (source_root / "app/platform/media/Native.cpp").write_text("#include <giomm/file.h>\n", encoding="utf-8")
+            (source_root / "app/platform/media/Umbrella.cpp").write_text("#include <gtkmm.h>\n", encoding="utf-8")
+            (source_root / "app/platform/media/GdkUmbrella.mm").write_text('#import "gdkmm.h"\n', encoding="utf-8")
+            (source_root / "app/platform/media/Documented.h").write_text(
+                "// #include <gtkmm.h>\n/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n*/\n"
+                "#include <giomm.h>\n#include <glibmm.h>\n",
+                encoding="utf-8",
+            )
             managed_state_violation = source_root / "app/tui/ManagedState.def"
             managed_state_violation.write_text("#include <ao/yaml/Reflect.h>\n", encoding="utf-8")
             suffix_violation = source_root / "app/tui/Unsupported.cc"
@@ -128,7 +138,12 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 11 violation", output)
+        self.assertIn("Application architecture audit found 14 violation", output)
+        self.assertIn("system_media_gui: app/platform/media/Gui.cpp", output)
+        self.assertIn("system_media_gui: app/platform/media/Umbrella.cpp", output)
+        self.assertIn("system_media_gui: app/platform/media/GdkUmbrella.mm", output)
+        self.assertNotIn("system_media_gui: app/platform/media/Native.cpp", output)
+        self.assertNotIn("system_media_gui: app/platform/media/Documented.h", output)
         self.assertIn("frontend_core: app/tui/Violation.cpp", output)
         self.assertIn("frontend_core: app/tui/Violation.mm", output)
         self.assertIn("managed_state_mechanism: app/tui/ManagedState.def", output)

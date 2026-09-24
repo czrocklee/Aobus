@@ -22,6 +22,7 @@ set_property(SOURCE
   integration/audio/DecoderIntegrationTest.cpp
   integration/audio/GraphIntegrityTest.cpp
   integration/media/file/FileTest.cpp
+  integration/linux/media/MprisBridgeTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio"
 )
 set_property(SOURCE
@@ -940,6 +941,35 @@ target_link_libraries(ao_integration_test PRIVATE
 if(LINUX)
   target_link_libraries(ao_integration_test PRIVATE PkgPipeWire)
 endif()
+set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED OFF)
+if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+  set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED ON)
+  target_sources(ao_integration_test PRIVATE integration/linux/media/MprisTestSupport.cpp)
+  target_link_libraries(ao_integration_test PRIVATE
+    ao_system_media_linux
+    ao_test_support_runtime
+    PkgGIOMM
+    PkgGLIBMM
+  )
+endif()
+aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_SYSTEM_MEDIA_ENABLED}" "Linux system media is disabled or unavailable"
+  integration/linux/media/MprisArtUrlSessionTest.cpp
+  integration/linux/media/MprisBridgeTest.cpp
+  integration/linux/media/MprisBridgeIntegrationTest.cpp
+  integration/linux/media/MprisBusSessionTest.cpp
+  integration/linux/media/MprisSignalTest.cpp
+  integration/linux/media/MprisPlaybackPositionTest.cpp
+)
+# Real TUI process coverage is normal/ASan only; FTXUI is outside supported TSan suites.
+set(AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED OFF)
+if(AOBUS_TEST_SYSTEM_MEDIA_ENABLED AND AOBUS_BUILD_TUI AND NOT AOBUS_ENABLE_TSAN)
+  set(AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED ON)
+  target_compile_definitions(ao_integration_test PRIVATE AOBUS_TUI_EXECUTABLE="$<TARGET_FILE:aobus-tui>")
+  add_dependencies(ao_integration_test aobus-tui)
+endif()
+aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED}" "Linux system media or TUI unavailable, or unsupported TUI TSan coverage"
+  integration/linux/media/TuiMprisProcessTest.cpp
+)
 aobus_target_test_sources(ao_integration_test "${LINUX}" "non-Linux host"
   integration/audio/backend/PipeWireProviderTest.cpp
 )
@@ -975,6 +1005,10 @@ target_link_libraries(ao_gtk_test PRIVATE
     FakeIt::FakeIt-catch
 )
 add_dependencies(ao_gtk_test ao_gapplication_probe)
+if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+    target_compile_definitions(ao_gtk_test PRIVATE AOBUS_HAS_SYSTEM_MEDIA=1)
+    target_link_libraries(ao_gtk_test PRIVATE ao_system_media_linux)
+endif()
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
@@ -1043,10 +1077,6 @@ aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
     unit/linux-gtk/status/ActivityStatusWidgetTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
-    unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp
-    unit/linux-gtk/platform/MprisBridgeTest.cpp
-    unit/linux-gtk/platform/MprisBusLifetimeTest.cpp
-    unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp
     unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp

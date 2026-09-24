@@ -5,7 +5,9 @@
 
 #include "image/ImageCache.h"
 #include "image/ImageRenderPolicy.h"
-#include "platform/MprisArtUrlCache.h"
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+#include "media/linux/MprisArtUrlCache.h"
+#endif
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -71,6 +73,7 @@ namespace ao::gtk::test
       co_return std::optional<std::vector<std::byte>>{};
     }
 
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
     async::Task<Result<std::optional<std::vector<std::byte>>>> readResourceAfterReleaseAsync(
       rt::test::AsyncTestState<std::size_t> readCount,
       rt::test::AsyncBarrier* release,
@@ -83,6 +86,7 @@ namespace ao::gtk::test
       async::throwIfStopRequested(stopToken);
       co_return std::optional{std::move(bytes)};
     }
+#endif
   } // namespace
 
   TEST_CASE("ResourceImageLoader - resolves image sources into pixbuf results",
@@ -499,6 +503,8 @@ namespace ao::gtk::test
     }
   }
 
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+
   TEST_CASE("ResourceByteMemoryCache - GTK derivatives share one owner-affine raw resource flight",
             "[gtk][integration][resource-byte][concurrency]")
   {
@@ -514,7 +520,7 @@ namespace ao::gtk::test
       runtime, std::bind_front(readResourceAfterReleaseAsync, readCount, &release, pngBytes)};
     auto imageCache = ImageCache{200};
     auto imageLoader = ResourceImageLoader{byteCache, imageCache, runtime};
-    auto artUrlCache = platform::MprisArtUrlCache{byteCache, runtime, tempDir.path() / "shared-resource-bytes"};
+    auto artUrlCache = media::MprisArtUrlCache{byteCache, runtime, tempDir.path() / "shared-resource-bytes"};
     constexpr auto kResourceId = ResourceId{8181};
     auto urlCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto nonEmptyUrlCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -588,4 +594,5 @@ namespace ao::gtk::test
     CHECK(readCount.load() == 1);
     CHECK(executor.queuedCount() == 0);
   }
+#endif
 } // namespace ao::gtk::test

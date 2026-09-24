@@ -16,6 +16,7 @@ Application shortcut descriptors, TUI-local defaults, neutral-to-FTXUI translati
 The replaceable plan value built there is read by `EventController.cpp` for root dispatch and by every renderer that advertises a configurable shortcut.
 `EventController.cpp` separately owns fixed text-input, list, overlay, notification, mouse, and Ctrl-C protocol, and forwards graceful exit to the App-owned `ExitController`.
 `LibraryScanController.cpp` owns one restartable eager scan flight.
+On supported Linux builds, `App.cpp` optionally composes the shared `ao::media::MprisBridge`; the [Linux MPRIS reference](../linux/mpris.md) owns that external protocol.
 `TrackEditController.cpp` owns editor preparation, session retention, and submission; `TrackPropertiesEditor.cpp` owns modal keys and submission prompts, while `TrackMetadataEditor.cpp` and `TrackTagEditor.cpp` own page input and rendering.
 
 ## Surface
@@ -28,11 +29,13 @@ The replaceable plan value built there is read by `EventController.cpp` for root
 | `--database <path>` | default `<root>/.aobus/library`; normalized absolute path |
 | `--config <path>` | workspace/playback-session file; default `<root>/.aobus/tui-workspace.yaml`; normalized absolute path; does not relocate the layout file and must not alias another TUI managed-state file |
 | `--cover-art-mode <auto|kitty|blocks|off>` | session override of the saved cover renderer; omitted uses the preference (default `auto`) |
+| `--system-media <auto|off>` | system media controls; default `auto`; `off` constructs no adapter, native thread, or MPRIS artwork interests |
 | `--log-level <trace|debug|info|warn|error|critical|off>` | case-insensitive runtime log level |
 | `--version` | prints `Aobus TUI <version>` and exits |
 
 Per-library List navigation visibility, column layouts, and presentation preferences always use `<root>/.aobus/tui_layout.yaml`; there is no startup override for that file. Startup rejects a `--config` path that aliases this document or the global TUI application-preference document so one `ConfigStore` remains authoritative for each physical file.
 Startup also exits with a diagnostic when it cannot prepare the selected workspace configuration directory.
+The system-media option is accepted on every platform, but `auto` currently activates an adapter only in Linux binaries built with system-media support; otherwise it is inert. An absent or unusable Linux session bus also degrades `auto` to no external controls without autolaunch or reconnect.
 
 ### Shortcut overrides
 

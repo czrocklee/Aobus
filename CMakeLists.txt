@@ -16,8 +16,10 @@ option(AOBUS_ENABLE_TSAN "Enable thread sanitizer (debug builds only)" OFF)
 # GTK is the Linux desktop frontend. macOS is also UNIX, so this has to test
 # LINUX: testing UNIX would make a macOS configure demand gtk4 and gtkmm-4.0.
 set(AOBUS_DEFAULT_BUILD_GTK OFF)
+set(AOBUS_DEFAULT_BUILD_SYSTEM_MEDIA OFF)
 if(LINUX)
   set(AOBUS_DEFAULT_BUILD_GTK ON)
+  set(AOBUS_DEFAULT_BUILD_SYSTEM_MEDIA ON)
 endif()
 
 set(AOBUS_DEFAULT_BUILD_LINT_PLUGIN ON)
@@ -27,10 +29,21 @@ endif()
 
 option(AOBUS_BUILD_CLI "Build the command-line frontend" ON)
 option(AOBUS_BUILD_GTK "Build the GTK frontend" ${AOBUS_DEFAULT_BUILD_GTK})
+option(AOBUS_BUILD_SYSTEM_MEDIA "Build native system-media integration" ${AOBUS_DEFAULT_BUILD_SYSTEM_MEDIA})
 option(AOBUS_BUILD_TESTS "Build test targets" ON)
 option(AOBUS_BUILD_LINT_PLUGIN "Build the Aobus clang-tidy plugin" ${AOBUS_DEFAULT_BUILD_LINT_PLUGIN})
 option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
 option(AOBUS_BUILD_WINUI "Build the Windows WinUI 3 frontend" OFF)
+
+if(AOBUS_BUILD_GTK AND NOT LINUX)
+  message(FATAL_ERROR "AOBUS_BUILD_GTK is supported only on Linux")
+endif()
+if(AOBUS_BUILD_SYSTEM_MEDIA AND NOT LINUX)
+  message(FATAL_ERROR "AOBUS_BUILD_SYSTEM_MEDIA is currently supported only on Linux")
+endif()
+message(STATUS
+  "Aobus features: AOBUS_BUILD_GTK=${AOBUS_BUILD_GTK}; "
+  "AOBUS_BUILD_SYSTEM_MEDIA=${AOBUS_BUILD_SYSTEM_MEDIA}")
 
 include(cmake/CompilerOptions.cmake)
 include(cmake/WindowsUtf8Manifest.cmake)

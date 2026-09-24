@@ -205,7 +205,7 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 - [`AtomicFilePosix.cpp`](../../../lib/utility/AtomicFilePosix.cpp) owns POSIX temporary-file RAII, mode, write, barriers, replacement, and parent synchronization.
 - [`AtomicFileWindows.cpp`](../../../lib/utility/AtomicFileWindows.cpp) owns extended paths, protected DACL creation, Windows temporary-file RAII, barriers, and replacement.
 - [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) selects one platform implementation and links the Windows security API.
-- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp), [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) use durable writes; [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) and [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) use visibility-only publication for discardable artwork.
+- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp), [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) use durable writes; [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) and [`MprisArtUrlCache.cpp`](../../../app/platform/media/linux/MprisArtUrlCache.cpp) use visibility-only publication for discardable artwork.
 
 ## Test map
 
@@ -224,5 +224,5 @@ Native platform tests remain necessary because the seam does not emulate filesys
 - [Grouped configuration store specification](config-store.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations reference](../../reference/persistence/location.md)
-- [GTK MPRIS specification](../frontend/gtk/mpris.md)
+- [Linux MPRIS specification](../frontend/mpris.md)
 - [Outcome channel specification](../failure/outcome-channel.md)
