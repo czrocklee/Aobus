@@ -376,14 +376,14 @@ namespace winrt::Aobus::implementation
           .presentTrackProperties = command(&MainWindow::presentTrackProperties),
           .showSoul = command(&MainWindow::showFullscreenSoul),
           .showSystemMenu = command(&MainWindow::showSystemMenu),
-          .showOutputDeviceSelector =
-            [weak](Microsoft::UI::Xaml::FrameworkElement const& anchor)
+        },
+        .showOutputDeviceSelector =
+          [weak](Microsoft::UI::Xaml::FrameworkElement const& anchor)
+        {
+          if (auto self = weak.get(); self)
           {
-            if (auto self = weak.get(); self)
-            {
-              self->showOutputDeviceSelector(anchor);
-            }
-          },
+            self->showOutputDeviceSelector(anchor);
+          }
         },
         .listCommands = {
           .createList =

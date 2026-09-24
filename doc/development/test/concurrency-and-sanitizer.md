@@ -32,11 +32,23 @@ Cover the applicable boundaries with observable outcomes:
 | Cancel while suspended | Work exits without completion or a user-visible error. |
 | Completion races with cancel | Exactly one terminal path wins. |
 | Callback queued, then owner destroyed | The callback becomes a safe no-op. |
-| Callback requests owner teardown | Teardown is deferred until publication unwinds; synchronous destruction is rejected by contract. |
-| Shutdown with active work | Producers stop and callbacks quiesce before destruction. |
+| Callback requests owner teardown | By default, teardown is deferred until publication unwinds and synchronous destruction is rejected; only an explicitly documented stronger reentrant lifetime model permits an exception (see below). |
+| Shutdown with active work | Producers stop and callbacks quiesce before the state they use is destroyed. |
 | Repeated cancellation | Cancellation and teardown are idempotent. |
 | Executor hop | The callback runs on its documented executor. |
 | Multiple workers | The contract holds with more than one worker. |
+
+The [threading and callback rules](../coding-style.md#threading-and-callbacks)
+allow a stronger lifetime model only where the API documents it.
+For the [BackendProvider exception](../../system/playback/audio-execution.md#backend-lifetime-and-properties),
+verify that callback-origin facade destruction leaves independently retained
+state to complete quiescence after the callback returns.
+Callback-origin shutdown does not wait for the invoking callback to return.
+This does not guarantee that the shutdown call returns immediately or avoids
+other blocking work. External shutdown callers still wait for the same
+provider-quiescence completion boundary.
+This exception does not relax deferred teardown required by Player, Engine, or
+GTK owner APIs.
 
 Timer-like components additionally cover expiry winning, cancellation winning,
 their collision, and obsolete reschedule generations.

@@ -63,6 +63,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   layout/LayoutSchema.cpp
   layout/LayoutDialect.cpp
   layout/PlacementPlan.cpp
+  layout/ShellCommands.cpp
   layout/ShellDocument.cpp
   layout/ShellState.cpp
   layout/StyleLookup.cpp
@@ -171,6 +172,8 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
 
 add_library(aobus-winui-lib STATIC ${AOBUS_WINUI_LIBRARY_SOURCES})
 target_precompile_headers(aobus-winui-lib PRIVATE pch.h)
+# Compile this cross-host mapping without implicit native PCH dependencies.
+set_source_files_properties(layout/ShellCommands.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 target_compile_options(aobus-winui-lib PRIVATE /bigobj)
 if(AOBUS_WINDOWS_SHARED_WORKSPACES)
   # LTCG embeds the PCH and object paths. The portal already fixes their B: root;

@@ -33,6 +33,7 @@
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
 #include <ao/winui/layout/LayoutSchema.h>
+#include <ao/winui/layout/ShellCommands.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -130,16 +131,6 @@ namespace ao::winui::layout
 
   void ShellBuilder::registerActions()
   {
-    auto const bindCommand = [this](std::string_view const id, std::function<void()> const& command)
-    {
-      if (!command)
-      {
-        return;
-      }
-
-      _actions.registerAction(id, [command](ActionContext const&) { command(); });
-    };
-
     // The transport is the one action family a keyboard map binds by default,
     // and the surface that runs it outlives every generation, so it is bound
     // here rather than left to the buttons that also invoke it.
@@ -151,13 +142,10 @@ namespace ao::winui::layout
                               [&playback, command](ActionContext const&) { playback.tryExecute(command); });
     }
 
-    bindCommand("library.open", _config.commands.openLibrary);
-    bindCommand("library.rescan", _config.commands.rescanLibrary);
-    bindCommand("shell.toggleInspector", _config.commands.toggleInspector);
-    bindCommand("shell.showSoul", _config.commands.showSoul);
-    bindCommand("shell.showSystemMenu", _config.commands.showSystemMenu);
-    bindCommand(uimodel::kRevealCurrentTrackActionId, _config.commands.revealCurrentTrack);
-    bindCommand("track.presentProperties", _config.commands.presentTrackProperties);
+    registerShellCommandActions(
+      _config.commands,
+      [this](std::string_view const id, std::function<void()> command)
+      { _actions.registerAction(id, [command = std::move(command)](ActionContext const&) { command(); }); });
 
     if (auto const& applyOrder = _config.listCommands.applyOrder; applyOrder)
     {
@@ -173,7 +161,7 @@ namespace ao::winui::layout
 
     // The selector presents from wherever it was raised, so unlike the rest this
     // one is the anchor's business as much as the shell's.
-    if (auto const& showSelector = _config.commands.showOutputDeviceSelector; showSelector)
+    if (auto const& showSelector = _config.showOutputDeviceSelector; showSelector)
     {
       _actions.registerAction("playback.showOutputDeviceSelector",
                               [showSelector](ActionContext const& context) { showSelector(context.anchor); });

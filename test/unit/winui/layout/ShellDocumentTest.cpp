@@ -8,6 +8,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/winui/layout/LayoutSchema.h>
+#include <ao/winui/layout/ShellCommands.h>
 #include <ao/winui/layout/ThemeSurface.h>
 
 #include <catch2/catch_message.hpp>
@@ -19,8 +20,10 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <ios>
 #include <iterator>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -250,22 +253,28 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - shipped action ids have shell registration source paths",
+  TEST_CASE("prepareShellPresetDocument - both shipped presets resolve frame commands to offered registrations",
             "[winui][unit][layout]")
   {
-    // Lexical guards at identifier level: each shipped action id and the
-    // callback that serves it appear in the shell source. They tolerate
-    // formatting and local refactoring, and cannot prove native invocation.
+    auto const commands = layout::ShellCommands{
+      .openLibrary = [] {},
+      .rescanLibrary = [] {},
+      .toggleInspector = [] {},
+      .revealCurrentTrack = [] {},
+      .presentTrackProperties = [] {},
+      .showSoul = [] {},
+      .showSystemMenu = [] {},
+    };
+    auto offeredActions = std::set<std::string, std::less<>>{};
+    layout::registerShellCommandActions(commands,
+                                        [&offeredActions](std::string_view const id, std::function<void()> /*command*/)
+                                        { REQUIRE(offeredActions.emplace(id).second); });
+    REQUIRE(offeredActions.size() == 7);
+
+    // Only non-extracted native registrations retain lexical guards. These
+    // source checks do not activate playback or forward a selector anchor.
     auto const builder = readShellBuilderSource();
     auto const schema = layoutSchema();
-
-    constexpr auto kCommandCallbacks = std::to_array<std::pair<std::string_view, std::string_view>>({
-      {"library.open", "commands.openLibrary"},
-      {"library.rescan", "commands.rescanLibrary"},
-      {"shell.toggleInspector", "commands.toggleInspector"},
-      {"shell.showSoul", "commands.showSoul"},
-      {"shell.showSystemMenu", "commands.showSystemMenu"},
-    });
 
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
@@ -277,28 +286,31 @@ namespace ao::winui::test
 
       auto actions = std::vector<std::string>{};
       collectBoundActions(schema, preparedRes->effectiveRoot(), actions);
-      CHECK_FALSE(actions.empty());
+      REQUIRE_FALSE(actions.empty());
 
       for (auto const& action : actions)
       {
         INFO("action " << action);
-        CHECK(builder.contains(std::format("\"{}\"", action)));
+
+        if (offeredActions.contains(action))
+        {
+          continue;
+        }
 
         if (action == "playback.showOutputDeviceSelector")
         {
+          CHECK(builder.contains("\"playback.showOutputDeviceSelector\""));
           CHECK(builder.contains("showSelector"));
         }
         else if (action.starts_with("playback."))
         {
+          CHECK(builder.contains(std::format("\"{}\"", action)));
           CHECK(builder.contains("playbackCommandActionId"));
           CHECK(builder.contains("tryExecute"));
         }
         else
         {
-          decltype(kCommandCallbacks)::const_iterator const it =
-            std::ranges::find_if(kCommandCallbacks, [&action](auto const& entry) { return entry.first == action; });
-          REQUIRE(it != kCommandCallbacks.end());
-          CHECK(builder.contains(it->second));
+          FAIL("Shipped frame command has no offered registration: " << action);
         }
       }
     }
@@ -322,6 +334,8 @@ namespace ao::winui::test
     collectBoundActions(layoutSchema(), preparedRes->effectiveRoot(), actions);
     CHECK(contains(actions, "shell.toggleInspector"));
 
+    // Classic reaches this command from composeMenuBar(), not the document.
+    // This is a source guard, not evidence of native menu activation.
     auto const builder = readShellBuilderSource();
     CHECK(builder.contains("\"winui_shell_track_details\""));
     CHECK(builder.contains("commands.toggleInspector"));
