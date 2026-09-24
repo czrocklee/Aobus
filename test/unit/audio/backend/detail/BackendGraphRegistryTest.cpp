@@ -72,7 +72,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - equal snapshots do not redeliver and remain available to late subscribers",
-            "[audio][regression][backend-graph]")
+            "[audio][unit][backend-graph]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -92,7 +92,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - initial callback publication drains without nesting or losing the current graph",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph]")
   {
     auto registry = BackendGraphRegistry{};
     auto const current = graphWithNode("current");
@@ -124,7 +124,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - reentrant subscription defers its initial callback and remains cancellable",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     bool cancelInitial = false;
 
@@ -196,7 +196,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - reentrant real changes coalesce and supersede unfinished delivery",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto firstGraphs = std::vector<flow::Graph>{};
@@ -230,7 +230,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - cancellation discards a reentrant publication for the cancelled subscriber",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -258,7 +258,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - cancellation removes callback already copied for route publication",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     bool cancelSecond = false;
@@ -302,7 +302,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - reentrant clear supersedes an older publication",
-            "[audio][regression][backend-graph]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto secondSubscriberGraphs = std::vector<flow::Graph>{};
@@ -333,7 +333,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - a blocked publisher keeps delivery ownership after superseding a route",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     constexpr auto kWaitTimeout = std::chrono::seconds{5};
     auto registry = BackendGraphRegistry{};
@@ -417,7 +417,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("BackendGraphRegistry - shutdown waits for an active callback and closes admission",
-            "[audio][regression][backend-graph][concurrency]")
+            "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto callbackEntered = std::binary_semaphore{0};
@@ -467,7 +467,7 @@ namespace ao::audio::backend::detail::test
 
   TEST_CASE(
     "BackendGraphRegistry - callback shutdown delivers final empties before returning and respects cancellation",
-    "[audio][regression][backend-graph][concurrency]")
+    "[audio][unit][backend-graph][concurrency]")
   {
     auto registry = BackendGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -508,7 +508,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(registry.subscribe("route-a", [](flow::Graph const&) {}));
   }
 
-  TEST_CASE("BackendGraphRegistry - subscription may outlive registry", "[audio][regression][backend-graph]")
+  TEST_CASE("BackendGraphRegistry - subscription may outlive registry", "[audio][unit][backend-graph]")
   {
     auto sub = utility::ScopedRegistration{};
 

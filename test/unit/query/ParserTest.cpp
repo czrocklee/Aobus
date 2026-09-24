@@ -499,7 +499,7 @@ namespace ao::query::test
   }
 
   TEST_CASE("Parser - admits bounded recursive work and rejects excessive flat and nested expressions",
-            "[query][regression][parser]")
+            "[query][unit][parser]")
   {
     auto adjacent = std::string{};
 
@@ -534,7 +534,7 @@ namespace ao::query::test
     CHECK(serialize(*nestedRes) == "true");
   }
 
-  TEST_CASE("Parser - admission rejects nested scalar lists before syntax parsing", "[query][regression][parser]")
+  TEST_CASE("Parser - admission rejects nested scalar lists before syntax parsing", "[query][unit][parser]")
   {
     auto const expression = std::string_view{"$year in [[1]]"};
     auto const res = ::ao::query::parse(expression);
@@ -544,7 +544,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesExpressionSyntax(expression));
   }
 
-  TEST_CASE("Parser - list exemption cannot hide recursive groups or an unclosed tail", "[query][regression][parser]")
+  TEST_CASE("Parser - list exemption cannot hide recursive groups or an unclosed tail", "[query][unit][parser]")
   {
     for (auto const& expression : {std::string{"$year in ["} + std::string(65000, '('),
                                    std::string{"$year in ["} + std::string(1000, '(') + "]",
@@ -559,7 +559,7 @@ namespace ao::query::test
   }
 
   TEST_CASE("Parser - admission counts quoted values and scalar lists without artificial AST depth",
-            "[query][regression][parser]")
+            "[query][unit][parser]")
   {
     auto quoted = std::string(1, '"') + std::string(1000, '(') + '"';
     CHECK(::ao::query::parse(quoted));

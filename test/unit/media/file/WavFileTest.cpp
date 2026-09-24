@@ -100,7 +100,7 @@ namespace ao::media::file::wav::test
     CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
-  TEST_CASE("WAV File - preserves ID3 APIC cover art", "[media][regression][wav]")
+  TEST_CASE("WAV File - preserves ID3 APIC cover art", "[media][unit][wav][file]")
   {
     auto const id3 = ao::test::wav::makeId3WithPicture(std::array<std::uint8_t, 3>{0x12, 0x34, 0x56});
     auto const data = ao::test::wav::makeWav({
@@ -119,52 +119,50 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[2]) == 0x56);
   }
 
-  TEST_CASE("WAV File - rejects malformed input", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - rejects empty audio data through the content API", "[media][unit][wav][file]")
   {
-    SECTION("empty audio data")
-    {
-      auto data = ao::test::wav::makeWav({.audioData = {}});
-      auto const temp = ao::test::TempFile{data, ".wav"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+    auto data = ao::test::wav::makeWav({.audioData = {}});
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "WAV file has no audio data");
+  }
 
-    SECTION("malformed embedded ID3 tag")
-    {
-      auto malformedId3 =
-        std::vector<std::uint8_t>{'I', 'D', '3', 3, 0, 0,   0,   0,   0,   22,  'T', 'I', 'T', '2', 0, 0,
-                                  0,   2,   0,   0, 0, 'A', 'T', 'P', 'E', '1', 0,   0,   0,   100, 0, 0};
-      auto data = ao::test::wav::makeWav({
-        .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = malformedId3}}},
-      });
-      auto const temp = ao::test::TempFile{data, ".wav"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+  TEST_CASE("WAV File - discards malformed optional ID3 metadata", "[media][unit][wav][file]")
+  {
+    auto malformedId3 =
+      std::vector<std::uint8_t>{'I', 'D', '3', 3, 0, 0,   0,   0,   0,   22,  'T', 'I', 'T', '2', 0, 0,
+                                0,   2,   0,   0, 0, 'A', 'T', 'P', 'E', '1', 0,   0,   0,   100, 0, 0};
+    auto data = ao::test::wav::makeWav({
+      .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = malformedId3}}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      REQUIRE(res);
-      CHECK(res->text(TextField::Title).empty());
-      CHECK(res->codec() == AudioCodec::Wav);
-    }
+    REQUIRE(res);
+    CHECK(res->text(TextField::Title).empty());
+    CHECK(res->codec() == AudioCodec::Wav);
+  }
 
-    SECTION("malformed LIST chunk discards fields parsed before the error")
-    {
-      auto const fields = std::vector<ao::test::wav::InfoField>{{.id = {'I', 'N', 'A', 'M'}, .value = "Partial"}};
-      auto info = ao::test::wav::makeInfoList(fields);
-      info.insert(info.end(), {'I', 'A', 'R', 'T'});
-      ao::test::wav::appendLe32(info, 100);
-      auto data = ao::test::wav::makeWav({
-        .extraChunks = {{{.id = {'L', 'I', 'S', 'T'}, .payload = info}}},
-      });
-      auto const temp = ao::test::TempFile{data, ".wav"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+  TEST_CASE("WAV File - malformed LIST discards fields parsed before the error", "[media][unit][wav][file]")
+  {
+    auto const fields = std::vector<ao::test::wav::InfoField>{{.id = {'I', 'N', 'A', 'M'}, .value = "Partial"}};
+    auto info = ao::test::wav::makeInfoList(fields);
+    info.insert(info.end(), {'I', 'A', 'R', 'T'});
+    ao::test::wav::appendLe32(info, 100);
+    auto data = ao::test::wav::makeWav({
+      .extraChunks = {{{.id = {'L', 'I', 'S', 'T'}, .payload = info}}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      REQUIRE(res);
-      CHECK(res->text(TextField::Title).empty());
-      CHECK(res->codec() == AudioCodec::Wav);
-    }
+    REQUIRE(res);
+    CHECK(res->text(TextField::Title).empty());
+    CHECK(res->codec() == AudioCodec::Wav);
   }
 } // namespace ao::media::file::wav::test

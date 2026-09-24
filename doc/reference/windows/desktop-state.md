@@ -34,6 +34,13 @@ The [system architecture](../../system/overview.md), [application shell architec
 
 The four window coordinates encode the native normal-position rectangle in
 Windows workspace coordinates. `window.maximized` is applied independently.
+At a window checkpoint, captured normal bounds are normalized before entering
+live settings: width and height are independently floored to the persisted
+minimum, retaining position and maximized state. This does not resize the current
+native window. It prevents a small normal rectangle, including one retained
+while maximized, from blocking later desktop checkpoints. A later valid capture
+replaces that rectangle exactly. The schema still rejects undersized values
+supplied directly; deserialization does not repair invalid documents.
 
 Presentation choice and column layout are deliberately not members of `desktop`.
 They use the shared per-list `trackView.presentations` and `trackView.columnLayouts` schemas so GTK, TUI, and WinUI consume the same semantic state model without maintaining platform-specific field vocabularies; each frontend keeps a separate per-library document for its geometry units, which also keeps its list ids from reaching another library through this global file.

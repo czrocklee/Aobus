@@ -22,7 +22,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback]")
+  TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback][soul]")
   {
     auto fixture = ApplicationPlaybackFixture{};
 
@@ -80,7 +80,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("AobusSoulViewModel - paused playback freezes motion and keeps the live quality aura",
-            "[uimodel][regression][playback][soul]")
+            "[uimodel][unit][playback][soul]")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -99,7 +99,7 @@ namespace ao::uimodel::test
     CHECK(log.last().aura == playingAura);
   }
 
-  TEST_CASE("resolveSoulAura uses live quality while paused", "[uimodel][regression][playback][soul]")
+  TEST_CASE("resolveSoulAura uses live quality while paused", "[uimodel][unit][playback][soul]")
   {
     CHECK(resolveSoulAura(audio::Transport::Paused,
                           true,
@@ -118,7 +118,7 @@ namespace ao::uimodel::test
                                            .overall = audio::Quality::BitwisePerfect}) == SoulAura::Veiled);
   }
 
-  TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender", "[uimodel][regression][playback][soul]")
+  TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender", "[uimodel][unit][playback][soul]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<AobusSoulViewState>{};
@@ -126,7 +126,7 @@ namespace ao::uimodel::test
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
-    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.states.size() == 1);
   }
 
@@ -183,7 +183,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("AobusSoul - frozen animation retains the exact sampled frame while aura changes",
-            "[uimodel][regression][playback][soul]")
+            "[uimodel][unit][playback][soul]")
   {
     auto animation = AobusSoulAnimationState{};
     animation.setMotionMode(AobusSoulMotionMode::Animating);

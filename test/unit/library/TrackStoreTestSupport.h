@@ -56,18 +56,21 @@ namespace ao::library::test
    * Plants raw Track rows straight into "tracks_hot"/"tracks_cold", behind the
    * store, on a library that is not open. An empty span omits that side, which
    * is how orphan pairs are produced. Both databases are always created so an
-   * omitted side reads as empty rather than missing.
+   * omitted side reads as empty rather than missing. Each hot row also gets a
+   * canonical manifest binding at uri, which must match the cold record's URI
+   * when that side is present. This keeps Track/manifest cardinality valid.
    *
    * Call initializeLibraryStorage first: without a metadata header the sweep
    * rejects the library before it ever validates a Track record.
    */
   void seedRawTrackRow(std::filesystem::path const& path,
                        std::uint32_t rawTrackId,
+                       std::string_view uri,
                        std::span<std::byte const> hotData,
                        std::span<std::byte const> coldData);
 
-  /** Requires that opening the library at path fails its fail-closed integrity sweep. */
-  void requireCorruptOpen(std::filesystem::path const& path);
+  /** Requires the intended rejection, not an earlier fail-closed admission guard. */
+  void requireCorruptOpen(std::filesystem::path const& path, std::string_view expectedMessage);
 
   TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder);
 

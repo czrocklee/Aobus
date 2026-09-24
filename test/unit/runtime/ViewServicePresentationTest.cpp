@@ -111,6 +111,7 @@ namespace ao::rt::test
     for (std::size_t i = 0; i < expected.size(); ++i)
     {
       CHECK(snap.sortBy[i].field == expected[i]);
+      CHECK(snap.sortBy[i].ascending);
     }
   }
 
@@ -127,9 +128,10 @@ namespace ao::rt::test
     auto const created = env.requireView({.listId = listId});
     auto const state = service.trackListState(created);
 
-    CHECK(state.presentation.id == kDefaultTrackPresentationId);
-    CHECK(state.groupBy == TrackGroupKey::None);
-    CHECK_FALSE(state.sortBy.empty());
+    auto const expected = normalizeTrackPresentationSpec(defaultTrackPresentationSpec());
+    CHECK(state.presentation == expected);
+    CHECK(state.groupBy == expected.groupBy);
+    CHECK(state.sortBy == expected.sortBy);
   }
 
   TEST_CASE("ViewService - explicit presentation wins over the saved List default",
@@ -147,9 +149,10 @@ namespace ao::rt::test
     auto const created = env.requireView({.listId = listId, .optPresentation = albumsPreset->spec});
     auto const state = service.trackListState(created);
 
-    CHECK(state.presentation.id == "albums");
-    CHECK(state.groupBy == TrackGroupKey::Album);
-    CHECK_FALSE(state.sortBy.empty());
+    auto const expected = normalizeTrackPresentationSpec(albumsPreset->spec);
+    CHECK(state.presentation == expected);
+    CHECK(state.groupBy == expected.groupBy);
+    CHECK(state.sortBy == expected.sortBy);
   }
 
   TEST_CASE("ViewService - saved Lists and All Tracks retain the normal default presentation",
@@ -166,8 +169,9 @@ namespace ao::rt::test
     auto const allTracks = env.requireView();
     auto const savedList = env.requireView({.listId = listId});
 
-    CHECK(service.trackListState(allTracks).presentation.id == kDefaultTrackPresentationId);
-    CHECK(service.trackListState(savedList).presentation.id == kDefaultTrackPresentationId);
+    auto const expected = normalizeTrackPresentationSpec(defaultTrackPresentationSpec());
+    CHECK(service.trackListState(allTracks).presentation == expected);
+    CHECK(service.trackListState(savedList).presentation == expected);
   }
 
   TEST_CASE("ViewService - playback launch capture contains exact list filter and sort only",
@@ -194,6 +198,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setPresentation updates state and projection", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
+    auto const rockTrack = env.addTrack(library::test::TrackSpec{.title = "A rock", .genre = "Rock"});
+    auto const jazzTrack = env.addTrack(library::test::TrackSpec{.title = "Z jazz", .genre = "Jazz"});
+    env.cachePtr->reloadAllTracks();
     auto& service = env.service;
 
     auto const result = env.requireView();
@@ -201,11 +208,21 @@ namespace ao::rt::test
 
     auto const* preset = builtinTrackPresentationPreset("genres");
     REQUIRE(preset != nullptr);
+    auto const expected = normalizeTrackPresentationSpec(preset->spec);
+    auto const beforeProjectionPtr = env.requireProjection(viewId);
+    REQUIRE(beforeProjectionPtr->size() == 2);
+    REQUIRE(beforeProjectionPtr->trackIdAt(0) == rockTrack);
+    REQUIRE(beforeProjectionPtr->trackIdAt(1) == jazzTrack);
     REQUIRE(service.setPresentation(viewId, preset->spec));
     auto const snap = service.trackListState(viewId);
+    auto const projectionPtr = env.requireProjection(viewId);
 
-    CHECK(snap.groupBy == TrackGroupKey::Genre);
-    CHECK(snap.presentation.id == "genres");
+    CHECK(snap.presentation == expected);
+    CHECK(snap.groupBy == expected.groupBy);
+    CHECK(snap.sortBy == expected.sortBy);
+    REQUIRE(projectionPtr->size() == 2);
+    CHECK(projectionPtr->trackIdAt(0) == jazzTrack);
+    CHECK(projectionPtr->trackIdAt(1) == rockTrack);
   }
 
   TEST_CASE("ViewService - setPresentation no-ops on same value", "[runtime][unit][view][presentation]")
@@ -255,16 +272,19 @@ namespace ao::rt::test
 
     auto const result = env.requireView();
 
-    auto received = TrackPresentationSpec{};
-    auto const sub = service.onPresentationChanged([&](auto const& ev) noexcept { received = ev.presentation; });
+    auto received = std::vector<ViewService::PresentationChanged>{};
+    auto const sub = service.onPresentationChanged([&](ViewService::PresentationChanged const& changed) noexcept
+                                                   { received.push_back(changed); });
 
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
+    auto const expected = normalizeTrackPresentationSpec(preset->spec);
     REQUIRE(service.setPresentation(result, preset->spec));
     env.drainCallbacks();
 
-    CHECK(received.id == "albums");
-    CHECK(received.groupBy == TrackGroupKey::Album);
+    REQUIRE(received.size() == 1);
+    CHECK(received[0].viewId == result);
+    CHECK(received[0].presentation == expected);
   }
 
   TEST_CASE("ViewService - setPresentation no-op does not publish event", "[runtime][unit][view][presentation]")
@@ -312,8 +332,8 @@ namespace ao::rt::test
     // not a per-call copy of the whole TrackListViewState.
     REQUIRE(presentation != nullptr);
     CHECK(presentation == presentationAgain);
-    CHECK(presentation->id == "albums");
-    CHECK(presentation->id == service.trackListState(result).presentation.id);
+    CHECK(*presentation == normalizeTrackPresentationSpec(preset->spec));
+    CHECK(*presentation == service.trackListState(result).presentation);
     CHECK(service.findTrackListPresentation(kInvalidViewId) == nullptr);
   }
 } // namespace ao::rt::test

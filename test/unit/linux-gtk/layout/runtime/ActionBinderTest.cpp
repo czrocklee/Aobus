@@ -12,6 +12,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/window.h>
 
+#include <functional>
 #include <string>
 
 namespace ao::gtk::layout::test
@@ -31,17 +32,20 @@ namespace ao::gtk::layout::test
     auto lastFiredId = std::string{};
     auto lastComponentId = std::string{};
     Gtk::Widget* lastAnchor = nullptr;
+    Gtk::Window* lastParentWindow = nullptr;
 
-    registry.tryRegisterAction(ActionSchema{.id = "test.action",
-                                            .label = "Test Action",
-                                            .category = "Test",
-                                            .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
-                               [&](ActionActivationContext& ctx)
-                               {
-                                 lastFiredId = "test.action";
-                                 lastComponentId = ctx.componentId;
-                                 lastAnchor = &ctx.anchorWidget;
-                               });
+    REQUIRE(
+      registry.tryRegisterAction(ActionSchema{.id = "test.action",
+                                              .label = "Test Action",
+                                              .category = "Test",
+                                              .capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor)},
+                                 [&](ActionActivationContext& ctx)
+                                 {
+                                   lastFiredId = "test.action";
+                                   lastComponentId = ctx.componentId;
+                                   lastAnchor = &ctx.anchorWidget;
+                                   lastParentWindow = &ctx.parentWindow;
+                                 }));
 
     // Binder doesn't need LayoutBuildContext, only registry and parent window
     auto const binder = ActionBinder{registry, window};
@@ -80,6 +84,7 @@ namespace ao::gtk::layout::test
       CHECK(lastFiredId == "test.action");
       CHECK(lastComponentId == "my-component");
       CHECK(lastAnchor == &anchor);
+      CHECK(lastParentWindow == &window);
     }
 
     SECTION("bind uses default action ID if property is missing")
@@ -95,6 +100,44 @@ namespace ao::gtk::layout::test
 
       CHECK(lastFiredId == "test.action");
       CHECK(lastComponentId == "default-comp");
+      CHECK(lastAnchor == &anchor);
+      CHECK(lastParentWindow == &window);
     }
+  }
+
+  TEST_CASE("ActionBinder - bound callbacks outlive the binder and authored node", "[gtk][unit][layout][runtime]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto window = Gtk::Window{};
+    auto anchor = Gtk::Box{};
+    auto layoutSchema = LayoutSchema{};
+    auto registry = ActionRegistry{layoutSchema};
+    auto componentId = std::string{};
+    Gtk::Window* parentWindow = nullptr;
+    Gtk::Widget* anchorWidget = nullptr;
+
+    REQUIRE(registry.tryRegisterAction(ActionSchema{.id = "test.action", .label = "Test Action", .category = "Test"},
+                                       [&](ActionActivationContext& ctx)
+                                       {
+                                         componentId = ctx.componentId;
+                                         parentWindow = &ctx.parentWindow;
+                                         anchorWidget = &ctx.anchorWidget;
+                                       }));
+
+    auto callback = std::function<void()>{};
+    {
+      auto const binder = ActionBinder{registry, window};
+      auto node = LayoutNode{.id = "retired-node", .type = "test.node"};
+      node.props[std::string{kPrimaryActionProp}] = LayoutValue{std::string{"test.action"}};
+      auto const schema = ComponentSchema{
+        .id = "test.node", .displayName = "Test Node", .actionSlots = actionSlotBit(ActionSlot::PrimaryClick)};
+      callback = binder.bind(node, schema, ActionSlot::PrimaryClick, anchor);
+      REQUIRE(callback);
+    }
+
+    callback();
+    CHECK(componentId == "retired-node");
+    CHECK(parentWindow == &window);
+    CHECK(anchorWidget == &anchor);
   }
 } // namespace ao::gtk::layout::test

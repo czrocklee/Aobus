@@ -28,7 +28,6 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <tuple>
 #include <variant>
 #include <vector>
@@ -57,7 +56,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("PlaybackSuccession - accepted final decoder failures stop after three committed attempts",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession]")
   {
     auto const repeatMode = GENERATE(RepeatMode::One, RepeatMode::Off);
     CAPTURE(repeatMode);
@@ -115,23 +114,28 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - unannounced successful recovery resets the failure streak",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     std::size_t committedStarts = 0;
+    auto failureGate = audio::test::StagedFailureGate{};
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .finalOpenFailureFileNames = {"transport-playable-0.flac",
                                     "transport-playable-1.flac",
-                                    "transport-playable-3.flac",
-                                    "transport-playable-4.flac"},
+                                    "transport-playable-3.flac"},
+      .stagedFailureFileName = "transport-playable-2.flac",
+      .stagedFailureGate = &failureGate,
     }};
+    auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
     auto const tracks = std::array{fixture.addPlayableTrack("First failure"),
                                    fixture.addPlayableTrack("Second failure"),
                                    fixture.addPlayableTrack("First recovery"),
-                                   fixture.addPlayableTrack("Third failure"),
-                                   fixture.addPlayableTrack("Fourth failure"),
+                                   fixture.addPlayableTrack("Final setup failure after recovery"),
                                    fixture.addPlayableTrack("Second recovery")};
     fixture.openManualView(tracks);
     countCommittedStarts(fixture, committedStarts);
+    std::size_t nowPlayingEvents = 0;
+    auto const nowPlayingSubscription = fixture.transport.playbackTransport.onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const&) { ++nowPlayingEvents; });
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, tracks[0]));
     REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&]
@@ -139,18 +143,25 @@ namespace ao::rt::test
         return fixture.successionPtr->state().currentTrackId == tracks[2] &&
                fixture.transport.playbackTransport.state().transport == audio::Transport::Playing;
       }));
+    REQUIRE(failureGate.tryWaitForRead());
+    REQUIRE(fixture.transport.playbackTransport.state().nowPlaying.trackId == tracks[2]);
     CHECK(committedStarts == 3);
+    CHECK(nowPlayingEvents == 0);
 
-    fixture.successionPtr->tryMoveNext();
+    // A navigation command resets the streak itself. Fail the running decoder
+    // instead, so only the successful recovery can have cleared the old failures.
+    releaseGuard.release();
     REQUIRE(fixture.transport.executor.tryDrainUntil(
       [&]
       {
-        return fixture.successionPtr->state().currentTrackId == tracks[5] ||
+        return fixture.successionPtr->state().currentTrackId == tracks[4] ||
                fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive;
       }));
-    CHECK(committedStarts == 6);
-    CHECK(fixture.successionPtr->state().currentTrackId == tracks[5]);
+    CHECK(committedStarts == 5);
+    CHECK(fixture.successionPtr->state().currentTrackId == tracks[4]);
+    CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == tracks[4]);
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(nowPlayingEvents == 0);
     auto const feed = fixture.transport.notificationService.feed();
 
     for (auto const& entry : feed.entries)
@@ -163,7 +174,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - accepted final decoder failure skips the failed candidate",
-            "[runtime][regression][playback-succession][failure]")
+            "[runtime][unit][playback-succession][failure]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .finalOpenFailureFileNames = {"transport-playable-2.flac"},
@@ -178,7 +189,7 @@ namespace ao::rt::test
         return fixture.successionPtr->state().currentTrackId == fixture.fourthTrackId &&
                fixture.transport.playbackTransport.state().transport == audio::Transport::Playing;
       },
-      std::chrono::seconds{5});
+      std::chrono::seconds{10});
     REQUIRE(recovered);
 
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.fourthTrackId);
@@ -260,6 +271,11 @@ namespace ao::rt::test
     auto const feed = fixture.transport.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackDeviceLost);
+    CHECK(report.detail == "device lost during succession playback");
   }
 
   TEST_CASE("PlaybackSuccession - track failure on an invalidated source posts one terminal succession error",
@@ -289,72 +305,6 @@ namespace ao::rt::test
     CHECK(report.templateId == NotificationReportTemplate::PlaybackStoppedForTrack);
     CHECK(report.subject == "Failing current");
     CHECK(report.detail == "gated staged decode failure");
-  }
-
-  TEST_CASE("PlaybackSuccession - previous restart uses a strict greater-than three-second final seek",
-            "[runtime][unit][playback-succession][previous]")
-  {
-    auto fixture = PlaybackSuccessionSeekFixture{};
-    fixture.buildThreeTrackManualView();
-    auto& succession = *fixture.successionPtr;
-    auto& playbackTransport = *fixture.transportPtr;
-    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-    fixture.executor.drain();
-    playbackTransport.pause();
-    REQUIRE(playbackTransport.state().transport == audio::Transport::Paused);
-
-    playbackTransport.seek(std::chrono::milliseconds{3000}, PlaybackTransport::SeekMode::Final);
-    CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{3000});
-    CHECK_FALSE(succession.state().hasPrevious);
-
-    playbackTransport.seek(std::chrono::milliseconds{3001}, PlaybackTransport::SeekMode::Final);
-    CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{3001});
-    CHECK(succession.state().hasPrevious);
-
-    succession.tryMovePrevious();
-    CHECK(succession.state().currentTrackId == fixture.firstTrackId);
-    CHECK_FALSE(succession.state().hasPrevious);
-    CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{0});
-    CHECK(playbackTransport.state().transport == audio::Transport::Playing);
-  }
-
-  TEST_CASE("PlaybackSuccession - commands and dedicated mode signals follow cursor resolution",
-            "[runtime][unit][playback-succession][command]")
-  {
-    auto fixture = PlaybackSuccessionFixture{};
-    fixture.buildThreeTrackManualView();
-    auto& succession = *fixture.successionPtr;
-    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-
-    std::uint32_t shuffleEvents = 0;
-    std::uint32_t repeatEvents = 0;
-    auto const shuffleSubscription =
-      succession.onShuffleModeChanged([&](PlaybackSuccession::ShuffleModeChanged const&) noexcept { ++shuffleEvents; });
-    auto const repeatSubscription =
-      succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&) noexcept { ++repeatEvents; });
-
-    succession.tryMoveNext();
-    CHECK(succession.state().currentTrackId == fixture.secondTrackId);
-    CHECK(succession.state().hasPrevious);
-
-    succession.tryMovePrevious();
-    CHECK(succession.state().currentTrackId == fixture.firstTrackId);
-
-    succession.setRepeatMode(RepeatMode::One);
-    CHECK(succession.state().repeat == RepeatMode::One);
-    CHECK(succession.state().optResolvedSuccessor == fixture.firstTrackId);
-    CHECK(repeatEvents == 1);
-    succession.setRepeatMode(RepeatMode::One);
-    CHECK(repeatEvents == 1);
-
-    succession.setShuffleMode(ShuffleMode::On);
-    CHECK(succession.state().shuffle == ShuffleMode::On);
-    CHECK(shuffleEvents == 1);
-
-    succession.clear();
-    CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
-    CHECK(succession.state().currentTrackId == kInvalidTrackId);
-    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
   TEST_CASE("PlaybackSuccession - shuffle failure walks preserve shuffle direction and semantic parity",

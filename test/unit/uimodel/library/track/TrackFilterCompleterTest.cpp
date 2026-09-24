@@ -7,13 +7,18 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -48,40 +53,80 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "Title Match",
-                                                                         .artist = "Artist Match",
-                                                                         .album = "Album Match",
-                                                                         .albumArtist = "Album Artist Match",
-                                                                         .genre = "Genre Match",
-                                                                         .composer = "Composer Match",
-                                                                         .conductor = "Conductor Match",
-                                                                         .work = "Work Match",
-                                                                         .tags = {"Tag Match"}});
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
+                                                  library::test::TrackSpec{.title = "Title Match",
+                                                                           .artist = "Artist Match",
+                                                                           .album = "Album Match",
+                                                                           .albumArtist = "Album Artist Match",
+                                                                           .genre = "Genre Match",
+                                                                           .composer = "Composer Match",
+                                                                           .conductor = "Conductor Match",
+                                                                           .ensemble = "Ensemble Match",
+                                                                           .work = "Work Match",
+                                                                           .movement = "Movement Match",
+                                                                           .soloist = "Soloist Match",
+                                                                           .tags = {"Tag Match"}});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
 
-    for (auto const& [prefix, expected] : std::vector<std::pair<std::string_view, std::string_view>>{
-           {"Title", "Title Match"},
-           {"Artist", "Artist Match"},
-           {"\"Album M", "Album Match"},
-           {"\"Album A", "Album Artist Match"},
-           {"Genre", "Genre Match"},
-           {"Composer", "Composer Match"},
-           {"Work", "Work Match"},
-           {"Tag", "Tag Match"},
+    for (auto const& [prefix, expected] : std::vector<std::pair<std::string_view, std::vector<std::string>>>{
+           {"Title", {"Title Match"}},
+           {"Artist", {"Artist Match", "Album Artist Match"}},
+           {"\"Album M", {"Album Match"}},
+           {"\"Album A", {"Album Artist Match"}},
+           {"Genre", {"Genre Match"}},
+           {"Composer", {"Composer Match"}},
+           {"Work", {"Work Match"}},
+           {"Tag", {"Tag Match"}},
          })
     {
+      CAPTURE(prefix);
       auto const optResult = completer.complete(prefix, prefix.size());
 
       REQUIRE(optResult);
-      auto const values = displayTexts(*optResult);
-      REQUIRE_FALSE(values.empty());
-      CHECK(values.front() == expected);
+      CHECK(optResult->replaceBegin == 0);
+      CHECK(optResult->replaceEnd == prefix.size());
+      REQUIRE(displayTexts(*optResult) == expected);
+
+      for (std::size_t index = 0; index < expected.size(); ++index)
+      {
+        auto const& item = optResult->items[index];
+        CHECK(item.insertText == "\"" + expected[index] + "\"");
+        CHECK(item.detail.kind == rt::CompletionDetailKind::Frequency);
+        CHECK(item.detail.frequency == 1);
+        CHECK(item.detail.resolvedText.empty());
+        CHECK(item.rank == static_cast<std::uint32_t>(index));
+      }
     }
 
-    CHECK_FALSE(completer.complete("Conductor", std::string_view{"Conductor"}.size()));
+    for (auto const prefix : std::array<std::string_view, 4>{"Conductor", "Ensemble", "Movement", "Soloist"})
+    {
+      CAPTURE(prefix);
+      CHECK_FALSE(completer.complete(prefix, prefix.size()));
+    }
+
+    REQUIRE_FALSE(completer.complete("Refreshed", 9));
+    auto commands = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto const ids = std::array{trackId};
+    auto const optOriginalTitle = completer.complete("\"Title M", 8);
+    REQUIRE(optOriginalTitle);
+    CHECK(displayTexts(*optOriginalTitle) == std::vector<std::string>{"Title Match"});
+    REQUIRE(commands.updateMetadata(ids, rt::MetadataPatch{.optTitle = "Refreshed Title"}));
+    CHECK_FALSE(completer.complete("\"Title M", 8));
+    auto optRefreshed = completer.complete("Refreshed", 9);
+    REQUIRE(optRefreshed);
+    CHECK(displayTexts(*optRefreshed) == std::vector<std::string>{"Refreshed Title"});
+
+    auto const optOriginalTag = completer.complete("\"Tag M", 6);
+    REQUIRE(optOriginalTag);
+    CHECK(displayTexts(*optOriginalTag) == std::vector<std::string>{"Tag Match"});
+    REQUIRE(commands.editTags(ids, std::array{std::string{"Refreshed Tag"}}, std::array{std::string{"Tag Match"}}));
+    CHECK_FALSE(completer.complete("\"Tag M", 6));
+    optRefreshed = completer.complete("Refreshed", 9);
+    REQUIRE(optRefreshed);
+    CHECK(displayTexts(*optRefreshed) == std::vector<std::string>{"Refreshed Tag", "Refreshed Title"});
   }
 
   TEST_CASE("TrackFilterCompleter - ranks aggregate matches by live frequency then value",
@@ -133,7 +178,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterCompleter - replaces only the current Quick-filter term",
-            "[uimodel][unit][track-filter-completion][replacement]")
+            "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -151,7 +196,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterCompleter - completes word prefixes without fuzzy correction",
-            "[uimodel][unit][track-filter-completion][word-prefix]")
+            "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -191,7 +236,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterCompleter - uses the explicit expression boundary shared with the resolver",
-            "[uimodel][unit][track-filter-completion][mode]")
+            "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -218,7 +263,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterCompleter - romanized completion remains an original-text selection aid",
-            "[uimodel][unit][completion-alias][track-filter-completion]")
+            "[uimodel][unit][track-filter-completion][completion-alias]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -242,7 +287,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterCompleter - direct matches outrank aliases and alias collisions remain distinct",
-            "[uimodel][unit][completion-alias][track-filter-completion]")
+            "[uimodel][unit][track-filter-completion][completion-alias]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(

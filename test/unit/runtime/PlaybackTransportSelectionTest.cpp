@@ -31,7 +31,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport selection - teardown is deferred after pending engine notification",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][concurrency]")
   {
     auto fixturePtr = std::make_unique<PlaybackTransportFixture<QueuedExecutor>>();
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);

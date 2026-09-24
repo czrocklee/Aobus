@@ -23,7 +23,7 @@ namespace ao::rt::test
   using playback_succession::PreparationReleaseGuard;
 
   TEST_CASE("PlaybackService - elapsed reads a live correlated clock without publishing",
-            "[runtime][regression][playback][seek]")
+            "[runtime][unit][playback][seek]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -50,13 +50,12 @@ namespace ao::rt::test
     playback.commands().pause();
     auto const paused = playback.snapshot().transport;
     CHECK(playback.elapsed() == paused.elapsed);
-    CHECK(playback.elapsed() == paused.elapsed);
     playback.commands().stop();
     CHECK(playback.elapsed() == std::chrono::milliseconds{0});
   }
 
   TEST_CASE("PlaybackService - elapsed does not attribute a pending realtime splice to old metadata",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -83,13 +82,14 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackCommands seekBy - past-end Next cancels an older pending explicit preparation",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-2.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     auto playback = fixture.createPlayback();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
@@ -100,19 +100,18 @@ namespace ao::rt::test
       [&](PlaybackSnapshot const& snapshot) { publishedTracks.push_back(snapshot.transport.nowPlaying.trackId); });
     REQUIRE(playback.commands().startFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
     playback.commands().seekBy(
       before.occurrenceId, std::chrono::milliseconds::max(), PlaybackRelativeSeekEndBehavior::Next);
+    auto const activationCount = fixture.lookaheadActivationCount(fixture.thirdTrackId);
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&]
-      {
-        return gatePtr->destroyedPtr->load(std::memory_order_relaxed) > 0 &&
-               playback.snapshot().transport.nowPlaying.trackId == fixture.secondTrackId;
-      },
-      std::chrono::seconds{5}));
-    fixture.transport.executor.drain();
+    // The single worker must retire the old inspection before it can prepare
+    // the winner's third-track lookahead. That legitimate decoder stays alive.
+    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.thirdTrackId, activationCount));
+    auto const created = gatePtr->createdPtr->load(std::memory_order_relaxed);
+    auto const destroyed = gatePtr->destroyedPtr->load(std::memory_order_relaxed);
+    CHECK(destroyed > 0);
+    CHECK(created == destroyed + 1);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == fixture.secondTrackId);
     CHECK(playback.snapshot().transport.occurrenceId != before.occurrenceId);
     CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);

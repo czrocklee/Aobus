@@ -73,7 +73,7 @@ The configured compiler, sanitizer flags, and CMake build type must match the se
 Its report and terminal summary mark the source revision as `unverified`: the current checkout does not establish which source produced an existing executable.
 Rerun without `--no-build` when the review needs source-attributed evidence.
 `-p` selects one exact build tree in the same way as other portal commands.
-The portal removes the selected report before launching the workload and rejects a successful test selection that does not recreate it, so a filtered run cannot present stale evidence.
+The portal validates output destinations, removes the selected reports before launching the workload, and rejects a successful test selection that does not recreate every requested report. Existing output symlinks, special files, directories, and aliases between the v1 and v2 destinations are rejected before removing either report.
 Debug, sanitizer, and profile runs may help diagnosis, but acceptance evidence uses `release` unless the reviewed question explicitly concerns another build mode.
 
 ## Report contract
@@ -108,11 +108,9 @@ An accepted long-term upgrade gate belongs in a scoped section of this guide; an
 ## Design-audit workloads
 
 The opt-in audit filters use the same report format and honor `--samples` and
-`--warmups`. Run each filter separately with its own output path: each test case
-writes one complete report. A second reporting case fails without overwriting the
-first report; the partial file from that failed run is not acceptance evidence.
-The portal creates missing output parent directories. Direct executable runs must
-provide an existing parent directory and a fresh output path.
+`--warmups`. Each reporting case writes one complete report, so run each filter
+separately with its own output path; a second reporting case in one run fails.
+Direct executable runs need an existing parent directory and a fresh path.
 For example, on Linux:
 
 ```bash
@@ -128,12 +126,9 @@ and write reports to the guest's local temporary directory.
   emits graphs with 32 nodes and 128-byte ordinary node names. It measures
   producer enqueue time and total owner drain time separately, asserts one
   pending delivery and one coalesced quality notification, and checks the final
-  graph. Older pre-coalescing reports retained one task and notification per
-  observation; their batch drain and memory costs remain the comparison baseline. Repeat at 100,
-  1,000, and 10,000 observations. The byte metric is a payload lower bound;
-  allocator overhead, task wrappers, connections, and additional graph copies
-  require a separate heap profile. The pending-payload byte metric now counts
-  one retained graph regardless of burst length. Drain p95 describes complete batches, not
+  graph. Repeat at 100, 1,000, and 10,000 observations. The pending-payload byte
+  metric counts one retained graph regardless of burst length and is a lower
+  bound; allocator and wrapper overhead need a heap profile. Drain p95 describes complete batches, not
   individual callback latency. This fixture does not directly withhold Engine's
   non-realtime event worker or exercise ordered terminal events. Deterministic
   Player regressions separately withhold that worker, delay outward publication,
@@ -159,6 +154,41 @@ and write reports to the guest's local temporary directory.
   sides of structural and byte limits, as well as much larger rejected inputs;
   parser correctness tests remain the authority for expected admission.
 
+### Process-cold alias diagnostic
+
+The default review's `first-kana-use` and `first-han-use` rows may be warm.
+For a first transform in a fresh process, run the cold-alias case alone,
+once per input kind, because ICU state persists for the whole process:
+
+```bash
+AOBUS_PERF_COLD_ALIAS_INPUT=kana ./ao perf --filter '[audit-cold-alias]' --samples 1 --warmups 0 --output /tmp/cold-kana.json
+AOBUS_PERF_COLD_ALIAS_INPUT=han ./ao perf --filter '[audit-cold-alias]' --samples 1 --warmups 0 --output /tmp/cold-han.json
+```
+
+The result is a one-shot observation, not a percentile or a machine-wide cold-cache measurement.
+
+### v1 baseline cases
+
+`PerformanceBaselineTest.cpp` writes the `aobus-performance-baseline/v1`
+payload to `AOBUS_PERF_BASELINE_JSON`. Its fixed workloads ignore `--samples` and
+`--warmups`. The portal still requires one v2 report, so pair these cases
+with exactly one v2 case and run the workload serially:
+
+```bash
+AOBUS_PERF_BASELINE_JSON=/tmp/baseline-v1.json ./ao perf --filter '[perf][baseline]~[completion-vocabulary],[perf][review]' --output /tmp/baseline-v2.json
+```
+
+The bare `[perf][baseline]` filter would also select the completion-vocabulary
+v2 writer. The v1 report is written only when every selected case passes, and the
+portal validates its shape, but not that every expected benchmark ran: check the
+benchmark names and the 10k/100k/1M scales before comparing.
+
+The scale fixtures seed a 2 GiB pinned library in one transaction, so
+`library_build` includes a single commit. Compare only runs that use the same
+fixture method, on the same host, with optimized builds.
+
+### Evidence discipline
+
 A fast workstation establishes an observed result on that workstation only.
 Record CPU, compiler, build settings, source identity, competing load, and sample
 counts, and run timing workloads serially without concurrent builds or profilers.
@@ -171,10 +201,7 @@ Before accepting a change, state an interaction budget and retain headroom for
 slower hardware. Explicit 3x and 5x latency sensitivity calculations can expose
 risk but are hypothetical projections, not measured low-end CPU results.
 A VM sharing the workstation CPU adds native-platform evidence, not independent
-weak-hardware evidence. For the September 2026 audit, use 100 ms as a cold owner
-request investigation threshold and 20 ms on the reference workstation as a
-warning under the 5x assumption. These are review thresholds, not timer assertions
-or a promised supported-library-size limit. Unbounded memory growth requires a
+weak-hardware evidence. Unbounded memory growth requires a
 retention decision regardless of how quickly a finite batch drains.
 
 ## Locale-aware ordering gate
@@ -218,32 +245,16 @@ than a flaky test threshold.
 
 ## Completion-transliteration gate
 
-The completion-alias acceptance review used Release/IPO, one warm-up, and twenty measured samples with ICU 78.3.
-The synthetic CJK fixture has 5,155 tracks, 1,619 distinct Han values, repeated Kana and mixed-script values, and 24,027 retained alias bytes.
-The accepted evidence was:
+An ICU upgrade or material alias-derivation change runs the completion-alias
+workload on Linux and native Windows with Release/IPO, one warm-up, and twenty
+samples. Its synthetic CJK fixture has 5,155 tracks with 1,619 distinct Han
+values plus repeated Kana and mixed-script values.
 
-| Snapshot workload | Linux GCC median / p95 | Windows MSVC median / p95 |
-|---|---:|---:|
-| 50k ASCII, policy disabled | 14.530 / 15.555 ms | 30.274 / 32.033 ms |
-| 50k ASCII, ICU policy | 15.157 / 15.679 ms | 31.743 / 34.109 ms |
-| 5,155 CJK, policy disabled | 0.857 / 0.904 ms | 7.069 / 7.671 ms |
-| 5,155 CJK, ICU policy | 42.622 / 43.171 ms | 59.843 / 65.605 ms |
-
-| Cached CJK lookup | Linux GCC median / p95 | Windows MSVC median / p95 |
-|---|---:|---:|
-| Whole-value tier fills the limit | 0.081 / 0.083 ms | 0.109 / 0.138 ms |
-| Interior-word tier fills the limit | 0.093 / 0.094 ms | 0.117 / 0.145 ms |
-| No direct hit, alias tier hits | 0.096 / 0.101 ms | 0.080 / 0.106 ms |
-| Complete direct-plus-alias miss | 0.121 / 0.122 ms | 0.088 / 0.116 ms |
-
-A separate one-sample process-cold diagnostic with no warm-up measured first Kana/Han use at 4.394/53.175 ms on Linux and 6.083/45.841 ms on Windows.
-Those one-shot values explain the lazy-transform design but are not percentile evidence.
-Policy construction itself performs no transform lookup, so an ASCII-only application startup does not pay that cost.
-
-An ICU upgrade or material alias-derivation change reruns the same matrix on both hosts.
-Investigate rather than silently accept a 50k ASCII median above 1.10x its same-run disabled policy, a CJK snapshot p95 above 100 ms, a cached lookup p95 above 1 ms, or either process-cold transform above 100 ms.
-These are review budgets over optimized builds, not test assertions.
-The accepted synchronous result does not justify a background worker, persisted alias index, or startup-time eager derivation; such complexity requires new evidence.
+Investigate a 50k ASCII median above 1.10x the same-run disabled policy, a CJK
+snapshot p95 above 100 ms, a cached lookup p95 above 1 ms, or a process-cold
+transform above 100 ms. These are review budgets, not test assertions. Policy
+construction performs no transform lookup, so ASCII-only startup does not pay
+the first-use cost.
 
 ## Validation
 

@@ -92,7 +92,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ShellGenerationSequence - a throwing attachment restores the previous generation",
-            "[uimodel][regression][layout][shell]")
+            "[uimodel][unit][layout][shell]")
   {
     auto sequence = ShellGenerationSequence{};
     auto const firstPtr = sequence.stage();
@@ -147,7 +147,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("isGenerationActive - late callbacks from a retired generation are suppressed",
-            "[uimodel][unit][layout][shell]")
+            "[uimodel][unit][layout][shell][async]")
   {
     auto sequence = ShellGenerationSequence{};
     auto firstPtr = sequence.stage();
@@ -167,7 +167,8 @@ namespace ao::uimodel::test
     CHECK(isGenerationActive(std::weak_ptr<ShellGenerationGate>{secondPtr}));
   }
 
-  TEST_CASE("ShellGenerationSequence - teardown closes the live generation's gate", "[uimodel][unit][layout][shell]")
+  TEST_CASE("ShellGenerationSequence - teardown closes the live generation's gate",
+            "[uimodel][unit][layout][shell][async]")
   {
     auto sequence = ShellGenerationSequence{};
     CHECK(sequence.retireActive() == ShellGenerationId::None);
@@ -181,7 +182,8 @@ namespace ao::uimodel::test
     CHECK_FALSE(isGenerationActive(std::weak_ptr<ShellGenerationGate>{activePtr}));
   }
 
-  TEST_CASE("isGenerationActive - a staged generation cannot run callbacks yet", "[uimodel][unit][layout][shell]")
+  TEST_CASE("isGenerationActive - a staged generation cannot run callbacks yet",
+            "[uimodel][unit][layout][shell][async]")
   {
     auto sequence = ShellGenerationSequence{};
     auto const candidatePtr = sequence.stage();

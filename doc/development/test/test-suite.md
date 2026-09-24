@@ -12,14 +12,23 @@ The `./ao test` command exposes individual suites and four suite groups:
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
-- `integration`: standalone integration tests (`ao_integration_test`).
+- `integration`: the standalone media-file, decoder, graph, and native-provider suite (`ao_integration_test`), not every case tagged `[integration]`.
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `appkit`: an opt-in native macOS GUI smoke harness with scenario selection and required disposable library and isolated state-root inputs; it is not part of a suite group.
 - `default`: the native fast-loop group. Linux runs core and GTK; macOS and Windows run core and TUI.
 - `all`: every suite enabled by the native build profile.
 - `tsan`: suites with a clean ThreadSanitizer baseline.
-- `concurrency`: every native Catch2 suite, filtered to `[concurrency]` tests.
+- `concurrency`: every native Catch2 suite, filtered to non-hidden concurrency cases with `[concurrency]~[.]`.
+
+Suites choose binaries; Catch2 filters choose cases within them. So
+`./ao test --core "[runtime][integration]"` runs integration-scoped cases in core,
+while `--integration` never collects cases from other binaries. A filter skips
+tooling and lint, and it fails only when no selected suite matches; a matched
+case that skips still counts as matched.
+
+`./ao check` is the complete native gate. CTest is not equivalent: it omits the
+standalone integration suite and the portal's tooling, lint, and environment setup.
 
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
 integration, tooling, and lint suites take longer, so they are included
@@ -44,9 +53,9 @@ Linux and the checkout-specific managed environment supplied by `ao.bat` on
 Windows. It is not exposed on macOS. On its supported hosts it probes the
 running Python, Ruff, and mypy versions against
 `script/ao/toolchain.json`, verifies the Windows hash lock agrees with that
-contract, and runs the same documentation structure validation exposed by
-`./ao docs check`. It never depends on unrelated tools from the ambient Windows
-`PATH`.
+contract, and tests documentation validation against isolated fixtures. Run
+`./ao docs check` separately to validate the live documentation tree. It never
+depends on unrelated tools from the ambient Windows `PATH`.
 
 Each suite is registered once in `script/ao/command/test.py` through `SUITES`
 and the native groups are defined by `script/ao/core/builddir.py` platform profiles.
@@ -70,8 +79,9 @@ stress aid; deterministic synchronization remains mandatory for regression
 tests.
 
 `--no-build` applies uniformly. Catch2 executables and the native lint artifact
-must already exist in the selected build tree; tooling tests never need a CMake
-build. `--path`, compiler, and sanitizer options select the same tree for C++
+must already exist in the selected build tree. Tooling tests do not build Aobus,
+but their registration-guard fixtures need CMake and a C++ compiler; on Windows
+they use Visual Studio's bundled CMake. `--path`, compiler, and sanitizer options select the same tree for C++
 and lint integration suites. On every native platform, build and test commands reuse
 the same flavor tree. Tests are configured by default, while `cmake --build
 --target ...` limits an incremental build to the selected suite targets.
@@ -97,39 +107,42 @@ For fixture placement, marker semantics, context-header constraints, Objective-C
 
 Coverage has a separate `--all` selection of core, TUI, CLI, and GTK. It excludes standalone integration, tooling, and lint suites from the application-source coverage run.
 
+## Environment availability
+
+Missing or malformed repository fixtures fail. Only a genuinely optional host
+capability may `SKIP()` with a reason; `WARN()` or `SUCCEED()` followed by
+`return` is not a skip.
+
+The PipeWire provider test skips when no daemon is reachable, unless
+`AOBUS_REQUIRE_PIPEWIRE=1` makes that a failure. Linux CI sets it and runs a
+private PipeWire daemon with a policy-only WirePlumber, so the test exercises its
+own null sinks, not host audio hardware.
+
 ## Sharded Catch2 execution
 
 Every Catch2 suite runs as several parallel shards of one binary. The default
 shard count is `min(16, cores - 1)`; `AOBUS_TEST_SHARDS` overrides it in either
-direction, and `AOBUS_TEST_SHARDS=1` restores a single process. On the core
-suite this takes 104.8s to 23.7s on the sixteen-vCPU Windows guest and 23.9s to
-6.2s on a thirty-two core Linux host. The cap bounds process count rather than
-diminishing returns: a shard is a whole test process with its own fixtures,
-temporary tree, and, for GTK, its own X server.
+direction, and `AOBUS_TEST_SHARDS=1` restores a single process. The cap bounds
+process count: a shard is a whole test process with its own fixtures, temporary
+tree, and, for GTK, its own display and session bus.
 
 Four kinds of run stay single-process, because parallel siblings would change
 what they measure rather than only how long they take: `--list`, `--repeat N`,
 `--tsan`, and the `concurrency` group. `ao coverage` is also unsharded; parallel
 processes would interleave writes to the same gcov counters.
 
-Sharding multiplies memory as well as throughput, which matters only for the
-sanitizer trees: a core ASan shard holds about 1.2 GB, so sixteen of them peak
-near 19 GB. Lower `AOBUS_TEST_SHARDS` on a smaller machine.
+Sharding multiplies memory, which matters for sanitizer trees: a core ASan
+shard holds about 1.2 GB. Lower `AOBUS_TEST_SHARDS` on a smaller machine.
 
-The GTK suite starts one Xvfb per shard. Several GTK tests present a window and
-then drain only the events already pending, so a popover still waiting on an X
-round trip has not been created when the assertion runs. One server shared by
-eight shards made that race real: 5 of 13 runs failed, against 0 of 14 with a
-display per shard.
+Each GTK shard gets its own Xvfb and private session bus; see
+[GTK process isolation](uimodel-and-gtk.md#process-isolation-and-diagnostics).
+Sharing one display is not safe: tests that drain only pending events can assert
+before a popover's X round trip completes.
 
-Every shard of one run receives the same `--rng-seed`. This is a correctness
-requirement, not a tidiness one. Catch2 orders test cases randomly by default
-and `--shard-index` slices that order, so shards that each pick their own seed
-slice *different* orderings: measured on the core suite, eight independently
-seeded shards ran 1773 of 2682 tests, 692 of them twice and 909 not at all,
-while still reporting exactly 2682 cases. With one shared seed the shards
-partition the suite exactly, and the totals match an unsharded run assertion for
-assertion.
+Every shard of one run receives the same `--rng-seed`. Catch2 orders cases
+randomly and `--shard-index` slices that order, so shards with different seeds
+would run some cases twice and others never while reporting a full count. One
+shared seed partitions the suite exactly.
 
 The portal prints the seed, then one combined tally per suite in place of the
 per-shard summaries. Every shard's console output goes to the gate log; only
@@ -155,7 +168,6 @@ behaviour stop the run instead of logging and continuing:
 rerun this shard: env LSAN_OPTIONS=suppressions=... UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 /tmp/build/Aobus/debug-asan/test/ao_core_test --rng-seed 2914 ...
 ```
 
-`DISPLAY` and `AOBUS_OWNED_GTK_DISPLAY` are left out because the portal tears down its private Xvfb after the run.
-A direct GTK rerun needs an available display, but native-input cases skip without proof that the portal owns that display.
-Rerun those cases through the portal, for example `./ao test --gtk "SeekControlWidget*"`, so it creates and marks a new private Xvfb.
-Never set the ownership marker for an inherited desktop or a manually supplied display.
+A GTK rerun line disables the retired display and bus instead of falling back to
+the host session, so rerun GTK failures through the portal, for example
+`./ao test --gtk "SeekControlWidget*"`.

@@ -7,33 +7,66 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace ao::rt::test
 {
-  TEST_CASE("builtinTrackPresentationPresets contains all expected ids", "[runtime][unit][presentation]")
+  namespace
   {
-    auto presets = builtinTrackPresentationPresets();
+    TrackPresentationSpec const& requirePresetSpec(std::string_view const id)
+    {
+      auto const* preset = builtinTrackPresentationPreset(id);
+      REQUIRE(preset != nullptr);
+      return preset->spec;
+    }
 
-    auto findPreset = [&](std::string_view id) -> bool
-    { return std::ranges::contains(presets, id, [](TrackPresentationPreset const& p) { return p.spec.id; }); };
+    // Field-wise checks name the part of the spec that differs; the spec itself has no Catch2 printer.
+    void checkSpec(TrackPresentationSpec const& actual, TrackPresentationSpec const& expected)
+    {
+      CHECK(actual.id == expected.id);
+      CHECK(actual.groupBy == expected.groupBy);
+      CHECK(actual.sortBy == expected.sortBy);
+      CHECK(actual.visibleFields == expected.visibleFields);
+      CHECK(actual.redundantFields == expected.redundantFields);
+    }
+  } // namespace
 
-    CHECK(findPreset("library"));
-    CHECK(findPreset("list-order"));
-    CHECK(findPreset("songs"));
-    CHECK(findPreset("albums"));
-    CHECK(findPreset("artists"));
-    CHECK(findPreset("performers"));
-    CHECK(findPreset("classical-composers"));
-    CHECK(findPreset("classical-works"));
-    CHECK(findPreset("genres"));
-    CHECK(findPreset("years"));
-    CHECK(findPreset("tagging"));
-    CHECK(findPreset("technical"));
+  TEST_CASE("builtinTrackPresentationPresets preserves ordered catalog contracts", "[runtime][unit][presentation]")
+  {
+    auto const presets = builtinTrackPresentationPresets();
+    constexpr auto kExpectedIds = std::to_array<std::string_view>({
+      "library",
+      "list-order",
+      "songs",
+      "albums",
+      "artists",
+      "performers",
+      "genres",
+      "years",
+      "classical-composers",
+      "classical-conductors",
+      "classical-works",
+      "tagging",
+      "technical",
+    });
+
+    REQUIRE(presets.size() == kExpectedIds.size());
+
+    for (std::size_t index = 0; index < presets.size(); ++index)
+    {
+      CHECK(presets[index].spec.id == kExpectedIds[index]);
+
+      for (auto const& term : presets[index].spec.sortBy)
+      {
+        CHECK(term.ascending);
+      }
+    }
 
     // "album-artists" was renamed to "artists"; the former "artists" is now "performers".
-    CHECK_FALSE(findPreset("album-artists"));
+    CHECK(builtinTrackPresentationPreset("album-artists") == nullptr);
   }
 
   TEST_CASE("builtinTrackPresentationPreset lookup by id", "[runtime][unit][presentation]")
@@ -44,266 +77,294 @@ namespace ao::rt::test
     CHECK(builtinTrackPresentationPreset("nonexistent") == nullptr);
   }
 
-  TEST_CASE("defaultTrackPresentationSpec is library", "[runtime][unit][presentation]")
+  TEST_CASE("defaultTrackPresentationSpec is the library preset", "[runtime][unit][presentation]")
   {
-    auto spec = defaultTrackPresentationSpec();
-
-    CHECK(spec.id == "library");
-    CHECK(spec.groupBy == TrackGroupKey::None);
-    CHECK(spec.redundantFields.empty());
+    checkSpec(defaultTrackPresentationSpec(), requirePresetSpec("library"));
   }
 
-  TEST_CASE("library preset orders by album artist and stays album-intact", "[runtime][unit][presentation]")
+  TEST_CASE("library preset - orders by album artist and stays album-intact", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("library");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::None);
-
-    REQUIRE(spec.sortBy.size() == 5);
     // First key is AlbumArtist so various-artist compilations are not split apart.
-    CHECK(spec.sortBy[0].field == TrackSortField::AlbumArtist);
-    CHECK(spec.sortBy[1].field == TrackSortField::Album);
-    CHECK(spec.sortBy[2].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[3].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[4].field == TrackSortField::Title);
-
-    REQUIRE(spec.visibleFields.size() == 6);
-    CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Title);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Album);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-    CHECK(spec.visibleFields[5] == TrackField::Duration);
-    CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::Tags));
-
-    CHECK(spec.redundantFields.empty());
+    checkSpec(requirePresetSpec("library"),
+              TrackPresentationSpec{
+                .id = "library",
+                .groupBy = TrackGroupKey::None,
+                .sortBy = {{TrackSortField::AlbumArtist, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::Year,
+                                  TrackField::Duration},
+                .redundantFields = {},
+              });
   }
 
-  TEST_CASE("List Order presentation - preserves source order with useful track columns",
-            "[runtime][unit][presentation]")
+  TEST_CASE("list-order preset - preserves source order with track columns", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId);
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-    CHECK(spec.id == kListOrderTrackPresentationId);
-    CHECK(spec.groupBy == TrackGroupKey::None);
-    CHECK(spec.sortBy.empty());
-
-    REQUIRE(spec.visibleFields.size() == 6);
-    CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Title);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Album);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-    CHECK(spec.visibleFields[5] == TrackField::Duration);
-    CHECK(spec.redundantFields.empty());
+    checkSpec(requirePresetSpec(kListOrderTrackPresentationId),
+              TrackPresentationSpec{
+                .id = std::string{kListOrderTrackPresentationId},
+                .groupBy = TrackGroupKey::None,
+                .sortBy = {},
+                .visibleFields = {TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::Year,
+                                  TrackField::Duration},
+                .redundantFields = {},
+              });
   }
 
-  TEST_CASE("songs preset is a flat title-ordered list", "[runtime][unit][presentation]")
+  TEST_CASE("songs preset - is a flat title-ordered list", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("songs");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::None);
-
-    REQUIRE(spec.sortBy.size() == 3);
-    CHECK(spec.sortBy[0].field == TrackSortField::Title);
-    CHECK(spec.sortBy[1].field == TrackSortField::Artist);
-    CHECK(spec.sortBy[2].field == TrackSortField::Album);
-
-    REQUIRE(spec.visibleFields.size() == 5);
-    CHECK(spec.visibleFields[0] == TrackField::Title);
-    CHECK(spec.visibleFields[1] == TrackField::Artist);
-    CHECK(spec.visibleFields[2] == TrackField::Album);
-    CHECK(spec.visibleFields[3] == TrackField::Duration);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-
-    CHECK(spec.redundantFields.empty());
+    checkSpec(
+      requirePresetSpec("songs"),
+      TrackPresentationSpec{
+        .id = "songs",
+        .groupBy = TrackGroupKey::None,
+        .sortBy = {{TrackSortField::Title, true}, {TrackSortField::Artist, true}, {TrackSortField::Album, true}},
+        .visibleFields =
+          {TrackField::Title, TrackField::Artist, TrackField::Album, TrackField::Duration, TrackField::Year},
+        .redundantFields = {},
+      });
   }
 
-  TEST_CASE("artists preset groups by album artist", "[runtime][unit][presentation]")
+  TEST_CASE("albums preset - groups tracks by album", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("artists");
-    REQUIRE(preset != nullptr);
+    checkSpec(
+      requirePresetSpec("albums"),
+      TrackPresentationSpec{
+        .id = "albums",
+        .groupBy = TrackGroupKey::Album,
+        .sortBy = {{TrackSortField::AlbumArtist, true},
+                   {TrackSortField::Album, true},
+                   {TrackSortField::DiscNumber, true},
+                   {TrackSortField::TrackNumber, true},
+                   {TrackSortField::Title, true}},
+        .visibleFields = {TrackField::DisplayTrackNumber, TrackField::Title, TrackField::Artist, TrackField::Duration},
+        .redundantFields = {TrackField::Album, TrackField::AlbumArtist},
+      });
+  }
 
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::AlbumArtist);
-    REQUIRE(spec.sortBy.size() == 6);
-    CHECK(spec.sortBy[0].field == TrackSortField::AlbumArtist);
-    CHECK(spec.sortBy[1].field == TrackSortField::Year);
-
+  TEST_CASE("artists preset - groups by album artist", "[runtime][unit][presentation]")
+  {
     // Year leads the columns so it reads as a discography.
-    REQUIRE(spec.visibleFields.size() == 6);
-    CHECK(spec.visibleFields[0] == TrackField::Year);
-    CHECK(spec.visibleFields[1] == TrackField::Album);
-    CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::Tags));
-
-    REQUIRE(spec.redundantFields.size() == 1);
-    CHECK(spec.redundantFields[0] == TrackField::AlbumArtist);
+    checkSpec(requirePresetSpec("artists"),
+              TrackPresentationSpec{
+                .id = "artists",
+                .groupBy = TrackGroupKey::AlbumArtist,
+                .sortBy = {{TrackSortField::AlbumArtist, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Year,
+                                  TrackField::Album,
+                                  TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Artist,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::AlbumArtist},
+              });
   }
 
-  TEST_CASE("performers preset groups by track artist", "[runtime][unit][presentation]")
+  TEST_CASE("performers preset - groups by track artist", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("performers");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::Artist);
-    REQUIRE(spec.redundantFields.size() == 1);
-    CHECK(spec.redundantFields[0] == TrackField::Artist);
-    CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::Tags));
+    checkSpec(requirePresetSpec("performers"),
+              TrackPresentationSpec{
+                .id = "performers",
+                .groupBy = TrackGroupKey::Artist,
+                .sortBy = {{TrackSortField::Artist, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Year,
+                                  TrackField::Album,
+                                  TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::Artist},
+              });
   }
 
-  TEST_CASE("technical preset exposes file inspection columns", "[runtime][unit][presentation]")
+  TEST_CASE("genres preset - groups albums within each genre", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("technical");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::None);
-
-    REQUIRE(spec.visibleFields.size() == 6);
-    CHECK(spec.visibleFields[0] == TrackField::Title);
-    CHECK(spec.visibleFields[1] == TrackField::Artist);
-    CHECK(spec.visibleFields[2] == TrackField::Album);
-    CHECK(spec.visibleFields[3] == TrackField::TechnicalSummary);
-    CHECK(spec.visibleFields[4] == TrackField::FileSize);
-    CHECK(spec.visibleFields[5] == TrackField::FilePath);
-
-    // FileSize/ModifiedTime are manifest-sourced and not yet sortable, so the
-    // preset falls back to a metadata-only sort order.
-    REQUIRE(spec.sortBy.size() == 5);
-    CHECK(spec.sortBy[0].field == TrackSortField::AlbumArtist);
-    CHECK(spec.sortBy[1].field == TrackSortField::Album);
+    checkSpec(requirePresetSpec("genres"),
+              TrackPresentationSpec{
+                .id = "genres",
+                .groupBy = TrackGroupKey::Genre,
+                .sortBy = {{TrackSortField::Genre, true},
+                           {TrackSortField::AlbumArtist, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Year,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::Genre},
+              });
   }
 
-  TEST_CASE("albums preset has correct group, sort, and redundant fields", "[runtime][unit][presentation]")
+  TEST_CASE("years preset - groups albums by release year", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("albums");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::Album);
-
-    REQUIRE(spec.sortBy.size() == 5);
-    CHECK(spec.sortBy[0].field == TrackSortField::AlbumArtist);
-    CHECK(spec.sortBy[1].field == TrackSortField::Album);
-    CHECK(spec.sortBy[2].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[3].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[4].field == TrackSortField::Title);
-
-    REQUIRE(spec.visibleFields.size() == 4);
-    CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Title);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Duration);
-    CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::Tags));
-
-    REQUIRE(spec.redundantFields.size() == 2);
-    CHECK(spec.redundantFields[0] == TrackField::Album);
-    CHECK(spec.redundantFields[1] == TrackField::AlbumArtist);
+    checkSpec(requirePresetSpec("years"),
+              TrackPresentationSpec{
+                .id = "years",
+                .groupBy = TrackGroupKey::Year,
+                .sortBy = {{TrackSortField::Year, true},
+                           {TrackSortField::AlbumArtist, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::DisplayTrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Genre,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::Year},
+              });
   }
 
-  TEST_CASE("classical-composers - preset has correct sort and visible fields", "[runtime][unit][presentation]")
+  TEST_CASE("classical-composers preset - groups works by composer", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("classical-composers");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::Composer);
-
-    REQUIRE(spec.sortBy.size() == 8);
-    CHECK(spec.sortBy[0].field == TrackSortField::Composer);
-    CHECK(spec.sortBy[1].field == TrackSortField::Work);
-    CHECK(spec.sortBy[2].field == TrackSortField::Year);
-    CHECK(spec.sortBy[3].field == TrackSortField::Album);
-    CHECK(spec.sortBy[4].field == TrackSortField::Movement);
-    CHECK(spec.sortBy[5].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[6].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[7].field == TrackSortField::Title);
-
-    REQUIRE(spec.visibleFields.size() == 7);
     // Work leads the columns; DisplayTrackNumber is demoted to the end because
     // in a classical context the movement is more meaningful than the track number.
-    CHECK(spec.visibleFields[0] == TrackField::Work);
-    CHECK(spec.visibleFields[1] == TrackField::Movement);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Album);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-    CHECK(spec.visibleFields[5] == TrackField::Duration);
-    CHECK(spec.visibleFields[6] == TrackField::DisplayTrackNumber);
-
-    REQUIRE(spec.redundantFields.size() == 1);
-    CHECK(spec.redundantFields[0] == TrackField::Composer);
+    checkSpec(requirePresetSpec("classical-composers"),
+              TrackPresentationSpec{
+                .id = "classical-composers",
+                .groupBy = TrackGroupKey::Composer,
+                .sortBy = {{TrackSortField::Composer, true},
+                           {TrackSortField::Work, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::Movement, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Work,
+                                  TrackField::Movement,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::Year,
+                                  TrackField::Duration,
+                                  TrackField::DisplayTrackNumber},
+                .redundantFields = {TrackField::Composer},
+              });
   }
 
-  TEST_CASE("classical-works - preset has correct group, sort, and redundant fields", "[runtime][unit][presentation]")
+  TEST_CASE("classical-conductors preset - groups works by conductor", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("classical-works");
-    REQUIRE(preset != nullptr);
-
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::Work);
-
-    REQUIRE(spec.sortBy.size() == 8);
-    CHECK(spec.sortBy[0].field == TrackSortField::Composer);
-    CHECK(spec.sortBy[1].field == TrackSortField::Work);
-    CHECK(spec.sortBy[2].field == TrackSortField::Year);
-    CHECK(spec.sortBy[3].field == TrackSortField::Album);
-    CHECK(spec.sortBy[4].field == TrackSortField::Movement);
-    CHECK(spec.sortBy[5].field == TrackSortField::DiscNumber);
-    CHECK(spec.sortBy[6].field == TrackSortField::TrackNumber);
-    CHECK(spec.sortBy[7].field == TrackSortField::Title);
-
-    REQUIRE(spec.visibleFields.size() == 6);
-    CHECK(spec.visibleFields[0] == TrackField::DisplayTrackNumber);
-    CHECK(spec.visibleFields[1] == TrackField::Movement);
-    CHECK(spec.visibleFields[2] == TrackField::Artist);
-    CHECK(spec.visibleFields[3] == TrackField::Album);
-    CHECK(spec.visibleFields[4] == TrackField::Year);
-    CHECK(spec.visibleFields[5] == TrackField::Duration);
-
-    REQUIRE(spec.redundantFields.size() == 2);
-    CHECK(spec.redundantFields[0] == TrackField::Composer);
-    CHECK(spec.redundantFields[1] == TrackField::Work);
+    checkSpec(requirePresetSpec("classical-conductors"),
+              TrackPresentationSpec{
+                .id = "classical-conductors",
+                .groupBy = TrackGroupKey::Conductor,
+                .sortBy = {{TrackSortField::Conductor, true},
+                           {TrackSortField::Composer, true},
+                           {TrackSortField::Work, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::Movement, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Work,
+                                  TrackField::Movement,
+                                  TrackField::Composer,
+                                  TrackField::Ensemble,
+                                  TrackField::Album,
+                                  TrackField::Year,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::Conductor},
+              });
   }
 
-  TEST_CASE("tagging preset has all curation columns visible", "[runtime][unit][presentation]")
+  TEST_CASE("classical-works preset - groups movements by work", "[runtime][unit][presentation]")
   {
-    auto const* preset = builtinTrackPresentationPreset("tagging");
-    REQUIRE(preset != nullptr);
+    checkSpec(requirePresetSpec("classical-works"),
+              TrackPresentationSpec{
+                .id = "classical-works",
+                .groupBy = TrackGroupKey::Work,
+                .sortBy = {{TrackSortField::Composer, true},
+                           {TrackSortField::Work, true},
+                           {TrackSortField::Year, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::Movement, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::DisplayTrackNumber,
+                                  TrackField::Movement,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::Year,
+                                  TrackField::Duration},
+                .redundantFields = {TrackField::Composer, TrackField::Work},
+              });
+  }
 
-    auto const& spec = preset->spec;
-
-    CHECK(spec.groupBy == TrackGroupKey::None);
-
+  TEST_CASE("tagging preset - has all curation columns visible", "[runtime][unit][presentation]")
+  {
     // Curation view exposes raw disc/track numbers rather than the formatted
     // DisplayTrackNumber, so tagging mistakes (missing disc, wrong totals) are visible.
-    REQUIRE(spec.visibleFields.size() == 9);
-    CHECK(spec.visibleFields[0] == TrackField::DiscNumber);
-    CHECK(spec.visibleFields[1] == TrackField::TrackNumber);
-    CHECK(spec.visibleFields[2] == TrackField::Title);
-    CHECK(spec.visibleFields[3] == TrackField::Artist);
-    CHECK(spec.visibleFields[4] == TrackField::Album);
-    CHECK(spec.visibleFields[5] == TrackField::Genre);
-    CHECK(spec.visibleFields[6] == TrackField::Year);
-    CHECK(spec.visibleFields[7] == TrackField::Duration);
-    CHECK(spec.visibleFields[8] == TrackField::Tags);
-    CHECK_FALSE(std::ranges::contains(spec.visibleFields, TrackField::DisplayTrackNumber));
+    checkSpec(requirePresetSpec("tagging"),
+              TrackPresentationSpec{
+                .id = "tagging",
+                .groupBy = TrackGroupKey::None,
+                .sortBy = {{TrackSortField::Artist, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::DiscNumber,
+                                  TrackField::TrackNumber,
+                                  TrackField::Title,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::Genre,
+                                  TrackField::Year,
+                                  TrackField::Duration,
+                                  TrackField::Tags},
+                .redundantFields = {},
+              });
+  }
 
-    CHECK(spec.redundantFields.empty());
+  TEST_CASE("technical preset - exposes file inspection columns", "[runtime][unit][presentation]")
+  {
+    // FileSize/ModifiedTime are manifest-sourced and not yet sortable, so the
+    // preset falls back to a metadata-only sort order.
+    checkSpec(requirePresetSpec("technical"),
+              TrackPresentationSpec{
+                .id = "technical",
+                .groupBy = TrackGroupKey::None,
+                .sortBy = {{TrackSortField::AlbumArtist, true},
+                           {TrackSortField::Album, true},
+                           {TrackSortField::DiscNumber, true},
+                           {TrackSortField::TrackNumber, true},
+                           {TrackSortField::Title, true}},
+                .visibleFields = {TrackField::Title,
+                                  TrackField::Artist,
+                                  TrackField::Album,
+                                  TrackField::TechnicalSummary,
+                                  TrackField::FileSize,
+                                  TrackField::FilePath},
+                .redundantFields = {},
+              });
   }
 
   TEST_CASE("normalizeTrackPresentationSpec removes duplicate visible fields", "[runtime][unit][presentation]")
@@ -365,39 +426,5 @@ namespace ao::rt::test
     auto normalized = normalizeTrackPresentationSpec(spec);
 
     CHECK(normalized.id == "library");
-  }
-
-  TEST_CASE("trackFieldId round-trips through trackFieldFromId", "[runtime][unit][presentation]")
-  {
-    auto const fields = {
-      TrackField::Title,
-      TrackField::Artist,
-      TrackField::Album,
-      TrackField::AlbumArtist,
-      TrackField::Genre,
-      TrackField::Composer,
-      TrackField::Work,
-      TrackField::Year,
-      TrackField::DiscNumber,
-      TrackField::TrackNumber,
-      TrackField::Duration,
-      TrackField::Tags,
-    };
-
-    for (auto const field : fields)
-    {
-      auto const id = trackFieldId(field);
-      auto const optParsed = trackFieldFromId(id);
-
-      REQUIRE(optParsed);
-      CHECK(*optParsed == field);
-    }
-  }
-
-  TEST_CASE("trackFieldFromId returns nullopt for unknown id", "[runtime][unit][presentation]")
-  {
-    CHECK(!trackFieldFromId("bpm").has_value());
-    CHECK(!trackFieldFromId("").has_value());
-    CHECK(!trackFieldFromId("unknown-field").has_value());
   }
 } // namespace ao::rt::test

@@ -39,13 +39,41 @@ namespace ao::test
 #endif
     }
 
-    void closeFileDescriptor(int descriptor) noexcept
+    void closeFileDescriptor(int& descriptor) noexcept
     {
       if (descriptor >= 0)
       {
-        [[maybe_unused]] auto const result = ::close(descriptor);
+        auto const ownedDescriptor = descriptor;
+        descriptor = -1;
+        [[maybe_unused]] auto const result = ::close(ownedDescriptor);
       }
     }
+
+    class [[nodiscard]] PipeFileDescriptorCleanup final
+    {
+    public:
+      PipeFileDescriptorCleanup(std::array<int, 2>& standardOutputPipe, std::array<int, 2>& standardErrorPipe) noexcept
+        : _standardOutputPipe{standardOutputPipe}, _standardErrorPipe{standardErrorPipe}
+      {
+      }
+
+      ~PipeFileDescriptorCleanup() noexcept
+      {
+        closeFileDescriptor(_standardOutputPipe[0]);
+        closeFileDescriptor(_standardOutputPipe[1]);
+        closeFileDescriptor(_standardErrorPipe[0]);
+        closeFileDescriptor(_standardErrorPipe[1]);
+      }
+
+      PipeFileDescriptorCleanup(PipeFileDescriptorCleanup const&) = delete;
+      PipeFileDescriptorCleanup& operator=(PipeFileDescriptorCleanup const&) = delete;
+      PipeFileDescriptorCleanup(PipeFileDescriptorCleanup&&) = delete;
+      PipeFileDescriptorCleanup& operator=(PipeFileDescriptorCleanup&&) = delete;
+
+    private:
+      std::array<int, 2>& _standardOutputPipe;
+      std::array<int, 2>& _standardErrorPipe;
+    };
 
     void captureOutput(int descriptor, std::string& output)
     {
@@ -84,6 +112,36 @@ namespace ao::test
         }
       }
     }
+
+    class [[nodiscard]] ChildProcessCleanup final
+    {
+    public:
+      explicit ChildProcessCleanup(pid_t processId) noexcept
+        : _processId{processId}
+      {
+      }
+
+      ~ChildProcessCleanup() noexcept
+      {
+        if (_active)
+        {
+          [[maybe_unused]] auto const killResult = ::kill(_processId, SIGKILL);
+          std::int32_t waitStatus = 0;
+          [[maybe_unused]] auto const reapedProcess = waitForProcess(_processId, waitStatus);
+        }
+      }
+
+      ChildProcessCleanup(ChildProcessCleanup const&) = delete;
+      ChildProcessCleanup& operator=(ChildProcessCleanup const&) = delete;
+      ChildProcessCleanup(ChildProcessCleanup&&) = delete;
+      ChildProcessCleanup& operator=(ChildProcessCleanup&&) = delete;
+
+      void release() noexcept { _active = false; }
+
+    private:
+      pid_t _processId = 0;
+      bool _active = true;
+    };
   } // namespace
 
   std::filesystem::path currentProbeExecutablePath()
@@ -142,6 +200,7 @@ namespace ao::test
     auto result = ProbeProcessResult{};
     auto standardOutputPipe = std::array<int, 2>{-1, -1};
     auto standardErrorPipe = std::array<int, 2>{-1, -1};
+    auto pipeCleanup = PipeFileDescriptorCleanup{standardOutputPipe, standardErrorPipe};
 
     if (::pipe(standardOutputPipe.data()) != 0)
     {
@@ -220,9 +279,7 @@ namespace ao::test
       ::posix_spawn(&processId, executable.c_str(), &actions, nullptr, arguments.data(), currentEnvironment());
     [[maybe_unused]] auto const destroyResult = ::posix_spawn_file_actions_destroy(&actions);
     closeFileDescriptor(standardOutputPipe[1]);
-    standardOutputPipe[1] = -1;
     closeFileDescriptor(standardErrorPipe[1]);
-    standardErrorPipe[1] = -1;
 
     if (spawnStatus != 0)
     {
@@ -233,45 +290,56 @@ namespace ao::test
     }
 
     result.started = true;
-    auto standardOutputReader =
-      std::jthread{[descriptor = standardOutputPipe[0], &result] { captureOutput(descriptor, result.standardOutput); }};
-    auto standardErrorReader =
-      std::jthread{[descriptor = standardErrorPipe[0], &result] { captureOutput(descriptor, result.standardError); }};
+    auto standardOutputReader = std::jthread{};
+    auto standardErrorReader = std::jthread{};
     int waitStatus = 0;
     bool childReaped = false;
-    auto const deadline = std::chrono::steady_clock::now() + timeout;
 
-    for (;;)
     {
-      auto const waitedProcess = ::waitpid(processId, &waitStatus, WNOHANG);
+      auto childCleanup = ChildProcessCleanup{processId};
+      standardOutputReader = std::jthread{[descriptor = standardOutputPipe[0], &result]
+                                          { captureOutput(descriptor, result.standardOutput); }};
+      standardErrorReader =
+        std::jthread{[descriptor = standardErrorPipe[0], &result] { captureOutput(descriptor, result.standardError); }};
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
 
-      if (waitedProcess == processId)
+      for (;;)
       {
-        childReaped = true;
-        break;
+        auto const waitedProcess = ::waitpid(processId, &waitStatus, WNOHANG);
+
+        if (waitedProcess == processId)
+        {
+          childReaped = true;
+          break;
+        }
+
+        if (waitedProcess < 0 && errno != EINTR)
+        {
+          result.launchError = std::strerror(errno);
+          [[maybe_unused]] auto const killResult = ::kill(processId, SIGKILL);
+
+          pid_t const reapedProcess = waitForProcess(processId, waitStatus);
+          childReaped = reapedProcess == processId;
+          break;
+        }
+
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+          result.timedOut = true;
+          [[maybe_unused]] auto const killResult = ::kill(processId, SIGKILL);
+
+          pid_t const reapedProcess = waitForProcess(processId, waitStatus);
+          childReaped = reapedProcess == processId;
+          break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
       }
 
-      if (waitedProcess < 0 && errno != EINTR)
+      if (childReaped)
       {
-        result.launchError = std::strerror(errno);
-        [[maybe_unused]] auto const killResult = ::kill(processId, SIGKILL);
-
-        pid_t const reapedProcess = waitForProcess(processId, waitStatus);
-        childReaped = reapedProcess == processId;
-        break;
+        childCleanup.release();
       }
-
-      if (std::chrono::steady_clock::now() >= deadline)
-      {
-        result.timedOut = true;
-        [[maybe_unused]] auto const killResult = ::kill(processId, SIGKILL);
-
-        pid_t const reapedProcess = waitForProcess(processId, waitStatus);
-        childReaped = reapedProcess == processId;
-        break;
-      }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds{5});
     }
 
     standardOutputReader.join();

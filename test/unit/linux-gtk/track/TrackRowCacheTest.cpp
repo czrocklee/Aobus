@@ -4,26 +4,99 @@
 #include "track/TrackRowCache.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "track/TrackRowObject.h"
+#include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <glibmm/refptr.h>
-#include <gtkmm/application.h>
+#include <glibmm/ustring.h>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <ranges>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    constexpr auto kBindFields = std::array{
+      rt::TrackField::Title,
+      rt::TrackField::Artist,
+      rt::TrackField::Album,
+      rt::TrackField::AlbumArtist,
+      rt::TrackField::Genre,
+      rt::TrackField::Year,
+      rt::TrackField::Duration,
+      rt::TrackField::TrackNumber,
+      rt::TrackField::Bitrate,
+      rt::TrackField::SampleRate,
+    };
+
+    std::vector<TrackId> seedLibrary(library::MusicLibrary& library, std::size_t count)
+    {
+      auto ids = std::vector<TrackId>{};
+      ids.reserve(count);
+      auto transaction = library::test::writeTransaction(library);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+          for (std::size_t const i : std::views::iota(std::size_t{0}, count))
+          {
+            auto const title = std::format("Track {}", i);
+            auto const artist = std::format("Artist {}", i % 500);
+            auto const album = std::format("Album {}", i % 1000);
+            auto const albumArtist = std::format("AlbumArtist {}", i % 400);
+            auto const genre = std::format("Genre {}", i % 40);
+            auto const uri = std::format("music/track_{}.flac", i);
+            auto builder = library::TrackBuilder::makeEmpty();
+            builder.metadata()
+              .title(title)
+              .artist(artist)
+              .album(album)
+              .albumArtist(albumArtist)
+              .genre(genre)
+              .year(static_cast<std::uint16_t>(1950 + (i % 70)))
+              .trackNumber(static_cast<std::uint16_t>(1 + (i % 30)));
+            builder.property()
+              .uri(uri)
+              .duration(std::chrono::milliseconds{120000 + static_cast<std::ptrdiff_t>(i % 200000)})
+              .bitrate(Bitrate{320000})
+              .sampleRate(SampleRate{44100})
+              .channels(Channels{2})
+              .bitDepth(BitDepth{16});
+            ids.push_back(ao::test::requireValue(writer.create(builder, library::FileManifestBuilder::makeEmpty())));
+          }
+          return {};
+        }));
+      REQUIRE(transaction.commit());
+      return ids;
+    }
+  } // namespace
+
   TEST_CASE("TrackRowCache - loads cached rows from runtime track data", "[gtk][unit][track][row-cache]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.row_cache_test");
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto basicId1 = kInvalidTrackId;
     auto basicId2 = kInvalidTrackId;
     auto utf8Id = kInvalidTrackId;
@@ -95,51 +168,10 @@ namespace ao::gtk::test
       CHECK(row2Ptr->fieldText(rt::TrackField::Title) == "Track 2");
       CHECK(row2Ptr->duration() == std::chrono::minutes{4});
 
-      // Verify the playing flag setter/getter
       CHECK_FALSE(row1Ptr->isPlaying());
-      row1Ptr->setPlaying(true);
-      CHECK(row1Ptr->isPlaying());
-      row1Ptr->setPlaying(false);
-      CHECK_FALSE(row1Ptr->isPlaying());
-
-      // Verify custom string fields and failure paths
-      CHECK(row1Ptr->trySetStringField(rt::TrackField::Artist, "New Artist"));
-      CHECK(row1Ptr->fieldText(rt::TrackField::Artist) == "New Artist");
-      CHECK_FALSE(row1Ptr->trySetStringField(rt::TrackField::Duration, "Failed"));
-
-      // Verify other metadata and resource/playback properties
-      row1Ptr->setYear(2025);
-      row1Ptr->setDiscNumber(2);
-      row1Ptr->setDiscTotal(3);
-      row1Ptr->setTrackNumber(4);
-      row1Ptr->setTrackTotal(10);
-      CHECK(row1Ptr->year() == 2025);
-      CHECK(row1Ptr->discNumber() == 2);
-      CHECK(row1Ptr->discTotal() == 3);
-      CHECK(row1Ptr->trackNumber() == 4);
-      CHECK(row1Ptr->trackTotal() == 10);
       CHECK(row1Ptr->sampleRate() == 44100);
       CHECK(row1Ptr->channels() == 2);
       CHECK(row1Ptr->bitDepth() == 16);
-
-      // displayText() memoizes computed fields and must drop the cached string
-      // when a contributing setter runs. Year was set to 2025 above; read it once
-      // (fills the cache), then mutate and confirm the refreshed value, not stale.
-      REQUIRE(row1Ptr->displayText(rt::TrackField::Year) != nullptr);
-      CHECK(*row1Ptr->displayText(rt::TrackField::Year) == "2025");
-      row1Ptr->setYear(1999);
-      CHECK(*row1Ptr->displayText(rt::TrackField::Year) == "1999");
-
-      // The TrackNumber setter ran above (value 4); a first-time computed read
-      // must still format correctly from scratch (lazy fill).
-      CHECK(*row1Ptr->displayText(rt::TrackField::TrackNumber) == "4");
-
-      // Text-backed fields share the same stored slot as stringField() — no
-      // separate cache, so displayText() returns the identical pointer.
-      REQUIRE(row1Ptr->displayText(rt::TrackField::Artist) != nullptr);
-      CHECK(row1Ptr->displayText(rt::TrackField::Artist) == row1Ptr->stringField(rt::TrackField::Artist));
-      CHECK(*row1Ptr->displayText(rt::TrackField::Artist) == "New Artist");
-      CHECK(row1Ptr->displayText(static_cast<rt::TrackField>(255)) == nullptr);
     }
 
     SECTION("UTF-8 metadata survives row materialization")
@@ -163,18 +195,45 @@ namespace ao::gtk::test
       CHECK(rowPtr->tags() == "夜, ライブ");
     }
 
-    SECTION("Clearing the cache discards loaded rows")
+    SECTION("Lookup retains rows until selective invalidation or whole-cache clearing")
     {
       auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+      auto const ids = std::array{helperId, cachingId, invalidationId};
+      auto rows = std::array<Glib::RefPtr<TrackRowObject>, 3>{};
+      CHECK(provider.cachedRowCount() == 0);
 
-      auto const rowBeforeClearPtr = provider.trackRow(helperId);
-      REQUIRE(rowBeforeClearPtr);
+      for (std::size_t index = 0; index < ids.size(); ++index)
+      {
+        rows[index] = provider.trackRow(ids[index]);
+        REQUIRE(rows[index]);
+        CHECK(rows[index]->trackId() == ids[index]);
+        CHECK(provider.cachedRowCount() == index + 1);
+        CHECK(provider.trackRow(ids[index]) == rows[index]);
+        CHECK(provider.cachedRowCount() == index + 1);
+      }
 
+      provider.invalidate(invalidationId);
+      CHECK(provider.cachedRowCount() == 2);
+      CHECK(provider.trackRow(helperId) == rows[0]);
+      CHECK(provider.trackRow(cachingId) == rows[1]);
+      auto const reloadedInvalidatedRowPtr = provider.trackRow(invalidationId);
+      REQUIRE(reloadedInvalidatedRowPtr);
+      CHECK(reloadedInvalidatedRowPtr->trackId() == invalidationId);
+      CHECK(reloadedInvalidatedRowPtr != rows[2]);
+      CHECK(provider.cachedRowCount() == 3);
+
+      auto const rowsBeforeClear = std::array{rows[0], rows[1], reloadedInvalidatedRowPtr};
       provider.clearCache();
+      CHECK(provider.cachedRowCount() == 0);
 
-      auto const rowAfterClearPtr = provider.trackRow(helperId);
-      REQUIRE(rowAfterClearPtr);
-      CHECK(rowAfterClearPtr != rowBeforeClearPtr);
+      for (std::size_t index = 0; index < ids.size(); ++index)
+      {
+        auto const rowPtr = provider.trackRow(ids[index]);
+        REQUIRE(rowPtr);
+        CHECK(rowPtr->trackId() == ids[index]);
+        CHECK(rowPtr != rowsBeforeClear[index]);
+        CHECK(provider.cachedRowCount() == index + 1);
+      }
     }
 
     // FilePath is a text-backed value materialized from the read-model row.
@@ -191,30 +250,6 @@ namespace ao::gtk::test
       CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == expected);
     }
 
-    SECTION("Caching works")
-    {
-      auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-
-      auto const row1APtr = provider.trackRow(cachingId);
-      auto const row1BPtr = provider.trackRow(cachingId);
-
-      REQUIRE(row1APtr);
-      REQUIRE(row1BPtr);
-      CHECK(row1APtr == row1BPtr);
-    }
-
-    SECTION("Invalidation")
-    {
-      auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-
-      auto const row1Ptr = provider.trackRow(invalidationId);
-      CHECK(row1Ptr);
-      provider.invalidate(invalidationId);
-
-      auto const row1NewPtr = provider.trackRow(invalidationId);
-      CHECK(row1Ptr != row1NewPtr);
-    }
-
     SECTION("Non-existent track")
     {
       auto provider = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
@@ -223,10 +258,9 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed",
-            "[gtk][regression][track][row-cache]")
+  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed", "[gtk][unit][track][row-cache]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.row_cache_invalidation_test");
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto const cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
@@ -242,6 +276,115 @@ namespace ao::gtk::test
 
     auto const rowAfterPtr = cache.trackRow(trackId);
     REQUIRE(rowAfterPtr);
+    CHECK(rowAfterPtr != rowBeforePtr);
     CHECK(rowAfterPtr->fieldText(rt::TrackField::Title) == "After Import");
+    CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
+  }
+
+  TEST_CASE("TrackRowCache - retained rows preserve bind text across repeated lookup", "[gtk][unit][track][row-cache]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    constexpr std::size_t kRowCount = 5000;
+    constexpr std::size_t kReScrollPasses = 20;
+    auto ids = std::vector<TrackId>{};
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& library) { ids = seedLibrary(library, kRowCount); }};
+    REQUIRE(ids.size() == kRowCount);
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+
+    struct RetainedRow final
+    {
+      Glib::RefPtr<TrackRowObject> rowPtr;
+      std::array<Glib::ustring const*, kBindFields.size()> texts{};
+      std::array<Glib::ustring, kBindFields.size()> values{};
+    };
+    auto retained = std::vector<RetainedRow>{};
+    retained.reserve(ids.size());
+    std::size_t missingRows = 0;
+    std::size_t wrongIds = 0;
+    std::size_t missingTexts = 0;
+    std::size_t coldCharacters = 0;
+
+    // Keep both row ownership and independent text copies across the complete cold walk.
+    for (auto const id : ids)
+    {
+      auto row = RetainedRow{.rowPtr = cache.trackRow(id)};
+
+      if (!row.rowPtr)
+      {
+        ++missingRows;
+        continue;
+      }
+
+      wrongIds += static_cast<std::size_t>(row.rowPtr->trackId() != id);
+
+      for (std::size_t column = 0; column < kBindFields.size(); ++column)
+      {
+        row.texts[column] = row.rowPtr->displayText(kBindFields[column]);
+
+        if (row.texts[column] == nullptr)
+        {
+          ++missingTexts;
+          continue;
+        }
+
+        row.values[column] = *row.texts[column];
+        coldCharacters += row.texts[column]->size();
+      }
+
+      retained.push_back(std::move(row));
+    }
+
+    REQUIRE(missingRows == 0);
+    REQUIRE(wrongIds == 0);
+    REQUIRE(missingTexts == 0);
+    REQUIRE(retained.size() == ids.size());
+    CHECK(coldCharacters > 0);
+    CHECK(cache.cachedRowCount() == kRowCount);
+
+    std::size_t changedRows = 0;
+    std::size_t changedTextPointers = 0;
+    std::size_t changedTextValues = 0;
+    std::size_t warmCharacters = 0;
+
+    for (std::size_t pass = 0; pass < kReScrollPasses; ++pass)
+    {
+      for (std::size_t index = 0; index < ids.size(); ++index)
+      {
+        auto const rowPtr = cache.trackRow(ids[index]);
+
+        if (!rowPtr)
+        {
+          ++missingRows;
+          continue;
+        }
+
+        wrongIds += static_cast<std::size_t>(rowPtr->trackId() != ids[index]);
+        changedRows += static_cast<std::size_t>(rowPtr != retained[index].rowPtr);
+
+        for (std::size_t column = 0; column < kBindFields.size(); ++column)
+        {
+          auto const* text = rowPtr->displayText(kBindFields[column]);
+
+          if (text == nullptr)
+          {
+            ++missingTexts;
+            continue;
+          }
+
+          changedTextPointers += static_cast<std::size_t>(text != retained[index].texts[column]);
+          changedTextValues += static_cast<std::size_t>(*text != retained[index].values[column]);
+          warmCharacters += text->size();
+        }
+      }
+    }
+
+    CHECK(missingRows == 0);
+    CHECK(wrongIds == 0);
+    CHECK(missingTexts == 0);
+    CHECK(changedRows == 0);
+    CHECK(changedTextPointers == 0);
+    CHECK(changedTextValues == 0);
+    CHECK(warmCharacters == coldCharacters * kReScrollPasses);
+    CHECK(cache.cachedRowCount() == kRowCount);
   }
 } // namespace ao::gtk::test

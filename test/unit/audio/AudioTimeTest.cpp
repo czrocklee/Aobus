@@ -9,7 +9,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Audio time - clamps non-positive durations to sample zero", "[audio][unit][audio-time][regression]")
+  TEST_CASE("Audio time - clamps non-positive durations to sample zero", "[audio][unit][audio-time]")
   {
     CHECK(durationToSamples(std::chrono::milliseconds::min(), 48000) == 0U);
     CHECK(durationToSamples(std::chrono::milliseconds{-1}, 48000) == 0U);

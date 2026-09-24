@@ -26,7 +26,9 @@ namespace ao::uimodel::test
     auto guard = KeyRepeatGuard{};
 
     REQUIRE(guard.tryAcceptPress(38));
+    REQUIRE(guard.tryAcceptPress(40));
     guard.reset();
     CHECK(guard.tryAcceptPress(38));
+    CHECK(guard.tryAcceptPress(40));
   }
 } // namespace ao::uimodel::test

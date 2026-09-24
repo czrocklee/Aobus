@@ -13,7 +13,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("ByteKeyDatabase - supports reader and writer operations", "[lmdb][unit][database][byte-key]")
+  TEST_CASE("ByteKeyDatabase::Reader - reads committed payloads in byte-key order", "[lmdb][unit][database][byte-key]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -61,24 +61,42 @@ namespace ao::lmdb::test
       ++it;
       REQUIRE(it == reader.end());
     }
+  }
 
-    SECTION("Writer::get works with byte keys")
-    {
-      auto wtxn2 = beginWriteTransaction(env);
-      auto writer2 = db.writer(wtxn2);
-      auto const optRes = writer2.get(key1);
-      REQUIRE(optRes);
-      REQUIRE(utility::bytes::stringView(*optRes) == "value1");
-    }
+  TEST_CASE("ByteKeyDatabase::Writer - deletion persists without changing another key",
+            "[lmdb][unit][database][byte-key]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
 
-    SECTION("Writer::del works with byte keys")
-    {
-      auto wtxn2 = beginWriteTransaction(env);
-      auto writer2 = db.writer(wtxn2);
-      REQUIRE(writer2.tryDelete(key1));
-      REQUIRE_FALSE(writer2.get(key1).has_value());
-      REQUIRE(wtxn2.commit());
-    }
+    auto wtxn = beginWriteTransaction(env);
+    auto db = openByteKeyDatabase(wtxn, "byte_database");
+    auto writer = db.writer(wtxn);
+
+    auto const key1 = createStringData("key1");
+    auto const key2 = createStringData("another_key");
+    auto const val1 = createStringData("value1");
+    auto const val2 = createStringData("value2");
+
+    REQUIRE(writer.create(key1, val1));
+    REQUIRE(writer.create(key2, val2));
+    REQUIRE(wtxn.commit());
+
+    auto deleteTransaction = beginWriteTransaction(env);
+    auto deleteWriter = db.writer(deleteTransaction);
+    auto const optBeforeDelete = deleteWriter.get(key1);
+    REQUIRE(optBeforeDelete);
+    CHECK(utility::bytes::stringView(*optBeforeDelete) == "value1");
+    REQUIRE(deleteWriter.tryDelete(key1));
+    CHECK_FALSE(deleteWriter.get(key1));
+    REQUIRE(deleteTransaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    CHECK_FALSE(reader.get(key1));
+    auto const optSurvivor = reader.get(key2);
+    REQUIRE(optSurvivor);
+    CHECK(utility::bytes::stringView(*optSurvivor) == "value2");
   }
 
   TEST_CASE("ByteKeyDatabase::Reader - lowerBound seeks to the first key not less than its target",
@@ -124,7 +142,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a read transaction ends",
-            "[lmdb][regression][cursor-lifetime]")
+            "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -148,7 +166,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a write transaction ends",
-            "[lmdb][regression][cursor-lifetime]")
+            "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -173,7 +191,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("ByteKeyDatabase::Writer - destruction remains safe after its transaction object is gone",
-            "[lmdb][regression][cursor-lifetime]")
+            "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

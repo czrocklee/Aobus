@@ -29,7 +29,6 @@ namespace ao::gtk
     _streamInfoLabel.add_css_class("dim-label");
     _sinkStatusIcon.set_from_icon_name("media-record-symbolic");
     _sinkStatusIcon.set_pixel_size(layout::kIconSizeXSmall);
-    _sinkStatusIcon.set_visible(false);
 
     _container.append(_streamInfoLabel);
     _container.append(_sinkStatusIcon);

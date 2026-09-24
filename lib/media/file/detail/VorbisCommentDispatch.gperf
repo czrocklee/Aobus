@@ -38,5 +38,5 @@ GROUPING, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder:
 MOVEMENTNAME, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
 MOVEMENT, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 MOVEMENTTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
-DATE, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
-YEAR, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+DATE, &handleYear
+YEAR, &handleYear

@@ -22,8 +22,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <semaphore>
 #include <span>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -127,7 +127,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("StreamingSource - growing preroll returns without a consumer and preserves all PCM",
-            "[audio][regression][streaming-preroll][concurrency]")
+            "[audio][unit][streaming-preroll]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic{0};
@@ -153,7 +153,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - seek retires pending PCM and completes growing preroll without a consumer",
-            "[audio][regression][streaming-preroll][concurrency]")
+            "[audio][unit][streaming-preroll][concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic{0};
@@ -172,7 +172,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - consecutive seeks retire every pending block before the final PCM is consumed",
-            "[audio][regression][streaming-preroll][concurrency]")
+            "[audio][unit][streaming-preroll][concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
     auto errors = std::atomic{0};
@@ -201,7 +201,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - destruction stops a pending preroll write without a consumer",
-            "[audio][regression][streaming-preroll][concurrency]")
+            "[audio][unit][streaming-preroll][concurrency]")
   {
     bool const activate = GENERATE(false, true);
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
@@ -225,28 +225,31 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - active growing block write remains stoppable without a consumer",
-            "[audio][regression][streaming-preroll][concurrency]")
+            "[audio][unit][streaming-preroll][concurrency]")
   {
-    auto growingRead = std::binary_semaphore{0};
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
     auto errors = std::atomic{0};
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(prerollStreamInfo());
     decoderPtr->setDestroyCounter(destroyedPtr);
     decoderPtr->setReadScript({{std::vector(kFirstBlockByteCount, std::byte{0x10}), false},
                                {std::vector(kGrowingBlockByteCount, std::byte{0x11}), true}});
-    decoderPtr->setReadObserver(
-      [&](std::size_t count)
-      {
-        if (count == 2)
-        {
-          growingRead.release();
-        }
-      });
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), prerollStreamInfo(), std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
     REQUIRE(sourcePtr->prepare());
+    auto const preparedBufferedDuration = sourcePtr->bufferedDuration();
     sourcePtr->activate([&](Error const&) { ++errors; });
-    REQUIRE(growingRead.try_acquire_for(std::chrono::seconds{5}));
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+    // With no consumer, growth proves a partial write of the second block:
+    // both blocks together exceed capacity, so its tail cannot be delivered.
+    STATIC_REQUIRE(kFirstBlockByteCount + kGrowingBlockByteCount > kRingBufferCapacity);
+
+    while (sourcePtr->bufferedDuration() <= preparedBufferedDuration && std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::yield();
+    }
+
+    REQUIRE(sourcePtr->bufferedDuration() > preparedBufferedDuration);
 
     sourcePtr.reset();
     CHECK(destroyedPtr->load() == 1);

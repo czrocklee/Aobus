@@ -20,7 +20,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("TrackPropertiesAdapter - maps shared form rows without WinRT", "[winui][unit][track-properties]")
+  TEST_CASE("TrackPropertiesAdapter - maps shared form rows without WinRT", "[winui][unit][property]")
   {
     auto const row = uimodel::TrackPropertiesFormRow{
       .field = rt::TrackField::Title,
@@ -60,17 +60,16 @@ namespace ao::winui::test
       CHECK(projected.mixed);
       CHECK_FALSE(projected.enabled);
     }
-
-    SECTION("number and readonly kinds stay distinct")
-    {
-      CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Number) ==
-            TrackPropertyControlKind::Number);
-      CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::ReadonlyText) ==
-            TrackPropertyControlKind::ReadonlyText);
-    }
   }
 
-  TEST_CASE("TrackPropertiesAdapter - parses native edits and command state", "[winui][unit][track-properties]")
+  TEST_CASE("TrackPropertiesAdapter - number and readonly control kinds stay distinct", "[winui][unit][property]")
+  {
+    CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Number) == TrackPropertyControlKind::Number);
+    CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::ReadonlyText) ==
+          TrackPropertyControlKind::ReadonlyText);
+  }
+
+  TEST_CASE("TrackPropertiesAdapter - parses native edits", "[winui][unit][property]")
   {
     auto const textRes = parseTrackPropertyEdit(TrackPropertyControlKind::Text, "Björk");
     REQUIRE(textRes);
@@ -82,9 +81,16 @@ namespace ao::winui::test
 
     CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::Number, "20x6"));
     CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::ReadonlyText, "ignored"));
+  }
 
+  TEST_CASE("TrackPropertiesAdapter - presentation requires a nonempty selection", "[winui][unit][property]")
+  {
     CHECK_FALSE(canPresentTrackProperties({}));
     CHECK(canPresentTrackProperties(std::array{TrackId{7}}));
+  }
+
+  TEST_CASE("TrackPropertiesAdapter - projects authoring commit states", "[winui][unit][property]")
+  {
     CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Applied) == TrackPropertiesCommitState::Accepted);
     CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::NoOp) == TrackPropertiesCommitState::Accepted);
     CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Busy) == TrackPropertiesCommitState::Busy);
@@ -93,7 +99,7 @@ namespace ao::winui::test
           TrackPropertiesCommitState::Unavailable);
   }
 
-  TEST_CASE("TrackPropertiesAdapter - projects tag and custom-key vocabulary", "[winui][unit][track-properties]")
+  TEST_CASE("TrackPropertiesAdapter - projects tag and custom-key vocabulary", "[winui][unit][property]")
   {
     auto const japaneseAliases = std::array<std::string, 1>{"yuduo"};
     auto const vocabulary = std::array{
@@ -109,8 +115,7 @@ namespace ao::winui::test
     CHECK(trackPropertyVocabularySuggestions(vocabulary, "", 2) == std::vector<std::string>{"宇多田光", "Night Drive"});
   }
 
-  TEST_CASE("TrackPropertiesAdapter - explicit empty custom value replaces a mixed original",
-            "[winui][regression][track-properties]")
+  TEST_CASE("TrackPropertiesAdapter - explicit empty custom value replaces a mixed original", "[winui][unit][property]")
   {
     CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, ""));
     CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, "Ambient"));

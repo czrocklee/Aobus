@@ -19,10 +19,13 @@
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::test
@@ -137,7 +140,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TagEditor - lays out tag chips and routes chip interactions", "[gtk][unit][tag][geometry]")
+  TEST_CASE("TagEditor - lays out tag chips across widths and themes", "[gtk][unit][tag][geometry]")
   {
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -189,9 +192,13 @@ namespace ao::gtk::test
       };
 
       auto const overallMinimum = measureMinimumHeight(-1);
+      auto const narrowMinimum = measureMinimumHeight(262);
+      auto const widerMinimum = measureMinimumHeight(300);
       CHECK(overallMinimum == 0);
-      CHECK(overallMinimum <= measureMinimumHeight(262));
-      CHECK(overallMinimum <= measureMinimumHeight(300));
+      CHECK(overallMinimum <= narrowMinimum);
+      CHECK(overallMinimum <= widerMinimum);
+      CHECK(narrowMinimum > overallMinimum);
+      CHECK(widerMinimum > overallMinimum);
     }
 
     SECTION("Current and suggested tags share the single flow")
@@ -201,94 +208,8 @@ namespace ao::gtk::test
 
       // The inline add trigger lives in the same flow as a trailing button.
       auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
-      CHECK(addButton != nullptr);
+      REQUIRE(addButton != nullptr);
       CHECK(addButton->get_label() == "Add…");
-    }
-
-    SECTION("Clicking a suggested tag promotes it to a current chip")
-    {
-      auto* suggested = findWidgetByClass<Gtk::Button>(editor, "ao-tag-chip-suggested");
-      REQUIRE(suggested != nullptr);
-
-      emitClicked(*suggested);
-      drainGtkEvents();
-
-      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
-      CHECK(countChipsByClass(editor, "ao-tag-chip-suggested") == 0);
-    }
-
-    SECTION("Add trigger expands inline and submits tag names")
-    {
-      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
-      auto* const entry = findWidgetByClass<Gtk::Entry>(editor, "ao-tags-entry");
-      REQUIRE(addButton != nullptr);
-      REQUIRE(entry != nullptr);
-      CHECK_FALSE(entry->get_visible());
-
-      emitClicked(*addButton);
-      drainGtkEvents();
-      CHECK(entry->get_visible());
-
-      entry->set_text("Funk");
-      emitActivate(*entry);
-      drainGtkEvents();
-
-      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
-      CHECK(entry->get_text().empty()); // cleared for rapid successive adds
-      CHECK(entry->get_visible());      // stays open
-
-      std::int32_t position = 0;
-      entry->insert_text("123 Mix", -1, position);
-      CHECK(entry->get_text() == "123 Mix");
-
-      emitActivate(*entry);
-      drainGtkEvents();
-
-      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 5);
-      CHECK(currentChipWithLabel(editor, "123 Mix") != nullptr);
-      CHECK(entry->get_text().empty());
-      CHECK(entry->get_visible());
-    }
-
-    SECTION("Clicking outside the open entry dismisses it without committing")
-    {
-      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
-      auto* const entry = findWidgetByClass<Gtk::Entry>(editor, "ao-tags-entry");
-      REQUIRE(addButton != nullptr);
-      REQUIRE(entry != nullptr);
-
-      emitClicked(*addButton);
-      drainGtkEvents();
-      REQUIRE(entry->get_visible());
-
-      entry->set_text("Funk"); // pending text must be discarded, never committed on an outside click
-      drainGtkEvents();
-
-      // A press landing outside the trigger (here resolving to nothing) collapses the entry.
-      REQUIRE(tryEmitWindowOutsideClick(window));
-      drainGtkEvents();
-
-      CHECK_FALSE(entry->get_visible());
-      CHECK(addButton->get_visible());
-      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 3); // nothing added
-    }
-
-    SECTION("Opening the add entry hides current tags and dismissing restores them")
-    {
-      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
-      REQUIRE(addButton != nullptr);
-
-      auto* const rockChip = currentChipWithLabel(editor, "Rock");
-      REQUIRE(rockChip != nullptr);
-      CHECK(rockChip->get_visible()); // shown in the default browse view
-
-      emitClicked(*addButton);
-      drainGtkEvents();
-      CHECK_FALSE(rockChip->get_visible()); // hidden while adding/searching
-
-      REQUIRE(tryEmitWindowOutsideClick(window));
-      drainGtkEvents();
-      CHECK(rockChip->get_visible()); // restored once the entry is dismissed
     }
 
     SECTION("Open add entry leaves the remaining suggested chip at its natural width")
@@ -366,9 +287,8 @@ namespace ao::gtk::test
     {
       // The inter-chip flow gap is theme-aware (dense classic vs. airy modern). The theme class
       // lives on the toplevel window and is read via the editor's root, so toggling it on the window
-      // must widen the single-row natural width by exactly the gap delta on every inter-chip seam.
-      // Chip widths are identical between measures (headless loads no per-theme CSS), so the gap is
-      // the only variable in the natural width — making this assertion exact and flake-free.
+      // must widen the single-row natural width by the current gap delta on every seam.
+      // This fixture changes root classes without loading per-theme CSS, so chip widths stay fixed.
       auto countVisibleChildren = [&]
       {
         std::int32_t n = 0;
@@ -400,11 +320,135 @@ namespace ao::gtk::test
       std::int32_t modernNat = 0;
       editor.measure(Gtk::Orientation::HORIZONTAL, -1, minW, modernNat, b1, b2);
 
-      // Classic gap 4 -> modern gap 8 = +4 per seam (kSpacingLarge - kSpacingSmall).
+      // Preserve the original Classic 4 -> Modern 8 geometry witness at every seam.
       constexpr std::int32_t kGapDelta = 4;
       CHECK(modernNat == classicNat + (seams * kGapDelta));
 
       window.remove_css_class("ao-theme-modern");
+    }
+
+    window.unset_child();
+  }
+
+  TEST_CASE("TagEditor - routes tag draft interactions", "[gtk][unit][tag]")
+  {
+    constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+
+    auto const trackId =
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
+    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
+
+    auto editor = TagEditor{ao::test::englishMessageCatalog()};
+    auto window = Gtk::Window{};
+    window.set_child(editor);
+
+    editor.setup(runtime.library(), {trackId});
+    drainGtkEvents();
+
+    using TagChange = std::pair<std::vector<std::string>, std::vector<std::string>>;
+    auto tagChanges = std::vector<TagChange>{};
+    auto tagChangesConnection = sigc::scoped_connection{editor.signalTagsChanged().connect(
+      [&tagChanges](std::span<std::string const> adds, std::span<std::string const> removes)
+      {
+        tagChanges.emplace_back(
+          std::vector<std::string>{adds.begin(), adds.end()}, std::vector<std::string>{removes.begin(), removes.end()});
+      })};
+
+    SECTION("Clicking a suggested tag promotes it to a current chip")
+    {
+      auto* suggested = findWidgetByClass<Gtk::Button>(editor, "ao-tag-chip-suggested");
+      REQUIRE(suggested != nullptr);
+
+      emitClicked(*suggested);
+      drainGtkEvents();
+
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
+      CHECK(countChipsByClass(editor, "ao-tag-chip-suggested") == 0);
+      REQUIRE(tagChanges.size() == 1);
+      CHECK((tagChanges[0] == TagChange{{"Jazz"}, {}}));
+    }
+
+    SECTION("Add trigger expands inline and submits tag names")
+    {
+      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
+      auto* const entry = findWidgetByClass<Gtk::Entry>(editor, "ao-tags-entry");
+      REQUIRE(addButton != nullptr);
+      REQUIRE(entry != nullptr);
+      CHECK_FALSE(entry->get_visible());
+
+      emitClicked(*addButton);
+      drainGtkEvents();
+      CHECK(entry->get_visible());
+
+      entry->set_text("Funk");
+      emitActivate(*entry);
+      drainGtkEvents();
+
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 4);
+      CHECK(entry->get_text().empty()); // cleared for rapid successive adds
+      CHECK(entry->get_visible());      // stays open
+      REQUIRE(tagChanges.size() == 1);
+      CHECK((tagChanges[0] == TagChange{{"Funk"}, {}}));
+
+      std::int32_t position = 0;
+      entry->insert_text("123 Mix", -1, position);
+      CHECK(entry->get_text() == "123 Mix");
+
+      emitActivate(*entry);
+      drainGtkEvents();
+
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 5);
+      CHECK(currentChipWithLabel(editor, "123 Mix") != nullptr);
+      CHECK(entry->get_text().empty());
+      CHECK(entry->get_visible());
+      REQUIRE(tagChanges.size() == 2);
+      CHECK((tagChanges[1] == TagChange{{"Funk", "123 Mix"}, {}}));
+    }
+
+    SECTION("Clicking outside the open entry dismisses it without committing")
+    {
+      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
+      auto* const entry = findWidgetByClass<Gtk::Entry>(editor, "ao-tags-entry");
+      REQUIRE(addButton != nullptr);
+      REQUIRE(entry != nullptr);
+
+      emitClicked(*addButton);
+      drainGtkEvents();
+      REQUIRE(entry->get_visible());
+
+      entry->set_text("Funk"); // pending text must be discarded, never committed on an outside click
+      drainGtkEvents();
+
+      // Direct GestureClick emission proves the installed outside-press binding,
+      // not native GDK delivery or gesture arbitration.
+      REQUIRE(tryEmitWindowOutsideClick(window));
+      drainGtkEvents();
+
+      CHECK_FALSE(entry->get_visible());
+      CHECK(addButton->get_visible());
+      CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 3); // nothing added
+      CHECK(tagChanges.empty());
+    }
+
+    SECTION("Opening the add entry hides current tags and dismissing restores them")
+    {
+      auto* const addButton = findWidgetByClass<Gtk::Button>(editor, "ao-tag-add-trigger");
+      REQUIRE(addButton != nullptr);
+
+      auto* const rockChip = currentChipWithLabel(editor, "Rock");
+      REQUIRE(rockChip != nullptr);
+      CHECK(rockChip->get_visible()); // shown in the default browse view
+
+      emitClicked(*addButton);
+      drainGtkEvents();
+      CHECK_FALSE(rockChip->get_visible()); // hidden while adding/searching
+
+      REQUIRE(tryEmitWindowOutsideClick(window));
+      drainGtkEvents();
+      CHECK(rockChip->get_visible()); // restored once the entry is dismissed
     }
 
     SECTION("Typing in the add entry filters the suggested chips")
@@ -455,6 +499,8 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 2);
+      REQUIRE(tagChanges.size() == 1);
+      CHECK((tagChanges[0] == TagChange{{}, {kLongTag}}));
     }
 
     window.unset_child();

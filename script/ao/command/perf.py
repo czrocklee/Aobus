@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from ..core import builddir
@@ -85,7 +86,7 @@ def _revision() -> str:
 def _print_report(path: Path) -> None:
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise die(f"could not read performance report '{path}': {exc}") from exc
 
     if not isinstance(report, dict) or report.get("schema") != REPORT_SCHEMA:
@@ -93,19 +94,14 @@ def _print_report(path: Path) -> None:
 
     metadata = report.get("metadata")
     measurements = report.get("measurements")
-    if not isinstance(metadata, dict) or not isinstance(measurements, list):
-        raise die(f"performance report '{path}' is missing metadata or measurements")
+    if not isinstance(metadata, dict) or not isinstance(measurements, list) or not measurements:
+        raise die(f"performance report '{path}' is missing metadata or nonempty measurements")
 
     for key in ("platform", "build_mode", "compiler", "icu_version"):
         if not isinstance(metadata.get(key), str) or not metadata[key]:
             raise die(f"performance report '{path}' has invalid metadata field '{key}'")
 
-    print()
-    print(
-        f"Performance review: {metadata['platform']} {metadata['build_mode']} "
-        f"{metadata['compiler']}, ICU {metadata['icu_version']}"
-    )
-    print(f"  Source revision: {metadata.get('revision', 'unverified')}")
+    summaries = []
     for index, measurement in enumerate(measurements):
         context = f"measurement {index}"
         if not isinstance(measurement, dict):
@@ -144,8 +140,59 @@ def _print_report(path: Path) -> None:
         summary = f"  {'/'.join(dimensions)}: median {median_ms:.3f} ms, p95 {p95_ms:.3f} ms"
         if byte_metric is not None:
             summary += f", {byte_metric['count']} {byte_metric['kind']}"
+        summaries.append(summary)
+
+    print()
+    print(
+        f"Performance review: {metadata['platform']} {metadata['build_mode']} "
+        f"{metadata['compiler']}, ICU {metadata['icu_version']}"
+    )
+    print(f"  Source revision: {metadata.get('revision', 'unverified')}")
+    for summary in summaries:
         print(summary)
     print(f"  Report: {path}")
+
+
+def _validate_baseline_report(path: Path) -> None:
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise die(f"could not read baseline report '{path}': {exc}") from exc
+    if not isinstance(report, dict) or report.get("schema") != "aobus-performance-baseline/v1":
+        raise die(f"baseline report '{path}' has an unsupported schema")
+    records = report.get("records")
+    if not isinstance(records, list) or not records:
+        raise die(f"baseline report '{path}' has no records")
+    for record in records:
+        if not isinstance(record, dict) or not isinstance(record.get("benchmark"), str) or not record["benchmark"]:
+            raise die(f"baseline report '{path}' has an invalid benchmark")
+        metrics = record.get("metrics")
+        if not isinstance(metrics, list) or not metrics:
+            raise die(f"baseline report '{path}' has no metrics for '{record['benchmark']}'")
+        for metric in metrics:
+            if (
+                not isinstance(metric, dict)
+                or any(not isinstance(metric.get(key), str) or not metric[key] for key in ("name", "unit"))
+                or type(metric.get("value")) is not int
+            ):
+                raise die(f"baseline report '{path}' has an invalid metric")
+
+
+def _prepare_outputs(output: Path, baseline: Path | None) -> None:
+    paths = [output] if baseline is None else [output, baseline]
+    # Inspect all destinations before deleting either artifact. Symlinks and
+    # special files are not report destinations; hard-link aliases collide too.
+    for path in paths:
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise die(f"performance report destination is not a regular file: {path}")
+    if baseline is not None and (
+        output.resolve() == baseline.resolve() or (output.exists() and baseline.exists() and output.samefile(baseline))
+    ):
+        raise die("v1 and v2 performance reports require distinct output paths")
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -177,11 +224,13 @@ def run_command(args: argparse.Namespace) -> int:
             expected_build_type={"debug": "Debug", "release": "Release", "profile": "RelWithDebInfo"}[args.flavor],
         )
     )
-    output = args.output if args.output is not None else build_dir / "performance-review.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.unlink(missing_ok=True)
+    output = (args.output if args.output is not None else build_dir / "performance-review.json").absolute()
+    baseline_request = os.environ.get("AOBUS_PERF_BASELINE_JSON", "")
+    baseline = Path(baseline_request).absolute() if baseline_request else None
+    _prepare_outputs(output, baseline)
     environment = {
         "AOBUS_PERF_REPORT_JSON": str(output),
+        "AOBUS_PERF_BASELINE_JSON": str(baseline) if baseline is not None else "",
         "AOBUS_PERF_SAMPLES": str(args.samples),
         "AOBUS_PERF_WARMUPS": str(args.warmups),
         "AOBUS_PERF_REVISION": "unverified" if args.no_build else _revision(),
@@ -197,5 +246,7 @@ def run_command(args: argparse.Namespace) -> int:
     if not output.is_file():
         raise die(f"performance review workload did not produce '{output}'")
 
+    if baseline is not None:
+        _validate_baseline_report(baseline)
     _print_report(output)
     return 0

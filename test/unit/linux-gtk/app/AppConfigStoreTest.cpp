@@ -42,88 +42,97 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists("config.yaml"));
   }
 
-  TEST_CASE("AppConfigStore - persists session and application preferences", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - missing configuration preserves window defaults", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
 
-    SECTION("Load non-existent config returns default values")
-    {
-      auto const configStore = AppConfigStore{configPath};
+    auto const configStore = AppConfigStore{configPath};
 
-      auto windowState = WindowState{};
-      windowState.width = 1200;
-      windowState.height = 800;
-      configStore.loadWindow(windowState);
+    auto windowState = WindowState{};
+    windowState.width = 1200;
+    windowState.height = 800;
+    configStore.loadWindow(windowState);
 
-      // Default loaded when not found should not modify the values
-      CHECK(windowState.width == 1200);
-      CHECK(windowState.height == 800);
-    }
+    // Default loaded when not found should not modify the values
+    CHECK(windowState.width == 1200);
+    CHECK(windowState.height == 800);
+  }
 
-    SECTION("Save and load WindowState")
-    {
-      auto configStore = AppConfigStore{configPath};
+  TEST_CASE("AppConfigStore - persists window state", "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto configStore = AppConfigStore{configPath};
 
-      auto saveState = WindowState{};
-      saveState.width = 1440;
-      saveState.height = 900;
-      saveState.maximized = true;
+    auto saveState = WindowState{};
+    saveState.width = 1440;
+    saveState.height = 900;
+    saveState.maximized = true;
 
-      configStore.saveWindow(saveState);
+    configStore.saveWindow(saveState);
 
-      auto const restoredStore = AppConfigStore{configPath};
-      auto loadState = WindowState{};
-      restoredStore.loadWindow(loadState);
+    auto const restoredStore = AppConfigStore{configPath};
+    auto loadState = WindowState{};
+    restoredStore.loadWindow(loadState);
 
-      CHECK(loadState.width == 1440);
-      CHECK(loadState.height == 900);
-      CHECK(loadState.maximized == true);
-    }
+    CHECK(loadState.width == 1440);
+    CHECK(loadState.height == 900);
+    CHECK(loadState.maximized == true);
+  }
 
-    SECTION("Save and load AppPrefsState")
-    {
-      auto configStore = AppConfigStore{configPath};
+  TEST_CASE("AppConfigStore - persists application preferences", "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto configStore = AppConfigStore{configPath};
 
-      auto savePrefs = rt::AppPrefsState{};
-      savePrefs.preferredOutputSelection.backendId = audio::BackendId{"test-backend"};
-      savePrefs.preferredOutputSelection.deviceId = audio::DeviceId{"test-device"};
-      savePrefs.preferredOutputSelection.profileId = audio::ProfileId{"test-profile"};
-      savePrefs.lastLayoutPreset = "modern";
-      savePrefs.lastThemePreset = "modern";
-      configStore.saveAppPrefs(savePrefs);
+    auto savePrefs = rt::AppPrefsState{};
+    savePrefs.preferredOutputSelection.backendId = audio::BackendId{"test-backend"};
+    savePrefs.preferredOutputSelection.deviceId = audio::DeviceId{"test-device"};
+    savePrefs.preferredOutputSelection.profileId = audio::ProfileId{"test-profile"};
+    savePrefs.lastLayoutPreset = "modern";
+    savePrefs.lastThemePreset = "modern";
+    configStore.saveAppPrefs(savePrefs);
 
-      auto const restoredStore = AppConfigStore{configPath};
-      auto loadPrefs = rt::AppPrefsState{};
-      restoredStore.loadAppPrefs(loadPrefs);
+    auto const restoredStore = AppConfigStore{configPath};
+    auto loadPrefs = rt::AppPrefsState{};
+    restoredStore.loadAppPrefs(loadPrefs);
 
-      CHECK(loadPrefs.preferredOutputSelection.backendId == "test-backend");
-      CHECK(loadPrefs.preferredOutputSelection.deviceId == "test-device");
-      CHECK(loadPrefs.preferredOutputSelection.profileId == "test-profile");
-      CHECK(loadPrefs.lastLayoutPreset == "modern");
-      CHECK(loadPrefs.lastThemePreset == "modern");
-    }
+    CHECK(loadPrefs.preferredOutputSelection.backendId == "test-backend");
+    CHECK(loadPrefs.preferredOutputSelection.deviceId == "test-device");
+    CHECK(loadPrefs.preferredOutputSelection.profileId == "test-profile");
+    CHECK(loadPrefs.lastLayoutPreset == "modern");
+    CHECK(loadPrefs.lastThemePreset == "modern");
+  }
 
-    SECTION("Save and load AppSessionState")
-    {
-      auto configStore = AppConfigStore{configPath};
+  TEST_CASE("AppConfigStore - persists session state", "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto configStore = AppConfigStore{configPath};
 
-      auto saveSession = rt::AppSessionState{};
-      saveSession.lastLibraryPath = "/tmp/music";
-      saveSession.lastOutputSelection.backendId = audio::BackendId{"session-backend"};
-      saveSession.lastOutputSelection.deviceId = audio::DeviceId{"session-device"};
-      saveSession.lastOutputSelection.profileId = audio::ProfileId{"session-profile"};
-      REQUIRE(configStore.saveAppSession(saveSession));
+    auto saveSession = rt::AppSessionState{};
+    saveSession.lastLibraryPath = "/tmp/music";
+    saveSession.lastOutputSelection.backendId = audio::BackendId{"session-backend"};
+    saveSession.lastOutputSelection.deviceId = audio::DeviceId{"session-device"};
+    saveSession.lastOutputSelection.profileId = audio::ProfileId{"session-profile"};
+    REQUIRE(configStore.saveAppSession(saveSession));
 
-      auto const restoredStore = AppConfigStore{configPath};
-      auto loadSession = rt::AppSessionState{};
-      restoredStore.loadAppSession(loadSession);
+    auto const restoredStore = AppConfigStore{configPath};
+    auto loadSession = rt::AppSessionState{};
+    restoredStore.loadAppSession(loadSession);
 
-      CHECK(loadSession.lastLibraryPath == "/tmp/music");
-      CHECK(loadSession.lastOutputSelection.backendId == "session-backend");
-      CHECK(loadSession.lastOutputSelection.deviceId == "session-device");
-      CHECK(loadSession.lastOutputSelection.profileId == "session-profile");
-    }
+    CHECK(loadSession.lastLibraryPath == "/tmp/music");
+    CHECK(loadSession.lastOutputSelection.backendId == "session-backend");
+    CHECK(loadSession.lastOutputSelection.deviceId == "session-device");
+    CHECK(loadSession.lastOutputSelection.profileId == "session-profile");
+  }
+
+  TEST_CASE("AppConfigStore - window decoding admits compatible fields atomically", "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
 
     SECTION("Partial window groups retain seeded fields and allow unknown keys")
     {
@@ -159,31 +168,33 @@ namespace ao::gtk::test
       CHECK(state.height == 480);
       CHECK(state.maximized);
     }
+  }
 
-    SECTION("Partial preference groups retain seeded output fields")
-    {
-      auto output = std::ofstream{configPath};
-      output << "runtime:\n"
-                "  lastOutputBackendId: replacement-backend\n";
-      output.close();
+  TEST_CASE("AppConfigStore - partial preferences retain seeded output fields", "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto output = std::ofstream{configPath};
+    output << "runtime:\n"
+              "  lastOutputBackendId: replacement-backend\n";
+    output.close();
 
-      auto const configStore = AppConfigStore{configPath};
-      auto state = rt::AppPrefsState{};
-      state.preferredOutputSelection = {
-        .backendId = audio::BackendId{"seed-backend"},
-        .deviceId = audio::DeviceId{"seed-device"},
-        .profileId = audio::ProfileId{"seed-profile"},
-      };
-      configStore.loadAppPrefs(state);
+    auto const configStore = AppConfigStore{configPath};
+    auto state = rt::AppPrefsState{};
+    state.preferredOutputSelection = {
+      .backendId = audio::BackendId{"seed-backend"},
+      .deviceId = audio::DeviceId{"seed-device"},
+      .profileId = audio::ProfileId{"seed-profile"},
+    };
+    configStore.loadAppPrefs(state);
 
-      CHECK(state.preferredOutputSelection.backendId == "replacement-backend");
-      CHECK(state.preferredOutputSelection.deviceId == "seed-device");
-      CHECK(state.preferredOutputSelection.profileId == "seed-profile");
-    }
+    CHECK(state.preferredOutputSelection.backendId == "replacement-backend");
+    CHECK(state.preferredOutputSelection.deviceId == "seed-device");
+    CHECK(state.preferredOutputSelection.profileId == "seed-profile");
   }
 
   TEST_CASE("preferredOutputDeviceRecorder - a recorded route updates only the preferred selection",
-            "[gtk][regression][app][config]")
+            "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app_config.yaml");
@@ -202,8 +213,9 @@ namespace ao::gtk::test
 
     // Choosing a device states a preference for the next start; it is not a
     // reason to forget the unrelated preferences already stored beside it.
+    auto const restoredStore = AppConfigStore{tempDir.path() / "app_config.yaml"};
     auto loadedPrefs = rt::AppPrefsState{};
-    configStorePtr->loadAppPrefs(loadedPrefs);
+    restoredStore.loadAppPrefs(loadedPrefs);
     CHECK(loadedPrefs.preferredOutputSelection == selection);
     CHECK(loadedPrefs.lastLayoutPreset == "classic");
     CHECK(loadedPrefs.lastThemePreset == "modern");

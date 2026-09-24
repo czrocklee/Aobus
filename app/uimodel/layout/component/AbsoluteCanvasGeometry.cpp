@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 
@@ -101,7 +102,31 @@ namespace ao::uimodel
       return value;
     }
 
-    return ((value + (gridSize / 2)) / gridSize) * gridSize;
+    auto const wideGrid = static_cast<std::int64_t>(gridSize);
+    auto const shifted = static_cast<std::int64_t>(value) + (wideGrid / 2);
+    auto quotient = shifted / wideGrid;
+
+    if (shifted % wideGrid < 0)
+    {
+      --quotient; // Convert truncating division to floor division.
+    }
+
+    auto snapped = quotient * wideGrid;
+
+    // Keep the intermediate representable before narrowing.
+    constexpr auto kMin = static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::min());
+    constexpr auto kMax = static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max());
+
+    if (snapped < kMin)
+    {
+      snapped += wideGrid;
+    }
+    else if (snapped > kMax)
+    {
+      snapped -= wideGrid;
+    }
+
+    return static_cast<std::int32_t>(snapped);
   }
 
   AbsoluteCanvasRect updateAbsoluteCanvasMoveDrag(AbsoluteCanvasRect startRect,
@@ -169,12 +194,16 @@ namespace ao::uimodel
     return rect;
   }
 
-  AbsoluteCanvasRect commitAbsoluteCanvasResizeDrag(AbsoluteCanvasRect rect, bool snapToGrid, std::int32_t gridSize)
+  AbsoluteCanvasRect commitAbsoluteCanvasResizeDrag(AbsoluteCanvasRect rect,
+                                                    std::int32_t minWidth,
+                                                    std::int32_t minHeight,
+                                                    bool snapToGrid,
+                                                    std::int32_t gridSize)
   {
     rect.x = snapAbsoluteCanvasValue(rect.x, snapToGrid, gridSize);
     rect.y = snapAbsoluteCanvasValue(rect.y, snapToGrid, gridSize);
-    rect.width = snapAbsoluteCanvasValue(rect.width, snapToGrid, gridSize);
-    rect.height = snapAbsoluteCanvasValue(rect.height, snapToGrid, gridSize);
+    rect.width = std::max(minWidth, snapAbsoluteCanvasValue(rect.width, snapToGrid, gridSize));
+    rect.height = std::max(minHeight, snapAbsoluteCanvasValue(rect.height, snapToGrid, gridSize));
     return rect;
   }
 

@@ -12,6 +12,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/enums.h>
 #include <gtkmm/paned.h>
 
 #include <cstdint>
@@ -22,7 +23,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::AllocationHost;
 
-  TEST_CASE("SplitComponent - applies sizing and persists panel state", "[gtk][unit][geometry]")
+  TEST_CASE("SplitComponent - applies authored and percentage sizing", "[gtk][unit][layout-component][geometry]")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -45,6 +46,11 @@ namespace ao::gtk::layout::test
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
+
+      CHECK(paned->get_orientation() == Gtk::Orientation::HORIZONTAL);
+      REQUIRE(paned->get_start_child() != nullptr);
+      REQUIRE(paned->get_end_child() != nullptr);
+      CHECK(paned->get_start_child() != paned->get_end_child());
 
       int const expectedPosition = 200;
       CHECK(paned->get_position() == expectedPosition);
@@ -72,6 +78,38 @@ namespace ao::gtk::layout::test
 
       CHECK(paned->get_position() == 300);
     }
+
+    SECTION("vertical split percent position uses container height")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "split";
+      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+      doc.root.props["initialPositionPercent"] = LayoutValue{0.25};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+      auto* const paned = splitPaned(*compPtr);
+
+      REQUIRE(paned != nullptr);
+      CHECK(paned->get_orientation() == Gtk::Orientation::VERTICAL);
+      REQUIRE(paned->get_start_child() != nullptr);
+      REQUIRE(paned->get_end_child() != nullptr);
+
+      auto allocationHost = AllocationHost{compPtr->widget()};
+      allocationHost.allocateChild(1200, 400);
+
+      CHECK(paned->get_position() == 100);
+    }
+  }
+
+  TEST_CASE("SplitComponent - restores guarded persisted positions", "[gtk][unit][layout-component][geometry]")
+  {
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("split persisted percent overrides layout percent after allocation")
     {
@@ -104,6 +142,38 @@ namespace ao::gtk::layout::test
       CHECK(paned->get_position() == 600);
     }
 
+    SECTION("vertical split restores persisted percent from container height")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.id = "main-paned";
+      doc.root.type = "split";
+      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+      doc.root.props["initialPositionPercent"] = LayoutValue{0.25};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["main-paned"] = LayoutComponentStateEntry{
+        .type = "split",
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
+        .state = {{"positionPercent", LayoutValue{0.6}}},
+      };
+      fixture.setComponentState("classic", state);
+
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+      auto* const paned = splitPaned(*compPtr);
+
+      REQUIRE(paned != nullptr);
+      CHECK(paned->get_orientation() == Gtk::Orientation::VERTICAL);
+
+      auto allocationHost = AllocationHost{compPtr->widget()};
+      allocationHost.allocateChild(1000, 400);
+
+      CHECK(paned->get_position() == 240);
+    }
+
     SECTION("split persisted percent with stale baseline falls back to layout percent")
     {
       auto doc = LayoutDocument{};
@@ -134,6 +204,59 @@ namespace ao::gtk::layout::test
 
       CHECK(paned->get_position() == 250);
     }
+
+    SECTION("split clamps persisted percent to [0, 1]")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.id = "main-paned";
+      doc.root.type = "split";
+      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
+      doc.root.props["initialPositionPercent"] = LayoutValue{0.25};
+
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+      doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+      auto state = LayoutComponentStateDocument{.preset = "classic"};
+      state.components["main-paned"] = LayoutComponentStateEntry{
+        .type = "split",
+        .stateVersion = kStateEntryVersion,
+        .baselineHash = componentBaselineHash(doc.root),
+        .state = {{"positionPercent", LayoutValue{1.5}}},
+      };
+      fixture.setComponentState("classic", state);
+
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+      auto* const paned = splitPaned(*compPtr);
+      REQUIRE(paned != nullptr);
+
+      auto allocationHost = AllocationHost{compPtr->widget()};
+      allocationHost.allocateChild(800, 400);
+
+      // GTK may clamp the paned handle one pixel inside the total allocation.
+      CHECK(paned->get_position() >= 799);
+      CHECK(paned->get_position() <= 800);
+
+      state.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
+      fixture.setComponentState("classic", state);
+
+      auto const lowPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+      auto* const lowPaned = splitPaned(*lowPtr);
+      REQUIRE(lowPaned != nullptr);
+
+      auto lowAllocationHost = AllocationHost{lowPtr->widget()};
+      lowAllocationHost.allocateChild(800, 400);
+
+      CHECK(lowPaned->get_position() == 0);
+    }
+  }
+
+  TEST_CASE("SplitComponent - persists positions and fences retired generations",
+            "[gtk][unit][layout-component][geometry][async]")
+  {
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("split saves user percent and rebuild restores it")
     {
@@ -229,49 +352,6 @@ namespace ao::gtk::layout::test
 
       CHECK(stateStore.saveCount() == 0);
       CHECK(stateStore.document().components.empty());
-    }
-
-    SECTION("split clamps persisted percent to [0, 1]")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.id = "main-paned";
-      doc.root.type = "split";
-      doc.root.props["orientation"] = LayoutValue{std::string{"horizontal"}};
-      doc.root.props["initialPositionPercent"] = LayoutValue{0.25};
-
-      doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      doc.root.children.push_back(LayoutNode{.type = "spacer"});
-
-      auto state = LayoutComponentStateDocument{.preset = "classic"};
-      state.components["main-paned"] = LayoutComponentStateEntry{
-        .type = "split",
-        .stateVersion = kStateEntryVersion,
-        .baselineHash = componentBaselineHash(doc.root),
-        .state = {{"positionPercent", LayoutValue{1.5}}},
-      };
-      fixture.setComponentState("classic", state);
-
-      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
-      auto* const paned = splitPaned(*compPtr);
-      REQUIRE(paned != nullptr);
-
-      auto allocationHost = AllocationHost{compPtr->widget()};
-      allocationHost.allocateChild(800, 400);
-
-      // GTK may clamp the paned handle one pixel inside the total allocation.
-      CHECK(paned->get_position() >= 790);
-
-      state.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
-      fixture.setComponentState("classic", state);
-
-      auto const lowPtr = layoutRuntime.build(ctx, preparedLayout(doc));
-      auto* const lowPaned = splitPaned(*lowPtr);
-      REQUIRE(lowPaned != nullptr);
-
-      auto lowAllocationHost = AllocationHost{lowPtr->widget()};
-      lowAllocationHost.allocateChild(800, 400);
-
-      CHECK(lowPaned->get_position() == 0);
     }
   }
 } // namespace ao::gtk::layout::test

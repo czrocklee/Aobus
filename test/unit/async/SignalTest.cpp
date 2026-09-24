@@ -209,7 +209,8 @@ namespace ao::async::test
     secondSub.reset();
   }
 
-  TEST_CASE("Signal - post owns decayed payload and defers reentrant posts to a later turn", "[core][unit][signal]")
+  TEST_CASE("Signal - post owns decayed payload and defers reentrant posts to a later turn",
+            "[core][unit][signal][concurrency]")
   {
     auto executor = LoopExecutor{};
     auto signal = Signal<std::string const&>{};
@@ -238,7 +239,7 @@ namespace ao::async::test
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("Signal - posted emission becomes a no-op after owner destruction", "[core][unit][signal]")
+  TEST_CASE("Signal - posted emission becomes a no-op after owner destruction", "[core][unit][signal][concurrency]")
   {
     auto executor = LoopExecutor{};
     auto signalPtr = std::make_unique<Signal<std::int32_t>>();

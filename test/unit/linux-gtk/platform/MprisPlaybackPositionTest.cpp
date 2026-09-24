@@ -61,7 +61,7 @@ namespace ao::gtk::platform::test
   } // namespace
 
   TEST_CASE("MprisPlaybackEndpoint - valid SetPosition survives an orthogonal backlog",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -98,7 +98,7 @@ namespace ao::gtk::platform::test
     CHECK(snapshots[2].finalSeekRevision.value == before.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress", "[gtk][regression][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress", "[gtk][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -116,7 +116,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - relative past-end Seek decides from live playback progress",
-            "[gtk][regression][mpris]")
+            "[gtk][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -133,7 +133,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - queued relative Seek samples at execution rather than admission",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -164,7 +164,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - queued positioning cannot act on a replayed occurrence",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -197,7 +197,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - past-end Seek does not skip a pending realtime successor",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][integration][mpris][concurrency]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -211,7 +211,8 @@ namespace ao::gtk::platform::test
     CHECK(fixture.application.successionPtr->state().optResolvedSuccessor == fixture.application.thirdTrackId);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative Seek preserves endpoint and overflow behavior", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative Seek preserves endpoint and overflow behavior",
+            "[gtk][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -254,7 +255,8 @@ namespace ao::gtk::platform::test
     CHECK(after.finalSeekRevision.value == expectedFinalRevision);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - positive past-end Seek without a successor is a no-op", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - positive past-end Seek without a successor is a no-op",
+            "[gtk][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     REQUIRE(fixture.application.playAndWait(fixture.application.thirdTrackId));
@@ -270,7 +272,7 @@ namespace ao::gtk::platform::test
     CHECK(after.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor", "[gtk][regression][mpris]")
+  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor", "[gtk][unit][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto snapshot = fixture.playback.snapshot();

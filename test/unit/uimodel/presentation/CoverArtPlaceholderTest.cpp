@@ -33,8 +33,13 @@ namespace ao::uimodel::test
     {
       auto const id = coverArtPlaceholderStyleId(style);
       CHECK(id == expectedId);
-      REQUIRE(parseCoverArtPlaceholderStyle(id));
-      CHECK(*parseCoverArtPlaceholderStyle(id) == style);
+      auto const optParsed = parseCoverArtPlaceholderStyle(id);
+      REQUIRE(optParsed);
+      CHECK(*optParsed == style);
+
+      auto const presentation =
+        makeCoverArtPlaceholderPresentation(style, CoverArtPlaceholderIdentity{.primaryText = "Synthetic Sun"});
+      CHECK(presentation.style == style);
     }
 
     CHECK_FALSE(parseCoverArtPlaceholderStyle("target"));

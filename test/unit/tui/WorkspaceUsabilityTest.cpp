@@ -26,8 +26,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("StatusBar - narrow filtered workspaces keep the condition and recovery controls",
-            "[tui][regression][usability]")
+  TEST_CASE("StatusBar - narrow filtered workspaces keep the condition and recovery controls", "[tui][unit][usability]")
   {
     for (auto const* locale : {"en", "de", "zh-Hans"})
     {
@@ -61,7 +60,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("StatusBar - narrow warning remains discoverable without displacing filter recovery",
-            "[tui][regression][usability]")
+            "[tui][unit][usability]")
   {
     auto activity = uimodel::ActivityStatusViewState{
       .compact = {.kind = uimodel::ActivityStatusKind::Warning, .text = "An actionable warning"}};
@@ -110,8 +109,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("Tab complete"));
   }
 
-  TEST_CASE("PlaybackBar - narrow terminals retain title time and the complete volume value",
-            "[tui][regression][usability]")
+  TEST_CASE("PlaybackBar - narrow terminals retain title time and the complete volume value", "[tui][unit][usability]")
   {
     for (auto const* locale : {"en", "de", "zh-Hans"})
     {
@@ -137,7 +135,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackTable - narrow empty-state guidance wraps instead of losing the recovery instruction",
-            "[tui][regression][usability]")
+            "[tui][unit][usability]")
   {
     auto const rendered = renderElement(
       trackTableView(ao::test::englishMessageCatalog(),
@@ -169,7 +167,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("QuickFilter - narrow German guidance preserves the complete no-suggestion explanation",
-            "[tui][regression][usability]")
+            "[tui][unit][usability]")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::QuickFilter);
@@ -182,8 +180,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("Esc Filter behalten"));
   }
 
-  TEST_CASE("PlaybackBar - missing title metadata does not masquerade as absent playback",
-            "[tui][regression][usability]")
+  TEST_CASE("PlaybackBar - missing title metadata does not masquerade as absent playback", "[tui][unit][usability]")
   {
     auto state = rt::PlaybackTransportSnapshot{};
     state.nowPlaying.trackId = TrackId{42};
@@ -194,7 +191,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("StatusBar - empty track selections retire play and tag action hints and mouse targets",
-            "[tui][regression][usability]")
+            "[tui][unit][usability]")
   {
     auto actions = std::list<StatusActionHitRegion>{};
 
@@ -207,6 +204,7 @@ namespace ao::tui::test
         200,
         1);
       CHECK(rendered.text.contains("Tags") == hasSelection);
+      CHECK(rendered.text.contains("play") == hasSelection);
       CHECK(std::ranges::any_of(actions,
                                 [](StatusActionHitRegion const& region)
                                 { return region.action == KeyAction::EditTags && !region.box.IsEmpty(); }) ==

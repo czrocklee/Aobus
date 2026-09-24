@@ -105,8 +105,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - entryCount reports visible row cardinality",
-            "[lmdb][unit][database-reader][entry-count]")
+  TEST_CASE("IntegerKeyDatabase::Reader - entryCount reports visible row cardinality", "[lmdb][unit][database][reader]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -214,7 +213,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("IntegerKeyDatabase::Reader::Iterator - destruction remains safe after a read transaction ends",
-            "[lmdb][regression][cursor-lifetime]")
+            "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -238,7 +237,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - destruction remains safe after its transaction object is gone",
-            "[lmdb][regression][cursor-lifetime]")
+            "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

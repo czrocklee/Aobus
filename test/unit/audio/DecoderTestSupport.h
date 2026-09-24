@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace ao::audio
 {
@@ -21,6 +22,10 @@ namespace ao::audio::test
     std::uint64_t frames = 0;
     std::optional<Error> optError;
   };
+
+  std::int16_t readSigned16LePcmSample(std::span<std::byte const> bytes, std::size_t index);
+  std::int32_t readSigned24PackedLePcmSample(std::span<std::byte const> bytes, std::size_t index);
+  std::int32_t readSigned32LePcmSample(std::span<std::byte const> bytes, std::size_t index);
 
   std::uint64_t readUntilStableEndOfStream(DecoderSession& decoder, std::size_t maxBlocks);
   TerminalReadResult readUntilTerminalState(DecoderSession& decoder, std::size_t maxBlocks);

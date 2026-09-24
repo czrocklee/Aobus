@@ -29,6 +29,7 @@
 #include <glibmm/variant.h>
 #include <glibmm/variantdbusstring.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <initializer_list>
@@ -186,6 +187,7 @@ namespace ao::gtk::platform
     MprisPlaybackEndpoint endpoint;
     Glib::RefPtr<Gio::DBus::Connection> connectionPtr{};
     Glib::RefPtr<Gio::DBus::NodeInfo> nodeInfoPtr{};
+    utility::ScopedRegistration instanceRegistration{};
     utility::ScopedRegistration ownerRegistration{};
     utility::ScopedRegistration rootObjectRegistration{};
     utility::ScopedRegistration playerObjectRegistration{};
@@ -217,32 +219,52 @@ namespace ao::gtk::platform
 
     void start()
     {
-      if (ownerRegistration)
+      if (instanceRegistration)
       {
         return;
       }
 
-      subscribePlayback();
-      auto const ownerId = Gio::DBus::own_name(
-        Gio::DBus::BusType::SESSION,
-        kBusName,
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
-        { handleBusAcquired(busConnectionPtr, name); },
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
-        { handleNameAcquired(busConnectionPtr, name); },
-        [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
-        { handleNameLost(busConnectionPtr, name); },
-        Gio::DBus::BusNameOwnerFlags::NONE);
+      // GIO shares the session connection and requires same-name own/unown
+      // calls to alternate. Reserve this process's single canonical export
+      // until the previous owner token has been retired, including startup.
+      static auto instanceClaimed = std::atomic_flag{};
 
-      if (ownerId == 0)
+      if (instanceClaimed.test_and_set(std::memory_order_acquire))
       {
-        clearArt();
-        subscriptions.clear();
-        APP_LOG_WARN("MPRIS disabled: failed to request D-Bus name ownership");
+        APP_LOG_WARN("MPRIS disabled: another bridge already requested the canonical name");
         return;
       }
 
-      ownerRegistration = utility::ScopedRegistration{[ownerId] { Gio::DBus::unown_name(ownerId); }};
+      instanceRegistration = utility::ScopedRegistration{[] { instanceClaimed.clear(std::memory_order_release); }};
+
+      try
+      {
+        subscribePlayback();
+        auto const ownerId = Gio::DBus::own_name(
+          Gio::DBus::BusType::SESSION,
+          kBusName,
+          [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+          { handleBusAcquired(busConnectionPtr, name); },
+          [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+          { handleNameAcquired(busConnectionPtr, name); },
+          [this](Glib::RefPtr<Gio::DBus::Connection> const& busConnectionPtr, Glib::ustring const& name)
+          { handleNameLost(busConnectionPtr, name); },
+          Gio::DBus::BusNameOwnerFlags::DO_NOT_QUEUE);
+
+        if (ownerId == 0)
+        {
+          stop();
+          APP_LOG_WARN("MPRIS disabled: failed to request D-Bus name ownership");
+          return;
+        }
+
+        ownerRegistration = utility::ScopedRegistration{[ownerId] { Gio::DBus::unown_name(ownerId); }};
+      }
+      catch (...)
+      {
+        stop();
+        throw;
+      }
     }
 
     void stop()
@@ -250,6 +272,8 @@ namespace ao::gtk::platform
       clearArt();
       subscriptions.clear();
       releaseBusState();
+      ownerRegistration.reset();
+      instanceRegistration.reset();
     }
 
     void clearArt() { artUrlSession.clear(); }
@@ -581,7 +605,6 @@ namespace ao::gtk::platform
     {
       playerObjectRegistration.reset();
       rootObjectRegistration.reset();
-      ownerRegistration.reset();
       connectionPtr.reset();
       nodeInfoPtr.reset();
       nameAcquired = false;
@@ -618,9 +641,7 @@ namespace ao::gtk::platform
       if (!rootObjectRegistration || !playerObjectRegistration)
       {
         APP_LOG_WARN("MPRIS disabled: D-Bus name {} acquired without registered objects", name.raw());
-        clearArt();
-        subscriptions.clear();
-        releaseBusState();
+        stop();
         return;
       }
 
@@ -633,6 +654,9 @@ namespace ao::gtk::platform
       clearArt();
       subscriptions.clear();
       releaseBusState();
+      // GLib finishes updating the owner's release state after this callback.
+      // Unowning here can release another owner's name on the shared connection.
+      // Keep the non-queued token until explicit teardown outside this callback.
       APP_LOG_WARN("MPRIS disabled: failed to acquire D-Bus name {}", name.raw());
     }
 

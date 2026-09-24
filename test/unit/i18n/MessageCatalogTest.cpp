@@ -4,6 +4,7 @@
 #include <ao/i18n/MessageCatalog.h>
 
 #include <ao/Error.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -17,10 +18,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <barrier>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <latch>
 #include <limits>
 #include <string_view>
 #include <thread>
@@ -35,7 +36,7 @@ namespace ao::i18n::test
   static_assert(!std::constructible_from<MessageArgument, std::string_view, bool>);
   static_assert(!std::constructible_from<MessageArgument, std::string_view, MessageId>);
 
-  TEST_CASE("MessageCatalog - Settings steps use singular and plural forms", "[core][regression][catalog]")
+  TEST_CASE("MessageCatalog - Settings steps use singular and plural forms", "[core][unit][catalog]")
   {
     struct Forms final
     {
@@ -62,7 +63,7 @@ namespace ao::i18n::test
   }
 
   TEST_CASE("MessageCatalog - selectable locales resolve packaged translations without fallback",
-            "[core][regression][catalog]")
+            "[core][unit][catalog]")
   {
     auto const locales = availableCatalogLocales();
     REQUIRE_FALSE(locales.empty());
@@ -195,7 +196,7 @@ namespace ao::i18n::test
     CHECK(invalidRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("MessageCatalog - exposes the internal root resource as English", "[core][regression][catalog]")
+  TEST_CASE("MessageCatalog - exposes the internal root resource as English", "[core][unit][catalog]")
   {
     auto rootRes = MessageCatalog::create("root");
     REQUIRE(rootRes);
@@ -216,7 +217,7 @@ namespace ao::i18n::test
 
 #ifndef _WIN32
 
-  TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English", "[core][regression][catalog]")
+  TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English", "[core][unit][catalog]")
   {
     auto const originalLocale = std::string{::uloc_getDefault()};
     auto const restoreLocale = gsl_lite::finally(
@@ -403,31 +404,36 @@ namespace ao::i18n::test
     CHECK(oversizedRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("MessageCatalog - one published catalog formats concurrently", "[core][unit][catalog][concurrency]")
+  TEST_CASE("MessageCatalog - one published catalog formats concurrently", "[core][unit][catalog][concurrency][stress]")
   {
     auto catalogRes = MessageCatalog::create("de-DE");
     REQUIRE(catalogRes);
     auto const catalog = *catalogRes;
 
     constexpr std::size_t kThreadCount = 8;
-    auto start = std::barrier{static_cast<std::ptrdiff_t>(kThreadCount)};
+    auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
+    auto start = std::latch{1};
     auto succeeded = std::atomic{true};
     auto threads = std::vector<std::jthread>{};
     threads.reserve(kThreadCount);
+    auto releaseWorkers = utility::ScopedRegistration{[&start] { start.count_down(); }};
 
     for (std::size_t threadIndex = 0; threadIndex < kThreadCount; ++threadIndex)
     {
       threads.emplace_back(
-        [catalog, &start, &succeeded, threadIndex]
+        [catalog, &ready, &start, &succeeded, threadIndex]
         {
-          start.arrive_and_wait();
+          ready.count_down();
+          start.wait();
+          constexpr auto kExpectedCounts = std::to_array({"1 Titel", "2 Titel", "3 Titel"});
 
           for (std::size_t iteration = 0; iteration < 200; ++iteration)
           {
-            auto const arguments = std::array{MessageArgument{"count", ((threadIndex + iteration) % 3) + 1}};
+            auto const count = ((threadIndex + iteration) % 3) + 1;
+            auto const arguments = std::array{MessageArgument{"count", count}};
             auto messageRes = catalog.format(MessageId::PilotTrackCount, arguments);
 
-            if (!messageRes || messageRes->locale != "de" || !messageRes->text.contains("Titel"))
+            if (!messageRes || messageRes->locale != "de" || messageRes->text != kExpectedCounts[count - 1])
             {
               succeeded.store(false, std::memory_order_relaxed);
               return;
@@ -436,7 +442,32 @@ namespace ao::i18n::test
         });
     }
 
+    ready.wait();
+    releaseWorkers.reset();
     threads.clear();
     CHECK(succeeded.load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("MessageCatalog - resolves German and pseudo shell copy", "[core][unit][catalog]")
+  {
+    auto germanRes = MessageCatalog::create("de-DE");
+    REQUIRE(germanRes);
+    auto const& german = *germanRes;
+    CHECK(requiredText(german, MessageId::GtkShellMenuFile) == "Datei");
+    CHECK(requiredText(german, MessageId::GtkShellOpenLibrary) == "Bibliothek öffnen...");
+    CHECK(requiredText(german, MessageId::GtkShellApplicationMenu) == "Anwendungsmenü");
+    CHECK(requiredText(german, MessageId::GtkLibraryQuickFilterPlaceholder) ==
+          "Titel, Interpreten, Alben und Tags durchsuchen...");
+    CHECK(requiredText(german, MessageId::GtkSmartListPreview) == "Vorschau");
+    CHECK(requiredText(german, MessageId::ListManualOrder) == "Manuelle Reihenfolge");
+    CHECK(requiredText(german, MessageId::GtkListMoveToTopAction) ==
+          "An den Anfang der manuellen Reihenfolge verschieben");
+
+    auto pseudoRes = MessageCatalog::create("qps-ploc");
+    REQUIRE(pseudoRes);
+    auto const& pseudo = *pseudoRes;
+    CHECK(requiredText(pseudo, MessageId::GtkShellMenuFile) != "File");
+    CHECK(requiredText(pseudo, MessageId::GtkShellOpenLibrary).contains("..."));
+    CHECK(requiredText(pseudo, MessageId::GtkSmartListNewTitle) != "New List");
   }
 } // namespace ao::i18n::test

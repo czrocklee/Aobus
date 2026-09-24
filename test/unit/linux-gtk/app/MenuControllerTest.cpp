@@ -4,25 +4,56 @@
 #include "app/MenuController.h"
 
 #include "app/WindowActionRegistry.h"
-#include "i18n/GtkText.h"
 #include "portal/ImportExportActions.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
-#include <ao/i18n/MessageCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gio/gio.h>
-#include <giomm/actiongroup.h>
+#include <giomm/action.h>
 #include <giomm/simpleaction.h>
+#include <gtk/gtk.h>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/widget.h>
 #include <sigc++/scoped_connection.h>
 
 #include <cstdint>
+#include <memory>
+#include <string>
 
 namespace ao::gtk::test
 {
   namespace
   {
+    auto menuLink(GMenuModel* menu, std::int32_t index, char const* link)
+    {
+      REQUIRE(menu != nullptr);
+      REQUIRE(index >= 0);
+      REQUIRE(index < ::g_menu_model_get_n_items(menu));
+      auto resultPtr = std::unique_ptr<GMenuModel, decltype(&::g_object_unref)>{
+        ::g_menu_model_get_item_link(menu, index, link), &::g_object_unref};
+      REQUIRE(resultPtr);
+      return resultPtr;
+    }
+
+    std::string menuStringAttribute(GMenuModel* menu, std::int32_t index, char const* attribute)
+    {
+      REQUIRE(menu != nullptr);
+      REQUIRE(index >= 0);
+      REQUIRE(index < ::g_menu_model_get_n_items(menu));
+      auto valuePtr = std::unique_ptr<GVariant, decltype(&::g_variant_unref)>{
+        ::g_menu_model_get_item_attribute_value(menu, index, attribute, G_VARIANT_TYPE_STRING), &::g_variant_unref};
+      REQUIRE(valuePtr);
+      return ::g_variant_get_string(valuePtr.get(), nullptr);
+    }
+
+    void activateMenuItem(Gtk::Widget& window, GMenuModel* menu, std::int32_t index)
+    {
+      auto const action = menuStringAttribute(menu, index, G_MENU_ATTRIBUTE_ACTION);
+      REQUIRE_FALSE(action.empty());
+      REQUIRE(::gtk_widget_activate_action(GTK_WIDGET(window.gobj()), action.c_str(), nullptr) != 0);
+    }
+
     class FakeImportExportActions final : public portal::ImportExportActions
     {
     public:
@@ -44,9 +75,10 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("WindowActionRegistry - actions dispatch to injected collaborators", "[gtk][unit][menu]")
+  TEST_CASE("MenuController - window menu actions dispatch through WindowActionRegistry", "[gtk][unit][menu]")
   {
-    auto const appPtr = ensureGtkApplication();
+    auto const appPtr = ensureRegisteredGtkApplication();
+    auto controller = MenuController{ao::test::englishMessageCatalog()};
     auto importExport = FakeImportExportActions{};
 
     bool editLayoutCalled = false;
@@ -67,22 +99,22 @@ namespace ao::gtk::test
       window.set_application(appPtr);
       auto registration = registry.install(window);
 
-      auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
-      REQUIRE(actions != nullptr);
+      auto fileMenuPtr = menuLink(controller.menuModel()->gobj(), 0, G_MENU_LINK_SUBMENU);
+      auto transferMenuPtr = menuLink(fileMenuPtr.get(), 2, G_MENU_LINK_SECTION);
 
-      actions->activate_action("open-library");
+      activateMenuItem(window, fileMenuPtr.get(), 0);
       CHECK(importExport.openLibraryCount() == 1);
       CHECK(importExport.scanLibraryCount() == 0);
       CHECK(importExport.importLibraryCount() == 0);
       CHECK(importExport.exportLibraryCount() == 0);
 
-      actions->activate_action("scan-library");
+      activateMenuItem(window, fileMenuPtr.get(), 1);
       CHECK(importExport.scanLibraryCount() == 1);
 
-      actions->activate_action("import-library");
+      activateMenuItem(window, transferMenuPtr.get(), 0);
       CHECK(importExport.importLibraryCount() == 1);
 
-      actions->activate_action("export-library");
+      activateMenuItem(window, transferMenuPtr.get(), 1);
       CHECK(importExport.exportLibraryCount() == 1);
     }
 
@@ -92,26 +124,25 @@ namespace ao::gtk::test
       window.set_application(appPtr);
       auto registration = registry.install(window);
 
-      auto* const actions = dynamic_cast<Gio::ActionGroup*>(&window);
-      REQUIRE(actions != nullptr);
+      auto viewMenuPtr = menuLink(controller.menuModel()->gobj(), 2, G_MENU_LINK_SUBMENU);
 
-      actions->activate_action("edit-layout");
+      activateMenuItem(window, viewMenuPtr.get(), 0);
       CHECK(editLayoutCalled);
       CHECK_FALSE(resetCalled);
       CHECK_FALSE(savePanelsCalled);
 
-      actions->activate_action("reset-runtime-layout-state");
+      activateMenuItem(window, viewMenuPtr.get(), 2);
       CHECK(resetCalled);
 
-      actions->activate_action("save-panel-sizes-as-layout-defaults");
+      activateMenuItem(window, viewMenuPtr.get(), 1);
       CHECK(savePanelsCalled);
     }
   }
 
   TEST_CASE("WindowActionRegistry - ending registration revokes old actions without removing replacements",
-            "[gtk][regression][menu]")
+            "[gtk][unit][menu][async]")
   {
-    auto const appPtr = ensureGtkApplication();
+    auto const appPtr = ensureRegisteredGtkApplication();
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
 
@@ -156,32 +187,6 @@ namespace ao::gtk::test
 
     REQUIRE(controller.menuModel() != nullptr);
 
-    auto* const fileLabel = ::g_menu_model_get_item_attribute_value(
-      controller.menuModel()->gobj(), 0, G_MENU_ATTRIBUTE_LABEL, G_VARIANT_TYPE_STRING);
-    REQUIRE(fileLabel != nullptr);
-    CHECK(std::string_view{::g_variant_get_string(fileLabel, nullptr)} == "File");
-    ::g_variant_unref(fileLabel);
-  }
-
-  TEST_CASE("i18n::MessageCatalog - resolves German and pseudo shell copy", "[gtk][unit][menu][localization]")
-  {
-    auto const german = ao::test::messageCatalog("de-DE");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkShellMenuFile) == "Datei");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkShellOpenLibrary) == "Bibliothek öffnen...");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkShellApplicationMenu) == "Anwendungsmenü");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkLibraryQuickFilterPlaceholder) ==
-          "Titel, Interpreten, Alben und Tags durchsuchen...");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkSmartListPreview) == "Vorschau");
-    CHECK(i18n::requiredText(german, i18n::MessageId::ListManualOrder) == "Manuelle Reihenfolge");
-    CHECK(i18n::requiredText(german, i18n::MessageId::GtkListMoveToTopAction) ==
-          "An den Anfang der manuellen Reihenfolge verschieben");
-    CHECK(removeFromCurrentList(german, "Straße", "#straße") == "Aus Straße (#straße) entfernen");
-    CHECK(deleteListQuestion(german, "Sommer").starts_with("\"Sommer\" löschen?"));
-
-    auto const pseudo = ao::test::messageCatalog("qps-ploc");
-    CHECK(i18n::requiredText(pseudo, i18n::MessageId::GtkShellMenuFile) != "File");
-    CHECK(i18n::requiredText(pseudo, i18n::MessageId::GtkShellOpenLibrary).contains("..."));
-    CHECK(i18n::requiredText(pseudo, i18n::MessageId::GtkSmartListNewTitle) != "New List");
-    CHECK(deleteSubtreeQuestion(pseudo, 2, "• A\n• B\n").contains("• A\n• B\n"));
+    CHECK(menuStringAttribute(controller.menuModel()->gobj(), 0, G_MENU_ATTRIBUTE_LABEL) == "File");
   }
 } // namespace ao::gtk::test

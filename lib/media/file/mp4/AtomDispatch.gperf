@@ -27,6 +27,6 @@ disk, &handleDiscNumbers
 "\251mvc", &handleIntegerNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 aART, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
 "\251gen", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>
-"\251day", &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+"\251day", &handleYear
 covr, &handleCoverArt
 "----", &handleFreeform

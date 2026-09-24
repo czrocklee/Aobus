@@ -27,7 +27,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
-#include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -116,12 +116,25 @@ namespace ao::rt::test
       }
     };
 
-    delta::RegularTrackEditScript const& onlyOrderScript(ListOrderWriterFixture const& fixture)
+    ListOrderChange const& onlyOrderChange(ListOrderWriterFixture const& fixture, ListId const listId)
     {
       REQUIRE(fixture.events.size() == 1);
-      REQUIRE(fixture.events.front().listOrderChanges.size() == 1);
-      auto const* script =
-        std::get_if<delta::RegularTrackEditScript>(&fixture.events.front().listOrderChanges.front().operation);
+      auto const& event = fixture.events.front();
+      CHECK_FALSE(event.libraryReset);
+      CHECK(event.tracksInserted.empty());
+      CHECK(event.tracksDeleted.empty());
+      CHECK(event.tracksMutated.empty());
+      CHECK(event.listsUpserted == std::vector{listId});
+      CHECK(event.listsDeleted.empty());
+      REQUIRE(event.listOrderChanges.size() == 1);
+      CHECK(event.listOrderChanges.front().listId == listId);
+      return event.listOrderChanges.front();
+    }
+
+    delta::RegularTrackEditScript const& onlyOrderScript(ListOrderWriterFixture const& fixture, ListId const listId)
+    {
+      auto const& change = onlyOrderChange(fixture, listId);
+      auto const* script = std::get_if<delta::RegularTrackEditScript>(&change.operation);
       REQUIRE(script != nullptr);
       return *script;
     }
@@ -146,8 +159,11 @@ namespace ao::rt::test
     CHECK(res->reply.selectedTrackIds == std::vector{third});
     CHECK(res->reply.optBeforeTrackId == std::optional{first});
     CHECK(fixture.storedOrder(listId) == std::vector{third, first, hidden, second});
-    auto const& script = onlyOrderScript(fixture);
-    CHECK_FALSE(script.edits.empty());
+    auto const& script = onlyOrderScript(fixture, listId);
+    CHECK(script == delta::RegularTrackEditScript{
+                      .edits = {delta::InsertRange{.start = 0, .trackIds = {third}},
+                                delta::InsertRange{.start = 3, .trackIds = {second}}},
+                    });
   }
 
   TEST_CASE("LibraryCommands List order - semantic no-op does not materialize an unranked tail",
@@ -185,7 +201,11 @@ namespace ao::rt::test
     CHECK(res->status == AuthoringStatus::Applied);
     CHECK(res->reply.optBeforeTrackId == std::nullopt);
     CHECK(fixture.storedOrder(listId) == std::vector{first, third, second});
-    std::ignore = onlyOrderScript(fixture);
+    auto const& script = onlyOrderScript(fixture, listId);
+    CHECK(script == delta::RegularTrackEditScript{
+                      .edits = {delta::RemoveRange{.start = 1, .trackIds = {second}},
+                                delta::InsertRange{.start = 2, .trackIds = {second}}},
+                    });
   }
 
   TEST_CASE("LibraryCommands List order - empty selection is a non-materializing no-op",
@@ -226,6 +246,10 @@ namespace ao::rt::test
     CHECK(res->status == AuthoringStatus::Applied);
     CHECK(res->reply.selectedTrackIds == std::vector{second, fourth});
     CHECK(fixture.storedOrder(listId) == std::vector{second, fourth, first, third});
+    auto const& script = onlyOrderScript(fixture, listId);
+    CHECK(script == delta::RegularTrackEditScript{
+                      .edits = {delta::InsertRange{.start = 0, .trackIds = {second, fourth, first, third}}},
+                    });
   }
 
   TEST_CASE("LibraryCommands List order - reset forgets visible and hidden positions",
@@ -244,9 +268,8 @@ namespace ao::rt::test
     CHECK(res->status == AuthoringStatus::Applied);
     CHECK(res->reply.forgottenPositionCount == 2);
     CHECK(fixture.storedOrder(listId).empty());
-    REQUIRE(fixture.events.size() == 1);
-    REQUIRE(fixture.events.front().listOrderChanges.size() == 1);
-    CHECK(std::holds_alternative<ListOrderReset>(fixture.events.front().listOrderChanges.front().operation));
+    auto const& change = onlyOrderChange(fixture, listId);
+    CHECK(std::holds_alternative<ListOrderReset>(change.operation));
   }
 
   TEST_CASE("LibraryCommands List order - forget hidden prunes only absent members",
@@ -266,7 +289,10 @@ namespace ao::rt::test
     CHECK(res->status == AuthoringStatus::Applied);
     CHECK(res->reply.forgottenPositionCount == 1);
     CHECK(fixture.storedOrder(listId) == std::vector{second, first});
-    std::ignore = onlyOrderScript(fixture);
+    auto const& script = onlyOrderScript(fixture, listId);
+    CHECK(script == delta::RegularTrackEditScript{
+                      .edits = {delta::RemoveRange{.start = 1, .trackIds = {hidden}}},
+                    });
   }
 
   TEST_CASE("LibraryCommands List order - stale bindings cannot overwrite a newer revision",
@@ -319,7 +345,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryWriteLane - List order binding rejects invalid identities and effective sequences",
-            "[runtime][unit][library-authoring][list-order]")
+            "[runtime][unit][library][library-authoring][list-order]")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");

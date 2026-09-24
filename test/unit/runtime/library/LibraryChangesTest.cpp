@@ -6,7 +6,6 @@
 #include "runtime/library/LibraryWriteLane.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -325,8 +324,7 @@ namespace ao::rt::test
     REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
   }
 
-  TEST_CASE("Library mutation - move chains preserve one live command admission",
-            "[runtime][regression][library][concurrency]")
+  TEST_CASE("Library mutation - move chains preserve one live command admission", "[runtime][unit][library]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<LibraryWriteLane::Mutation>);
     STATIC_REQUIRE_FALSE(std::is_move_assignable_v<LibraryWriteLane::Mutation>);
@@ -337,7 +335,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library mutation - Closing waits for the final owner in a move chain",
-            "[runtime][regression][library][concurrency]")
+            "[runtime][unit][library][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -372,8 +370,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("Library mutation execution - errors and exceptions release admission",
-            "[runtime][unit][library][concurrency]")
+  TEST_CASE("Library mutation execution - errors and exceptions release admission", "[runtime][unit][library]")
   {
     auto env = MutationTestEnvironment{};
 
@@ -407,7 +404,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library mutation execution - commit failure rolls back and releases admission",
-            "[runtime][regression][library][changeset]")
+            "[runtime][unit][library][changeset]")
   {
     auto env = MutationTestEnvironment{};
     auto observed = std::vector<LibraryChangeSet>{};
@@ -482,7 +479,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryChanges - replica subscription reset is safe after owner destruction",
-            "[runtime][regression][library][concurrency]")
+            "[runtime][unit][library][async]")
   {
     auto changesPtr = std::make_unique<LibraryChanges>(stateOnlyLibraryExecutor(), 0, "test-library");
     auto binding = LibraryChangesAccess::bindReplica(*changesPtr, "Replica", [](LibraryChangeSet const&) noexcept {});
@@ -493,7 +490,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryChanges - queued weak delivery is inert after owner destruction",
-            "[runtime][regression][library][concurrency]")
+            "[runtime][unit][library][concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto changesPtr = std::make_unique<LibraryChanges>(executor, 0, "test-library");
@@ -511,7 +508,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - Closing retires an admitted publication and releases its command",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -535,7 +532,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - Maintenance revision settles before workflow availability",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto env = MutationTestEnvironment{};
     auto phases = std::vector<std::string_view>{};
@@ -556,7 +553,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - maintenance control delivery retains admission through callback completion",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -596,7 +593,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - Closing retires blocked maintenance control delivery",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -640,7 +637,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryChanges - foreign publication may complete before its submission call returns",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = CompletionBeforeForeignDispatchReturnsExecutor{};
@@ -670,7 +667,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - a second outstanding interactive command reports Busy",
-            "[runtime][regression][changeset][concurrency]")
+            "[runtime][unit][library][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -702,7 +699,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write sequencer - a later callback turn reports Busy while publication settles",
-            "[runtime][regression][library-authoring][concurrency]")
+            "[runtime][unit][library][library-authoring][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Bound target");
@@ -759,29 +756,5 @@ namespace ao::rt::test
     CHECK(observed[0].tracksMutated == std::vector{trackId});
     auto transaction = libraryFixture.library().readTransaction();
     CHECK(libraryFixture.library().libraryRevision(transaction) == observed[0].libraryRevision);
-  }
-
-  TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision", "[library][unit][revision]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    {
-      auto transaction = libraryFixture.library().readTransaction();
-      CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
-    }
-    {
-      auto transaction = library::test::writeTransaction(libraryFixture.library());
-      CHECK(libraryFixture.library().libraryRevision(transaction) == 1);
-    }
-    {
-      auto transaction = libraryFixture.library().readTransaction();
-      CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
-    }
-    {
-      auto transaction = library::test::writeTransaction(libraryFixture.library());
-      CHECK(libraryFixture.library().libraryRevision(transaction) == 1);
-      REQUIRE(transaction.commit());
-    }
-    auto transaction = libraryFixture.library().readTransaction();
-    CHECK(libraryFixture.library().libraryRevision(transaction) == 1);
   }
 } // namespace ao::rt::test

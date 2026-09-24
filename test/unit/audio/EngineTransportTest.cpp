@@ -18,11 +18,22 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "test.flac"}));
-    CHECK(engine.status().transport == Transport::Playing);
+    REQUIRE(engine.status().transport == Transport::Playing);
+    backend->clearEvents();
     engine.resume();
+    CHECK(engine.status().transport == Transport::Playing);
+    CHECK(backend->events().empty());
+
+    engine.pause();
+    engine.resume();
+    auto const events = backend->events();
+    REQUIRE(events.size() == 2);
+    CHECK(events[0].name == "pause");
+    CHECK(events[1].name == "resume");
     CHECK(engine.status().transport == Transport::Playing);
   }
 
@@ -30,10 +41,22 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
     engine.stop();
+    backend->clearEvents();
     engine.pause();
     CHECK(engine.status().transport == Transport::Idle);
+    CHECK(backend->events().empty());
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "test.flac"}));
+    REQUIRE(engine.status().transport == Transport::Playing);
+    backend->clearEvents();
+    engine.pause();
+    auto const events = backend->events();
+    REQUIRE(events.size() == 1);
+    CHECK(events.front().name == "pause");
+    CHECK(engine.status().transport == Transport::Paused);
   }
 } // namespace ao::audio::test

@@ -11,7 +11,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
-#include <ao/audio/Engine.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -35,6 +34,7 @@ namespace ao::rt
 namespace ao::audio::test
 {
   struct BlockingPreparationGate;
+  class StagedFailureGate;
 }
 
 namespace ao::rt::test::playback_succession
@@ -77,14 +77,6 @@ namespace ao::rt::test::playback_succession
     std::shared_ptr<audio::test::BlockingPreparationGate> _gatePtr;
   };
 
-  audio::DecoderFactoryFn makeActivationProbedDecoderFactory(
-    std::shared_ptr<DecoderActivationProbe> probePtr,
-    std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr = {},
-    std::filesystem::path blockedFileName = {},
-    bool failBlockedPreparation = false,
-    bool blockEveryLookahead = false,
-    std::vector<std::filesystem::path> finalOpenFailureFileNames = {});
-
   struct PlaybackSuccessionTransportFixtureConfig final
   {
     std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr{};
@@ -92,6 +84,8 @@ namespace ao::rt::test::playback_succession
     bool failBlockedPreparation = false;
     bool blockEveryLookahead = false;
     std::vector<std::filesystem::path> finalOpenFailureFileNames{};
+    std::filesystem::path stagedFailureFileName{};
+    audio::test::StagedFailureGate* stagedFailureGate = nullptr;
   };
 
   struct PlaybackSuccessionTransportFixture final

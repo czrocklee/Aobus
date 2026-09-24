@@ -56,7 +56,7 @@ namespace ao::uimodel::test
   } // namespace
 
   TEST_CASE("TrackFilterViewModel - shared views reconcile commits while preserving an unsubmitted draft",
-            "[uimodel][regression][track-filter]")
+            "[uimodel][integration][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto const viewId = fixture.focusAllTracksView();
@@ -91,7 +91,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterViewModel - queued commit notices render only changed filter state",
-            "[uimodel][regression][track-filter]")
+            "[uimodel][unit][track-filter][async]")
   {
     auto library = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -135,7 +135,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterViewModel - focus changes discard drafts and restore each view's committed filter",
-            "[uimodel][regression][track-filter]")
+            "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto const first = fixture.focusAllTracksView();
@@ -171,12 +171,28 @@ namespace ao::uimodel::test
   {
     auto fixture = TrackFilterFixture{};
 
-    fixture.viewModel.updateFilter("");
+    SECTION("no focused view")
+    {
+      fixture.viewModel.updateFilter("");
 
-    CHECK(fixture.renderLog.last().enabled == false);
+      CHECK_FALSE(fixture.renderLog.last().enabled);
+    }
+
+    SECTION("focused view")
+    {
+      auto const viewId = fixture.focusAllTracksView();
+      REQUIRE(fixture.renderLog.last().enabled);
+
+      fixture.viewModel.updateFilter("");
+
+      CHECK(fixture.renderLog.last().enabled);
+      CHECK(fixture.viewService.trackListState(viewId).filterExpression.empty());
+    }
+
     CHECK(fixture.renderLog.last().entryText.empty());
     CHECK(fixture.renderLog.last().resolvedExpression.empty());
-    CHECK(fixture.renderLog.last().canCreateSmartList == false);
+    CHECK_FALSE(fixture.renderLog.last().hasError);
+    CHECK_FALSE(fixture.renderLog.last().canCreateSmartList);
   }
 
   TEST_CASE("TrackFilterViewModel - expression syntax becomes the resolved expression", "[uimodel][unit][track-filter]")
@@ -193,8 +209,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression",
-            "[uimodel][unit][track-filter][regression]")
+  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto const aimerTrackId =
@@ -291,8 +306,7 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == false);
   }
 
-  TEST_CASE("TrackFilterViewModel - retains a temporary catalog for later renders",
-            "[uimodel][regression][track-filter]")
+  TEST_CASE("TrackFilterViewModel - retains a temporary catalog for later renders", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{ao::test::messageCatalog("de-DE")};
     fixture.focusAllTracksView();
@@ -356,7 +370,8 @@ namespace ao::uimodel::test
     CHECK(renderLog.last().tooltip.empty());
   }
 
-  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track-filter]")
+  TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation",
+            "[uimodel][integration][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};

@@ -47,6 +47,33 @@ namespace ao::tui::test
     CHECK(items[1].detail == "custom");
   }
 
+  TEST_CASE("TrackPresentationNavigation - preserves complete builtin then custom order",
+            "[tui][unit][track-presentation]")
+  {
+    auto const builtin = std::vector<rt::TrackPresentationPreset>{
+      {.spec = rt::TrackPresentationSpec{.id = "raw-first"}},
+      {.spec = rt::TrackPresentationSpec{.id = "raw-second"}},
+    };
+    auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
+      {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense"}},
+      {.label = "Simple", .spec = rt::TrackPresentationSpec{.id = "simple"}},
+    };
+
+    auto const items = makeTrackPresentationNavigation(ao::test::englishMessageCatalog(), builtin, custom);
+
+    REQUIRE(items.size() == 4);
+    CHECK(items[0].id == "raw-first");
+    CHECK(items[0].label == "raw-first");
+    CHECK(items[1].id == "raw-second");
+    CHECK(items[1].label == "raw-second");
+    CHECK(items[2].id == "dense");
+    CHECK(items[2].label == "Dense Albums");
+    CHECK(items[2].detail == "custom from albums");
+    CHECK(items[3].id == "simple");
+    CHECK(items[3].label == "Simple");
+    CHECK(items[3].detail == "custom");
+  }
+
   TEST_CASE("TrackPresentationNavigation - display labels fall back to default", "[tui][unit][track-presentation]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
@@ -56,7 +83,8 @@ namespace ao::tui::test
     CHECK(trackPresentationBadgeLabel(textCatalog, "albums") == "view:albums");
   }
 
-  TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy", "[tui][unit][localization]")
+  TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy",
+            "[tui][unit][track-presentation][localization]")
   {
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
@@ -66,6 +94,8 @@ namespace ao::tui::test
     auto const items = makeTrackPresentationNavigation(textCatalog, {}, custom);
 
     REQUIRE(items.size() == 1);
+    CHECK(items.front().id == "dense");
+    CHECK(items.front().label == "Dicht");
     CHECK(items.front().detail == "benutzerdefiniert aus albums");
     CHECK(trackPresentationDisplayId(textCatalog, "") == "Standard");
     CHECK(trackPresentationBadgeLabel(textCatalog, "") == "Ansicht:Standard");

@@ -291,6 +291,8 @@ namespace ao::gtk::layout
       }
 
     private:
+      struct ChildLayoutState;
+
       bool tryHandleKeyPressed(guint keyval)
       {
         if (_selectedId.empty())
@@ -401,6 +403,25 @@ namespace ao::gtk::layout
           uimodel::detectAbsoluteCanvasResizeCorner(rect.width, rect.height, xPosition - child.x, yPosition - child.y);
       }
 
+      static std::pair<std::int32_t, std::int32_t> measureMinimumSize(ChildLayoutState const& child,
+                                                                      std::int32_t widthForHeight)
+      {
+        std::int32_t minWidth = 0;
+        std::int32_t naturalWidth = 0;
+        std::int32_t minHeight = 0;
+        std::int32_t naturalHeight = 0;
+        std::int32_t minBaseline = -1;
+        std::int32_t naturalBaseline = -1;
+        child.widget->measure(Gtk::Orientation::HORIZONTAL, -1, minWidth, naturalWidth, minBaseline, naturalBaseline);
+        child.widget->measure(Gtk::Orientation::VERTICAL,
+                              std::max(minWidth, widthForHeight),
+                              minHeight,
+                              naturalHeight,
+                              minBaseline,
+                              naturalBaseline);
+        return {minWidth, minHeight};
+      }
+
       void handleDragUpdate(double offsetX, double offsetY)
       {
         if (_dragChild == nullptr)
@@ -411,35 +432,15 @@ namespace ao::gtk::layout
         if (int const offX = static_cast<std::int32_t>(offsetX), offY = static_cast<std::int32_t>(offsetY);
             _resizeCorner != uimodel::AbsoluteCanvasResizeCorner::None)
         {
-          std::int32_t childNaturalWidth = 0;
-          std::int32_t childNaturalHeight = 0;
-          std::int32_t childMinBaseline = -1;
-          std::int32_t childNaturalBaseline = -1;
-
-          _dragChild->widget->measure(Gtk::Orientation::HORIZONTAL,
-                                      -1,
-                                      childNaturalWidth,
-                                      childNaturalWidth,
-                                      childMinBaseline,
-                                      childNaturalBaseline);
-          _dragChild->widget->measure(Gtk::Orientation::VERTICAL,
-                                      childNaturalWidth,
-                                      childNaturalHeight,
-                                      childNaturalHeight,
-                                      childMinBaseline,
-                                      childNaturalBaseline);
-
-          auto const rect = uimodel::updateAbsoluteCanvasResizeDrag({.x = _dragChild->startX,
-                                                                     .y = _dragChild->startY,
-                                                                     .width = _dragChild->startReqWidth,
-                                                                     .height = _dragChild->startReqHeight},
-                                                                    _resizeCorner,
-                                                                    offX,
-                                                                    offY,
-                                                                    childNaturalWidth,
-                                                                    childNaturalHeight,
-                                                                    _snapToGrid,
-                                                                    _gridSize);
+          auto const startRect = uimodel::AbsoluteCanvasRect{.x = _dragChild->startX,
+                                                             .y = _dragChild->startY,
+                                                             .width = _dragChild->startReqWidth,
+                                                             .height = _dragChild->startReqHeight};
+          auto const provisional =
+            uimodel::updateAbsoluteCanvasResizeDrag(startRect, _resizeCorner, offX, offY, 0, 0, _snapToGrid, _gridSize);
+          auto const [minWidth, minHeight] = measureMinimumSize(*_dragChild, provisional.width);
+          auto const rect = uimodel::updateAbsoluteCanvasResizeDrag(
+            startRect, _resizeCorner, offX, offY, minWidth, minHeight, _snapToGrid, _gridSize);
           _dragChild->x = rect.x;
           _dragChild->y = rect.y;
           _dragChild->reqWidth = rect.width;
@@ -484,8 +485,11 @@ namespace ao::gtk::layout
         }
         else
         {
+          auto const [minWidth, minHeight] = measureMinimumSize(*_dragChild, _dragChild->reqWidth);
           auto const rect = uimodel::commitAbsoluteCanvasResizeDrag(
             {.x = _dragChild->x, .y = _dragChild->y, .width = _dragChild->reqWidth, .height = _dragChild->reqHeight},
+            minWidth,
+            minHeight,
             _snapToGrid,
             _gridSize);
           _dragChild->x = rect.x;
@@ -583,19 +587,40 @@ namespace ao::gtk::layout
 
   void registerAbsoluteCanvasComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.id = "absoluteCanvas",
-                                .displayName = "Absolute Canvas",
-                                .category = uimodel::ComponentCategory::Container,
-                                .properties = {{.name = "snapToGrid",
-                                                .kind = uimodel::PropertyKind::Bool,
-                                                .label = "Snap To Grid",
-                                                .defaultValue = uimodel::LayoutValue{true}},
-                                               {.name = "gridSize",
-                                                .kind = uimodel::PropertyKind::Int,
-                                                .label = "Grid Size",
-                                                .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
-                                .minChildren = 0,
-                                .optMaxChildren = std::nullopt},
-                               createAbsoluteCanvas);
+    registry.registerComponent(
+      {.id = "absoluteCanvas",
+       .displayName = "Absolute Canvas",
+       .category = uimodel::ComponentCategory::Container,
+       .properties = {{.name = "snapToGrid",
+                       .kind = uimodel::PropertyKind::Bool,
+                       .label = "Snap To Grid",
+                       .defaultValue = uimodel::LayoutValue{true}},
+                      {.name = "gridSize",
+                       .kind = uimodel::PropertyKind::Int,
+                       .label = "Grid Size",
+                       .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(8)}}},
+       .layoutProperties = {{.name = "x",
+                             .kind = uimodel::PropertyKind::Int,
+                             .label = "X",
+                             .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(0)}},
+                            {.name = "y",
+                             .kind = uimodel::PropertyKind::Int,
+                             .label = "Y",
+                             .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(0)}},
+                            {.name = "width",
+                             .kind = uimodel::PropertyKind::Int,
+                             .label = "Width",
+                             .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(-1)}},
+                            {.name = "height",
+                             .kind = uimodel::PropertyKind::Int,
+                             .label = "Height",
+                             .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(-1)}},
+                            {.name = "zIndex",
+                             .kind = uimodel::PropertyKind::Int,
+                             .label = "Z-Index",
+                             .defaultValue = uimodel::LayoutValue{static_cast<std::int64_t>(0)}}},
+       .minChildren = 0,
+       .optMaxChildren = std::nullopt},
+      createAbsoluteCanvas);
   }
 } // namespace ao::gtk::layout

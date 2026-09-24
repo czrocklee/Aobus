@@ -6,6 +6,7 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "tui/ShellInteractionModel.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -58,6 +59,23 @@ namespace ao::tui::test
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output", "previous", "back"});
     CHECK(optResult->items[0].displayText == "output device");
     CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items[0].detail) == ":output");
+
+    // Completing an already-canonical command from within its name must not
+    // duplicate the text after the caret.
+    auto const optInterior = completeCommandDraft(ao::test::englishMessageCatalog(), "output", 2, {});
+    REQUIRE(optInterior);
+    CHECK(optInterior->replaceBegin == 0);
+    CHECK(optInterior->replaceEnd == 6);
+    REQUIRE_FALSE(optInterior->items.empty());
+    CHECK(optInterior->items.front().insertText == "output");
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command, "output");
+    REQUIRE(shell.tryMoveInputCursor(2));
+    CHECK(shell.inputField().cursor() == 2);
+    shell.setCommandCompletion(optInterior);
+    REQUIRE(shell.tryApplyCommandCompletion());
+    CHECK(shell.inputDraft() == "output");
+    CHECK(shell.inputField().cursor() == 6);
   }
 
   TEST_CASE("CommandCompletion - completes presentation ids after view commands", "[tui][unit][completion]")
@@ -72,12 +90,31 @@ namespace ao::tui::test
     CHECK(optResult->replaceEnd == 7);
     CHECK(optResult->items[0].insertText == "albums");
     CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items[0].detail) == "Albums");
+
+    // The current preset id is one complete token even with the caret inside it.
+    auto const optInterior =
+      completeCommandDraft(ao::test::englishMessageCatalog(),
+                           "view artists",
+                           7,
+                           CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()});
+    REQUIRE(optInterior);
+    CHECK(optInterior->replaceBegin == 5);
+    CHECK(optInterior->replaceEnd == 12);
+    REQUIRE_FALSE(optInterior->items.empty());
+    CHECK(optInterior->items.front().insertText == "artists");
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command, "view artists");
+    REQUIRE(shell.tryMoveInputCursor(7));
+    CHECK(shell.inputField().cursor() == 7);
+    shell.setCommandCompletion(optInterior);
+    REQUIRE(shell.tryApplyCommandCompletion());
+    CHECK(shell.inputDraft() == "view artists");
+    CHECK(shell.inputField().cursor() == 12);
   }
 
   TEST_CASE("CommandCompletion - returns no filter result without a filter completion provider",
             "[tui][unit][completion]")
   {
-    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzzzzz", CommandCompletionContext{}));
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "filter Road Trips", CommandCompletionContext{}));
   }
 
@@ -85,6 +122,7 @@ namespace ao::tui::test
             "[tui][unit][completion]")
   {
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzz", CommandCompletionContext{}));
+    CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzzzzz", CommandCompletionContext{}));
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(),
                               "view zzz",
                               CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()}));
@@ -164,5 +202,118 @@ namespace ao::tui::test
     CHECK(optResult->replaceEnd == 19);
     CHECK(optResult->items[0].displayText == "Aimer");
     CHECK(optResult->items[0].insertText == "\"Aimer\"");
+  }
+
+  TEST_CASE("CommandCompletion - translates an interior filter range into shell offsets",
+            "[tui][unit][completion][input]")
+  {
+    std::size_t calls = 0;
+    auto const optCompletion = completeCommandDraft(
+      ao::test::englishMessageCatalog(),
+      "filter $ar = Aimer",
+      10,
+      CommandCompletionContext{.filterCompleter = [&calls](std::string_view text, std::size_t cursor, std::size_t)
+                               {
+                                 ++calls;
+                                 CHECK(text == "$ar = Aimer");
+                                 CHECK(cursor == 3);
+                                 return rt::CompletionResult{
+                                   .replaceBegin = 0,
+                                   .replaceEnd = 3,
+                                   .items = {rt::CompletionItem{.displayText = "$artist", .insertText = "$artist"}}};
+                               }});
+    REQUIRE(optCompletion);
+    CHECK(calls == 1);
+    CHECK(optCompletion->replaceBegin == 7);
+    CHECK(optCompletion->replaceEnd == 10);
+    REQUIRE(optCompletion->items.size() == 1);
+    CHECK(optCompletion->items.front().displayText == "$artist");
+    CHECK(optCompletion->items.front().insertText == "$artist");
+  }
+
+  TEST_CASE("CommandCompletion - action search deduplicates aliases and accepts localized names",
+            "[tui][unit][completion][input]")
+  {
+    auto const catalog = ao::test::messageCatalog("zh-Hans");
+    auto const optByName = completeCommandDraft(catalog, "设置", std::string{"设置"}.size(), {});
+    REQUIRE(optByName);
+    REQUIRE(optByName->items.size() == 1);
+    CHECK(optByName->replaceBegin == 0);
+    CHECK(optByName->replaceEnd == std::string{"设置"}.size());
+    CHECK(optByName->items.front().displayText == "设置");
+    CHECK(optByName->items.front().insertText == "settings");
+    auto const optByAlias = completeCommandDraft(catalog, "device", 6, {});
+    REQUIRE(optByAlias);
+    REQUIRE(optByAlias->items.size() == 1);
+    CHECK(optByAlias->replaceBegin == 0);
+    CHECK(optByAlias->replaceEnd == 6);
+    CHECK(optByAlias->items.front().insertText == "output");
+    auto const optAbbreviated = completeCommandDraft(catalog, "stgs", 4, {});
+    REQUIRE(optAbbreviated);
+    REQUIRE(optAbbreviated->items.size() == 1);
+    CHECK(optAbbreviated->replaceBegin == 0);
+    CHECK(optAbbreviated->replaceEnd == 4);
+    CHECK(optAbbreviated->items.front().insertText == "settings");
+  }
+
+  TEST_CASE("CommandCompletion - custom presentation uses its id and label", "[tui][unit][completion]")
+  {
+    auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
+      {.label = "My listening view", .spec = {.id = "my-listening-view"}}};
+    auto const optResult = completeDraft(
+      ao::test::englishMessageCatalog(), "view my-l", CommandCompletionContext{.customPresentations = custom});
+    REQUIRE(optResult);
+    CHECK(optResult->replaceBegin == 5);
+    CHECK(optResult->replaceEnd == 9);
+    REQUIRE(optResult->items.size() == 1);
+    CHECK(optResult->items.front().displayText == "my-listening-view");
+    CHECK(optResult->items.front().insertText == "my-listening-view");
+    CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optResult->items.front().detail) ==
+          "My listening view");
+  }
+
+  TEST_CASE("CommandCompletion - zero limit and invalid caret refuse candidates without forwarding",
+            "[tui][unit][completion]")
+  {
+    std::size_t calls = 0;
+    auto const context = CommandCompletionContext{
+      .filterCompleter = [&calls](std::string_view, std::size_t, std::size_t) -> std::optional<rt::CompletionResult>
+      {
+        ++calls;
+        return std::nullopt;
+      }};
+    auto const& catalog = ao::test::englishMessageCatalog();
+    CHECK_FALSE(completeCommandDraft(catalog, "filter A", 9, context));
+    CHECK_FALSE(completeCommandDraft(catalog, "ou", 3, context));
+    CHECK(calls == 0);
+    CHECK_FALSE(completeCommandDraft(catalog, "ou", 2, context, 0));
+    CHECK_FALSE(
+      completeCommandDraft(catalog,
+                           "view al",
+                           7,
+                           CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()},
+                           0));
+  }
+
+  TEST_CASE("CommandCompletion - filter callback receives the exact argument cursor and limit",
+            "[tui][unit][completion][filter]")
+  {
+    std::size_t calls = 0;
+    auto const optResult = completeCommandDraft(
+      ao::test::englishMessageCatalog(),
+      "filter two  words",
+      11,
+      CommandCompletionContext{.filterCompleter = [&calls](std::string_view text, std::size_t cursor, std::size_t limit)
+                                 -> std::optional<rt::CompletionResult>
+                               {
+                                 ++calls;
+                                 CHECK(text == "two  words");
+                                 CHECK(cursor == 4);
+                                 CHECK(limit == 3);
+                                 return std::nullopt;
+                               }},
+      3);
+    CHECK_FALSE(optResult);
+    CHECK(calls == 1);
   }
 } // namespace ao::tui::test

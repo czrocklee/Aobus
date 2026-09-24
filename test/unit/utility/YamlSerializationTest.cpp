@@ -179,15 +179,15 @@ namespace ao::test
     CHECK(readRes.error().message.contains("values.1"));
   }
 
-  TEST_CASE("YamlSerialization - emitted scalars and composed maps own their text", "[core][unit][yaml]")
+  TEST_CASE("YamlSerialization - field context is bounded", "[core][unit][yaml]")
   {
-    SECTION("field context is bounded")
-    {
-      auto const field = yaml::fieldContext(std::string(500, 'x'), std::string(500, 'y'));
-      CHECK(field.size() == yaml::kMaximumErrorContextBytes);
-      CHECK(field.ends_with("..."));
-    }
+    auto const field = yaml::fieldContext(std::string(500, 'x'), std::string(500, 'y'));
+    CHECK(field.size() == yaml::kMaximumErrorContextBytes);
+    CHECK(field.ends_with("..."));
+  }
 
+  TEST_CASE("YamlSerialization - scalar writers own and quote text", "[core][unit][yaml]")
+  {
     SECTION("writeScalar copies transient text into the tree arena")
     {
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -216,7 +216,10 @@ namespace ao::test
         CHECK(*readRes == value);
       }
     }
+  }
 
+  TEST_CASE("YamlSerialization - map writers compose owned values and preserve failures", "[core][unit][yaml]")
+  {
     SECTION("MapWriter creates arena-owned scalar fields")
     {
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -273,10 +276,15 @@ namespace ao::test
 
       auto res = std::move(writer).finish();
       REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidState);
+      CHECK(res.error().message == "intentional writer failure");
       CHECK_FALSE(yaml::findChild(tree.rootref(), "skipped").readable());
       CHECK(yaml::findChild(tree.rootref(), "nested").is_map());
     }
+  }
 
+  TEST_CASE("YamlSerialization - string-map helpers preserve dynamic keys and reject empty keys", "[core][unit][yaml]")
+  {
     SECTION("string-map helpers preserve dynamic keys")
     {
       using StringIntMap = std::map<std::string, std::int32_t, std::less<>>;
@@ -329,7 +337,7 @@ namespace ao::test
   }
 
   TEMPLATE_TEST_CASE("YamlSerialization - floating scalars round trip exactly without string quoting",
-                     "[core][regression][yaml]",
+                     "[core][unit][yaml]",
                      float,
                      double)
   {
@@ -364,7 +372,7 @@ namespace ao::test
   }
 
   TEMPLATE_TEST_CASE("YamlSerialization - nonfinite scalars retain native spelling and strict rejection",
-                     "[core][regression][yaml]",
+                     "[core][unit][yaml]",
                      float,
                      double)
   {

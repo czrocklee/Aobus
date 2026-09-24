@@ -3,7 +3,6 @@
 
 #include "platform/MprisBridge.h"
 
-#include "common/UStringConvert.h"
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisPlaybackEndpoint.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -45,6 +44,9 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/file.h>
+#include <giomm/init.h>
+#include <glibmm/ustring.h>
+#include <glibmm/variant.h>
 
 #include <array>
 #include <atomic>
@@ -56,6 +58,7 @@
 #include <functional>
 #include <ios>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -241,7 +244,7 @@ namespace ao::gtk::platform::test
     CHECK(MprisBridge::metadataForState(rt::PlaybackTransportSnapshot{}).trackObjectPath.empty());
   }
 
-  TEST_CASE("MprisBridge - same-track replay changes metadata identity", "[gtk][regression][mpris]")
+  TEST_CASE("MprisBridge - same-track replay changes metadata identity", "[gtk][unit][mpris]")
   {
     auto before = playbackSnapshot(TrackId{42}, ResourceId{77}, rt::PlaybackOccurrenceId{8});
     auto after = before;
@@ -253,8 +256,9 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisBridge - delayed art URL completion cannot publish for a replaced track",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
+    ao::gtk::test::requireOwnedGtkSessionBus();
     constexpr auto kFirstTrackId = TrackId{1};
     constexpr auto kSecondTrackId = TrackId{2};
     constexpr auto kFirstResourceId = ResourceId{11};
@@ -313,8 +317,9 @@ namespace ao::gtk::platform::test
     CHECK(cancellationCount == 2);
   }
 
-  TEST_CASE("MprisBridge - art requester exceptions reach the snapshot owner", "[gtk][regression][mpris][concurrency]")
+  TEST_CASE("MprisBridge - art requester exceptions reach the snapshot owner", "[gtk][unit][mpris]")
   {
+    ao::gtk::test::requireOwnedGtkSessionBus();
     constexpr auto kTrackId = TrackId{3};
     constexpr auto kResourceId = ResourceId{33};
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
@@ -341,16 +346,34 @@ namespace ao::gtk::platform::test
     REQUIRE(capturedCompletion);
   }
 
-  TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")
+  TEST_CASE("MprisBridge - metadata property preserves a multibyte title", "[gtk][unit][mpris]")
   {
     constexpr auto kTitle = std::string_view{"龙卷风"};
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
+    auto fixture = ao::gtk::test::GtkRuntimeFixture{};
+    auto& playback = fixture.runtime().playback();
+    auto actions = uimodel::PlaybackActions{playback, [] {}};
+    auto snapshot = playbackSnapshot(TrackId{3}, kInvalidResourceId);
+    snapshot.transport.nowPlaying.title = kTitle;
+    auto bridge = MprisBridge{
+      playback,
+      actions,
+      {},
+      MprisBridge::PlaybackSource{
+        .snapshot = [&snapshot] -> rt::PlaybackSnapshot const& { return snapshot; }, .onSnapshot = {}, .elapsed = {}}};
 
-    auto const converted = toUString(kTitle);
-
-    CHECK(converted.raw() == kTitle);
+    auto const property = bridge.playerProperty("Metadata");
+    REQUIRE(property);
+    REQUIRE(property.get_type_string() == "a{sv}");
+    auto const metadata =
+      Glib::VariantBase::cast_dynamic<Glib::Variant<std::map<Glib::ustring, Glib::VariantBase>>>(property).get();
+    REQUIRE(metadata.contains("xesam:title"));
+    auto const& title = metadata.at("xesam:title");
+    REQUIRE(title.get_type_string() == "s");
+    CHECK(Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(title).get().raw() == kTitle);
   }
 
-  TEST_CASE("MprisArtUrlCache - exports library cover art resources as file URLs", "[gtk][unit][mpris]")
+  TEST_CASE("MprisArtUrlCache - exports library cover art resources as file URLs", "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kPngBytes = std::array{std::byte{0x89},
                                           std::byte{0x50},
@@ -448,16 +471,115 @@ namespace ao::gtk::platform::test
 
     auto const metadata = MprisBridge::metadataForState(playback.snapshot().transport, url);
     CHECK(metadata.artUrl == url);
-    CHECK(requestUrl(kInvalidResourceId).empty());
-    CHECK(requestUrl(ResourceId{999999}).empty());
+  }
 
+  TEST_CASE("MprisArtUrlCache - invalid and missing resources complete without a URL", "[gtk][unit][mpris]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto readId = rt::test::AsyncTestState<ResourceId>::create(kInvalidResourceId);
+    auto failNextPtr = std::make_shared<std::atomic_bool>(false);
+    auto byteCache = rt::ResourceByteMemoryCache{
+      runtime,
+      [readCount, readId, failNextPtr](ResourceId const resourceId, std::stop_token stopToken)
+      {
+        readId.set(resourceId);
+        return readEmptyMprisResourceAfterOneFailureAsync(failNextPtr, readCount, resourceId, stopToken);
+      }};
+    auto cache = MprisArtUrlCache{byteCache, runtime, tempDir.path() / "mpris-missing-art"};
+    std::size_t callbackCount = 0;
+    auto url = std::string{};
+    auto complete = [&](std::string resolvedUrl)
+    {
+      url = std::move(resolvedUrl);
+      ++callbackCount;
+    };
+
+    auto invalidRequest = cache.requestUrl(kInvalidResourceId, complete);
+    REQUIRE(executor.tryDrainUntil([&] { return callbackCount == 1; }));
+    CHECK(url.empty());
+    CHECK(readCount.load() == 0);
+
+    auto missingRequest = cache.requestUrl(ResourceId{999999}, complete);
+    REQUIRE(executor.tryDrainUntil([&] { return callbackCount == 2; }));
+    CHECK(url.empty());
+    CHECK(readCount.load() == 1);
+    CHECK(readId.load() == ResourceId{999999});
+
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("MprisArtUrlCache - cancelling one waiter preserves the other completion",
+            "[gtk][unit][mpris][concurrency]")
+  {
+    // Export creates Gio::File wrappers on a worker, even without a GTK application.
+    Gio::init();
+    constexpr auto kResourceId = ResourceId{999998};
+    auto const pngBytes = std::vector{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}};
+    bool hasResource = true;
+
+    SECTION("successful shared export")
+    {
+      hasResource = true;
+    }
+
+    SECTION("missing shared resource")
+    {
+      hasResource = false;
+    }
+
+    auto tempDir = ao::test::TempDir{};
+    auto executor = rt::test::QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto failNextPtr = std::make_shared<std::atomic_bool>(false);
+    auto byteCache = rt::ResourceByteMemoryCache{
+      runtime,
+      [readCount, failNextPtr, hasResource, pngBytes](ResourceId const resourceId, std::stop_token stopToken)
+      {
+        if (!hasResource)
+        {
+          return readEmptyMprisResourceAfterOneFailureAsync(failNextPtr, readCount, resourceId, stopToken);
+        }
+
+        readCount.increment();
+        return readMprisResourceAsync(pngBytes, resourceId, stopToken);
+      }};
+    auto cache = MprisArtUrlCache{byteCache, runtime, tempDir.path() / "mpris-shared-art"};
     std::int32_t cancelledCallbackCount = 0;
-    bool activeWaiterCompleted = false;
-    auto cancelledRequest = cache.requestUrl(ResourceId{999998}, [&](std::string) { ++cancelledCallbackCount; });
-    [[maybe_unused]] auto activeRequest =
-      cache.requestUrl(ResourceId{999998}, [&](std::string) { activeWaiterCompleted = true; });
+    std::int32_t activeCallbackCount = 0;
+    auto url = std::string{};
+    auto cancelledRequest = cache.requestUrl(kResourceId, [&](std::string) { ++cancelledCallbackCount; });
+    auto activeRequest = cache.requestUrl(kResourceId,
+                                          [&](std::string resolvedUrl)
+                                          {
+                                            url = std::move(resolvedUrl);
+                                            ++activeCallbackCount;
+                                          });
+    REQUIRE(cancelledRequest);
+    REQUIRE(activeRequest);
     cancelledRequest.reset();
-    REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&] { return activeWaiterCompleted; }));
+    // Completion is queued, so both interests exist before cancellation and drain.
+    REQUIRE(executor.tryDrainUntil([&] { return activeCallbackCount == 1; }));
+    CHECK(cancelledCallbackCount == 0);
+    CHECK(readCount.load() == 1);
+
+    if (hasResource)
+    {
+      REQUIRE(url.starts_with("file://"));
+      CHECK(hasExpectedFileBytes(pathFromFileUrl(url), pngBytes));
+    }
+    else
+    {
+      CHECK(url.empty());
+    }
+
+    runtime.requestStop();
+    runtime.join();
+    CHECK(activeCallbackCount == 1);
     CHECK(cancelledCallbackCount == 0);
   }
 
@@ -580,7 +702,7 @@ namespace ao::gtk::platform::test
           std::numeric_limits<std::int64_t>::min());
   }
 
-  TEST_CASE("MprisBridge - Seeked follows final seek identity rather than elapsed drift", "[gtk][regression][mpris]")
+  TEST_CASE("MprisBridge - Seeked follows final seek identity rather than elapsed drift", "[gtk][unit][mpris]")
   {
     auto before = rt::PlaybackTransportSnapshot{.elapsed = std::chrono::milliseconds{100}};
     auto after = before;
@@ -615,7 +737,8 @@ namespace ao::gtk::platform::test
     CHECK_FALSE(MprisBridge::repeatModeForLoopStatus("Album").has_value());
   }
 
-  TEST_CASE("MprisBridge - player methods execute shared and guarded playback commands", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - player methods execute shared and guarded playback commands",
+            "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -650,8 +773,8 @@ namespace ao::gtk::platform::test
     CHECK_FALSE(endpoint.tryDispatchPlayerMethod("Seek"));
   }
 
-  TEST_CASE("MprisBridge - publication-issued past-end Seek advances after handoff",
-            "[gtk][regression][mpris][concurrency]")
+  TEST_CASE("MprisPlaybackEndpoint - publication-issued past-end Seek advances after handoff",
+            "[gtk][integration][mpris][async]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -694,7 +817,7 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisBridge - root methods dispatch to injected GTK lifecycle callbacks", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - root methods dispatch to injected GTK lifecycle callbacks", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
@@ -724,7 +847,7 @@ namespace ao::gtk::platform::test
     CHECK(quitCount == 1);
   }
 
-  TEST_CASE("MprisBridge - unsupported player methods are rejected", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - unsupported player methods are rejected", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
@@ -735,7 +858,8 @@ namespace ao::gtk::platform::test
     CHECK_FALSE(endpoint.tryDispatchPlayerMethod("Seek"));
   }
 
-  TEST_CASE("MprisBridge - capability properties mirror playback command capability", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - capability properties mirror playback command capability",
+            "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -780,8 +904,8 @@ namespace ao::gtk::platform::test
     CHECK_FALSE(endpoint.playerCapabilityProperty("Volume", playback.snapshot().transport).has_value());
   }
 
-  TEST_CASE("MprisBridge - seek capability requires a current subject with known positive duration",
-            "[gtk][regression][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - seek capability requires a current subject with known positive duration",
+            "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
@@ -804,7 +928,8 @@ namespace ao::gtk::platform::test
     CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{false});
   }
 
-  TEST_CASE("MprisBridge - volume setter delegates to playback service normalization", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - volume setter delegates to playback service normalization",
+            "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
@@ -822,7 +947,7 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().transport.volume.level == 0.0F);
   }
 
-  TEST_CASE("MprisBridge - rate setter keeps fixed rate and pauses on zero", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - rate setter keeps fixed rate and pauses on zero", "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -856,7 +981,8 @@ namespace ao::gtk::platform::test
     CHECK_FALSE(endpoint.tryDispatchSetRate(std::numeric_limits<double>::quiet_NaN()));
   }
 
-  TEST_CASE("MprisBridge - shuffle and loop status setters delegate to playback sequence", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters delegate to playback sequence",
+            "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
@@ -880,7 +1006,8 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::Off);
   }
 
-  TEST_CASE("MprisBridge - shuffle and loop status setters update an active sequence", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters update an active sequence",
+            "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -912,7 +1039,7 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().succession.hasNext);
   }
 
-  TEST_CASE("MprisBridge - seek methods update playback service position", "[gtk][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - seek methods update playback service position", "[gtk][integration][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -991,8 +1118,8 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().transport.finalSeekRevision == stopped.finalSeekRevision);
   }
 
-  TEST_CASE("MprisBridge - queued Next makes observer SetPosition a successful stale no-op",
-            "[gtk][regression][mpris][concurrency]")
+  TEST_CASE("MprisPlaybackEndpoint - queued Next makes observer SetPosition a successful stale no-op",
+            "[gtk][integration][mpris][async]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();

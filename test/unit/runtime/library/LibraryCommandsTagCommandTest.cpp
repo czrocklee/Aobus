@@ -96,8 +96,7 @@ namespace ao::rt::test
     CHECK(removeRes->changes[0].removedTags[0] == "résumé");
   }
 
-  TEST_CASE("LibraryCommands - conflicting tag edits preserve membership and revision",
-            "[runtime][regression][library][tag]")
+  TEST_CASE("LibraryCommands - conflicting tag edits preserve membership and revision", "[runtime][unit][library][tag]")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Track");
@@ -138,21 +137,24 @@ namespace ao::rt::test
   TEST_CASE("LibraryCommands - editTags rejects missing tag-add targets", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& writer = commandsFixture;
+    auto const revisionBefore = writer.bind(std::array{trackId}).revision();
 
-    auto mutated = std::vector<TrackId>{};
-    auto sub =
-      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
+    std::size_t publicationCount = 0;
+    auto sub = changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const replyRes = writer.editTags(std::array{TrackId{99999}}, favorite, {});
     REQUIRE_FALSE(replyRes);
     CHECK(replyRes.error().code == Error::Code::NotFound);
+    CHECK(publicationCount == 0);
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
   }
 
   TEST_CASE("LibraryCommands - editTags removes an existing tag and publishes a mutation",
@@ -179,6 +181,12 @@ namespace ao::rt::test
     CHECK_FALSE(replyRes->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
+
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optTrack =
+      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optTrack);
+    CHECK(optTrack->tags().empty());
   }
 
   TEST_CASE("LibraryCommands - editTags ignores missing tags", "[runtime][unit][library][tag]")
@@ -204,20 +212,23 @@ namespace ao::rt::test
   TEST_CASE("LibraryCommands - editTags rejects missing tag-remove targets", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
+    auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& writer = commandsFixture;
+    auto const revisionBefore = writer.bind(std::array{trackId}).revision();
 
-    auto mutated = std::vector<TrackId>{};
-    auto sub =
-      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
+    std::size_t publicationCount = 0;
+    auto sub = changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const replyRes = writer.editTags(std::array{TrackId{99999}}, {}, favorite);
     REQUIRE_FALSE(replyRes);
     CHECK(replyRes.error().code == Error::Code::NotFound);
+    CHECK(publicationCount == 0);
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
   }
 } // namespace ao::rt::test

@@ -37,7 +37,10 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <giomm/simpleaction.h>
+#include <glibmm/refptr.h>
+#include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
@@ -56,12 +59,43 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
   using namespace uimodel;
   namespace
   {
+    struct ShellLayoutControllerFixture final
+    {
+      Glib::RefPtr<Gtk::Application> appPtr = ensureRegisteredGtkApplication();
+      GtkRuntimeFixture runtimeFixture{};
+      Gtk::ApplicationWindow window{appPtr};
+      std::filesystem::path tempDir = runtimeFixture.tempDir().path();
+      std::shared_ptr<AppConfigStore> configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
+      std::shared_ptr<ShellLayoutStore> storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
+      std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr =
+        std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
+      ThemeCoordinator themeCoordinator;
+      uimodel::PlaybackActions playbackActions{
+        runtimeFixture.runtime().playback(),
+        [this] { std::ignore = runtimeFixture.runtime().playSelectionInFocusedView(); }};
+      std::optional<audio::OutputDeviceSelection> optOutputSelectionRequested;
+      ShellLayoutController controller{
+        runtimeFixture.runtime(),
+        window,
+        configStorePtr,
+        storePtr,
+        componentStateStorePtr,
+        ShellLayoutCollaborators{
+          .textCatalog = ao::test::englishMessageCatalog(),
+          .playbackActions = &playbackActions,
+          .themeCoordinator = &themeCoordinator,
+          .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
+            [this](audio::OutputDeviceSelection const& selection) { optOutputSelectionRequested = selection; }),
+        }};
+    };
+
     uimodel::LayoutNode splitNode(std::string_view id)
     {
       auto node = uimodel::LayoutNode{};
@@ -122,139 +156,160 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShellLayoutController - attaches layout shell and persists panel state", "[gtk][unit][app][shell]")
+  TEST_CASE("ShellLayoutController - attaches its host and exports transport-gated actions", "[gtk][unit][app][shell]")
   {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& runtime = fixture.runtime();
-    auto window = Gtk::ApplicationWindow{};
-    window.set_application(appPtr);
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& window = fixture.window;
+    auto& controller = fixture.controller;
 
-    auto const tempDir = fixture.tempDir().path();
-    auto const configStorePtr = std::make_shared<AppConfigStore>(tempDir / "config.yaml");
-    auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
-    auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
-    auto themeCoordinator = ThemeCoordinator{};
-    auto& playback = runtime.playback();
-    auto playbackActions =
-      uimodel::PlaybackActions{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
-    auto optOutputSelectionRequested = std::optional<audio::OutputDeviceSelection>{};
-    auto controller =
-      ShellLayoutController{runtime,
-                            window,
-                            configStorePtr,
-                            storePtr,
-                            componentStateStorePtr,
-                            ShellLayoutCollaborators{
-                              .textCatalog = ao::test::englishMessageCatalog(),
-                              .playbackActions = &playbackActions,
-                              .themeCoordinator = &themeCoordinator,
-                              .outputDeviceIntent = uimodel::OutputDeviceIntent::recordedBy(
-                                [&optOutputSelectionRequested](audio::OutputDeviceSelection const& selection)
-                                { optOutputSelectionRequested = selection; }),
-                            }};
+    controller.attachToWindow();
+    CHECK(window.get_child() == &controller.host());
 
-    SECTION("attachToWindow sets child")
-    {
-      controller.attachToWindow();
-      CHECK(window.get_child() != nullptr);
-    }
+    auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+    REQUIRE(actionMap != nullptr);
 
-    SECTION("action descriptors retain stable ids with catalog-selected presentation")
-    {
-      auto const optDescriptor = controller.layoutSchema().action("playback.playPause");
-      REQUIRE(optDescriptor);
-      CHECK(optDescriptor->id == "playback.playPause");
-      CHECK(optDescriptor->label == "Play/Pause");
-      CHECK(optDescriptor->category == "Playback");
-    }
+    auto gioActionPtr = actionMap->lookup_action("playback.stop");
+    REQUIRE(gioActionPtr != nullptr);
+    CHECK(actionMap->lookup_action("playback.play") != nullptr);
+    CHECK(actionMap->lookup_action("playback.pause") != nullptr);
+    CHECK(actionMap->lookup_action("shell.showSystemMenu") != nullptr);
+    CHECK(actionMap->lookup_action("playback.showOutputDeviceSelector") == nullptr);
+    CHECK(actionMap->lookup_action("track.editTags") == nullptr);
 
-    SECTION("output-device action reports the exact route selected from its popover")
-    {
-      rt::test::addReadyAudioProvider(runtime, rt::test::makePipeWireOutputStatus());
-      controller.attachToWindow();
-      window.present();
-      drainGtkEvents();
+    // Layout state actions are owned by the window menu, not exported as shell.* actions.
+    CHECK(actionMap->lookup_action("shell.resetRuntimeLayoutState") == nullptr);
+    CHECK(actionMap->lookup_action("shell.saveCurrentPanelSizesAsLayoutDefaults") == nullptr);
 
-      controller.activateAction("playback.showOutputDeviceSelector");
-      drainGtkEvents();
-      auto* const popover = findWidget<OutputDevicePopover>(window);
-      REQUIRE(popover != nullptr);
-      emitShow(*popover);
-      drainGtkEvents();
-      auto* const listBox = findWidget<Gtk::ListBox>(*popover);
-      REQUIRE(listBox != nullptr);
-      auto* const exclusiveRow = listBox->get_row_at_index(2);
-      REQUIRE(exclusiveRow != nullptr);
+    // Nothing is playing yet, so stop should be disabled.
+    controller.refreshExportedActions();
+    CHECK(gioActionPtr->property_enabled() == false);
+  }
 
-      emitRowActivated(*listBox, *exclusiveRow);
+  TEST_CASE("ShellLayoutController - registers stable action ids with catalog-selected presentation",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& controller = fixture.controller;
 
-      REQUIRE(optOutputSelectionRequested);
-      CHECK(optOutputSelectionRequested->backendId == audio::BackendId{"pipewire"});
-      CHECK(optOutputSelectionRequested->deviceId == audio::DeviceId{"device1"});
-      CHECK(optOutputSelectionRequested->profileId == audio::kProfileExclusive);
-    }
+    auto const optDescriptor = controller.layoutSchema().action("playback.playPause");
+    REQUIRE(optDescriptor);
+    CHECK(optDescriptor->id == "playback.playPause");
+    CHECK(optDescriptor->label == "Play/Pause");
+    CHECK(optDescriptor->category == "Playback");
+  }
 
-    SECTION("layout edit action defers generation replacement until after dispatch")
-    {
-      REQUIRE(controller.editorDialog() == nullptr);
+  TEST_CASE("ShellLayoutController - output-device action reports the selected popover route",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& runtime = fixture.runtimeFixture.runtime();
+    auto& window = fixture.window;
+    auto& optOutputSelectionRequested = fixture.optOutputSelectionRequested;
+    auto& controller = fixture.controller;
 
-      controller.activateAction("shell.editLayout");
+    rt::test::addReadyAudioProvider(runtime, rt::test::makePipeWireOutputStatus());
+    controller.attachToWindow();
+    window.present();
+    drainGtkEvents();
 
-      CHECK(controller.editorDialog() == nullptr);
-      drainGtkEvents();
-      CHECK(controller.editorDialog() != nullptr);
-    }
+    controller.activateAction("playback.showOutputDeviceSelector");
+    drainGtkEvents();
+    auto* const popover = findWidget<OutputDevicePopover>(window);
+    REQUIRE(popover != nullptr);
+    emitShow(*popover);
+    drainGtkEvents();
+    auto* const listBox = findWidget<Gtk::ListBox>(*popover);
+    REQUIRE(listBox != nullptr);
+    auto* const exclusiveRow = listBox->get_row_at_index(2);
+    REQUIRE(exclusiveRow != nullptr);
 
-    SECTION("layout editor retirement is deferred beyond its hide callback")
-    {
-      auto const topLevelCount = Gtk::Window::list_toplevels().size();
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+    emitRowActivated(*listBox, *exclusiveRow);
 
-      dialog->hide();
+    REQUIRE(optOutputSelectionRequested);
+    CHECK(optOutputSelectionRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optOutputSelectionRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optOutputSelectionRequested->profileId == audio::kProfileExclusive);
+  }
 
-      CHECK(controller.editorDialog() == nullptr);
-      CHECK_FALSE(controller.layoutSession().isEditMode());
-      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+  TEST_CASE("ShellLayoutController - layout edit action defers generation replacement until after dispatch",
+            "[gtk][unit][app][shell][async]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& controller = fixture.controller;
 
-      controller.openEditor(*configStorePtr);
-      auto* const replacementDialog = controller.editorDialog();
-      REQUIRE(replacementDialog != nullptr);
-      REQUIRE(replacementDialog != dialog);
-      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 2);
+    REQUIRE(controller.editorDialog() == nullptr);
 
-      ::g_signal_emit_by_name(dialog->gobj(), "hide");
-      CHECK(controller.editorDialog() == replacementDialog);
-      CHECK(controller.layoutSession().isEditMode());
+    controller.activateAction("shell.editLayout");
 
-      drainGtkEvents();
-      CHECK(controller.editorDialog() == replacementDialog);
-      CHECK(controller.layoutSession().isEditMode());
-      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+    CHECK(controller.editorDialog() == nullptr);
+    drainGtkEvents();
+    CHECK(controller.editorDialog() != nullptr);
+  }
 
-      replacementDialog->hide();
-      drainGtkEvents();
-      CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
-    }
+  TEST_CASE("ShellLayoutController - editor retirement preserves a replacement beyond the old hide callback",
+            "[gtk][unit][app][shell][async]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
 
-    SECTION("Soul window retirement is deferred beyond the hide callback")
-    {
-      REQUIRE(controller.soulWindow() == nullptr);
+    auto const topLevelCount = Gtk::Window::list_toplevels().size();
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
 
-      controller.activateAction("shell.showSoul");
-      auto* const soulWindow = controller.soulWindow();
-      REQUIRE(soulWindow != nullptr);
+    dialog->hide();
 
-      soulWindow->hide();
-      CHECK(controller.soulWindow() == soulWindow);
+    CHECK(controller.editorDialog() == nullptr);
+    CHECK_FALSE(controller.layoutSession().isEditMode());
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
 
-      drainGtkEvents();
-      CHECK(controller.soulWindow() == nullptr);
-    }
+    controller.openEditor(*configStorePtr);
+    auto* const replacementDialog = controller.editorDialog();
+    REQUIRE(replacementDialog != nullptr);
+    REQUIRE(replacementDialog != dialog);
+    REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 2);
+
+    ::g_signal_emit_by_name(dialog->gobj(), "hide");
+    CHECK(controller.editorDialog() == replacementDialog);
+    CHECK(controller.layoutSession().isEditMode());
+
+    drainGtkEvents();
+    CHECK(controller.editorDialog() == replacementDialog);
+    CHECK(controller.layoutSession().isEditMode());
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+
+    replacementDialog->hide();
+    drainGtkEvents();
+    CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
+  }
+
+  TEST_CASE("ShellLayoutController - Soul window retirement is deferred beyond the hide callback",
+            "[gtk][unit][app][shell][async]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& controller = fixture.controller;
+
+    REQUIRE(controller.soulWindow() == nullptr);
+
+    controller.activateAction("shell.showSoul");
+    auto* const soulWindow = controller.soulWindow();
+    REQUIRE(soulWindow != nullptr);
+
+    soulWindow->hide();
+    CHECK(controller.soulWindow() == soulWindow);
+
+    drainGtkEvents();
+    CHECK(controller.soulWindow() == nullptr);
+  }
+
+  TEST_CASE("ShellLayoutController - loads the default and saved built-in presets", "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
 
     SECTION("loadLayout load works")
     {
@@ -275,6 +330,16 @@ namespace ao::gtk::test
       CHECK(controller.activeLayout().root.type == "box");
       CHECK(findNodeById(controller.activeLayout().root, "modern-bar") != nullptr);
     }
+  }
+
+  TEST_CASE("ShellLayoutController - custom layout rejection falls back without changing the file",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& tempDir = fixture.tempDir;
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& storePtr = fixture.storePtr;
+    auto& controller = fixture.controller;
 
     SECTION("loadLayout falls back from an oversized custom layout without changing its file")
     {
@@ -315,410 +380,451 @@ namespace ao::gtk::test
       CHECK(controller.activeLayout().root.type == "box");
       CHECK(ao::test::readFile(layoutPath) == original);
     }
+  }
 
-    SECTION("an over-budget editor preview preserves the active GTK tree")
+  TEST_CASE("ShellLayoutController - over-budget editor preview preserves the active GTK tree",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    auto* const activeChild = controller.host().get_first_child();
+    REQUIRE(activeChild != nullptr);
+
+    auto overBudget = LayoutDocument{};
+    overBudget.root.type = "box";
+    overBudget.root.children.reserve(LayoutDocumentLimits::kDefaultMaxEffectiveEntries);
+
+    for (std::size_t i = 0; i < LayoutDocumentLimits::kDefaultMaxEffectiveEntries; ++i)
     {
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-      auto* const activeChild = controller.host().get_first_child();
-      REQUIRE(activeChild != nullptr);
-
-      auto overBudget = LayoutDocument{};
-      overBudget.root.type = "box";
-      overBudget.root.children.reserve(LayoutDocumentLimits::kDefaultMaxEffectiveEntries);
-
-      for (std::size_t i = 0; i < LayoutDocumentLimits::kDefaultMaxEffectiveEntries; ++i)
-      {
-        overBudget.root.children.push_back(LayoutNode{.type = "spacer"});
-      }
-
-      dialog->signalApplyPreview().emit(overBudget);
-
-      CHECK(controller.host().get_first_child() == activeChild);
-
-      dialog->response(Gtk::ResponseType::CANCEL);
-      drainGtkEvents();
+      overBudget.root.children.push_back(LayoutNode{.type = "spacer"});
     }
 
-    SECTION("layout editor save failure keeps the draft open and reports the error")
-    {
-      auto prefs = rt::AppPrefsState{};
-      prefs.lastLayoutPreset = "classic";
-      configStorePtr->saveAppPrefs(prefs);
-
-      auto const layoutsDir = tempDir / "layouts";
-      std::filesystem::create_directories(layoutsDir);
-      auto const layoutPath = layoutsDir / "classic.yaml";
-      auto const original = std::string{"layout:\n  version: 99\n  root: future-layout\n"};
-      std::ofstream{layoutPath, std::ios::binary} << original;
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-      auto* const treeView = findWidget<Gtk::TreeView>(*dialog);
-      REQUIRE(treeView != nullptr);
-      auto const treeModelPtr = treeView->get_model();
-      REQUIRE(treeModelPtr);
-      REQUIRE_FALSE(treeModelPtr->children().empty());
-      treeView->get_selection()->select(treeModelPtr->children().begin());
-      auto const activeRootChildCount = controller.activeLayout().root.children.size();
-      REQUIRE(dialog->activate_action("editor.add_spacer"));
-      CHECK(dialog->document().root.children.size() == activeRootChildCount + 1);
-
-      dialog->response(Gtk::ResponseType::OK);
-      drainGtkEvents();
-
-      REQUIRE(controller.editorDialog() == dialog);
-      CHECK(dialog->get_visible());
-      CHECK(controller.activeLayout().root.children.size() == activeRootChildCount);
-      CHECK(ao::test::readFile(layoutPath) == original);
-
-      Gtk::Window* errorDialog = nullptr;
-
-      for (auto* const toplevel : Gtk::Window::list_toplevels())
-      {
-        if (toplevel->get_title() == "Unable to Save Layout")
-        {
-          errorDialog = toplevel;
-          break;
-        }
-      }
-
-      REQUIRE(errorDialog != nullptr);
-      CHECK(errorDialog->get_visible());
-      CHECK(errorDialog->get_transient_for() == dialog);
-      errorDialog->close();
-      drainGtkEvents();
-
-      dialog->response(Gtk::ResponseType::CANCEL);
-      drainGtkEvents();
-    }
-
-    SECTION("layout editor cancel restores a persistable shell generation")
-    {
-      auto prefs = rt::AppPrefsState{};
-      prefs.lastLayoutPreset = "classic";
-      configStorePtr->saveAppPrefs(prefs);
-      REQUIRE(storePtr->save(panelLayoutDocument(), "classic"));
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-      dialog->response(Gtk::ResponseType::CANCEL);
-      drainGtkEvents();
-
-      auto allocationHost = AllocationHost{controller.host()};
-      allocationHost.allocateChild(1000, 400);
-      auto* const paned = findWidget<Gtk::Paned>(controller.host());
-      REQUIRE(paned != nullptr);
-      paned->set_position(400);
-
-      REQUIRE(tryPumpGtkEventsUntil(
-        [&controller] { return controller.layoutSession().componentState().components.contains("main-paned"); }));
-      auto const optPersisted = componentStateStorePtr->load("classic");
-      REQUIRE(optPersisted);
-      REQUIRE(optPersisted->components.contains("main-paned"));
-      CHECK(optPersisted->components.at("main-paned").type == "split");
-      CHECK(optPersisted->components.at("main-paned").state.contains("positionPercent"));
-    }
-
-    SECTION("layout editor cancel rolls back theme preview without changing persisted theme")
-    {
-      auto prefs = rt::AppPrefsState{};
-      prefs.lastLayoutPreset = "classic";
-      prefs.lastThemePreset = "classic";
-      configStorePtr->saveAppPrefs(prefs);
-      themeCoordinator.load(*configStorePtr);
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-      CHECK(dialog->selectedThemeId() == "classic");
-
-      dialog->setSelectedThemeId("modern");
-      drainGtkEvents();
-      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
-
-      auto* const cancelButton = findButtonByLabel(*dialog, "Cancel");
-      REQUIRE(cancelButton != nullptr);
-      emitClicked(*cancelButton);
-      drainGtkEvents();
-
-      auto savedPrefs = rt::AppPrefsState{};
-      configStorePtr->loadAppPrefs(savedPrefs);
-      CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
-    }
-
-    SECTION("layout editor save does not persist the previewed theme")
-    {
-      auto prefs = rt::AppPrefsState{};
-      prefs.lastLayoutPreset = "classic";
-      prefs.lastThemePreset = "classic";
-      configStorePtr->saveAppPrefs(prefs);
-      themeCoordinator.load(*configStorePtr);
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-
-      controller.openEditor(*configStorePtr);
-      drainGtkEvents();
-
-      auto* const dialog = controller.editorDialog();
-      REQUIRE(dialog != nullptr);
-
-      dialog->setSelectedThemeId("modern");
-      drainGtkEvents();
-      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
-
-      auto* const saveButton = findButtonByLabel(*dialog, "Save");
-      REQUIRE(saveButton != nullptr);
-      emitClicked(*saveButton);
-      drainGtkEvents();
-
-      auto savedPrefs = rt::AppPrefsState{};
-      configStorePtr->loadAppPrefs(savedPrefs);
-      CHECK(savedPrefs.lastLayoutPreset == "classic");
-      CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
-    }
-
-    SECTION("attachToWindow exports actions and refreshExportedActions works")
-    {
-      controller.attachToWindow();
-
-      auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
-      REQUIRE(actionMap != nullptr);
-
-      auto gioActionPtr = actionMap->lookup_action("playback.stop");
-      REQUIRE(gioActionPtr != nullptr);
-      CHECK(actionMap->lookup_action("playback.play") != nullptr);
-      CHECK(actionMap->lookup_action("playback.pause") != nullptr);
-      CHECK(actionMap->lookup_action("shell.showSystemMenu") != nullptr);
-      CHECK(actionMap->lookup_action("playback.showOutputDeviceSelector") == nullptr);
-      CHECK(actionMap->lookup_action("track.editTags") == nullptr);
-
-      // Layout state actions are owned by the window menu, not exported as shell.* actions.
-      CHECK(actionMap->lookup_action("shell.resetRuntimeLayoutState") == nullptr);
-      CHECK(actionMap->lookup_action("shell.saveCurrentPanelSizesAsLayoutDefaults") == nullptr);
-
-      // Nothing is playing yet, so stop should be disabled.
-      controller.refreshExportedActions();
-      CHECK(gioActionPtr->property_enabled() == false);
-    }
-
-    SECTION("repeated attachment revokes the previous action generation")
-    {
-      controller.attachToWindow();
-      auto* const actionMap = dynamic_cast<Gio::ActionMap*>(&window);
-      REQUIRE(actionMap != nullptr);
-      auto oldActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
-      REQUIRE(oldActionPtr);
-
-      controller.attachToWindow();
-      auto newActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
-      REQUIRE(newActionPtr);
-      CHECK(newActionPtr.get() != oldActionPtr.get());
-
-      oldActionPtr->activate();
-      CHECK(controller.soulWindow() == nullptr);
-
-      newActionPtr->activate();
-      CHECK(controller.soulWindow() != nullptr);
-    }
-
-    SECTION("playPause resumes restored idle now-playing and stop is transport-gated")
-    {
-      rt::test::addReadyAudioProvider(runtime);
-      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
-      runtime.sources().reloadAllTracks();
-      auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
-      REQUIRE(viewRes);
-      REQUIRE(playback.commands().startFromView(*viewRes, trackId));
-      REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
-      playback.commands().seek(std::chrono::milliseconds{50});
-      REQUIRE(runtime.savePlaybackSession());
-      playback.commands().stop();
-      auto const restoredRes = runtime.restorePlaybackSession();
-      REQUIRE(restoredRes);
-      REQUIRE(restoredRes->restored);
-      controller.attachToWindow();
-      controller.refreshExportedActions();
-
-      auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
-      REQUIRE(actionMap != nullptr);
-      auto const stopActionPtr = actionMap->lookup_action("playback.stop");
-      REQUIRE(stopActionPtr != nullptr);
-      CHECK(stopActionPtr->property_enabled() == false);
-
-      controller.activateAction("playback.playPause");
-      CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
-      CHECK(playback.snapshot().transport.nowPlaying.trackId == trackId);
-
-      controller.refreshExportedActions();
-      CHECK(stopActionPtr->property_enabled() == true);
-
-      controller.activateAction("playback.stop");
-      CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
-    }
-
-    SECTION("resetRuntimeLayoutState clears preset state without removing customized layout")
-    {
-      auto doc = panelLayoutDocument();
-      REQUIRE(storePtr->save(doc, "classic"));
-
-      auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
-      auto const* split = findNodeById(doc.root, "main-paned");
-      REQUIRE(split != nullptr);
-      stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
-        .type = "split",
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(*split),
-        .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
-      };
-      componentStateStorePtr->save("classic", stateDoc);
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-      REQUIRE(controller.layoutSession().componentState().components.contains("main-paned"));
-
-      controller.resetRuntimeLayoutState();
-
-      CHECK(controller.layoutSession().componentState().components.empty());
-      CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
-      auto const loadedLayoutRes = storePtr->load("classic");
-      REQUIRE(loadedLayoutRes);
-      CHECK((*loadedLayoutRes).has_value());
-    }
-
-    SECTION("saveCurrentPanelSizesAsLayoutDefaults cancels when the user declines")
-    {
-      auto doc = panelLayoutDocument();
-      REQUIRE(storePtr->save(doc, "classic"));
-
-      auto const* split = findNodeById(doc.root, "main-paned");
-      REQUIRE(split != nullptr);
-
-      auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
-      stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
-        .type = "split",
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(*split),
-        .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
-      };
-      componentStateStorePtr->save("classic", stateDoc);
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-
-      controller.setConfirmPromotionCallback(
-        [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(false); });
-      controller.saveCurrentPanelSizesAsLayoutDefaults();
-
-      auto savedRes = storePtr->load("classic");
-      REQUIRE(savedRes);
-      REQUIRE(*savedRes);
-      auto const& savedDoc = **savedRes;
-
-      auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
-      REQUIRE(savedSplit != nullptr);
-      CHECK(savedSplit->props.at("position").asInt() == 200);
-
-      auto optUntouchedState = componentStateStorePtr->load("classic");
-      REQUIRE(optUntouchedState);
-      CHECK(optUntouchedState->components.contains("main-paned"));
-    }
-
-    SECTION("saveCurrentPanelSizesAsLayoutDefaults promotes runtime panel state")
-    {
-      auto doc = panelLayoutDocument();
-      REQUIRE(storePtr->save(doc, "classic"));
-
-      auto const* split = findNodeById(doc.root, "main-paned");
-      auto const* collapsible = findNodeById(doc.root, "detail-split");
-      REQUIRE(split != nullptr);
-      REQUIRE(collapsible != nullptr);
-
-      auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
-      stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
-        .type = "split",
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(*split),
-        .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
-      };
-      stateDoc.components["detail-split"] = uimodel::LayoutComponentStateEntry{
-        .type = "collapsibleSplit",
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(*collapsible),
-        .state = {{"size", uimodel::LayoutValue{static_cast<std::int64_t>(320)}},
-                  {"revealed", uimodel::LayoutValue{false}}},
-      };
-      componentStateStorePtr->save("classic", stateDoc);
-
-      controller.loadLayout();
-      REQUIRE(tryPumpGtkEventsUntil([&controller]
-                                    { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
-
-      controller.setConfirmPromotionCallback(
-        [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(true); });
-      controller.saveCurrentPanelSizesAsLayoutDefaults();
-
-      auto savedRes = storePtr->load("classic");
-      REQUIRE(savedRes);
-      REQUIRE(*savedRes);
-      auto const& savedDoc = **savedRes;
-
-      auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
-      auto const* savedCollapsible = findNodeById(savedDoc.root, "detail-split");
-      REQUIRE(savedSplit != nullptr);
-      REQUIRE(savedCollapsible != nullptr);
-
-      CHECK_FALSE(savedSplit->props.contains("position"));
-      CHECK(savedSplit->props.at("initialPositionPercent").asDouble() == 0.42);
-      CHECK(savedCollapsible->props.at("position").asInt() == 320);
-      CHECK_FALSE(savedCollapsible->props.contains("initialPositionPercent"));
-
-      auto optPromotedState = componentStateStorePtr->load("classic");
-      REQUIRE(optPromotedState);
-      CHECK_FALSE(optPromotedState->components.contains("main-paned"));
-      REQUIRE(optPromotedState->components.contains("detail-split"));
-      auto const& remainingEntry = optPromotedState->components.at("detail-split");
-      CHECK(remainingEntry.baselineHash == uimodel::componentBaselineHash(*savedCollapsible));
-      CHECK(remainingEntry.state.size() == 1);
-      CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
-    }
+    dialog->signalApplyPreview().emit(overBudget);
+
+    CHECK(controller.host().get_first_child() == activeChild);
+
+    dialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
+  }
+
+  TEST_CASE("ShellLayoutController - editor save failure keeps the draft open and reports the error",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& tempDir = fixture.tempDir;
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    configStorePtr->saveAppPrefs(prefs);
+
+    auto const layoutsDir = tempDir / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto const layoutPath = layoutsDir / "classic.yaml";
+    auto const original = std::string{"layout:\n  version: 99\n  root: future-layout\n"};
+    std::ofstream{layoutPath, std::ios::binary} << original;
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    auto* const treeView = findWidget<Gtk::TreeView>(*dialog);
+    REQUIRE(treeView != nullptr);
+    auto const treeModelPtr = treeView->get_model();
+    REQUIRE(treeModelPtr);
+    REQUIRE_FALSE(treeModelPtr->children().empty());
+    treeView->get_selection()->select(treeModelPtr->children().begin());
+    auto const activeRootChildCount = controller.activeLayout().root.children.size();
+    REQUIRE(dialog->activate_action("editor.add_spacer"));
+    CHECK(dialog->document().root.children.size() == activeRootChildCount + 1);
+
+    dialog->response(Gtk::ResponseType::OK);
+    drainGtkEvents();
+
+    REQUIRE(controller.editorDialog() == dialog);
+    CHECK(dialog->get_visible());
+    CHECK(controller.activeLayout().root.children.size() == activeRootChildCount);
+    CHECK(ao::test::readFile(layoutPath) == original);
+
+    auto* const errorDialog = findAppDialogByTitle("Unable to Save Layout");
+    REQUIRE(errorDialog != nullptr);
+    CHECK(errorDialog->get_visible());
+    CHECK(errorDialog->get_transient_for() == dialog);
+    errorDialog->close();
+    drainGtkEvents();
+
+    dialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
+  }
+
+  TEST_CASE("ShellLayoutController - editor cancel restores a persistable shell generation", "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& storePtr = fixture.storePtr;
+    auto& componentStateStorePtr = fixture.componentStateStorePtr;
+    auto& controller = fixture.controller;
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    configStorePtr->saveAppPrefs(prefs);
+    REQUIRE(storePtr->save(panelLayoutDocument(), "classic"));
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    dialog->response(Gtk::ResponseType::CANCEL);
+    drainGtkEvents();
+
+    auto allocationHost = AllocationHost{controller.host()};
+    allocationHost.allocateChild(1000, 400);
+    auto* const paned = findWidget<Gtk::Paned>(controller.host());
+    REQUIRE(paned != nullptr);
+    paned->set_position(400);
+
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&controller] { return controller.layoutSession().componentState().components.contains("main-paned"); }));
+    auto const optPersisted = componentStateStorePtr->load("classic");
+    REQUIRE(optPersisted);
+    REQUIRE(optPersisted->components.contains("main-paned"));
+    CHECK(optPersisted->components.at("main-paned").type == "split");
+    CHECK(optPersisted->components.at("main-paned").state.contains("positionPercent"));
+  }
+
+  TEST_CASE("ShellLayoutController - ordinary editor close restores layout and theme previews",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& themeCoordinator = fixture.themeCoordinator;
+    auto& controller = fixture.controller;
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    prefs.lastThemePreset = "classic";
+    configStorePtr->saveAppPrefs(prefs);
+    themeCoordinator.load(*configStorePtr);
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    auto preview = controller.activeLayout();
+    preview.root.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"editor-close-preview"}};
+    dialog->signalApplyPreview().emit(preview);
+    dialog->setSelectedThemeId("modern");
+    drainGtkEvents();
+
+    auto* const previewRoot = controller.host().get_first_child();
+    REQUIRE(previewRoot != nullptr);
+    REQUIRE(hasCssClass(*previewRoot, "editor-close-preview"));
+    REQUIRE(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
+    REQUIRE(controller.layoutSession().isEditMode());
+
+    dialog->close();
+    drainGtkEvents();
+
+    CHECK(controller.editorDialog() == nullptr);
+    CHECK_FALSE(controller.layoutSession().isEditMode());
+    auto* const restoredRoot = controller.host().get_first_child();
+    REQUIRE(restoredRoot != nullptr);
+    CHECK_FALSE(hasCssClass(*restoredRoot, "editor-close-preview"));
+    CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
+  }
+
+  TEST_CASE("ShellLayoutController - ending a theme preview leaves persisted preferences unchanged",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& themeCoordinator = fixture.themeCoordinator;
+    auto& controller = fixture.controller;
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    prefs.lastThemePreset = "classic";
+    configStorePtr->saveAppPrefs(prefs);
+    themeCoordinator.load(*configStorePtr);
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    CHECK(dialog->selectedThemeId() == "classic");
+
+    dialog->setSelectedThemeId("modern");
+    drainGtkEvents();
+    CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
+
+    auto const action = GENERATE(std::string{"Cancel"}, std::string{"Save"});
+    auto* const button = findButtonByLabel(*dialog, action);
+    REQUIRE(button != nullptr);
+    emitClicked(*button);
+    drainGtkEvents();
+
+    auto savedPrefs = rt::AppPrefsState{};
+    configStorePtr->loadAppPrefs(savedPrefs);
+    CHECK(savedPrefs.lastLayoutPreset == "classic");
+    CHECK(savedPrefs.lastThemePreset == "classic");
+    CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
+  }
+
+  TEST_CASE("ShellLayoutController - repeated attachment revokes the previous action generation",
+            "[gtk][unit][app][shell][async]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& window = fixture.window;
+    auto& controller = fixture.controller;
+
+    controller.attachToWindow();
+    auto* const actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+    REQUIRE(actionMap != nullptr);
+    auto oldActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
+    REQUIRE(oldActionPtr);
+    oldActionPtr->activate();
+    REQUIRE(controller.soulWindow() != nullptr);
+    controller.soulWindow()->hide();
+    drainGtkEvents();
+    REQUIRE(controller.soulWindow() == nullptr);
+
+    controller.attachToWindow();
+    auto newActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap->lookup_action("shell.showSoul"));
+    REQUIRE(newActionPtr);
+    CHECK(newActionPtr.get() != oldActionPtr.get());
+
+    oldActionPtr->activate();
+    CHECK(controller.soulWindow() == nullptr);
+
+    newActionPtr->activate();
+    CHECK(controller.soulWindow() != nullptr);
+  }
+
+  TEST_CASE("ShellLayoutController - playPause resumes restored idle playback and stop is transport-gated",
+            "[gtk][integration][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& runtime = fixture.runtimeFixture.runtime();
+    auto& window = fixture.window;
+    auto& playback = fixture.runtimeFixture.runtime().playback();
+    auto& controller = fixture.controller;
+
+    rt::test::addReadyAudioProvider(runtime);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
+    runtime.sources().reloadAllTracks();
+    auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
+    REQUIRE(viewRes);
+    REQUIRE(playback.commands().startFromView(*viewRes, trackId));
+    REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
+    playback.commands().seek(std::chrono::milliseconds{50});
+    REQUIRE(runtime.savePlaybackSession());
+    playback.commands().stop();
+    auto const restoredRes = runtime.restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    controller.attachToWindow();
+    controller.refreshExportedActions();
+
+    auto* actionMap = dynamic_cast<Gio::ActionMap*>(&window);
+    REQUIRE(actionMap != nullptr);
+    auto const stopActionPtr = actionMap->lookup_action("playback.stop");
+    REQUIRE(stopActionPtr != nullptr);
+    CHECK(stopActionPtr->property_enabled() == false);
+
+    controller.activateAction("playback.playPause");
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == trackId);
+
+    controller.refreshExportedActions();
+    CHECK(stopActionPtr->property_enabled() == true);
+
+    controller.activateAction("playback.stop");
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
+  }
+
+  TEST_CASE("ShellLayoutController - resetting runtime panel state preserves the customized layout file",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& tempDir = fixture.tempDir;
+    auto& storePtr = fixture.storePtr;
+    auto& componentStateStorePtr = fixture.componentStateStorePtr;
+    auto& controller = fixture.controller;
+
+    auto doc = panelLayoutDocument();
+    REQUIRE(storePtr->save(doc, "classic"));
+    auto const layoutPath = tempDir / "layouts" / "classic.yaml";
+    auto const original = ao::test::readFile(layoutPath);
+
+    auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
+    auto const* split = findNodeById(doc.root, "main-paned");
+    REQUIRE(split != nullptr);
+    stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
+      .type = "split",
+      .stateVersion = uimodel::kStateEntryVersion,
+      .baselineHash = uimodel::componentBaselineHash(*split),
+      .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
+    };
+    componentStateStorePtr->save("classic", stateDoc);
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    REQUIRE(controller.layoutSession().componentState().components.contains("main-paned"));
+
+    controller.resetRuntimeLayoutState();
+
+    CHECK(controller.layoutSession().componentState().components.empty());
+    CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
+    auto const loadedLayoutRes = storePtr->load("classic");
+    REQUIRE(loadedLayoutRes);
+    CHECK((*loadedLayoutRes).has_value());
+    CHECK(ao::test::readFile(layoutPath) == original);
+  }
+
+  TEST_CASE("ShellLayoutController - declining panel promotion preserves layout defaults and runtime state",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& storePtr = fixture.storePtr;
+    auto& componentStateStorePtr = fixture.componentStateStorePtr;
+    auto& controller = fixture.controller;
+
+    auto doc = panelLayoutDocument();
+    REQUIRE(storePtr->save(doc, "classic"));
+
+    auto const* split = findNodeById(doc.root, "main-paned");
+    REQUIRE(split != nullptr);
+
+    auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
+    stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
+      .type = "split",
+      .stateVersion = uimodel::kStateEntryVersion,
+      .baselineHash = uimodel::componentBaselineHash(*split),
+      .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
+    };
+    componentStateStorePtr->save("classic", stateDoc);
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+    controller.setConfirmPromotionCallback(
+      [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(false); });
+    controller.saveCurrentPanelSizesAsLayoutDefaults();
+
+    auto savedRes = storePtr->load("classic");
+    REQUIRE(savedRes);
+    REQUIRE(*savedRes);
+    auto const& savedDoc = **savedRes;
+
+    auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
+    REQUIRE(savedSplit != nullptr);
+    CHECK(savedSplit->props.at("position").asInt() == 200);
+
+    auto optUntouchedState = componentStateStorePtr->load("classic");
+    REQUIRE(optUntouchedState);
+    CHECK(optUntouchedState->components.contains("main-paned"));
+  }
+
+  TEST_CASE("ShellLayoutController - panel promotion saves geometry defaults and retains nongeometry state",
+            "[gtk][unit][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& storePtr = fixture.storePtr;
+    auto& componentStateStorePtr = fixture.componentStateStorePtr;
+    auto& controller = fixture.controller;
+
+    auto doc = panelLayoutDocument();
+    REQUIRE(storePtr->save(doc, "classic"));
+
+    auto const* split = findNodeById(doc.root, "main-paned");
+    auto const* collapsible = findNodeById(doc.root, "detail-split");
+    REQUIRE(split != nullptr);
+    REQUIRE(collapsible != nullptr);
+
+    auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
+    stateDoc.components["main-paned"] = uimodel::LayoutComponentStateEntry{
+      .type = "split",
+      .stateVersion = uimodel::kStateEntryVersion,
+      .baselineHash = uimodel::componentBaselineHash(*split),
+      .state = {{"positionPercent", uimodel::LayoutValue{0.42}}},
+    };
+    stateDoc.components["detail-split"] = uimodel::LayoutComponentStateEntry{
+      .type = "collapsibleSplit",
+      .stateVersion = uimodel::kStateEntryVersion,
+      .baselineHash = uimodel::componentBaselineHash(*collapsible),
+      .state = {{"size", uimodel::LayoutValue{static_cast<std::int64_t>(320)}},
+                {"revealed", uimodel::LayoutValue{false}}},
+    };
+    componentStateStorePtr->save("classic", stateDoc);
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+    controller.setConfirmPromotionCallback(
+      [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(true); });
+    controller.saveCurrentPanelSizesAsLayoutDefaults();
+
+    auto savedRes = storePtr->load("classic");
+    REQUIRE(savedRes);
+    REQUIRE(*savedRes);
+    auto const& savedDoc = **savedRes;
+
+    auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
+    auto const* savedCollapsible = findNodeById(savedDoc.root, "detail-split");
+    REQUIRE(savedSplit != nullptr);
+    REQUIRE(savedCollapsible != nullptr);
+
+    CHECK_FALSE(savedSplit->props.contains("position"));
+    CHECK(savedSplit->props.at("initialPositionPercent").asDouble() == 0.42);
+    CHECK(savedCollapsible->props.at("position").asInt() == 320);
+    CHECK_FALSE(savedCollapsible->props.contains("initialPositionPercent"));
+
+    auto optPromotedState = componentStateStorePtr->load("classic");
+    REQUIRE(optPromotedState);
+    CHECK_FALSE(optPromotedState->components.contains("main-paned"));
+    REQUIRE(optPromotedState->components.contains("detail-split"));
+    auto const& remainingEntry = optPromotedState->components.at("detail-split");
+    CHECK(remainingEntry.baselineHash == uimodel::componentBaselineHash(*savedCollapsible));
+    CHECK(remainingEntry.state.size() == 1);
+    CHECK(remainingEntry.state.at("revealed").asBool(true) == false);
   }
 
   TEST_CASE("ShellLayoutController - teardown revokes exported actions while the window remains alive",
-            "[gtk][regression][shell][lifecycle]")
+            "[gtk][unit][app][shell][async]")
   {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::ApplicationWindow{};
@@ -747,6 +853,13 @@ namespace ao::gtk::test
       controller.attachToWindow();
       retainedShellActionPtr = std::dynamic_pointer_cast<Gio::SimpleAction>(window.lookup_action("shell.showSoul"));
       REQUIRE(retainedShellActionPtr);
+      retainedShellActionPtr->activate();
+      REQUIRE(controller.soulWindow() != nullptr);
+      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount + 1);
+      controller.soulWindow()->hide();
+      drainGtkEvents();
+      REQUIRE(controller.soulWindow() == nullptr);
+      REQUIRE(Gtk::Window::list_toplevels().size() == topLevelCount);
     }
 
     CHECK(window.lookup_action("shell.showSoul") == nullptr);
@@ -759,10 +872,10 @@ namespace ao::gtk::test
     CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
-  TEST_CASE("ShellLayoutController - teardown makes a pending layout load presentation inert",
-            "[gtk][regression][shell][concurrency]")
+  TEST_CASE("ShellLayoutController - teardown releases the stores captured by a pending layout load",
+            "[gtk][unit][app][shell][concurrency]")
   {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::ApplicationWindow{};
@@ -800,10 +913,9 @@ namespace ao::gtk::test
       }));
   }
 
-  TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement",
-            "[gtk][regression][shell][lifecycle]")
+  TEST_CASE("ShellLayoutController - teardown cancels pending Soul window retirement", "[gtk][unit][app][shell][async]")
   {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::ApplicationWindow{};
@@ -839,9 +951,9 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShellLayoutController - teardown flushes pending component state while its sole store owner is alive",
-            "[gtk][regression][shell][lifecycle]")
+            "[gtk][unit][app][shell][async]")
   {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto window = Gtk::ApplicationWindow{};

@@ -41,7 +41,7 @@ namespace ao::tui::test
   } // namespace
 
   TEST_CASE("EventController - painted playback geometry retains hover only while its target contains the pointer",
-            "[tui][regression][playback-hover]")
+            "[tui][unit][playback-hover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -126,7 +126,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - height-only workspace resize preserves valid top-bar hover",
-            "[tui][regression][playback-hover]")
+            "[tui][unit][playback-hover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -144,7 +144,7 @@ namespace ao::tui::test
     CHECK(events.hoveredButton() == HoveredButton::PlaybackMode);
   }
 
-  TEST_CASE("EventController - metadata updates retire hover on a vanished link", "[tui][regression][playback-hover]")
+  TEST_CASE("EventController - metadata updates retire hover on a vanished link", "[tui][unit][playback-hover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -166,7 +166,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - painted hover refresh never resurrects a cancelled interaction",
-            "[tui][regression][playback-hover]")
+            "[tui][unit][playback-hover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -182,7 +182,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - opening an overlay retires quality hover without another redraw",
-            "[tui][regression][playback-hover]")
+            "[tui][unit][playback-hover]")
   {
     auto fixture = EventControllerFixture{};
     fixture.preferences.qualityHover = true;

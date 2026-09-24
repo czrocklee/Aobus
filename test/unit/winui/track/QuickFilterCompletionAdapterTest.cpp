@@ -69,7 +69,7 @@ namespace ao::winui::test
   }
 
   TEST_CASE("quickFilterSuggestionContinuesEditing distinguishes incomplete expression tokens",
-            "[winui][unit][quick-filter][regression]")
+            "[winui][unit][quick-filter]")
   {
     CHECK(shouldContinueEditingQuickFilterSuggestion(
       {.insertText = "$artist", .detailKind = rt::CompletionDetailKind::Field}));

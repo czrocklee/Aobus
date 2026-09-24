@@ -3,6 +3,15 @@ id: development.test.fixture-and-helper
 ---
 # Fixtures, helpers, fakes, and test data
 
+## Before adding or restructuring tests
+
+Read the owning layer's nearby cases and support first, and name the contract
+that is missing. Extend a case or section only when it shares that contract and
+arrange; otherwise add a focused case beside related ones. Integrate a bug
+reproducer rather than appending it: a stale playback callback belongs with the
+lifecycle cases and their queued executor, not in a standalone
+`RegressionTest.cpp` with copied setup.
+
 ## Fixtures and helpers
 
 Use fixtures to remove noise, not to hide behavior.

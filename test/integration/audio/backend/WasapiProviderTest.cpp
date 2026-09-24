@@ -162,6 +162,7 @@ namespace ao::audio::backend::test
       {
         INFO("Device: " << device.id.raw() << " / " << device.displayName);
         CHECK_FALSE(device.id.raw().empty());
+        CHECK(std::ranges::count(status.devices, device.id, &Device::id) == 1);
         CHECK_FALSE(device.displayName.empty());
         CHECK(device.backendId == kBackendWasapi);
       }

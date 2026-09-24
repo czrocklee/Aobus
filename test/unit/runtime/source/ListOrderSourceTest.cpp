@@ -147,7 +147,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ListOrderSource - preserves exact move identity for an ambiguous final permutation",
-            "[runtime][regression][source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};

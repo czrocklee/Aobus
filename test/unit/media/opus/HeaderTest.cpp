@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -253,6 +254,7 @@ namespace ao::media::opus::test
       auto const optBody = parseTagsBody(packet);
       REQUIRE(optBody);
       CHECK(optBody->size() == 4);
+      CHECK(std::ranges::equal(*optBody, makePacket("BODY")));
     }
 
     SECTION("A tags packet with no body exposes an empty span")

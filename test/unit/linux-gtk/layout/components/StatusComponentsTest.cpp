@@ -6,11 +6,16 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/uimodel/layout/component/LayoutSchema.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 
+#include <algorithm>
+#include <array>
 #include <memory>
+#include <string_view>
 
 namespace ao::gtk::layout::test
 {
@@ -23,13 +28,50 @@ namespace ao::gtk::layout::test
     auto registry = ComponentRegistry{};
     registerStatusComponents(registry, *runtimePtr, ao::test::englishMessageCatalog());
 
-    auto const optComponentSchema = registry.schema().component("status.activity");
-    REQUIRE(optComponentSchema);
-    CHECK(optComponentSchema->displayName == "Activity Status");
+    struct ExpectedStatusSchema final
+    {
+      std::string_view id;
+      std::string_view displayName;
+      bool shared;
+    };
 
-    auto const optSelectionSchema = registry.schema().component("status.selectionInfo");
-    REQUIRE(optSelectionSchema);
-    CHECK(optSelectionSchema->displayName == "Selection Info");
+    auto constexpr kExpectedSchemas = std::to_array<ExpectedStatusSchema>({
+      {.id = "status.activity", .displayName = "Activity Status", .shared = true},
+      {.id = "status.message", .displayName = "Status Message", .shared = true},
+      {.id = "status.nowPlaying", .displayName = "Now Playing Status", .shared = false},
+      {.id = "status.playbackDetails", .displayName = "Playback Details", .shared = false},
+      {.id = "status.selectionInfo", .displayName = "Selection Info", .shared = true},
+      {.id = "status.trackCount", .displayName = "Track Count", .shared = true},
+    });
+
+    CHECK(registry.schema().components().size() == kExpectedSchemas.size());
+    auto const sharedSchemas = uimodel::sharedComponentSchemas();
+
+    for (auto const& expected : kExpectedSchemas)
+    {
+      CAPTURE(expected.id);
+      auto const optSchema = registry.schema().component(expected.id);
+      REQUIRE(optSchema);
+      CHECK(optSchema->displayName == expected.displayName);
+      CHECK(optSchema->category == uimodel::ComponentCategory::Status);
+      CHECK(optSchema->minChildren == 0);
+      REQUIRE(optSchema->optMaxChildren);
+      CHECK(*optSchema->optMaxChildren == 0);
+
+      auto const sharedIt = std::ranges::find(sharedSchemas, expected.id, &uimodel::ComponentSchema::id);
+      CHECK((sharedIt != sharedSchemas.end()) == expected.shared);
+
+      if (expected.shared)
+      {
+        REQUIRE(sharedIt != sharedSchemas.end());
+        CHECK(optSchema->displayName == sharedIt->displayName);
+        CHECK(optSchema->category == sharedIt->category);
+        CHECK(optSchema->minChildren == sharedIt->minChildren);
+        CHECK(optSchema->optMaxChildren == sharedIt->optMaxChildren);
+        CHECK(optSchema->persistentState == sharedIt->persistentState);
+        CHECK((optSchema->actionSlots & sharedIt->actionSlots) == sharedIt->actionSlots);
+      }
+    }
 
     CHECK_FALSE(registry.schema().component("status.statusSlot").has_value());
     CHECK_FALSE(registry.schema().component("status.notificationCenter").has_value());

@@ -129,11 +129,21 @@ namespace ao::test
 
       auto exactRes = yaml::readFileResult(path, 5);
       REQUIRE(exactRes);
-      CHECK(exactRes->size() == 5);
+      CHECK(std::string{exactRes->begin(), exactRes->end()} == "12345");
 
       auto const rejectedRes = yaml::readFileResult(path, 4);
       REQUIRE_FALSE(rejectedRes);
       CHECK(rejectedRes.error().code == Error::Code::ValueTooLarge);
+
+      auto const emptyPath = tempDir.path() / "empty.yaml";
+      {
+        auto emptyOutput = std::ofstream{emptyPath, std::ios::binary};
+        REQUIRE(emptyOutput);
+      }
+
+      auto const emptyRes = yaml::readFileResult(emptyPath, 0);
+      REQUIRE(emptyRes);
+      CHECK(emptyRes->empty());
     }
 
     SECTION("scalarAs reports malformed scalars as FormatRejected")
@@ -161,6 +171,20 @@ namespace ao::test
       CHECK(bounded.size() == yaml::kMaximumErrorContextBytes);
       CHECK(bounded.ends_with("..."));
     }
+  }
+
+  TEST_CASE("RymlAdapter - arena parsing retains source bytes after input destruction", "[core][unit][yaml]")
+  {
+    auto state = yaml::ErrorCallbackState{"arena.yaml"};
+    auto tree = ryml::Tree{yaml::callbacks()};
+    {
+      auto source = std::string{"name: preserved\n"};
+      REQUIRE(yaml::parseInArena(tree, source, state));
+      source.assign(source.size(), '#');
+    }
+
+    auto root = tree.rootref();
+    CHECK(yaml::scalarView(yaml::findChild(root, "name")) == "preserved");
   }
 
   TEST_CASE("RymlAdapter - error callback state owns diagnostic filename", "[core][unit][yaml]")

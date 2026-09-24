@@ -7,6 +7,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -28,6 +29,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -239,6 +241,17 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
+    auto const* songsPreset = builtinTrackPresentationPreset("songs");
+    REQUIRE(songsPreset != nullptr);
+    auto customSpec = songsPreset->spec;
+    customSpec.id = "custom.session-songs";
+    customSpec.visibleFields = {TrackField::Title, TrackField::Artist, TrackField::Duration};
+    customSpec.redundantFields = {TrackField::Album};
+    auto const expectedPreset = CustomTrackPresentationPreset{
+      .label = "Session songs",
+      .basePresetId = "songs",
+      .spec = normalizeTrackPresentationSpec(customSpec),
+    };
 
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
@@ -246,6 +259,7 @@ namespace ao::rt::test
       auto const secondListId = createList(*runtimePtr, "Second snapshot");
       REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
       REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
+      REQUIRE(runtimePtr->workspace().addCustomPreset(expectedPreset));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
 
@@ -267,6 +281,11 @@ namespace ao::rt::test
     CHECK(changed.snapshot.openViews.size() == 2);
     CHECK(changed.snapshot == runtimePtr->workspace().snapshot());
     CHECK(changed.snapshot.revision == 1);
+    REQUIRE(changed.snapshot.customPresets.size() == 1);
+    CHECK(changed.snapshot.customPresets[0] == expectedPreset);
+    auto const restoredPresets = runtimePtr->workspace().customPresets();
+    REQUIRE(restoredPresets.size() == 1);
+    CHECK(restoredPresets[0] == expectedPreset);
   }
 
   TEST_CASE("WorkspaceService - saveSession tolerates flush failures", "[runtime][unit][workspace][session]")
@@ -308,23 +327,30 @@ namespace ao::rt::test
     customSpec.id = "custom.keep";
     REQUIRE(runtimePtr->workspace().addCustomPreset(
       CustomTrackPresentationPreset{.label = "Keep", .basePresetId = "songs", .spec = customSpec}));
+    settleRuntimeCallbacks(*runtimePtr);
     auto const beforeSnapshot = runtimePtr->workspace().snapshot();
     auto const configPath = tempDir.path() / "config.yaml";
     writeWorkspaceConfig(configPath, {storedListId.raw()}, 1);
     std::int32_t changeCount = 0;
     auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
+    auto destroyed = std::vector<ViewService::ViewDestroyed>{};
+    auto const destroyedSub = runtimePtr->views().onViewDestroyed([&](ViewService::ViewDestroyed const& event) noexcept
+                                                                  { destroyed.push_back(event); });
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::FormatRejected);
+    settleRuntimeCallbacks(*runtimePtr);
     CHECK(runtimePtr->workspace().snapshot() == beforeSnapshot);
-    CHECK(runtimePtr->workspace().snapshot().openViews == beforeSnapshot.openViews);
     CHECK(runtimePtr->workspace().customPresets().size() == 1);
     CHECK(changeCount == 0);
+    CHECK(destroyed.empty());
 
-    REQUIRE(runtimePtr->workspace().navigate({.target = nextListId}));
+    auto const nextViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = nextListId}));
+    CHECK(existingViewId == ViewId{1});
+    CHECK(nextViewId == ViewId{2});
     REQUIRE(runtimePtr->workspace().goBack());
     CHECK(runtimePtr->workspace().snapshot().activeViewId == existingViewId);
   }
@@ -340,10 +366,15 @@ namespace ao::rt::test
     SECTION("Empty workspace remains unfocused")
     {
       auto runtimePtr = makeStateOnlyRuntime(tempDir);
+      std::int32_t changeCount = 0;
+      auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
+
       REQUIRE(runtimePtr->workspace().restoreSession(store));
+      settleRuntimeCallbacks(*runtimePtr);
       CHECK(runtimePtr->workspace().snapshot().openViews.empty());
       CHECK(runtimePtr->workspace().snapshot().activeViewId == kInvalidViewId);
       CHECK(runtimePtr->workspace().snapshot().revision == 0);
+      CHECK(changeCount == 0);
     }
 
     SECTION("Existing workspace selects its first view")
@@ -353,11 +384,21 @@ namespace ao::rt::test
       auto const secondListId = createList(*runtimePtr, "Second existing");
       auto const firstViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = firstListId}));
       REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
-      auto const beforeViews = runtimePtr->workspace().snapshot().openViews;
+      settleRuntimeCallbacks(*runtimePtr);
+      auto const before = runtimePtr->workspace().snapshot();
+      auto changes = std::vector<WorkspaceChanged>{};
+      auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const& changed) noexcept
+                                                         { changes.push_back(changed); });
 
       REQUIRE(runtimePtr->workspace().restoreSession(store));
-      CHECK(runtimePtr->workspace().snapshot().activeViewId == firstViewId);
-      CHECK(runtimePtr->workspace().snapshot().openViews == beforeViews);
+      settleRuntimeCallbacks(*runtimePtr);
+      auto const restored = runtimePtr->workspace().snapshot();
+      CHECK(restored.activeViewId == firstViewId);
+      CHECK(restored.openViews == before.openViews);
+      CHECK(restored.revision == before.revision + 1);
+      REQUIRE(changes.size() == 1);
+      CHECK(changes[0].cause == WorkspaceChangeCause::Restore);
+      CHECK(changes[0].snapshot == restored);
     }
   }
 
@@ -371,16 +412,40 @@ namespace ao::rt::test
 
     writeWorkspaceConfig(configPath, {listId.raw(), 999999}, 0);
 
+    auto destroyed = std::vector<ViewService::ViewDestroyed>{};
+    auto const destroyedSub = runtimePtr->views().onViewDestroyed([&](ViewService::ViewDestroyed const& event) noexcept
+                                                                  { destroyed.push_back(event); });
+    std::int32_t changeCount = 0;
+    auto const workspaceSub =
+      runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::NotFound);
+    settleRuntimeCallbacks(*runtimePtr);
     auto const layout = runtimePtr->workspace().snapshot();
     CHECK(layout.openViews.empty());
     CHECK(layout.activeViewId == kInvalidViewId);
     CHECK(layout.revision == 0);
-    CHECK(runtimePtr->workspace().snapshot().openViews.empty());
+    CHECK(changeCount == 0);
+    REQUIRE(destroyed.size() == 1);
+    CHECK(destroyed[0].viewId == ViewId{1});
+    auto const candidateStateRes = runtimePtr->views().findTrackListState(ViewId{1});
+    auto const candidateProjectionRes = runtimePtr->views().findTrackListProjection(ViewId{1});
+    REQUIRE_FALSE(candidateStateRes);
+    CHECK(candidateStateRes.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(candidateProjectionRes);
+    CHECK(candidateProjectionRes.error().code == Error::Code::NotFound);
+
+    auto const nextViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = listId}));
+    CHECK(nextViewId == ViewId{2});
+    auto const nextStateRes = runtimePtr->views().findTrackListState(nextViewId);
+    REQUIRE(nextStateRes);
+    CHECK(nextStateRes->listId == listId);
+    auto const backRes = runtimePtr->workspace().goBack();
+    REQUIRE_FALSE(backRes);
+    CHECK(backRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary",
@@ -409,13 +474,17 @@ namespace ao::rt::test
       std::ofstream{configPath, std::ios::app} << "  unexpected: true\n";
     }
 
+    auto const before = runtimePtr->workspace().snapshot();
+    std::int32_t changeCount = 0;
+    auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const res = runtimePtr->workspace().restoreSession(*storePtr);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == expectedCode);
-    CHECK(runtimePtr->workspace().snapshot().openViews.empty());
-    CHECK(runtimePtr->workspace().snapshot().openViews.empty());
+    settleRuntimeCallbacks(*runtimePtr);
+    CHECK(runtimePtr->workspace().snapshot() == before);
+    CHECK(changeCount == 0);
   }
 
   TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format",

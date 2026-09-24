@@ -6,8 +6,10 @@
 #include <ao/Error.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -58,7 +60,7 @@ namespace ao::i18n::test
     CHECK(aliasesFor(*policyPtr, "音乐") == std::vector<std::string>{"yinle"});
   }
 
-  TEST_CASE("IcuCompletionAliases - unsupported and short source shapes produce no aliases",
+  TEST_CASE("IcuCompletionAliases - values without useful distinct romanization produce no aliases",
             "[runtime][unit][completion-alias]")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
@@ -79,19 +81,23 @@ namespace ao::i18n::test
     REQUIRE(policyPtr->makeAliasesInto(aliases, "周杰倫"));
     REQUIRE(aliases == std::vector<std::string>{"zhoujielun"});
 
-    auto malformedRes = policyPtr->makeAliasesInto(aliases, "bad\xFFtext");
-    REQUIRE_FALSE(malformedRes);
-    CHECK(malformedRes.error().code == Error::Code::InvalidInput);
-    CHECK(aliases.empty());
+    auto const rejectedInputs = std::array{
+      std::string_view{"bad\xFFtext"},
+      std::string_view{"Cafe\u0301"},
+      std::string_view{"周\0杰", 7},
+    };
 
-    auto nonNfcRes = policyPtr->makeAliasesInto(aliases, "Cafe\u0301");
-    REQUIRE_FALSE(nonNfcRes);
-    CHECK(nonNfcRes.error().code == Error::Code::InvalidInput);
-    CHECK(aliases.empty());
+    for (auto const input : rejectedInputs)
+    {
+      CAPTURE(input);
+      aliases = {"stale"};
+      auto const rejectedRes = policyPtr->makeAliasesInto(aliases, input);
+      REQUIRE_FALSE(rejectedRes);
+      CHECK(rejectedRes.error().code == Error::Code::InvalidInput);
+      CHECK(aliases.empty());
 
-    auto embeddedNulRes = policyPtr->makeAliasesInto(aliases, std::string_view{"周\0杰", 7});
-    REQUIRE_FALSE(embeddedNulRes);
-    CHECK(embeddedNulRes.error().code == Error::Code::InvalidInput);
-    CHECK(aliases.empty());
+      REQUIRE(policyPtr->makeAliasesInto(aliases, "王菲"));
+      CHECK(aliases == std::vector<std::string>{"wangfei"});
+    }
   }
 } // namespace ao::i18n::test

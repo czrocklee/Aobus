@@ -9,6 +9,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,8 +37,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("NavigationHistory - empty history reports no current point or movement",
-            "[runtime][unit][navigation][lifecycle]")
+  TEST_CASE("NavigationHistory - empty history reports no current point or movement", "[runtime][unit][navigation]")
   {
     auto h = NavigationHistory{};
     CHECK(h.size() == 0);
@@ -47,19 +48,48 @@ namespace ao::rt::test
     CHECK_FALSE(h.forward().has_value());
   }
 
-  TEST_CASE("NavigationHistory - zero max size is accepted as an empty history",
-            "[runtime][unit][navigation][lifecycle]")
+  TEST_CASE("NavigationHistory - zero max size starts empty and clamps committed history to one entry",
+            "[runtime][unit][navigation]")
   {
-    auto const h = NavigationHistory{0};
-    // Should not crash; max size is clamped to at least 1 internally.
+    auto h = NavigationHistory{0};
+    CHECK(h.size() == 0);
+    auto const first = makePoint(ListId{10});
+    auto const second = makePoint(ListId{20});
+    REQUIRE(h.tryCommit(first));
+    REQUIRE(h.tryCommit(second));
+
+    CHECK(h.size() == 1);
+    CHECK(h.current() == second);
+    CHECK_FALSE(h.canGoBack());
+    CHECK_FALSE(h.canGoForward());
+  }
+
+  TEST_CASE("NavigationHistory - default construction starts without entries", "[runtime][unit][navigation]")
+  {
+    auto h = NavigationHistory{};
     CHECK(h.size() == 0);
   }
 
-  TEST_CASE("NavigationHistory - default construction starts without entries", "[runtime][unit][navigation][lifecycle]")
+  TEST_CASE("NavigationHistory - default capacity retains the newest 256 points",
+            "[runtime][unit][navigation][eviction]")
   {
-    auto const h = NavigationHistory{};
-    // Default is 256; only observable via eviction tests below.
-    CHECK(h.size() == 0);
+    auto h = NavigationHistory{};
+
+    for (std::size_t id = 1; id <= NavigationHistory::kDefaultMaxSize + 1; ++id)
+    {
+      REQUIRE(h.tryCommit(makePoint(ListId{static_cast<std::uint32_t>(id)})));
+    }
+
+    CHECK(h.size() == NavigationHistory::kDefaultMaxSize);
+    CHECK(h.current() == makePoint(ListId{257}));
+
+    for (std::size_t index = 0; index < NavigationHistory::kDefaultMaxSize - 1; ++index)
+    {
+      REQUIRE(h.back());
+    }
+
+    CHECK(h.current() == makePoint(ListId{2}));
+    CHECK_FALSE(h.back());
   }
 
   TEST_CASE("NavigationHistory - first commit becomes the current point", "[runtime][unit][navigation][commit]")
@@ -104,18 +134,29 @@ namespace ao::rt::test
   TEST_CASE("NavigationHistory - committing the current point is deduplicated", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
-    auto const point = makePoint(ListId{10});
-    CHECK(h.tryCommit(point));
-    CHECK_FALSE(h.tryCommit(point));
+    auto const first = makePoint(ListId{10});
+    auto const second = makePoint(ListId{20});
+    CHECK(h.tryCommit(first));
+    CHECK_FALSE(h.tryCommit(first));
+    REQUIRE(h.tryCommit(second));
+    REQUIRE(h.back());
 
-    CHECK(h.size() == 1);
+    CHECK_FALSE(h.tryCommit(first));
+    CHECK(h.size() == 2);
+    CHECK(h.current() == first);
+    CHECK(h.canGoForward());
+    CHECK(h.forward() == second);
   }
 
   TEST_CASE("NavigationHistory - presentation changes create distinct points", "[runtime][unit][navigation][dedup]")
   {
     auto h = NavigationHistory{};
-    auto const pointA = makePoint(ListId{10}, {}, makeSpec("songs"));
-    auto const pointB = makePoint(ListId{10}, {}, makeSpec("albums", TrackGroupKey::Album));
+    auto firstPresentation = makeSpec("custom");
+    firstPresentation.visibleFields = {TrackField::Title};
+    auto secondPresentation = firstPresentation;
+    secondPresentation.visibleFields = {TrackField::Title, TrackField::Artist};
+    auto const pointA = makePoint(ListId{10}, {}, firstPresentation);
+    auto const pointB = makePoint(ListId{10}, {}, secondPresentation);
     h.tryCommit(pointA);
     h.tryCommit(pointB);
 
@@ -175,10 +216,14 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.tryCommit(makePoint(ListId{10}));
+    auto const first = makePoint(ListId{10});
+    h.tryCommit(first);
 
     auto const optResult = h.back();
     CHECK_FALSE(optResult);
+    CHECK(h.current() == first);
+    CHECK_FALSE(h.canGoBack());
+    CHECK_FALSE(h.canGoForward());
   }
 
   TEST_CASE("NavigationHistory - back on empty history returns no point", "[runtime][unit][navigation][traversal]")
@@ -205,9 +250,13 @@ namespace ao::rt::test
             "[runtime][unit][navigation][traversal]")
   {
     auto h = NavigationHistory{};
-    h.tryCommit(makePoint(ListId{10}));
+    auto const newest = makePoint(ListId{10});
+    h.tryCommit(newest);
 
     CHECK_FALSE(h.forward().has_value());
+    CHECK(h.current() == newest);
+    CHECK_FALSE(h.canGoBack());
+    CHECK_FALSE(h.canGoForward());
   }
 
   TEST_CASE("NavigationHistory - forward on empty history returns no point", "[runtime][unit][navigation][traversal]")
@@ -295,6 +344,11 @@ namespace ao::rt::test
     auto const optFirstBack = h.back();
     REQUIRE(optFirstBack);
     CHECK(optFirstBack->listId == ListId{30});
+    auto const optSecondBack = h.back();
+    REQUIRE(optSecondBack);
+    CHECK(optSecondBack->listId == ListId{20});
+    CHECK_FALSE(h.back());
+    CHECK(h.current() == makePoint(ListId{20}));
   }
 
   TEST_CASE("NavigationHistory - capacity one keeps only the newest point", "[runtime][unit][navigation][eviction]")

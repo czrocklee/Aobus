@@ -69,7 +69,7 @@ namespace ao::rt::test
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.async().spawn(flagCompletionAsync(completedPtr, std::move(task)));
-    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
 
     while (!completedPtr->load() && std::chrono::steady_clock::now() < deadline)
     {

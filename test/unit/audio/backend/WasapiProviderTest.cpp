@@ -11,25 +11,25 @@
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <memory>
-#include <mutex>
 #include <semaphore>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
 {
   constexpr auto kWaitTimeout = std::chrono::seconds{5};
 
-  TEST_CASE("WasapiProvider - exposes shared-mode wiring without a render endpoint", "[audio][unit][wasapi][provider]")
+  TEST_CASE("WasapiProvider - shared-mode wiring retires on repeated shutdown without a render endpoint",
+            "[audio][unit][wasapi][provider][concurrency]")
   {
-    auto snapshotMutex = std::mutex{};
-    auto deviceSnapshot = std::vector<Device>{};
-    std::size_t deviceSnapshotCount = 0;
+    auto deviceSnapshotCount = std::atomic{std::size_t{0}};
     auto provider = WasapiProvider{};
     auto const status = provider.status();
 
@@ -37,13 +37,8 @@ namespace ao::audio::backend::test
     REQUIRE(status.descriptor.supportedProfiles.size() == 1U);
     CHECK(status.descriptor.supportedProfiles.front().id == kProfileShared);
 
-    auto deviceSub = provider.subscribeDevices(
-      [&](std::vector<Device> const& devices)
-      {
-        auto const lock = std::scoped_lock{snapshotMutex};
-        deviceSnapshot = devices;
-        ++deviceSnapshotCount;
-      });
+    auto deviceSub = provider.subscribeDevices([&](std::vector<Device> const&)
+                                               { deviceSnapshotCount.fetch_add(1, std::memory_order_relaxed); });
 
     auto graph = flow::Graph{};
     std::size_t graphUpdateCount = 0;
@@ -69,10 +64,7 @@ namespace ao::audio::backend::test
     provider.shutdown();
     provider.shutdown();
 
-    {
-      auto const lock = std::scoped_lock{snapshotMutex};
-      CHECK(deviceSnapshotCount >= 1);
-    }
+    CHECK(deviceSnapshotCount.load(std::memory_order_relaxed) >= 1);
 
     CHECK(provider.status().devices.empty());
 
@@ -94,7 +86,8 @@ namespace ao::audio::backend::test
     CHECK(graph.connections.empty());
   }
 
-  TEST_CASE("WasapiProvider - device callback may destroy provider safely", "[audio][regression][wasapi][provider]")
+  TEST_CASE("WasapiProvider - device callback may destroy provider safely",
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto providerPtr = std::make_unique<WasapiProvider>();
     std::size_t callbackCount = 0;
@@ -113,7 +106,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - nested provider callback may destroy the outer provider",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto makeHooks = []
     {
@@ -156,7 +149,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - monitor callback may destroy provider on its own thread",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -195,36 +188,45 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - initial callback destruction cannot deadlock a waiting monitor",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
-    auto callbacksReady = std::binary_semaphore{0};
-    auto monitorExited = std::binary_semaphore{0};
+    auto callbacksReadyPtr = std::make_shared<std::binary_semaphore>(0);
+    auto monitorExitedPtr = std::make_shared<std::binary_semaphore>(0);
     auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
     hooksPtr->enumerateDevices = []
     { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
-    hooksPtr->onDeviceCallbacksReady = [&] { callbacksReady.release(); };
-    hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
+    hooksPtr->onDeviceCallbacksReady = [callbacksReadyPtr] { callbacksReadyPtr->release(); };
+    hooksPtr->onMonitorExit = [monitorExitedPtr] { monitorExitedPtr->release(); };
     auto providerPtr = std::make_unique<WasapiProvider>(hooksPtr);
     std::size_t callbackCount = 0;
+    bool refreshAvailable = false;
+    bool monitorReady = false;
 
     auto sub = providerPtr->subscribeDevices(
       [&](std::vector<Device> const&)
       {
         ++callbackCount;
-        REQUIRE(hooksPtr->requestRefresh);
-        hooksPtr->requestRefresh();
-        REQUIRE(callbacksReady.try_acquire_for(kWaitTimeout));
+        refreshAvailable = static_cast<bool>(hooksPtr->requestRefresh);
+
+        if (refreshAvailable)
+        {
+          hooksPtr->requestRefresh();
+          monitorReady = callbacksReadyPtr->try_acquire_for(kWaitTimeout);
+        }
+
         providerPtr.reset();
       });
 
+    CHECK(refreshAvailable);
+    CHECK(monitorReady);
     CHECK(callbackCount == 1);
     CHECK_FALSE(providerPtr);
     CHECK_FALSE(sub);
-    CHECK(monitorExited.try_acquire_for(kWaitTimeout));
+    CHECK(monitorExitedPtr->try_acquire_for(kWaitTimeout));
   }
 
   TEST_CASE("WasapiProvider - cancellation removes a device callback already copied by monitor",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto refreshCompleted = std::binary_semaphore{0};
     auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
@@ -267,7 +269,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - concurrent external shutdown callers share callback quiescence",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto callbackEntered = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -292,27 +294,40 @@ namespace ao::audio::backend::test
         }
       });
     REQUIRE(sub);
+    // Declared before any wait so a failed REQUIRE unblocks the monitor callback
+    // before the shutdown threads join and the provider waits for quiescence.
+    auto firstShutdown = std::jthread{};
+    auto secondShutdown = std::jthread{};
+    bool callbackReleased = false;
+    auto const releaseCallbackOnce = [&]
+    {
+      if (!std::exchange(callbackReleased, true))
+      {
+        releaseCallback.release();
+      }
+    };
+    auto const releaseOnExit = gsl_lite::finally(releaseCallbackOnce);
     blockCallback.store(true, std::memory_order_release);
     REQUIRE(hooksPtr->requestRefresh);
     hooksPtr->requestRefresh();
     REQUIRE(callbackEntered.try_acquire_for(kWaitTimeout));
 
-    auto firstShutdown = std::jthread{[&]
-                                      {
-                                        provider.shutdown();
-                                        firstReturned.release();
-                                      }};
+    firstShutdown = std::jthread{[&]
+                                 {
+                                   provider.shutdown();
+                                   firstReturned.release();
+                                 }};
     REQUIRE(shutdownStarted.try_acquire_for(kWaitTimeout));
-    auto secondShutdown = std::jthread{[&]
-                                       {
-                                         provider.shutdown();
-                                         secondReturned.release();
-                                       }};
+    secondShutdown = std::jthread{[&]
+                                  {
+                                    provider.shutdown();
+                                    secondReturned.release();
+                                  }};
     REQUIRE(shutdownWait.try_acquire_for(kWaitTimeout));
 
     CHECK_FALSE(firstReturned.try_acquire());
     CHECK_FALSE(secondReturned.try_acquire());
-    releaseCallback.release();
+    releaseCallbackOnce();
     firstShutdown.join();
     secondShutdown.join();
     CHECK(firstReturned.try_acquire());
@@ -321,7 +336,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - callback shutdown returns while later external shutdown waits",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto callbackShutdownReturned = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -349,18 +364,30 @@ namespace ao::audio::backend::test
       });
     REQUIRE(sub);
     REQUIRE(hooksPtr->requestRefresh);
+    // Declared before any wait so a failed REQUIRE unblocks the monitor callback
+    // before the shutdown threads join and the provider waits for quiescence.
+    auto externalShutdown = std::jthread{};
+    bool callbackReleased = false;
+    auto const releaseCallbackOnce = [&]
+    {
+      if (!std::exchange(callbackReleased, true))
+      {
+        releaseCallback.release();
+      }
+    };
+    auto const releaseOnExit = gsl_lite::finally(releaseCallbackOnce);
 
     hooksPtr->requestRefresh();
     REQUIRE(callbackShutdownReturned.try_acquire_for(kWaitTimeout));
-    auto externalShutdown = std::jthread{[&]
-                                         {
-                                           provider.shutdown();
-                                           externalReturned.release();
-                                         }};
+    externalShutdown = std::jthread{[&]
+                                    {
+                                      provider.shutdown();
+                                      externalReturned.release();
+                                    }};
     REQUIRE(shutdownWait.try_acquire_for(kWaitTimeout));
 
     CHECK_FALSE(externalReturned.try_acquire());
-    releaseCallback.release();
+    releaseCallbackOnce();
     externalShutdown.join();
     REQUIRE(monitorExited.try_acquire_for(kWaitTimeout));
     CHECK(externalReturned.try_acquire());
@@ -369,7 +396,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - graph callback may destroy provider and retained backend stays inert",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -414,7 +441,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - device subscription racing shutdown receives no initial callback",
-            "[audio][regression][wasapi][concurrency]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto startSubscription = std::binary_semaphore{0};
@@ -460,7 +487,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(racedSub);
   }
 
-  TEST_CASE("WasapiProvider - device subscription may outlive provider", "[audio][regression][wasapi][provider]")
+  TEST_CASE("WasapiProvider - device subscription may outlive provider", "[audio][unit][wasapi][provider][concurrency]")
   {
     auto sub = utility::ScopedRegistration{};
 
@@ -474,7 +501,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("WasapiProvider - backend cannot republish a route after provider destruction",
-            "[audio][regression][wasapi][provider]")
+            "[audio][unit][wasapi][provider][concurrency]")
   {
     auto providerPtr = std::make_unique<WasapiProvider>();
     auto graph = flow::Graph{};

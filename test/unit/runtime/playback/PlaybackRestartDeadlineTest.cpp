@@ -51,7 +51,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("PlaybackRestartDeadline - equality remains unavailable and an early callback retries",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
 
@@ -90,7 +90,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - cancellation suppresses a queued callback from an older deadline",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
@@ -118,7 +118,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - destruction cancels a callback already queued for delivery",
-            "[runtime][regression][playback-cursor][concurrency]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
@@ -146,7 +146,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - reentrant availability changes install only the replacement deadline",
-            "[runtime][regression][playback-cursor][concurrency]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto scheduler = ControlledSleeper{};
@@ -176,7 +176,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - start pause resume and seek explicitly control the deadline",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{500});
@@ -211,7 +211,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - current and session replacement cancel obsolete schedules",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});
@@ -243,7 +243,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackRestartDeadline - shutdown suppresses queued work and future controls",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto fixture = RestartDeadlineFixture{};
     fixture.deadline.start(Elapsed{0});

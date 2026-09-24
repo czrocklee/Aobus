@@ -10,12 +10,36 @@
 #include <ao/rt/TrackPresentation.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/main.h>
 #include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
+
+#include <cstdint>
+#include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    Gtk::Entry* viewNameEntry(Gtk::Widget& root)
+    {
+      for (auto* const entry : collectAll<Gtk::Entry>(root))
+      {
+        if (entry->get_placeholder_text() == "View label")
+        {
+          return entry;
+        }
+      }
+
+      return nullptr;
+    }
+  } // namespace
+
   TEST_CASE("TrackCustomViewDialog - renders the initial custom-view draft", "[gtk][unit][track][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -29,8 +53,13 @@ namespace ao::gtk::test
       auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
       drainGtkEvents();
 
-      auto const entries = collectAll<Gtk::Entry>(dialog);
-      CHECK_FALSE(entries.empty());
+      auto* const nameEntry = viewNameEntry(dialog);
+      auto const dropdowns = collectAll<Gtk::DropDown>(dialog);
+      REQUIRE(nameEntry != nullptr);
+      REQUIRE(dropdowns.size() == 2);
+      CHECK(nameEntry->get_text() == "Initial Label");
+      CHECK(dropdowns[0]->get_selected() == 0); // Group: None
+      CHECK(dropdowns[1]->get_selected() == 0); // Visible field: Title
     }
 
     SECTION("row tools use icon-only controls")
@@ -99,7 +128,74 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackCustomViewDialog - renders locale-selected editor copy", "[gtk][unit][localization]")
+  TEST_CASE("TrackCustomViewDialog - returns only the publicly submitted draft", "[gtk][unit][track][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto window = Gtk::Window{};
+    auto spec = rt::TrackPresentationSpec{};
+    spec.visibleFields = {rt::TrackField::Title};
+    auto const runDialog = [](TrackCustomViewDialog& dialog)
+    {
+      constexpr std::uint32_t kResponseTimeoutMilliseconds = 5000;
+      bool deadlineExpired = false;
+      auto deadlineConnection = sigc::scoped_connection{Glib::signal_timeout().connect(
+        [&]
+        {
+          deadlineExpired = true;
+          dialog.response(Gtk::ResponseType::CANCEL);
+          return false;
+        },
+        kResponseTimeoutMilliseconds)};
+      auto optResult = dialog.runDialog();
+      CHECK_FALSE(deadlineExpired);
+      return optResult;
+    };
+
+    SECTION("Save returns the edited name and group with the initial visible field")
+    {
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
+      auto* const nameEntry = viewNameEntry(dialog);
+      auto const dropdowns = collectAll<Gtk::DropDown>(dialog);
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(nameEntry != nullptr);
+      REQUIRE(dropdowns.size() == 2);
+      REQUIRE(saveButton != nullptr);
+
+      auto* const groupDropdown = dropdowns.front();
+      auto responseConnection = sigc::scoped_connection{Glib::signal_idle().connect(
+        [nameEntry, groupDropdown, saveButton]
+        {
+          nameEntry->set_text("Edited View");
+          groupDropdown->set_selected(2); // Album in the retained UIModel option order.
+          emitClicked(*saveButton);       // Public response binding, not native pointer delivery.
+          return false;
+        })};
+
+      auto const optResult = runDialog(dialog);
+      REQUIRE(optResult);
+      CHECK(optResult->label == "Edited View");
+      CHECK_FALSE(optResult->spec.id.empty());
+      CHECK(optResult->spec.groupBy == rt::TrackGroupKey::Album);
+      CHECK(optResult->spec.visibleFields == std::vector{rt::TrackField::Title});
+    }
+
+    SECTION("Cancel returns no draft")
+    {
+      auto dialog = TrackCustomViewDialog{window, ao::test::englishMessageCatalog(), spec, "Initial Label"};
+      auto* const cancelButton = findButtonByLabel(dialog, "Cancel");
+      REQUIRE(cancelButton != nullptr);
+      auto responseConnection = sigc::scoped_connection{Glib::signal_idle().connect(
+        [cancelButton]
+        {
+          emitClicked(*cancelButton); // Public response binding only.
+          return false;
+        })};
+
+      CHECK_FALSE(runDialog(dialog));
+    }
+  }
+
+  TEST_CASE("TrackCustomViewDialog - renders locale-selected editor copy", "[gtk][unit][track][dialog][localization]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};

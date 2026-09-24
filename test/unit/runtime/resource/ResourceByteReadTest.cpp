@@ -219,7 +219,7 @@ namespace ao::rt::test
     CHECK_FALSE(*res);
   }
 
-  TEST_CASE("readResourceBytes - a carrier hit is cached, and the next request opens no file",
+  TEST_CASE("readResourceBytes - a carrier hit is cached and survives removal of every carrier",
             "[runtime][unit][resource-walk]")
   {
     auto fixture = CarrierFixture{1};
@@ -233,8 +233,13 @@ namespace ao::rt::test
       .optMaximumBytes = kMaximumInteractiveResourceBytes,
     };
 
-    REQUIRE(readResourceBytes(context, {}));
-    REQUIRE(cache.read(fixture.digest));
+    auto const firstRes = readResourceBytes(context, {});
+    REQUIRE(firstRes);
+    REQUIRE(*firstRes);
+    CHECK(**firstRes == fixture.pictureBytes);
+    auto const optCached = cache.read(fixture.digest);
+    REQUIRE(optCached);
+    CHECK(*optCached == fixture.pictureBytes);
 
     // Every carrier is gone, so a hit now proves the cache answered alone: a valid
     // entry keeps a cover displayable until it is evicted.
@@ -277,10 +282,14 @@ namespace ao::rt::test
       ++count;
       REQUIRE(view.coverArt().count() == 1);
       CHECK(view.coverArt().at(0).resourceId == fixture.resourceId);
+      CHECK(view.coverArt().at(0).type == PictureType::FrontCover);
     }
 
     CHECK(count == 1);
-    CHECK(fixture.library.resources().reader(transaction).get(fixture.resourceId));
+    auto const optDescriptor = fixture.library.resources().reader(transaction).get(fixture.resourceId);
+    REQUIRE(optDescriptor);
+    CHECK(optDescriptor->digest == fixture.digest);
+    CHECK(optDescriptor->byteLength == fixture.pictureBytes.size());
   }
 
   TEST_CASE("readResourceBytes - bytes above the caller's ceiling are refused", "[runtime][unit][resource-walk]")
@@ -317,7 +326,7 @@ namespace ao::rt::test
       auto res = readResourceBytes(context, {});
       REQUIRE(res);
       REQUIRE(*res);
-      CHECK((*res)->size() == fixture.pictureBytes.size());
+      CHECK(**res == fixture.pictureBytes);
     }
   }
 
@@ -342,10 +351,10 @@ namespace ao::rt::test
     auto res = readResourceBytes(context, {});
     REQUIRE(res);
     REQUIRE(*res);
-    CHECK((*res)->size() == fixture.pictureBytes.size());
+    CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - cancellation stops the walk between candidates",
+  TEST_CASE("readResourceBytes - cancellation before the first candidate stops the walk",
             "[runtime][unit][resource-walk][concurrency]")
   {
     auto fixture = CarrierFixture{3};
@@ -401,10 +410,7 @@ namespace ao::rt::test
     auto const candidates = index.carrierUris(fixture.resourceId);
     REQUIRE(candidates.size() == 3);
 
-    for (auto const& uri : candidates)
-    {
-      CHECK(uri != "unreferenced.flac");
-    }
+    CHECK(std::vector<std::string>{candidates.begin(), candidates.end()} == fixture.uris);
 
     CHECK(index.carrierUris(ResourceId{999999}).empty());
 
@@ -428,7 +434,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("readResourceBytes - a restored library serves a cover with no rescan",
-            "[runtime][unit][resource-walk][cover]")
+            "[runtime][integration][resource-walk][cover-art]")
   {
     auto source = CarrierFixture{1};
     auto const yamlPath = std::filesystem::path{source.temp.path()} / "library.yaml";

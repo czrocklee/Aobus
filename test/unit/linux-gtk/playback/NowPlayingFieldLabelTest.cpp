@@ -67,6 +67,7 @@ namespace ao::gtk::test
         runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Title};
       auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
       REQUIRE(gtkLabel);
+      CHECK(gtkLabel->get_text() == "Not Playing");
 
       CHECK(gtkLabel->has_css_class("ao-playback-title"));
       CHECK_FALSE(gtkLabel->has_css_class("ao-clickable"));
@@ -112,8 +113,8 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("NowPlayingFieldLabel - clickable actions route through runtime services",
-            "[gtk][unit][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - filter action routes the exact title query",
+            "[gtk][integration][playback][field-label]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -121,77 +122,92 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime);
     drainGtkEvents();
 
-    SECTION("filter action navigates to the now playing field query")
-    {
-      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
-                                             runtime.workspace(),
-                                             ao::test::englishMessageCatalog(),
-                                             rt::TrackField::Title,
-                                             uimodel::NowPlayingFieldAction::FilterByField};
-      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
-      REQUIRE(gtkLabel);
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::FilterByField};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
 
-      auto const trackId = addPlayableTrack(runtime, "Filtered Song", "Filter Artist");
-      startPlayback(runtime, trackId);
-      drainGtkEvents();
+    auto const trackId = addPlayableTrack(runtime, "Filtered Song", "Filter Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
 
-      CHECK(gtkLabel->has_css_class("ao-clickable"));
-      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
-      drainGtkEvents();
+    CHECK(gtkLabel->has_css_class("ao-clickable"));
+    REQUIRE(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).filterExpression.empty());
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    drainGtkEvents();
 
-      auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
-      CHECK(state.listId == rt::kAllTracksListId);
-      CHECK_FALSE(state.filterExpression.empty());
-    }
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    CHECK(state.listId == rt::kAllTracksListId);
+    CHECK(state.filterExpression == R"($title = "Filtered Song")");
+  }
 
-    SECTION("reveal action emits a reveal request for the current track")
-    {
-      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
-                                             runtime.workspace(),
-                                             ao::test::englishMessageCatalog(),
-                                             rt::TrackField::Title,
-                                             uimodel::NowPlayingFieldAction::Reveal};
-      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
-      REQUIRE(gtkLabel);
+  TEST_CASE("NowPlayingFieldLabel - reveal action publishes the current track and list",
+            "[gtk][integration][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
 
-      auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
-      auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::Reveal};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
 
-      auto const trackId = addPlayableTrack(runtime, "Reveal Song", "Reveal Artist");
-      startPlayback(runtime, trackId);
-      drainGtkEvents();
+    auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
+    auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
 
-      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
-      drainGtkEvents();
+    auto const trackId = addPlayableTrack(runtime, "Reveal Song", "Reveal Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
 
-      REQUIRE(optRequest);
-      CHECK(optRequest->trackId == trackId);
-      CHECK(optRequest->preferredListId == rt::kAllTracksListId);
-    }
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    drainGtkEvents();
 
-    SECTION("play-pause action resumes when transport is not playing")
-    {
-      auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
-                                             runtime.workspace(),
-                                             ao::test::englishMessageCatalog(),
-                                             rt::TrackField::Title,
-                                             uimodel::NowPlayingFieldAction::PlayPause};
-      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
-      REQUIRE(gtkLabel);
+    REQUIRE(optRequest);
+    CHECK(optRequest->trackId == trackId);
+    CHECK(optRequest->preferredListId == rt::kAllTracksListId);
+  }
 
-      auto const trackId = addPlayableTrack(runtime, "Toggle Song", "Toggle Artist");
-      startPlayback(runtime, trackId);
-      drainGtkEvents();
-      runtime.playback().commands().pause();
-      drainGtkEvents();
+  TEST_CASE("NowPlayingFieldLabel - play-pause action resumes a paused track",
+            "[gtk][integration][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
 
-      bool started = false;
-      auto startSub = runtime.playback().events().onSnapshot(
-        [&](rt::PlaybackSnapshot const& snapshot) noexcept
-        { started = snapshot.transport.transport == audio::Transport::Playing; });
-      REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
-      drainGtkEvents();
-      CHECK(started);
-    }
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::PlayPause};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
+
+    auto const trackId = addPlayableTrack(runtime, "Toggle Song", "Toggle Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
+    runtime.playback().commands().pause();
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Paused; }));
+
+    bool started = false;
+    auto startSub = runtime.playback().events().onSnapshot(
+      [&](rt::PlaybackSnapshot const& snapshot) noexcept
+      { started = started || snapshot.transport.transport == audio::Transport::Playing; });
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Playing; }));
+    CHECK(started);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == trackId);
   }
 } // namespace ao::gtk::test

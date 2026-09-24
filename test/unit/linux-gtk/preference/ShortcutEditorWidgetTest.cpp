@@ -17,6 +17,7 @@
 #include <gdk/gdktypes.h>
 #include <gdkmm/enums.h>
 #include <gtkmm/button.h>
+#include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/label.h>
 
@@ -113,7 +114,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ShortcutEditorWidget - lists only shortcut-eligible actions", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - lists only shortcut-eligible actions", "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -128,7 +129,7 @@ namespace ao::gtk::test
     CHECK_FALSE(contains(ids, "track.editTags"));
   }
 
-  TEST_CASE("ShortcutEditorWidget - renders the effective chords for each action", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - renders the effective chords for each action", "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -142,7 +143,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(editor, "Play/Pause") != nullptr);
   }
 
-  TEST_CASE("ShortcutEditorWidget - renders locale-selected editor chrome", "[gtk][unit][localization]")
+  TEST_CASE("ShortcutEditorWidget - renders locale-selected editor chrome", "[gtk][unit][preference][localization]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -158,7 +159,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - long action names preserve shortcut controls at constrained width",
-            "[gtk][regression][preferences][geometry]")
+            "[gtk][unit][preference][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const longActionLabel = std::string{"Activar/desactivar reproducción aleatoria excepcionalmente larga"};
@@ -170,7 +171,10 @@ namespace ao::gtk::test
       ao::test::englishMessageCatalog(), schema, uimodel::KeymapModel{uimodel::defaultKeymap()}, {}, hostWindow};
 
     auto allocationHost = AllocationHost{editor};
-    allocationHost.allocateChild(420, 480);
+    // Constrain to the active font/theme's minimum, not an invalid fixed pixel width.
+    auto const width = measureWidget(editor, Gtk::Orientation::HORIZONTAL).minimum;
+    auto const height = std::max(480, measureWidget(editor, Gtk::Orientation::VERTICAL, width).minimum);
+    allocationHost.allocateChild(width, height);
     drainGtkEvents();
 
     auto* const actionLabel = findLabelByText(editor, longActionLabel);
@@ -184,7 +188,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - routes shortcut button events to keymap changes",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -312,7 +316,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - ignores conflict responses after destruction",
-            "[gtk][regression][shortcut][concurrency]")
+            "[gtk][unit][preference][shortcut][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -342,7 +346,7 @@ namespace ao::gtk::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("ShortcutEditorWidget - parents capture popups to the injected host", "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("ShortcutEditorWidget - parents capture popups to the injected host", "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -362,7 +366,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - old capture teardown does not close a replacement popup",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -385,7 +389,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - failed persistence keeps the candidate and live applied model",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -443,7 +447,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ShortcutEditorWidget - deferred list rebuild does not destroy the dispatching button",
-            "[gtk][regression][shortcut][lifetime]")
+            "[gtk][unit][preference][shortcut][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

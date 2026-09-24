@@ -4,22 +4,12 @@
 #include "tui/PlaybackPanel.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
-#include "test/unit/tui/KeymapTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
-#include "tui/OutputDevicePanel.h"
-#include "tui/QualityPanel.h"
-#include <ao/audio/BackendIds.h>
-#include <ao/audio/Device.h>
-#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
-#include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -31,51 +21,15 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <string>
-#include <utility>
-#include <vector>
 
 namespace ao::tui::test
 {
   namespace
   {
-    ftxui::Element englishQualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t const columns = 0)
-    {
-      return qualityPanel(ao::test::englishMessageCatalog(), state, defaultKeymapPlan(), columns);
-    }
-
     ftxui::Element englishPlaybackBar(PlaybackBarViewState const& view)
     {
       return playbackBar(ao::test::englishMessageCatalog(), view);
-    }
-
-    std::int32_t englishQualityPanelColumns(rt::PlaybackTransportSnapshot const& state,
-                                            std::int32_t const terminalColumns)
-    {
-      return qualityPanelColumns(ao::test::englishMessageCatalog(), state, defaultKeymapPlan(), terminalColumns);
-    }
-
-    ftxui::Element englishOutputDevicePanel(uimodel::OutputDeviceViewState const& view,
-                                            std::int32_t const selectedRow,
-                                            std::vector<OutputDeviceRowHitRegion>* const rowHitRegions = nullptr,
-                                            std::int32_t const columns = 0)
-    {
-      return outputDevicePanel(
-        ao::test::englishMessageCatalog(), view, selectedRow, defaultKeymapPlan(), rowHitRegions, columns);
-    }
-
-    std::int32_t englishOutputDevicePanelColumns(uimodel::OutputDeviceViewState const& view,
-                                                 std::int32_t const terminalColumns)
-    {
-      return outputDevicePanelColumns(ao::test::englishMessageCatalog(), view, defaultKeymapPlan(), terminalColumns);
-    }
-
-    std::string renderPlaybackText(ftxui::Element elementPtr)
-    {
-      auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fit(elementPtr));
-      ftxui::Render(screen, elementPtr);
-      return screen.ToString();
     }
 
     bool isBrailleGlyph(std::string const& character)
@@ -125,18 +79,13 @@ namespace ao::tui::test
 
       return -1;
     }
-
-    audio::SignalFormat cdFormat()
-    {
-      return audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
-    }
   } // namespace
 
   TEST_CASE("PlaybackPanel - playback bar renders idle fallback state", "[tui][unit][playback]")
   {
     auto const state = rt::PlaybackTransportSnapshot{};
 
-    auto const text = renderPlaybackText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state}));
+    auto const text = renderText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state}), 96);
 
     CHECK_FALSE(text.contains("Aobus"));
     CHECK_FALSE(text.contains("Library"));
@@ -155,17 +104,17 @@ namespace ao::tui::test
     auto const german = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = rt::NowPlayingInfo{.title = "誰か、海を。"}, .volume = rt::VolumeState{.level = 0.42F}};
-    auto text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
+    auto text = renderText(playbackBar(german, {.playbackState = &state}), 96);
 
     CHECK(text.contains("誰か、海を。"));
     CHECK(text.contains("Lautst. 42%"));
 
     state.nowPlaying.title.clear();
-    text = renderPlaybackText(playbackBar(german, {.playbackState = &state}));
+    text = renderText(playbackBar(german, {.playbackState = &state}), 96);
     CHECK(text.contains("Kein aktiver Titel"));
   }
 
-  TEST_CASE("PlaybackPanel - muted volume remains visible as a mouse target", "[tui][unit][mouse][playback]")
+  TEST_CASE("PlaybackPanel - muted volume remains visible as a mouse target", "[tui][unit][playback][mouse]")
   {
     auto state = rt::PlaybackTransportSnapshot{.volume = rt::VolumeState{.level = 0.42F, .muted = true}};
     auto box = ftxui::Box{};
@@ -174,7 +123,13 @@ namespace ao::tui::test
     CHECK(screen.ToString().contains("Muted"));
     CHECK_FALSE(screen.ToString().contains("42%"));
     CHECK_FALSE(box.IsEmpty());
-    CHECK(state.volume.level == 0.42F);
+    auto const optRenderedMutedBox = findTextCells(screen, "Muted");
+    REQUIRE(optRenderedMutedBox);
+    CHECK(box.x_min <= optRenderedMutedBox->x_min);
+    CHECK(box.x_max == optRenderedMutedBox->x_max);
+    CHECK(box.y_min == optRenderedMutedBox->y_min);
+    CHECK(box.y_max >= optRenderedMutedBox->y_max);
+    CHECK(box.y_max < screen.dimy());
   }
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
@@ -186,8 +141,9 @@ namespace ao::tui::test
                                     .volume = rt::VolumeState{.level = 0.42F},
                                     .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
 
-    auto const text = renderPlaybackText(
-      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
+    auto const text = renderText(
+      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}),
+      96);
 
     CHECK_FALSE(text.contains("view:"));
     CHECK(text.contains("Signal Path"));
@@ -200,7 +156,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PlaybackPanel - paused soul retains its sampled frame while live quality changes",
-            "[tui][regression][playback][soul]")
+            "[tui][unit][playback][soul]")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .transport = audio::Transport::Paused,
@@ -262,8 +218,9 @@ namespace ao::tui::test
                                                .duration = std::chrono::seconds{100},
                                                .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
 
-    auto const text = renderPlaybackText(
-      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
+    auto const text = renderText(
+      englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}),
+      96);
 
     CHECK_FALSE(text.contains("50%"));
     CHECK(text.contains("●"));
@@ -369,7 +326,7 @@ namespace ao::tui::test
     };
 
     auto const text =
-      renderPlaybackText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}));
+      renderText(englishPlaybackBar(PlaybackBarViewState{.playbackState = &state, .outputView = &output}), 96);
 
     CHECK(text.contains("PW"));
     CHECK(text.contains("No active track"));
@@ -394,287 +351,5 @@ namespace ao::tui::test
 
     auto const pixel = screen.PixelAt(outputDeviceBox.x_min, outputDeviceBox.y_min);
     checkInteractiveSurface(pixel);
-  }
-
-  TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")
-  {
-    auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
-
-    auto const text = renderPlaybackText(englishQualityPanel(state));
-
-    CHECK_FALSE(text.contains("Quality"));
-    CHECK_FALSE(text.contains("Audio Pipeline"));
-    CHECK(text.contains("No audio pipeline yet"));
-    CHECK_FALSE(text.contains("toggle"));
-    CHECK(text.contains("Esc close"));
-  }
-
-  TEST_CASE("PlaybackPanel - quality panel renders selected device pipeline and findings", "[tui][unit][playback]")
-  {
-    auto state =
-      rt::PlaybackTransportSnapshot{
-        .output =
-          rt::OutputState{
-            .selectedDevice = audio::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
-                                                           .deviceId = audio::DeviceId{"dac"}},
-            .availableBackends =
-              std::vector{
-                rt::OutputBackendSnapshot{
-                  .id = audio::BackendId{"mock_backend"},
-                  .devices =
-                    std::vector{
-                      rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Studio DAC"},
-                    },
-                },
-              },
-          },
-        .quality =
-          rt::QualityState{
-            .sourceQuality = audio::Quality::BitwisePerfect,
-            .pipelineQuality = audio::Quality::LinearIntervention,
-            .overall = audio::Quality::LinearIntervention,
-            .assessments =
-              std::vector{
-                audio::NodeQualityAssessment{
-                  .nodeId = "ao-source",
-                  .nodeName = "FLAC",
-                  .nodeType = audio::flow::NodeType::Source,
-                  .optFormat = cdFormat(),
-                  .worstQuality = audio::Quality::BitwisePerfect,
-                  .findings =
-                    std::vector{
-                      audio::QualityFinding{
-                        .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect},
-                    },
-                },
-                audio::NodeQualityAssessment{
-                  .nodeId = "ao-sink",
-                  .nodeName = "DAC",
-                  .nodeType = audio::flow::NodeType::Sink,
-                  .optFormat = cdFormat(),
-                  .worstQuality = audio::Quality::LinearIntervention,
-                  .findings =
-                    std::vector{
-                      audio::QualityFinding{
-                        .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect},
-                      audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification,
-                                            .quality = audio::Quality::LinearIntervention},
-                    },
-                },
-              },
-          },
-      };
-
-    auto const text = renderPlaybackText(englishQualityPanel(state));
-
-    CHECK(text.contains("Studio DAC"));
-    CHECK_FALSE(text.contains("Quality"));
-    CHECK(text.contains("[Source] FLAC"));
-    CHECK(text.contains("44.1 kHz"));
-    CHECK(text.contains("[Device] DAC"));
-    CHECK(text.contains("Software volume attenuation"));
-    CHECK(text.contains("Pipeline intervention"));
-  }
-
-  TEST_CASE("PlaybackPanel - quality panel localizes semantic copy and preserves external names",
-            "[tui][unit][playback][localization]")
-  {
-    auto const textCatalog = ao::test::messageCatalog("de-DE");
-    auto state = rt::PlaybackTransportSnapshot{
-      .output =
-        rt::OutputState{
-          .selectedDevice = audio::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
-                                                         .deviceId = audio::DeviceId{"dac"}},
-          .availableBackends = {rt::OutputBackendSnapshot{
-            .id = audio::BackendId{"mock_backend"},
-            .devices = {rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Dvořák DAC"}},
-          }},
-        },
-      .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                  .pipelineQuality = audio::Quality::LinearIntervention,
-                                  .overall = audio::Quality::LinearIntervention,
-                                  .assessments = {audio::NodeQualityAssessment{
-                                    .nodeName = "誰か",
-                                    .nodeType = audio::flow::NodeType::Source,
-                                    .optFormat = cdFormat(),
-                                    .findings = {audio::QualityFinding{
-                                      .kind = audio::QualityFindingKind::Resampling,
-                                      .quality = audio::Quality::LinearIntervention,
-                                      .optFromFormat = cdFormat(),
-                                      .optToFormat =
-                                        audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16},
-                                    }},
-                                  }}},
-    };
-
-    auto const text = renderPlaybackText(qualityPanel(textCatalog, state, defaultKeymapPlan(), 0));
-
-    CHECK(text.contains("Dvořák DAC"));
-    CHECK(text.contains("[Quelle] 誰か"));
-    CHECK(text.contains("Neuabtastung: 44100 Hz → 48000 Hz"));
-    CHECK(text.contains("Signalverarbeitung in der Audiokette"));
-
-    state.quality.assessments.clear();
-    auto const emptyText = renderPlaybackText(qualityPanel(textCatalog, state, defaultKeymapPlan(), 0));
-    CHECK(emptyText.contains("Noch keine Audiokette"));
-  }
-
-  TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
-  {
-    auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
-    auto const narrowColumns = englishQualityPanelColumns(state, 120);
-
-    state.quality.assessments = std::vector{
-      audio::NodeQualityAssessment{
-        .nodeName = "Extremely Long Decoder Stage Name",
-        .nodeType = audio::flow::NodeType::Source,
-        .optFormat = cdFormat(),
-      },
-    };
-
-    CHECK(englishQualityPanelColumns(state, 120) > narrowColumns);
-    CHECK(englishQualityPanelColumns(state, 32) == 32);
-  }
-
-  TEST_CASE("PlaybackPanel - output device panel renders grouped selectable rows", "[tui][unit][playback]")
-  {
-    auto rowHitRegions = std::vector<OutputDeviceRowHitRegion>{};
-    auto const view = uimodel::OutputDeviceViewState{
-      .rows =
-        std::vector{
-          uimodel::OutputDeviceRow{
-            .kind = uimodel::OutputDeviceRow::Kind::BackendHeader,
-            .backendId = audio::BackendId{"pipewire"},
-            .title = "PipeWire",
-          },
-          uimodel::OutputDeviceRow{
-            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
-            .backendId = audio::BackendId{"pipewire"},
-            .deviceId = audio::DeviceId{"studio"},
-            .profileId = audio::kProfileShared,
-            .title = "Studio DAC",
-            .description = "USB interface",
-            .isActive = true,
-          },
-          uimodel::OutputDeviceRow{
-            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
-            .backendId = audio::BackendId{"pipewire"},
-            .deviceId = audio::DeviceId{"studio"},
-            .profileId = audio::kProfileExclusive,
-            .title = "Studio DAC",
-            .isExclusive = true,
-          },
-        },
-      .outputBackendSummary = "PW",
-      .outputDeviceStatus = "PipeWire: Studio DAC",
-      .hasActiveOutputDevice = true,
-    };
-
-    auto const text = renderPlaybackText(englishOutputDevicePanel(view, 2, &rowHitRegions));
-
-    CHECK(text.contains("Output Devices"));
-    CHECK(text.contains("PipeWire"));
-    CHECK(text.contains("Studio DAC"));
-    CHECK(text.contains("USB interface"));
-    CHECK(text.contains("PipeWire: Studio DAC"));
-    CHECK(text.contains("Enter select"));
-    REQUIRE(rowHitRegions.size() == 2);
-    CHECK(rowHitRegions[0].rowIndex == 1);
-    CHECK(rowHitRegions[0].backendId == audio::BackendId{"pipewire"});
-    CHECK(rowHitRegions[0].deviceId == audio::DeviceId{"studio"});
-    CHECK(rowHitRegions[0].profileId == audio::kProfileShared);
-    CHECK(rowHitRegions[1].rowIndex == 2);
-    CHECK(rowHitRegions[1].profileId == audio::kProfileExclusive);
-  }
-
-  TEST_CASE("PlaybackPanel - output device empty state uses the selected locale", "[tui][unit][playback][localization]")
-  {
-    auto const german = ao::test::messageCatalog("de-AT");
-    auto const view = uimodel::OutputDeviceViewState{};
-    auto const text = renderPlaybackText(outputDevicePanel(german, view, 0, defaultKeymapPlan()));
-
-    CHECK(text.contains("Ausgabegeräte"));
-    CHECK(text.contains("Keine Ausgabegeräte gefunden"));
-    CHECK(text.contains("Kein Ausgabegerät ausgewählt"));
-  }
-
-  TEST_CASE("PlaybackPanel - output device panel width follows content and terminal bounds", "[tui][unit][playback]")
-  {
-    auto view = uimodel::OutputDeviceViewState{
-      .rows =
-        std::vector{
-          uimodel::OutputDeviceRow{
-            .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
-            .backendId = audio::BackendId{"pipewire"},
-            .deviceId = audio::DeviceId{"studio"},
-            .profileId = audio::kProfileShared,
-            .title = "Studio DAC",
-          },
-        },
-      .outputBackendSummary = "PW",
-      .outputDeviceStatus = "PipeWire: Studio DAC",
-    };
-    auto const narrowColumns = englishOutputDevicePanelColumns(view, 120);
-
-    view.rows[0].description = "USB interface with a very long ALSA/PipeWire profile identifier";
-
-    CHECK(englishOutputDevicePanelColumns(view, 120) > narrowColumns);
-    CHECK(englishOutputDevicePanelColumns(view, 40) == 40);
-  }
-
-  TEST_CASE("PlaybackPanel - output device panel frames long device lists", "[tui][unit][playback]")
-  {
-    auto rows = std::vector{
-      uimodel::OutputDeviceRow{
-        .kind = uimodel::OutputDeviceRow::Kind::BackendHeader,
-        .backendId = audio::BackendId{"pipewire"},
-        .title = "PipeWire",
-      },
-    };
-
-    for (std::int32_t index = 0; index < 20; ++index)
-    {
-      rows.push_back(uimodel::OutputDeviceRow{
-        .kind = uimodel::OutputDeviceRow::Kind::DeviceProfile,
-        .backendId = audio::BackendId{"pipewire"},
-        .deviceId = audio::DeviceId{std::format("device-{}", index)},
-        .profileId = audio::kProfileShared,
-        .title = std::format("Device {}", index),
-        .description = "alsa_output.usb-Sonata_Sonata_BHD_Pro_Sonata_BHD_Pro_very_long_identifier",
-        .isActive = index == 0,
-      });
-    }
-
-    auto const view = uimodel::OutputDeviceViewState{
-      .rows = std::move(rows),
-      .outputBackendSummary = "PW",
-      .outputDeviceStatus = "PipeWire: Device 0",
-      .hasActiveOutputDevice = true,
-    };
-
-    auto regions = std::vector<OutputDeviceRowHitRegion>{};
-    auto const rendered = renderElement(englishOutputDevicePanel(view, 1, &regions, 48), 48, 24);
-
-    CHECK_FALSE(rendered.text.contains("very_long_identifier"));
-    CHECK_FALSE(rendered.text.contains("toggle"));
-    REQUIRE_FALSE(regions.empty());
-    auto const selectedRow = regions.front().box;
-    CHECK(selectedRow.x_min == 2);
-    CHECK(selectedRow.x_max == 45);
-    CHECK(rendered.screen.PixelAt(1, selectedRow.y_min).background_color == ftxui::Color::Default);
-    CHECK(rendered.screen.PixelAt(2, selectedRow.y_min).background_color == ftxui::Color::Yellow);
-    CHECK(rendered.screen.PixelAt(45, selectedRow.y_min).background_color == ftxui::Color::Yellow);
-    CHECK(rendered.screen.PixelAt(46, selectedRow.y_min).background_color == ftxui::Color::Default);
-  }
-
-  TEST_CASE("QualityPanel - indicators use the Soul quality colors", "[tui][unit][quality]")
-  {
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Medal) == uimodel::kAobusSoulRadiant);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Positive) == uimodel::kAobusSoulFlowing);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Diagnostic) == uimodel::kAobusSoulTurbulent);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Warning) == uimodel::kAobusSoulTurbulent);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Informational) == uimodel::kAobusSoulVeiled);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Unknown) == uimodel::kAobusSoulVeiled);
-    CHECK(qualityIndicatorColor(uimodel::AudioQualityCategory::Clipped) == uimodel::kAobusSoulBurning);
   }
 } // namespace ao::tui::test

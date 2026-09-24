@@ -8,12 +8,16 @@
 #include <ao/Error.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/utility/Path.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -27,10 +31,8 @@ namespace ao::rt::test
     {
       auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
 
-      if (!std::filesystem::exists(source))
-      {
-        return {};
-      }
+      INFO("Required audio fixture: " << source);
+      REQUIRE(std::filesystem::is_regular_file(source));
 
       auto const destination = libraryFixture.root() / name;
       std::filesystem::create_directories(destination.parent_path());
@@ -61,12 +63,7 @@ namespace ao::rt::test
     auto collectionSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { inserted = ev.tracksInserted; });
 
     auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
-
-    if (!std::filesystem::exists(absValidFile))
-    {
-      SUCCEED("Skipping test because test file is missing");
-      return;
-    }
+    REQUIRE(std::filesystem::is_regular_file(absValidFile));
 
     auto const trackIdRes = commandsFixture.runTask(commands.createTrackFromFileAsync(absValidFile));
     REQUIRE(trackIdRes);
@@ -98,12 +95,7 @@ namespace ao::rt::test
     auto& commands = commandsFixture.commands();
 
     auto const absValidFile = copyFixtureAudio(libraryFixture, "relative.flac");
-
-    if (!std::filesystem::exists(absValidFile))
-    {
-      SUCCEED("Skipping test because test file is missing");
-      return;
-    }
+    REQUIRE(std::filesystem::is_regular_file(absValidFile));
 
     auto const trackIdRes = commandsFixture.runTask(commands.createTrackFromFileAsync("relative.flac"));
     REQUIRE(trackIdRes);
@@ -117,8 +109,7 @@ namespace ao::rt::test
     CHECK(optTrackView->property().uri() == "relative.flac");
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile preserves a UTF-8 URI",
-            "[runtime][regression][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile preserves a UTF-8 URI", "[runtime][unit][library][track-create]")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -128,11 +119,7 @@ namespace ao::rt::test
     auto& commands = commandsFixture.commands();
     auto const mediaPath = copyFixtureAudio(libraryFixture, utility::pathFromUtf8(expected));
 
-    if (!std::filesystem::exists(mediaPath))
-    {
-      SUCCEED("Skipping test because test file is missing");
-      return;
-    }
+    REQUIRE(std::filesystem::is_regular_file(mediaPath));
 
     auto const createdRes = commandsFixture.runTask(commands.createTrackFromFileAsync(mediaPath));
 
@@ -151,19 +138,31 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto const existingId = libraryFixture.addTrack("Existing");
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
+    auto const revisionBefore = commandsFixture.bind(std::array{existingId}).revision();
 
-    auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
+    std::size_t publicationCount = 0;
+    auto sub = changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
 
     auto const unsupportedFile = createTextFile(libraryFixture, "unsupported.txt");
+    REQUIRE(std::filesystem::is_regular_file(unsupportedFile));
 
     auto const trackIdRes = commandsFixture.runTask(commands.createTrackFromFileAsync(unsupportedFile));
-    REQUIRE(!trackIdRes);
+    REQUIRE_FALSE(trackIdRes);
     CHECK(trackIdRes.error().code == Error::Code::NotSupported);
-    CHECK(mutated.empty());
+    CHECK(publicationCount == 0);
+
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
+    auto const reader = libraryFixture.library().tracks().reader(transaction);
+    CHECK(reader.entryCount() == 1);
+    auto const optExisting = reader.get(existingId);
+    REQUIRE(optExisting);
+    CHECK(optExisting->metadata().title() == "Existing");
+    CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("unsupported.txt"));
   }
 
   TEST_CASE("LibraryCommands - createTrackFromFile rejects invalid path boundaries",

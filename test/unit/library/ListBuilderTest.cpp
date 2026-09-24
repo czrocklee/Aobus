@@ -5,11 +5,9 @@
 
 #include "lib/library/ListRecordValidation.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "test/unit/library/LibraryStoreTestSupport.h"
-#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/ListLayout.h>
-#include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/utility/ByteView.h>
 
@@ -21,22 +19,12 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::library::test
 {
   namespace
   {
-    std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
-    {
-      auto res = writer.create(prepared);
-      REQUIRE(res);
-      auto optView = writer.get(*res);
-      REQUIRE(optView);
-      return {*res, *optView};
-    }
-
     std::vector<std::byte> duplicateOrderPayload(std::span<TrackId const> trackIds)
     {
       auto const trackIdsSize = trackIds.size_bytes();
@@ -86,18 +74,14 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[1] == TrackId{12});
   }
 
-  TEST_CASE("ListBuilder - normalizes display text and preserves opaque filter bytes", "[library][unit][list][unicode]")
+  TEST_CASE("ListBuilder - normalizes display text", "[library][unit][list][unicode]")
   {
-    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty()
-                                                  .name("Cafe\u0301")
-                                                  .description("Cre\u0300me bru\u0302le\u0301e")
-                                                  .filter("$title = 'Re\u0301sume\u0301'")
-                                                  .serialize());
+    auto const payload = ao::test::requireValue(
+      ListBuilder::makeEmpty().name("Cafe\u0301").description("Cre\u0300me bru\u0302le\u0301e").serialize());
     auto const view = ListView{payload};
 
     CHECK(view.name() == "Café");
     CHECK(view.description() == "Crème brûlée");
-    CHECK(view.filter() == "$title = 'Re\u0301sume\u0301'");
     CHECK(validateSerializedList(payload));
   }
 
@@ -123,7 +107,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("List name"));
   }
 
-  TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][regression][list]")
+  TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][unit][list]")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("x").serialize());
     constexpr auto kLogicalSize = kListHeaderSize + 1;
@@ -133,22 +117,6 @@ namespace ao::library::test
     {
       CHECK(byte == std::byte{0});
     }
-  }
-
-  TEST_CASE("ListBuilder - order track IDs round-trip", "[library][unit][list]")
-  {
-    auto builder = ListBuilder::makeEmpty().name("My List").description("A saved order");
-    builder.orderTrackIds().add(TrackId{100});
-    builder.orderTrackIds().add(TrackId{200});
-    builder.orderTrackIds().add(TrackId{300});
-    auto const payload = ao::test::requireValue(builder.serialize());
-    auto const view = ListView{payload};
-
-    CHECK(view.name() == "My List");
-    CHECK(view.orderTrackIds().size() == 3);
-    CHECK(view.orderTrackIds()[0] == TrackId{100});
-    CHECK(view.orderTrackIds()[1] == TrackId{200});
-    CHECK(view.orderTrackIds()[2] == TrackId{300});
   }
 
   TEST_CASE("ListBuilder - add retains only the first occurrence in request order", "[library][unit][list]")
@@ -205,6 +173,7 @@ namespace ao::library::test
       ao::test::requireValue(ListBuilder::makeEmpty().name("Empty List").description("No tracks").serialize());
     auto const view = ListView{payload};
 
+    CHECK(view.filter().empty());
     CHECK(view.orderTrackIds().empty());
     CHECK(view.parentId() == kInvalidListId);
   }
@@ -229,58 +198,6 @@ namespace ao::library::test
     CHECK(rebuiltView.filter() == "$year >= 2021");
   }
 
-  TEST_CASE("ListBuilder - saved order round-trips through ListStore", "[library][unit][list]")
-  {
-    auto fixture = LibraryStoreFixture{};
-    auto& library = fixture.library;
-    auto const& store = library.lists();
-
-    auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
-    builder.orderTrackIds().add(TrackId{42});
-    builder.orderTrackIds().add(TrackId{99});
-    auto const prepared = ao::test::requireValue(builder.prepare());
-
-    auto wtxn2 = writeTransaction(library);
-    auto const [id, createdView] = requireCreate(physicalWriter(store, wtxn2), prepared);
-    REQUIRE(wtxn2.commit());
-
-    auto rtxn = library.readTransaction();
-    auto const optFoundResult = store.reader(rtxn).get(id);
-    REQUIRE(optFoundResult);
-
-    auto const& found = *optFoundResult;
-    CHECK(found.name() == "RoundTrip Test");
-    CHECK(found.orderTrackIds().size() == 2);
-    CHECK(found.orderTrackIds()[0] == TrackId{42});
-    CHECK(found.orderTrackIds()[1] == TrackId{99});
-  }
-
-  TEST_CASE("ListBuilder - expression round-trips through ListStore", "[library][unit][list]")
-  {
-    auto fixture = LibraryStoreFixture{};
-    auto& library = fixture.library;
-    auto const& store = library.lists();
-
-    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty()
-                                                   .name("Smart RoundTrip")
-                                                   .description("Testing smart list round-trip")
-                                                   .filter("@year > 2020")
-                                                   .prepare());
-
-    auto wtxn2 = writeTransaction(library);
-    auto const [id, createdView] = requireCreate(physicalWriter(store, wtxn2), prepared);
-    REQUIRE(wtxn2.commit());
-
-    auto rtxn = library.readTransaction();
-    auto const optFoundResult = store.reader(rtxn).get(id);
-    REQUIRE(optFoundResult);
-
-    auto const& found = *optFoundResult;
-    CHECK(found.name() == "Smart RoundTrip");
-    CHECK(found.filter() == "@year > 2020");
-    CHECK(found.orderTrackIds().empty());
-  }
-
   TEST_CASE("ListBuilder - derives adjacent text field positions", "[library][unit][list]")
   {
     auto const payload =
@@ -298,14 +215,25 @@ namespace ao::library::test
     CHECK(longTextRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("ListBuilder - preparation preserves an opaque invalid filter", "[library][unit][list]")
+  TEST_CASE("ListBuilder - preparation preserves opaque filter bytes", "[library][unit][list]")
   {
-    constexpr auto kInvalidFilter = "((( this is not query grammar";
-    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().filter(kInvalidFilter).prepare());
+    auto filter = std::string_view{};
+
+    SECTION("query grammar is not interpreted")
+    {
+      filter = "((( this is not query grammar";
+    }
+
+    SECTION("filter text is not normalized")
+    {
+      filter = "$title = 'Re\u0301sume\u0301'";
+    }
+
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().filter(filter).prepare());
     auto const view = ListView{prepared.bytes()};
 
     REQUIRE(view.isValid());
-    CHECK(view.filter() == kInvalidFilter);
+    CHECK(view.filter() == filter);
     CHECK(validateSerializedList(prepared.bytes()));
   }
 
@@ -333,12 +261,15 @@ namespace ao::library::test
   TEST_CASE("ListBuilder - preparation rejects the reserved saved-order Track id", "[library][unit][list]")
   {
     auto builder = ListBuilder::makeEmpty();
-    builder.orderTrackIds().add(kInvalidTrackId);
+    builder.orderTrackIds().add(TrackId{1});
+    REQUIRE(builder.prepare());
+    builder.orderTrackIds().clear().add(kInvalidTrackId);
 
     auto const preparedRes = builder.prepare();
 
     REQUIRE_FALSE(preparedRes);
     CHECK(preparedRes.error().code == Error::Code::CorruptData);
+    CHECK(preparedRes.error().message == "List record contains the reserved Track id zero");
   }
 
   TEST_CASE("ListBuilder - order supports more than 16-bit byte offsets", "[library][unit][list]")

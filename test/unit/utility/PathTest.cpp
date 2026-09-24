@@ -10,7 +10,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("Path - UTF-8 text round trips through native paths", "[utility][regression][path]")
+  TEST_CASE("Path - UTF-8 text round trips through native paths", "[utility][unit][path]")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -21,12 +21,12 @@ namespace ao::utility::test
     CHECK(pathToUtf8(path.filename()) == "Dvo\xC5\x99\xC3\xA1k.flac");
   }
 
-  TEST_CASE("Path - native filename code units round trip without text conversion", "[utility][regression][path]")
+  TEST_CASE("Path - native filename code units round trip without text conversion", "[utility][unit][path]")
   {
     auto native = std::filesystem::path::string_type{};
     native.push_back(static_cast<std::filesystem::path::value_type>('a'));
     native.push_back(static_cast<std::filesystem::path::value_type>('o'));
-#if defined(_WIN32)
+#ifdef _WIN32
     native.push_back(L'\u00DC');
 #else
     native.push_back(static_cast<char>(0xFF));

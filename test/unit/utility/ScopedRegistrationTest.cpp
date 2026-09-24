@@ -56,8 +56,7 @@ namespace ao::utility::test
     CHECK(secondReleaseCount == 1);
   }
 
-  TEST_CASE("ScopedRegistration - stack unwinding releases a registration",
-            "[utility][regression][scoped-registration]")
+  TEST_CASE("ScopedRegistration - stack unwinding releases a registration", "[utility][unit][scoped-registration]")
   {
     std::int32_t releaseCount = 0;
 

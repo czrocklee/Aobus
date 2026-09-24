@@ -3,12 +3,19 @@
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
+#include <ao/library/TrackView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 #include <string_view>
 
 namespace ao::library::test
@@ -53,11 +60,20 @@ namespace ao::library::test
     builder.property().uri("test.flac");
     builder.tags().add("tag1").add("tag2").add("tag3");
 
-    auto const [hotData, coldData] = serializeTestTrack(builder);
+    auto context = TrackSerializationFixture{};
+    auto const [hotData, coldData] = context.serialize(builder);
+    auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 12); // 3 tags * 4 bytes each
-    CHECK(header->tagBloom != 0);   // Bloom should be computed from tag IDs
+    CHECK(header->tagBloom == 0x0000000EU);
+    REQUIRE(view.tags().count() == 3);
+    CHECK(view.tags().id(0) == DictionaryId{1});
+    CHECK(view.tags().id(1) == DictionaryId{2});
+    CHECK(view.tags().id(2) == DictionaryId{3});
+    CHECK(context.dictionary().get(view.tags().id(0)) == "tag1");
+    CHECK(context.dictionary().get(view.tags().id(1)) == "tag2");
+    CHECK(context.dictionary().get(view.tags().id(2)) == "tag3");
   }
 
   TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track-builder][tag]")
@@ -67,10 +83,16 @@ namespace ao::library::test
     builder.property().uri("test.flac");
     builder.tags().add("tag42");
 
-    auto const [hotData, coldData] = serializeTestTrack(builder);
+    auto context = TrackSerializationFixture{};
+    auto const [hotData, coldData] = context.serialize(builder);
+    auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 4); // 1 tag * 4 bytes
+    CHECK(header->tagBloom == 0x00000002U);
+    REQUIRE(view.tags().count() == 1);
+    CHECK(view.tags().id(0) == DictionaryId{1});
+    CHECK(context.dictionary().get(view.tags().id(0)) == "tag42");
   }
 
   TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track-builder][tag]")
@@ -80,11 +102,23 @@ namespace ao::library::test
     builder.property().uri("test.flac");
     builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
 
-    auto const [hotData, coldData] = serializeTestTrack(builder);
+    auto context = TrackSerializationFixture{};
+    auto const [hotData, coldData] = context.serialize(builder);
+    auto const view = TrackView{hotData, coldData};
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 20); // 5 tags * 4 bytes each
-    CHECK(header->tagBloom != 0);
+    CHECK(header->tagBloom == 0x0000003EU);
+    REQUIRE(view.tags().count() == 5);
+    constexpr auto kExpectedIds = std::to_array<DictionaryId>(
+      {DictionaryId{1}, DictionaryId{2}, DictionaryId{3}, DictionaryId{4}, DictionaryId{5}});
+    constexpr auto kExpectedNames = std::to_array<std::string_view>({"tag1", "tag2", "tag3", "tag4", "tag5"});
+
+    for (std::uint16_t index = 0; index < view.tags().count(); ++index)
+    {
+      CHECK(view.tags().id(index) == kExpectedIds[index]);
+      CHECK(context.dictionary().get(kExpectedIds[index]) == kExpectedNames[index]);
+    }
   }
 
   TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track-builder][tag]")
@@ -99,9 +133,15 @@ namespace ao::library::test
     REQUIRE(hotDataRes);
     auto const& hotData = *hotDataRes;
 
+    REQUIRE(context.transaction().commit());
+    auto const view = TrackView{hotData, std::span<std::byte const>{}};
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
     CHECK(header->tagLength == 8); // 2 tags * 4 bytes
-
-    CHECK(header->tagBloom != 0);
+    CHECK(header->tagBloom == 0x00000006U);
+    REQUIRE(view.tags().count() == 2);
+    CHECK(view.tags().id(0) == DictionaryId{1});
+    CHECK(view.tags().id(1) == DictionaryId{2});
+    CHECK(context.dictionary().get(view.tags().id(0)) == "tag10");
+    CHECK(context.dictionary().get(view.tags().id(1)) == "tag20");
   }
 } // namespace ao::library::test

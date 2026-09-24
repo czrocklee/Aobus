@@ -72,7 +72,8 @@ namespace ao::rt
     std::vector<std::string> selectionTags(std::span<TrackId const> trackIds) const;
 
     // Tags carried by any track in the selection paired with how many selected
-    // tracks carry it. Tracks that do not exist contribute no tags.
+    // tracks carry it, ordered by ascending name (byte order, not locale order).
+    // Tracks that do not exist contribute no tags.
     std::vector<std::pair<std::string, std::size_t>> selectionTagCounts(std::span<TrackId const> trackIds) const;
 
     // Every distinct tag in the library paired with how many tracks carry it,

@@ -46,6 +46,10 @@ namespace ao::audio::test
       CHECK(terminal.frames < 44100);
       REQUIRE(terminal.optError);
       CHECK(terminal.optError->code == Error::Code::DecodeFailed);
+
+      auto const repeatedReadRes = decoder.readNextBlock();
+      REQUIRE_FALSE(repeatedReadRes);
+      CHECK(repeatedReadRes.error().code == Error::Code::DecodeFailed);
     }
 
     SECTION("Corrupt audio frame does not hang or overrun the stream")
@@ -67,6 +71,10 @@ namespace ao::audio::test
       CHECK(terminal.frames < 44100);
       REQUIRE(terminal.optError);
       CHECK(terminal.optError->code == Error::Code::DecodeFailed);
+
+      auto const repeatedReadRes = decoder.readNextBlock();
+      REQUIRE_FALSE(repeatedReadRes);
+      CHECK(repeatedReadRes.error().code == Error::Code::DecodeFailed);
     }
   }
 } // namespace ao::audio::test

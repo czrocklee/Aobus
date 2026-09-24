@@ -33,6 +33,7 @@ namespace ao::rt::test
       std::get_if<library::ObservedResourceDescriptor>(&rebuilt.coverArt().entries().front().source);
 
     REQUIRE(observed);
+    CHECK(rebuilt.coverArt().entries().front().type == PictureType::FrontCover);
     CHECK(observed->descriptor.digest == utility::computeSha256(coverBytes));
     CHECK(observed->descriptor.byteLength == coverBytes.size());
   }
@@ -51,9 +52,13 @@ namespace ao::rt::test
     auto builder = library::TrackBuilder::makeEmpty();
     builder.coverArt().add(PictureType::BackCover, expected);
 
-    auto snapshotRes = TrackBuilderSnapshot::make(builder);
-    REQUIRE(snapshotRes);
-    auto rebuilt = snapshotRes->makeBuilder();
+    auto const rebuilt = [&builder]
+    {
+      auto snapshotRes = TrackBuilderSnapshot::make(builder);
+      REQUIRE(snapshotRes);
+      return snapshotRes->makeBuilder();
+    }();
+    // Only cover evidence is owned by value; text still borrows from the retired snapshot.
     REQUIRE(rebuilt.coverArt().entries().size() == 1);
     auto const& rebuiltCover = rebuilt.coverArt().entries().front();
     auto const* const observed = std::get_if<library::ObservedResourceDescriptor>(&rebuiltCover.source);

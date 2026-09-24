@@ -3,6 +3,7 @@
 
 #include "PerformanceReport.h"
 
+#include <ao/Error.h>
 #include <ao/utility/Path.h>
 
 #include <unicode/uvernum.h>
@@ -13,19 +14,55 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <ios>
+#include <ostream>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 namespace ao::rt::test
 {
   namespace
   {
+    std::vector<BaselineRecord>& baselineRecords()
+    {
+      static auto records = std::vector<BaselineRecord>{};
+      return records;
+    }
+
+    Result<> validateBaselineRecords(std::span<BaselineRecord const> const records)
+    {
+      if (records.empty())
+      {
+        return makeError(Error::Code::InvalidInput, "Requested baseline report has no records");
+      }
+
+      for (auto const& record : records)
+      {
+        if (record.benchmark.empty() || record.metrics.empty())
+        {
+          return makeError(Error::Code::InvalidInput, "Baseline records require a benchmark and metrics");
+        }
+
+        for (auto const& metric : record.metrics)
+        {
+          if (metric.name.empty() || metric.unit.empty())
+          {
+            return makeError(Error::Code::InvalidInput, "Baseline metrics require a name and unit");
+          }
+        }
+      }
+
+      return {};
+    }
+
     std::string jsonEscape(std::string_view const value)
     {
       auto result = std::string{};
@@ -57,6 +94,96 @@ namespace ao::rt::test
       return result;
     }
   } // namespace
+
+  void recordBaseline(std::string benchmark, std::vector<BaselineMetric> metrics)
+  {
+    baselineRecords().push_back(BaselineRecord{.benchmark = std::move(benchmark), .metrics = std::move(metrics)});
+  }
+
+  Result<> writeBaselineReport(std::ostream& output, std::span<BaselineRecord const> const records)
+  {
+    if (auto validationRes = validateBaselineRecords(records); !validationRes)
+    {
+      return validationRes;
+    }
+
+    try
+    {
+      output << "{\n  \"schema\": \"aobus-performance-baseline/v1\",\n  \"records\": [\n";
+
+      for (std::size_t index = 0; index < records.size(); ++index)
+      {
+        auto const& record = records[index];
+        output << R"(    {"benchmark": ")" << jsonEscape(record.benchmark) << R"(", "metrics": [)" << '\n';
+
+        for (std::size_t metricIndex = 0; metricIndex < record.metrics.size(); ++metricIndex)
+        {
+          auto const& metric = record.metrics[metricIndex];
+          output << R"(      {"name": ")" << jsonEscape(metric.name) << R"(", "value": )" << metric.value
+                 << R"(, "unit": ")" << jsonEscape(metric.unit) << R"("})"
+                 << (metricIndex + 1 == record.metrics.size() ? "\n" : ",\n");
+        }
+
+        output << "    ]}" << (index + 1 == records.size() ? "\n" : ",\n");
+      }
+
+      output << "  ]\n}\n";
+      output.flush();
+    }
+    catch (std::ios_base::failure const&)
+    {
+      return makeError(Error::Code::IoError, "Could not write or flush baseline report");
+    }
+
+    if (!output)
+    {
+      return makeError(Error::Code::IoError, "Could not write or flush baseline report");
+    }
+
+    return {};
+  }
+
+  Result<> writeBaselineReport(std::filesystem::path const& path, std::span<BaselineRecord const> const records)
+  {
+    if (auto validationRes = validateBaselineRecords(records); !validationRes)
+    {
+      return validationRes;
+    }
+
+    auto output = std::ofstream{path, std::ios::out | std::ios::binary | std::ios::noreplace};
+
+    if (!output)
+    {
+      return makeError(Error::Code::IoError, "Could not create baseline report; use a fresh output path");
+    }
+
+    auto writeRes = writeBaselineReport(output, records);
+    output.close();
+
+    if (!writeRes)
+    {
+      return writeRes;
+    }
+
+    if (!output)
+    {
+      return makeError(Error::Code::IoError, "Could not close baseline report");
+    }
+
+    return {};
+  }
+
+  Result<> writeRequestedBaselineReport()
+  {
+    auto const path = environmentText("AOBUS_PERF_BASELINE_JSON", "");
+
+    if (path.empty())
+    {
+      return {};
+    }
+
+    return writeBaselineReport(utility::pathFromUtf8(path), baselineRecords());
+  }
 
   std::string environmentText(char const* const name, std::string_view const fallback)
   {

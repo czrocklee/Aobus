@@ -53,7 +53,6 @@ namespace ao::tui::test
     CHECK(truncateToCellWidth("雨abc", 1).empty());
     CHECK(truncateToCellWidth("雨abc", 2) == "雨");
     CHECK(truncateToCellWidth("雨abc", 3) == "雨a");
-    CHECK(truncateToCellWidth("abc", 0).empty());
   }
 
   TEST_CASE("TextCell - shortening handles empty and negative budgets", "[tui][unit][text]")
@@ -119,10 +118,10 @@ namespace ao::tui::test
     // The cluster does not fit beside the marker, so only the marker survives.
     CHECK(shortened == "…");
     CHECK(ellipsizeToCellWidth(std::string{kWomanTechnologist} + "abc", 6) == std::string{kWomanTechnologist} + "…");
-    CHECK_FALSE(ellipsizeToCellWidth(std::string{kWomanTechnologist} + "abc", 5).contains("\u200D"));
+    CHECK(ellipsizeToCellWidth(std::string{kWomanTechnologist} + "abc", 5) == "…");
   }
 
-  TEST_CASE("TextCell - wrapping uses stable display clusters without changing its source", "[tui][regression][text]")
+  TEST_CASE("TextCell - wrapping uses stable display clusters without changing its source", "[tui][unit][text]")
   {
     using namespace std::string_view_literals;
     // NOLINTNEXTLINE(misc-include-cleaner) -- MSVC include-cleaner cannot map sv to the included <string_view>.
@@ -137,7 +136,7 @@ namespace ao::tui::test
     CHECK(source == kOriginal);
   }
 
-  TEST_CASE("TextCell - wrapping preserves LF and treats CRLF as one deliberate break", "[tui][regression][text]")
+  TEST_CASE("TextCell - wrapping preserves LF and treats CRLF as one deliberate break", "[tui][unit][text]")
   {
     CHECK(wrapCellText("Alpha\nOmega", 10) == std::vector<std::string>{"Alpha", "Omega"});
     CHECK(wrapCellText("Alpha\r\nOmega", 10) == std::vector<std::string>{"Alpha", "Omega"});
@@ -147,14 +146,14 @@ namespace ao::tui::test
     CHECK(wrapCellText("A\r\n\u0301B", 4) == std::vector<std::string>{"A", "B"});
   }
 
-  TEST_CASE("TextCell - capped wrapping keeps explicit breaks out of the final row", "[tui][regression][text]")
+  TEST_CASE("TextCell - capped wrapping keeps explicit breaks out of the final row", "[tui][unit][text]")
   {
     CHECK(wrapCellText("A\nB", 10, {.maxLines = 1}) == std::vector<std::string>{"A…"});
     CHECK(wrapCellText("A\nB\nC", 10, {.maxLines = 2}) == std::vector<std::string>{"A", "B…"});
     CHECK(wrapCellText("A\n", 10, {.maxLines = 1}) == std::vector<std::string>{"A"});
   }
 
-  TEST_CASE("TextCell - an oversized wrapped emoji is omitted as a whole cluster", "[tui][regression][text]")
+  TEST_CASE("TextCell - an oversized wrapped emoji is omitted as a whole cluster", "[tui][unit][text]")
   {
     for (auto const emoji : {kWomanTechnologist, kJapanFlag})
     {

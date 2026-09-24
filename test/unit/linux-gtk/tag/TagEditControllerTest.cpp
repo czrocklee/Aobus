@@ -120,7 +120,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TagEditController - routes submitted tag mutations", "[gtk][unit][tag]")
+  TEST_CASE("TagEditController - routes submitted tag mutations", "[gtk][integration][tag][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto firstTrackId = kInvalidTrackId;
@@ -184,7 +184,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TagEditController - tag popover attachment follows the anchor lifetime", "[gtk][regression][tag]")
+  TEST_CASE("TagEditController - tag popover attachment follows the anchor lifetime", "[gtk][unit][tag]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -227,7 +227,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TagEditController - Edit Tags survives context popover close-before-action ordering",
-            "[gtk][regression][tag][collation]")
+            "[gtk][unit][tag][collation][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");

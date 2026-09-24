@@ -15,6 +15,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
@@ -85,10 +86,8 @@ namespace ao::tui::test
     {
       auto const position = line.find(needle);
 
-      if (position == std::string_view::npos)
-      {
-        return -1;
-      }
+      CAPTURE(line, needle);
+      REQUIRE(position != std::string_view::npos);
 
       return static_cast<std::int32_t>(ftxui::string_width(std::string{line.substr(0, position)}));
     }
@@ -175,7 +174,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar", "[tui][regression][track-table]")
+  TEST_CASE("TrackTable - framed rows share the right padding with the scrollbar", "[tui][unit][track-table]")
   {
     using namespace ftxui;
     auto const presentation = rt::TrackPresentationSpec{.id = "padding", .visibleFields = {rt::TrackField::Title}};
@@ -256,8 +255,8 @@ namespace ao::tui::test
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
     CHECK(cellPosition(second, "2:05") + ftxui::string_width("2:05") ==
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
-    CHECK(first.find('|') == header.find('|'));
-    CHECK(second.find('|') == header.find('|'));
+    CHECK(cellPosition(first, "|") == cellPosition(header, "|"));
+    CHECK(cellPosition(second, "|") == cellPosition(header, "|"));
   }
 
   TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns", "[tui][unit][track-table]")
@@ -299,7 +298,7 @@ namespace ao::tui::test
 
     CHECK_FALSE(first.contains('>'));
     CHECK(second.find('>') == 0);
-    CHECK(first.find('7') == second.find('8'));
+    CHECK(cellPosition(first, "7") == cellPosition(second, "8"));
   }
 
   TEST_CASE("TrackTable - empty state remains visible", "[tui][unit][track-table]")
@@ -389,7 +388,7 @@ namespace ao::tui::test
     CHECK(sectionHitRegions[1].box.y_min == albumBLine);
   }
 
-  TEST_CASE("TrackTable - negative selection does not highlight section headers", "[tui][regression][track-table]")
+  TEST_CASE("TrackTable - negative selection does not highlight section headers", "[tui][unit][track-table]")
   {
     auto const presentation =
       rt::TrackPresentationSpec{.id = "grouped", .visibleFields = {rt::TrackField::Title, rt::TrackField::Duration}};
@@ -520,6 +519,14 @@ namespace ao::tui::test
     CHECK(wideHandles[0].columns == 12);
     CHECK(wideHandles[1].columns > narrowHandles[1].columns);
     CHECK(wideHandles[2].columns > narrowHandles[2].columns);
+    CHECK(narrowHandles[0].box.x_max - narrowHandles[0].box.x_min + 1 == 12);
+    CHECK(wideHandles[0].box.x_min == narrowHandles[0].box.x_min);
+    CHECK(wideHandles[0].box.x_max == narrowHandles[0].box.x_max);
+    CHECK(narrowHandles[1].box.x_max - narrowHandles[1].box.x_min + 1 == 30);
+    CHECK(wideHandles[1].box.x_max - wideHandles[1].box.x_min + 1 == 40);
+    CHECK(narrowHandles[2].box.x_max - narrowHandles[2].box.x_min + 1 == 48);
+    CHECK(wideHandles[2].box.x_max - wideHandles[2].box.x_min + 1 == 58);
+    CHECK(wideHandles[2].box.x_min == narrowHandles[2].box.x_min + 10);
   }
 
   TEST_CASE("TrackTable - narrow available width clamps columns to terminal minimum", "[tui][unit][track-table]")
@@ -993,8 +1000,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTable - virtualization builds O(viewport) rows, not the whole library",
-            "[tui][regression][track-table]")
+  TEST_CASE("TrackTable - virtualization builds O(viewport) rows, not the whole library", "[tui][unit][track-table]")
   {
     std::size_t const trackCount = 5000;
     std::int32_t const viewportRows = 40;

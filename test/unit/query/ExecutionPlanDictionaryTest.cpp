@@ -2,12 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/query/ExecutionPlanTestSupport.h"
+#include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -16,16 +16,6 @@
 
 namespace ao::query::test
 {
-  namespace
-  {
-    Instruction const& findInstruction(ExecutionPlan const& plan, OpCode op)
-    {
-      auto const instruction = std::ranges::find(plan.instructions, op, &Instruction::op);
-      REQUIRE(instruction != plan.instructions.end());
-      return *instruction;
-    }
-  } // namespace
-
   TEST_CASE("ExecutionPlan - compiles custom field existence as an owned symbol", "[query][unit][execution-plan]")
   {
     auto const plan = compileOk(parseOk("%rating?"));
@@ -46,7 +36,7 @@ namespace ao::query::test
 
     REQUIRE(plan.stringConstants == std::vector<std::string>{"bach"});
     CHECK(plan.dictionarySymbols.empty());
-    CHECK(findInstruction(plan, OpCode::Like).field == static_cast<std::uint8_t>(Field::ArtistId));
+    CHECK(findInstruction(plan, OpCode::Like)->field == static_cast<std::uint8_t>(Field::ArtistId));
     CHECK(plan.requiresDictionary);
   }
 
@@ -57,7 +47,7 @@ namespace ao::query::test
 
     REQUIRE(plan.stringConstants == std::vector<std::string>{"dvořák"});
     CHECK(plan.dictionarySymbols.empty());
-    CHECK(findInstruction(plan, OpCode::Like).field == static_cast<std::uint8_t>(Field::ArtistId));
+    CHECK(findInstruction(plan, OpCode::Like)->field == static_cast<std::uint8_t>(Field::ArtistId));
     CHECK(plan.requiresDictionary);
   }
 
@@ -68,7 +58,7 @@ namespace ao::query::test
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"FutureTag"});
     REQUIRE(plan.requiredTagSymbols == std::vector<std::uint32_t>{0});
-    CHECK(findInstruction(plan, OpCode::Eq).dictionarySymbol == 0);
+    CHECK(findInstruction(plan, OpCode::Eq)->dictionarySymbol == 0);
     CHECK(plan.requiresDictionary);
   }
 
@@ -77,10 +67,10 @@ namespace ao::query::test
     auto const plan = compileOk(parseOk("%FutureKey = 'Value'"));
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"FutureKey"});
-    auto const& load = findInstruction(plan, OpCode::LoadField);
+    auto const& load = *findInstruction(plan, OpCode::LoadField);
     CHECK(load.field == static_cast<std::uint8_t>(Field::Custom));
     CHECK(load.dictionarySymbol == 0);
-    CHECK(findInstruction(plan, OpCode::Eq).dictionarySymbol == 0);
+    CHECK(findInstruction(plan, OpCode::Eq)->dictionarySymbol == 0);
   }
 
   TEST_CASE("ExecutionPlan - dictionary-backed equality compiles to a bindable symbol", "[query][unit][execution-plan]")
@@ -89,7 +79,7 @@ namespace ao::query::test
 
     REQUIRE(plan.dictionarySymbols == std::vector<std::string>{"Bach"});
     CHECK(plan.stringConstants.empty());
-    CHECK(findInstruction(plan, OpCode::Eq).dictionarySymbol == 0);
+    CHECK(findInstruction(plan, OpCode::Eq)->dictionarySymbol == 0);
     CHECK(plan.requiresDictionary);
   }
 
@@ -106,13 +96,13 @@ namespace ao::query::test
   {
     auto compileMalformed = [](Operator op)
     {
-      auto binary = std::make_unique<BinaryExpression>();
-      binary->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
-      binary->optOperation = BinaryExpression::Operation{
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "title"};
+      binaryPtr->optOperation = BinaryExpression::Operation{
         .op = op,
         .operand = ConstantExpression{std::string{"\xC0\xAF", 2}},
       };
-      return compileError(Expression{std::move(binary)});
+      return compileError(Expression{std::move(binaryPtr)});
     };
 
     auto const equalityError = compileMalformed(Operator::Equal);

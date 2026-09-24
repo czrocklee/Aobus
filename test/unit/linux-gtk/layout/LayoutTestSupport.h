@@ -13,6 +13,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 
 namespace Gtk
@@ -137,4 +139,7 @@ namespace ao::gtk::layout::test
    * this as well.
    */
   bool containsLayoutErrorPlaceholder(Gtk::Widget& widget);
+
+  /// Serializes @p document to YAML text so tests can compare whole documents; empty when serialization fails.
+  std::optional<std::string> encodedLayout(uimodel::LayoutDocument const& document);
 } // namespace ao::gtk::layout::test

@@ -33,6 +33,7 @@ namespace ao::cli::test
   };
 
   ryml::Tree parseYaml(std::string_view text);
+  void requireJsonLineParses(std::string_view line);
   bool contains(std::string_view text, std::string_view expected);
 
   /**

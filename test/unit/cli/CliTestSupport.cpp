@@ -37,6 +37,12 @@ namespace ao::cli::test
     return tree;
   }
 
+  void requireJsonLineParses(std::string_view line)
+  {
+    auto tree = parseYaml(line);
+    REQUIRE(tree.rootref().is_map());
+  }
+
   bool contains(std::string_view text, std::string_view expected)
   {
     return text.contains(expected);

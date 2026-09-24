@@ -20,6 +20,7 @@
 #include <fakeit.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <vector>
 
 namespace ao::rt::test
@@ -48,22 +49,12 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackTransport output device - devices output and quality signal subscriptions",
+  TEST_CASE("PlaybackTransport output device - publishes confirmed selection without premature quality",
             "[runtime][unit][playback][output]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
     fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
-
-    bool devicesChangedFired = false;
-    auto sub1 = fixture.playbackTransport.onOutputDevicesChanged([&] noexcept { devicesChangedFired = true; });
 
     bool outputChangedFired = false;
     auto lastOutputDevice = audio::OutputDeviceSelection{};
@@ -90,7 +81,11 @@ namespace ao::rt::test
     CHECK(lastOutputDevice.profileId == audio::ProfileId{audio::kProfileShared});
     CHECK(lastOutputDevice == fixture.playbackTransport.state().output.selectedDevice);
     CHECK(qualityEvents.empty());
+  }
 
+  TEST_CASE("PlaybackTransport output device - publishes confirmed quality after route readiness",
+            "[runtime][integration][playback][output]")
+  {
     auto qualityFixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto routedQualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
     auto qualitySub = qualityFixture.playbackTransport.onQualityChanged([&](auto const& ev) noexcept
@@ -103,7 +98,7 @@ namespace ao::rt::test
     auto const testFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const desc =
       playbackRequest(TrackId{1}, testFile.string(), "Fake Track", "Fake Artist", std::chrono::minutes{2});
-    CHECK(qualityFixture.playbackTransport.play(desc, ListId{1}));
+    REQUIRE(qualityFixture.playbackTransport.play(desc, ListId{1}));
     REQUIRE(qualityFixture.renderTarget != nullptr);
 
     qualityFixture.renderTarget->handleRouteReady("mock_anchor");
@@ -138,7 +133,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport output device - paused playback continues to publish graph quality changes",
-            "[runtime][regression][playback][output]")
+            "[runtime][unit][playback][output]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto qualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
@@ -194,6 +189,34 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
     REQUIRE(fixture.playbackTransport.state().output.availableBackends.size() == 1);
     REQUIRE(fixture.playbackTransport.state().output.availableBackends.front().devices.size() == 1);
+  }
+
+  TEST_CASE("PlaybackTransport output device - repeated and empty device lists keep the confirmed selection",
+            "[runtime][unit][playback][output]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const selected = fixture.playbackTransport.state().output.selectedDevice;
+    REQUIRE(selected.backendId == audio::BackendId{"mock_backend"});
+    std::size_t devicesChangedCount = 0;
+    auto selections = std::vector<audio::OutputDeviceSelection>{};
+    auto const devicesSub = fixture.playbackTransport.onOutputDevicesChanged([&] noexcept { ++devicesChangedCount; });
+    auto const selectionSub = fixture.playbackTransport.onOutputDeviceChanged(
+      [&](audio::OutputDeviceSelection const& selection) noexcept { selections.push_back(selection); });
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+
+    CHECK(devicesChangedCount == 1);
+    CHECK(selections.empty());
+    CHECK(fixture.playbackTransport.state().output.selectedDevice == selected);
+
+    fixture.onDevicesChangedCb({});
+
+    CHECK(devicesChangedCount == 2);
+    CHECK(selections.empty());
+    CHECK(fixture.playbackTransport.state().output.selectedDevice == selected);
+    REQUIRE(fixture.playbackTransport.state().output.availableBackends.size() == 1);
+    CHECK(fixture.playbackTransport.state().output.availableBackends.front().devices.empty());
   }
 
   TEST_CASE("PlaybackTransport output device - auto-select skips unsupported default exclusive profile",

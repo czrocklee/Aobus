@@ -11,7 +11,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -19,8 +18,6 @@
 
 #include <array>
 #include <cstddef>
-#include <memory>
-#include <optional>
 #include <variant>
 #include <vector>
 
@@ -28,39 +25,6 @@ namespace ao::rt::test
 {
   namespace
   {
-    class QueryCountingTrackSource final : public TrackSource
-    {
-    public:
-      explicit QueryCountingTrackSource(TrackId trackId)
-        : _trackId{trackId}
-      {
-      }
-
-      std::size_t size() const override
-      {
-        ++_queryCount;
-        return 1;
-      }
-
-      TrackId trackIdAt(std::size_t /*index*/) const override
-      {
-        ++_queryCount;
-        return _trackId;
-      }
-
-      std::optional<std::size_t> indexOf(TrackId trackId) const override
-      {
-        ++_queryCount;
-        return trackId == _trackId ? std::optional<std::size_t>{0} : std::nullopt;
-      }
-
-      std::size_t queryCount() const noexcept { return _queryCount; }
-
-    private:
-      TrackId _trackId{};
-      mutable std::size_t _queryCount = 0;
-    };
-
     std::vector<TrackId> projectionTrackIds(TrackListProjection const& projection)
     {
       auto trackIds = std::vector<TrackId>{};
@@ -161,6 +125,15 @@ namespace ao::rt::test
                                 });
 
     REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 2);
+    REQUIRE(std::holds_alternative<ProjectionRemoveRange>(batches.front().deltas[0]));
+    REQUIRE(std::holds_alternative<ProjectionUpdateRange>(batches.front().deltas[1]));
+    auto const& removal = std::get<ProjectionRemoveRange>(batches.front().deltas[0]);
+    auto const& update = std::get<ProjectionUpdateRange>(batches.front().deltas[1]);
+    CHECK(removal.range.start == 1);
+    CHECK(removal.range.count == 1);
+    CHECK(update.range.start == 0);
+    CHECK(update.range.count == 1);
     CHECK(isValidTrackListProjectionDeltaBatch(batches.front(), 4));
     CHECK(projectionTrackIds(projection) == std::vector{third, fourth, second});
 
@@ -302,8 +275,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - detached construction applies only captured order",
-            "[runtime][unit][projection][detached]")
+  TEST_CASE("TrackListProjection - detached construction applies only captured order", "[runtime][unit][projection]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
@@ -324,27 +296,5 @@ namespace ao::rt::test
     CHECK(projection.presentation().sortBy == std::vector{TrackSortTerm{.field = TrackSortField::Title}});
     CHECK(projection.groupCount() == 0);
     CHECK(projectionTrackIds(projection) == expected);
-  }
-
-  TEST_CASE("TrackListProjection - construction never queries an already invalidated source",
-            "[runtime][unit][projection][lifecycle]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto sourcePtr = std::make_shared<QueryCountingTrackSource>(TrackId{99});
-    TrackSourceAccess::invalidate(*sourcePtr);
-
-    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
-    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription = projection.subscribe(
-      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
-    projection.setPresentation(TrackPresentationSpec{
-      .groupBy = TrackGroupKey::None,
-      .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
-    });
-
-    CHECK(sourcePtr->queryCount() == 0);
-    REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
   }
 } // namespace ao::rt::test

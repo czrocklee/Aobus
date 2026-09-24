@@ -148,7 +148,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("convertPcmEncoding - S24-in-32 uses the low 24 bits", "[audio][regression][pcm]")
+  TEST_CASE("convertPcmEncoding - S24-in-32 uses the low 24 bits", "[audio][unit][pcm]")
   {
     auto const source = std::to_array<std::byte>(
       {std::byte{0x56}, std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}});
@@ -170,7 +170,7 @@ namespace ao::audio::test
                                                 std::byte{0xFF}});
   }
 
-  TEST_CASE("convertPcmEncoding - S16 to S32 uses the full 32-bit scale", "[audio][regression][pcm]")
+  TEST_CASE("convertPcmEncoding - S16 to S32 uses the full 32-bit scale", "[audio][unit][pcm]")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}});
     auto destination = std::vector<std::byte>{};
@@ -204,7 +204,7 @@ namespace ao::audio::test
     CHECK(destination == std::vector<std::byte>{std::byte{0x00}, std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
   }
 
-  TEST_CASE("convertPcmEncoding - integer narrowing is rejected", "[audio][regression][pcm]")
+  TEST_CASE("convertPcmEncoding - integer narrowing is rejected", "[audio][unit][pcm]")
   {
     // 0x123456 and 0xFFFFFF (-1) packed little-endian.
     auto const source = std::to_array<std::byte>(
@@ -221,14 +221,26 @@ namespace ao::audio::test
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - float source is never quantized to integer PCM", "[audio][regression][pcm]")
+  TEST_CASE("convertPcmEncoding - float source is never quantized to integer PCM", "[audio][unit][pcm]")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
 
-    auto const res = convertPcmEncoding(
-      source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed24PackedLe, destination);
+    auto destinationEncoding = SampleEncoding::Signed24PackedLe;
+
+    SECTION("narrower integer destination")
+    {
+      destinationEncoding = SampleEncoding::Signed24PackedLe;
+    }
+
+    SECTION("equal-width integer destination")
+    {
+      destinationEncoding = SampleEncoding::Signed32Le;
+    }
+
+    auto const res =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), destinationEncoding, destination);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::NotSupported);
@@ -257,21 +269,23 @@ namespace ao::audio::test
                                                 std::byte{0xBF}});
   }
 
-  TEST_CASE("convertPcmEncoding - Float32 cannot convert losslessly to integer PCM", "[audio][unit][pcm]")
+  TEST_CASE("convertPcmEncoding - Float32 carrying an integer signal still rejects integer output",
+            "[audio][unit][pcm]")
   {
     auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
     auto destination = std::vector<std::byte>{};
     auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
+    auto const sourceSignal =
+      SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16, .sampleKind = SampleKind::Integer};
 
-    auto const res =
-      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
+    auto const res = convertPcmEncoding(source, sourceFormat, sourceSignal, SampleEncoding::Signed16Le, destination);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::NotSupported);
     CHECK(destination.empty());
   }
 
-  TEST_CASE("convertPcmEncoding - input must contain complete interleaved frames", "[audio][regression][pcm]")
+  TEST_CASE("convertPcmEncoding - input must contain complete interleaved frames", "[audio][unit][pcm]")
   {
     auto const source = std::to_array<std::byte>(
       {std::byte{0x01}, std::byte{0x00}, std::byte{0x02}, std::byte{0x00}, std::byte{0x03}, std::byte{0x00}});

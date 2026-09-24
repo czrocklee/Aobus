@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -254,10 +255,18 @@ namespace ao::media::file::opus::test
     REQUIRE(content.pictures().size() == 1);
     auto const& picture = content.pictures().front();
     CHECK(picture.type == PictureType::FrontCover);
-    REQUIRE(picture.bytes.size() > 8);
+    constexpr auto kPngSignature = std::array{std::byte{0x89},
+                                              std::byte{0x50},
+                                              std::byte{0x4E},
+                                              std::byte{0x47},
+                                              std::byte{0x0D},
+                                              std::byte{0x0A},
+                                              std::byte{0x1A},
+                                              std::byte{0x0A}};
+    REQUIRE(picture.bytes.size() >= kPngSignature.size());
 
     // The decoded comment must hand out the image itself, not its container.
-    CHECK(containsBytes(picture.bytes.first(8), std::string_view{"PNG"}));
+    CHECK(std::ranges::equal(picture.bytes.first(kPngSignature.size()), kPngSignature));
   }
 
   TEST_CASE("Opus File - ignores a Base64 picture comment with invalid structure", "[media][unit][opus][file]")
@@ -324,12 +333,32 @@ namespace ao::media::file::opus::test
       CHECK(readError(makeStreamBytes(spec)) == Error::Code::CorruptData);
     }
 
-    SECTION("A stream without a tags packet is corrupt")
+    SECTION("An identification packet without remaining header or audio packets is corrupt")
     {
       auto spec = StreamSpec{};
       spec.optTagsPacket.reset();
       spec.audioPacketCount = 0;
       CHECK(readError(makeStreamBytes(spec)) == Error::Code::CorruptData);
+
+      // A present second header slot with foreign magic remains optional metadata;
+      // valid audio after it still determines the stream's technical properties.
+      auto control = StreamSpec{};
+      (*control.optTagsPacket)[0] = static_cast<std::uint8_t>('X');
+      auto const temp = TempFile{makeStreamBytes(control), ".opus"};
+      auto const file = File{temp.path};
+      auto const contentRes = file.readContent();
+      REQUIRE(contentRes);
+      CHECK(contentRes->codec() == AudioCodec::Opus);
+      CHECK(contentRes->sampleRate() == kDecodedSampleRate);
+      CHECK(contentRes->channels() == 2);
+      CHECK(contentRes->duration() == std::chrono::seconds{1});
+      CHECK(contentRes->text(TextField::Title).empty());
+      CHECK(contentRes->text(TextField::Artist).empty());
+      CHECK(contentRes->pictures().empty());
+
+      auto const payloadRes = file.audioPayload();
+      REQUIRE(payloadRes);
+      CHECK_FALSE(payloadRes->bytes.empty());
     }
 
     SECTION("A stream without audio packets is corrupt")

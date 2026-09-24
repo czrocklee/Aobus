@@ -18,6 +18,7 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/uimodel/layout/shell/LayoutSession.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
@@ -25,11 +26,13 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
 #include <gtkmm/window.h>
+#include <ryml_std.hpp>
 #include <sigc++/signal.h>
 
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -266,5 +269,17 @@ namespace ao::gtk::layout::test
     }
 
     return false;
+  }
+
+  std::optional<std::string> encodedLayout(uimodel::LayoutDocument const& document)
+  {
+    auto tree = ryml::Tree{};
+
+    if (!uimodel::LayoutDocumentYamlSchema{}.serialize(tree.rootref(), document))
+    {
+      return std::nullopt;
+    }
+
+    return ryml::emitrs_yaml<std::string>(tree);
   }
 } // namespace ao::gtk::layout::test

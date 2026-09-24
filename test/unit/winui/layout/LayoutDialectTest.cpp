@@ -77,8 +77,9 @@ namespace ao::winui::test
     CHECK(rejection.detail == "tabs");
   }
 
-  TEST_CASE("validateLayout under the Windows dialect - a failed template expansion cannot reach a constructed element",
-            "[winui][unit][layout]")
+  TEST_CASE(
+    "validateLayout under the Windows dialect - a failed template expansion is rejected as an unknown component",
+    "[winui][unit][layout]")
   {
     auto root = shellRoot({LayoutNode{
       .id = "missing-template", .type = "template", .props = {{"templateId", LayoutValue{std::string{"absent"}}}}}});

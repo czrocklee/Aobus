@@ -4,6 +4,7 @@
 #include <ao/media/mp4/Demuxer.h>
 
 #include "TestAtoms.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/utility/MappedFile.h>
 
 #include <catch2/catch_message.hpp>
@@ -13,7 +14,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <limits>
 #include <span>
 #include <string_view>
@@ -75,7 +75,7 @@ namespace ao::media::mp4::test
   static_assert(std::is_nothrow_move_constructible_v<Demuxer>);
   static_assert(!std::is_move_assignable_v<Demuxer>);
 
-  TEST_CASE("MP4 Demuxer - rejects infeasible fixed-size sample counts before expansion", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - rejects infeasible fixed-size sample counts before expansion", "[media][unit][mp4]")
   {
     constexpr auto kHugeCount = std::numeric_limits<std::uint32_t>::max();
     auto sampleCount = kHugeCount;
@@ -83,28 +83,34 @@ namespace ao::media::mp4::test
     auto stsc = ao::test::mp4::makeStscAtom(kHugeCount);
     auto stts = ao::test::mp4::makeSttsAtom(kHugeCount);
     auto chunkOffsets = ao::test::mp4::makeStcoAtom();
+    auto expectedMessage = std::string_view{};
 
     SECTION("Matching compact tables cannot justify more fixed-size bytes than the file")
     {
+      expectedMessage = "MP4 fixed-size samples or index exceed file size";
     }
 
     SECTION("Missing chunk entries cannot admit the declared count")
     {
+      expectedMessage = "Missing MP4 samples, chunk offsets, or sample-to-chunk table";
       stsc.clear();
     }
 
     SECTION("A small chunk mapping cannot admit the declared count")
     {
+      expectedMessage = "MP4 sample-to-chunk table does not cover every sample";
       stsc = ao::test::mp4::makeStscAtom();
     }
 
     SECTION("Missing timing keeps the byte-feasibility requirement")
     {
+      expectedMessage = "MP4 fixed-size samples or index exceed file size";
       stts.clear();
     }
 
     SECTION("Zero samples are rejected")
     {
+      expectedMessage = "Failed to extract track extradata or sample table";
       sampleCount = 0;
       stsc = ao::test::mp4::makeStscAtom();
       stts = ao::test::mp4::makeSttsAtom();
@@ -112,6 +118,7 @@ namespace ao::media::mp4::test
 
     SECTION("Fixed-size byte multiplication cannot wrap at 32 bits")
     {
+      expectedMessage = "MP4 fixed-size samples or index exceed file size";
       sampleCount = 2;
       sampleSize = 0x80000000U;
       stsc = ao::test::mp4::makeStscAtom(2);
@@ -120,6 +127,7 @@ namespace ao::media::mp4::test
 
     SECTION("Chunk expansion cannot exceed the sample count")
     {
+      expectedMessage = "MP4 sample-to-chunk table has too many samples";
       sampleCount = 2;
       sampleSize = 4;
       stts = ao::test::mp4::makeSttsAtom(2);
@@ -127,6 +135,7 @@ namespace ao::media::mp4::test
 
     SECTION("Timing expansion cannot exceed the sample count")
     {
+      expectedMessage = "MP4 timing table has too many samples";
       sampleCount = 2;
       sampleSize = 4;
       stsc = ao::test::mp4::makeStscAtom(2);
@@ -134,6 +143,7 @@ namespace ao::media::mp4::test
 
     SECTION("Chunk-run multiplication cannot wrap at 32 bits")
     {
+      expectedMessage = "MP4 sample-to-chunk table has too many samples";
       auto body = std::vector<std::uint8_t>{};
 
       for (auto const value : {0U, 2U, 0U, 1U})
@@ -146,6 +156,7 @@ namespace ao::media::mp4::test
 
     SECTION("Timing entries must cover every sample")
     {
+      expectedMessage = "MP4 timing table does not cover every sample";
       sampleCount = 2;
       stsc = ao::test::mp4::makeStscAtom(2);
       stts = ao::test::mp4::makeSttsAtom();
@@ -153,6 +164,7 @@ namespace ao::media::mp4::test
 
     SECTION("Timing deltas must be nonzero")
     {
+      expectedMessage = "Invalid MP4 time-to-sample entry";
       sampleCount = 1;
       stsc = ao::test::mp4::makeStscAtom();
       stts = ao::test::mp4::makeSttsAtom(1, 0);
@@ -165,9 +177,10 @@ namespace ao::media::mp4::test
     auto const res = Demuxer::parse(fileData, "alac");
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message == expectedMessage);
   }
 
-  TEST_CASE("MP4 Demuxer - fixed-size sample index must fit the mapped file budget", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - fixed-size sample index must fit the mapped file budget", "[media][unit][mp4]")
   {
     constexpr std::uint32_t kSampleCount = 1024;
     auto const fileSize = GENERATE(std::size_t{kSampleCount},
@@ -198,7 +211,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - rejects malformed compact sample table entries", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - rejects malformed compact sample table entries", "[media][unit][mp4]")
   {
     auto stsz = ao::test::mp4::makeStszAtom();
     auto stsc = ao::test::mp4::makeStscAtom();
@@ -254,7 +267,7 @@ namespace ao::media::mp4::test
     CHECK(res.error().message == expectedMessage);
   }
 
-  TEST_CASE("MP4 Demuxer - preserves packets across chunk runs and missing payload", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - preserves packets across chunk runs and missing payload", "[media][unit][mp4]")
   {
     auto stscBody = std::vector<std::uint8_t>{};
 
@@ -474,7 +487,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - selected track ignores unrelated trailing structure", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - selected track ignores unrelated trailing structure", "[media][unit][mp4]")
   {
     auto const config = ao::test::mp4::makeAtom("alac", {9, 8, 7});
     auto const track = ao::test::mp4::makeCompleteAudioTrackAtom("alac", config, 48000, 96000, 7, 2048, 321);
@@ -534,7 +547,7 @@ namespace ao::media::mp4::test
     CHECK(demuxerRes->duration() == 96000);
   }
 
-  TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables", "[media][regression][mp4]")
+  TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables", "[media][unit][mp4]")
   {
     auto const stsd = ao::test::mp4::makeExtendedFromCompactAtom(makeAlacStsd());
     auto const stsz = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStszAtom(7));
@@ -556,12 +569,7 @@ namespace ao::media::mp4::test
 
   TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig", "[media][unit][mp4]")
   {
-    auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.m4a";
-
-    if (!std::filesystem::exists(testFile))
-    {
-      SKIP("Test file 'basic_metadata.m4a' missing");
-    }
+    auto const testFile = audio::test::requireAudioFixture("basic_metadata.m4a");
 
     auto mappedFile = utility::MappedFile{};
     REQUIRE(mappedFile.map(testFile));
@@ -601,7 +609,7 @@ namespace ao::media::mp4::test
     CHECK(res->magicCookie()[1] == std::byte{0x10});
   }
 
-  TEST_CASE("MP4 Demuxer - seek lookup preserves packet-boundary semantics", "[media][regression][mp4][seek]")
+  TEST_CASE("MP4 Demuxer - seek lookup preserves packet-boundary semantics", "[media][unit][mp4][seek]")
   {
     constexpr std::uint32_t kSampleCount = 8;
     constexpr std::uint32_t kSampleDelta = 1024;

@@ -43,7 +43,7 @@ namespace ao::gtk::test
       std::string{"The last shortcut change was not saved. Retry the save, discard the change, or keep editing."};
 
     /// The live pending-shortcut close prompt: a separate, showing toplevel carrying that message.
-    /// A retired prompt stays in the toplevel list hidden until its parent goes away.
+    /// A retired prompt may remain in the toplevel list hidden until its parent goes away.
     AppDialog* pendingShortcutClosePrompt()
     {
       for (auto* const topLevel : Gtk::Window::list_toplevels())
@@ -54,6 +54,24 @@ namespace ao::gtk::test
         }
 
         if (auto* const dialog = dynamic_cast<AppDialog*>(topLevel); dialog != nullptr)
+        {
+          return dialog;
+        }
+      }
+
+      return nullptr;
+    }
+
+    /// Finds the exact retained prompt wrapper after it is hidden. This is an arrange guard for
+    /// stale-response coverage, not a requirement that every implementation retain hidden prompts.
+    AppDialog* shortcutClosePromptIncludingHidden(Gtk::Window& parent, std::uintptr_t const identity)
+    {
+      for (auto* const topLevel : Gtk::Window::list_toplevels())
+      {
+        if (auto* const dialog = dynamic_cast<AppDialog*>(topLevel);
+            dialog != nullptr && dialog->get_transient_for() == &parent &&
+            reinterpret_cast<std::uintptr_t>(dialog) == identity &&
+            findLabelByText(*dialog, kPendingCloseMessage) != nullptr)
         {
           return dialog;
         }
@@ -107,7 +125,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("PreferencesWindow - builds first-cut pages and hosts shortcut editor", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - builds first-cut pages and hosts shortcut editor", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -126,7 +144,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - renders locale-selected page and action copy", "[gtk][unit][localization]")
+  TEST_CASE("PreferencesWindow - renders locale-selected page and action copy", "[gtk][unit][preference][localization]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -139,7 +157,7 @@ namespace ao::gtk::test
     CHECK(findButtonByLabel(window, "Layout bearbeiten...") != nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - layout page dispatches commands", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - layout page dispatches commands", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -171,7 +189,7 @@ namespace ao::gtk::test
     CHECK(resetCount == 1);
   }
 
-  TEST_CASE("PreferencesWindow - appearance page persists and applies selected theme", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - appearance page persists and applies selected theme", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -200,7 +218,7 @@ namespace ao::gtk::test
     CHECK(*optTheme == uimodel::ThemePreset::Modern);
   }
 
-  TEST_CASE("PreferencesWindow - layout page persists default preset for next launch", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - layout page persists default preset for next launch", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -229,7 +247,7 @@ namespace ao::gtk::test
     CHECK(optPersisted->preferredOutputSelection.backendId == "existing-backend");
   }
 
-  TEST_CASE("PreferencesWindow - playback output selection persists the requested device", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - playback output selection persists the requested device", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -271,7 +289,7 @@ namespace ao::gtk::test
     CHECK(optPersisted->preferredOutputSelection.profileId == audio::kProfileShared.raw());
   }
 
-  TEST_CASE("PreferencesWindow - target hide clears window-scoped output selector", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - target hide clears window-scoped output selector", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -293,7 +311,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "Unavailable");
   }
 
-  TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults", "[gtk][unit][preferences]")
+  TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults", "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -308,8 +326,7 @@ namespace ao::gtk::test
     CHECK(window.selectedLayoutPresetId() == "classic");
   }
 
-  TEST_CASE("PreferencesWindow - ordinary close keeps a failed shortcut candidate",
-            "[gtk][unit][preferences][shortcut]")
+  TEST_CASE("PreferencesWindow - ordinary close keeps a failed shortcut candidate", "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -339,7 +356,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PreferencesWindow - refreshing the keyboard page keeps a failed shortcut candidate",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -363,7 +380,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PreferencesWindow - target hide discards a failed shortcut candidate without a new prompt",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -394,7 +411,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PreferencesWindow - pending-shortcut close prompt applies the chosen response",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -487,7 +504,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PreferencesWindow - repeated close requests reuse one pending-shortcut prompt",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -521,7 +538,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PreferencesWindow - dismissal retires a live pending-shortcut prompt",
-            "[gtk][unit][preferences][shortcut]")
+            "[gtk][unit][preference][shortcut][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -546,26 +563,99 @@ namespace ao::gtk::test
     gboolean handled = FALSE;
     ::g_signal_emit_by_name(window.gobj(), "close-request", &handled);
     drainGtkEvents();
-    REQUIRE(pendingShortcutClosePrompt() != nullptr);
+    auto* const retiredPrompt = pendingShortcutClosePrompt();
+    REQUIRE(retiredPrompt != nullptr);
+    auto const retiredPromptIdentity = reinterpret_cast<std::uintptr_t>(retiredPrompt);
 
-    // The target window disappearing dismisses Preferences; the prompt must not outlive it and
-    // reach a later editing session.
+    // This implementation retains the hidden managed prompt after target dismissal. The exact
+    // retained wrapper is required below solely to make stale response delivery deterministic.
     ::g_signal_emit_by_name(target.gobj(), "hide");
     drainGtkEvents();
 
     CHECK(pendingShortcutClosePrompt() == nullptr);
     CHECK(pendingShortcutClosePromptCount() == 0);
+    REQUIRE(shortcutClosePromptIncludingHidden(window, retiredPromptIdentity) != nullptr);
 
-    std::int32_t freshPersistCount = 0;
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
-                               {
-                                 ++freshPersistCount;
-                                 return {};
-                               });
-    drainGtkEvents();
+    SECTION("retained response leaves a fresh clean session unchanged")
+    {
+      std::int32_t freshPersistCount = 0;
+      window.refreshKeyboardPage(makeSchema(),
+                                 uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                 [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
+                                 {
+                                   ++freshPersistCount;
+                                   return {};
+                                 });
+      window.set_visible(true);
+      drainGtkEvents();
 
-    CHECK(findButtonByLabel(window, "✕") != nullptr);
+      REQUIRE(window.get_visible());
+      REQUIRE(findLabelByText(window, "Ctrl+P") != nullptr);
+      REQUIRE(findButtonByLabel(window, "✕") != nullptr);
+      REQUIRE(findLabelByText(window, "Could not save shortcuts: disk full") == nullptr);
+      auto* const liveRetiredPrompt = shortcutClosePromptIncludingHidden(window, retiredPromptIdentity);
+      REQUIRE(liveRetiredPrompt != nullptr);
+
+      liveRetiredPrompt->response(Gtk::ResponseType::REJECT);
+      drainGtkEvents();
+
+      CHECK(freshPersistCount == 0);
+      CHECK(window.get_visible());
+      CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
+      CHECK(findButtonByLabel(window, "✕") != nullptr);
+      CHECK(findLabelByText(window, "Could not save shortcuts: disk full") == nullptr);
+      CHECK(pendingShortcutClosePrompt() == nullptr);
+    }
+
+    SECTION("retained response cannot steer a fresh failed draft or its prompt")
+    {
+      std::int32_t freshPersistCount = 0;
+      window.refreshKeyboardPage(makeSchema(),
+                                 uimodel::KeymapModel{uimodel::defaultKeymap()},
+                                 [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
+                                 {
+                                   ++freshPersistCount;
+                                   return makeError(Error::Code::IoError, "fresh disk full");
+                                 });
+      window.set_visible(true);
+      drainGtkEvents();
+
+      auto* const freshRemoveButton = findButtonByLabel(window, "✕");
+      REQUIRE(freshRemoveButton != nullptr);
+      emitClicked(*freshRemoveButton);
+      drainGtkEvents();
+
+      REQUIRE(freshPersistCount == 1);
+      REQUIRE(window.get_visible());
+      REQUIRE(findLabelByText(window, "Ctrl+P") == nullptr);
+      REQUIRE(findLabelByText(window, "Media:Play") != nullptr);
+      REQUIRE(findLabelByText(window, "Could not save shortcuts: fresh disk full") != nullptr);
+      REQUIRE(findButtonByLabel(window, "Retry") != nullptr);
+      REQUIRE(findButtonByLabel(window, "Discard") != nullptr);
+
+      ::g_signal_emit_by_name(window.gobj(), "close-request", &handled);
+      drainGtkEvents();
+      auto* const freshPrompt = pendingShortcutClosePrompt();
+      REQUIRE(freshPrompt != nullptr);
+      REQUIRE(reinterpret_cast<std::uintptr_t>(freshPrompt) != retiredPromptIdentity);
+      auto* const liveRetiredPrompt = shortcutClosePromptIncludingHidden(window, retiredPromptIdentity);
+      REQUIRE(liveRetiredPrompt != nullptr);
+      REQUIRE(liveRetiredPrompt != freshPrompt);
+
+      liveRetiredPrompt->response(Gtk::ResponseType::REJECT);
+      drainGtkEvents();
+
+      CHECK(freshPersistCount == 1);
+      CHECK(window.get_visible());
+      CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
+      CHECK(findLabelByText(window, "Media:Play") != nullptr);
+      CHECK(findLabelByText(window, "Could not save shortcuts: fresh disk full") != nullptr);
+      CHECK(findButtonByLabel(window, "Retry") != nullptr);
+      CHECK(findButtonByLabel(window, "Discard") != nullptr);
+      auto* const remainingPrompt = pendingShortcutClosePrompt();
+      REQUIRE(remainingPrompt != nullptr);
+      CHECK(remainingPrompt == freshPrompt);
+      CHECK(remainingPrompt->get_visible());
+    }
   }
 } // namespace ao::gtk::test

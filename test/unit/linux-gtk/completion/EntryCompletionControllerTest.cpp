@@ -307,7 +307,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("EntryCompletionController - keyboard navigation cycles and only Tab accepts a selection",
-            "[gtk][regression][completion]")
+            "[gtk][unit][completion]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

@@ -5,10 +5,12 @@
 
 #include "MusicLibraryTestSupport.h"
 #include "WritableLibraryTestSupport.h"
+#include "lib/library/FileManifestValidation.h"
 #include "lib/library/TrackWrite.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
@@ -30,11 +32,6 @@
 
 namespace ao::library::test
 {
-  namespace
-  {
-    constexpr std::string_view kMissingMetadataMessage = "Library data exists without a metadata header";
-  }
-
   TrackStoreFixture::TrackStoreFixture()
     : temp{}, library{makeTestMusicLibrary(temp.path(), temp.path() / "db")}, store{library.tracks()}
   {
@@ -69,6 +66,7 @@ namespace ao::library::test
 
   void seedRawTrackRow(std::filesystem::path const& path,
                        std::uint32_t const rawTrackId,
+                       std::string_view const uri,
                        std::span<std::byte const> const hotData,
                        std::span<std::byte const> const coldData)
   {
@@ -80,6 +78,10 @@ namespace ao::library::test
     if (!hotData.empty())
     {
       REQUIRE(hotDatabase.writer(transaction).create(rawTrackId, hotData));
+      auto manifestDatabase = lmdb::test::openByteKeyDatabase(transaction, "file_manifest");
+      auto const manifestKey = detail::PaddedFileManifestKey{uri};
+      auto const manifestPayload = FileManifestBuilder::makeEmpty().trackId(TrackId{rawTrackId}).serialize();
+      REQUIRE(manifestDatabase.writer(transaction).create(manifestKey.bytes(), manifestPayload));
     }
 
     if (!coldData.empty())
@@ -96,16 +98,12 @@ namespace ao::library::test
     REQUIRE(libraryRes);
   }
 
-  void requireCorruptOpen(std::filesystem::path const& path)
+  void requireCorruptOpen(std::filesystem::path const& path, std::string_view const expectedMessage)
   {
     auto const res = openTestMusicLibrary(path, path);
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::CorruptData);
-
-    // Seeded rows without a metadata header fail before any record sweep runs,
-    // so a record-integrity case that forgets initializeLibraryStorage would
-    // otherwise pass without ever reaching the validator it means to exercise.
-    CHECK(res.error().message != kMissingMetadataMessage);
+    CHECK(res.error().message == expectedMessage);
   }
 
   TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder)

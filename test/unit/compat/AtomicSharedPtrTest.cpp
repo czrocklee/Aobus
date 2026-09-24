@@ -4,9 +4,14 @@
 #include <ao/compat/AtomicSharedPtr.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
+#include <semaphore>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -59,6 +64,134 @@ namespace ao::compat::test
 
     slot.store(nullptr);
     CHECK(weakPtr.expired());
+  }
+
+  TEST_CASE("AtomicSharedPtr - store retires its last owner outside the slot lock",
+            "[core][unit][atomic-shared-ptr][concurrency]")
+  {
+    auto canLoad = std::binary_semaphore{0};
+    auto loadFinished = std::binary_semaphore{0};
+    auto gateOpened = std::atomic_bool{false};
+    auto readerStarted = std::atomic_bool{false};
+    auto completedWhileRetiring = std::atomic_bool{false};
+    std::int32_t readValue = -1;
+
+    // Callback state outlives slot, even when a broken store retains its last owner.
+    auto slot = Portable<std::int32_t>{};
+    auto const replacementPtr = std::make_shared<std::int32_t>(7);
+
+    // If retirement holds the slot lock, the reader cannot finish before the
+    // bounded wait expires; the deleter then returns and the reader can join.
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+    auto retiredPtr = std::shared_ptr<std::int32_t>{
+      new std::int32_t{1},
+      [&](std::int32_t* ptr) noexcept
+      {
+        if (!gateOpened.exchange(true, std::memory_order_acq_rel))
+        {
+          canLoad.release();
+
+          if (readerStarted.load(std::memory_order_acquire))
+          {
+            completedWhileRetiring.store(
+              loadFinished.try_acquire_for(std::chrono::seconds{5}), std::memory_order_relaxed);
+          }
+        }
+
+        std::default_delete<std::int32_t>{}(ptr);
+      }};
+    slot.store(std::move(retiredPtr));
+
+    auto reader = std::jthread{};
+    {
+      // Release before jthread destruction, including failed thread construction.
+      auto const releaseOnExit = gsl_lite::finally(
+        [&] noexcept
+        {
+          if (!gateOpened.exchange(true, std::memory_order_acq_rel))
+          {
+            canLoad.release();
+          }
+        });
+      reader = std::jthread{[&]
+                            {
+                              canLoad.acquire();
+                              auto const heldPtr = slot.load();
+                              readValue = heldPtr ? *heldPtr : -1;
+                              loadFinished.release();
+                            }};
+      readerStarted.store(true, std::memory_order_release);
+      slot.store(replacementPtr);
+    }
+    reader.join();
+
+    CHECK(completedWhileRetiring.load(std::memory_order_relaxed));
+    CHECK(readValue == 7);
+    CHECK(slot.load() == replacementPtr);
+  }
+
+  TEST_CASE("AtomicSharedPtr - stale compare-exchange retires its expectation outside the slot lock",
+            "[core][unit][atomic-shared-ptr][concurrency]")
+  {
+    auto canLoad = std::binary_semaphore{0};
+    auto loadFinished = std::binary_semaphore{0};
+    auto gateOpened = std::atomic_bool{false};
+    auto readerStarted = std::atomic_bool{false};
+    auto completedWhileRetiring = std::atomic_bool{false};
+    std::int32_t readValue = -1;
+
+    // A broken CAS may retain the stale owner in slot until scope exit.
+    auto const currentPtr = std::make_shared<std::int32_t>(7);
+    auto const rejectedPtr = std::make_shared<std::int32_t>(9);
+    auto slot = Portable<std::int32_t>{currentPtr};
+
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+    auto stalePtr = std::shared_ptr<std::int32_t>{
+      new std::int32_t{1},
+      [&](std::int32_t* ptr) noexcept
+      {
+        if (!gateOpened.exchange(true, std::memory_order_acq_rel))
+        {
+          canLoad.release();
+
+          if (readerStarted.load(std::memory_order_acquire))
+          {
+            completedWhileRetiring.store(
+              loadFinished.try_acquire_for(std::chrono::seconds{5}), std::memory_order_relaxed);
+          }
+        }
+
+        std::default_delete<std::int32_t>{}(ptr);
+      }};
+    auto reader = std::jthread{};
+    bool exchanged = false;
+    {
+      // Release before jthread destruction, including failed thread construction.
+      auto const releaseOnExit = gsl_lite::finally(
+        [&] noexcept
+        {
+          if (!gateOpened.exchange(true, std::memory_order_acq_rel))
+          {
+            canLoad.release();
+          }
+        });
+      reader = std::jthread{[&]
+                            {
+                              canLoad.acquire();
+                              auto const heldPtr = slot.load();
+                              readValue = heldPtr ? *heldPtr : -1;
+                              loadFinished.release();
+                            }};
+      readerStarted.store(true, std::memory_order_release);
+      exchanged = slot.compare_exchange_strong(stalePtr, rejectedPtr);
+    }
+    reader.join();
+
+    CHECK_FALSE(exchanged);
+    CHECK(completedWhileRetiring.load(std::memory_order_relaxed));
+    CHECK(readValue == 7);
+    CHECK(stalePtr == currentPtr);
+    CHECK(slot.load() == currentPtr);
   }
 
   TEST_CASE("AtomicSharedPtr - compare-exchange replaces a matching expectation", "[core][unit][atomic-shared-ptr]")

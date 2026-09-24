@@ -94,7 +94,7 @@ namespace ao::library::test
     CHECK(tooLongRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][regression][uri]")
+  TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][unit][uri]")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -194,7 +194,7 @@ namespace ao::library::test
     CHECK(resolvedRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("LibraryUri - resolution rejects a dangling symlink", "[library][regression][uri]")
+  TEST_CASE("LibraryUri - resolution rejects a dangling symlink", "[library][unit][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";

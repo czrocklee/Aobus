@@ -11,6 +11,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <limits>
+
 namespace ao::uimodel::test
 {
   TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids", "[uimodel][unit][track-column-layout]")
@@ -81,9 +83,72 @@ namespace ao::uimodel::test
       CHECK(res.error().code == Error::Code::FormatRejected);
     }
 
+    SECTION("Duplicate list id")
+    {
+      document.layouts.push_back(document.layouts[0]);
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
     SECTION("Invalid width and weight")
     {
       document.layouts[0].columns[0].width = 200;
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Flexible weight is zero")
+    {
+      document.layouts[0].columns[0].weight = 0.0;
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Flexible weight is negative")
+    {
+      document.layouts[0].columns[0].weight = -2.0;
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Flexible weight is positive infinity")
+    {
+      document.layouts[0].columns[0].weight = std::numeric_limits<double>::infinity();
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Flexible weight is NaN")
+    {
+      document.layouts[0].columns[0].weight = std::numeric_limits<double>::quiet_NaN();
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Fixed width is zero")
+    {
+      document.layouts[0].columns[0] = StoredTrackColumn{.field = "duration", .width = 0};
+      auto const res = trackColumnLayoutsFromDocument(document);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("Fixed width is negative")
+    {
+      document.layouts[0].columns[0] = StoredTrackColumn{.field = "duration", .width = -2};
       auto const res = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(res);
@@ -123,14 +188,33 @@ namespace ao::uimodel::test
     auto state = TrackColumnLayouts::Snapshot{};
     state[ListId{10}] = {
       TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.75},
+      TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .visible = false},
     };
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(TrackColumnLayoutYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["version"]) == "2");
-    REQUIRE(tree.rootref()["layouts"].is_seq());
-    CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["field"]) == "artist");
-    CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["visible"]) == "true");
+    auto const root = tree.rootref();
+    CHECK(root.num_children() == 2);
+    CHECK(yaml::scalarView(root["version"]) == "2");
+    REQUIRE(root["layouts"].is_seq());
+    REQUIRE(root["layouts"].num_children() == 1);
+    auto const layout = root["layouts"][0];
+    CHECK(layout.num_children() == 2);
+    CHECK(yaml::scalarView(layout["listId"]) == "10");
+    REQUIRE(layout["columns"].is_seq());
+    REQUIRE(layout["columns"].num_children() == 2);
+    auto const flexibleColumn = layout["columns"][0];
+    CHECK(flexibleColumn.num_children() == 4);
+    CHECK(yaml::scalarView(flexibleColumn["field"]) == "artist");
+    CHECK(yaml::scalarView(flexibleColumn["width"]) == "-1");
+    CHECK(yaml::scalarView(flexibleColumn["weight"]) == "1.75");
+    CHECK(yaml::scalarView(flexibleColumn["visible"]) == "true");
+    auto const fixedColumn = layout["columns"][1];
+    CHECK(fixedColumn.num_children() == 4);
+    CHECK(yaml::scalarView(fixedColumn["field"]) == "duration");
+    CHECK(yaml::scalarView(fixedColumn["width"]) == "200");
+    CHECK(yaml::scalarView(fixedColumn["weight"]) == "-1");
+    CHECK(yaml::scalarView(fixedColumn["visible"]) == "false");
 
     auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
     REQUIRE(decodedRes);
@@ -173,6 +257,82 @@ namespace ao::uimodel::test
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
       CHECK(decodedRes.error().message.contains("future"));
+    }
+
+    SECTION("Unknown layout keys are rejected")
+    {
+      auto const* source = R"(
+        version: 2
+        layouts:
+          - listId: 10
+            columns: []
+            future: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
+    }
+
+    SECTION("Layout sequence entries must be mappings")
+    {
+      auto const* source = "version: 2\nlayouts:\n  - malformed\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("layouts"));
+    }
+
+    SECTION("Layout columns are required")
+    {
+      auto const* source = "version: 2\nlayouts:\n  - listId: 10\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("columns"));
+    }
+
+    SECTION("Unknown column keys are rejected")
+    {
+      auto const* source = R"(
+        version: 2
+        layouts:
+          - listId: 10
+            columns:
+              - field: artist
+                width: -1
+                weight: 1
+                visible: true
+                future: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
+    }
+
+    SECTION("Column sequence entries must be mappings")
+    {
+      auto const* source = "version: 2\nlayouts:\n  - listId: 10\n    columns:\n      - malformed\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("columns"));
     }
 
     SECTION("Malformed nested entries reject the whole candidate")

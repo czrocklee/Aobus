@@ -11,6 +11,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <fcntl.h>
+#include <gsl-lite/gsl-lite.hpp>
 #include <poll.h>
 #include <unistd.h>
 
@@ -22,6 +23,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <future>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -145,16 +147,11 @@ namespace ao::gtk::test
           }
 
           auto descriptor = ::pollfd{.fd = _descriptor, .events = POLLIN, .revents = 0};
-          std::int32_t pollStatus = 0;
+          auto const pollStatus = ::poll(&descriptor, 1, static_cast<std::int32_t>(remaining.count()));
 
-          for (;;)
+          if (pollStatus < 0 && errno == EINTR)
           {
-            pollStatus = ::poll(&descriptor, 1, static_cast<std::int32_t>(remaining.count()));
-
-            if (pollStatus >= 0 || errno != EINTR)
-            {
-              break;
-            }
+            continue;
           }
 
           if (pollStatus == 0)
@@ -173,16 +170,11 @@ namespace ao::gtk::test
           }
 
           auto buffer = std::array<char, 256>{};
-          ssize_t readSize = 0;
+          auto const readSize = ::read(_descriptor, buffer.data(), buffer.size());
 
-          for (;;)
+          if (readSize < 0 && (errno == EINTR || errno == EAGAIN))
           {
-            readSize = ::read(_descriptor, buffer.data(), buffer.size());
-
-            if (readSize >= 0 || errno != EINTR)
-            {
-              break;
-            }
+            continue;
           }
 
           if (readSize < 0)
@@ -288,13 +280,13 @@ namespace ao::gtk::test
 
       auto const gateDescriptor = ::open(gatePath.c_str(), O_RDWR | O_CLOEXEC);
       REQUIRE(gateDescriptor >= 0);
-      [[maybe_unused]] auto gateRegistration =
-        utility::ScopedRegistration{[gateDescriptor] { std::ignore = ::close(gateDescriptor); }};
+      [[maybe_unused]] auto const closeGateDescriptor =
+        gsl_lite::finally([gateDescriptor] { std::ignore = ::close(gateDescriptor); });
 
       auto const completionDescriptor = ::open(completionPath.c_str(), O_RDWR | O_CLOEXEC | O_NONBLOCK);
       REQUIRE(completionDescriptor >= 0);
-      [[maybe_unused]] auto completionRegistration =
-        utility::ScopedRegistration{[completionDescriptor] { std::ignore = ::close(completionDescriptor); }};
+      [[maybe_unused]] auto const closeCompletionDescriptor =
+        gsl_lite::finally([completionDescriptor] { std::ignore = ::close(completionDescriptor); });
 
       auto const plan = SuccessorLaunchPlan{
         .executable = "/bin/sh",
@@ -306,17 +298,61 @@ namespace ao::gtk::test
         .optActivationToken = std::nullopt,
       };
 
-      REQUIRE(launchDetachedSuccessor(plan));
+      auto launch = std::future<Result<>>{};
+      ssize_t gateWriteSize = -1;
+      auto releaseChild = utility::ScopedRegistration{[&] noexcept
+                                                      {
+                                                        auto const gateByte = std::array{'g'};
 
-      auto const gateByte = std::array{'g'};
-      REQUIRE(::write(gateDescriptor, gateByte.data(), gateByte.size()) == 1);
+                                                        for (;;)
+                                                        {
+                                                          gateWriteSize =
+                                                            ::write(gateDescriptor, gateByte.data(), gateByte.size());
 
-      auto descriptor = ::pollfd{.fd = completionDescriptor, .events = POLLIN, .revents = 0};
-      REQUIRE(::poll(&descriptor, 1, 5'000) == 1);
-      CHECK((descriptor.revents & POLLIN) != 0);
+                                                          if (gateWriteSize >= 0 || errno != EINTR)
+                                                          {
+                                                            break;
+                                                          }
+                                                        }
+                                                      }};
+      launch = std::async(std::launch::async, [&plan] { return launchDetachedSuccessor(plan); });
+      auto const returnedBeforeRelease = launch.wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+      CHECK(returnedBeforeRelease);
+
+      // The guard also releases before future destruction when an assertion aborts the case.
+      releaseChild.reset();
+      REQUIRE(gateWriteSize == 1);
+      REQUIRE(launch.get());
 
       auto completionByte = std::array<char, 1>{};
-      REQUIRE(::read(completionDescriptor, completionByte.data(), completionByte.size()) == 1);
+      auto const completionDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+      for (;;)
+      {
+        auto const remaining =
+          std::chrono::duration_cast<std::chrono::milliseconds>(completionDeadline - std::chrono::steady_clock::now());
+        REQUIRE(remaining.count() > 0);
+        auto descriptor = ::pollfd{.fd = completionDescriptor, .events = POLLIN, .revents = 0};
+        auto const pollStatus = ::poll(&descriptor, 1, static_cast<std::int32_t>(remaining.count()));
+
+        if (pollStatus < 0 && errno == EINTR)
+        {
+          continue;
+        }
+
+        REQUIRE(pollStatus == 1);
+        REQUIRE((descriptor.revents & POLLIN) != 0);
+        auto const readSize = ::read(completionDescriptor, completionByte.data(), completionByte.size());
+
+        if (readSize < 0 && (errno == EINTR || errno == EAGAIN))
+        {
+          continue;
+        }
+
+        REQUIRE(readSize == 1);
+        break;
+      }
+
       CHECK(completionByte.front() == 'x');
     }
   }

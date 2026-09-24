@@ -31,12 +31,15 @@ KNOWN_LAYERS = frozenset(
     }
 )
 
-KNOWN_TYPES = frozenset({"integration", "regression", "smoke", "unit", "workflow"})
+KNOWN_SCOPES = frozenset({"integration", "unit"})
+BEHAVIOR_TAGS = frozenset({"concurrency", "stress"})
+# Retired tags carried no selection use; the test name states the protected behavior.
+RETIRED_TAGS = frozenset({"regression", "workflow", "smoke"})
 CONCURRENCY_TAG = "concurrency"
 STRESS_TAG = "stress"
 
 TAG_RE = re.compile(r"\[([^\[\]]+)\]")
-TEST_CASE_RE = re.compile(r"\bTEST_CASE\s*\(")
+TEST_CASE_RE = re.compile(r"\b(?:TEST_CASE|TEMPLATE_TEST_CASE)\s*\(")
 STRING_LITERAL_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 # Catch2 treats a leading dot as an opt-in hidden tag. The tag body still uses
 # the project's kebab-case convention (for example, [.manual]).
@@ -170,42 +173,28 @@ def _audit_case(case: TestCase) -> list[Issue]:
             )
         )
 
-    if len(case.tags) < 2:
-        issues.append(Issue(case.path, case.line, "tag-order", "second tag should identify the test type"))
-    elif case.tags[1] not in KNOWN_TYPES:
-        issues.append(
-            Issue(
-                case.path,
-                case.line,
-                "tag-order",
-                f"second tag should be a known test type tag, got [{case.tags[1]}]",
-            )
-        )
+    if len(case.tags) < 2 or case.tags[1] not in KNOWN_SCOPES:
+        issues.append(Issue(case.path, case.line, "tag-order", "second tag must be [unit] or [integration]"))
 
-    has_concurrency_stress_suffix = case.tags[-2:] == (CONCURRENCY_TAG, STRESS_TAG)
-    if len(case.tags) > 4 and not (len(case.tags) == 5 and has_concurrency_stress_suffix):
-        issues.append(
-            Issue(
-                case.path,
-                case.line,
-                "tag-count",
-                "prefer three or four tags; five are reserved for a final [concurrency][stress] pair",
-            )
-        )
+    if sum(tag in KNOWN_SCOPES for tag in case.tags) != 1:
+        issues.append(Issue(case.path, case.line, "tag-scope", "include exactly one [unit] or [integration] scope"))
 
-    if STRESS_TAG in case.tags and not has_concurrency_stress_suffix:
-        issues.append(
-            Issue(
-                case.path,
-                case.line,
-                "tag-order",
-                "[stress] must be the final tag and immediately follow [concurrency]",
-            )
-        )
-    elif CONCURRENCY_TAG in case.tags and case.tags[-1] != CONCURRENCY_TAG and not has_concurrency_stress_suffix:
-        issues.append(Issue(case.path, case.line, "tag-order", "[concurrency] must be the final behavior tag"))
+    if (
+        len(case.tags) < 3
+        or case.tags[2] in KNOWN_SCOPES | BEHAVIOR_TAGS | RETIRED_TAGS
+        or case.tags[2].startswith(".")
+    ):
+        issues.append(Issue(case.path, case.line, "tag-component", "third tag must identify a component or domain"))
+
+    if len(set(case.tags)) != len(case.tags):
+        issues.append(Issue(case.path, case.line, "tag-duplicate", "tags must not repeat"))
+
+    if STRESS_TAG in case.tags and CONCURRENCY_TAG not in case.tags:
+        issues.append(Issue(case.path, case.line, "tag-relation", "[stress] requires [concurrency]"))
 
     for tag in case.tags:
+        if tag in RETIRED_TAGS:
+            issues.append(Issue(case.path, case.line, "tag-retired", f"tag [{tag}] is retired"))
         if TAG_STYLE_RE.fullmatch(tag) is None:
             issues.append(Issue(case.path, case.line, "tag-style", f"tag [{tag}] should use kebab case"))
 

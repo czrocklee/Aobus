@@ -3,9 +3,10 @@
 
 #include <ao/utility/MappedFile.h>
 
+#include "test/unit/TestFixtureSupport.h"
+
 #include <catch2/catch_test_macros.hpp>
 
-#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <string_view>
@@ -15,15 +16,14 @@ namespace ao::utility::test
 {
   TEST_CASE("MappedFile - maps files and reports failed mappings", "[utility][unit][mapped-file]")
   {
-    auto const tempDir = std::filesystem::temp_directory_path() / "ao_mapped_file_test";
-    std::filesystem::create_directories(tempDir);
-    auto const testFilePath = tempDir / "test.bin";
-
-    // Create a dummy file for testing
+    auto const tempDir = ao::test::TempDir{};
+    auto const testFilePath = tempDir.path() / "test.bin";
     auto const testContent = std::string_view{"Hello, MappedFile!"};
     {
       auto ofs = std::ofstream{testFilePath, std::ios::binary};
+      REQUIRE(ofs);
       ofs.write(testContent.data(), static_cast<std::streamsize>(testContent.size()));
+      REQUIRE(ofs.good());
     }
 
     SECTION("Maps successfully and reads correct bytes")
@@ -52,7 +52,7 @@ namespace ao::utility::test
     SECTION("Mapping failure for non-existent file")
     {
       auto mappedFile = MappedFile{};
-      auto const res = mappedFile.map(tempDir / "non_existent.bin");
+      auto const res = mappedFile.map(tempDir.path() / "non_existent.bin");
 
       CHECK(!res.has_value());
       CHECK(mappedFile.isMapped() == false);
@@ -108,7 +108,32 @@ namespace ao::utility::test
       REQUIRE(reusedBytes.size() == testContent.size());
       CHECK(std::string_view{reinterpret_cast<char const*>(reusedBytes.data()), reusedBytes.size()} == testContent);
     }
+  }
 
-    std::filesystem::remove_all(tempDir);
+  TEST_CASE("MappedFile - a failed remap leaves the previous mapping closed", "[utility][unit][mapped-file]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const path = tempDir.path() / "present.bin";
+    {
+      auto output = std::ofstream{path, std::ios::binary};
+      REQUIRE(output);
+      output << "before";
+      REQUIRE(output.good());
+    }
+
+    auto mappedFile = MappedFile{};
+    REQUIRE(mappedFile.map(path));
+    REQUIRE(mappedFile.isMapped());
+
+    auto const res = mappedFile.map(tempDir.path() / "missing.bin");
+    REQUIRE_FALSE(res);
+    CHECK_FALSE(mappedFile.isMapped());
+    CHECK(mappedFile.bytes().empty());
+
+    // map() unmaps first; a later successful map must still be possible.
+    REQUIRE(mappedFile.map(path));
+    auto const bytes = mappedFile.bytes();
+    REQUIRE(bytes.size() == 6);
+    CHECK(std::string_view{reinterpret_cast<char const*>(bytes.data()), bytes.size()} == "before");
   }
 } // namespace ao::utility::test

@@ -11,6 +11,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -37,12 +38,13 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
+  using ao::gtk::layout::test::encodedLayout;
   using ao::gtk::test::findWidget;
 
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutEditorDialog - renders and edits the current layout document", "[gtk][unit][layout][editor]")
+  TEST_CASE("LayoutEditorDialog - renders and edits the current layout document", "[gtk][unit][layout-editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
@@ -83,9 +85,12 @@ namespace ao::gtk::layout::editor::test
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(
         window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader);
       auto const& returned = dialogPtr->document();
+      auto const optExpected = encodedLayout(doc);
+      auto const optActual = encodedLayout(returned);
 
-      CHECK(returned.root.type == doc.root.type);
-      CHECK(returned.root.id == doc.root.id);
+      REQUIRE(optExpected);
+      REQUIRE(optActual);
+      CHECK(*optActual == *optExpected);
 
       dialogPtr->close();
     }
@@ -149,9 +154,9 @@ namespace ao::gtk::layout::editor::test
     {
       auto dialogPtr = std::make_unique<LayoutEditorDialog>(
         window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader);
-      std::int32_t count = 0;
+      auto previews = std::vector<LayoutDocument>{};
 
-      dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++count; });
+      dialogPtr->signalApplyPreview().connect([&](LayoutDocument const& preview) { previews.push_back(preview); });
 
       auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
       REQUIRE(treeView != nullptr);
@@ -163,42 +168,14 @@ namespace ao::gtk::layout::editor::test
 
       CHECK(dialogPtr->activate_action("editor.add_spacer"));
 
-      CHECK(count > 0);
+      REQUIRE(previews.size() == 1);
+      auto const optExpected = encodedLayout(dialogPtr->document());
+      auto const optActual = encodedLayout(previews.front());
+      REQUIRE(optExpected);
+      REQUIRE(optActual);
+      CHECK(*optActual == *optExpected);
 
       dialogPtr->close();
-    }
-
-    SECTION("pending property preview is cancelled when the dialog is destroyed")
-    {
-      std::int32_t previewCount = 0;
-      std::int32_t scheduledPreviewCount = 0;
-      auto manualScheduler = sigc::signal<bool()>{};
-      {
-        auto const scheduler = [&](std::function<bool()> callback)
-        {
-          ++scheduledPreviewCount;
-          return manualScheduler.connect(std::move(callback));
-        };
-        auto dialogPtr = std::make_unique<LayoutEditorDialog>(
-          window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader, scheduler);
-        dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++previewCount; });
-
-        auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
-        REQUIRE(treeView != nullptr);
-        auto const modelPtr = treeView->get_model();
-        REQUIRE(modelPtr);
-        REQUIRE(!modelPtr->children().empty());
-        treeView->get_selection()->select(modelPtr->children().begin());
-
-        auto const spinButtons = ao::gtk::test::collectAll<Gtk::SpinButton>(*dialogPtr);
-        REQUIRE(!spinButtons.empty());
-        spinButtons.front()->set_value(spinButtons.front()->get_value() + 1.0);
-        REQUIRE(scheduledPreviewCount == 1);
-        CHECK(previewCount == 0);
-      }
-
-      manualScheduler.emit();
-      CHECK(previewCount == 0);
     }
 
     SECTION("added components receive unique ids")
@@ -284,5 +261,53 @@ namespace ao::gtk::layout::editor::test
 
       dialog.close();
     }
+  }
+
+  TEST_CASE("LayoutEditorDialog - destruction cancels a pending property preview", "[gtk][unit][layout-editor][async]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_preview_lifetime_test");
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{
+        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    auto actionRegistry = ActionRegistry{registry.schema()};
+    auto window = Gtk::Window{};
+    auto const doc = makeDefaultLayout();
+    auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
+    std::int32_t previewCount = 0;
+    std::int32_t scheduledPreviewCount = 0;
+    auto manualScheduler = sigc::signal<bool()>{};
+
+    {
+      auto const scheduler = [&](std::function<bool()> callback)
+      {
+        ++scheduledPreviewCount;
+        return manualScheduler.connect(std::move(callback));
+      };
+      auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+        window, registry, actionRegistry, textCatalog, doc, "classic", "modern", stubLoader, scheduler);
+      dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++previewCount; });
+
+      auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
+      REQUIRE(treeView != nullptr);
+      auto const modelPtr = treeView->get_model();
+      REQUIRE(modelPtr);
+      REQUIRE(!modelPtr->children().empty());
+      treeView->get_selection()->select(modelPtr->children().begin());
+
+      auto const spinButtons = ao::gtk::test::collectAll<Gtk::SpinButton>(*dialogPtr);
+      REQUIRE(!spinButtons.empty());
+      spinButtons.front()->set_value(spinButtons.front()->get_value() + 1.0);
+      REQUIRE(scheduledPreviewCount == 1);
+      CHECK(previewCount == 0);
+    }
+
+    manualScheduler.emit();
+    CHECK(previewCount == 0);
   }
 } // namespace ao::gtk::layout::editor::test

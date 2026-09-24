@@ -54,6 +54,14 @@ namespace ao::media::file::detail
       }
     }
 
+    [[maybe_unused]] void handleYear(ContentBuilder& builder, std::string_view value)
+    {
+      if (auto const optYear = decodeYear(value); optYear)
+      {
+        builder.metadata().year(*optYear);
+      }
+    }
+
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
     void handleSlashNumber(ContentBuilder& builder, std::string_view value)
     {

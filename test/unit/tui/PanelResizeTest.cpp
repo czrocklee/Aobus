@@ -71,7 +71,7 @@ namespace ao::tui::test
     layout(fixture, events);
     auto const right = ftxui::Event::Special("\x1b[1;2C");
     auto const left = ftxui::Event::Special("\x1b[1;2D");
-    events.tryHandleEvent(right);
+    CHECK_FALSE(events.tryHandleEvent(right));
     CHECK(fixture.shell.panelWidths() == PanelWidths{});
     fixture.shell.focusNavigation();
     REQUIRE(events.tryHandleEvent(right));
@@ -129,7 +129,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - escape and terminal changes cancel an unfinished drag", "[tui][regression][panel-resize]")
+  TEST_CASE("PanelResize - escape and terminal changes cancel an unfinished drag", "[tui][unit][panel-resize]")
   {
     for (bool const resizeTerminal : {false, true})
     {
@@ -160,7 +160,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - cancelling moved pointer input retires drag hover", "[tui][regression][panel-resize]")
+  TEST_CASE("PanelResize - cancelling moved pointer input retires drag hover", "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -222,7 +222,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelResize - normal release recomputes hover from the painted pointer target",
-            "[tui][regression][panel-resize]")
+            "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -281,7 +281,7 @@ namespace ao::tui::test
     CHECK_FALSE(events.isPanelResizing(HoveredButton::NavigationToggle));
   }
 
-  TEST_CASE("PanelResize - active list search owns modified arrows", "[tui][regression][panel-resize]")
+  TEST_CASE("PanelResize - active list search owns modified arrows", "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -295,7 +295,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelResize - shrinking detail can restore pinned lists without cancelling the drag",
-            "[tui][regression][panel-resize]")
+            "[tui][unit][panel-resize]")
   {
     for (bool const separate : {false, true})
     {
@@ -318,7 +318,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - newly opened detail waits for its first painted width", "[tui][regression][panel-resize]")
+  TEST_CASE("PanelResize - newly opened detail waits for its first painted width", "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -370,7 +370,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelResize - mode previews both boundaries and applies or cancels them together",
-            "[tui][regression][panel-resize]")
+            "[tui][unit][panel-resize]")
   {
     for (bool const apply : {false, true})
     {
@@ -437,7 +437,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelResize - text editing retains Ctrl W word deletion", "[tui][regression][panel-resize]")
+  TEST_CASE("PanelResize - text editing retains Ctrl W word deletion", "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -476,7 +476,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelResize - mode cancels on terminal changes and consumes a cancelling mouse press",
-            "[tui][regression][panel-resize]")
+            "[tui][unit][panel-resize]")
   {
     for (bool const terminalChange : {false, true})
     {
@@ -520,7 +520,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelResize - mode status identifies its divider and keeps activity and exit keys visible",
-            "[tui][regression][panel-resize]")
+            "[tui][unit][panel-resize]")
   {
     auto fixture = EventControllerFixture{};
     fixture.runtimePtr->notifications().post(

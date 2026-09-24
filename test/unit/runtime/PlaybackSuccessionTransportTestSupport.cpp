@@ -106,88 +106,87 @@ namespace ao::rt::test::playback_succession
     _gatePtr.reset();
   }
 
-  audio::DecoderFactoryFn makeActivationProbedDecoderFactory(
-    std::shared_ptr<DecoderActivationProbe> probePtr,
-    std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr,
-    std::filesystem::path blockedFileName,
-    bool const failBlockedPreparation,
-    bool const blockEveryLookahead,
-    std::vector<std::filesystem::path> finalOpenFailureFileNames)
+  namespace
   {
-    return [probePtr = std::move(probePtr),
-            blockingGatePtr = std::move(blockingGatePtr),
-            blockedFileName = std::move(blockedFileName),
-            failBlockedPreparation,
-            blockEveryLookahead,
-            finalOpenFailureFileNames = std::move(finalOpenFailureFileNames)](
-             std::filesystem::path const& path,
-             std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
+    audio::DecoderFactoryFn makeActivationProbedDecoderFactory(std::shared_ptr<DecoderActivationProbe> probePtr,
+                                                               PlaybackSuccessionTransportFixtureConfig config)
     {
-      auto const blocks =
-        blockingGatePtr &&
-        (path.filename() == blockedFileName ||
-         (blockEveryLookahead && path.filename() != std::filesystem::path{"transport-playable-0.flac"}));
-
-      if (blocks)
+      return [probePtr = std::move(probePtr), config = std::move(config)](
+               std::filesystem::path const& path,
+               std::optional<audio::SampleEncoding> optOutputEncoding) -> Result<std::unique_ptr<audio::DecoderSession>>
       {
-        blockingGatePtr->enterAndWait();
-      }
+        auto const blocks =
+          config.blockingGatePtr &&
+          (path.filename() == config.blockedFileName ||
+           (config.blockEveryLookahead && path.filename() != std::filesystem::path{"transport-playable-0.flac"}));
 
-      auto const sourceFormat = audio::SignalFormat{
-        .sampleRate = 44100,
-        .channels = 2,
-        .precisionBits = 16,
-      };
-      auto const outputFormat =
-        audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
-      auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
-        .sourceFormat = sourceFormat,
-        .outputFormat = outputFormat,
-        .duration = std::chrono::seconds{2},
-        .isLossy = false,
-        .codec = AudioCodec::Flac,
-      });
-      decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
-
-      if (blocks)
-      {
-        blockingGatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
-        decoderPtr->setDestroyCounter(blockingGatePtr->destroyedPtr);
-      }
-
-      if (blocks && failBlockedPreparation)
-      {
-        return makeError(Error::Code::IoError, "Scripted lookahead preparation failure");
-      }
-
-      if (optOutputEncoding && std::ranges::contains(finalOpenFailureFileNames, path.filename()))
-      {
-        return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
-      }
-
-      decoderPtr->setReadObserver(
-        [probePtr, path](std::size_t const readCount)
+        if (blocks)
         {
-          if (readCount == 2)
-          {
-            probePtr->notify(path);
-          }
-        });
+          config.blockingGatePtr->enterAndWait();
+        }
 
-      return std::unique_ptr<audio::DecoderSession>{std::move(decoderPtr)};
-    };
-  }
+        auto const sourceFormat = audio::SignalFormat{
+          .sampleRate = 44100,
+          .channels = 2,
+          .precisionBits = 16,
+        };
+        auto const outputFormat =
+          audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
+        auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+          .sourceFormat = sourceFormat,
+          .outputFormat = outputFormat,
+          .duration = std::chrono::seconds{2},
+          .isLossy = false,
+          .codec = AudioCodec::Flac,
+        });
+        auto* const failureGate =
+          optOutputEncoding && path.filename() == config.stagedFailureFileName ? config.stagedFailureGate : nullptr;
+        decoderPtr->setReadScript(
+          {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false},
+           {.endOfStream = failureGate == nullptr,
+            .res = failureGate != nullptr ? Result<>{makeError(Error::Code::IoError, "gated staged decode failure")}
+                                          : Result<>{}}});
+
+        if (blocks)
+        {
+          config.blockingGatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
+          decoderPtr->setDestroyCounter(config.blockingGatePtr->destroyedPtr);
+        }
+
+        if (blocks && config.failBlockedPreparation)
+        {
+          return makeError(Error::Code::IoError, "Scripted lookahead preparation failure");
+        }
+
+        if (optOutputEncoding && std::ranges::contains(config.finalOpenFailureFileNames, path.filename()))
+        {
+          return makeError(Error::Code::IoError, "Scripted final decoder setup failure");
+        }
+
+        decoderPtr->setReadObserver(
+          [probePtr, path, failureGate](std::size_t const readCount)
+          {
+            if (readCount == 2)
+            {
+              probePtr->notify(path);
+
+              if (failureGate != nullptr)
+              {
+                failureGate->notifyReadEntered();
+                failureGate->waitForRelease();
+              }
+            }
+          });
+
+        return std::unique_ptr<audio::DecoderSession>{std::move(decoderPtr)};
+      };
+    }
+  } // namespace
 
   PlaybackSuccessionTransportFixture::PlaybackSuccessionTransportFixture(
     PlaybackSuccessionTransportFixtureConfig config)
     : decoderProbePtr{std::make_shared<DecoderActivationProbe>()}
-    , transport{makeActivationProbedDecoderFactory(decoderProbePtr,
-                                                   std::move(config.blockingGatePtr),
-                                                   std::move(config.blockedFileName),
-                                                   config.failBlockedPreparation,
-                                                   config.blockEveryLookahead,
-                                                   std::move(config.finalOpenFailureFileNames))}
+    , transport{makeActivationProbedDecoderFactory(decoderProbePtr, std::move(config))}
     , asyncRuntime{transport.executor, 1, &sleeper}
     , changes{transport.executor, 0, "test-library"}
     , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}
@@ -317,6 +316,6 @@ namespace ao::rt::test::playback_succession
   {
     auto const& path = trackPaths.at(trackId);
     return transport.executor.tryDrainUntil(
-      [&] { return decoderProbePtr->count(path) > previousCount; }, std::chrono::seconds{5});
+      [&] { return decoderProbePtr->count(path) > previousCount; }, std::chrono::seconds{10});
   }
 } // namespace ao::rt::test::playback_succession

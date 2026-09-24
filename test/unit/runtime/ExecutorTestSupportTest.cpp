@@ -50,7 +50,7 @@ namespace ao::rt::test
     CHECK(order == std::vector<int>{1, 2});
   }
 
-  TEST_CASE("InlineExecutor - foreign work is rejected", "[runtime][regression][async][concurrency]")
+  TEST_CASE("InlineExecutor - foreign work is rejected", "[runtime][unit][async][concurrency]")
   {
     auto executor = InlineExecutor{};
     bool taskRan = false;

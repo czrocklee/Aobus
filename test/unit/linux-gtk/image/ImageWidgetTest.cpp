@@ -20,13 +20,19 @@
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdkmm/enums.h>
+#include <gdkmm/pixbuf.h>
+#include <gdkmm/texture.h>
+#include <gdkmm/texturedownloader.h>
 #include <gtkmm/drawingarea.h>
 #include <gtkmm/label.h>
+#include <gtkmm/picture.h>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -36,7 +42,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImageWidget - renders pixbufs at target and allocated sizes", "[gtk][unit][image]")
+  TEST_CASE("ImageWidget - renders pixbufs at target and allocated sizes", "[gtk][unit][image][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = ImageWidget{};
@@ -197,6 +203,8 @@ namespace ao::gtk::test
       auto const scaleFactor = widget.get_scale_factor();
       auto const firstPixbufPtr = makePixbuf(2000, 2000);
       auto const secondPixbufPtr = makePixbuf(3000, 3000);
+      firstPixbufPtr->fill(0xff0000ff);
+      secondPixbufPtr->fill(0x00ff00ff);
 
       widget.setTargetSize(56);
       widget.setImagePixbuf(firstPixbufPtr);
@@ -216,6 +224,17 @@ namespace ao::gtk::test
       CHECK(newSourcePaintablePtr.get() != interimPaintablePtr.get());
       CHECK(newSourcePaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
       CHECK(newSourcePaintablePtr->get_intrinsic_height() == 96 * scaleFactor);
+      auto const texturePtr = std::dynamic_pointer_cast<Gdk::Texture>(newSourcePaintablePtr);
+      REQUIRE(texturePtr);
+      auto const stride = static_cast<std::size_t>(texturePtr->get_width()) * 3;
+      auto pixels = std::vector<std::uint8_t>(stride * static_cast<std::size_t>(texturePtr->get_height()));
+      REQUIRE(pixels.size() >= 3);
+      auto downloader = Gdk::TextureDownloader{texturePtr};
+      downloader.set_format(Gdk::MemoryFormat::R8G8B8);
+      downloader.download_into(pixels.data(), stride);
+      CHECK(pixels[0] == 0);
+      CHECK(pixels[1] == 255);
+      CHECK(pixels[2] == 0);
     }
 
     SECTION("small target growth refreshes undersized render")
@@ -243,7 +262,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ImageWidget - superseded high-quality render cannot publish stale pixels",
-            "[gtk][regression][image][concurrency]")
+            "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completions = std::vector<ImageWidget::RenderedImageReady>{};
@@ -293,7 +312,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ImageWidget - resize keeps its interim frame until worker quality render completes",
-            "[gtk][regression][image][concurrency]")
+            "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completions = std::vector<ImageWidget::RenderedImageReady>{};
@@ -341,7 +360,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ImageWidget - destruction cancels and invalidates a retained render completion",
-            "[gtk][regression][image][concurrency]")
+            "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completion = ImageWidget::RenderedImageReady{};
@@ -370,12 +389,18 @@ namespace ao::gtk::test
     completion(makePixbuf(56, 56));
   }
 
-  TEST_CASE("CoverArtView - renders every placeholder style and yields to real artwork",
+  TEST_CASE("CoverArtView - selects placeholder layers for each style and yields to real artwork",
             "[gtk][unit][image][cover-art]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
     auto const identity = uimodel::makeCoverArtPlaceholderIdentity(std::array<std::string_view, 1>{"Synthetic Sun"});
+
+    auto* const monogram = findWidgetByClass<Gtk::Label>(widget, "ao-cover-monogram");
+    auto* const vinyl = findWidgetByClass<Gtk::DrawingArea>(widget, "ao-cover-vinyl-decoration");
+    REQUIRE(monogram != nullptr);
+    REQUIRE(vinyl != nullptr);
+    auto const pictures = collectAll<Gtk::Picture>(widget);
 
     for (auto const style : {uimodel::CoverArtPlaceholderStyle::Monogram,
                              uimodel::CoverArtPlaceholderStyle::Note,
@@ -387,6 +412,24 @@ namespace ao::gtk::test
       CHECK(widget.isShowingPlaceholder());
       CHECK(widget.placeholderPresentation().style == style);
       CHECK_FALSE(widget.hasImage());
+      auto const isMonogram = style == uimodel::CoverArtPlaceholderStyle::Monogram;
+      CHECK(monogram->get_visible() == isMonogram);
+      CHECK(vinyl->get_visible() == (style == uimodel::CoverArtPlaceholderStyle::Vinyl));
+      CHECK(std::count_if(pictures.begin(), pictures.end(), [](auto* picture) { return picture->get_visible(); }) ==
+            (isMonogram ? 0 : 1));
+
+      if (isMonogram)
+      {
+        CHECK(monogram->get_text() == "S");
+      }
+
+      for (auto* const picture : pictures)
+      {
+        if (picture->get_visible())
+        {
+          CHECK(picture->get_paintable());
+        }
+      }
     }
 
     widget.setTargetSize(56);
@@ -395,6 +438,8 @@ namespace ao::gtk::test
 
     CHECK_FALSE(widget.isShowingPlaceholder());
     CHECK(widget.hasImage());
+    CHECK_FALSE(monogram->get_visible());
+    CHECK_FALSE(vinyl->get_visible());
 
     widget.clearImage();
     CHECK_FALSE(widget.isShowingPlaceholder());
@@ -402,7 +447,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("CoverArtView - compact monogram reduces two-scalar text within the cover",
-            "[gtk][regression][cover-art][geometry]")
+            "[gtk][unit][image][cover-art][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
@@ -446,7 +491,7 @@ namespace ao::gtk::test
     CHECK(label->get_height() >= compactTextHeight);
   }
 
-  TEST_CASE("CoverArtView - vinyl decoration follows the cover allocation", "[gtk][regression][cover-art][geometry]")
+  TEST_CASE("CoverArtView - vinyl decoration follows the cover allocation", "[gtk][unit][image][cover-art][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
@@ -475,7 +520,7 @@ namespace ao::gtk::test
     CHECK(decoration->get_height() == widget.get_height());
   }
 
-  TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image]")
+  TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const fullCoverBytes = encodePng(makePixbuf(128));
@@ -630,19 +675,23 @@ namespace ao::gtk::test
       CHECK(widget.hasImage());
     }
 
-    SECTION("cache hit renders synchronously without touching the database")
+    SECTION("cache hit makes the image available synchronously without touching the database")
     {
       // Resource id that does not exist in the database; a synchronous hit must
       // not require any decode, proving the fast path bypasses the worker.
       auto const resourceId = ResourceId{9001};
-      thumbnailCache.put(ImageCacheKey::thumbnail(resourceId, kLogicalSize), makePixbuf(kLogicalSize, kLogicalSize));
-
       auto widget = CoverArtView{};
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(widget);
+      windowFixture.present();
+      auto const physicalSize =
+        std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
+      thumbnailCache.put(ImageCacheKey::thumbnail(resourceId, physicalSize), makePixbuf(physicalSize, physicalSize));
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
+      CHECK(controller.isImageAvailable());
       drainGtkEvents();
-
       CHECK(widget.hasImage());
     }
 
@@ -659,25 +708,30 @@ namespace ao::gtk::test
       CHECK(widget.placeholderPresentation().style == uimodel::CoverArtPlaceholderStyle::Note);
     }
 
-    SECTION("destroying a widget mid-decode is safe")
+    SECTION("destroying a controller before queued completion preserves shared cache work")
     {
       auto const resourceId = thumbnailResourceId;
+      std::int32_t physicalSize = 0;
+      std::size_t availabilityChanges = 0;
 
       {
         auto widget = CoverArtView{};
-        auto controller = ResourceImageController{widget, loader};
+        physicalSize =
+          std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
+        auto controller = ResourceImageController{widget, loader, [&](bool) { ++availabilityChanges; }};
         controller.enableThumbnailMode(kLogicalSize);
         controller.load(resourceId);
-        // Leave the scope immediately: the decode is likely still in flight on a
-        // worker thread. The shared loader outlives the widget and still completes
-        // the decode, but the controller's request handle must cancel the UI
-        // callback so it never touches the destroyed widget.
+        REQUIRE_FALSE(widget.hasImage());
+        REQUIRE_FALSE(loader.getThumbnail(resourceId, physicalSize));
+        REQUIRE(availabilityChanges == 0);
+        // No main-context turn has delivered the outstanding completion yet.
       }
 
       // The shared loader still salvages the decode into the cache, while the
       // controller's destroyed request handle prevents the callback from touching it.
       REQUIRE(tryPumpGtkEventsUntil(
-        [&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }, std::chrono::seconds{5}));
+        [&] { return static_cast<bool>(loader.getThumbnail(resourceId, physicalSize)); }, std::chrono::seconds{5}));
+      CHECK(availabilityChanges == 0);
 
       // The runtime remains usable afterwards.
       auto widget = CoverArtView{};

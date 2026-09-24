@@ -1,3 +1,5 @@
+include("${CMAKE_SOURCE_DIR}/cmake/AobusTestSources.cmake")
+
 # ao_test_options: shared test compilation settings
 add_library(ao_test_options INTERFACE)
 target_include_directories(ao_test_options INTERFACE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app")
@@ -26,10 +28,6 @@ set_property(SOURCE
   unit/uimodel/layout/component/LayoutSchemaTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
-
-if(LINUX)
-  target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
-endif()
 
 # This opt-in GUI harness needs a console session and disposable media. It is
 # built by native checks but deliberately excluded from the unattended suites.
@@ -97,7 +95,14 @@ add_test(NAME ao_audio_fatal_probe COMMAND ao_audio_fatal_probe)
 # headers merely to use a temporary directory or a Track fixture.
 add_library(ao_test_support_common STATIC
     unit/TestFixtureSupport.cpp
+    unit/FilesystemTestSupport.cpp
 )
+if(WIN32)
+  target_sources(ao_test_support_common PRIVATE unit/FilesystemTestSupportWindows.cpp)
+  target_link_libraries(ao_test_support_common PRIVATE advapi32)
+else()
+  target_sources(ao_test_support_common PRIVATE unit/FilesystemTestSupportPosix.cpp)
+endif()
 
 add_executable(ao_library_probe
     fatal/LibraryProbeMain.cpp
@@ -162,6 +167,8 @@ add_library(ao_test_support_runtime STATIC
     unit/runtime/RuntimeLibraryTestSupport.cpp
     unit/runtime/ViewServiceTestSupport.cpp
     unit/runtime/WorkspaceTestSupport.cpp
+    unit/runtime/completion/CompletionTestSupport.cpp
+    unit/runtime/library/ScanApplyTestSupport.cpp
     unit/runtime/projection/TrackListProjectionTestSupport.cpp
     unit/runtime/source/ListOrderSourceTestSupport.cpp
     unit/runtime/source/SmartListEvaluatorTestSupport.cpp
@@ -217,11 +224,22 @@ if(AOBUS_BUILD_GTK)
   )
 endif()
 
+add_library(ao_test_support_performance STATIC
+    perf/PerformanceReport.cpp
+)
+target_link_libraries(ao_test_support_performance
+    PUBLIC
+      ao_test_options
+      ao_utility
+    PRIVATE
+      ICU::uc
+)
+
 # ao_core_test: shared and host-native unit + integration tests
 add_executable(ao_core_test
     CoreTestMain.cpp
+    unit/perf/PerformanceReportTest.cpp
     fatal/RuntimeFatalProbeScenario.cpp
-    unit/FilesystemTestSupport.cpp
 
     # async tests
     unit/async/RequestCoalescerTest.cpp
@@ -702,45 +720,43 @@ target_link_libraries(ao_core_test PRIVATE
     ao_catalog_pattern
     ao_unicode_text
     ao_test_support_i18n
+    ao_test_support_performance
     ao_test_support_runtime
     ao_test_options
     Catch2::Catch2
     FakeIt::FakeIt-catch
-    ICU::uc
 )
-if(NOT WIN32)
-  target_sources(ao_core_test PRIVATE unit/FilesystemTestSupportPosix.cpp)
+if(LINUX)
+  target_link_libraries(ao_core_test PRIVATE PkgALSA PkgPipeWire)
 endif()
 if(LINUX)
-  target_sources(ao_core_test PRIVATE
-    unit/audio/backend/AlsaMixerTestSupport.cpp
-    unit/audio/backend/PipeWireMonitorTest.cpp
-    unit/audio/backend/AlsaEnginePropertyTest.cpp
-    unit/audio/backend/AlsaExclusiveBackendTest.cpp
-    unit/audio/backend/AlsaProviderTest.cpp
-    unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
-    unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
-    unit/audio/backend/detail/AlsaMixerSessionTest.cpp
-    unit/audio/backend/detail/AlsaModeSelectorTest.cpp
-    unit/audio/backend/detail/AlsaPcmErrorTest.cpp
-    unit/audio/backend/detail/AlsaPcmFormatTest.cpp
-    unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
-    unit/runtime/PlaybackSessionAlsaMuteTest.cpp
-  )
+  target_sources(ao_core_test PRIVATE unit/audio/backend/AlsaMixerTestSupport.cpp)
 endif()
-if(APPLE)
-  target_sources(ao_core_test PRIVATE
-    unit/audio/backend/CoreAudioBackendTest.cpp
-    unit/audio/backend/CoreAudioProviderTest.cpp
-    unit/audio/backend/detail/CoreAudioErrorTest.cpp
-    unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
-    unit/audio/backend/detail/CoreAudioFormatTest.cpp
-    unit/audio/backend/detail/CoreAudioGraphTest.cpp
-    unit/audio/backend/detail/CoreAudioLatencyTest.cpp
-    unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
-    unit/audio/backend/detail/CoreFoundationStringTest.cpp
-  )
-endif()
+aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
+  unit/audio/backend/PipeWireMonitorTest.cpp
+  unit/audio/backend/AlsaEnginePropertyTest.cpp
+  unit/audio/backend/AlsaExclusiveBackendTest.cpp
+  unit/audio/backend/AlsaProviderTest.cpp
+  unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+  unit/audio/backend/detail/AlsaMixerSessionTest.cpp
+  unit/audio/backend/detail/AlsaModeSelectorTest.cpp
+  unit/audio/backend/detail/AlsaPcmErrorTest.cpp
+  unit/audio/backend/detail/AlsaPcmFormatTest.cpp
+  unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
+  unit/runtime/PlaybackSessionAlsaMuteTest.cpp
+)
+aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
+  unit/audio/backend/CoreAudioBackendTest.cpp
+  unit/audio/backend/CoreAudioProviderTest.cpp
+  unit/audio/backend/detail/CoreAudioErrorTest.cpp
+  unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
+  unit/audio/backend/detail/CoreAudioFormatTest.cpp
+  unit/audio/backend/detail/CoreAudioGraphTest.cpp
+  unit/audio/backend/detail/CoreAudioLatencyTest.cpp
+  unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
+  unit/audio/backend/detail/CoreFoundationStringTest.cpp
+)
 if(WIN32)
   add_executable(ao_detached_process_probe
     helper/DetachedProcessProbeWindows.cpp
@@ -750,26 +766,22 @@ if(WIN32)
   add_dependencies(ao_core_test ao_detached_process_probe)
 
   target_sources(ao_core_test PRIVATE
-    unit/FilesystemTestSupportWindows.cpp
-    unit/audio/backend/WasapiProviderTest.cpp
-    unit/audio/backend/WasapiSharedBackendTest.cpp
-    unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
-    unit/audio/backend/detail/WasapiStringsTest.cpp
-    unit/windows/platform/MemoryRandomAccessStreamTest.cpp
-
-    # Windows shell rules that need native types are tested only here.
-    # Cross-desktop startup/protocol/launcher rules are supplied by
-    # ao_desktop_launch above, and the WinRT-free desktop policy is gated on every
-    # host with the portable sources.
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
-    unit/winui/FrameResourceTest.cpp
-    unit/winui/StringResourceTest.cpp
-    unit/winui/WinUiErrorBoundaryTest.cpp
   )
   target_compile_definitions(ao_core_test PRIVATE
     AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml")
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
+aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"
+  unit/audio/backend/WasapiProviderTest.cpp
+  unit/audio/backend/WasapiSharedBackendTest.cpp
+  unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
+  unit/audio/backend/detail/WasapiStringsTest.cpp
+  unit/windows/platform/MemoryRandomAccessStreamTest.cpp
+  unit/winui/FrameResourceTest.cpp
+  unit/winui/StringResourceTest.cpp
+  unit/winui/WinUiErrorBoundaryTest.cpp
+)
 add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_probe)
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
@@ -788,6 +800,37 @@ add_executable(ao_tui_test
     unit/tui/KeymapTestSupport.cpp
     unit/tui/EventControllerTestSupport.cpp
     unit/tui/RenderTestSupport.cpp
+    unit/tui/TrackPropertiesEditorTestSupport.cpp
+)
+aobus_enable_windows_utf8_manifest(ao_tui_test)
+
+target_link_libraries(ao_tui_test PRIVATE
+    ao_app_i18n_ordering
+    aobus-tui-lib
+    ao_app_uimodel
+    ao_app_runtime
+    ao_fatal_probe_support
+    ao_test_support_i18n
+    ao_test_support_runtime
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
+add_dependencies(ao_tui_test ao_tui_signal_probe)
+add_test(NAME ao_tui_test COMMAND ao_tui_test)
+
+# ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
+# it is never built by the gate -- it links mimalloc to mirror the shipping
+# aobus-tui allocator, which would collide with the ASan/TSan interceptors that
+# --asan/--tsan apply to every in-gate target. Build explicitly and run directly:
+#   ./ao build --target ao_tui_bench && <builddir>/test/ao_tui_bench
+add_executable(ao_tui_bench EXCLUDE_FROM_ALL
+    unit/tui/TrackTableBenchmark.cpp
+)
+aobus_enable_windows_utf8_manifest(ao_tui_bench)
+target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_i18n ao_test_options Catch2::Catch2WithMain mimalloc)
+endif()
+aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandTest.cpp
     unit/tui/CommandCompletionTest.cpp
@@ -821,7 +864,6 @@ add_executable(ao_tui_test
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
     unit/tui/TrackTagPopoverTest.cpp
     unit/tui/TrackPropertiesEditorTagsTest.cpp
-    unit/tui/TrackPropertiesEditorTestSupport.cpp
     unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackNavigationTest.cpp
@@ -829,9 +871,10 @@ add_executable(ao_tui_test
     unit/tui/PlaybackModeTest.cpp
     unit/tui/PlaybackHoverTest.cpp
     unit/tui/PlaybackPanelTest.cpp
+    unit/tui/QualityPanelTest.cpp
+    unit/tui/OutputDevicePanelTest.cpp
     unit/tui/RenderTest.cpp
     unit/tui/WorkspaceUsabilityTest.cpp
-    unit/tui/ShellInputTest.cpp
     unit/tui/ListSearchTest.cpp
     unit/tui/ShellInteractionModelTest.cpp
     unit/tui/SoulButtonTest.cpp
@@ -847,43 +890,11 @@ add_executable(ao_tui_test
     unit/tui/TuiSignalProbeTest.cpp
     unit/tui/TextFieldModelTest.cpp
 )
-aobus_enable_windows_utf8_manifest(ao_tui_test)
-
-target_link_libraries(ao_tui_test PRIVATE
-    ao_app_i18n_ordering
-    aobus-tui-lib
-    ao_app_uimodel
-    ao_app_runtime
-    ao_fatal_probe_support
-    ao_test_support_i18n
-    ao_test_support_runtime
-    ao_test_options
-    Catch2::Catch2WithMain
-    FakeIt::FakeIt-catch
-)
-add_dependencies(ao_tui_test ao_tui_signal_probe)
-add_test(NAME ao_tui_test COMMAND ao_tui_test)
-
-# ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
-# it is never built by the gate -- it links mimalloc to mirror the shipping
-# aobus-tui allocator, which would collide with the ASan/TSan interceptors that
-# --asan/--tsan apply to every in-gate target. Build explicitly and run directly:
-#   ./ao build --target ao_tui_bench && <builddir>/test/ao_tui_bench
-add_executable(ao_tui_bench EXCLUDE_FROM_ALL
-    unit/tui/TrackTableBenchmark.cpp
-)
-aobus_enable_windows_utf8_manifest(ao_tui_bench)
-target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_i18n ao_test_options Catch2::Catch2WithMain mimalloc)
-endif()
 
 if(AOBUS_BUILD_CLI)
 # ao_cli_test: command-line frontend tests
 add_executable(ao_cli_test
     unit/cli/CliTestSupport.cpp
-    unit/cli/CommandErrorTest.cpp
-    unit/cli/CliRuntimeTest.cpp
-    unit/cli/CliSmokeTest.cpp
-    unit/cli/OutputTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_cli_test)
 
@@ -896,6 +907,20 @@ target_link_libraries(ao_cli_test PRIVATE
 )
 add_test(NAME ao_cli_test COMMAND ao_cli_test)
 endif()
+aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
+    unit/cli/CommandErrorTest.cpp
+    unit/cli/CliRuntimeTest.cpp
+    unit/cli/CliSmokeTest.cpp
+    unit/cli/InitCommandTest.cpp
+    unit/cli/LibCommandTest.cpp
+    unit/cli/ListCommandTest.cpp
+    unit/cli/QueryHelpTest.cpp
+    unit/cli/RunTest.cpp
+    unit/cli/ScanCommandTest.cpp
+    unit/cli/TagCommandTest.cpp
+    unit/cli/TrackCommandTest.cpp
+    unit/cli/OutputTest.cpp
+)
 
 # ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
@@ -913,16 +938,18 @@ target_link_libraries(ao_integration_test PRIVATE
     FakeIt::FakeIt-catch
 )
 if(LINUX)
-  target_sources(ao_integration_test PRIVATE integration/audio/backend/PipeWireProviderTest.cpp)
+  target_link_libraries(ao_integration_test PRIVATE PkgPipeWire)
 endif()
+aobus_target_test_sources(ao_integration_test "${LINUX}" "non-Linux host"
+  integration/audio/backend/PipeWireProviderTest.cpp
+)
 
-if(WIN32)
-  target_sources(ao_integration_test PRIVATE integration/audio/backend/WasapiProviderTest.cpp)
-endif()
-
-if(APPLE)
-  target_sources(ao_integration_test PRIVATE integration/audio/backend/CoreAudioProviderTest.cpp)
-endif()
+aobus_target_test_sources(ao_integration_test "${WIN32}" "non-Windows host"
+  integration/audio/backend/WasapiProviderTest.cpp
+)
+aobus_target_test_sources(ao_integration_test "${APPLE}" "non-macOS host"
+  integration/audio/backend/CoreAudioProviderTest.cpp
+)
 
 # Not using add_test() here to keep it out of default 'ctest' runs, 
 # or use labels/properties if preferred. For now, it's just a manual driver.
@@ -932,6 +959,32 @@ if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
 add_executable(ao_gtk_test
+    unit/linux-gtk/GtkTestMain.cpp
+)
+
+target_link_libraries(ao_gtk_test PRIVATE
+    aobus-gtk-lib
+    ao_app_i18n_ordering
+    ao_fatal_probe_support
+    ao_test_support_gtk
+    ao_test_support_runtime
+    PkgGTKMM
+    PkgConfig::XTEST
+    ao_test_options
+    Catch2::Catch2
+    FakeIt::FakeIt-catch
+)
+add_dependencies(ao_gtk_test ao_gapplication_probe)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
+endif()
+add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
+set_tests_properties(ao_gtk_test PROPERTIES
+    ENVIRONMENT "GTK_A11Y=test;GTK_IM_MODULE=simple;GDK_BACKEND=x11;GDK_DISABLE=gl,vulkan;GSK_RENDERER=cairo"
+)
+endif()
+aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
+    unit/linux-gtk/GtkTestEnvironmentTest.cpp
     unit/linux-gtk/common/ActionMapRegistrationTest.cpp
     unit/linux-gtk/common/DismissControllerTest.cpp
     unit/linux-gtk/common/MainContextCallbackScopeTest.cpp
@@ -956,6 +1009,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp
     unit/linux-gtk/app/MenuControllerTest.cpp
+    unit/linux-gtk/i18n/GtkTextTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
     unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
@@ -982,16 +1036,16 @@ add_executable(ao_gtk_test
     unit/linux-gtk/track/TrackQuickFilterTest.cpp
     unit/linux-gtk/track/TrackPresentationButtonTest.cpp
     unit/linux-gtk/track/TrackCustomViewDialogTest.cpp
-    unit/linux-gtk/track/TrackPresentationTest.cpp
     unit/linux-gtk/track/TrackFieldUiTest.cpp
     unit/linux-gtk/track/TrackRowCacheTest.cpp
-    unit/linux-gtk/track/TrackScrollBaselineTest.cpp
+    unit/linux-gtk/track/TrackRowObjectTest.cpp
     unit/linux-gtk/track/SelectionInfoLabelTest.cpp
     unit/linux-gtk/status/ActivityStatusWidgetTest.cpp
     unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
     unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
     unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp
     unit/linux-gtk/platform/MprisBridgeTest.cpp
+    unit/linux-gtk/platform/MprisBusLifetimeTest.cpp
     unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp
     unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
@@ -1035,35 +1089,12 @@ add_executable(ao_gtk_test
     unit/linux-gtk/playback/OutputDeviceListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
     unit/linux-gtk/playback/VolumeControlWidgetTest.cpp
-    unit/linux-gtk/GtkTestMain.cpp
 )
-
-target_link_libraries(ao_gtk_test PRIVATE
-    aobus-gtk-lib
-    ao_app_i18n_ordering
-    ao_fatal_probe_support
-    ao_test_support_gtk
-    ao_test_support_runtime
-    PkgGTKMM
-    PkgConfig::XTEST
-    ao_test_options
-    Catch2::Catch2
-    FakeIt::FakeIt-catch
-)
-add_dependencies(ao_gtk_test ao_gapplication_probe)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
-endif()
-add_test(NAME ao_gtk_test COMMAND ao_gtk_test)
-set_tests_properties(ao_gtk_test PROPERTIES
-    ENVIRONMENT "GTK_A11Y=test;GTK_IM_MODULE=simple;GDK_BACKEND=x11;GDK_DISABLE=gl,vulkan;GSK_RENDERER=cairo"
-)
-endif()
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
+    perf/PerformanceMain.cpp
     perf/CompletionVocabularyBaselineTest.cpp
-    perf/PerformanceReport.cpp
     perf/PerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp
 )
@@ -1071,12 +1102,13 @@ aobus_enable_windows_utf8_manifest(ao_perf_baseline)
 
 target_link_libraries(ao_perf_baseline PRIVATE
     ICU::uc
+    ao_test_support_performance
     ao_app_i18n_completion
     ao_app_i18n_ordering
     ao_app_uimodel
     ao_test_support_runtime
     ao_test_options
-    Catch2::Catch2WithMain
+    Catch2::Catch2
     FakeIt::FakeIt-catch
 )
 
@@ -1084,3 +1116,8 @@ target_link_libraries(ao_perf_baseline PRIVATE
 file(GLOB_RECURSE LINT_FIXTURE_SOURCES "integration/lint/fixture/*.cpp")
 add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL ${LINT_FIXTURE_SOURCES})
 target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/integration/lint/fixture")
+
+aobus_finalize_test_sources(
+  "${CMAKE_BINARY_DIR}/aobus-test-sources.tsv"
+  ao_core_test ao_tui_test ao_cli_test ao_gtk_test ao_integration_test ao_perf_baseline
+)

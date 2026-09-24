@@ -291,14 +291,13 @@ namespace ao::media::file::mp4
       }
     }
 
-    template<NumberSetter Setter>
-    void handleNumber(detail::ContentBuilder& builder, AtomView const& view)
+    void handleYear(detail::ContentBuilder& builder, AtomView const& view)
     {
       if (auto const optText = atomTextView(view); optText)
       {
-        if (auto const optYear = decodeUint16(*optText); optYear)
+        if (auto const optYear = decodeYear(*optText); optYear)
         {
-          (builder.metadata().*Setter)(*optYear);
+          builder.metadata().year(*optYear);
         }
       }
     }
@@ -574,7 +573,10 @@ namespace ao::media::file::mp4
       }
       else if (isEqualIgnoringAsciiCase(key, "date") || isEqualIgnoringAsciiCase(key, "year"))
       {
-        handleTextNumber<&detail::ContentBuilder::MetadataBuilder::year>(builder, value);
+        if (auto const optYear = decodeYear(value); optYear)
+        {
+          builder.metadata().year(*optYear);
+        }
       }
     }
 

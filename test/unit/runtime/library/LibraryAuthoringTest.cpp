@@ -296,7 +296,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - observer cannot reenter mutation during publication",
-            "[runtime][unit][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
     auto boundRes = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
@@ -337,7 +337,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - storage mutation failure unwinds the mutation scope",
-            "[runtime][regression][library-authoring]")
+            "[runtime][unit][library-authoring]")
   {
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
@@ -380,7 +380,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - failed root operation releases coordinator admission immediately",
-            "[runtime][unit][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring]")
   {
     auto env = WriteLaneFixture{};
 
@@ -408,7 +408,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write lane - transaction construction failure releases command admission",
-            "[runtime][regression][library-authoring]")
+            "[runtime][unit][library-authoring]")
   {
     bool failNextConstruction = true;
     auto env = WriteLaneFixture{
@@ -431,7 +431,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library write lane - cancellation after command grant releases command admission",
-            "[runtime][regression][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring][concurrency]")
   {
     auto env = WriteLaneFixture{};
     auto backgroundRes = env.writeLane().beginBackgroundTask(LibraryWriteLane::BackgroundTaskKind::ScanApply);
@@ -469,8 +469,7 @@ namespace ao::rt::test
     CHECK(fixture.title() == "Before");
   }
 
-  TEST_CASE("Library authoring - maintenance closes interactive admission",
-            "[runtime][unit][library-authoring][concurrency]")
+  TEST_CASE("Library authoring - maintenance closes interactive admission", "[runtime][unit][library-authoring]")
   {
     auto env = WriteLaneFixture{};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
@@ -511,7 +510,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - background task leases serialize and finish idempotently",
-            "[runtime][unit][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring]")
   {
     auto env = WriteLaneFixture{};
     std::size_t availabilityCount = 0;
@@ -557,7 +556,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - interactive work reports Busy behind an active background mutation",
-            "[runtime][regression][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring][concurrency]")
   {
     auto env = WriteLaneFixture{library::test::TrackSpec{.title = "Background target"}};
     auto targetsRes = env.writeLane().bindTrackTargets(std::array{env.initialTrackId()});
@@ -582,7 +581,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("Library authoring - Closing stops active background pre-transaction work",
-            "[runtime][regression][library-authoring][concurrency]")
+            "[runtime][unit][library-authoring][concurrency]")
   {
     auto temp = ao::test::TempDir{};
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -636,33 +635,21 @@ namespace ao::rt::test
 
   TEST_CASE("Library authoring - foreign runtime binding is stale", "[runtime][unit][library-authoring]")
   {
-    auto firstTemp = ao::test::TempDir{};
-    auto firstLibrary = library::test::makeTestMusicLibrary(firstTemp.path(), firstTemp.path() / "db");
-    auto const firstTrackId =
-      library::test::addTrackWithUniqueFixtureUri(firstLibrary, library::test::TrackSpec{.title = "First runtime"});
-    auto secondTemp = ao::test::TempDir{};
-    auto secondLibrary = library::test::makeTestMusicLibrary(secondTemp.path(), secondTemp.path() / "db");
-    REQUIRE(library::test::addTrackWithUniqueFixtureUri(
-              secondLibrary, library::test::TrackSpec{.title = "Second runtime"}) != kInvalidTrackId);
-    auto executor = async::LoopExecutor{};
-    auto asyncRuntime = async::Runtime{executor};
-    auto firstRead = firstLibrary.readTransaction();
-    auto secondRead = secondLibrary.readTransaction();
-    auto firstChanges = LibraryChanges{executor, firstLibrary.libraryRevision(firstRead), "first-test-library"};
-    auto secondChanges = LibraryChanges{executor, secondLibrary.libraryRevision(secondRead), "second-test-library"};
-    auto firstWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(firstLibrary));
-    auto secondWritable = ao::test::requireValue(library::WritableMusicLibrary::acquire(secondLibrary));
-    auto firstWriteLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(firstWritable), firstChanges};
-    auto secondWriteLane = LibraryWriteLane{asyncRuntime.callbackExecutor(), std::move(secondWritable), secondChanges};
-    auto foreignTargets = ao::test::requireValue(firstWriteLane.bindTrackTargets(std::array{firstTrackId}));
+    auto first = AuthoringFixture{};
+    auto second = AuthoringFixture{};
+    auto foreignTargetsRes = first.runtimeLibrary().bindTrackTargets(std::array{first.trackId()});
+    REQUIRE(foreignTargetsRes);
+    auto const patch = MetadataPatch{.optTitle = "Should not apply"};
 
-    auto const start =
-      runLoopTask(asyncRuntime,
-                  executor,
-                  LibraryWriteLane::beginAuthoringMutationAsync(secondWriteLane.captureSubmission(), foreignTargets));
+    auto const authoringRes =
+      second.runTask(second.runtimeLibrary().commands().updateMetadataAsync(*foreignTargetsRes, patch));
 
-    CHECK(start.status == AuthoringStatus::Stale);
-    CHECK_FALSE(start.optMutation);
+    REQUIRE(authoringRes);
+    CHECK(authoringRes->status == AuthoringStatus::Stale);
+    CHECK(authoringRes->reply.changes.empty());
+    CHECK_FALSE(authoringRes->optNextTargets);
+    CHECK(first.title() == "Before");
+    CHECK(second.title() == "Before");
   }
 
   TEST_CASE("Library authoring - intervening library commit makes a target binding stale",

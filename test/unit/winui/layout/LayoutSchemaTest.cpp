@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::winui::test
 {
@@ -68,6 +69,74 @@ namespace ao::winui::test
     CHECK_FALSE(schema.component("absoluteCanvas").has_value());
     CHECK_FALSE(schema.component("responsiveClass").has_value());
     CHECK_FALSE(schema.component("collapsibleSplit").has_value());
+
+    // Exact Windows vocabulary: an unexpected entry is as significant as a missing one.
+    auto componentIds = std::vector<std::string>{};
+
+    for (auto const& component : schema.components())
+    {
+      componentIds.push_back(component.id);
+    }
+
+    auto expectedComponents = std::vector<std::string>{
+      "box",
+      "split",
+      "app.menuBar",
+      "windows.inspectorPane",
+      "windows.libraryPath",
+      "windows.navigationPane",
+      "windows.statusBar",
+      "windows.titleBar",
+      "track.coverArt",
+      "track.detail",
+      "track.presentationButton",
+      "track.quickFilter",
+      "track.table",
+      "playback.nowPlayingInfo",
+      "playback.outputDeviceSelector",
+      "playback.seekSlider",
+      "playback.soulButton",
+      "playback.timeLabel",
+      "playback.transportButton",
+      "playback.volumeControl",
+      "status.activity",
+      "status.message",
+      "status.selectionInfo",
+      "status.trackCount",
+      "actionButton",
+      "label",
+      "menuButton",
+    };
+    std::ranges::sort(componentIds);
+    std::ranges::sort(expectedComponents);
+    CHECK(componentIds == expectedComponents);
+
+    auto actionIds = std::vector<std::string>{};
+
+    for (auto const& action : schema.actions())
+    {
+      actionIds.push_back(action.id);
+    }
+
+    auto expectedActions = std::vector<std::string>{
+      "library.open",
+      "library.rescan",
+      "shell.toggleInspector",
+      "shell.showSystemMenu",
+      "shell.showSoul",
+      "playback.play",
+      "playback.pause",
+      "playback.playPause",
+      "playback.stop",
+      "playback.next",
+      "playback.previous",
+      "playback.toggleShuffle",
+      "playback.cycleRepeat",
+      "playback.showOutputDeviceSelector",
+    };
+    std::ranges::sort(actionIds);
+    std::ranges::sort(expectedActions);
+    CHECK(actionIds == expectedActions);
   }
 
   TEST_CASE("layoutSchema - action slots are injected only where the policy allows them", "[winui][unit][layout]")
@@ -187,6 +256,12 @@ namespace ao::winui::test
     auto const optSoul = schema.component("playback.soulButton");
     REQUIRE(optSoul);
 
+    REQUIRE(optSoul->defaultActions.size() == 2);
+    CHECK(optSoul->defaultAction(uimodel::ActionSlot::SecondaryClick) == "shell.showSystemMenu");
+    CHECK(optSoul->defaultAction(uimodel::ActionSlot::PrimaryLongPress) == "shell.showSoul");
+    CHECK(optSoul->defaultAction(uimodel::ActionSlot::PrimaryClick).empty());
+    CHECK(optSoul->defaultAction(uimodel::ActionSlot::SecondaryLongPress).empty());
+
     for (auto const& [slot, actionId] : optSoul->defaultActions)
     {
       INFO("default action " << actionId);
@@ -240,7 +315,7 @@ namespace ao::winui::test
           ElementKind::Slider);
   }
 
-  TEST_CASE("componentElementKind - every registered component constructs a known element", "[winui][unit][layout]")
+  TEST_CASE("componentElementKind - every registered component declares a known element kind", "[winui][unit][layout]")
   {
     for (auto const& component : layoutSchema().components())
     {

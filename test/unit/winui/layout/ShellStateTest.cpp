@@ -36,6 +36,43 @@ namespace ao::winui::test
     CHECK(narrow.widthClass == ShellWidthClass::Narrow);
     CHECK(narrow.navigation == NavigationPaneMode::Overlay);
     CHECK(narrow.inspector == InspectorPaneMode::Overlay);
+
+    // Pin the published pixel thresholds independently of the constants used by the resolver.
+    CHECK(kMediumShellWidth == 720.0);
+    CHECK(kWideShellWidth == 1120.0);
+
+    for (auto const mode : {ShellMode::Modern, ShellMode::Classic})
+    {
+      for (auto const width : {719.0, 719.9})
+      {
+        INFO("mode " << static_cast<int>(mode) << ", width " << width);
+        auto const state = unrequested(mode, width);
+        CHECK(state.widthClass == ShellWidthClass::Narrow);
+        CHECK(state.navigation == NavigationPaneMode::Overlay);
+        CHECK(state.inspector == InspectorPaneMode::Overlay);
+        CHECK_FALSE(state.inspectorRevealed);
+      }
+
+      for (auto const width : {720.0, 720.1, 1119.9})
+      {
+        INFO("mode " << static_cast<int>(mode) << ", width " << width);
+        auto const state = unrequested(mode, width);
+        CHECK(state.widthClass == ShellWidthClass::Medium);
+        CHECK(state.navigation == NavigationPaneMode::Compact);
+        CHECK(state.inspector == InspectorPaneMode::Overlay);
+        CHECK_FALSE(state.inspectorRevealed);
+      }
+
+      for (auto const width : {1120.0, 1120.1})
+      {
+        INFO("mode " << static_cast<int>(mode) << ", width " << width);
+        auto const state = unrequested(mode, width);
+        CHECK(state.widthClass == ShellWidthClass::Wide);
+        CHECK(state.navigation == NavigationPaneMode::Expanded);
+        CHECK(state.inspector == InspectorPaneMode::Inline);
+        CHECK(state.inspectorRevealed);
+      }
+    }
   }
 
   TEST_CASE("ShellState - mode changes chrome without changing responsive visibility", "[winui][unit][layout]")

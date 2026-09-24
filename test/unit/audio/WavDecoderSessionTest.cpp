@@ -50,13 +50,6 @@ namespace ao::audio::test
       return fixture;
     }
 
-    std::int16_t readLe16(std::span<std::byte const> bytes, std::size_t offset) noexcept
-    {
-      auto const bits = static_cast<std::uint16_t>(std::to_integer<std::uint16_t>(bytes[offset])) |
-                        static_cast<std::uint16_t>(std::to_integer<std::uint16_t>(bytes[offset + 1U]) << 8U);
-      return static_cast<std::int16_t>(bits);
-    }
-
     std::vector<std::uint8_t> floatSamples(std::span<float const> samples)
     {
       auto data = std::vector<std::uint8_t>{};
@@ -94,7 +87,8 @@ namespace ao::audio::test
     auto const& block = *blockRes;
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(block.firstFrameIndex == 0);
-    CHECK(block.frames > 0);
+    REQUIRE(block.frames > 0);
+    REQUIRE_FALSE(block.bytes.empty());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
 
@@ -115,6 +109,8 @@ namespace ao::audio::test
     REQUIRE(blockRes);
     auto const& block = *blockRes;
     CHECK(info.outputFormat.encoding == SampleEncoding::Signed24PackedLe);
+    REQUIRE(block.frames > 0);
+    REQUIRE_FALSE(block.bytes.empty());
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
@@ -214,6 +210,8 @@ namespace ao::audio::test
     auto blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
     auto const& block = *blockRes;
+    REQUIRE(block.frames > 0);
+    REQUIRE_FALSE(block.bytes.empty());
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
@@ -251,11 +249,11 @@ namespace ao::audio::test
     {
       auto const unsignedSample = static_cast<std::int16_t>(std::to_integer<std::uint8_t>(parsed.wave.data[index]));
       auto const expected = static_cast<std::int16_t>((unsignedSample - 128) << 8U);
-      CHECK(readLe16(block.bytes, index * 2U) == expected);
+      CHECK(readSigned16LePcmSample(block.bytes, index) == expected);
     }
   }
 
-  TEST_CASE("WavDecoderSession - ignores malformed chunks after required audio data", "[audio][regression][wav]")
+  TEST_CASE("WavDecoderSession - ignores malformed chunks after required audio data", "[audio][unit][wav]")
   {
     auto data = ao::test::wav::makeWav({});
     ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
@@ -280,11 +278,22 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
-  TEST_CASE("WavDecoderSession - reports invalid input", "[audio][unit][wav][error]")
+  TEST_CASE("WavDecoderSession - supports integer-to-float output", "[audio][unit][wav]")
   {
     auto const integerFixture = requireAudioFixture("basic_metadata.wav");
-    CHECK(WavDecoderSession::open(integerFixture, SampleEncoding::Float32Le));
+    auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(integerFixture, SampleEncoding::Float32Le));
+    CHECK(decoderPtr->streamInfo().outputFormat.encoding == SampleEncoding::Float32Le);
+    CHECK(decoderPtr->streamInfo().outputFormat.channels == 2);
 
-    CHECK(!WavDecoderSession::open("/path/to/nowhere/nonexistent.wav", SampleEncoding::Signed16Le));
+    auto const blockRes = decoderPtr->readNextBlock();
+    REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
+    CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
+  }
+
+  TEST_CASE("WavDecoderSession - rejects missing input", "[audio][unit][wav][error]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    CHECK_FALSE(WavDecoderSession::open(tempDir.path() / "missing.wav", SampleEncoding::Signed16Le));
   }
 } // namespace ao::audio::test

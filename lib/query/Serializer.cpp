@@ -126,6 +126,8 @@ namespace ao::query
         }
 
         appendFormatted(oss, "not ");
+        // A binary operand is nested even when this negation is the root.
+        ++counter;
         std::visit(*this, unaryPtr->operand);
       }
 

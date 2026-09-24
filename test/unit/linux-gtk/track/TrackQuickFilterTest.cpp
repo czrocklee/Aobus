@@ -56,7 +56,7 @@ namespace ao::gtk::test
   } // namespace
 
   TEST_CASE("TrackQuickFilter - duplicate surfaces preserve drafts and create from the current commit",
-            "[gtk][regression][track][quick-filter]")
+            "[gtk][unit][track][quick-filter]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -132,10 +132,10 @@ namespace ao::gtk::test
     CHECK(hasAccessibleLabel(*clearButton, "Clear filter"));
     CHECK(hasAccessibleLabel(*createButton, "Create List from current filter"));
 
-    // Just verify it wires up and doesn't crash
+    REQUIRE_FALSE(filter.get_sensitive());
     REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
-
     drainGtkEvents();
+    CHECK(filter.get_sensitive());
   }
 
   TEST_CASE("TrackQuickFilter - clear button clears current filter text", "[gtk][unit][track][quick-filter]")
@@ -181,7 +181,8 @@ namespace ao::gtk::test
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
   }
 
-  TEST_CASE("TrackQuickFilter - accepts query completion trigger text", "[gtk][unit][track][completion]")
+  TEST_CASE("TrackQuickFilter - completes a field trigger through the shared entry controller",
+            "[gtk][unit][track][quick-filter][completion]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -189,18 +190,36 @@ namespace ao::gtk::test
     REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
     drainGtkEvents();
 
-    auto filter =
-      TrackQuickFilter{runtime.completion(), runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
+    auto filter = TrackQuickFilter{runtime.completion(),
+                                   runtime.views(),
+                                   runtime.workspace(),
+                                   ao::test::englishMessageCatalog(),
+                                   [](auto, auto) { return sigc::connection{}; }};
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(filter);
+    windowFixture.present();
+    auto* const popover = findWidget<Gtk::Popover>(filter.entry());
+    REQUIRE(popover != nullptr);
+
     filter.setText("$al");
     filter.setPosition(3);
+    ::g_signal_emit_by_name(filter.entry().gobj(), "changed");
     drainGtkEvents();
 
     CHECK(filter.text() == "$al");
     CHECK(filter.position() == 3);
+    auto* const title = findWidgetByClass<Gtk::Label>(*popover, "ao-query-completion-row-title");
+    REQUIRE(title != nullptr);
+    CHECK(title->get_text() == "$album");
+    CHECK(popover->get_visible());
+    CHECK(tryEmitCompletionKey(filter.entry(), GDK_KEY_Return));
+    CHECK(filter.text() == "$album");
+    CHECK(filter.position() == 6);
+    CHECK_FALSE(popover->get_visible());
   }
 
   TEST_CASE("TrackQuickFilter - retains shared value completion after filter debounce",
-            "[gtk][regression][track][completion]")
+            "[gtk][unit][track][quick-filter][completion][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

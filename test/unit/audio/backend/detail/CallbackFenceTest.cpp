@@ -3,9 +3,12 @@
 
 #include "lib/audio/backend/detail/CallbackFence.h"
 
+#include <ao/utility/ScopedRegistration.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <semaphore>
 #include <thread>
 
@@ -21,31 +24,50 @@ namespace ao::audio::backend::detail::test
     auto enteredFence = std::atomic{false};
     fence.open();
 
-    auto callbackThread = std::jthread{[&]
-                                       {
-                                         enteredFence.store(fence.tryEnter(), std::memory_order_release);
-                                         entered.release();
-                                         release.acquire();
+    auto callbackThread = std::jthread{};
+    auto closeThread = std::jthread{};
+    auto cleanup = utility::ScopedRegistration{[&]
+                                               {
+                                                 release.release();
 
-                                         if (enteredFence.load(std::memory_order_acquire))
-                                         {
-                                           fence.leave();
-                                         }
-                                       }};
-    entered.acquire();
+                                                 if (callbackThread.joinable())
+                                                 {
+                                                   callbackThread.join();
+                                                 }
+
+                                                 if (closeThread.joinable())
+                                                 {
+                                                   closeThread.join();
+                                                 }
+                                               }};
+    callbackThread = std::jthread{[&]
+                                  {
+                                    enteredFence.store(fence.tryEnter(), std::memory_order_release);
+                                    entered.release();
+                                    release.acquire();
+
+                                    if (enteredFence.load(std::memory_order_acquire))
+                                    {
+                                      fence.leave();
+                                    }
+                                  }};
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds{5}));
     REQUIRE(enteredFence.load(std::memory_order_acquire));
 
-    auto closeThread = std::jthread{[&]
-                                    {
-                                      fence.closeAndWait();
-                                      closeReturned.store(true, std::memory_order_release);
-                                    }};
+    closeThread = std::jthread{[&]
+                               {
+                                 fence.closeAndWait();
+                                 closeReturned.store(true, std::memory_order_release);
+                               }};
 
-    while (fence.isOpen())
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+    while (fence.isOpen() && std::chrono::steady_clock::now() < deadline)
     {
       std::this_thread::yield();
     }
 
+    REQUIRE_FALSE(fence.isOpen());
     CHECK_FALSE(closeReturned.load(std::memory_order_acquire));
     auto const lateEntry = fence.tryEnter();
 
@@ -56,9 +78,7 @@ namespace ao::audio::backend::detail::test
 
     CHECK_FALSE(lateEntry);
 
-    release.release();
-    closeThread.join();
-    callbackThread.join();
+    cleanup.reset();
     CHECK(closeReturned.load(std::memory_order_acquire));
   }
 
@@ -73,9 +93,14 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(fence.isOpen());
     fence.open();
     CHECK(fence.isOpen());
+    REQUIRE(fence.tryEnter());
+    fence.leave();
+    fence.closeAndWait();
+    CHECK_FALSE(fence.tryEnter());
   }
 
-  TEST_CASE("CallbackFence - listener removal can separate close from quiescence", "[audio][unit][callback-fence]")
+  TEST_CASE("CallbackFence - listener removal can separate close from quiescence",
+            "[audio][unit][callback-fence][concurrency]")
   {
     auto fence = CallbackFence{};
     fence.open();

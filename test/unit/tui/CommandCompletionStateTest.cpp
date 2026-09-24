@@ -91,7 +91,7 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - rejects invalid replacement ranges", "[tui][regression][completion]")
+  TEST_CASE("CommandCompletionState - rejects invalid replacement ranges", "[tui][unit][completion]")
   {
     auto state = CommandCompletionState{};
     auto draft = TextFieldModel{"view so"};

@@ -33,10 +33,9 @@
 
 namespace ao::gtk::test
 {
-  // Menu population semantics are covered by TrackPresentationCatalog and workflow tests. The widget
-  // keeps a focused adapter smoke: it binds services, renders the menu, and dispatches selection.
-  TEST_CASE("TrackPresentationButton - rebuilds presentation actions when focus changes",
-            "[gtk][unit][track][presentation]")
+  // Catalog tests own menu contents; the widget owns binding and apply-before-persist.
+  TEST_CASE("TrackPresentationButton - binds the active title and applies a menu selection",
+            "[gtk][integration][track-presentation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -49,19 +48,27 @@ namespace ao::gtk::test
     auto button = TrackPresentationButton{runtime.views(), runtime.workspace(), ao::test::englishMessageCatalog()};
     button.setPresentationServices(&catalog, &listPresentations, &themeCoordinator);
     window.set_child(button);
+    auto* const menuButton = findWidget<Gtk::MenuButton>(button);
+    REQUIRE(menuButton != nullptr);
+    CHECK_FALSE(menuButton->get_sensitive());
+    CHECK(menuButton->get_label() == "Presentation");
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
-    auto* const menuButton = findWidget<Gtk::MenuButton>(button);
-    REQUIRE(menuButton != nullptr);
     CHECK(menuButton->get_sensitive());
+    CHECK(menuButton->get_label() == "Library");
     CHECK(button.get_valign() == Gtk::Align::CENTER);
     CHECK(menuButton->get_valign() == Gtk::Align::CENTER);
     CHECK(hasCssClass(*menuButton, "ao-presentation-trigger"));
 
     auto* const popover = menuButton->get_popover();
     REQUIRE(popover != nullptr);
+    window.present();
+    drainGtkEvents();
+    menuButton->popup();
+    drainGtkEvents();
+    REQUIRE(popover->get_visible());
 
     auto* const albumsButton = findButtonByLabel(*popover, "Albums");
     REQUIRE(albumsButton != nullptr);
@@ -72,6 +79,8 @@ namespace ao::gtk::test
     // change before the list preference records it.
     emitClicked(*albumsButton);
     drainGtkEvents();
+    CHECK_FALSE(popover->get_visible());
+    CHECK(menuButton->get_label() == "Albums");
 
     auto const activeViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);
@@ -80,10 +89,12 @@ namespace ao::gtk::test
     auto const optStored = listPresentations.presentationIdForList(rt::kAllTracksListId);
     REQUIRE(optStored);
     CHECK(*optStored == "albums");
+    window.close();
+    drainGtkEvents();
   }
 
   TEST_CASE("TrackPresentationButton - rebinding services drops the pending apply",
-            "[gtk][regression][track][presentation]")
+            "[gtk][integration][track-presentation][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -120,7 +131,8 @@ namespace ao::gtk::test
     CHECK_FALSE(replacementPreferences.presentationIdForList(rt::kAllTracksListId).has_value());
   }
 
-  TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed", "[gtk][unit][regression]")
+  TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed",
+            "[gtk][integration][track-presentation][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -158,7 +170,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TrackPresentationButton - refused deferred applies do not persist a preference",
-            "[gtk][regression][track][presentation]")
+            "[gtk][integration][track-presentation][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -189,31 +201,17 @@ namespace ao::gtk::test
 
     emitClicked(*albumsButton);
 
-    SECTION("focus changes before the idle apply")
-    {
-      auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
-      auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
-      drainGtkEvents();
+    auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
+    auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
+    drainGtkEvents();
 
-      CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
-      CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
-      CHECK_FALSE(listPresentations.presentationIdForList(secondListId).has_value());
-    }
+    CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+    CHECK_FALSE(listPresentations.presentationIdForList(secondListId).has_value());
 
     CHECK_FALSE(listPresentations.presentationIdForList(rt::kAllTracksListId).has_value());
 
-    AppDialog* errorDialog = nullptr;
-
-    for (auto* const topLevel : Gtk::Window::list_toplevels())
-    {
-      if (auto* const dialog = dynamic_cast<AppDialog*>(topLevel);
-          dialog != nullptr && dialog->get_title() == "Unable to Change Track View")
-      {
-        errorDialog = dialog;
-        break;
-      }
-    }
-
+    auto* const errorDialog = findAppDialogByTitle("Unable to Change Track View");
     REQUIRE(errorDialog != nullptr);
     CHECK(errorDialog->get_transient_for() == &window);
     CHECK(errorDialog->has_css_class("ao-theme-modern"));

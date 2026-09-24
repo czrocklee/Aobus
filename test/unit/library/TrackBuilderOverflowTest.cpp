@@ -9,8 +9,11 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -193,8 +196,27 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("TrackBuilder - cold serialization rejects durations outside the stored range",
+            "[library][unit][track-builder][overflow]")
+  {
+    auto context = TrackSerializationFixture{};
+
+    for (auto const durationMs : std::array<std::int64_t, 5>{
+           -1, -4294967296LL, 2147483648LL, 4294967295LL, std::numeric_limits<std::int64_t>::max()})
+    {
+      CAPTURE(durationMs);
+      auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("duration.flac").duration(std::chrono::milliseconds{durationMs});
+      auto const res = context.trySerializeCold(builder);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == (durationMs < 0 ? Error::Code::InvalidInput : Error::Code::ValueTooLarge));
+      CHECK(res.error().message.contains("Track duration"));
+    }
+  }
+
   TEST_CASE("TrackBuilder - complete preflight keeps rejected cold data from staging shared dictionary rows",
-            "[library][regression][track-builder][atomicity]")
+            "[library][unit][track-builder][atomicity]")
   {
     constexpr auto kUint16Overflow = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U;
     auto context = TrackSerializationFixture{};
@@ -202,7 +224,17 @@ namespace ao::library::test
     auto rejected = TrackBuilder::makeEmpty();
     rejected.metadata().artist("rejected-artist");
     rejected.property().uri("rejected.flac");
-    rejected.customMetadata().add("oversized-key", oversizedValue);
+
+    SECTION("Oversized custom metadata")
+    {
+      rejected.customMetadata().add("oversized-key", oversizedValue);
+    }
+
+    SECTION("Duration outside the stored range")
+    {
+      rejected.customMetadata().add("oversized-key", "must not be staged");
+      rejected.property().duration(std::chrono::milliseconds{2147483648LL});
+    }
 
     auto rejectedRes = physicalSerializeTrack(rejected, context.transaction(), context.resources());
     REQUIRE_FALSE(rejectedRes);

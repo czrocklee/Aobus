@@ -7,9 +7,11 @@
 #include <ao/async/Task.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -31,9 +33,24 @@ namespace ao::rt::test
       co_return;
     }
 
-    Task<> throwingTaskAsync()
+    Task<> throwingTaskAsync(AsyncTestState<std::int32_t> started,
+                             AsyncBarrier* release,
+                             AsyncTestState<bool> aboutToThrow)
     {
+      started.increment();
+      release->wait();
+      aboutToThrow.set(true);
       throw std::runtime_error{"whenAll test failure"};
+      co_return;
+    }
+
+    Task<> gatedIncrementTaskAsync(AsyncTestState<std::int32_t> started,
+                                   AsyncBarrier* release,
+                                   std::atomic<std::int32_t>* counter)
+    {
+      started.increment();
+      release->wait();
+      counter->fetch_add(1);
       co_return;
     }
 
@@ -50,11 +67,11 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("whenAll - completes after all tasks ran", "[runtime][unit][async]")
+  TEST_CASE("whenAll - completes after all tasks ran", "[runtime][unit][async][concurrency]")
   {
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor, 4};
     auto counter = std::atomic<std::int32_t>{0};
+    auto runtime = Runtime{executor, 4};
 
     auto tasks = std::vector<Task<>>{};
 
@@ -76,28 +93,54 @@ namespace ao::rt::test
     runtime.spawn(awaitAllTaskAsync(&runtime, {})).get();
   }
 
-  TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[runtime][unit][async]")
+  TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[runtime][unit][async][concurrency]")
   {
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor, 2};
     auto counter = std::atomic<std::int32_t>{0};
+    auto markerCount = std::atomic<std::int32_t>{0};
+    auto started = AsyncTestState<std::int32_t>::create(0);
+    auto aboutToThrow = AsyncTestState<bool>::create(false);
+    auto finishRelease = AsyncBarrier{};
+    auto throwRelease = AsyncBarrier{};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto runtime = Runtime{executor, 2};
+    auto cleanup = gsl_lite::finally(
+      [&]
+      {
+        finishRelease.release();
+        throwRelease.release();
+      });
 
     auto tasks = std::vector<Task<>>{};
-    tasks.push_back(throwingTaskAsync());
-    tasks.push_back(incrementTaskAsync(&counter));
+    tasks.push_back(throwingTaskAsync(started, &throwRelease, aboutToThrow));
+    tasks.push_back(gatedIncrementTaskAsync(started, &finishRelease, &counter));
+    auto future = runtime.spawn(flagCompletionAsync(completedPtr, awaitAllTaskAsync(&runtime, std::move(tasks))));
 
-    auto future = runtime.spawn(awaitAllTaskAsync(&runtime, std::move(tasks)));
+    REQUIRE(started.tryWaitUntil(2));
+    throwRelease.release();
+    REQUIRE(aboutToThrow.tryWaitUntil(true));
 
+    // One worker remains blocked. This marker can finish on the other worker only
+    // after Asio's dispatched child-completion stack has processed the exception.
+    runtime.spawn(incrementTaskAsync(&markerCount)).get();
+    CHECK(markerCount.load() == 1);
+    CHECK_FALSE(completedPtr->load());
+    CHECK(counter.load() == 0);
+
+    finishRelease.release();
     CHECK_THROWS_AS(future.get(), std::runtime_error);
+    CHECK(completedPtr->load());
     CHECK(counter.load() == 1);
   }
 
   TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[runtime][unit][async][concurrency]")
   {
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor, 2};
     auto started = AsyncTestState<std::int32_t>::create(0);
     auto release = AsyncBarrier{};
+    auto runtime = Runtime{executor, 2};
+    // Release blocked workers before Runtime joins, including assertion unwinding.
+    auto cleanup = gsl_lite::finally([&release] { release.release(); });
 
     auto tasks = std::vector<Task<>>{};
     tasks.push_back(rendezvousTaskAsync(started, &release));
@@ -117,8 +160,8 @@ namespace ao::rt::test
     // suspended in whenAllAsync; a blocking wait would deadlock here instead of
     // letting the tasks run sequentially.
     auto executor = InlineExecutor{};
-    auto runtime = Runtime{executor, 1};
     auto counter = std::atomic<std::int32_t>{0};
+    auto runtime = Runtime{executor, 1};
 
     auto tasks = std::vector<Task<>>{};
     tasks.push_back(incrementTaskAsync(&counter));

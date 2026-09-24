@@ -15,6 +15,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
@@ -178,6 +179,8 @@ namespace ao::gtk::layout::test
 
     SECTION("Modern controls bar reserves enough height for padded controls")
     {
+      [[maybe_unused]] auto const shutdownStyleRuntime =
+        gsl_lite::finally([] { GtkStyleRuntime::instance().shutdown(); });
       GtkStyleRuntime::instance().initialize();
 
       auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
@@ -207,7 +210,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown", "[gtk][unit][layout][lifetime]")
+  TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown", "[gtk][unit][layout]")
   {
     auto childPtr = std::unique_ptr<Gtk::Box>{};
 

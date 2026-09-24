@@ -15,6 +15,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -34,6 +35,14 @@ namespace ao::uimodel::test
 {
   namespace
   {
+    std::vector<TrackId> readStoredOrder(library::MusicLibrary const& storage, ListId const listId)
+    {
+      auto transaction = storage.readTransaction();
+      auto const optList = storage.lists().reader(transaction).get(listId);
+      REQUIRE(optList);
+      return {optList->orderTrackIds().begin(), optList->orderTrackIds().end()};
+    }
+
     struct SessionFixture final
     {
       SessionFixture()
@@ -58,13 +67,7 @@ namespace ao::uimodel::test
         });
       }
 
-      std::vector<TrackId> storedOrder() const
-      {
-        auto transaction = runtime.libraryFixture.library().readTransaction();
-        auto const optList = runtime.libraryFixture.library().lists().reader(transaction).get(listId);
-        REQUIRE(optList);
-        return {optList->orderTrackIds().begin(), optList->orderTrackIds().end()};
-      }
+      std::vector<TrackId> storedOrder() const { return readStoredOrder(runtime.libraryFixture.library(), listId); }
 
       rt::test::ViewServiceFixture runtime;
       TrackId first;
@@ -100,6 +103,8 @@ namespace ao::uimodel::test
         return viewId;
       }
 
+      std::vector<TrackId> storedOrder() const { return readStoredOrder(libraryFixture.library(), listId); }
+
       rt::test::MusicLibraryFixture libraryFixture;
       rt::test::ManualExecutor executor;
       rt::LibraryChanges changes;
@@ -114,7 +119,7 @@ namespace ao::uimodel::test
   } // namespace
 
   TEST_CASE("ListOrderAuthoringSession - relative move commits the complete source order",
-            "[uimodel][unit][list][list-order]")
+            "[uimodel][integration][list][list-order]")
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open();
@@ -134,7 +139,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ListOrderAuthoringSession - quick filter permits absolute but not relative moves",
-            "[uimodel][unit][list][list-order]")
+            "[uimodel][integration][list][list-order]")
   {
     auto fixture = SessionFixture{};
     auto const viewId = fixture.open("true");
@@ -194,10 +199,12 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ListOrderAuthoringSession - NoOp replays invalidation observed while submission is pending",
-            "[uimodel][regression][list-order][concurrency]")
+            "[uimodel][integration][list][list-order][concurrency]")
   {
     auto fixture = PendingSessionFixture{};
     auto const viewId = fixture.open();
+    auto const revision = fixture.commandsFixture.library().authoringAvailability().libraryRevision;
+    REQUIRE(fixture.storedOrder().empty());
     auto sessionRes = ListOrderAuthoringSession::begin(
       fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
     REQUIRE(sessionRes);
@@ -218,10 +225,12 @@ namespace ao::uimodel::test
     CHECK(res->status == rt::AuthoringStatus::NoOp);
     CHECK_FALSE(session.isCurrent());
     CHECK(invalidatedCount == 1);
+    CHECK(fixture.storedOrder().empty());
+    CHECK(fixture.commandsFixture.library().authoringAvailability().libraryRevision == revision);
   }
 
   TEST_CASE("ListOrderAuthoringSession - pending submission outlives moved and destroyed facades",
-            "[uimodel][regression][list-order][concurrency]")
+            "[uimodel][integration][list][list-order][concurrency]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListOrderAuthoringSession>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListOrderAuthoringSession>);
@@ -229,6 +238,8 @@ namespace ao::uimodel::test
 
     auto fixture = PendingSessionFixture{};
     auto const viewId = fixture.open();
+    auto const revision = fixture.commandsFixture.library().authoringAvailability().libraryRevision;
+    REQUIRE(fixture.storedOrder().empty());
     std::size_t invalidatedCount = 0;
     auto invalidatedSubscription = async::Subscription{};
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
@@ -250,6 +261,8 @@ namespace ao::uimodel::test
     REQUIRE(res);
     CHECK(res->status == rt::AuthoringStatus::NoOp);
     CHECK(invalidatedCount == 1);
+    CHECK(fixture.storedOrder().empty());
+    CHECK(fixture.commandsFixture.library().authoringAvailability().libraryRevision == revision);
 
     REQUIRE(fixture.commandsFixture.runTask(
       fixture.commandsFixture.commands().createListAsync(rt::ListDraft{.name = "After cleanup"})));

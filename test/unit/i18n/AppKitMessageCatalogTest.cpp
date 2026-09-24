@@ -11,7 +11,7 @@
 
 namespace ao::i18n::test
 {
-  TEST_CASE("AppKit messages - editor counts use singular and grouped plural forms", "[core][regression][catalog]")
+  TEST_CASE("AppKit messages - editor counts use singular and grouped plural forms", "[core][unit][catalog]")
   {
     auto catalogRes = MessageCatalog::create("en");
     REQUIRE(catalogRes);
@@ -64,8 +64,7 @@ namespace ao::i18n::test
     CHECK(requiredText(*catalogRes, MessageId::AppKitRepeatOne) == "Repeat One");
   }
 
-  TEST_CASE("AppKit messages - missing shell translation retains English message grammar",
-            "[core][regression][catalog]")
+  TEST_CASE("AppKit messages - missing shell translation retains English message grammar", "[core][unit][catalog]")
   {
     auto catalogRes = MessageCatalog::create("ja-JP");
     REQUIRE(catalogRes);

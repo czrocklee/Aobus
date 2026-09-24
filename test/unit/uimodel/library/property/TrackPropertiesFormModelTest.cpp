@@ -41,7 +41,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesFormModel - merges multi-track field state", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormModel - merges multi-track field state", "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -58,7 +58,7 @@ namespace ao::uimodel::test
     CHECK(model.rowView(rt::TrackField::Title).mixed);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - writes changed metadata edits", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormModel - writes changed metadata edits", "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -79,7 +79,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optYear == 2024);
   }
 
-  TEST_CASE("TrackPropertiesFormModel - exposes row view and save state", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormModel - exposes row view and save state", "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -103,8 +103,7 @@ namespace ao::uimodel::test
     CHECK(*patch.optTitle == "New Title");
   }
 
-  TEST_CASE("TrackPropertiesFormModel - keeps mixed multi-track edits out of patches",
-            "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormModel - keeps mixed multi-track edits out of patches", "[uimodel][unit][property]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto model = TrackPropertiesFormModel{textCatalog};
@@ -125,7 +124,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPropertiesFormModel - skips unchanged, read-only, and incompatible edits",
-            "[uimodel][unit][library][property]")
+            "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -151,7 +150,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPropertiesFormModel - explicit replacement writes mixed fields including first-target equality",
-            "[uimodel][unit][library][property]")
+            "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -181,7 +180,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPropertiesFormModel - explicit replacement omits a common no-op and rejects read-only fields",
-            "[uimodel][unit][library][property]")
+            "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);
@@ -202,7 +201,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPropertiesFormModel - later edits replace explicit intent without changing the baseline",
-            "[uimodel][regression][library][property]")
+            "[uimodel][unit][property]")
   {
     auto model = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     model.addField(rt::TrackField::Title, true);

@@ -45,7 +45,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - reconciles device state after listener installation",
-            "[audio][regression][coreaudio][provider]")
+            "[audio][unit][coreaudio][provider]")
   {
     auto enumerateCount = std::atomic{std::size_t{0U}};
     auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
@@ -66,7 +66,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - startup failure retires the installed monitor",
-            "[audio][regression][coreaudio][provider]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto enumerateCount = std::atomic{std::size_t{0U}};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -88,7 +88,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - monitor refresh publishes a complete deterministic snapshot",
-            "[audio][unit][coreaudio][provider]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto refreshComplete = std::binary_semaphore{0};
     auto enumerateCount = std::atomic{std::size_t{0U}};
@@ -121,7 +121,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - subscription and backend may outlive provider",
-            "[audio][regression][coreaudio][provider]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto sub = utility::ScopedRegistration{};
     auto backendPtr = std::unique_ptr<Backend>{};
@@ -146,7 +146,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - nested provider callback may destroy the outer provider",
-            "[audio][regression][coreaudio][concurrency]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto makeHooks = []
     {
@@ -192,7 +192,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - device observer may destroy provider on monitor thread",
-            "[audio][regression][coreaudio][concurrency]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -224,7 +224,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - concurrent external shutdown callers share callback quiescence",
-            "[audio][regression][coreaudio][concurrency]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto callbackEntered = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -282,7 +282,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - callback shutdown returns while later external shutdown waits",
-            "[audio][regression][coreaudio][concurrency]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto callbackShutdownReturned = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -339,7 +339,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioProvider - initial graph observer may destroy provider and completes shared shutdown",
-            "[audio][regression][coreaudio][concurrency]")
+            "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};

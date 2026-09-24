@@ -31,13 +31,16 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -45,6 +48,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <filesystem>
@@ -190,7 +194,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CoreRuntime - move construction preserves service identity after the source retires",
-            "[runtime][unit][core-runtime][lifetime]")
+            "[runtime][unit][core-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
     auto optRuntime = std::optional<CoreRuntime>{};
@@ -234,7 +238,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires",
-            "[runtime][unit][app-runtime][lifetime]")
+            "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
     auto optRuntime = std::optional<AppRuntime>{};
@@ -365,30 +369,45 @@ namespace ao::rt::test
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("CoreRuntime - shutdown retires a queued library publication",
-            "[runtime][regression][core-runtime][concurrency]")
+  TEST_CASE("CoreRuntime - shutdown retires a queued library publication", "[runtime][unit][core-runtime][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
+    std::size_t publications = 0;
     auto runtime = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
                                                               tempDir.path(),
                                                               LibraryPaths{tempDir.path()}.databasePath(),
                                                               tempDir.path() / "cache",
                                                               library::test::kTestMusicLibraryMapBytes));
 
+    auto subscription =
+      runtime.library().changes().onChanged([&publications](LibraryChangeSet const&) { ++publications; });
+    REQUIRE(runQueuedTask(
+      runtime.async(), *executor, runtime.library().commands().createListAsync(ListDraft{.name = "Live publication"})));
+    REQUIRE(publications == 1);
+    publications = 0;
+    auto const revisionBefore = runtime.library().snapshot().revision();
+
     [[maybe_unused]] auto future =
       runtime.async().spawn(runtime.library().commands().createListAsync(ListDraft{.name = "Committed before close"}));
     REQUIRE(executor->tryWaitUntilQueued());
     REQUIRE(executor->queuedCount() == 1);
+    {
+      auto snapshot = runtime.library().snapshot();
+      REQUIRE(snapshot.revision() == revisionBefore + 1);
+      REQUIRE(std::ranges::any_of(
+        snapshot.lists(), [](ListNode const& node) { return node.name == "Committed before close"; }));
+    }
 
+    CHECK(publications == 0);
     runtime.shutdown();
-
     CHECK_NOTHROW(executor->drain());
+    CHECK(publications == 0);
   }
 
-  TEST_CASE("AppRuntime - teardown is deferred until playback callbacks quiesce",
-            "[runtime][regression][app-runtime][concurrency]")
+  TEST_CASE("AppRuntime - teardown after playback callback settlement shuts down the provider",
+            "[runtime][unit][app-runtime][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
@@ -431,21 +450,16 @@ namespace ao::rt::test
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
-    bool callbackCompleted = false;
     auto const sequenceSubscription = appPtr->playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept
-      {
-        callbackEntered = snapshot.succession.currentTrackId == secondTrackId;
-        callbackCompleted = true;
-      });
+      { callbackEntered = snapshot.succession.currentTrackId == secondTrackId; });
 
     executor->drain();
     auto output = std::array<std::byte, 4096>{};
     REQUIRE(tryDriveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
-    CHECK(callbackCompleted);
     REQUIRE(appPtr);
-
+    CHECK_FALSE(audioStatePtr->providerShutdownStarted.load());
     appPtr.reset();
-    CHECK_FALSE(appPtr);
+    CHECK(audioStatePtr->providerShutdownStarted.load());
   }
 } // namespace ao::rt::test

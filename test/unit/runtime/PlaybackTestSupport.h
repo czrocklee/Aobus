@@ -46,7 +46,7 @@ namespace ao::rt::test
   bool tryWaitForPlaybackSettlement(ExecutorT& executor,
                                     PlaybackPositionRevision const previousRevision,
                                     PositionRevisionFn positionRevision,
-                                    std::chrono::milliseconds const timeout = std::chrono::seconds{2})
+                                    std::chrono::milliseconds const timeout = std::chrono::seconds{10})
   {
     return executor.tryDrainUntil([&] { return positionRevision() != previousRevision; }, timeout);
   }
@@ -55,7 +55,7 @@ namespace ao::rt::test
   Result<> admitPlaybackAndWait(ExecutorT& executor,
                                 AdmissionFn admit,
                                 PositionRevisionFn positionRevision,
-                                std::chrono::milliseconds const timeout = std::chrono::seconds{2})
+                                std::chrono::milliseconds const timeout = std::chrono::seconds{10})
   {
     auto const previousRevision = positionRevision();
 
@@ -75,14 +75,14 @@ namespace ao::rt::test
   bool tryDriveRenderUntilTaskQueued(audio::RenderTarget& renderTarget,
                                      QueuedExecutor& executor,
                                      std::span<std::byte> output,
-                                     std::chrono::milliseconds timeout = std::chrono::seconds{5});
+                                     std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
   template<typename Predicate>
   bool tryDriveRenderUntil(audio::RenderTarget& renderTarget,
                            QueuedExecutor& executor,
                            std::span<std::byte> output,
                            Predicate predicate,
-                           std::chrono::milliseconds timeout = std::chrono::seconds{5})
+                           std::chrono::milliseconds timeout = std::chrono::seconds{10})
   {
     auto const deadline = std::chrono::steady_clock::now() + timeout;
 

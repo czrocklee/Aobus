@@ -3,7 +3,8 @@
 
 #include "app/AppDialog.h"
 
-#include <glib-object.h>
+#include <ao/utility/ScopedRegistration.h>
+
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -29,11 +30,6 @@ namespace ao::gtk
     constexpr int kMessageMinWidth = 360;
     constexpr int kMessageMaxWidth = 520;
     constexpr int kActionSpacing = 8;
-
-    void markFinalized(void* const data, GObject* /*whereTheObjectWas*/)
-    {
-      *static_cast<bool*>(data) = true;
-    }
   } // namespace
 
   AppDialog::AppDialog()
@@ -78,19 +74,13 @@ namespace ao::gtk
 
   void AppDialog::response(std::int32_t id)
   {
-    bool finalized = false;
-    auto* const object = G_OBJECT(gobj());
-    ::g_object_weak_ref(object, markFinalized, &finalized);
+    auto const wasInProgress = _responseInProgress;
+    auto const restoreResponse = utility::ScopedRegistration{
+      _responseCallbacks.guard([this, wasInProgress] { _responseInProgress = wasInProgress; })};
     _responseInProgress = true;
-    _signalResponse.emit(id);
-
-    if (finalized)
-    {
-      return;
-    }
-
-    ::g_object_weak_unref(object, markFinalized, &finalized);
-    _responseInProgress = false;
+    // A response may destroy the C++ owner while the native window remains referenced.
+    auto signal = _signalResponse;
+    signal.emit(id);
   }
 
   sigc::signal<void(std::int32_t)> AppDialog::signal_response()

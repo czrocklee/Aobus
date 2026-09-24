@@ -76,6 +76,33 @@ namespace ao::library
       return byteCount;
     }
 
+    Result<> validateColdProperties(TrackBuilder::PropertyBuilder const& property)
+    {
+      auto uriRes = LibraryUri::parse(property.uri());
+
+      if (!uriRes)
+      {
+        return std::unexpected{uriRes.error()};
+      }
+
+      if (uriRes->value() != property.uri())
+      {
+        return makeError(Error::Code::InvalidInput, "Track URI is not canonical");
+      }
+
+      if (property.duration() < std::chrono::milliseconds::zero())
+      {
+        return makeError(Error::Code::InvalidInput, "Track duration must not be negative");
+      }
+
+      if (property.duration() > TrackDuration::max())
+      {
+        return makeError(Error::Code::ValueTooLarge, "Track duration exceeds the signed 32-bit millisecond range");
+      }
+
+      return {};
+    }
+
     template<typename T>
     void writePod(std::span<std::byte> out, std::size_t offset, T const& value)
     {
@@ -620,16 +647,9 @@ namespace ao::library
   {
     AO_EXPECTS(_baselineKind != BaselineKind::HotOnly, "A hot-only TrackBuilder cannot serialize cold data");
 
-    auto uriRes = LibraryUri::parse(_propertyBuilder._uri);
-
-    if (!uriRes)
+    if (auto propertyRes = validateColdProperties(_propertyBuilder); !propertyRes)
     {
-      return std::unexpected{uriRes.error()};
-    }
-
-    if (uriRes->value() != _propertyBuilder._uri)
-    {
-      return makeError(Error::Code::InvalidInput, "Track URI is not canonical");
+      return propertyRes;
     }
 
     try

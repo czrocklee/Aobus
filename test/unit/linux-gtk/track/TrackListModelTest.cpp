@@ -24,7 +24,6 @@
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
 #include <gtk/gtk.h>
-#include <gtkmm/application.h>
 #include <gtkmm/multiselection.h>
 #include <sigc++/functors/mem_fun.h>
 #include <sigc++/scoped_connection.h>
@@ -104,65 +103,77 @@ namespace ao::gtk::test
         events.push_back({position, removed, added, modelPtr->get_n_items(), modelPtr->projection() != nullptr});
       }
     };
+
+    struct TrackListModelFixture final
+    {
+      TrackListModelFixture()
+        : id1{addRuntimeTrack(runtime, makeTrackSpec("Song A", "Artist A", "Album A", 2020))}
+        , id2{addRuntimeTrack(runtime, makeTrackSpec("Song B", "Artist B", "Album B", 2021))}
+        , sourcePtr{rt::test::makeMutableTrackSource({id1, id2})}
+        , rowCache{runtime.library(), ao::test::englishMessageCatalog()}
+        , projectionPtr{runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})}
+        , modelPtr{TrackListModel::create(rowCache)}
+      {
+        modelPtr->bindProjection(projectionPtr);
+        spy.modelPtr = modelPtr;
+        spyConnection =
+          modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &SpyTrackListModelEvents::handleItemsChanged));
+      }
+
+      GtkRuntimeFixture runtimeFixture{};
+      rt::AppRuntime& runtime = runtimeFixture.runtime();
+      TrackId id1;
+      TrackId id2;
+      std::shared_ptr<rt::test::MutableTrackSource> sourcePtr;
+      TrackRowCache rowCache;
+      std::shared_ptr<rt::TrackListProjection> projectionPtr;
+      Glib::RefPtr<TrackListModel> modelPtr;
+      SpyTrackListModelEvents spy;
+      sigc::scoped_connection spyConnection;
+    };
   } // namespace
 
-  TEST_CASE("TrackListModel - exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
+  TEST_CASE("TrackListModel - exposes projection identity and cached row fields", "[gtk][unit][track-model]")
   {
-    auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
-    auto fixture = GtkRuntimeFixture{};
-    auto& runtime = fixture.runtime();
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = TrackListModelFixture{};
 
-    auto const id1 = addRuntimeTrack(runtime, makeTrackSpec("Song A", "Artist A", "Album A", 2020));
-    auto const id2 = addRuntimeTrack(runtime, makeTrackSpec("Song B", "Artist B", "Album B", 2021));
+    CHECK(fixture.modelPtr->projection() == fixture.projectionPtr.get());
+    CHECK(fixture.modelPtr->indexOf(fixture.id1) == 0);
+    CHECK(fixture.modelPtr->indexOf(fixture.id2) == 1);
+    CHECK(fixture.modelPtr->get_n_items() == 2);
+    CHECK(fixture.modelPtr->get_item_type() != G_TYPE_INVALID);
 
-    auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
-    sourcePtr->addInitial(id1);
-    sourcePtr->addInitial(id2);
+    auto const itemPtr = fixture.modelPtr->get_object(0);
+    REQUIRE(itemPtr != nullptr);
+    auto const castRowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
+    REQUIRE(castRowPtr);
+    CHECK(castRowPtr->trackId() == fixture.id1);
+    CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
+  }
 
-    auto rowCache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
-    auto const projectionPtr = std::shared_ptr<rt::TrackListProjection>{
-      runtime.views().createTransientTrackListProjection(rt::TrackSourceLease{sourcePtr})};
-
-    auto const modelPtr = TrackListModel::create(rowCache);
-    modelPtr->bindProjection(projectionPtr);
-
-    auto spy = SpyTrackListModelEvents{};
-    spy.modelPtr = modelPtr;
-    modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &SpyTrackListModelEvents::handleItemsChanged));
-
-    SECTION("Basic properties and size")
-    {
-      CHECK(modelPtr->projection() == projectionPtr.get());
-      CHECK(modelPtr->indexOf(id1) == 0);
-      CHECK(modelPtr->indexOf(id2) == 1);
-      CHECK(modelPtr->get_n_items() == 2);
-      CHECK(modelPtr->get_item_type() != G_TYPE_INVALID);
-
-      auto const itemPtr = modelPtr->get_object(0);
-      REQUIRE(itemPtr != nullptr);
-      auto const castRowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr);
-      REQUIRE(castRowPtr);
-      CHECK(castRowPtr->trackId() == id1);
-      CHECK(castRowPtr->fieldText(rt::TrackField::Artist) == "Artist A");
-    }
+  TEST_CASE("TrackListModel - reports playing state without structural notifications", "[gtk][unit][track-model]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = TrackListModelFixture{};
 
     SECTION("Setting the playing track emits the playing-changed signal, not items_changed")
     {
       std::int32_t playingChangedCount = 0;
-      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
-      CHECK(spy.events.empty());
-      modelPtr->setPlayingTrackId(id1);
+      CHECK(fixture.spy.events.empty());
+      fixture.modelPtr->setPlayingTrackId(fixture.id1);
 
       // The shared, cached row objects make items_changed a no-op (GTK dedups the
       // rebind), so the highlight is driven by the dedicated signal instead.
-      CHECK(spy.events.empty());
+      CHECK(fixture.spy.events.empty());
       CHECK(playingChangedCount == 1);
-      CHECK(modelPtr->playingTrackId() == id1);
+      CHECK(fixture.modelPtr->playingTrackId() == fixture.id1);
 
       // get_item_vfunc still stamps isPlaying() on the object it hands back, so a
       // freshly bound (scrolled-in) row reflects the current playing track.
-      auto const playingRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(0));
+      auto const playingRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
       REQUIRE(playingRowPtr);
       CHECK(playingRowPtr->isPlaying());
     }
@@ -170,130 +181,145 @@ namespace ao::gtk::test
     SECTION("Setting the same playing track twice is a no-op")
     {
       std::int32_t playingChangedCount = 0;
-      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
-      modelPtr->setPlayingTrackId(id1);
-      modelPtr->setPlayingTrackId(id1);
+      fixture.modelPtr->setPlayingTrackId(fixture.id1);
+      fixture.modelPtr->setPlayingTrackId(fixture.id1);
 
       CHECK(playingChangedCount == 1);
+      CHECK(fixture.spy.events.empty());
+      CHECK(fixture.modelPtr->playingTrackId() == fixture.id1);
     }
 
     SECTION("Setting playing track outside the projection emits only the playing signal")
     {
       std::int32_t playingChangedCount = 0;
-      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
-      modelPtr->setPlayingTrackId(TrackId{987654});
+      fixture.modelPtr->setPlayingTrackId(TrackId{987654});
 
       CHECK(playingChangedCount == 1);
-      CHECK(spy.events.empty());
-      CHECK(modelPtr->get_n_items() == 2);
-      CHECK(modelPtr->playingTrackId() == TrackId{987654});
+      CHECK(fixture.spy.events.empty());
+      CHECK(fixture.modelPtr->get_n_items() == 2);
+      CHECK(fixture.modelPtr->playingTrackId() == TrackId{987654});
     }
 
     SECTION("Setting playing track before binding a projection records state and emits the signal")
     {
-      auto emptyModelPtr = TrackListModel::create(rowCache);
+      auto emptyModelPtr = TrackListModel::create(fixture.rowCache);
       std::int32_t playingChangedCount = 0;
       emptyModelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
-      emptyModelPtr->setPlayingTrackId(id1);
+      emptyModelPtr->setPlayingTrackId(fixture.id1);
 
       CHECK(playingChangedCount == 1);
-      CHECK(emptyModelPtr->playingTrackId() == id1);
+      CHECK(emptyModelPtr->playingTrackId() == fixture.id1);
       CHECK(emptyModelPtr->get_n_items() == 0);
     }
 
     SECTION("Switching the playing track re-emits the signal and restamps both rows")
     {
       std::int32_t playingChangedCount = 0;
-      modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
+      fixture.modelPtr->signalPlayingChanged().connect([&] { ++playingChangedCount; });
 
-      modelPtr->setPlayingTrackId(id1);
-      modelPtr->setPlayingTrackId(id2);
+      auto const retainedRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
+      REQUIRE(retainedRowPtr);
+      CHECK_FALSE(retainedRowPtr->isPlaying());
+
+      fixture.modelPtr->setPlayingTrackId(fixture.id1);
+      CHECK(fixture.modelPtr->get_object(0) == retainedRowPtr);
+      CHECK(retainedRowPtr->isPlaying());
+      fixture.modelPtr->setPlayingTrackId(fixture.id2);
 
       CHECK(playingChangedCount == 2);
-      CHECK(spy.events.empty());
-      CHECK(modelPtr->playingTrackId() == id2);
+      CHECK(fixture.spy.events.empty());
+      CHECK(fixture.modelPtr->playingTrackId() == fixture.id2);
 
-      auto const oldRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(0));
-      auto const newRowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(1));
+      auto const oldRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(0));
+      auto const newRowPtr = std::dynamic_pointer_cast<TrackRowObject>(fixture.modelPtr->get_object(1));
       REQUIRE(oldRowPtr);
       REQUIRE(newRowPtr);
+      CHECK(oldRowPtr == retainedRowPtr);
       CHECK_FALSE(oldRowPtr->isPlaying());
       CHECK(newRowPtr->isPlaying());
     }
+  }
+
+  TEST_CASE("TrackListModel - translates projection changes into list-model notifications", "[gtk][unit][track-model]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = TrackListModelFixture{};
 
     SECTION("Delta batch notifications - Insert")
     {
-      auto const id3 = addRuntimeTrack(runtime, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
-      sourcePtr->insert(id3, 0);
+      auto const id3 = addRuntimeTrack(fixture.runtime, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
+      fixture.sourcePtr->insert(id3, 0);
 
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events[0].position == 0);
-      CHECK(spy.events[0].removed == 0);
-      CHECK(spy.events[0].added == 1);
-      CHECK(spy.events[0].sizeDuringEvent == 3);
-      CHECK(modelPtr->get_n_items() == 3);
-      CHECK(modelPtr->indexOf(id3) == 0);
-      CHECK(modelPtr->indexOf(id1) == 1);
-      CHECK(modelPtr->indexOf(id2) == 2);
+      REQUIRE(fixture.spy.events.size() == 1);
+      CHECK(fixture.spy.events[0].position == 0);
+      CHECK(fixture.spy.events[0].removed == 0);
+      CHECK(fixture.spy.events[0].added == 1);
+      CHECK(fixture.spy.events[0].sizeDuringEvent == 3);
+      CHECK(fixture.modelPtr->get_n_items() == 3);
+      CHECK(fixture.modelPtr->indexOf(id3) == 0);
+      CHECK(fixture.modelPtr->indexOf(fixture.id1) == 1);
+      CHECK(fixture.modelPtr->indexOf(fixture.id2) == 2);
     }
 
     SECTION("Delta batch notifications - Remove")
     {
-      sourcePtr->remove(id1);
+      fixture.sourcePtr->remove(fixture.id1);
 
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events[0].position == 0);
-      CHECK(spy.events[0].removed == 1);
-      CHECK(spy.events[0].added == 0);
-      CHECK(spy.events[0].sizeDuringEvent == 1);
-      CHECK(modelPtr->get_n_items() == 1);
+      REQUIRE(fixture.spy.events.size() == 1);
+      CHECK(fixture.spy.events[0].position == 0);
+      CHECK(fixture.spy.events[0].removed == 1);
+      CHECK(fixture.spy.events[0].added == 0);
+      CHECK(fixture.spy.events[0].sizeDuringEvent == 1);
+      CHECK(fixture.modelPtr->get_n_items() == 1);
     }
 
     SECTION("Delta batch notifications - Update")
     {
-      sourcePtr->update(id2);
+      fixture.sourcePtr->update(fixture.id2);
 
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events[0].position == 1);
-      CHECK(spy.events[0].removed == 1);
-      CHECK(spy.events[0].added == 1);
-      CHECK(spy.events[0].sizeDuringEvent == 2);
+      REQUIRE(fixture.spy.events.size() == 1);
+      CHECK(fixture.spy.events[0].position == 1);
+      CHECK(fixture.spy.events[0].removed == 1);
+      CHECK(fixture.spy.events[0].added == 1);
+      CHECK(fixture.spy.events[0].sizeDuringEvent == 2);
     }
 
     SECTION("Delta batch notifications - Reset")
     {
-      sourcePtr->emitReset();
+      fixture.sourcePtr->emitReset();
 
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events[0].position == 0);
-      CHECK(spy.events[0].removed == 2);
-      CHECK(spy.events[0].added == 2);
-      CHECK(spy.events[0].sizeDuringEvent == 2);
+      REQUIRE(fixture.spy.events.size() == 1);
+      CHECK(fixture.spy.events[0].position == 0);
+      CHECK(fixture.spy.events[0].removed == 2);
+      CHECK(fixture.spy.events[0].added == 2);
+      CHECK(fixture.spy.events[0].sizeDuringEvent == 2);
     }
 
     SECTION("Clearing and unbinding projection")
     {
-      auto selectionPtr = Gtk::MultiSelection::create(modelPtr);
+      auto selectionPtr = Gtk::MultiSelection::create(fixture.modelPtr);
       CHECK(::g_list_model_get_n_items(G_LIST_MODEL(selectionPtr->gobj())) == 2);
 
-      modelPtr->clearProjection();
+      fixture.modelPtr->clearProjection();
 
-      CHECK(modelPtr->projection() == nullptr);
-      CHECK(modelPtr->get_n_items() == 0);
+      CHECK(fixture.modelPtr->projection() == nullptr);
+      CHECK(fixture.modelPtr->get_n_items() == 0);
       CHECK(::g_list_model_get_n_items(G_LIST_MODEL(selectionPtr->gobj())) == 0);
-      REQUIRE(spy.events.size() == 1);
-      CHECK(spy.events.front().position == 0);
-      CHECK(spy.events.front().removed == 2);
-      CHECK(spy.events.front().added == 0);
-      CHECK(spy.events.front().sizeDuringEvent == 0);
-      CHECK_FALSE(spy.events.front().projectionAttachedDuringEvent);
+      REQUIRE(fixture.spy.events.size() == 1);
+      CHECK(fixture.spy.events.front().position == 0);
+      CHECK(fixture.spy.events.front().removed == 2);
+      CHECK(fixture.spy.events.front().added == 0);
+      CHECK(fixture.spy.events.front().sizeDuringEvent == 0);
+      CHECK_FALSE(fixture.spy.events.front().projectionAttachedDuringEvent);
     }
   }
 
-  TEST_CASE("TrackListModel - section ranges propagate without materializing rows", "[gtk][regression][track-model]")
+  TEST_CASE("TrackListModel - section ranges propagate without materializing rows", "[gtk][unit][track-model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -347,8 +373,7 @@ namespace ao::gtk::test
     CHECK(rowCache.cachedRowCount() == 0);
   }
 
-  TEST_CASE("TrackListModel - source invalidation clears rows and detaches the projection",
-            "[gtk][regression][track-model]")
+  TEST_CASE("TrackListModel - source invalidation clears rows and detaches the projection", "[gtk][unit][track-model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -393,7 +418,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TrackListModel - multi-delta batches reset atomically and preserve section invariants",
-            "[gtk][regression][track-model]")
+            "[gtk][unit][track-model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -471,7 +496,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TrackListModel - multi-delta updates refresh cached rows across notification strategies",
-            "[gtk][regression][track-model]")
+            "[gtk][unit][track-model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

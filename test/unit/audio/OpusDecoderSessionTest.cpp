@@ -27,7 +27,6 @@
 #include <numbers>
 #include <optional>
 #include <span>
-#include <utility>
 #include <vector>
 
 namespace ao::audio::test
@@ -181,6 +180,7 @@ namespace ao::audio::test
 
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 2U);
   }
 
@@ -195,6 +195,7 @@ namespace ao::audio::test
 
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 1U * 2U);
   }
 
@@ -210,6 +211,7 @@ namespace ao::audio::test
 
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
@@ -251,7 +253,9 @@ namespace ao::audio::test
 
     SECTION("Seeking back to the start replays the whole stream")
     {
-      std::ignore = decoder.readNextBlock();
+      auto const initialBlockRes = decoder.readNextBlock();
+      REQUIRE(initialBlockRes);
+      REQUIRE(initialBlockRes->frames > 0);
       REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
       REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
 
@@ -271,8 +275,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - nonzero granule origin preserves duration and seek positions",
-            "[audio][regression][opus]")
+  TEST_CASE("OpusDecoderSession - nonzero granule origin preserves duration and seek positions", "[audio][unit][opus]")
   {
     constexpr std::int64_t kDecodeOrigin = 24000;
     auto data = readFileBytes(requireAudioFixture("short_pages.opus"));
@@ -308,7 +311,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - known zero-frame stream reaches stable end of stream", "[audio][regression][opus]")
+  TEST_CASE("OpusDecoderSession - known zero-frame stream reaches stable end of stream", "[audio][unit][opus]")
   {
     auto const data = makeZeroFrameStream();
     auto const tempFile = ao::test::TempFile{data, ".opus"};
@@ -385,13 +388,21 @@ namespace ao::audio::test
     REQUIRE(channels == kWavOrderTones.size());
 
     // Skip the first block so the measurement never lands on the pre-skip edge.
-    std::ignore = decoder.readNextBlock();
+    auto const skippedBlockRes = decoder.readNextBlock();
+    REQUIRE(skippedBlockRes);
+    REQUIRE(skippedBlockRes->frames > 0);
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
     REQUIRE(blockRes->frames > 480);
 
-    auto const samples = std::span{
-      reinterpret_cast<std::int16_t const*>(blockRes->bytes.data()), blockRes->bytes.size() / sizeof(std::int16_t)};
+    REQUIRE(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * channels * 2U);
+    auto samples = std::vector<std::int16_t>{};
+    samples.reserve(blockRes->bytes.size() / 2U);
+
+    for (std::size_t index = 0; index < blockRes->bytes.size() / 2U; ++index)
+    {
+      samples.push_back(readSigned16LePcmSample(blockRes->bytes, index));
+    }
 
     for (std::uint8_t channel = 0; channel < channels; ++channel)
     {
@@ -418,7 +429,9 @@ namespace ao::audio::test
     auto decoderPtr = ao::test::requireValue(OpusDecoderSession::open(testFile, SampleEncoding::Signed16Le));
     auto& decoder = *decoderPtr;
 
-    std::ignore = decoder.readNextBlock();
+    auto const initialBlockRes = decoder.readNextBlock();
+    REQUIRE(initialBlockRes);
+    REQUIRE(initialBlockRes->frames > 0);
     decoder.flush();
 
     auto const blockRes = decoder.readNextBlock();

@@ -130,6 +130,7 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(path).contains("retained: yes"));
     preferences.language.clear();
     REQUIRE(savePreferences(reopened, preferences));
+    CHECK(ao::test::readFile(path).contains("retained: yes"));
     CHECK(uimodel::loadKeymap(reopened, uimodel::defaultKeymap()).chordsFor("foreign.action") ==
           keymap.chordsFor("foreign.action"));
     auto systemRes = loadPreferences(reopened);

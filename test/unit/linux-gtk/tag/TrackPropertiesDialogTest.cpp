@@ -16,8 +16,12 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -35,8 +39,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::test
@@ -46,7 +53,7 @@ namespace ao::gtk::test
     class [[nodiscard]] FinalizationObserver final
     {
     public:
-      explicit FinalizationObserver(GObject* const object) { ::g_weak_ref_init(&_weakRef, object); }
+      explicit FinalizationObserver(::GObject* const object) { ::g_weak_ref_init(&_weakRef, object); }
       ~FinalizationObserver() { ::g_weak_ref_clear(&_weakRef); }
 
       FinalizationObserver(FinalizationObserver const&) = delete;
@@ -68,12 +75,12 @@ namespace ao::gtk::test
       }
 
     private:
-      GWeakRef _weakRef{};
+      ::GWeakRef _weakRef{};
     };
   } // namespace
 
   TEST_CASE("TrackPropertiesDialog - pending Save freezes the draft and commits before closing",
-            "[gtk][regression][dialog][concurrency]")
+            "[gtk][integration][tag][dialog][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -106,11 +113,15 @@ namespace ao::gtk::test
 
     emitClicked(*saveButton);
 
+    REQUIRE(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
     auto const spinButtons = collectAll<Gtk::SpinButton>(*dialog);
+    REQUIRE_FALSE(spinButtons.empty());
     CHECK_FALSE(saveButton->get_sensitive());
     CHECK((*titleEntryIter)->get_text().raw() == "After Save");
     CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_sensitive(); }));
+    CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_editable(); }));
     CHECK(std::ranges::none_of(spinButtons, [](Gtk::SpinButton const* spin) { return spin->get_sensitive(); }));
+    CHECK(std::ranges::none_of(spinButtons, [](Gtk::SpinButton const* spin) { return spin->get_editable(); }));
 
     REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId]
                                   { return rt::test::runtimeTrackSpec(runtime, trackId).title == "After Save"; }));
@@ -120,7 +131,8 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - stale managed Save keeps the editor open", "[gtk][regression][tag][dialog]")
+  TEST_CASE("TrackPropertiesDialog - stale managed Save keeps the editor open",
+            "[gtk][integration][tag][dialog][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -165,10 +177,11 @@ namespace ao::gtk::test
         return false;
       }));
 
-    CHECK(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
+    REQUIRE(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
     CHECK(dialog->get_visible());
     CHECK((*titleEntryIter)->get_text().raw() == "Stale Replacement");
     CHECK_FALSE((*titleEntryIter)->get_sensitive());
+    CHECK_FALSE((*titleEntryIter)->get_editable());
     CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "External Change");
 
     staleDialog->response(Gtk::ResponseType::CLOSE);
@@ -178,7 +191,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TrackPropertiesDialog - post-publication owner teardown does not cancel an admitted Save",
-            "[gtk][regression][dialog][concurrency]")
+            "[gtk][integration][tag][dialog][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -231,6 +244,42 @@ namespace ao::gtk::test
     CHECK_FALSE(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
     drainGtkEvents();
   }
+
+  namespace
+  {
+    Gtk::Entry* findEntryByText(Gtk::Widget& root, std::string_view const text)
+    {
+      auto const entries = collectAll<Gtk::Entry>(root);
+      auto const iter =
+        std::ranges::find_if(entries, [text](Gtk::Entry const* entry) { return entry->get_text().raw() == text; });
+      return iter != entries.end() ? *iter : nullptr;
+    }
+
+    Gtk::Entry* findEntryForLabel(Gtk::Widget& root, std::string const& labelText)
+    {
+      auto* const label = findLabelByText(root, labelText);
+
+      if (label == nullptr || label->get_parent() == nullptr)
+      {
+        return nullptr;
+      }
+
+      return findWidget<Gtk::Entry>(*label->get_parent());
+    }
+
+    AppDialog* findOtherDialogWithText(Gtk::Window const& owner, std::string const& text)
+    {
+      for (auto* const topLevel : Gtk::Window::list_toplevels())
+      {
+        if (topLevel != &owner && findLabelByText(*topLevel, text) != nullptr)
+        {
+          return dynamic_cast<AppDialog*>(topLevel);
+        }
+      }
+
+      return nullptr;
+    }
+  } // namespace
 
   TEST_CASE("TrackPropertiesDialog - renders metadata fields for the selected tracks", "[gtk][unit][tag][dialog]")
   {
@@ -298,11 +347,10 @@ namespace ao::gtk::test
       REQUIRE(saveButton != nullptr);
       CHECK_FALSE(saveButton->get_sensitive());
 
-      auto const titleEntryIter =
-        std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; });
-      REQUIRE(titleEntryIter != entries.end());
+      auto* const titleEntry = findEntryByText(dialog, "Track 1");
+      REQUIRE(titleEntry != nullptr);
 
-      (*titleEntryIter)->set_text("Renamed Track");
+      titleEntry->set_text("Renamed Track");
       drainGtkEvents();
       CHECK(saveButton->get_sensitive());
     }
@@ -323,6 +371,24 @@ namespace ao::gtk::test
       auto const mixedCount = std::ranges::count_if(
         entries, [mixedText](Gtk::Entry const* entry) { return entry->get_placeholder_text().raw() == mixedText; });
       CHECK(mixedCount >= 1);
+
+      auto* const titleEntry = findEntryForLabel(dialog, "Title");
+      auto* const artistEntry = findEntryForLabel(dialog, "Artist");
+      auto* const albumEntry = findEntryForLabel(dialog, "Album");
+      REQUIRE(titleEntry != nullptr);
+      REQUIRE(artistEntry != nullptr);
+      REQUIRE(albumEntry != nullptr);
+      CHECK(titleEntry->get_text().empty());
+      CHECK(titleEntry->get_placeholder_text().raw() == mixedText);
+      CHECK_FALSE(titleEntry->get_sensitive());
+      CHECK(artistEntry->get_text().empty());
+      CHECK(artistEntry->get_placeholder_text().raw() == mixedText);
+      CHECK_FALSE(artistEntry->get_sensitive());
+      CHECK(albumEntry->get_text() == "Album 1");
+      CHECK(albumEntry->get_sensitive());
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(saveButton != nullptr);
+      CHECK_FALSE(saveButton->get_sensitive());
     }
 
     SECTION("an incomplete selection shows no partial writable baseline")
@@ -352,8 +418,25 @@ namespace ao::gtk::test
         std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; }));
       CHECK(std::ranges::none_of(entries, [](Gtk::Entry const* entry) { return entry->get_sensitive(); }));
     }
+  }
 
-    SECTION("a repeated Save while submitting is rejected")
+  TEST_CASE("TrackPropertiesDialog - keeps a presented draft until save settlement",
+            "[gtk][integration][tag][dialog][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     {
+                                       trackId = library::test::addTrackWithUniqueFixtureUri(
+                                         musicLibrary, {.title = "Before save", .artist = "Settlement Artist"});
+                                     }};
+    auto& runtime = fixture.runtime();
+    auto cache = TrackRowCache{runtime.library(), ao::test::englishMessageCatalog()};
+    auto window = Gtk::Window{};
+
+    REQUIRE(trackId != kInvalidTrackId);
+
+    SECTION("accepted save keeps the exact pending draft and closes only after readback is committed")
     {
       auto dialog = TrackPropertiesDialog{window,
                                           runtime.async(),
@@ -361,33 +444,149 @@ namespace ao::gtk::test
                                           runtime.completion(),
                                           ao::test::englishMessageCatalog(),
                                           cache,
-                                          {trackId1}};
+                                          {trackId}};
+      dialog.present();
+      drainGtkEvents();
+      REQUIRE(dialog.get_visible());
+
+      auto* const titleEntry = findEntryByText(dialog, "Before save");
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(titleEntry != nullptr);
+      REQUIRE(saveButton != nullptr);
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return dialog.get_mapped(); }));
+      auto* const yearLabel = findLabelByText(dialog, "Year");
+      REQUIRE(yearLabel != nullptr);
+      REQUIRE(yearLabel->get_parent() != nullptr);
+      auto* const yearEditor = findWidget<Gtk::SpinButton>(*yearLabel->get_parent());
+      REQUIRE(yearEditor != nullptr);
+      REQUIRE(titleEntry->is_sensitive());
+      REQUIRE(titleEntry->get_editable());
+      REQUIRE(yearEditor->is_sensitive());
+      REQUIRE(yearEditor->get_editable());
+
+      titleEntry->set_text("Settled rename");
+      yearEditor->set_value(2027);
+      REQUIRE(saveButton->get_sensitive());
+      bool textUnlocked = false;
+      bool numberUnlocked = false;
+      auto textObserver = sigc::scoped_connection{titleEntry->property_editable().signal_changed().connect(
+        [&] { textUnlocked = textUnlocked || titleEntry->get_editable(); })};
+      auto numberObserver = sigc::scoped_connection{yearEditor->property_editable().signal_changed().connect(
+        [&] { numberUnlocked = numberUnlocked || yearEditor->get_editable(); })};
+      emitClicked(*saveButton); // Public Save binding; not a native pointer-delivery claim.
+
+      CHECK(dialog.get_visible());
+      CHECK(dialog.get_mapped());
+      CHECK(titleEntry->get_text() == "Settled rename");
+      CHECK_FALSE(saveButton->get_sensitive());
+      CHECK_FALSE(titleEntry->is_sensitive());
+      CHECK_FALSE(titleEntry->get_editable());
+      CHECK_FALSE(yearEditor->is_sensitive());
+      CHECK_FALSE(yearEditor->get_editable());
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+      CHECK_FALSE(textUnlocked);
+      CHECK_FALSE(numberUnlocked);
+
+      auto scope = runtime.library().snapshot();
+      auto const title = scope.trackField(trackId, rt::TrackField::Title);
+      auto const year = scope.trackField(trackId, rt::TrackField::Year);
+      REQUIRE(std::holds_alternative<std::string>(title));
+      REQUIRE(std::holds_alternative<std::uint16_t>(year));
+      CHECK(std::get<std::string>(title) == "Settled rename");
+      CHECK(std::get<std::uint16_t>(year) == 2027);
+    }
+
+    SECTION("repeated Save preserves the admitted draft without starting another submission")
+    {
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishMessageCatalog(),
+                                          cache,
+                                          {trackId}};
       dialog.present();
       drainGtkEvents();
 
-      auto const entries = collectAll<Gtk::Entry>(dialog);
-      auto const titleEntryIter =
-        std::ranges::find_if(entries, [](Gtk::Entry const* entry) { return entry->get_text().raw() == "Track 1"; });
-      REQUIRE(titleEntryIter != entries.end());
-      (*titleEntryIter)->set_text("One submitted draft");
+      auto* const titleEntry = findEntryByText(dialog, "Before save");
       auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(titleEntry != nullptr);
       REQUIRE(saveButton != nullptr);
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return dialog.get_mapped(); }));
+      titleEntry->set_text("Single draft");
       std::size_t createdWindowCount = 0;
       auto const topLevelsPtr = Gtk::Window::get_toplevels();
-      // The list model records creation before a transient can be destroyed with its owner.
-      [[maybe_unused]] auto const topLevelsConnection =
-        sigc::scoped_connection{topLevelsPtr->signal_items_changed().connect(
-          [&createdWindowCount](::guint, ::guint, ::guint const added) { createdWindowCount += added; })};
+      // Observe transient creation even if the successful close destroys it.
+      auto const topLevelsConnection = sigc::scoped_connection{topLevelsPtr->signal_items_changed().connect(
+        [&createdWindowCount](::guint, ::guint, ::guint const added) { createdWindowCount += added; })};
 
       emitClicked(*saveButton);
-      // Reflection deliberately bypasses GTK sensitivity to exercise the handler guard.
-      emitClicked(*saveButton);
+      emitClicked(*saveButton); // Controlled callback re-entry; the insensitive button blocks real users.
+      CHECK(dialog.get_visible());
+      CHECK(dialog.get_mapped());
+      CHECK(titleEntry->get_text() == "Single draft");
+      CHECK_FALSE(titleEntry->is_sensitive());
+      CHECK_FALSE(titleEntry->get_editable());
 
-      REQUIRE(tryPumpGtkEventsUntil(
-        [&runtime, trackId1] { return rt::test::runtimeTrackSpec(runtime, trackId1).title == "One submitted draft"; }));
-      CHECK(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return !dialog.get_visible(); }));
       CHECK(createdWindowCount == 0);
-      CHECK(rt::test::runtimeTrackSpec(runtime, trackId1).title == "One submitted draft");
+
+      auto scope = runtime.library().snapshot();
+      auto const title = scope.trackField(trackId, rt::TrackField::Title);
+      REQUIRE(std::holds_alternative<std::string>(title));
+      CHECK(std::get<std::string>(title) == "Single draft");
+    }
+
+    SECTION("stale settlement keeps the exact submitted draft open with its error")
+    {
+      auto dialog = TrackPropertiesDialog{window,
+                                          runtime.async(),
+                                          runtime.library(),
+                                          runtime.completion(),
+                                          ao::test::englishMessageCatalog(),
+                                          cache,
+                                          {trackId}};
+      dialog.present();
+      drainGtkEvents();
+
+      auto* const titleEntry = findEntryByText(dialog, "Before save");
+      auto* const saveButton = findButtonByLabel(dialog, "Save");
+      REQUIRE(titleEntry != nullptr);
+      REQUIRE(saveButton != nullptr);
+      REQUIRE(tryPumpGtkEventsUntil([&dialog] { return dialog.get_mapped(); }));
+      titleEntry->set_text("Unavailable draft");
+
+      REQUIRE(runGtkTask(
+        runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Invalidate properties"})));
+      emitClicked(*saveButton); // Controlled binding emission after the session became stale.
+      CHECK(dialog.get_visible());
+      CHECK(dialog.get_mapped());
+      CHECK(titleEntry->get_text() == "Unavailable draft");
+      CHECK_FALSE(titleEntry->is_sensitive());
+      CHECK_FALSE(titleEntry->get_editable());
+
+      AppDialog* errorDialog = nullptr;
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&]
+        {
+          errorDialog = findOtherDialogWithText(
+            dialog, "The library changed while this dialog was open. Reload the properties and try again.");
+          return errorDialog != nullptr;
+        }));
+      CHECK(dialog.get_visible());
+      CHECK(dialog.get_mapped());
+      CHECK(titleEntry->get_text() == "Unavailable draft");
+      CHECK_FALSE(titleEntry->is_sensitive());
+      CHECK_FALSE(titleEntry->get_editable());
+      CHECK_FALSE(saveButton->get_sensitive());
+      auto scope = runtime.library().snapshot();
+      auto const title = scope.trackField(trackId, rt::TrackField::Title);
+      REQUIRE(std::holds_alternative<std::string>(title));
+      CHECK(std::get<std::string>(title) == "Before save");
+
+      errorDialog->response(Gtk::ResponseType::CLOSE);
+      dialog.response(Gtk::ResponseType::CLOSE);
+      drainGtkEvents();
     }
   }
 } // namespace ao::gtk::test

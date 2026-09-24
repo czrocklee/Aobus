@@ -81,7 +81,11 @@ namespace ao::uimodel
                                                     bool snapToGrid,
                                                     std::int32_t gridSize);
 
-  AbsoluteCanvasRect commitAbsoluteCanvasResizeDrag(AbsoluteCanvasRect rect, bool snapToGrid, std::int32_t gridSize);
+  AbsoluteCanvasRect commitAbsoluteCanvasResizeDrag(AbsoluteCanvasRect rect,
+                                                    std::int32_t minWidth,
+                                                    std::int32_t minHeight,
+                                                    bool snapToGrid,
+                                                    std::int32_t gridSize);
 
   AbsoluteCanvasRect nudgeAbsoluteCanvasRect(AbsoluteCanvasRect rect,
                                              AbsoluteCanvasNudgeDirection direction,

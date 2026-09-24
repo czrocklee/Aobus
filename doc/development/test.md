@@ -16,14 +16,14 @@ samples), see the focused documents under `doc/development/test/`.
 
 | Document | Scope |
 |---|---|
-| [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and workflow/integration/regression placement |
+| [`test/layer-selection.md`](test/layer-selection.md) | Layer boundaries and unit/integration scope |
 | [`test/naming-and-assertion.md`](test/naming-and-assertion.md) | Test names, tags, structure, and assertion quality |
 | [`test/fixture-and-helper.md`](test/fixture-and-helper.md) | Fixtures, helpers, FakeIt, test data, and filesystem setup |
 | [`test/runtime-and-async.md`](test/runtime-and-async.md) | Deterministic async, runtime service, callback, and lifetime tests |
 | [`test/concurrency-and-sanitizer.md`](test/concurrency-and-sanitizer.md) | Concurrency tags, race matrices, TSan gates, and review checklist |
 | [`test/uimodel-and-gtk.md`](test/uimodel-and-gtk.md) | UIModel policy tests, GTK adapter tests, geometry, lifecycle, and testability |
 | [`test/coverage-workflow.md`](test/coverage-workflow.md) | Coverage reports and the measure-analyze-test-verify loop |
-| [`test/validation-and-review.md`](test/validation-and-review.md) | New files, regression tests, validation, smells, and review checklist |
+| [`test/validation-and-review.md`](test/validation-and-review.md) | New files, reviewing existing tests, validation, smells, and review checklist |
 | [`test/test-suite.md`](test/test-suite.md) | `./ao test` suite organization |
 | [`test/performance.md`](test/performance.md) | Standalone optimized performance sampling and report evidence |
 
@@ -46,7 +46,8 @@ For detailed layer selection guidance with boundary-case tables, see
 ## Naming and tags
 
 Name tests as behavior contracts: `"Component - behavior under condition"`.
-Tag with `[layer][type][subsystem]`, keeping the total at 3–4 tags.
+Tags start with `[layer][scope][component]`, where scope is exactly one of
+`[unit]` or `[integration]`.
 
 For tag tables, naming examples, and anti-patterns, see
 `doc/development/test/naming-and-assertion.md`.

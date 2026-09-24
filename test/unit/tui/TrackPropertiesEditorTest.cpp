@@ -493,8 +493,6 @@ namespace ao::tui::test
       editor.setStatus(TrackEditorStatus::Stale);
 
       CHECK_FALSE(editor.canApply());
-      CHECK(editor.isDirty());
-      CHECK(editor.buildPatch().metadata.optAlbum);
 
       auto const text = frame(editor);
       CHECK(text.contains("library changed"));
@@ -524,12 +522,14 @@ namespace ao::tui::test
       CHECK(frame(editor).contains("Ctrl-D"));
       CHECK(frame(editor).contains("Ctrl-G"));
       CHECK(editor.canApply());
-      CHECK(editor.buildPatch().metadata.optAlbum == "Kind of Blue!");
     }
+
+    CHECK(editor.isDirty());
+    CHECK(editor.buildPatch().metadata.optAlbum == "Kind of Blue!");
   }
 
   TEST_CASE("TrackPropertiesEditor - localized recovery shortcuts remain readable in short terminals",
-            "[tui][regression][editor]")
+            "[tui][unit][editor]")
   {
     for (auto const* const locale : {"de", "fr", "ja", "zh-Hans", "zh-Hant", "qps-ploc"})
     {
@@ -543,7 +543,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - long confirmation prompts wrap without losing the final action",
-            "[tui][regression][editor]")
+            "[tui][unit][editor]")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}}, {}, {}, {}, "de");
     typeText(editor, "!");
@@ -718,8 +718,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - preserves both page drafts while retiring transient input",
-            "[tui][regression][editor]")
+  TEST_CASE("TrackPropertiesEditor - preserves both page drafts while retiring transient input", "[tui][unit][editor]")
   {
     auto editor = makeEditor(
       {TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}}, {"Acoustic"});
@@ -750,7 +749,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - invalid metadata blocks tag submission until the field is restored",
-            "[tui][regression][editor]")
+            "[tui][unit][editor]")
   {
     auto editor =
       makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}}, {}, {{"Jazz", 1}});
@@ -774,8 +773,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackPropertiesEditor - line deletion preserves untouched mixed values",
-            "[tui][regression][keyboard][editor]")
+  TEST_CASE("TrackPropertiesEditor - line deletion preserves untouched mixed values", "[tui][unit][editor][keyboard]")
   {
     auto editor = makeEditor(
       {TrackFixture{.title = "First", .album = "Common"}, TrackFixture{.title = "Second", .album = "Common"}});

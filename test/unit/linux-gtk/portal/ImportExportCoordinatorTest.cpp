@@ -18,6 +18,9 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <glib-object.h>
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/dialog.h>
 #include <gtkmm/dropdown.h>
 #include <gtkmm/enums.h>
@@ -41,7 +44,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ImportExportCoordinator - localized export dialog preserves layout and actions",
-            "[gtk][regression][import-export][geometry]")
+            "[gtk][unit][portal][import-export][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -66,17 +69,7 @@ namespace ao::gtk::test
 
       coordinator.exportLibrary();
 
-      AppDialog* exportModeDialog = nullptr;
-
-      for (auto* const window : Gtk::Window::list_toplevels())
-      {
-        if (auto* const dialog = dynamic_cast<AppDialog*>(window); dialog != nullptr && dialog->get_title() == title)
-        {
-          exportModeDialog = dialog;
-          break;
-        }
-      }
-
+      auto* const exportModeDialog = findAppDialogByTitle(title);
       REQUIRE(exportModeDialog != nullptr);
       auto* const modeCombo = findWidget<Gtk::DropDown>(*exportModeDialog);
       REQUIRE(modeCombo != nullptr);
@@ -177,7 +170,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ImportExportCoordinator - installs its restore confirmation callback before import",
-            "[gtk][regression][portal][import-export]")
+            "[gtk][unit][portal][import-export]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -211,17 +204,8 @@ library:
     REQUIRE(tryPumpGtkEventsUntil(
       [&confirmationDialog]
       {
-        for (auto* const window : Gtk::Window::list_toplevels())
-        {
-          if (auto* const dialog = dynamic_cast<AppDialog*>(window);
-              dialog != nullptr && dialog->get_title() == "Confirm Restore")
-          {
-            confirmationDialog = dialog;
-            return true;
-          }
-        }
-
-        return false;
+        confirmationDialog = findAppDialogByTitle("Confirm Restore");
+        return confirmationDialog != nullptr;
       }));
 
     REQUIRE(confirmationDialog != nullptr);
@@ -231,7 +215,7 @@ library:
   }
 
   TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown",
-            "[gtk][regression][import-export][concurrency]")
+            "[gtk][unit][portal][import-export][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -248,27 +232,43 @@ library:
 
     coordinatorPtr->exportLibrary();
 
-    AppDialog* exportModeDialog = nullptr;
-
-    for (auto* const window : Gtk::Window::list_toplevels())
-    {
-      if (auto* const dialog = dynamic_cast<AppDialog*>(window);
-          dialog != nullptr && dialog->get_title() == "Select Export Mode")
-      {
-        exportModeDialog = dialog;
-        break;
-      }
-    }
+    auto* const exportModeDialog = findAppDialogByTitle("Select Export Mode");
 
     REQUIRE(exportModeDialog != nullptr);
     REQUIRE(exportModeDialog->get_visible());
 
-    coordinatorPtr.reset();
+    auto const retireBeforeResponse = GENERATE(false, true);
+    bool finalized = false;
+    auto* const nativeDialog = G_OBJECT(exportModeDialog->gobj());
+    auto const markFinalized = +[](void* data, GObject*) { *static_cast<bool*>(data) = true; };
+    auto const detachWeakWatch = gsl_lite::finally(
+      [&finalized, nativeDialog, markFinalized]
+      {
+        if (!finalized)
+        {
+          ::g_object_weak_unref(nativeDialog, markFinalized, &finalized);
+        }
+      });
+    ::g_object_weak_ref(nativeDialog, markFinalized, &finalized);
+
+    if (retireBeforeResponse)
+    {
+      coordinatorPtr.reset();
+    }
+
     exportModeDialog->response(Gtk::ResponseType::CANCEL);
     drainGtkEvents();
 
-    CHECK(exportModeDialog->get_visible());
-    exportModeDialog->close();
-    drainGtkEvents();
+    if (retireBeforeResponse)
+    {
+      REQUIRE_FALSE(finalized);
+      CHECK(exportModeDialog->get_visible());
+      exportModeDialog->close();
+      drainGtkEvents();
+    }
+    else
+    {
+      CHECK(finalized);
+    }
   }
 } // namespace ao::gtk::test

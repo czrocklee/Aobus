@@ -47,7 +47,7 @@ namespace ao::gtk
     Gtk::Button _button;
     Gtk::Image _icon;
     Gtk::Popover _popover;
-    Gtk::Scale _scale{Gtk::Orientation::VERTICAL};
+    Gtk::Scale _scale;
     Gtk::Label _valueLabel;
     Gtk::ToggleButton _muteButton;
     Gtk::Popover _scrollBubble;

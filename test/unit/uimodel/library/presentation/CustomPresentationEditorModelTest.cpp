@@ -9,11 +9,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <limits>
 #include <vector>
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("CustomPresentationEditorModel - edits custom presentation draft", "[uimodel][unit][library][presentation]")
+  TEST_CASE("CustomPresentationEditorModel - edits custom presentation draft", "[uimodel][unit][presentation]")
   {
     auto spec = rt::TrackPresentationSpec{};
     spec.groupBy = rt::TrackGroupKey::Album;
@@ -131,6 +133,82 @@ namespace ao::uimodel::test
       CHECK(std::vector<rt::TrackSortTerm>{model.sortTerms().begin(), model.sortTerms().end()} == originalSortTerms);
       CHECK(std::vector<rt::TrackField>{model.visibleFields().begin(), model.visibleFields().end()} ==
             originalVisibleFields);
+    }
+
+    SECTION("rejects the maximum sort row index without mutation")
+    {
+      auto const before = std::vector<rt::TrackSortTerm>{model.sortTerms().begin(), model.sortTerms().end()};
+
+      CHECK_FALSE(model.tryMoveSortTermDown(std::numeric_limits<std::size_t>::max()));
+      CHECK(std::vector<rt::TrackSortTerm>{model.sortTerms().begin(), model.sortTerms().end()} == before);
+    }
+
+    SECTION("rejects the maximum visible row index without mutation")
+    {
+      auto const before = std::vector<rt::TrackField>{model.visibleFields().begin(), model.visibleFields().end()};
+
+      CHECK_FALSE(model.tryMoveVisibleFieldDown(std::numeric_limits<std::size_t>::max()));
+      CHECK(std::vector<rt::TrackField>{model.visibleFields().begin(), model.visibleFields().end()} == before);
+    }
+
+    SECTION("normalizes appended default rows in exported state without mutating the draft")
+    {
+      auto duplicateSpec = rt::TrackPresentationSpec{
+        .id = "draft-id",
+        .groupBy = rt::TrackGroupKey::Album,
+        .sortBy =
+          {
+            {.field = rt::TrackSortField::Artist, .ascending = true},
+            {.field = rt::TrackSortField::Artist, .ascending = false},
+          },
+        .visibleFields = {rt::TrackField::Title, rt::TrackField::Album},
+      };
+      auto duplicateModel =
+        CustomPresentationEditorModel{ao::test::englishMessageCatalog(), duplicateSpec, "Duplicate View"};
+      duplicateModel.addVisibleField();
+      duplicateModel.addVisibleField();
+      auto const expectedDraftFields =
+        std::vector{rt::TrackField::Title, rt::TrackField::Album, rt::TrackField::Title, rt::TrackField::Title};
+      REQUIRE(std::vector<rt::TrackField>{
+                duplicateModel.visibleFields().begin(), duplicateModel.visibleFields().end()} == expectedDraftFields);
+      auto const expected = rt::CustomTrackPresentationPreset{
+        .label = "Duplicate View",
+        .spec =
+          {
+            .id = "duplicate-export",
+            .groupBy = rt::TrackGroupKey::Album,
+            .sortBy = duplicateSpec.sortBy,
+            .visibleFields = {rt::TrackField::Title, rt::TrackField::Album},
+          },
+      };
+
+      CHECK(duplicateModel.collectState("duplicate-export") == expected);
+      CHECK(std::vector<rt::TrackSortTerm>{duplicateModel.sortTerms().begin(), duplicateModel.sortTerms().end()} ==
+            duplicateSpec.sortBy);
+      CHECK(std::vector<rt::TrackField>{duplicateModel.visibleFields().begin(), duplicateModel.visibleFields().end()} ==
+            expectedDraftFields);
+    }
+
+    SECTION("defaults empty populated fields only in exported state")
+    {
+      auto const emptySpec = rt::TrackPresentationSpec{
+        .id = "draft-id",
+        .groupBy = rt::TrackGroupKey::Work,
+      };
+      auto emptyModel = CustomPresentationEditorModel{ao::test::englishMessageCatalog(), emptySpec, "Empty View"};
+      auto const expected = rt::CustomTrackPresentationPreset{
+        .label = "Empty View",
+        .spec =
+          {
+            .id = "empty-export",
+            .groupBy = rt::TrackGroupKey::Work,
+            .visibleFields = {rt::TrackField::Title},
+          },
+      };
+
+      CHECK(emptyModel.collectState("empty-export") == expected);
+      CHECK(emptyModel.sortTerms().empty());
+      CHECK(emptyModel.visibleFields().empty());
     }
 
     SECTION("collects a presentation preset")

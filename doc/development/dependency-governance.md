@@ -154,7 +154,12 @@ archive identity.
 
 The Windows App Runtime is host state, not the NuGet development closure. Its
 identity, installer URL, and SHA-256 are governed separately, and setup also
-checks Microsoft Authenticode.
+checks Microsoft Authenticode. The runtime `version` pins that installer and is
+the minimum accepted host package version, not an exact installed-version
+requirement: Microsoft services framework packages within the same family.
+Host detection selects the highest healthy, current-user-registered version
+in the governed Microsoft package family and architecture. See
+[WinUI setup](windows.md#build-and-run-winui) for the native commands.
 
 ### Repository tooling
 

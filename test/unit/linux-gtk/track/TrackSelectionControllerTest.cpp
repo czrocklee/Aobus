@@ -10,7 +10,9 @@
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
+#include "track/TrackRowBinding.h"
 #include "track/TrackRowCache.h"
+#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
@@ -21,6 +23,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdk/gdk.h>
+#include <glib-object.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/gestureclick.h>
@@ -31,7 +34,9 @@
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <memory>
@@ -51,10 +56,23 @@ namespace ao::gtk::test
         [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
         {
           auto* const label = dynamic_cast<Gtk::Label*>(itemPtr->get_child());
+          auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr->get_item());
 
-          if (label != nullptr)
+          if (label != nullptr && rowPtr != nullptr)
           {
             label->set_text("track");
+            ::g_object_set_data(G_OBJECT(label->gobj()),
+                                kBoundTrackIdDataKey,
+                                GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+          }
+        });
+
+      factoryPtr->signal_unbind().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+        {
+          if (auto* const child = itemPtr->get_child(); child != nullptr)
+          {
+            ::g_object_set_data(G_OBJECT(child->gobj()), kBoundTrackIdDataKey, nullptr);
           }
         });
 
@@ -171,7 +189,8 @@ namespace ao::gtk::test
       SECTION("signal propagation")
       {
         bool changed = false;
-        controller.signalSelectionChanged().connect([&] { changed = true; });
+        auto subscription =
+          sigc::scoped_connection{controller.signalSelectionChanged().connect([&] { changed = true; })};
 
         selectionModelPtr->select_item(1, true);
         drainGtkEvents();
@@ -179,11 +198,65 @@ namespace ao::gtk::test
         CHECK(changed == true);
       }
 
+      SECTION("secondary click reports the exact picked track and coordinates")
+      {
+        controller.configureActivation();
+        std::size_t requestCount = 0;
+        double requestedX = 0.0;
+        double requestedY = 0.0;
+        auto subscription = sigc::scoped_connection{controller.signalContextMenuRequested().connect(
+          [&](double const xPosition, double const yPosition)
+          {
+            ++requestCount;
+            requestedX = xPosition;
+            requestedY = yPosition;
+          })};
+        auto host = GtkWindowFixture{};
+        host.window().set_default_size(400, 400);
+        host.mount(columnView);
+        host.present();
+        auto const secondaryClickPtr = findControllerIf<Gtk::GestureClick>(
+          columnView, [](Gtk::GestureClick const& gesture) { return gesture.get_button() == GDK_BUTTON_SECONDARY; });
+        REQUIRE(secondaryClickPtr);
+
+        auto const labels = collectAll<Gtk::Label>(columnView);
+        auto const rowLabelIter = std::ranges::find_if(
+          labels,
+          [trackId1](Gtk::Label* label)
+          {
+            return label->get_text() == "track" && GPOINTER_TO_UINT(::g_object_get_data(
+                                                     G_OBJECT(label->gobj()), kBoundTrackIdDataKey)) == trackId1.raw();
+          });
+        REQUIRE(rowLabelIter != labels.end());
+        auto* const rowLabel = *rowLabelIter;
+        REQUIRE(rowLabel->get_mapped());
+        REQUIRE(rowLabel->get_width() > 0);
+        REQUIRE(rowLabel->get_height() > 0);
+        REQUIRE(controller.selectedTrackIds().empty());
+        auto const optPoint =
+          rowLabel->compute_point(columnView,
+                                  Gdk::Graphene::Point{static_cast<float>(rowLabel->get_width()) / 2.0F,
+                                                       static_cast<float>(rowLabel->get_height()) / 2.0F});
+        REQUIRE(optPoint);
+        auto const xPosition = static_cast<double>(optPoint->get_x());
+        auto const yPosition = static_cast<double>(optPoint->get_y());
+
+        // Direct signal emission proves the installed GTK binding and semantic
+        // pick result, not native pointer delivery or gesture arbitration.
+        ::g_signal_emit_by_name(secondaryClickPtr->gobj(), "released", 1, xPosition, yPosition);
+
+        CHECK(requestCount == 1);
+        CHECK(requestedX == xPosition);
+        CHECK(requestedY == yPosition);
+        CHECK(controller.selectedTrackIds() == std::vector<TrackId>{trackId1});
+      }
+
       SECTION("secondary click on blank space does not request a track menu")
       {
         controller.configureActivation();
         std::size_t requestCount = 0;
-        auto subscription = controller.signalContextMenuRequested().connect([&](double, double) { ++requestCount; });
+        auto subscription = sigc::scoped_connection{
+          controller.signalContextMenuRequested().connect([&](double, double) { ++requestCount; })};
         auto host = GtkWindowFixture{};
         host.window().set_default_size(400, 400);
         host.mount(columnView);
@@ -193,6 +266,8 @@ namespace ao::gtk::test
         REQUIRE(secondaryClickPtr);
         REQUIRE(columnView.get_height() > 1);
 
+        // Direct signal emission proves blank-pick binding only; it is not a
+        // native pointer-delivery or gesture-arbitration witness.
         ::g_signal_emit_by_name(
           secondaryClickPtr->gobj(), "released", 1, 10.0, static_cast<double>(columnView.get_height() - 1));
 

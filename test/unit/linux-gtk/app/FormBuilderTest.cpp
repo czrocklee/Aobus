@@ -15,8 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("FormBoxedList - long labels yield constrained width to the form control",
-            "[gtk][regression][form][geometry]")
+  TEST_CASE("FormBoxedList - long labels yield constrained width to the form control", "[gtk][unit][form][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const longLabel = std::string{"Fréquence d'échantillonnage exceptionnellement longue"};

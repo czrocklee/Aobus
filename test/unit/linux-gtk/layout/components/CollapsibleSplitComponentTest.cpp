@@ -13,14 +13,20 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/gesturedrag.h>
 #include <gtkmm/revealer.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace ao::gtk::layout::test
 {
@@ -30,7 +36,8 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::hasAccessibleLabel;
   using ao::gtk::test::measureWidget;
 
-  TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
+  TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and drag adaptation",
+            "[gtk][unit][layout-component][geometry]")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -199,7 +206,7 @@ namespace ao::gtk::layout::test
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);
 
-      int const expectedDefaultWidth = 0;
+      int const expectedDefaultWidth = 50;
       auto const horizontalMeasure = measureWidget(*paneSizer, Gtk::Orientation::HORIZONTAL);
       CHECK(horizontalMeasure.minimum == expectedDefaultWidth);
       CHECK(horizontalMeasure.natural == expectedDefaultWidth);
@@ -244,6 +251,190 @@ namespace ao::gtk::layout::test
       CHECK(secondMeasure.minimum == 600);
       CHECK(secondMeasure.natural == 600);
     }
+
+    SECTION("collapsibleSplit drag callbacks apply threshold side axis floor and persistence")
+    {
+      struct DragVariant final
+      {
+        std::string_view id;
+        std::string_view orientation;
+        std::string_view collapseSide;
+        double offsetX;
+        double offsetY;
+        std::int32_t expectedSize;
+        bool persists;
+      };
+
+      auto constexpr kVariants = std::to_array<DragVariant>({
+        {.id = "below-threshold",
+         .orientation = "horizontal",
+         .collapseSide = "end",
+         .offsetX = 2.0,
+         .offsetY = 200.0,
+         .expectedSize = 180,
+         .persists = false},
+        {.id = "horizontal-end",
+         .orientation = "horizontal",
+         .collapseSide = "end",
+         .offsetX = 40.0,
+         .offsetY = 200.0,
+         .expectedSize = 140,
+         .persists = true},
+        {.id = "horizontal-start",
+         .orientation = "horizontal",
+         .collapseSide = "start",
+         .offsetX = 40.0,
+         .offsetY = 200.0,
+         .expectedSize = 220,
+         .persists = true},
+        {.id = "vertical-end",
+         .orientation = "vertical",
+         .collapseSide = "end",
+         .offsetX = 200.0,
+         .offsetY = 40.0,
+         .expectedSize = 140,
+         .persists = true},
+        {.id = "vertical-start",
+         .orientation = "vertical",
+         .collapseSide = "start",
+         .offsetX = 200.0,
+         .offsetY = 40.0,
+         .expectedSize = 220,
+         .persists = true},
+        {.id = "minimum-floor",
+         .orientation = "horizontal",
+         .collapseSide = "end",
+         .offsetX = 500.0,
+         .offsetY = 200.0,
+         .expectedSize = 50,
+         .persists = true},
+      });
+
+      fixture.setComponentState("classic", LayoutComponentStateDocument{.preset = "classic"});
+
+      for (auto const& variant : kVariants)
+      {
+        INFO(variant.id);
+        auto doc = LayoutDocument{};
+        doc.root.id = std::string{variant.id};
+        doc.root.type = "collapsibleSplit";
+        doc.root.props["orientation"] = LayoutValue{std::string{variant.orientation}};
+        doc.root.props["collapseSide"] = LayoutValue{std::string{variant.collapseSide}};
+        doc.root.props["position"] = LayoutValue{static_cast<std::int64_t>(180)};
+        doc.root.props["revealed"] = LayoutValue{true};
+        doc.root.children.push_back(LayoutNode{.type = "spacer"});
+        doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+        auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+        auto* const box = collapsibleSplitBox(*compPtr);
+        REQUIRE(box != nullptr);
+        auto* const gutterBox = ao::gtk::test::findWidgetByClass<Gtk::Box>(*box, "ao-detail-resize-grip");
+        REQUIRE(gutterBox != nullptr);
+        auto* const revealer = ao::gtk::test::findWidget<Gtk::Revealer>(*box);
+        REQUIRE(revealer != nullptr);
+        auto* const paneSizer = revealer->get_child();
+        REQUIRE(paneSizer != nullptr);
+
+        revealer->set_transition_duration(0);
+        auto allocationHost = AllocationHost{compPtr->widget()};
+        allocationHost.allocateChild(800, 600);
+        auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+        windowFixture.mount(allocationHost);
+        windowFixture.present();
+        REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&] { return gutterBox->get_mapped(); }));
+        REQUIRE(gutterBox->get_width() > 0);
+        REQUIRE(gutterBox->get_height() > 0);
+        REQUIRE(gutterBox->contains(
+          static_cast<double>(gutterBox->get_width()) / 2.0, static_cast<double>(gutterBox->get_height()) / 2.0));
+        REQUIRE((variant.orientation == "horizontal" ? paneSizer->get_width() : paneSizer->get_height()) == 180);
+
+        double dragStartX = 0.0;
+        double dragStartY = 0.0;
+        REQUIRE(gutterBox->translate_coordinates(*box,
+                                                 static_cast<double>(gutterBox->get_width()) / 2.0,
+                                                 static_cast<double>(gutterBox->get_height()) / 2.0,
+                                                 dragStartX,
+                                                 dragStartY));
+        auto const dragPtr = ao::gtk::test::findController<Gtk::GestureDrag>(*box);
+        REQUIRE(dragPtr);
+        auto const saveCountBeforeDrag = stateStore.saveCount();
+
+        ::g_signal_emit_by_name(dragPtr->gobj(), "drag-begin", dragStartX, dragStartY);
+        ::g_signal_emit_by_name(dragPtr->gobj(), "drag-update", variant.offsetX, variant.offsetY);
+        ::g_signal_emit_by_name(dragPtr->gobj(), "drag-end", variant.offsetX, variant.offsetY);
+
+        auto const axis =
+          variant.orientation == "horizontal" ? Gtk::Orientation::HORIZONTAL : Gtk::Orientation::VERTICAL;
+        auto const measure = measureWidget(*paneSizer, axis);
+        CHECK(measure.minimum == variant.expectedSize);
+        CHECK(measure.natural == variant.expectedSize);
+        CHECK(stateStore.saveCount() == saveCountBeforeDrag + (variant.persists ? 1 : 0));
+
+        if (variant.persists)
+        {
+          REQUIRE(stateStore.document().components.contains(variant.id));
+          auto const& entry = stateStore.document().components.at(doc.root.id);
+          CHECK(entry.state.at("size").asInt() == variant.expectedSize);
+          CHECK(entry.state.at("revealed").asBool(false));
+        }
+      }
+    }
+  }
+
+  TEST_CASE("CollapsibleSplitComponent - allocated revealed pane enforces the minimum on both axes",
+            "[gtk][unit][layout-component][geometry]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+
+    for (auto const& orientation : {std::string{"horizontal"}, std::string{"vertical"}})
+    {
+      for (auto const optPosition : std::array<std::optional<std::int64_t>, 5>{std::nullopt, -1, 0, 20, 180})
+      {
+        INFO("axis=" << orientation << " position=" << optPosition.value_or(-999));
+        auto doc = LayoutDocument{};
+        doc.root.type = "collapsibleSplit";
+        doc.root.props["orientation"] = LayoutValue{orientation};
+        doc.root.props["revealed"] = LayoutValue{true};
+
+        if (optPosition)
+        {
+          doc.root.props["position"] = LayoutValue{*optPosition};
+        }
+
+        doc.root.children.push_back(LayoutNode{.type = "spacer"});
+        doc.root.children.push_back(LayoutNode{.type = "spacer"});
+
+        auto const compPtr = fixture.layoutRuntime().build(fixture.context(), preparedLayout(doc));
+        auto* const box = collapsibleSplitBox(*compPtr);
+        REQUIRE(box != nullptr);
+        auto* const revealer = ao::gtk::test::findWidget<Gtk::Revealer>(*box);
+        REQUIRE(revealer != nullptr);
+        revealer->set_transition_duration(0);
+        auto* const paneSizer = revealer->get_child();
+        REQUIRE(paneSizer != nullptr);
+
+        auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+        windowFixture.window().set_default_size(800, 600);
+        windowFixture.mount(compPtr->widget());
+        windowFixture.present();
+        REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil(
+          [&] { return box->get_mapped() && box->get_width() >= 800 && box->get_height() >= 600; }));
+        REQUIRE(revealer->get_reveal_child());
+        REQUIRE(revealer->get_child_revealed());
+
+        auto const extent = orientation == "horizontal" ? paneSizer->get_width() : paneSizer->get_height();
+        auto const expectedExtent = static_cast<std::int32_t>(std::max<std::int64_t>(50, optPosition.value_or(0)));
+        CHECK(extent == expectedExtent);
+      }
+    }
+  }
+
+  TEST_CASE("CollapsibleSplitComponent - restores guarded panel state", "[gtk][unit][layout-component][geometry]")
+  {
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("collapsibleSplit persisted size overrides layout defaults and clamps to narrow allocation")
     {
@@ -326,6 +517,15 @@ namespace ao::gtk::layout::test
       REQUIRE(fallbackRevealer != nullptr);
       CHECK(fallbackRevealer->get_reveal_child() == true);
     }
+  }
+
+  TEST_CASE("CollapsibleSplitComponent - persists current state and fences retired generations",
+            "[gtk][unit][layout-component][geometry][async]")
+  {
+    auto stateStore = FakeLayoutComponentStateStore{};
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("collapsibleSplit toggle persists revealed state and current size")
     {
@@ -418,7 +618,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("CollapsibleSplitComponent - toggle accessibility copy follows the selected locale",
-            "[gtk][unit][localization]")
+            "[gtk][unit][layout-component][localization]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_localization_test", {}, "de-DE"};
     auto& ctx = fixture.context();

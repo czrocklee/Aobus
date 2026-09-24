@@ -148,7 +148,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("SmartListEvaluator - update-only batches preserve upstream order across several membership changes",
-            "[runtime][regression][smart-list][batch]")
+            "[runtime][unit][smart-list][batch]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const t0 = libraryFixture.addTrack(makeSmartListSpec("t0", 2024));

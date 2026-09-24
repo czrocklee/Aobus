@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <string>
 #include <vector>
 
 namespace ao::rt::test
@@ -38,7 +39,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("NotificationService expiry - transient lifetime expires through the callback executor",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     constexpr auto kDuration = std::chrono::milliseconds{1250};
@@ -70,12 +71,51 @@ namespace ao::rt::test
     fixture.service.post(NotificationSeverity::Warning, "History", NotificationLifetime::history());
     fixture.service.post(NotificationSeverity::Error, "Pinned", NotificationLifetime::pinned());
 
-    CHECK(fixture.sleeper.callCount() == 0);
     REQUIRE(fixture.service.feed().entries.size() == 2);
+    // The single worker reaches this later timer after any erroneous retained expiry.
+    constexpr auto kControlDuration = std::chrono::milliseconds{1750};
+    fixture.service.post(NotificationSeverity::Info, "Control", NotificationLifetime::transient(kControlDuration));
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(1));
+    REQUIRE(fixture.sleeper.callCount() == 1);
+    CHECK(fixture.sleeper.call(0).delay == kControlDuration);
+    REQUIRE(fixture.sleeper.tryFire(0));
+    fixture.executor.checkQueued();
+    fixture.executor.drain();
+    CHECK(fixture.sleeper.callCount() == 1);
+    REQUIRE(fixture.service.feed().entries.size() == 2);
+    CHECK(std::get<std::string>(fixture.service.feed().entries[0].message) == "History");
+    CHECK(std::get<std::string>(fixture.service.feed().entries[1].message) == "Pinned");
+  }
+
+  TEST_CASE("NotificationService expiry - keyed retention cancels a still-active timer",
+            "[runtime][unit][notification][concurrency]")
+  {
+    auto fixture = NotificationExpiryFixture{};
+    auto const key = NotificationReportKey{"runtime.operation.current"};
+    auto request =
+      NotificationRequest{.message = "Retained", .lifetime = NotificationLifetime::transient(std::chrono::seconds{30})};
+    fixture.service.createOrUpdate(key, request);
+    REQUIRE(fixture.service.feed().entries.size() == 1);
+    auto const id = fixture.service.feed().entries.front().id;
+    REQUIRE(fixture.sleeper.tryWaitForCallCount(1));
+    request.lifetime = NotificationLifetime::history();
+
+    fixture.service.createOrUpdate(key, request);
+
+    REQUIRE(fixture.sleeper.tryWaitForCancellation(0));
+    CHECK_FALSE(fixture.sleeper.tryFire(0));
+    fixture.executor.drain();
+    REQUIRE(fixture.service.feed().entries.size() == 1);
+    CHECK(fixture.service.feed().entries.front().id == id);
+    CHECK(fixture.service.feed().entries.front().lifetime == NotificationLifetime::history());
+    REQUIRE(fixture.updates.size() == 2);
+    CHECK(fixture.updates[0].mutationKind == NotificationFeedMutationKind::Posted);
+    CHECK(fixture.updates[1].mutationKind == NotificationFeedMutationKind::ReportUpdated);
+    CHECK(fixture.updates[1].id == id);
   }
 
   TEST_CASE("NotificationService expiry - keyed update registration identity rejects an already queued timer",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     auto const key = NotificationReportKey{"runtime.operation.current"};
@@ -113,7 +153,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NotificationService expiry - keyed lifetime transitions reject a queued obsolete timer",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     auto const key = NotificationReportKey{"runtime.operation.current"};
@@ -158,11 +198,13 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     CHECK(fixture.service.feed().entries.empty());
-    CHECK(fixture.updates.size() == 4);
+    REQUIRE(fixture.updates.size() == 4);
+    CHECK(fixture.updates.back().mutationKind == NotificationFeedMutationKind::Expired);
+    CHECK(fixture.updates.back().id == createdId);
   }
 
   TEST_CASE("NotificationService expiry - queued callback is safe after service destruction",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification][concurrency]")
   {
     auto sleeper = ControlledSleeper{};
     auto executor = QueuedExecutor{};

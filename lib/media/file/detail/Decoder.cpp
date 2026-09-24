@@ -70,8 +70,15 @@ namespace ao::media::file
   std::optional<std::uint16_t> decodeUint16(std::string_view text)
   {
     std::uint16_t result = 0;
-    auto const* data = text.data();
-    auto [_, ec] = std::from_chars(data, data + text.size(), result);
+    auto const [end, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
+    auto const consumedAll = static_cast<std::size_t>(end - text.data()) == text.size();
+    return ec == std::errc() && consumedAll ? std::optional{result} : std::nullopt;
+  }
+
+  std::optional<std::uint16_t> decodeYear(std::string_view text)
+  {
+    std::uint16_t result = 0;
+    auto const [_, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
     return ec == std::errc() ? std::optional{result} : std::nullopt;
   }
 

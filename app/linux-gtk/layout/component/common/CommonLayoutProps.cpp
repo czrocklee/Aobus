@@ -32,7 +32,7 @@ namespace ao::gtk::layout
       return Gtk::Align::FILL;
     }
 
-    /// GTK spells "no minimum" as a negative request, which is what an unset field means.
+    /// GTK spells an authored clearing of a minimum as a negative request.
     std::int32_t toSizeRequest(std::optional<double> const& optMinimum)
     {
       return optMinimum ? static_cast<std::int32_t>(*optMinimum) : -1;
@@ -99,7 +99,11 @@ namespace ao::gtk::layout
 
     if (placement.widthRequestAuthored || placement.heightRequestAuthored)
     {
-      widget.set_size_request(toSizeRequest(placement.optMinWidth), toSizeRequest(placement.optMinHeight));
+      std::int32_t widthRequest = -1;
+      std::int32_t heightRequest = -1;
+      widget.get_size_request(widthRequest, heightRequest);
+      widget.set_size_request(placement.widthRequestAuthored ? toSizeRequest(placement.optMinWidth) : widthRequest,
+                              placement.heightRequestAuthored ? toSizeRequest(placement.optMinHeight) : heightRequest);
     }
 
     // Left alone when unauthored, like expansion, but for a sharper reason: a

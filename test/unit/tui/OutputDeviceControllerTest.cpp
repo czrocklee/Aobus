@@ -7,6 +7,7 @@
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/audio/BackendTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/audio/BackendIds.h>
@@ -119,12 +120,20 @@ namespace ao::tui::test
 
     REQUIRE(optRecorded);
     CHECK(optRecorded->backendId == audio::BackendId{"mock_backend"});
-    CHECK_FALSE(optRecorded->profileId.empty());
+    CHECK(optRecorded->deviceId == audio::DeviceId{"mock_device"});
+    CHECK(optRecorded->profileId == audio::kProfileShared);
   }
 
-  TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
+  TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][integration][output]")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
+    fakeit::When(Method(fixture.mockProvider, createBackend))
+      .AlwaysDo(
+        [&fixture](audio::Device const&, audio::ProfileId const& profile)
+        {
+          fakeit::When(Method(fixture.spyBackendPtr->mock(), profileId)).AlwaysReturn(profile);
+          return fixture.spyBackendPtr->makeProxy();
+        });
     fixture.status.descriptor.supportedProfiles.push_back(
       audio::BackendProvider::ProfileDescriptor{.id = audio::kProfileExclusive});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
@@ -149,6 +158,10 @@ namespace ao::tui::test
     CHECK(controller.viewState().rows[2].profileId == audio::kProfileExclusive);
     CHECK(controller.trySelectRow(2));
     CHECK(controller.selectedRow() == 2);
+    auto const& exclusiveSelection = fixture.playbackTransport.state().output.selectedDevice;
+    CHECK(exclusiveSelection.backendId == audio::BackendId{"mock_backend"});
+    CHECK(exclusiveSelection.deviceId == audio::DeviceId{"mock_device"});
+    CHECK(exclusiveSelection.profileId == audio::kProfileExclusive);
   }
 
   TEST_CASE("OutputDeviceController - presents Core Audio shared outputs", "[tui][unit][output][coreaudio]")

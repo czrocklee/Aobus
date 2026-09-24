@@ -10,7 +10,9 @@ Physical byte placement belongs to [library database version 7](../storage/datab
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
-The signed storage type of duration does not define negative values as meaningful playback lengths. The current builder narrows its wider duration input without an explicit range check; see the [YAML duration limitation](../format/yaml.md#technical-properties) before assuming that the interchange and stored ranges are equivalent.
+The signed storage type of duration does not define negative values as meaningful playback lengths.
+Before staging dictionary or resource changes, `TrackBuilder` cold-data validation rejects negative durations with `InvalidInput` and values above `2147483647` ms with `ValueTooLarge`.
+Accepted durations are stored without narrowing loss; the [YAML technical-property rules](../format/yaml.md#technical-properties) describe how import reports an unrepresentable value.
 
 ## Code boundary
 

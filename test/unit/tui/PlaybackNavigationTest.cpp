@@ -64,7 +64,7 @@ namespace ao::tui::test
   } // namespace
 
   TEST_CASE("LibraryController - artist links escape literal metadata and preserve filtered history",
-            "[tui][unit][playback-navigation]")
+            "[tui][integration][playback-navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto const artist = std::string{R"(A "quoted" artist\with slash; B)"};
@@ -125,7 +125,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - absent metadata targets leave navigation and marks untouched",
-            "[tui][unit][playback-navigation]")
+            "[tui][integration][playback-navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -150,23 +150,47 @@ namespace ao::tui::test
     };
     auto hit = PlaybackMetadataHitRegions{};
 
-    for (auto const columns : {140, 80, 48, 24})
+    struct WidthCase final
     {
+      std::int32_t columns{};
+      std::array<std::string_view, 3> paintedFields;
+    };
+    auto const cases = std::array{
+      WidthCase{140, {"曲目 Title", "藝人 Artist", "專輯 Album"}},
+      WidthCase{80, {"曲目 Title", "藝人 Arti…", "專…"}},
+      WidthCase{48, {"曲目…", "藝…", ""}},
+      WidthCase{24, {"", "", ""}},
+    };
+
+    for (auto const& widthCase : cases)
+    {
+      auto const columns = widthCase.columns;
+      CAPTURE(columns);
       auto const rendered = renderPlaybackMetadata(state, hit, columns);
       INFO(rendered.text);
       CHECK(hit.nowPlaying == state.nowPlaying);
+      auto const boxes = std::array{hit.title, hit.artist, hit.album};
 
-      for (auto const& box : {hit.title, hit.artist, hit.album})
+      for (std::size_t field = 0; field < boxes.size(); ++field)
       {
+        auto const& box = boxes[field];
+        REQUIRE(box.IsEmpty() == widthCase.paintedFields[field].empty());
+
         if (box.IsEmpty())
         {
           continue;
         }
 
-        CHECK(box.x_min >= 0);
-        CHECK(box.x_max < columns);
-        CHECK(box.y_min == 0);
-        CHECK(box.y_max == 0);
+        auto const optPainted = findTextCells(rendered.screen, widthCase.paintedFields[field]);
+        REQUIRE(optPainted);
+        CHECK(box.x_min == optPainted->x_min);
+        CHECK(box.x_max == optPainted->x_max);
+        CHECK(box.y_min == optPainted->y_min);
+        CHECK(box.y_max == optPainted->y_max);
+        REQUIRE(box.x_min >= 0);
+        REQUIRE(box.x_max < columns);
+        REQUIRE(box.y_min == 0);
+        REQUIRE(box.y_max == 0);
         CHECK_FALSE(rendered.screen.PixelAt(box.x_min, box.y_min).underlined);
       }
 
@@ -223,7 +247,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PlaybackPanel - long artist and album values yield space to the track title",
-            "[tui][regression][playback-navigation]")
+            "[tui][unit][playback-navigation]")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = {.trackId = TrackId{42},
@@ -353,8 +377,8 @@ namespace ao::tui::test
     CHECK(library.filterDraft() == previousFilter);
   }
 
-  TEST_CASE("EventController - stale playback metadata and modal input cannot navigate",
-            "[tui][regression][playback-navigation]")
+  TEST_CASE("EventController - stale playback identity or metadata cannot navigate",
+            "[tui][integration][playback-navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -381,6 +405,34 @@ namespace ao::tui::test
       fixture.hitRegions.playbackMetadata.nowPlaying.artist = "Old artist";
     }
 
+    for (auto const& box : {fixture.hitRegions.playbackMetadata.title,
+                            fixture.hitRegions.playbackMetadata.artist,
+                            fixture.hitRegions.playbackMetadata.album})
+    {
+      REQUIRE_FALSE(box.IsEmpty());
+      CHECK(events.tryHandleEvent(clickBox(box)));
+      fixture.executor->drain();
+      CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    }
+  }
+
+  TEST_CASE("EventController - modal input blocks playback metadata navigation",
+            "[tui][integration][playback-navigation]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    fixture.addReadyAudioProvider();
+    auto& playback = fixture.runtimePtr->playback();
+    auto const target = library.tracks().front().id;
+    REQUIRE(playback.commands().startFromView(library.activeViewId(), target));
+    REQUIRE(fixture.tryWaitForPlayback(target));
+    auto const rendered =
+      renderPlaybackMetadata(playback.snapshot().transport, fixture.hitRegions.playbackMetadata, 140);
+    INFO(rendered.text);
+    auto const before = fixture.runtimePtr->workspace().snapshot();
+    bool consumesPointer = false;
+
     SECTION("Quick Filter owns pointer input")
     {
       fixture.shell.beginInput(ShellInputMode::QuickFilter, "draft");
@@ -390,13 +442,15 @@ namespace ao::tui::test
     {
       REQUIRE(events.tryHandleEvent(ftxui::Event::Character("e")));
       REQUIRE(fixture.trackEditPtr->isActive());
+      consumesPointer = true;
     }
 
     for (auto const& box : {fixture.hitRegions.playbackMetadata.title,
                             fixture.hitRegions.playbackMetadata.artist,
                             fixture.hitRegions.playbackMetadata.album})
     {
-      events.tryHandleEvent(clickBox(box));
+      REQUIRE_FALSE(box.IsEmpty());
+      CHECK(events.tryHandleEvent(clickBox(box)) == consumesPointer);
       fixture.executor->drain();
       CHECK(fixture.runtimePtr->workspace().snapshot() == before);
     }

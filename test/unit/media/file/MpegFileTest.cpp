@@ -450,7 +450,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.bitDepth() == 16);
   }
 
-  TEST_CASE("MPEG File - CBR duration excludes trailing APEv2 bytes", "[media][regression][mpeg]")
+  TEST_CASE("MPEG File - CBR duration excludes trailing APEv2 bytes", "[media][unit][mpeg][file]")
   {
     auto data = createValidMpegFrames(40);
     appendApeV2HeaderAndFooter(data);
@@ -462,7 +462,7 @@ namespace ao::media::file::mpeg::test
     CHECK(content.duration() == std::chrono::milliseconds{1042});
   }
 
-  TEST_CASE("MPEG File - reads free-format frame properties and payload", "[media][regression][mpeg]")
+  TEST_CASE("MPEG File - reads free-format frame properties and payload", "[media][unit][mpeg][file]")
   {
     auto const data = createFreeFormatMpegFrames(3);
 
@@ -477,7 +477,7 @@ namespace ao::media::file::mpeg::test
     CHECK(payloadRes->bytes.size() == 2160);
   }
 
-  TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("MPEG File - decodes ID3v2.4 syncsafe frame sizes", "[media][unit][mpeg][file][id3v2]")
   {
     // A content size >= 128 makes the v2.4 syncsafe encoding differ from a plain
     // big-endian 32-bit decode, so the parser must use the syncsafe path to step
@@ -500,7 +500,22 @@ namespace ao::media::file::mpeg::test
     CHECK(metadata.text(TextField::Artist) == "Artist");
   }
 
-  TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("MPEG File - ID3v2.4 recording dates yield the leading year", "[media][unit][mpeg][file][id3v2]")
+  {
+    auto body = std::vector<std::uint8_t>{};
+    addV24TextFrame(body, "TDRC", id3v2::Encoding::Latin1, asBytes("2024-05-17"));
+
+    auto data = wrapId3v2(4, body);
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.number(NumberField::Year) == 2024);
+  }
+
+  TEST_CASE("MPEG File - decodes ID3v2.4 UTF-8 and UTF-16BE text", "[media][unit][mpeg][file][id3v2]")
   {
     SECTION("UTF-8")
     {
@@ -549,7 +564,7 @@ namespace ao::media::file::mpeg::test
   }
 
   TEST_CASE("MPEG File - mixed borrowed and converted ID3 text remains stable across File move",
-            "[media][regression][lifetime]")
+            "[media][unit][mpeg][file]")
   {
     auto body = std::vector<std::uint8_t>{};
     auto const utf8Title = std::to_array<std::uint8_t>(
@@ -602,153 +617,186 @@ namespace ao::media::file::mpeg::test
     CHECK(second.text(TextField::Work).data() == firstWork.data());
   }
 
-  TEST_CASE("MPEG File - handles unsupported or malformed input", "[media][unit][mpeg][file]")
+  TEST_CASE("MPEG File - skips the declared unsupported ID3v2.2 region", "[media][unit][mpeg][file]")
   {
-    SECTION("Unsupported ID3v2.2 tag")
+    auto const frame = createValidMpegFrame();
+    auto body = std::vector<std::uint8_t>{};
+
+    SECTION("padding in the unsupported tag")
     {
-      auto data = std::vector<std::uint8_t>{};
-      auto header = id3v2::HeaderLayout{};
-      std::memcpy(header.id.data(), "ID3", 3);
-      header.majorVersion = 2;
-      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
-      data.resize(data.size() + 100, 0);
-      auto const frame = createValidMpegFrame();
-      data.insert(data.end(), frame.begin(), frame.end());
-
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto res = file.readContent();
-
-      REQUIRE(res);
-      CHECK(res->text(TextField::Title).empty());
-      CHECK(res->codec() == AudioCodec::Mp3);
+      body.resize(100, 0);
     }
 
-    SECTION("Truncated ID3v2 header")
+    SECTION("complete MPEG frame inside the unsupported tag")
     {
-      auto data = std::vector<std::uint8_t>{};
-      auto header = id3v2::HeaderLayout{};
-      std::memcpy(header.id.data(), "ID3", 3);
-      header.majorVersion = 3;
-      header.size.data[3] = 100;
-      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
-      // Give it only 10 bytes instead of 100
+      // Generic junk scanning would incorrectly choose this frame.
+      body = frame;
+    }
+
+    auto data = wrapId3v2(2, body);
+    auto const expectedOffset = data.size();
+    data.insert(data.end(), frame.begin(), frame.end());
+
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto res = file.readContent();
+
+    REQUIRE(res);
+    CHECK(res->text(TextField::Title).empty());
+    CHECK(res->codec() == AudioCodec::Mp3);
+    auto const payloadRes = file.audioPayload();
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == expectedOffset);
+    CHECK(payloadRes->bytes.size() == frame.size());
+  }
+
+  TEST_CASE("MPEG File - rejects ID3 layouts without a complete frame outside the tag", "[media][unit][mpeg][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    auto header = id3v2::HeaderLayout{};
+    std::memcpy(header.id.data(), "ID3", 3);
+    header.majorVersion = 3;
+    header.size.data[3] = 100;
+    auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+    data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
+    auto const frame = createValidMpegFrame();
+    auto control = data;
+    control.insert(control.end(), 100, 0);
+    control.insert(control.end(), frame.begin(), frame.end());
+    auto const controlTemp = TempFile{control, ".mp3"};
+    auto const controlFile = TestFile{controlTemp.path};
+    auto const controlPayloadRes = controlFile.audioPayload();
+    REQUIRE(controlPayloadRes);
+    CHECK(controlPayloadRes->offset == sizeof(header) + 100);
+    CHECK(controlPayloadRes->bytes.size() == frame.size());
+
+    SECTION("truncated envelope with no audio")
+    {
+      // Preserve the original short-container boundary.
       data.resize(data.size() + 10, 0);
-
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto res = file.readContent();
-
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
     }
 
-    SECTION("Oversized ID3v2 envelope is ignored when a complete MPEG frame follows")
+    SECTION("complete frame starts inside the declared tag region")
     {
-      auto header = id3v2::HeaderLayout{};
-      std::memcpy(header.id.data(), "ID3", 3);
-      header.majorVersion = 3;
-      header.size.data = {0x7F, 0x7F, 0x7F, 0x7F};
-      auto data = std::vector<std::uint8_t>{};
-      auto const* headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
-      auto const expectedOffset = data.size();
-      auto const frame = createValidMpegFrame();
       data.insert(data.end(), frame.begin(), frame.end());
-
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto trackRes = file.readContent();
-      auto payloadRes = file.audioPayload();
-
-      REQUIRE(trackRes);
-      CHECK(trackRes->text(TextField::Title).empty());
-      CHECK(trackRes->codec() == AudioCodec::Mp3);
-      REQUIRE(payloadRes);
-      CHECK(payloadRes->offset == expectedOffset);
-      CHECK(payloadRes->bytes.size() == frame.size());
     }
 
-    SECTION("Frame size exceeds tag body")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      auto header = id3v2::HeaderLayout{};
-      std::memcpy(header.id.data(), "ID3", 3);
-      header.majorVersion = 3;
-      header.size.data[3] = 20;
-      auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
-      data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto res = file.readContent();
 
-      auto titleFrame = id3v2::V23TextFrameLayout{};
-      std::memcpy(titleFrame.common.id.data(), "TIT2", 4);
-      titleFrame.common.size = 500; // Claims 500 bytes, but body is only 20
-      titleFrame.encoding = id3v2::Encoding::Latin1;
-      auto const* frameAddr = reinterpret_cast<std::uint8_t const*>(&titleFrame);
-      data.insert(data.end(), frameAddr, frameAddr + sizeof(titleFrame));
-      data.resize(sizeof(header) + 20, 0); // Fill to exactly 20 bytes body
-      auto const frame = createValidMpegFrame();
-      data.insert(data.end(), frame.begin(), frame.end());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mpeg file has no complete audio frame");
+  }
 
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto res = file.readContent();
+  TEST_CASE("MPEG File - ignores an oversized ID3 envelope when a complete MPEG frame follows",
+            "[media][unit][mpeg][file]")
+  {
+    auto header = id3v2::HeaderLayout{};
+    std::memcpy(header.id.data(), "ID3", 3);
+    header.majorVersion = 3;
+    header.size.data = {0x7F, 0x7F, 0x7F, 0x7F};
+    auto data = std::vector<std::uint8_t>{};
+    auto const* headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
+    data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
+    auto const expectedOffset = data.size();
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
 
-      REQUIRE(res);
-      CHECK(res->text(TextField::Title).empty());
-      CHECK(res->codec() == AudioCodec::Mp3);
-    }
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto trackRes = file.readContent();
+    auto payloadRes = file.audioPayload();
 
-    SECTION("Missing MPEG frame sync")
-    {
-      auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto res = file.readContent();
+    REQUIRE(trackRes);
+    CHECK(trackRes->text(TextField::Title).empty());
+    CHECK(trackRes->codec() == AudioCodec::Mp3);
+    REQUIRE(payloadRes);
+    CHECK(payloadRes->offset == expectedOffset);
+    CHECK(payloadRes->bytes.size() == frame.size());
+  }
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+  TEST_CASE("MPEG File - discards optional ID3 frames exceeding the tag body", "[media][unit][mpeg][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    auto header = id3v2::HeaderLayout{};
+    std::memcpy(header.id.data(), "ID3", 3);
+    header.majorVersion = 3;
+    header.size.data[3] = 20;
+    auto const* hdrAddr = reinterpret_cast<std::uint8_t const*>(&header);
+    data.insert(data.end(), hdrAddr, hdrAddr + sizeof(header));
 
-    SECTION("Truncated APIC frame does not overrun the buffer")
-    {
-      // APIC body with an unterminated MIME string and no picture-type/description/
-      // image data. The handler must stop at the frame boundary rather than walking
-      // past it (release builds strip the gsl bounds checks).
-      auto frameBody = std::vector<std::uint8_t>{0x00, 'i', 'm', 'g'};
-      auto header = id3v2::V23CommonFrameLayout{};
-      std::memcpy(header.id.data(), "APIC", 4);
-      header.size = static_cast<std::uint32_t>(frameBody.size());
+    auto titleFrame = id3v2::V23TextFrameLayout{};
+    std::memcpy(titleFrame.common.id.data(), "TIT2", 4);
+    titleFrame.common.size = 500; // Claims 500 bytes, but body is only 20
+    titleFrame.encoding = id3v2::Encoding::Latin1;
+    auto const* frameAddr = reinterpret_cast<std::uint8_t const*>(&titleFrame);
+    data.insert(data.end(), frameAddr, frameAddr + sizeof(titleFrame));
+    data.resize(sizeof(header) + 20, 0); // Fill to exactly 20 bytes body
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
 
-      auto body = std::vector<std::uint8_t>{};
-      auto const* hdr = reinterpret_cast<std::uint8_t const*>(&header);
-      body.insert(body.end(), hdr, hdr + sizeof(header));
-      body.insert(body.end(), frameBody.begin(), frameBody.end());
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto res = file.readContent();
 
-      auto data = wrapId3v2(3, body);
-      auto const frame = createValidMpegFrame();
-      data.insert(data.end(), frame.begin(), frame.end());
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto const content = readContent(file);
-      CHECK(content.pictures().empty());
-    }
+    REQUIRE(res);
+    CHECK(res->text(TextField::Title).empty());
+    CHECK(res->codec() == AudioCodec::Mp3);
+  }
 
-    SECTION("Incomplete MPEG frame")
-    {
-      auto data = createValidMpegFrame();
-      data.resize(12);
+  TEST_CASE("MPEG File - rejects input without frame sync", "[media][unit][mpeg][file]")
+  {
+    auto data = std::vector<std::uint8_t>(1000, 0x42); // Just 1000 bytes of garbage, no 0xFF 0xFB sync
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto res = file.readContent();
 
-      auto const temp = TempFile{data, ".mp3"};
-      auto const file = TestFile{temp.path};
-      auto trackRes = file.readContent();
-      auto payloadRes = file.audioPayload();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mpeg file has no complete audio frame");
+  }
 
-      REQUIRE_FALSE(trackRes);
-      CHECK(trackRes.error().code == Error::Code::CorruptData);
-      REQUIRE_FALSE(payloadRes);
-      CHECK(payloadRes.error().code == Error::Code::CorruptData);
-    }
+  TEST_CASE("MPEG File - bounds truncated APIC MIME parsing to its frame", "[media][unit][mpeg][file]")
+  {
+    // APIC body with an unterminated MIME string and no picture-type/description/
+    // image data. The handler must stop at the frame boundary rather than walking
+    // past it (release builds strip the gsl bounds checks).
+    auto frameBody = std::vector<std::uint8_t>{0x00, 'i', 'm', 'g'};
+    auto header = id3v2::V23CommonFrameLayout{};
+    std::memcpy(header.id.data(), "APIC", 4);
+    header.size = static_cast<std::uint32_t>(frameBody.size());
+
+    auto body = std::vector<std::uint8_t>{};
+    auto const* hdr = reinterpret_cast<std::uint8_t const*>(&header);
+    body.insert(body.end(), hdr, hdr + sizeof(header));
+    body.insert(body.end(), frameBody.begin(), frameBody.end());
+
+    auto data = wrapId3v2(3, body);
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const content = readContent(file);
+    CHECK(content.pictures().empty());
+  }
+
+  TEST_CASE("MPEG File - rejects incomplete frames through content and payload APIs", "[media][unit][mpeg][file]")
+  {
+    auto data = createValidMpegFrame();
+    data.resize(12);
+
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto trackRes = file.readContent();
+    auto payloadRes = file.audioPayload();
+
+    REQUIRE_FALSE(trackRes);
+    CHECK(trackRes.error().code == Error::Code::CorruptData);
+    CHECK(trackRes.error().message == "mpeg file has no complete audio frame");
+    REQUIRE_FALSE(payloadRes);
+    CHECK(payloadRes.error().code == Error::Code::CorruptData);
+    CHECK(payloadRes.error().message == "mpeg file has no complete audio frame");
   }
 } // namespace ao::media::file::mpeg::test

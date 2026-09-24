@@ -48,6 +48,26 @@ namespace ao::gtk::test
       CHECK(fit.width == 50);
       CHECK(fit.height == 50);
     }
+
+    SECTION("non-positive source or target dimensions are rejected")
+    {
+      auto fit =
+        fitSourceIntoTarget(RenderTarget{.width = 0, .height = 100}, RenderTarget{.width = 200, .height = 200});
+      CHECK(fit.width == 0);
+      CHECK(fit.height == 0);
+
+      fit = fitSourceIntoTarget(RenderTarget{.width = 100, .height = -1}, RenderTarget{.width = 200, .height = 200});
+      CHECK(fit.width == 0);
+      CHECK(fit.height == 0);
+
+      fit = fitSourceIntoTarget(RenderTarget{.width = 100, .height = 100}, RenderTarget{.width = 0, .height = 200});
+      CHECK(fit.width == 0);
+      CHECK(fit.height == 0);
+
+      fit = fitSourceIntoTarget(RenderTarget{.width = 100, .height = 100}, RenderTarget{.width = 200, .height = -1});
+      CHECK(fit.width == 0);
+      CHECK(fit.height == 0);
+    }
   }
 
   TEST_CASE("ImageRenderPolicy - refreshes only after meaningful target-size changes", "[gtk][unit][image]")
@@ -59,6 +79,11 @@ namespace ao::gtk::test
     CHECK_FALSE(shouldRefresh(current, RenderTarget{.width = 100, .height = 104}));
     CHECK(shouldRefresh(current, RenderTarget{.width = 105, .height = 100}));
     CHECK(shouldRefresh(current, RenderTarget{.width = 100, .height = 105}));
+    CHECK(shouldRefresh(current, RenderTarget{.width = 95, .height = 100}));
+
+    auto const uninitialized = RenderTarget{.width = 0, .height = 0};
+    CHECK(shouldRefresh(uninitialized, RenderTarget{.width = 100, .height = 100}));
+    CHECK_FALSE(shouldRefresh(uninitialized, RenderTarget{.width = 100, .height = 0}));
 
     auto const small = RenderTarget{.width = 20, .height = 20};
     CHECK_FALSE(shouldRefresh(small, RenderTarget{.width = 21, .height = 20}));

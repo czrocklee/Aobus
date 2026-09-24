@@ -99,6 +99,8 @@ namespace ao::tui::test
       editor.tryHandleEvent(ftxui::Event::Escape);
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK_FALSE(frame(editor).contains("Kind of Blue"));
+      CHECK(editor.isDirty());
+      CHECK(editor.buildPatch().metadata.optAlbum == "K");
     }
 
     SECTION("Explicit trigger with Ctrl-N requests completion on empty input")
@@ -118,6 +120,8 @@ namespace ao::tui::test
 
       editor.tryHandleEvent(ftxui::Event::Tab);
       CHECK(editor.tab() == TrackEditorTab::Tags);
+      CHECK(editor.isDirty());
+      CHECK(editor.buildPatch().metadata.optAlbum == "K");
     }
   }
 
@@ -212,7 +216,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - word and line caret moves dismiss stale candidates", "[tui][regression][editor]")
+  TEST_CASE("TrackPropertiesEditor - word and line caret moves dismiss stale candidates", "[tui][unit][editor]")
   {
     for (auto const& event : {ftxui::Event::CtrlA, ftxui::Event::Special("\033b"), ftxui::Event::ArrowLeftCtrl})
     {
@@ -226,7 +230,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - caret commands dismiss completion even at a boundary", "[tui][regression][editor]")
+  TEST_CASE("TrackPropertiesEditor - caret commands dismiss completion even at a boundary", "[tui][unit][editor]")
   {
     for (auto const& event : {ftxui::Event::CtrlA,
                               ftxui::Event::CtrlE,
@@ -246,7 +250,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - scrolls short terminals to the selected completion", "[tui][regression][editor]")
+  TEST_CASE("TrackPropertiesEditor - scrolls short terminals to the selected completion", "[tui][unit][editor]")
   {
     for (auto const height : {24, 20, 16})
     {
@@ -272,7 +276,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - reversing candidate navigation preserves the visible window",
-            "[tui][regression][editor]")
+            "[tui][unit][editor]")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
@@ -293,7 +297,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("Cand00"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - page navigation advances a full candidate window", "[tui][regression][editor]")
+  TEST_CASE("TrackPropertiesEditor - page navigation advances a full candidate window", "[tui][unit][editor]")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");

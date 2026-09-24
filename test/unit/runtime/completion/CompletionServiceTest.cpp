@@ -191,7 +191,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - builds metadata value vocabularies for supported fields",
-            "[runtime][unit][completion-vocabulary][value]")
+            "[runtime][unit][completion][vocabulary][value]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
@@ -279,7 +279,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - aggregates selected live track values and tags",
-            "[runtime][unit][completion-vocabulary][aggregate]")
+            "[runtime][unit][completion][vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
@@ -318,7 +318,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - one snapshot alias record serves every materialized vocabulary",
-            "[runtime][unit][completion-alias][cache]")
+            "[runtime][unit][completion][completion-alias][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -358,7 +358,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - sparse live dictionary ids preserve frequencies and alias borrows",
-            "[runtime][regression][completion][completion-alias]")
+            "[runtime][unit][completion][completion-alias]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto transaction = library::test::writeTransaction(libraryFixture.library());
@@ -423,7 +423,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - snapshot invalidation retires stale aliases",
-            "[runtime][unit][completion-alias][cache]")
+            "[runtime][unit][completion][completion-alias][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(
@@ -448,7 +448,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - one library snapshot serves every live vocabulary",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
@@ -541,7 +541,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - invalidates aggregate values for every track change kind",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const originalId = library::test::addTrackWithUniqueFixtureUri(
@@ -602,7 +602,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - invalidates tag snapshots on track mutation",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(
@@ -626,7 +626,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - invalidates metadata value vocabularies on track mutation",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(
@@ -676,7 +676,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - deleting the last contributor removes every cached vocabulary value",
-            "[runtime][regression][completion-vocabulary]")
+            "[runtime][unit][completion][vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId =
@@ -729,7 +729,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - insertion and reset changes invalidate every vocabulary kind",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -776,7 +776,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("CompletionService - lazily rebuilds one dirty snapshot before deriving field values",
-            "[runtime][unit][completion-vocabulary][cache]")
+            "[runtime][unit][completion][vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(

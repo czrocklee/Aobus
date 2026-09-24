@@ -25,8 +25,11 @@ namespace ao::gtk::test
 
     for (auto const& rtDef : kAllFields)
     {
-      INFO("Field " << rtDef.id << " must have a UI definition");
-      CHECK(trackFieldUiDefinition(rtDef.field) != nullptr);
+      INFO("Field " << rtDef.id << " must have a complete UI definition");
+      auto const* const def = trackFieldUiDefinition(rtDef.field);
+      REQUIRE(def != nullptr);
+      CHECK(def->field == rtDef.field);
+      CHECK(def->readRowText != nullptr);
     }
   }
 

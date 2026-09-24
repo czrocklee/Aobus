@@ -436,7 +436,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackCursor - paired modes resolve once without an intermediate shuffle candidate",
-            "[runtime][regression][playback-cursor]")
+            "[runtime][unit][playback-cursor]")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1, RepeatMode::Off, ShuffleMode::On);

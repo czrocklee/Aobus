@@ -16,6 +16,13 @@ namespace ao::uimodel::test
     /// mismatch instead of dereferencing an empty optional.
     constexpr auto kUnparsed = std::string_view{"<unparsed>"};
 
+    KeyChord requireChord(std::string_view const text)
+    {
+      auto const optChord = KeyChord::parse(text);
+      REQUIRE(optChord);
+      return *optChord;
+    }
+
     std::string parsedKey(std::string_view const text)
     {
       auto const optChord = KeyChord::parse(text);
@@ -29,7 +36,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("KeyChord - parse returns modifiers and key", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - parse returns modifiers and key", "[uimodel][unit][input][key-chord]")
   {
     SECTION("plain key")
     {
@@ -44,7 +51,7 @@ namespace ao::uimodel::test
       auto const optChord = KeyChord::parse("Ctrl+p");
       REQUIRE(optChord);
       CHECK(optChord->key == "P");
-      CHECK(optChord->modifiers.has(KeyModifier::Ctrl));
+      CHECK(optChord->modifiers == KeyModifiers{KeyModifier::Ctrl});
     }
 
     SECTION("multiple modifiers in any input order")
@@ -52,25 +59,25 @@ namespace ao::uimodel::test
       auto const optChord = KeyChord::parse("shift+ctrl+Right");
       REQUIRE(optChord);
       CHECK(optChord->key == "Right");
-      CHECK(optChord->modifiers.has(KeyModifier::Ctrl));
-      CHECK(optChord->modifiers.has(KeyModifier::Shift));
-      CHECK(optChord->modifiers.has(KeyModifier::Alt) == false);
+      CHECK(optChord->modifiers == (KeyModifier::Ctrl | KeyModifier::Shift));
     }
 
     SECTION("modifier aliases")
     {
       auto const optPrimary = KeyChord::parse("Primary+L");
       REQUIRE(optPrimary);
-      CHECK(optPrimary->modifiers.has(KeyModifier::Ctrl));
+      CHECK(optPrimary->key == "L");
+      CHECK(optPrimary->modifiers == KeyModifiers{KeyModifier::Ctrl});
 
       auto const optMetaChord = KeyChord::parse("Meta+Cmd+Q");
       REQUIRE(optMetaChord);
-      CHECK(optMetaChord->modifiers.has(KeyModifier::Super));
+      CHECK(optMetaChord->key == "Q");
+      CHECK(optMetaChord->modifiers == KeyModifiers{KeyModifier::Super});
 
       auto const optPlatformAliases = KeyChord::parse("Option+Windows+K");
       REQUIRE(optPlatformAliases);
-      CHECK(optPlatformAliases->modifiers.has(KeyModifier::Alt));
-      CHECK(optPlatformAliases->modifiers.has(KeyModifier::Super));
+      CHECK(optPlatformAliases->key == "K");
+      CHECK(optPlatformAliases->modifiers == (KeyModifier::Alt | KeyModifier::Super));
     }
 
     SECTION("media key token preserved")
@@ -86,12 +93,11 @@ namespace ao::uimodel::test
       auto const optChord = KeyChord::parse("  Ctrl + Shift + U  ");
       REQUIRE(optChord);
       CHECK(optChord->key == "U");
-      CHECK(optChord->modifiers.has(KeyModifier::Ctrl));
-      CHECK(optChord->modifiers.has(KeyModifier::Shift));
+      CHECK(optChord->modifiers == (KeyModifier::Ctrl | KeyModifier::Shift));
     }
   }
 
-  TEST_CASE("KeyChord - parse rejects malformed input", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - parse rejects malformed input", "[uimodel][unit][input][key-chord]")
   {
     CHECK(KeyChord::parse("").has_value() == false);
     CHECK(KeyChord::parse("   ").has_value() == false);
@@ -99,12 +105,16 @@ namespace ao::uimodel::test
     CHECK(KeyChord::parse("Bogus+P").has_value() == false);
   }
 
-  TEST_CASE("KeyChord - toString returns canonical text", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - toString returns canonical text", "[uimodel][unit][input][key-chord]")
   {
     SECTION("modifier order is Ctrl, Shift, Alt, Super")
     {
       auto chord = KeyChord{.modifiers = KeyModifier::Super | KeyModifier::Ctrl | KeyModifier::Shift, .key = "Right"};
       CHECK(chord.toString() == "Ctrl+Shift+Super+Right");
+
+      auto const allModifiers = KeyChord{
+        .modifiers = KeyModifier::Super | KeyModifier::Ctrl | KeyModifier::Shift | KeyModifier::Alt, .key = "Right"};
+      CHECK(allModifiers.toString() == "Ctrl+Shift+Alt+Super+Right");
     }
 
     SECTION("no modifiers")
@@ -113,7 +123,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - round-trips through parse and toString", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - round-trips through parse and toString", "[uimodel][unit][input][key-chord]")
   {
     for (auto const* text :
          {"Ctrl+P", "Ctrl+Shift+Right", "Media:Next", "F5", "Super+Q", "+", "Ctrl++", "Ctrl+Shift++"})
@@ -124,7 +134,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - parses the '+' key despite the separator collision", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - parses the '+' key despite the separator collision", "[uimodel][unit][input][key-chord]")
   {
     SECTION("bare plus")
     {
@@ -138,7 +148,7 @@ namespace ao::uimodel::test
     {
       auto const optChord = KeyChord::parse("Ctrl++");
       REQUIRE(optChord);
-      CHECK(optChord->modifiers.has(KeyModifier::Ctrl));
+      CHECK(optChord->modifiers == KeyModifiers{KeyModifier::Ctrl});
       CHECK(optChord->key == "+");
     }
 
@@ -150,14 +160,15 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("KeyChord - equality compares modifiers and key", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - equality compares modifiers and key", "[uimodel][unit][input][key-chord]")
   {
-    CHECK(KeyChord::parse("Ctrl+P") == KeyChord::parse("primary+p"));
-    CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Shift+P"));
-    CHECK_FALSE(KeyChord::parse("Ctrl+P") == KeyChord::parse("Ctrl+Q"));
+    CHECK(requireChord("Ctrl+P") == requireChord("primary+p"));
+    CHECK_FALSE(requireChord("Ctrl+P") == requireChord("Ctrl+Shift+P"));
+    CHECK_FALSE(requireChord("Ctrl+P") == requireChord("Ctrl+Q"));
   }
 
-  TEST_CASE("KeyChord - canonicalizes named keys, function keys, and media aliases", "[uimodel][unit][input][keychord]")
+  TEST_CASE("KeyChord - canonicalizes named keys, function keys, and media aliases",
+            "[uimodel][unit][input][key-chord]")
   {
     SECTION("named editing and navigation keys")
     {
@@ -214,9 +225,9 @@ namespace ao::uimodel::test
 
     SECTION("formerly distinct spellings compare equal after parse")
     {
-      CHECK(KeyChord::parse("Return") == KeyChord::parse("enter"));
-      CHECK(KeyChord::parse("Esc") == KeyChord::parse("Escape"));
-      CHECK(KeyChord::parse("Ctrl+PgUp") == KeyChord::parse("ctrl+pageup"));
+      CHECK(requireChord("Return") == requireChord("enter"));
+      CHECK(requireChord("Esc") == requireChord("Escape"));
+      CHECK(requireChord("Ctrl+PgUp") == requireChord("ctrl+pageup"));
     }
   }
 } // namespace ao::uimodel::test

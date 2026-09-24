@@ -79,10 +79,10 @@ namespace ao::rt::test
     ControlledSleeper& operator=(ControlledSleeper&&) = delete;
 
     async::Task<void> sleepForAsync(Delay delay, std::stop_token stopToken) override;
-    bool tryWaitForCallCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitForCallCount(std::size_t count, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
     std::size_t callCount() const;
     Call call(std::size_t index) const;
-    bool tryWaitForCancellation(std::size_t index, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+    bool tryWaitForCancellation(std::size_t index, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
     bool tryFire(std::size_t index);
     bool tryFireNext();
     bool tryFireNext(Delay delay);
@@ -90,8 +90,8 @@ namespace ao::rt::test
     std::uint64_t lastScheduledId() const;
     std::vector<Delay> pendingDelays() const;
     bool tryWaitForPendingDelays(std::vector<Delay> const& expected,
-                                 std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
-    bool tryWaitForPendingDelay(Delay delay, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const;
+                                 std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
+    bool tryWaitForPendingDelay(Delay delay, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const;
 
   private:
     struct Impl;
@@ -132,7 +132,7 @@ namespace ao::rt::test
 
     T load() const { return _dataPtr->value.load(); }
 
-    bool tryWaitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    bool tryWaitUntil(T expected, std::chrono::milliseconds timeout = std::chrono::seconds{10}) const
     {
       auto lock = std::unique_lock{_dataPtr->mutex};
       return _dataPtr->cv.wait_for(lock, timeout, [this, expected] { return _dataPtr->value.load() == expected; });
@@ -235,11 +235,12 @@ namespace ao::rt::test
     }
   }
 
+  // This is a hang guard, not a latency assertion; allow for loaded CI workers and storage.
   template<typename RuntimeType, typename ExecutorType, typename T>
   T runQueuedTask(RuntimeType& runtime,
                   ExecutorType& executor,
                   async::Task<T> task,
-                  std::chrono::milliseconds timeout = std::chrono::seconds{2})
+                  std::chrono::milliseconds timeout = std::chrono::seconds{10})
   {
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.spawn(flagCompletionAsync(completedPtr, std::move(task)));

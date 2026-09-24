@@ -7,7 +7,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ThemePreset - stable ids resolve with classic fallback", "[uimodel][unit][preferences]")
+  TEST_CASE("ThemePreset - stable ids resolve with classic fallback", "[uimodel][unit][preference]")
   {
     CHECK(themePresetId(ThemePreset::Classic) == "classic");
     CHECK(themePresetId(ThemePreset::Modern) == "modern");

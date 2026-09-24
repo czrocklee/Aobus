@@ -14,7 +14,6 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/Transport.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_message.hpp>
@@ -34,6 +33,25 @@
 namespace ao::audio::test
 {
   using namespace fakeit;
+
+  namespace
+  {
+    DecoderFactoryFn makePropertyDecoderFactory()
+    {
+      auto const fmt = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+      return [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+      {
+        auto const sourceFormat = signalFormat(fmt);
+        auto decPtr = std::make_unique<ScriptedDecoderSession>(
+          DecodedStreamInfo{.sourceFormat = sourceFormat,
+                            .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                            .duration = std::chrono::seconds{1},
+                            .isLossy = false});
+        decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
+        return decPtr;
+      };
+    }
+  } // namespace
 
   TEST_CASE("Engine - volume and mute controls update backend and status", "[audio][unit][engine][property]")
   {
@@ -75,7 +93,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - controls refresh volume capability while preserving valid intent",
-            "[audio][regression][engine][property]")
+            "[audio][unit][engine][property]")
   {
     for (auto const& [propertyId, controlFails] : std::array{std::pair{PropertyId::Volume, false},
                                                              std::pair{PropertyId::Volume, true},
@@ -169,7 +187,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - NaN volume is rejected without backend observation or intent mutation",
-            "[audio][regression][engine][property]")
+            "[audio][unit][engine][property]")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -224,79 +242,15 @@ namespace ao::audio::test
     CHECK(statusAfterNaN.volumeIsHardwareAssisted == statusBeforeNaN.volumeIsHardwareAssisted);
   }
 
-  TEST_CASE("Engine - exposes property API", "[audio][unit][engine][property]")
+  TEST_CASE("Engine - property callbacks refresh observed capability and intent", "[audio][unit][engine][property]")
   {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    auto* backendRaw = backendPtr.get();
-
-    auto const fmt = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
-    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
-    {
-      auto const sourceFormat = signalFormat(fmt);
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(
-        DecodedStreamInfo{.sourceFormat = sourceFormat,
-                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
-                          .duration = std::chrono::seconds{1},
-                          .isLossy = false});
-      decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
-      return decPtr;
-    };
-
-    auto engine = Engine{std::move(backendPtr), device, factory};
+    auto* const backendRaw = backendPtr.get();
+    auto stateChanged = CallbackLatch{};
+    auto volumeStateChanged = CallbackLatch{};
+    auto settled = CallbackLatch{};
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), makePropertyDecoderFactory()};
     auto const desc = PlaybackInput{.filePath = "test.flac"};
-
-    SECTION("queryProperty returns all-false for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const info = backendRaw->queryProperty(kUnknownId);
-
-      CHECK(info.canRead == false);
-      CHECK(info.canWrite == false);
-      CHECK(info.isAvailable == false);
-      CHECK(info.emitsChangeNotifications == false);
-    }
-
-    SECTION("queryProperty returns valid info for Volume")
-    {
-      backendRaw->setMockPropertyInfo(PropertyId::Volume,
-                                      PropertyInfo{
-                                        .canRead = true,
-                                        .canWrite = true,
-                                        .isAvailable = true,
-                                        .emitsChangeNotifications = false,
-                                        .isHardwareAssisted = true,
-                                      });
-
-      auto const info = backendRaw->queryProperty(PropertyId::Volume);
-
-      CHECK(info.canRead == true);
-      CHECK(info.canWrite == true);
-      CHECK(info.isAvailable == true);
-      CHECK(info.isHardwareAssisted == true);
-    }
-
-    SECTION("setProperty returns error for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const res = backendRaw->setProperty(kUnknownId, PropertyValue{0.5F});
-
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("property returns error for unknown PropertyId")
-    {
-      auto constexpr kUnknownId = static_cast<PropertyId>(999);
-      auto const res = backendRaw->property(kUnknownId);
-
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
 
     SECTION("handlePropertyChanged callback updates engine volume status")
     {
@@ -311,8 +265,8 @@ namespace ao::audio::test
 
       // Play must be called so the backend target is initialized
       engine.play(makePlaybackItem(desc));
+      REQUIRE(backendRaw->target() != nullptr);
 
-      auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       backendRaw->emitPropertyChanged(PropertyId::Volume);
@@ -327,10 +281,10 @@ namespace ao::audio::test
     SECTION("handlePropertyChanged handles backend read errors gracefully")
     {
       engine.play(makePlaybackItem(desc));
+      REQUIRE(backendRaw->target() != nullptr);
       CHECK(engine.setVolume(0.42F));
       CHECK(engine.setMuted(true));
 
-      auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       backendRaw->setPropertyError(Error::Code::Generic);
@@ -346,7 +300,7 @@ namespace ao::audio::test
     SECTION("handlePropertyChanged callback updates engine mute status")
     {
       engine.play(makePlaybackItem(desc));
-      auto volumeStateChanged = CallbackLatch{};
+      REQUIRE(backendRaw->target() != nullptr);
       engine.setOnStateChanged([&] { volumeStateChanged.notify(); });
       backendRaw->setMockPropertyInfo(PropertyId::Volume,
                                       PropertyInfo{
@@ -370,7 +324,6 @@ namespace ao::audio::test
                                       });
       CHECK(backendRaw->setProperty(PropertyId::Muted, PropertyValue{true}));
 
-      auto stateChanged = CallbackLatch{};
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       backendRaw->emitPropertyChanged(PropertyId::Muted);
@@ -385,31 +338,24 @@ namespace ao::audio::test
     SECTION("handlePropertyChanged callback for unknown property is ignored")
     {
       engine.play(makePlaybackItem(desc));
-      auto stateChanged = CallbackLatch{};
+      REQUIRE(backendRaw->target() != nullptr);
       engine.setOnStateChanged([&] { stateChanged.notify(); });
 
       auto constexpr kUnknownId = static_cast<PropertyId>(999);
       backendRaw->emitPropertyChanged(kUnknownId);
 
-      CHECK_FALSE(stateChanged.tryWaitForCount(1, std::chrono::milliseconds{100}));
+      engine.defer([&] { settled.notify(); });
+      REQUIRE(settled.tryWaitForCount(1));
+      CHECK(stateChanged.count() == 0);
     }
+  }
 
-    SECTION("Backend callbacks update engine state correctly")
-    {
-      engine.play(makePlaybackItem(desc));
-      auto stateChanged = CallbackLatch{};
-      engine.setOnStateChanged([&] { stateChanged.notify(); });
-
-      backendRaw->emitBackendError("hardware failed");
-      CHECK(stateChanged.tryWaitForCount(1));
-      CHECK(engine.status().transport == Transport::Error);
-
-      engine.play(makePlaybackItem(desc));
-      auto routeChanged = CallbackLatch{};
-      engine.setOnRouteChanged([&](auto const&) { routeChanged.notify(); });
-      backendRaw->emitRouteReady("test-anchor");
-      CHECK(routeChanged.tryWaitForCount(1));
-    }
+  TEST_CASE("Engine - property controls round-trip and survive backend open", "[audio][unit][engine][property]")
+  {
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), makePropertyDecoderFactory()};
+    auto const desc = PlaybackInput{.filePath = "test.flac"};
 
     SECTION("setVolume round-trips through engine and backend")
     {

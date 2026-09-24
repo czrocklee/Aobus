@@ -8,8 +8,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace ao::audio::detail::test
@@ -40,8 +43,10 @@ namespace ao::audio::detail::test
     CHECK(source.isOpen());
     CHECK_FALSE(source.isAtEnd());
     CHECK(source.sampleIndex() == 0);
-    CHECK(source.packet().size() == 4);
-    CHECK(source.magicCookie().size() == 11);
+    auto const expectedPacket = std::to_array<std::uint8_t>({1, 2, 3, 4});
+    auto const expectedCookie = ao::test::mp4::makeAtom("alac", {9, 8, 7});
+    CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
+    CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
     CHECK(source.timescale() == 44100);
     CHECK(source.duration() == std::chrono::seconds{2});
     CHECK(source.firstFrameIndex(44100, 4096) == 0);
@@ -63,10 +68,29 @@ namespace ao::audio::detail::test
     {
       auto const temp = ao::test::TempFile{makeMp4(), ".m4a"};
       auto source = Mp4PacketSource{};
+      auto const expectedPacket = std::to_array<std::uint8_t>({1, 2, 3, 4});
+      auto const expectedCookie = ao::test::mp4::makeAtom("alac", {9, 8, 7});
 
-      CHECK(!source.open(temp.path, "mp4a"));
+      REQUIRE(source.open(temp.path, "alac"));
+      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
+      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
+
+      CHECK_FALSE(source.open(temp.path, "mp4a"));
       CHECK_FALSE(source.isOpen());
       CHECK(source.isAtEnd());
+      CHECK(source.sampleIndex() == 0);
+      CHECK(source.packet().empty());
+      CHECK(source.magicCookie().empty());
+      CHECK(source.sampleInfo().size == 0);
+      CHECK(source.timescale() == 0);
+      CHECK(source.duration() == std::chrono::milliseconds{0});
+
+      REQUIRE(source.open(temp.path, "alac"));
+      CHECK(source.isOpen());
+      CHECK_FALSE(source.isAtEnd());
+      CHECK(source.sampleIndex() == 0);
+      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
+      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
     }
 
     SECTION("Zero media timescale uses the codec fallback")

@@ -26,8 +26,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListPresentations - stores list presentation ids and emits changed lists",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("ListPresentations - stores list presentation ids and emits changed lists", "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -54,8 +53,7 @@ namespace ao::uimodel::test
     CHECK(events[1] == rt::kAllTracksListId);
   }
 
-  TEST_CASE("ListPresentations - copied presentation id survives preference removal",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("ListPresentations - copied presentation id survives preference removal", "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -75,7 +73,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ListPresentations - empty presentation id clears without inserting empty state",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -97,7 +95,7 @@ namespace ao::uimodel::test
 
   TEST_CASE(
     "ListPresentations - resolves custom list-presentation preferences and preserves unknown ids while falling back",
-    "[uimodel][unit][library][presentation]")
+    "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -121,8 +119,7 @@ namespace ao::uimodel::test
     CHECK(store.presentationIdForList(rt::kAllTracksListId) == "missing-preset");
   }
 
-  TEST_CASE("ListPresentations - resolves saved-list defaults after preference lookup",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("ListPresentations - resolves saved-list defaults after preference lookup", "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -152,7 +149,7 @@ namespace ao::uimodel::test
     CHECK(store.presentationForList(emptySavedContext).id == "albums");
   }
 
-  TEST_CASE("ListPresentations - bulk state emits only when changed", "[uimodel][unit][library][presentation]")
+  TEST_CASE("ListPresentations - bulk state emits only when changed", "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.listPresentations;
@@ -172,15 +169,9 @@ namespace ao::uimodel::test
             "[uimodel][unit][presentation][restore]")
   {
     auto presentationFixture = TrackPresentationFixture{};
-    auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto executor = rt::test::QueuedExecutor{};
-    auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
-    auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-    auto& commands = commandsFixture.commands();
-    auto const liveId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Live"})));
-    auto listPresentations = ListPresentations{presentationFixture.catalog, changes};
-    auto const staleId = ListId{liveId.raw() + 1};
+    auto& listPresentations = presentationFixture.listPresentations;
+    auto const liveId = ListId{42};
+    auto const staleId = ListId{99};
 
     // A list deleted while the frontend was down produces no LibraryChanges
     // event, so only the restore path can retire its entry.
@@ -237,8 +228,7 @@ namespace ao::uimodel::test
     CHECK(listPresentations.snapshot().contains(unrelatedId));
   }
 
-  TEST_CASE("ListPresentations - library reset clears every preference",
-            "[uimodel][regression][presentation][library-reset]")
+  TEST_CASE("ListPresentations - library reset clears every preference", "[uimodel][unit][presentation][library-reset]")
   {
     auto presentationFixture = TrackPresentationFixture{};
     auto libraryFixture = rt::test::MusicLibraryFixture{};
@@ -263,8 +253,7 @@ namespace ao::uimodel::test
     CHECK(removed == std::vector{ListId{42}, ListId{43}});
   }
 
-  TEST_CASE("ListPresentations - deletion callback may destroy its owner",
-            "[uimodel][regression][presentation][lifecycle]")
+  TEST_CASE("ListPresentations - deletion callback may destroy its owner", "[uimodel][unit][presentation]")
   {
     auto presentationFixture = TrackPresentationFixture{};
     auto libraryFixture = rt::test::MusicLibraryFixture{};

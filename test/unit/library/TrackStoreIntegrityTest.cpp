@@ -23,40 +23,41 @@ namespace ao::library::test
   // still has to hold is that such a record never survives being read back: the
   // canonical validators run again over persisted bytes at MusicLibrary::open().
   TEST_CASE("MusicLibrary - open rejects a non-canonical persisted hot Track record",
-            "[library][regression][track-store][track-integrity]")
+            "[library][unit][track-store][track-integrity]")
   {
     auto const temp = ao::test::TempDir{};
     auto const hot = makeHotData(TrackHotHeader{.tagBloom = 1}, "Invalid bloom");
 
     initializeLibraryStorage(temp.path());
-    seedRawTrackRow(temp.path(), 1, hot, makeColdData());
-    requireCorruptOpen(temp.path());
+    seedRawTrackRow(temp.path(), 1, "track.flac", hot, makeColdData());
+    requireCorruptOpen(
+      temp.path(), "Track 1 failed persisted validation: Hot Track record tag bloom does not match its tag IDs");
   }
 
   TEST_CASE("MusicLibrary - open rejects a non-canonical persisted cold Track record",
-            "[library][regression][track-store][track-integrity]")
+            "[library][unit][track-store][track-integrity]")
   {
     auto const temp = ao::test::TempDir{};
     auto const cold = makeColdData(TrackColdHeader{.reserved8 = 1});
 
     initializeLibraryStorage(temp.path());
-    seedRawTrackRow(temp.path(), 1, makeHotData(), cold);
-    requireCorruptOpen(temp.path());
+    seedRawTrackRow(temp.path(), 1, "track.flac", makeHotData(), cold);
+    requireCorruptOpen(
+      temp.path(), "Track 1 failed persisted validation: Cold Track record has a non-canonical structural layout");
   }
 
-  TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title",
-            "[library][regression][track-store][unicode]")
+  TEST_CASE("MusicLibrary - open rejects a non-NFC persisted Track title", "[library][unit][track-store][unicode]")
   {
     auto const temp = ao::test::TempDir{};
     auto const hot = makeHotData({}, "Cafe\u0301");
 
     initializeLibraryStorage(temp.path());
-    seedRawTrackRow(temp.path(), 1, hot, makeColdData());
-    requireCorruptOpen(temp.path());
+    seedRawTrackRow(temp.path(), 1, "track.flac", hot, makeColdData());
+    requireCorruptOpen(temp.path(), "Track 1 failed persisted validation: Track title is not NFC");
   }
 
   TEST_CASE("TrackStore - prepared updates of an absent Track are non-mutating NotFound",
-            "[library][regression][track-store][track-integrity]")
+            "[library][unit][track-store][track-integrity]")
   {
     auto fixture = TrackStoreFixture{};
     auto const original = makeTrackSpec("Original");
@@ -124,7 +125,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackStore - writer rejects the reserved Track id before probing storage",
-            "[library][regression][track-store][track-integrity]")
+            "[library][unit][track-store][track-integrity]")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);

@@ -32,7 +32,7 @@ Good `runtime` tests usually:
 - Assert emitted callbacks and resulting service state.
 - Keep service tests small and direct.
 - Use deterministic executors, barriers, explicit callbacks, and fake services instead of wall-clock timing.
-- Treat full library import/export/scan flows as workflow or integration-style tests, even when they live in the core test target.
+- Mark complete library import/export/scan flows `[integration]`; focused planning, validation, and cancellation contracts stay `[unit]`.
 
 Appropriate contracts:
 
@@ -67,6 +67,8 @@ Use `test/unit/linux-gtk/...Test.cpp` for GTK adapter behavior: widget construct
 
 GTK tests should be thin. Do not re-test all business policy that can be covered in `uimodel` or `runtime`.
 
+GTK scope follows the [direction of the asserted value](#scope-and-independent-metadata).
+
 Good GTK tests usually:
 
 - Build the widget with a fixture.
@@ -84,7 +86,7 @@ Appropriate contracts:
 
 ## CLI and TUI frontend tests
 
-Use `test/unit/cli/...Test.cpp` and `test/unit/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`; use `[workflow]` when a frontend case intentionally crosses several production components.
+Use `test/unit/cli/...Test.cpp` and `test/unit/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`. Scope follows the [direction of the asserted value](#scope-and-independent-metadata): a CLI command or TUI action that changes library, playback, workspace, or notification state and asserts that state is `[integration]`; read-only output and TUI rendering of runtime state stay `[unit]`.
 
 ## WinUI frontend tests
 
@@ -92,13 +94,31 @@ Use `test/unit/winui/...Test.cpp` for native WinUI composition and frontend-owne
 
 Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
 
-## Workflow, integration, and regression placement
+## Scope and independent metadata
 
-Use `[workflow]` when the test exercises multiple production components but still runs in a unit target.
+Choose scope from the contract under test, not from the directory or binary:
 
-Use `[integration]` when it relies on real files, real codecs, real GTK event loop behavior, environment permissions, or cross-component wiring.
+- `[unit]` verifies a focused component contract with controlled collaborators,
+  such as TrackStore read-back, YAML schema rejection, or fake-backend state
+  transitions. An owned temporary database, file, or GTK fixture does not make
+  it an integration test.
+- `[integration]` verifies collaboration across production boundaries, such as
+  export-to-import round trips, CLI-to-runtime mutations, decoder pipelines,
+  subprocess protocols, or a real daemon. The asserted outcome decides: a case
+  is integration when the value it checks is produced across such a boundary,
+  such as stream facts from the real decoder. A real media file that only
+  serves as playable input to a transport, session, or token contract with a
+  fake output device stays unit.
 
-Use `[regression]` when the test protects a known bug or fragile invariant. Add a short comment when the assertion is non-obvious.
+UI-model and frontend components apply the asserted outcome by direction. A
+case that drives the real runtime through a view model, session, or widget and
+asserts runtime state, or state the runtime persisted, is `[integration]`.
+Runtime state projected into view state or rendered into widgets, and
+frontend-owned configuration written by the component itself, stay `[unit]`
+even with an owned runtime fixture.
+
+Scope promises neither speed nor hermeticity, and it is unrelated to the
+`ao_integration_test` binary.
 
 Useful existing samples:
 

@@ -21,7 +21,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes", "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes", "[uimodel][unit][presentation]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);
@@ -46,7 +46,7 @@ namespace ao::uimodel::test
     CHECK(store.layoutForList(rt::kAllTracksListId)[1].weight == 1.25);
   }
 
-  TEST_CASE("TrackColumnLayouts - an unchanged empty layout creates no entry", "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - an unchanged empty layout creates no entry", "[uimodel][unit][presentation]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);
@@ -97,8 +97,7 @@ namespace ao::uimodel::test
     CHECK(layouts.snapshot().contains(unrelatedId));
   }
 
-  TEST_CASE("TrackColumnLayouts - library reset clears every layout",
-            "[uimodel][regression][presentation][library-reset]")
+  TEST_CASE("TrackColumnLayouts - library reset clears every layout", "[uimodel][unit][presentation][library-reset]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
@@ -123,8 +122,7 @@ namespace ao::uimodel::test
     CHECK(removed == std::vector{ListId{42}, ListId{43}});
   }
 
-  TEST_CASE("TrackColumnLayouts - deletion callback may destroy its owner",
-            "[uimodel][regression][presentation][lifecycle]")
+  TEST_CASE("TrackColumnLayouts - deletion callback may destroy its owner", "[uimodel][unit][presentation]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
@@ -159,16 +157,12 @@ namespace ao::uimodel::test
   TEST_CASE("TrackColumnLayouts - restore drops layouts whose list the library no longer has",
             "[uimodel][unit][presentation][restore]")
   {
-    auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
-    auto changes = rt::test::makeLibraryChanges(executor, libraryFixture.library());
-    auto commandsFixture = rt::test::LibraryCommandsFixture{libraryFixture.library(), changes, executor};
-    auto& commands = commandsFixture.commands();
-    auto const liveId =
-      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(rt::ListDraft{.name = "Live"})));
+    auto changes = rt::test::makeLibraryChanges(executor);
     auto layouts = TrackColumnLayouts{changes};
     auto const state = std::vector{TrackColumnState{.field = rt::TrackField::Duration, .width = 17}};
-    auto const staleId = ListId{liveId.raw() + 1};
+    auto const liveId = ListId{42};
+    auto const staleId = ListId{99};
 
     // A list deleted while the frontend was down produces no LibraryChanges
     // event, so only the restore path can retire its entry.
@@ -181,7 +175,7 @@ namespace ao::uimodel::test
     CHECK(layouts.snapshot().contains(rt::kAllTracksListId));
   }
 
-  TEST_CASE("TrackColumnLayouts - bulk state emits only when changed", "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnLayouts - bulk state emits only when changed", "[uimodel][unit][presentation]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);

@@ -4,30 +4,49 @@
 #include "windows-winui/app/DispatcherQueueAdmission.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <semaphore>
 #include <thread>
+#include <utility>
 
 namespace ao::winui::test
 {
   TEST_CASE("DispatcherQueueAdmission - closure preserves accepted submissions until the final drain",
             "[winui][unit][async][concurrency]")
   {
+    constexpr auto kWaitTimeout = std::chrono::seconds{5};
     auto admission = detail::DispatcherQueueAdmission{};
     auto producerEntered = std::binary_semaphore{0};
     auto releaseProducer = std::binary_semaphore{0};
+    auto drainFinished = std::binary_semaphore{0};
+    auto drainStarted = std::binary_semaphore{0};
     auto producerAccepted = std::atomic_bool{false};
+    bool drainAccepted = false;
 
-    auto producer = std::jthread{[&]
-                                 {
-                                   auto optTicket = admission.tryAcquire(false);
-                                   producerAccepted.store(optTicket.has_value(), std::memory_order_release);
-                                   producerEntered.release();
-                                   releaseProducer.acquire();
-                                 }};
+    auto producer = std::jthread{};
+    auto closer = std::jthread{};
+    bool producerReleased = false;
+    auto releaseProducerOnce = [&]
+    {
+      if (!std::exchange(producerReleased, true))
+      {
+        releaseProducer.release();
+      }
+    };
+    auto releaseProducerOnExit = gsl_lite::finally(releaseProducerOnce);
 
-    producerEntered.acquire();
+    producer = std::jthread{[&]
+                            {
+                              auto optTicket = admission.tryAcquire(false);
+                              producerAccepted.store(optTicket.has_value(), std::memory_order_release);
+                              producerEntered.release();
+                              releaseProducer.acquire();
+                            }};
+
+    REQUIRE(producerEntered.try_acquire_for(kWaitTimeout));
     REQUIRE(producerAccepted.load(std::memory_order_acquire));
     REQUIRE(admission.tryBeginClosing());
     CHECK(admission.state() == detail::DispatcherQueueAdmissionState::Closing);
@@ -36,28 +55,28 @@ namespace ao::winui::test
     REQUIRE(optClosingTicket);
     optClosingTicket.reset();
 
-    auto drainFinished = std::binary_semaphore{0};
-    auto drainStarted = std::binary_semaphore{0};
-    bool drainAccepted = false;
-    auto closer = std::jthread{[&]
-                               {
-                                 drainStarted.release();
-                                 drainAccepted = admission.tryBeginDraining();
-                                 drainFinished.release();
-                               }};
+    closer = std::jthread{[&]
+                          {
+                            drainStarted.release();
+                            drainAccepted = admission.tryBeginDraining();
+                            drainFinished.release();
+                          }};
 
-    drainStarted.acquire();
+    REQUIRE(drainStarted.try_acquire_for(kWaitTimeout));
+    auto const deadline = std::chrono::steady_clock::now() + kWaitTimeout;
 
-    while (admission.state() != detail::DispatcherQueueAdmissionState::Draining)
+    while (admission.state() != detail::DispatcherQueueAdmissionState::Draining &&
+           std::chrono::steady_clock::now() < deadline)
     {
       std::this_thread::yield();
     }
 
-    CHECK_FALSE(drainFinished.try_acquire());
+    REQUIRE(admission.state() == detail::DispatcherQueueAdmissionState::Draining);
+    REQUIRE_FALSE(drainFinished.try_acquire());
     CHECK_FALSE(admission.tryAcquire(false));
 
-    releaseProducer.release();
-    drainFinished.acquire();
+    releaseProducerOnce();
+    REQUIRE(drainFinished.try_acquire_for(kWaitTimeout));
     producer.join();
     closer.join();
 
@@ -70,7 +89,7 @@ namespace ao::winui::test
     CHECK_FALSE(admission.tryAcquire(true));
   }
 
-  TEST_CASE("DispatcherQueueAdmission - only live wake rejection is fatal", "[winui][unit][async][regression]")
+  TEST_CASE("DispatcherQueueAdmission - only live wake rejection is fatal", "[winui][unit][async]")
   {
     using detail::DispatcherQueueAdmissionState;
     using detail::DispatcherQueueWakeRejectionDisposition;
@@ -91,8 +110,7 @@ namespace ao::winui::test
     CHECK_FALSE(detail::isTaskAdmissionOpen(DispatcherQueueAdmissionState::Closed, true));
   }
 
-  TEST_CASE("DispatcherQueueAdmission - destruction fallback refuses an active owner callback",
-            "[winui][unit][async][regression]")
+  TEST_CASE("DispatcherQueueAdmission - destruction fallback refuses an active owner callback", "[winui][unit][async]")
   {
     auto admission = detail::DispatcherQueueAdmission{};
     auto optOwnerTicket = admission.tryAcquire(true);

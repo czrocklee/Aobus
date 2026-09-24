@@ -16,6 +16,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -41,36 +42,65 @@ namespace ao::rt::test
   TEST_CASE("SmartListEvaluator - evaluator destruction detaches from sources", "[runtime][unit][source][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto sourcePtr = makeMutableTrackSource({});
+    auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020));
+    auto second = libraryFixture.addTrack(makeSmartListSpec("second", 2021));
+    auto third = libraryFixture.addTrack(makeSmartListSpec("third", 2022));
+    auto sourcePtr = makeMutableTrackSource({first});
     auto enginePtr = std::make_unique<SmartListEvaluator>(libraryFixture.library());
     auto listPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, *enginePtr);
+    listPtr->setExpression("$year >= 2020");
+    listPtr->reload();
+    REQUIRE(sourceTrackIds(*listPtr) == std::vector{first});
 
-    // Destroy engine BEFORE source and list
-    // Note: list won't be able to reload anymore but we just want to hit the destructor
+    auto spy = TrackSourceBatchSpy{*listPtr};
+    sourcePtr->insert(second, 1);
+
+    REQUIRE(spy.batches.size() == 1);
+    CHECK(sourceEditScript(spy.batches.front()) ==
+          delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = 1, .trackIds = {second}}}});
+    CHECK(sourceTrackIds(*listPtr) == std::vector{first, second});
+    spy.clear();
+
     enginePtr.reset();
+    sourcePtr->insert(third, 2);
+
+    CHECK(spy.batches.empty());
+    CHECK(sourceTrackIds(*sourcePtr) == std::vector{first, second, third});
+    CHECK(listPtr->state() == TrackSourceState::Live);
+    CHECK(sourceTrackIds(*listPtr) == std::vector{first, second});
+
     listPtr.reset();
   }
 
   TEST_CASE("SmartListEvaluator - upstream invalidation propagates terminally", "[runtime][unit][source][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto trackId = libraryFixture.addTrack(makeSmartListSpec("matching", 2022));
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto sourcePtr = makeMutableTrackSource({});
+    auto sourcePtr = makeMutableTrackSource({trackId});
     auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    list.setExpression("$year >= 2020");
     list.reload();
+    REQUIRE(sourceTrackIds(list) == std::vector{trackId});
 
     auto batches = std::vector<TrackSourceDelta>{};
-    auto subscription =
-      list.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
+    auto callbackSizes = std::vector<std::size_t>{};
+    auto subscription = list.subscribe(
+      [&](TrackSourceDelta const& batch) noexcept
+      {
+        callbackSizes.push_back(list.size());
+        batches.push_back(batch);
+      });
 
     TrackSourceAccess::invalidate(*sourcePtr);
+    TrackSourceAccess::invalidate(*sourcePtr);
+    sourcePtr->emitReset();
 
     CHECK(list.state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(batches.front()));
-
-    sourcePtr->emitReset();
-    CHECK(batches.size() == 1);
+    CHECK(callbackSizes == std::vector<std::size_t>{0});
+    CHECK(list.size() == 0);
   }
 
   TEST_CASE("SmartListEvaluator - index lookup and source update forwarding work for filtered tracks",
@@ -97,23 +127,17 @@ namespace ao::rt::test
     CHECK(list.indexOf(t2) == std::nullopt);           // Filtered out
     CHECK(list.indexOf(TrackId{999}) == std::nullopt); // Non-existent
 
-    // Test identity-based update lookup through the mutable source fixture.
-    auto spy = TrackSourceBatchSpy{source};
+    auto spy = TrackSourceBatchSpy{list};
 
     source.updateByIdentity(t3);
 
     REQUIRE(spy.batches.size() == 1);
-    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
-    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(spy.batches.front()).edits.front());
-    CHECK(update.start == 2);
-    CHECK(update.trackIds == std::vector{t3});
+    CHECK(sourceEditScript(spy.batches.front()) ==
+          delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = 1, .trackIds = {t3}}}});
 
-    // t2 is not in source's indexOf (wait, it IS in source, just not in list)
-    // Let's call it on a non-existent track
+    // The mutable input source does not publish an update for an absent identity.
     spy.clear();
     source.updateByIdentity(TrackId{999});
-    CHECK(spy.batches.empty()); // Should not notify since it's not in the source
-
-    // Destructor for TrackSource is implicitly covered when MutableTrackSource is destroyed
+    CHECK(spy.batches.empty());
   }
 } // namespace ao::rt::test

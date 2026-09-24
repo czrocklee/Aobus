@@ -50,6 +50,7 @@ namespace ao::rt::test
         result.push_back(trackId);
       }
 
+      std::ranges::sort(result);
       return result;
     }
 
@@ -140,7 +141,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("Source pipeline oracle - mutation storm matches full recomputation after every write",
-            "[runtime][unit][source][oracle]")
+            "[runtime][unit][source]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto initialTrackIds = std::vector<TrackId>{};

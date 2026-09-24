@@ -37,7 +37,9 @@ namespace ao::uimodel::test
     auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "box");
-    CHECK(expanded.children.size() == 2);
+    REQUIRE(expanded.props.contains("spacing"));
+    CHECK(expanded.props.at("spacing").asInt() == 0);
+    REQUIRE(expanded.children.size() == 2);
     CHECK(expanded.children[0].type == "playback.transportButton");
     CHECK(expanded.children[1].type == "playback.soulButton");
   }
@@ -46,38 +48,68 @@ namespace ao::uimodel::test
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "spacer"};
-
     doc.root.type = "template";
-    doc.root.id = "my-override-id";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
 
-    auto const expanded = expandedRoot(doc);
+    SECTION("a use-site id names the original anonymous template root")
+    {
+      doc.root.id = "my-override-id";
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "spacer");
+      CHECK(expanded.id == "my-override-id");
+    }
 
-    CHECK(expanded.type == "spacer");
-    CHECK(expanded.id == "my-override-id");
+    SECTION("an empty use-site id preserves the template id")
+    {
+      doc.templates["my.template"].id = "template-owned-id";
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "spacer");
+      CHECK(expanded.id == "template-owned-id");
+    }
+
+    SECTION("a nonempty use-site id replaces the template id")
+    {
+      doc.templates["my.template"].id = "template-owned-id";
+      doc.root.id = "my-override-id";
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "spacer");
+      CHECK(expanded.id == "my-override-id");
+    }
   }
 
   TEST_CASE("LayoutTemplateExpansion - merges layout property overrides", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] = LayoutNode{.type = "box", .layout = {{"hexpand", LayoutValue{true}}}};
-
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
-    doc.root.layout["vexpand"] = LayoutValue{true};
 
-    auto const expanded = expandedRoot(doc);
+    SECTION("an additional property preserves the original inherited property")
+    {
+      doc.root.layout["vexpand"] = LayoutValue{true};
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "box");
+      CHECK(expanded.layout.at("hexpand").asBool() == true);
+      CHECK(expanded.layout.at("vexpand").asBool() == true);
+    }
 
-    CHECK(expanded.type == "box");
-    CHECK(expanded.layout.at("hexpand").asBool() == true);
-    CHECK(expanded.layout.at("vexpand").asBool() == true);
+    SECTION("a colliding use-site property wins without replacing other values")
+    {
+      doc.templates["my.template"].layout["vexpand"] = LayoutValue{false};
+      doc.root.layout["hexpand"] = LayoutValue{false};
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "box");
+      CHECK(expanded.layout.at("hexpand").asBool() == false);
+      CHECK(expanded.layout.at("vexpand").asBool() == false);
+    }
   }
 
   TEST_CASE("LayoutTemplateExpansion - merges prop overrides except templateId", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
     doc.templates["my.template"] =
-      LayoutNode{.type = "actionButton", .props = {{"text", LayoutValue{std::string{"Original"}}}}};
+      LayoutNode{.type = "actionButton",
+                 .props = {{"text", LayoutValue{std::string{"Original"}}}, {"role", LayoutValue{std::string{"base"}}}}};
 
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
@@ -87,6 +119,7 @@ namespace ao::uimodel::test
     auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.props.at("text").asString() == "Override");
+    CHECK(expanded.props.at("role").asString() == "base");
     CHECK(expanded.props.at("icon").asString() == "emblem-system");
     CHECK_FALSE(expanded.props.contains("templateId"));
   }
@@ -129,19 +162,34 @@ namespace ao::uimodel::test
     auto templateTooltip = LayoutNode{.type = "my.templateTooltip"};
     doc.templates["my.template"] =
       LayoutNode{.type = "actionButton", .optTooltip = BoxedLayoutNode{std::move(templateTooltip)}};
-
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
 
-    auto useSiteTooltip = LayoutNode{.type = "my.useSiteTooltip"};
-    doc.root.optTooltip = BoxedLayoutNode{std::move(useSiteTooltip)};
+    SECTION("a template-owned tooltip is retained and recursively expanded")
+    {
+      doc.templates["inner.tooltip"] = LayoutNode{.type = "spacer"};
+      auto nestedReference =
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"inner.tooltip"}}}}};
+      doc.templates["my.template"].optTooltip = BoxedLayoutNode{std::move(nestedReference)};
 
-    auto const expanded = expandedRoot(doc);
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "actionButton");
+      REQUIRE(expanded.optTooltip);
+      REQUIRE(expanded.optTooltip->nodePtr != nullptr);
+      CHECK(expanded.optTooltip->nodePtr->type == "spacer");
+    }
 
-    CHECK(expanded.type == "actionButton");
-    REQUIRE(expanded.optTooltip);
-    REQUIRE(expanded.optTooltip->nodePtr != nullptr);
-    CHECK(expanded.optTooltip->nodePtr->type == "my.useSiteTooltip");
+    SECTION("a use-site tooltip replaces the template tooltip")
+    {
+      auto useSiteTooltip = LayoutNode{.type = "my.useSiteTooltip"};
+      doc.root.optTooltip = BoxedLayoutNode{std::move(useSiteTooltip)};
+
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "actionButton");
+      REQUIRE(expanded.optTooltip);
+      REQUIRE(expanded.optTooltip->nodePtr != nullptr);
+      CHECK(expanded.optTooltip->nodePtr->type == "my.useSiteTooltip");
+    }
   }
 
   TEST_CASE("LayoutTemplateExpansion - recurses into non-template tooltip", "[uimodel][unit][layout][document]")
@@ -167,11 +215,26 @@ namespace ao::uimodel::test
   {
     auto doc = LayoutDocument{};
     doc.root.type = "template";
-    // No templateId prop
 
-    auto const expanded = expandedRoot(doc);
+    SECTION("absent")
+    {
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Missing templateId");
+    }
 
-    CHECK(expanded.type == "[TemplateError] Missing templateId");
+    SECTION("empty string")
+    {
+      doc.root.props["templateId"] = LayoutValue{std::string{}};
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Missing templateId");
+    }
+
+    SECTION("wrong value alternative")
+    {
+      doc.root.props["templateId"] = LayoutValue{std::int64_t{42}};
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Missing templateId");
+    }
   }
 
   TEST_CASE("LayoutTemplateExpansion - returns an error node for unknown template id",
@@ -181,23 +244,50 @@ namespace ao::uimodel::test
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"nonexistent"}};
 
-    auto const expanded = expandedRoot(doc);
+    SECTION("anonymous reference preserves the historical diagnostic")
+    {
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Unknown template: nonexistent");
+      CHECK(expanded.id.empty());
+    }
 
-    CHECK(expanded.type == "[TemplateError] Unknown template: nonexistent");
+    SECTION("identified reference preserves its authored id")
+    {
+      doc.root.id = "unknown-slot";
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Unknown template: nonexistent");
+      CHECK(expanded.id == "unknown-slot");
+    }
   }
 
   TEST_CASE("LayoutTemplateExpansion - returns an error node for recursive template loops",
             "[uimodel][unit][layout][document]")
   {
-    auto doc = LayoutDocument{};
-    doc.templates["selfRef"] =
-      LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"selfRef"}}}}};
+    SECTION("anonymous direct self-reference preserves the historical diagnostic")
+    {
+      auto doc = LayoutDocument{};
+      doc.templates["selfRef"] =
+        LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"selfRef"}}}}};
+      doc.root.type = "template";
+      doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
-    doc.root.type = "template";
-    doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Recursive template loop: selfRef -> selfRef");
+      CHECK(expanded.id.empty());
+    }
 
-    auto const expanded = expandedRoot(doc);
+    SECTION("identified nested cycle preserves the id on the failing edge")
+    {
+      auto doc = LayoutDocument{};
+      doc.templates["a"] = LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"b"}}}}};
+      doc.templates["b"] = LayoutNode{
+        .id = "nested-cycle-edge", .type = "template", .props = {{"templateId", LayoutValue{std::string{"a"}}}}};
+      doc.root.type = "template";
+      doc.root.props["templateId"] = LayoutValue{std::string{"a"}};
 
-    CHECK(expanded.type == "[TemplateError] Recursive template loop: selfRef -> selfRef");
+      auto const expanded = expandedRoot(doc);
+      CHECK(expanded.type == "[TemplateError] Recursive template loop: a -> b -> a");
+      CHECK(expanded.id == "nested-cycle-edge");
+    }
   }
 } // namespace ao::uimodel::test

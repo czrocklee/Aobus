@@ -10,6 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <semaphore>
@@ -90,14 +91,18 @@ namespace ao::audio::backend::detail::test
     CHECK(callsA == 2);
     CHECK(callsB == 1);
 
+    registry.publish({.routeAnchor = "endpoint-b", .volume = 0.5F});
+    CHECK(callsA == 2);
+    CHECK(callsB == 2);
+
     subA.reset();
     registry.publish({.routeAnchor = "endpoint-a", .volume = 0.75F});
     CHECK(callsA == 2);
-    CHECK(callsB == 1);
+    CHECK(callsB == 2);
   }
 
   TEST_CASE("WasapiGraphRegistry - cancellation removes a callback already copied for publication",
-            "[audio][regression][wasapi][graph]")
+            "[audio][unit][wasapi][graph][concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     bool cancelSecond = false;
@@ -141,23 +146,51 @@ namespace ao::audio::backend::detail::test
     CHECK(received.nodes[1].isMuted);
   }
 
-  TEST_CASE("WasapiGraphRegistry - initial callback may publish reentrantly", "[audio][regression][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - initial callback may publish reentrantly", "[audio][unit][wasapi][graph]")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t callCount = 0;
+    std::int32_t callbackDepth = 0;
+    std::int32_t maximumDepth = 0;
+    auto received = std::vector<flow::Graph>{};
 
     auto sub = registry.subscribe("endpoint-a",
-                                  [&](flow::Graph const&)
+                                  [&](flow::Graph const& graph)
                                   {
+                                    ++callbackDepth;
+                                    maximumDepth = std::max(maximumDepth, callbackDepth);
                                     ++callCount;
+                                    received.push_back(graph);
 
                                     if (callCount == 1)
                                     {
                                       registry.publish({.routeAnchor = "endpoint-a", .volume = 0.5F});
                                     }
+
+                                    --callbackDepth;
                                   });
 
     CHECK(callCount == 2);
+    CHECK(maximumDepth == 1);
+    REQUIRE(received.size() == 2);
+
+    for (auto const& graph : received)
+    {
+      REQUIRE(graph.nodes.size() == 2);
+      CHECK(graph.nodes[0].id == "wasapi-stream");
+      CHECK(graph.nodes[1].id == "wasapi-sink");
+      CHECK(graph.nodes[1].name == "endpoint-a");
+      CHECK(graph.nodes[1].objectPath == "endpoint-a");
+      REQUIRE(graph.connections.size() == 1);
+      CHECK(graph.connections[0].sourceId == "wasapi-stream");
+      CHECK(graph.connections[0].destinationId == "wasapi-sink");
+      CHECK(graph.connections[0].isActive);
+    }
+
+    CHECK_FALSE(received[0].nodes[1].softwareVolumeNotUnity);
+    CHECK(received[1].nodes[1].softwareVolumeNotUnity);
+    CHECK(received[1].nodes[1].minSoftwareGain == 0.5F);
+    CHECK(received[1].nodes[1].maxSoftwareGain == 0.5F);
   }
 
   TEST_CASE("WasapiGraphRegistry - clear removes state and emits an empty graph", "[audio][unit][wasapi][graph]")
@@ -175,7 +208,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("WasapiGraphRegistry - shutdown clears routes and rejects later publications",
-            "[audio][regression][wasapi][graph]")
+            "[audio][unit][wasapi][graph]")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -204,7 +237,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("WasapiGraphRegistry - shutdown from initial callback emits one empty graph",
-            "[audio][regression][wasapi][graph]")
+            "[audio][unit][wasapi][graph][concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t initialCalls = 0;
@@ -236,7 +269,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("WasapiGraphRegistry - shutdown callback may cancel a later shutdown delivery",
-            "[audio][regression][wasapi][graph]")
+            "[audio][unit][wasapi][graph][concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t secondShutdownCalls = 0;
@@ -264,7 +297,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("WasapiGraphRegistry - subscription blocked behind callback delivery loses to shutdown",
-            "[audio][regression][wasapi][graph]")
+            "[audio][unit][wasapi][graph][concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     auto startSubscription = std::binary_semaphore{0};

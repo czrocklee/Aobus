@@ -89,9 +89,6 @@ Storage failures are not translated into source invalidation; an exception escap
 the owning source-signal boundary.
 Internal delta and mirror violations require fail-fast contracts rather than a recovery reset.
 
-**Current implementation discrepancy:** `TrackListProjection::Impl` retains rebuild/reset fallbacks when incremental maintenance, derived edit-script replay, or public-range validation fails.
-These branches in `tryApplyIncrementalBatch`, `publishSortedSourceBatch`, and `handleSourceBatch` do not establish the fail-fast guarantee for every internal divergence. Their reachability and treatment need a code/contract resolution; they are not permission for producers to publish malformed deltas.
-
 Projection delivery is synchronous on the callback side.
 A lease pins the source identity until the projection releases it, and the projection subscription releases before its source owner.
 
@@ -104,6 +101,7 @@ A lease pins the source identity until the projection releases it, and the proje
 ## Test map
 
 Track-list projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection) prove lifecycle, sequential deltas, sorting, grouping, incremental equivalence, arena rebase, mutation behavior, and scale behavior.
+The source-order mismatch case in [`RuntimeFatalProbeTest.cpp`](../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that an inconsistent source batch terminates rather than publishing a recovery reset.
 
 ## Related documents
 

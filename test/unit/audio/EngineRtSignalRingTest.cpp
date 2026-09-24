@@ -15,6 +15,7 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -122,9 +123,12 @@ namespace ao::audio::test
 
     auto signal = ProbeSignal{};
     REQUIRE(ring.tryPop(signal));
+    CHECK(signal.kind == ProbeSignalKind::Spliced);
     CHECK(signal.sequence == 1);
     REQUIRE(ring.tryPop(signal));
+    CHECK(signal.kind == ProbeSignalKind::Drained);
     CHECK(signal.sequence == 2);
+    CHECK_FALSE(ring.tryPop(signal));
   }
 
   TEST_CASE("Engine render path - sequential splices never accumulate two splice signals",
@@ -144,6 +148,7 @@ namespace ao::audio::test
     std::size_t pendingSignals = 0;
     std::size_t maximumPendingSignals = 0;
     std::size_t spliceCount = 0;
+    bool lookaheadClearedBeforePromotion = true;
 
     auto output = std::array<std::byte, 6>{};
     auto const result = detail::renderPcm(
@@ -175,6 +180,7 @@ namespace ao::audio::test
 
         if (signaledNode != nullptr)
         {
+          lookaheadClearedBeforePromotion = lookaheadClearedBeforePromotion && timeline.lookaheadNode() == nullptr;
           [[maybe_unused]] auto retiredNodePtr = timeline.promoteSplicedLookahead(signaledNode);
           --pendingSignals;
           ++spliceCount;
@@ -193,6 +199,7 @@ namespace ao::audio::test
       output ==
       std::array{std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}, std::byte{0x31}, std::byte{0x32}});
     CHECK(spliceCount == 2);
+    CHECK(lookaheadClearedBeforePromotion);
     CHECK(maximumPendingSignals == 1);
     CHECK(pendingSignals == 0);
   }
@@ -216,6 +223,51 @@ namespace ao::audio::test
     auto* const disarmed = timeline.disarmLookahead();
     REQUIRE(disarmed == node);
     timeline.dropDisarmedLookahead(disarmed);
+
+    // Exercise the Engine consumer as well as the independent timeline owner.
+    auto eventWorkerEntered = std::binary_semaphore{0};
+    auto holdEventWorker = std::binary_semaphore{0};
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto engine = Engine{
+      std::move(backendPtr),
+      makeEngineTestDevice(),
+      makePathScriptedDecoderFactory({
+        {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = {std::byte{0x11}, std::byte{0x12}}},
+        {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = {std::byte{0x21}, std::byte{0x22}}},
+      })};
+    auto releaseWorker = utility::ScopedRegistration{[&] { holdEventWorker.release(); }};
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+    engine.defer(
+      [&]
+      {
+        eventWorkerEntered.release();
+        holdEventWorker.acquire();
+      });
+    REQUIRE(eventWorkerEntered.try_acquire_for(std::chrono::seconds{5}));
+
+    auto output = std::array<std::byte, 2>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(output == std::array{std::byte{0x11}, std::byte{0x12}});
+    auto const drainedResult = target->renderPcm(output);
+    REQUIRE(drainedResult.drained);
+    CHECK(drainedResult.bytesWritten == 0);
+    backend->emitDrainComplete();
+
+    // setNext must settle the pending drain, not reject an otherwise empty owner.
+    auto const nextItem = makePlaybackItem(PlaybackInput{.filePath = "second.flac"});
+    auto const nextRes = engine.setNext(nextItem);
+    REQUIRE(nextRes);
+    CHECK(nextRes->itemId == nextItem.id);
+    auto const optClearedItemId = engine.clearNext();
+    REQUIRE(optClearedItemId);
+    CHECK(*optClearedItemId == nextItem.id);
+
+    releaseWorker.reset();
+    engine.shutdown();
   }
 
   TEST_CASE("Engine event queue - settled destruction state satisfies every invariant", "[audio][unit][engine]")
@@ -224,8 +276,13 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine RT signal ring - blocked consumer accepts the legal splice-drain full sequence",
-            "[audio][integration][engine][concurrency]")
+            "[audio][unit][engine][concurrency]")
   {
+    auto callbacks = std::vector<std::string_view>{};
+    callbacks.reserve(2);
+    auto ended = CallbackLatch{};
+    auto eventWorkerEntered = std::binary_semaphore{0};
+    auto holdEventWorker = std::binary_semaphore{0};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
@@ -237,9 +294,7 @@ namespace ao::audio::test
         {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = {std::byte{0x21}, std::byte{0x22}}},
       })};
 
-    auto callbacks = std::vector<std::string_view>{};
-    callbacks.reserve(2);
-    auto ended = CallbackLatch{};
+    auto releaseWorker = utility::ScopedRegistration{[&] { holdEventWorker.release(); }};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { callbacks.emplace_back("advanced"); });
     engine.setOnTrackEnded(
       [&](Engine::TrackEnded const&)
@@ -253,28 +308,28 @@ namespace ao::audio::test
     auto* const target = backend->target();
     REQUIRE(target != nullptr);
 
-    auto eventWorkerEntered = std::binary_semaphore{0};
-    auto holdEventWorker = std::binary_semaphore{0};
     engine.defer(
       [&]
       {
         eventWorkerEntered.release();
         holdEventWorker.acquire();
       });
-    eventWorkerEntered.acquire();
+    REQUIRE(eventWorkerEntered.try_acquire_for(std::chrono::seconds{5}));
 
     auto combinedOutput = std::array<std::byte, 4>{};
     auto const combinedResult = target->renderPcm(combinedOutput);
     auto drainedOutput = std::array<std::byte, 2>{};
     auto const drainedResult = target->renderPcm(drainedOutput);
     backend->emitDrainComplete();
-    holdEventWorker.release();
+    releaseWorker.reset();
 
     CHECK(combinedResult.bytesWritten == combinedOutput.size());
+    CHECK(combinedOutput == std::array{std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}});
     CHECK_FALSE(combinedResult.drained);
     CHECK(drainedResult.bytesWritten == 0);
     CHECK(drainedResult.drained);
     REQUIRE(ended.tryWaitForCount(1));
+    engine.shutdown();
     REQUIRE(callbacks.size() == 2);
     CHECK(callbacks[0] == "advanced");
     CHECK(callbacks[1] == "ended");

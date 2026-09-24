@@ -11,6 +11,7 @@
 
 #include <gdk/gdk.h>
 #include <glibmm/main.h>
+#include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollerscroll.h>
@@ -41,7 +42,8 @@ namespace ao::gtk
   } // namespace
 
   VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
-    : _volumeViewModel{playback, textCatalog, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
+    : _scale{Gtk::Adjustment::create(0.0, 0.0, 1.0), Gtk::Orientation::VERTICAL}
+    , _volumeViewModel{playback, textCatalog, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);
@@ -112,7 +114,6 @@ namespace ao::gtk
     _valueLabel.set_halign(Gtk::Align::CENTER);
     vbox->append(_valueLabel);
 
-    _scale.set_range(0.0, 1.0);
     constexpr double kScaleStepIncrement = 0.02;
     constexpr double kScalePageIncrement = 0.1;
     constexpr int kScaleHeight = 160;

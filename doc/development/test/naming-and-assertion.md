@@ -8,7 +8,7 @@ id: development.test.naming-and-assertion
 Prefer:
 
 ```cpp
-TEST_CASE("Component - behavior under condition", "[layer][type][component]")
+TEST_CASE("Component - behavior under condition", "[layer][scope][component]")
 ```
 
 Function-level tests may use:
@@ -27,95 +27,54 @@ TEST_CASE("ActivityStatusFeedProjection - pinned info remains in detail after co
           "[uimodel][unit][activity-status]")
 
 TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation",
-          "[gtk][unit][track-presentation]")
+          "[gtk][integration][track-presentation]")
 
 TEST_CASE("TrackFieldGrid - collapsed metadata keeps custom rows hidden",
-          "[gtk][regression][track-field-grid]")
+          "[gtk][unit][track-field-grid]")
 ```
 
 Avoid vague names such as `"ActionRegistry"`, `"Library Export/Import Cycle"`, or `"Simple Equal Match"` for new tests. Legacy tests may exist; do not copy weak naming.
 
 ## Tags
 
-Use tags that identify layer, test type, and component/domain.
+Every case starts with `[layer][scope][component]`:
 
-The testing layers from `layer-selection.md` map to first tags like this:
+- **Layer** is the testing layer from [layer selection](layer-selection.md):
+  the owning module for `lib` tests (`[core]`, `[library]`, `[query]`, `[audio]`,
+  `[media]`, `[lmdb]`, or `[utility]`), otherwise `[runtime]`, `[uimodel]`,
+  `[gtk]`, `[winui]`, `[tui]`, `[cli]`, or `[perf]`.
+- **Scope** is exactly one of `[unit]` or `[integration]`; see
+  [scope and metadata](layer-selection.md#scope-and-independent-metadata).
+- **Component** names the domain, such as `[track-store]`, `[serializer]`, or
+  `[import-export]`. A scope, descriptive, or hidden tag cannot stand in for it.
 
-| Testing layer | First tag |
-|---|---|
-| `lib` | The owning module: `[core]`, `[library]`, `[query]`, `[audio]`, `[media]`, `[lmdb]`, or `[utility]` |
-| `runtime` | `[runtime]` |
-| `uimodel` | `[uimodel]` |
-| `linux-gtk` | `[gtk]` |
-| WinUI frontend | `[winui]` |
-| TUI frontend | `[tui]` |
-| CLI frontend | `[cli]` |
-| performance baselines (`test/perf/`) | `[perf]` |
+Further tags are optional and need a real selection use:
 
-Recommended layer tags:
+- Descriptive markers such as `[regression]`, `[workflow]`, or `[smoke]` are
+  retired: they select nothing, and the test name states the protected behavior.
+- `[concurrency]` marks the contracts in
+  [concurrency and sanitizer validation](concurrency-and-sanitizer.md) and
+  selects the `--concurrency` gate.
+- `[async]` marks owner-thread asynchronous ordering and lifetime contracts
+  from the same document; it is also the component of the async runtime's own
+  tests.
+- `[stress]` marks deliberate repetition and requires `[concurrency]`.
+- A hidden tag such as `[.manual]` opts out of automatic runs. Reserve it for
+  real hardware or deliberate manual execution; `[integration]` does not imply it.
 
-- `[core]`
-- `[library]`
-- `[query]`
-- `[runtime]`
-- `[uimodel]`
-- `[gtk]`
-- `[winui]`
-- `[audio]`
-- `[utility]`
-- `[cli]`
-- `[lmdb]`
-- `[media]`
-- `[perf]`
-- `[tui]`
+```cpp
+"[runtime][unit][async][concurrency][stress]"
+"[runtime][integration][import-export][yaml]"
+```
 
-Recommended type tags:
+Use singular kebab-case names (`[track-store]`, `[preference]`), but keep proper
+names and literal identifiers such as `[windows]` or the CLI `[stats]` command.
+Avoid duplicate and synonymous tags.
 
-- `[unit]`
-- `[workflow]`
-- `[integration]`
-- `[regression]`
-- `[smoke]`
-
-Recommended component/domain tags:
-
-- `[tag]`
-- `[notification]`
-- `[activity-status]`
-- `[track-store]`
-- `[serializer]`
-- `[plan-evaluator]`
-- `[import-export]`
-
-Cross-cutting behavior tags:
-
-- `[concurrency]` for cross-thread access, synchronization, executor affinity,
-  cancellation races, or teardown while work is in flight.
-- `[stress]` only for deliberate repetition or schedule exploration. Pair it
-  with `[concurrency]`; stress is an execution strategy, not a behavior domain.
-
-Tag ordering: `[layer][type][subsystem]`. The layer tag is always first, the type
-tag second, and optional subsystem tags follow. Keep the total at 3–4 tags. The
-only five-tag form is `[layer][type][component][concurrency][stress]`, which
-preserves the component while identifying a repeated race window. Put
-`[concurrency]` last, or immediately before `[stress]`, when present. See
-[concurrency and sanitizer validation](concurrency-and-sanitizer.md) for the required contract matrix.
-
-Use singular form for all tags: `[component]` not `[components]`, `[shortcut]`
-not `[shortcuts]`.
-
-Use kebab case for multi-word tags: `[track-store]` not `[track_store]` or
-`[trackstore]`.
-
-Catch2 opt-in integration drivers may use a hidden final tag with a leading
-dot, such as `[.manual]`. The tag body must still use kebab case. Reserve hidden
-tags for tests that require real hardware or deliberate manual execution; do
-not hide ordinary unit or regression coverage.
-
-Use the advisory audit when reviewing naming/tag cleanup or checking a focused
-directory. The current auditor also accepts `tag` as a first-position layer,
-although this guide treats it as a component tag; a clean audit does not prove
-that distinction was respected.
+`./ao test-audit` checks the prefix, the single scope, spelling, duplicates,
+`[stress]` pairing, and retired tags; `./ao hygiene` enforces it for changed test files. It cannot
+judge whether the chosen scope matches the contract, and it also accepts `tag`
+as a layer.
 
 ```bash
 ./ao test-audit test/unit/query

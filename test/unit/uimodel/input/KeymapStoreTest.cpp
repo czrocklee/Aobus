@@ -36,36 +36,51 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("loadKeymap returns defaults when the config group is absent", "[uimodel][unit][input][keymapstore]")
+  TEST_CASE("loadKeymap returns defaults when the config group is absent", "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto store = rt::ConfigStore{tempDir.path() / "config.yaml"};
 
     auto const keymap = loadKeymap(store, sampleDefaults());
-    CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
+    CHECK(keymap.bindings() == sampleDefaults());
   }
 
-  TEST_CASE("saveKeymap then loadKeymap round-trips a customization", "[uimodel][unit][input][keymapstore]")
+  TEST_CASE("saveKeymap then loadKeymap round-trips a customization", "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
 
+    auto overrides = KeymapOverrides{};
+    auto expectedChords = std::vector<KeyChord>{};
+
+    SECTION("nonempty customization")
+    {
+      overrides["playback.next"] = {"Ctrl+N", "Media:Next"};
+      expectedChords = {chord("Ctrl+N"), chord("Media:Next")};
+    }
+
+    SECTION("explicit empty override remains unbound after reload")
+    {
+      overrides["playback.next"] = {};
+    }
+
     {
       auto store = rt::ConfigStore{configPath};
       auto keymap = KeymapModel{sampleDefaults()};
-      keymap.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N", "Media:Next"}}});
+      keymap.applyOverrides(overrides);
+      REQUIRE(keymap.chordsFor("playback.next") == expectedChords);
       REQUIRE(saveKeymap(store, keymap));
     }
 
     auto store = rt::ConfigStore{configPath};
     auto const reloaded = loadKeymap(store, sampleDefaults());
 
-    CHECK(reloaded.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N"), chord("Media:Next")});
+    CHECK(reloaded.chordsFor("playback.next") == expectedChords);
     // Unmodified action still resolves to its default.
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 
-  TEST_CASE("saveKeymap only persists deltas from defaults", "[uimodel][unit][input][keymapstore]")
+  TEST_CASE("saveKeymap only persists deltas from defaults", "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -82,7 +97,7 @@ namespace ao::uimodel::test
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+Shift+P")});
   }
 
-  TEST_CASE("saveKeymap rejects an empty action id", "[uimodel][unit][input][keymapstore]")
+  TEST_CASE("saveKeymap rejects an empty action id", "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -97,17 +112,19 @@ namespace ao::uimodel::test
     CHECK_FALSE(std::filesystem::exists(configPath));
   }
 
-  TEST_CASE("loadKeymap rejects malformed YAML as one candidate", "[uimodel][unit][input][keymapstore]")
+  TEST_CASE("loadKeymap rejects malformed YAML as one candidate", "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
     auto output = std::ofstream{configPath};
+    REQUIRE(output.is_open());
     output << "shortcuts:\n"
               "  playback.playPause:\n"
               "    - Ctrl+Shift+P\n"
               "  playback.next:\n"
               "    - nested: invalid\n";
     output.close();
+    REQUIRE(output.good());
 
     auto store = rt::ConfigStore{configPath};
     auto const keymap = loadKeymap(store, sampleDefaults());
@@ -117,16 +134,18 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("loadKeymap preserves dynamic action ids and skips invalid chord strings semantically",
-            "[uimodel][unit][input][keymapstore]")
+            "[uimodel][unit][input][keymap-store]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
     auto output = std::ofstream{configPath};
+    REQUIRE(output.is_open());
     output << "shortcuts:\n"
               "  plugin.futureAction:\n"
               "    - Ctrl+F\n"
               "    - Ctrl+\n";
     output.close();
+    REQUIRE(output.good());
 
     auto store = rt::ConfigStore{configPath};
     auto const keymap = loadKeymap(store, sampleDefaults());

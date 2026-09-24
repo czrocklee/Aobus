@@ -51,8 +51,8 @@ namespace ao::gtk::layout
                                       rt::PlaybackService& playback,
                                       i18n::MessageCatalog const& textCatalog)
   {
-    // GTK can stand the slider on end, which no other shell offers yet, and
-    // which the schema entry has to admit for a document to reach the code below.
+    // Keep the GTK orientation extension admissible in documents. The modern
+    // control preserves its vertical popover scale for either authored value.
     registry.registerSharedComponent("playback.volumeControl",
                                      {.properties = {{.name = std::string{kOrientationProp},
                                                       .kind = PropertyKind::Enum,

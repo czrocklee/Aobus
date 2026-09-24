@@ -98,10 +98,10 @@ namespace ao::lmdb::test
   {
     auto temp = ao::test::TempDir{};
     auto envRes = Environment::open(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-    CHECK(envRes);
+    REQUIRE(envRes);
 
     auto txnRes = WriteTransaction::begin(*envRes);
-    CHECK(txnRes);
+    REQUIRE(txnRes);
   }
 
   TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")

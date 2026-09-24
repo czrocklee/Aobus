@@ -71,7 +71,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("TrackListProjection - equal keys follow source order across every update path",
-            "[runtime][regression][projection][incremental]")
+            "[runtime][unit][projection][incremental]")
   {
     auto fixture = MusicLibraryFixture{};
     auto const first = fixture.addTrack(library::test::makeTrackSpec("First", 2020));
@@ -118,7 +118,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackListProjection - incremental batches match a fresh full rebuild",
-            "[runtime][regression][projection][incremental]")
+            "[runtime][unit][projection][incremental]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackIds = std::vector<TrackId>{};
@@ -221,7 +221,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackListProjection - incremental article rename matches a full rebuild",
-            "[runtime][regression][projection][incremental]")
+            "[runtime][unit][projection][incremental]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const doorsA = libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Doors"});

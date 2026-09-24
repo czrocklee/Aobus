@@ -21,7 +21,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("PanelDivider - separate borders preserve padding and one-cell toggle targets", "[tui][regression][render]")
+  TEST_CASE("PanelDivider - separate borders preserve padding and one-cell toggle targets", "[tui][unit][render]")
   {
     using namespace ftxui;
 
@@ -97,6 +97,8 @@ namespace ao::tui::test
           CHECK(hits.hitTestButton(hits.detailDividerBox.x_min, 2, {.isOverlayActive = true}).hoveredButton ==
                 HoveredButton::None);
           hits.clearFrameLocalRows();
+          CHECK(hits.navigationPinBox.IsEmpty());
+          CHECK(hits.detailToggleBox.IsEmpty());
           CHECK(hits.navigationDividerBox.IsEmpty());
           CHECK(hits.detailDividerBox.IsEmpty());
         }
@@ -104,7 +106,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PanelDivider - docking budgets include each separate border", "[tui][unit][navigation]")
+  TEST_CASE("PanelDivider - docking budgets include each separate border", "[tui][unit][render][navigation]")
   {
     CHECK(navigationGeometry(100, 0, true).docked);
     CHECK_FALSE(navigationGeometry(100, 0, true, true).docked);
@@ -119,8 +121,7 @@ namespace ao::tui::test
     CHECK(navigationGeometry(146, 45, false, true).trackColumns == 98);
   }
 
-  TEST_CASE("PanelDivider - hover-only arrows restore border strokes without changing targets",
-            "[tui][regression][render]")
+  TEST_CASE("PanelDivider - hover-only arrows restore border strokes without changing targets", "[tui][unit][render]")
   {
     using namespace ftxui;
 
@@ -167,7 +168,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelDivider - concealed collapsed arrows remain discoverable from their side borders",
-            "[tui][regression][mouse]")
+            "[tui][unit][render][mouse]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -223,7 +224,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PanelDivider - hovering a divider does not make its whole line a collapse target",
-            "[tui][regression][mouse]")
+            "[tui][unit][render][mouse]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -262,6 +263,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isDetailVisible());
     REQUIRE(mouse(120, 8, true));
     CHECK_FALSE(fixture.shell.isDetailVisible());
+    CHECK(fixture.hitRegions.detailToggleBox.IsEmpty());
     CHECK(fixture.hitRegions.detailDividerBox.IsEmpty());
     REQUIRE(mouse(25, 8, true));
     CHECK_FALSE(fixture.shell.isNavigationPinned());

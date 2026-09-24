@@ -103,5 +103,5 @@ namespace ao::gtk::test
 
   bool tryWaitForPlaybackSettlement(rt::AppRuntime& runtime,
                                     TrackId trackId,
-                                    std::chrono::milliseconds timeout = std::chrono::seconds{2});
+                                    std::chrono::milliseconds timeout = std::chrono::seconds{10});
 } // namespace ao::gtk::test

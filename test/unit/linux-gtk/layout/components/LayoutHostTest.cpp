@@ -56,7 +56,8 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("LayoutHost - rebuilds widget trees after layout updates", "[gtk][unit][layout][container]")
+  TEST_CASE("LayoutHost - commit replaces widget trees and fences stale state writes",
+            "[gtk][unit][layout][container][async]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -79,6 +80,8 @@ namespace ao::gtk::layout::test
                                   .buildSnapshot = std::move(buildSnapshot)};
 
     auto host = LayoutHost{registry};
+    // LayoutHost does not own LayoutSession advancement. This lower-level
+    // fixture deliberately models the caller-owned apply-before-commit order.
     auto install = [&](LayoutDocument const& document)
     {
       auto componentState = session.componentState();
@@ -216,8 +219,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutHost - shared track stack handoff is atomic across layout replacement",
-            "[gtk][unit][layout][lifetime]")
+  TEST_CASE("LayoutHost - shared track stack handoff is atomic across layout replacement", "[gtk][unit][layout]")
   {
     [[maybe_unused]] auto const appPtr = Gtk::Application::create("io.github.aobus.layout_handoff_test");
     auto runtimeFixture = ao::gtk::test::GtkRuntimeFixture{};

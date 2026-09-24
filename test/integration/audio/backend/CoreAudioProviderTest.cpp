@@ -138,6 +138,11 @@ namespace ao::audio::backend::test
       SKIP("macOS host has no live Core Audio output device");
     }
 
+    for (auto const& device : status.devices)
+    {
+      CHECK(std::ranges::count(status.devices, device.id, &Device::id) == 1);
+    }
+
     auto const defaultCount = std::ranges::count(status.devices, true, &Device::isDefault);
     CHECK(defaultCount <= 1);
 

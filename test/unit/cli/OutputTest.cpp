@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <sstream>
@@ -64,15 +65,34 @@ namespace ao::cli::test
   TEST_CASE("Output - emitDocument writes reflected JSON documents", "[cli][unit][output]")
   {
     auto os = std::ostringstream{};
-    emitDocument(os, OutputFormat::Json, EmitReportDto{.name = "beta", .count = 3, .ok = true, .ids = {5}});
+    emitDocument(os, OutputFormat::Json, EmitReportDto{.name = "be\"ta", .count = 3, .ok = true, .ids = {5}});
 
     REQUIRE_FALSE(os.str().empty());
     CHECK(os.str().back() == '\n');
 
     auto tree = parseYaml(os.str());
-    CHECK(yaml::scalarView(tree.rootref()["name"]) == "beta");
+    CHECK(yaml::scalarView(tree.rootref()["name"]) == "be\"ta");
     CHECK(yaml::scalarView(tree.rootref()["count"]) == "3");
     CHECK(yaml::scalarView(tree.rootref()["ids"][0]) == "5");
+
+    // Match this fixture's complete JSON lexemes; whitespace is legal only between them.
+    auto const emitted = os.str();
+    auto remaining = std::string_view{emitted};
+    auto const tokens = std::to_array<std::string_view>({
+      "{", R"("name")", ":", R"("be\"ta")", ",", R"("count")", ":", "3", ",", R"("ok")",
+      ":", "true",      ",", R"("ids")",    ":", "[",          "5", "]", "}",
+    });
+
+    for (auto const token : tokens)
+    {
+      auto const whitespace = remaining.find_first_not_of(" \t\r\n");
+      REQUIRE(whitespace != std::string_view::npos);
+      remaining.remove_prefix(whitespace);
+      REQUIRE(remaining.starts_with(token));
+      remaining.remove_prefix(token.size());
+    }
+
+    CHECK(remaining.find_first_not_of(" \t\r\n") == std::string_view::npos);
   }
 
   TEST_CASE("Output - emitDocument skips plain output", "[cli][unit][output]")

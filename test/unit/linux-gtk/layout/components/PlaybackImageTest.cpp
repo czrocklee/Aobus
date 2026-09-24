@@ -32,11 +32,11 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
-#include <ao/utility/ScopedRegistration.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -149,7 +149,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][unit][image]")
+  TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][integration][image]")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto mutableCoverTrackId = kInvalidTrackId;
@@ -396,7 +396,7 @@ namespace ao::gtk::layout::test
       REQUIRE(tooltipButton != nullptr);
 
       fixture.window().set_child(*button);
-      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      auto const windowDetach = gsl_lite::finally([&fixture] { fixture.window().unset_child(); });
       fixture.window().present();
       ao::gtk::test::drainGtkEvents();
 
@@ -476,7 +476,7 @@ namespace ao::gtk::layout::test
       REQUIRE(tooltipButton != nullptr);
 
       fixture.window().set_child(*button);
-      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      auto const windowDetach = gsl_lite::finally([&fixture] { fixture.window().unset_child(); });
       fixture.window().present();
       ao::gtk::test::drainGtkEvents();
 
@@ -529,7 +529,7 @@ namespace ao::gtk::layout::test
       REQUIRE(tooltipButton != nullptr);
 
       fixture.window().set_child(*button);
-      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      auto const windowDetach = gsl_lite::finally([&fixture] { fixture.window().unset_child(); });
       fixture.window().present();
       ao::gtk::test::drainGtkEvents();
 
@@ -686,7 +686,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ComponentTooltipController - copies only popover shell classes", "[gtk][unit][layout][component]")
+  TEST_CASE("ComponentTooltipController - copies only popover shell classes", "[gtk][unit][layout-component]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_test");
 
@@ -705,8 +705,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(popover->has_css_class("ao-opacity-80"));
   }
 
-  TEST_CASE("ComponentTooltipController - detaches target controller on destruction",
-            "[gtk][unit][layout-component][regression]")
+  TEST_CASE("ComponentTooltipController - detaches target controller on destruction", "[gtk][unit][layout-component]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_lifecycle_test");
 

@@ -4,6 +4,7 @@
 #include <ao/Contract.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <atomic>
@@ -11,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <thread>
+#include <tuple>
 
 namespace ao::test
 {
@@ -70,6 +72,8 @@ namespace ao::test
   TEST_CASE("Fatal - sink registration preserves exact ownership", "[utility][unit][fatal]")
   {
     REQUIRE(tryRegisterFatalSink(&tryAcceptFirstFatal));
+    [[maybe_unused]] auto registration =
+      gsl_lite::finally([] { std::ignore = tryUnregisterFatalSink(&tryAcceptFirstFatal); });
     CHECK_FALSE(tryRegisterFatalSink(&tryAcceptSecondFatal));
     CHECK_FALSE(tryUnregisterFatalSink(&tryAcceptSecondFatal));
     CHECK(tryUnregisterFatalSink(&tryAcceptFirstFatal));
@@ -102,6 +106,19 @@ namespace ao::test
 
     auto const firstRegistered = results[0].load(std::memory_order_relaxed);
     auto const secondRegistered = results[1].load(std::memory_order_relaxed);
+    [[maybe_unused]] auto registration = gsl_lite::finally(
+      [firstRegistered, secondRegistered]
+      {
+        if (firstRegistered)
+        {
+          std::ignore = tryUnregisterFatalSink(&tryAcceptFirstFatal);
+        }
+
+        if (secondRegistered)
+        {
+          std::ignore = tryUnregisterFatalSink(&tryAcceptSecondFatal);
+        }
+      });
     CHECK(firstRegistered != secondRegistered);
 
     if (firstRegistered)

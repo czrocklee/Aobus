@@ -20,6 +20,7 @@
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -29,7 +30,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][status][activity]")
+  TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][activity-status]")
   {
     auto executor = rt::test::InlineExecutor{};
     auto sleeper = rt::test::ControlledSleeper{};
@@ -175,7 +176,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("ActivityStatusViewModel - accepted history eviction projects one bounded snapshot",
-            "[uimodel][unit][status][activity]")
+            "[uimodel][unit][activity-status]")
   {
     auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor, 1};
@@ -213,15 +214,22 @@ namespace ao::uimodel::test
     CHECK(notifications.feed().entries.front().id == secondId);
   }
 
-  TEST_CASE("ActivityStatusViewModel - projects events from LibraryJobs", "[uimodel][regression][status][activity]")
+  TEST_CASE("ActivityStatusViewModel - projects events from LibraryJobs", "[uimodel][unit][activity-status]")
   {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
     auto notifications = rt::NotificationService{runtime};
     auto changes = rt::test::makeLibraryChanges(executor);
-    auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto runtimeLibrary =
       rt::Library{runtime, ao::test::requireValue(rt::Library::prepare(libraryFixture.library())), changes};
+    auto const stopRuntime = gsl_lite::finally(
+      [&]
+      {
+        runtime.requestStop();
+        runtime.join();
+        executor.drain();
+      });
     auto& jobs = runtimeLibrary.jobs();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
@@ -245,7 +253,7 @@ namespace ao::uimodel::test
     auto const res = rt::test::runQueuedTask(runtime, executor, jobs.applyScanPlanAsync(std::move(plan)));
 
     REQUIRE(res);
-    CHECK(res->failureCount == 1);
+    REQUIRE(res->failureCount == 1);
 
     auto const* progressView = static_cast<ActivityStatusViewState const*>(nullptr);
 

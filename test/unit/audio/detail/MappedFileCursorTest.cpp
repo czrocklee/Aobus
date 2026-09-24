@@ -4,6 +4,7 @@
 #include "lib/audio/detail/MappedFileCursor.h"
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/Error.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,17 +29,26 @@ namespace ao::audio::detail::test
     CHECK(cursor.size() == data.size());
 
     auto output = std::array<std::byte, 3>{};
-    CHECK(cursor.read(output) == output.size());
-    CHECK(output[0] == std::byte{10});
-    CHECK(output[2] == std::byte{30});
+    REQUIRE(cursor.read(output) == output.size());
+    CHECK(output == std::array{std::byte{10}, std::byte{20}, std::byte{30}});
     CHECK(cursor.position() == 3);
 
-    CHECK(cursor.seek(-2, SeekOrigin::Current));
+    REQUIRE(cursor.seek(-2, SeekOrigin::Current));
     CHECK(cursor.position() == 1);
-    CHECK(cursor.seek(-1, SeekOrigin::End));
+    REQUIRE(cursor.read(output) == output.size());
+    CHECK(output == std::array{std::byte{20}, std::byte{30}, std::byte{40}});
+
+    REQUIRE(cursor.seek(-1, SeekOrigin::End));
     CHECK(cursor.position() == 4);
-    CHECK(cursor.seek(0, SeekOrigin::Begin));
+    output.fill(std::byte{0xEE});
+    REQUIRE(cursor.read(output) == 1);
+    CHECK(output == std::array{std::byte{50}, std::byte{0xEE}, std::byte{0xEE}});
+    CHECK(cursor.isAtEnd());
+
+    REQUIRE(cursor.seek(0, SeekOrigin::Begin));
     CHECK(cursor.position() == 0);
+    REQUIRE(cursor.read(output) == output.size());
+    CHECK(output == std::array{std::byte{10}, std::byte{20}, std::byte{30}});
   }
 
   TEST_CASE("MappedFileCursor - rejects invalid seeks and resets on close", "[audio][unit][detail]")
@@ -48,11 +58,19 @@ namespace ao::audio::detail::test
     auto cursor = MappedFileCursor{};
 
     REQUIRE(cursor.open(temp.path));
-    CHECK(!cursor.seek(-1, SeekOrigin::Begin));
-    CHECK(!cursor.seek(1, SeekOrigin::End));
-    CHECK(!cursor.seek(std::numeric_limits<std::int64_t>::max(), SeekOrigin::End));
+    REQUIRE(cursor.seek(1, SeekOrigin::Begin));
+    auto const requireRejectedSeek = [&](std::int64_t offset, SeekOrigin origin)
+    {
+      auto const seekRes = cursor.seek(offset, origin);
+      REQUIRE_FALSE(seekRes);
+      CHECK(seekRes.error().code == Error::Code::SeekFailed);
+      CHECK(cursor.position() == 1);
+    };
+    requireRejectedSeek(-1, SeekOrigin::Begin);
+    requireRejectedSeek(1, SeekOrigin::End);
+    requireRejectedSeek(std::numeric_limits<std::int64_t>::max(), SeekOrigin::End);
 
-    CHECK(cursor.seek(0, SeekOrigin::End));
+    REQUIRE(cursor.seek(0, SeekOrigin::End));
     CHECK(cursor.isAtEnd());
 
     auto output = std::array<std::byte, 2>{};

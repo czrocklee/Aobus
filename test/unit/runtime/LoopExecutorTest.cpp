@@ -6,11 +6,14 @@
 #include <ao/async/QueuedExecutorBase.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <barrier>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <latch>
 #include <semaphore>
 #include <thread>
 #include <vector>
@@ -27,6 +30,12 @@ namespace ao::async::test
     private:
       void wake() noexcept override {}
     };
+
+    // Bounds a turn that should already be ready, so a lost wake fails instead of hanging.
+    std::chrono::steady_clock::time_point turnDeadline()
+    {
+      return std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    }
   } // namespace
 
   TEST_CASE("LoopExecutor - owner dispatch runs inline", "[runtime][unit][async]")
@@ -52,13 +61,13 @@ namespace ao::async::test
 
     CHECK(callbackThread == std::thread::id{});
 
-    executor.runOneTurn();
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
 
     CHECK(callbackThread == ownerThread);
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[runtime][regression][async]")
+  TEST_CASE("LoopExecutor - a timed-out wait preserves subsequent turns", "[runtime][unit][async][concurrency]")
   {
     auto executor = LoopExecutor{};
 
@@ -80,14 +89,14 @@ namespace ao::async::test
         executor.defer([&] { order.push_back(2); });
       });
 
-    REQUIRE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now() + std::chrono::seconds{5}));
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
     CHECK(order == std::vector<int>{1});
     REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2});
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
 
-  TEST_CASE("LoopExecutor - a bounded wait accepts a foreign producer", "[runtime][regression][async][concurrency]")
+  TEST_CASE("LoopExecutor - a bounded wait accepts a foreign producer", "[runtime][unit][async][concurrency]")
   {
     auto executor = LoopExecutor{};
     auto const ownerThread = std::this_thread::get_id();
@@ -99,7 +108,7 @@ namespace ao::async::test
                                  executor.defer([&] { callbackThread = std::this_thread::get_id(); });
                                }};
     startLine.arrive_and_wait();
-    REQUIRE(executor.tryRunOneTurnUntil(std::chrono::steady_clock::now() + std::chrono::seconds{5}));
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
     CHECK(callbackThread == ownerThread);
     CHECK_FALSE(executor.tryRunReadyTurn());
   }
@@ -108,29 +117,38 @@ namespace ao::async::test
   {
     constexpr std::size_t kProducerCount = 8;
     auto executor = LoopExecutor{};
-    auto startLine = std::barrier{static_cast<std::ptrdiff_t>(kProducerCount + 1)};
+    auto startLine = std::latch{1};
     auto executions = std::vector<int>(kProducerCount, 0);
     auto workers = std::vector<std::jthread>{};
     workers.reserve(kProducerCount);
+    // Unblock already-created workers if a later thread construction fails.
+    auto const releaseWorkers = gsl_lite::finally(
+      [&]
+      {
+        if (!startLine.try_wait())
+        {
+          startLine.count_down();
+        }
+      });
 
     for (std::size_t producer = 0; producer < kProducerCount; ++producer)
     {
       workers.emplace_back(
         [&, producer]
         {
-          startLine.arrive_and_wait();
+          startLine.wait();
           executor.dispatch([&, producer] { ++executions[producer]; });
         });
     }
 
-    startLine.arrive_and_wait();
+    startLine.count_down();
 
     for (auto& worker : workers)
     {
       worker.join();
     }
 
-    executor.runOneTurn();
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
 
     CHECK(executions == std::vector<int>(kProducerCount, 1));
     CHECK_FALSE(executor.tryRunReadyTurn());
@@ -146,7 +164,7 @@ namespace ao::async::test
       executor.defer([&, value] { order.push_back(value); });
     }
 
-    executor.runOneTurn();
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
 
     CHECK(order == std::vector<std::int32_t>{1, 2, 3, 4});
     CHECK_FALSE(executor.tryRunReadyTurn());
@@ -158,27 +176,53 @@ namespace ao::async::test
     auto drainStarted = std::binary_semaphore{0};
     auto producerFinished = std::binary_semaphore{0};
     auto order = std::vector<int>{};
+    bool drainSignaled = false;
+    bool producerFinishedInTurn = false;
+    auto producerFailure = std::exception_ptr{};
 
     executor.defer(
       [&]
       {
         order.push_back(1);
+        drainSignaled = true;
         drainStarted.release();
-        producerFinished.acquire();
+        producerFinishedInTurn = producerFinished.try_acquire_for(std::chrono::seconds{5});
         order.push_back(2);
       });
 
     auto producer = std::jthread{[&]
                                  {
+                                   auto const releaseOnExit = gsl_lite::finally([&] { producerFinished.release(); });
                                    drainStarted.acquire();
-                                   executor.defer([&] { order.push_back(3); });
-                                   executor.defer([&] { order.push_back(4); });
-                                   producerFinished.release();
-                                 }};
 
-    executor.runOneTurn();
+                                   try
+                                   {
+                                     executor.defer([&] { order.push_back(3); });
+                                     executor.defer([&] { order.push_back(4); });
+                                   }
+                                   catch (...)
+                                   {
+                                     producerFailure = std::current_exception();
+                                   }
+                                 }};
+    auto const releaseUnstartedProducer = gsl_lite::finally(
+      [&]
+      {
+        if (!drainSignaled)
+        {
+          drainStarted.release();
+        }
+      });
+
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
     producer.join();
 
+    if (producerFailure)
+    {
+      std::rethrow_exception(producerFailure);
+    }
+
+    CHECK(producerFinishedInTurn);
     CHECK(order == std::vector<int>{1, 2});
     REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3, 4});
@@ -198,7 +242,7 @@ namespace ao::async::test
         order.push_back(2);
       });
 
-    executor.runOneTurn();
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
 
     CHECK(order == std::vector<int>{1, 2});
     REQUIRE(executor.tryRunReadyTurn());
@@ -210,24 +254,26 @@ namespace ao::async::test
   {
     auto executor = LoopExecutor{};
     auto order = std::vector<int>{};
+    bool nestedTurnRan = true;
 
     executor.defer(
       [&]
       {
         order.push_back(1);
         executor.defer([&] { order.push_back(3); });
-        CHECK_FALSE(executor.tryRunReadyTurn());
+        nestedTurnRan = executor.tryRunReadyTurn();
         order.push_back(2);
       });
 
-    executor.runOneTurn();
+    REQUIRE(executor.tryRunOneTurnUntil(turnDeadline()));
 
+    CHECK_FALSE(nestedTurnRan);
     CHECK(order == std::vector<int>{1, 2});
     REQUIRE(executor.tryRunReadyTurn());
     CHECK(order == std::vector<int>{1, 2, 3});
   }
 
-  TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations", "[runtime][unit][async][regression]")
+  TEST_CASE("QueuedExecutorBase - final drain includes deferred continuations", "[runtime][unit][async]")
   {
     auto executor = FinalDrainExecutor{};
     auto order = std::vector<int>{};

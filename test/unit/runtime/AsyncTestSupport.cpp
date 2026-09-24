@@ -240,7 +240,7 @@ namespace ao::rt::test
       auto lock = std::unique_lock{_implPtr->mutex};
 
       if (!_implPtr->cv.wait_for(lock,
-                                 std::chrono::seconds{2},
+                                 std::chrono::seconds{10},
                                  [this]
                                  {
                                    return std::ranges::any_of(_implPtr->entries,
@@ -267,7 +267,7 @@ namespace ao::rt::test
       auto lock = std::unique_lock{_implPtr->mutex};
 
       if (!_implPtr->cv.wait_for(lock,
-                                 std::chrono::seconds{2},
+                                 std::chrono::seconds{10},
                                  [this, delay]
                                  {
                                    return std::ranges::any_of(

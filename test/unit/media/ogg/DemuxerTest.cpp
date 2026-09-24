@@ -103,6 +103,7 @@ namespace ao::media::ogg::test
 
     REQUIRE(demuxerRes->packetCount() == 1);
     CHECK(demuxerRes->packet(0).bytes.size() == 4);
+    CHECK(hasOnlyEqualBytes(demuxerRes->packet(0).bytes, 1));
     CHECK(demuxerRes->finalGranulePosition() == 480);
     CHECK(demuxerRes->hasIncompleteTail());
   }

@@ -12,9 +12,9 @@
 
 namespace ao::gtk::test
 {
-  // Smoke only. The soul view state (breathe/aura) is covered by
-  // AobusSoulViewModelTest; the click/Escape -> hide wiring is trivial GTK glue.
-  TEST_CASE("AobusSoulWindow - constructs and hides the visualizer shell", "[gtk][unit][smoke]")
+  // Shell smoke only. View-state policy belongs to AobusSoulViewModelTest;
+  // this case does not exercise click/Escape dispatch or queued callback retirement.
+  TEST_CASE("AobusSoulWindow - constructs and hides the visualizer shell", "[gtk][unit][playback][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -25,9 +25,12 @@ namespace ao::gtk::test
     CHECK(hasCssClass(window, "ao-soul-window"));
 
     window.bind(fixture.runtime().playback());
+    REQUIRE_FALSE(window.get_visible());
     window.show();
     drainGtkEvents();
+    REQUIRE(window.get_visible());
     window.hide();
     drainGtkEvents();
+    CHECK_FALSE(window.get_visible());
   }
 } // namespace ao::gtk::test

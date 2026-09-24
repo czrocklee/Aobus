@@ -11,9 +11,12 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 
@@ -23,6 +26,29 @@ namespace ao::uimodel::test
   {
     using StringTarget = std::optional<std::string> rt::MetadataPatch::*;
     using Uint16Target = std::optional<std::uint16_t> rt::MetadataPatch::*;
+
+    auto patchValues(rt::MetadataPatch const& patch)
+    {
+      return std::tie(patch.optTitle,
+                      patch.optArtist,
+                      patch.optAlbum,
+                      patch.optAlbumArtist,
+                      patch.optGenre,
+                      patch.optComposer,
+                      patch.optConductor,
+                      patch.optEnsemble,
+                      patch.optWork,
+                      patch.optMovement,
+                      patch.optSoloist,
+                      patch.optYear,
+                      patch.optTrackNumber,
+                      patch.optTrackTotal,
+                      patch.optDiscNumber,
+                      patch.optDiscTotal,
+                      patch.optMovementNumber,
+                      patch.optMovementTotal,
+                      patch.customUpdates);
+    }
 
     void checkStringField(rt::TrackField field, StringTarget target)
     {
@@ -34,6 +60,9 @@ namespace ao::uimodel::test
       CHECK(tryWriteTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == "Edited");
+      auto expected = rt::MetadataPatch{};
+      expected.*target = "Edited";
+      CHECK(patchValues(patch) == patchValues(expected));
     }
 
     void checkUint16Field(rt::TrackField field, Uint16Target target)
@@ -46,6 +75,9 @@ namespace ao::uimodel::test
       CHECK(tryWriteTrackFieldPatch(patch, field, value));
       REQUIRE((patch.*target).has_value());
       CHECK(*(patch.*target) == 42);
+      auto expected = rt::MetadataPatch{};
+      expected.*target = static_cast<std::uint16_t>(42);
+      CHECK(patchValues(patch) == patchValues(expected));
     }
   } // namespace
 
@@ -94,12 +126,33 @@ namespace ao::uimodel::test
 
     SECTION("negative input is rejected")
     {
-      CHECK_FALSE(parseUint16EditValue("-1").has_value());
+      auto const res = parseUint16EditValue("-1");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message == "Enter a whole number from 0 to 65535.");
     }
 
     SECTION("out-of-range input is rejected")
     {
-      CHECK_FALSE(parseUint16EditValue("65536").has_value());
+      auto const res = parseUint16EditValue("65536");
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK(res.error().message == "Enter a whole number from 0 to 65535.");
+    }
+
+    SECTION("zero and maximum are admitted exactly")
+    {
+      auto const bounds = std::to_array<std::pair<std::string_view, std::uint16_t>>({{"0", 0}, {"65535", 65535}});
+
+      for (auto const& [text, expected] : bounds)
+      {
+        CAPTURE(text);
+        auto const res = parseUint16EditValue(text);
+        REQUIRE(res);
+        auto const* value = std::get_if<std::uint16_t>(&*res);
+        REQUIRE(value != nullptr);
+        CHECK(*value == expected);
+      }
     }
   }
 
@@ -131,19 +184,23 @@ namespace ao::uimodel::test
   {
     auto textPatch = rt::MetadataPatch{};
     textPatch.optTitle = "Before";
+    auto const originalTextPatch = textPatch;
     auto const numericValue = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
 
     CHECK_FALSE(tryWriteTrackFieldPatch(textPatch, rt::TrackField::Title, numericValue));
     REQUIRE(textPatch.optTitle);
     CHECK(*textPatch.optTitle == "Before");
+    CHECK(patchValues(textPatch) == patchValues(originalTextPatch));
 
     auto numberPatch = rt::MetadataPatch{};
     numberPatch.optYear = static_cast<std::uint16_t>(1999);
+    auto const originalNumberPatch = numberPatch;
     auto const stringValue = TrackFieldEditValue{std::in_place_type<std::string>, "Not a number"};
 
     CHECK_FALSE(tryWriteTrackFieldPatch(numberPatch, rt::TrackField::Year, stringValue));
     REQUIRE(numberPatch.optYear);
     CHECK(*numberPatch.optYear == 1999);
+    CHECK(patchValues(numberPatch) == patchValues(originalNumberPatch));
   }
 
   TEST_CASE("TrackAuthoring - rejects read-only and synthetic fields without mutation",
@@ -163,9 +220,29 @@ namespace ao::uimodel::test
 
     REQUIRE(patch.optTitle);
     CHECK(*patch.optTitle == "Before");
+
+    patch.optYear = static_cast<std::uint16_t>(1999);
+    patch.customUpdates["Mood"] = "Bright";
+    auto const before = patch;
+
+    for (auto const& definition : rt::trackFieldDefinitions())
+    {
+      CAPTURE(definition.id);
+      auto const writable = definition.editable && definition.category == rt::TrackFieldCategory::Metadata;
+      CHECK(canWriteTrackFieldPatch(definition.field) == writable);
+
+      if (!writable)
+      {
+        CHECK_FALSE(tryWriteTrackFieldPatch(patch, definition.field, value));
+        CHECK(patchValues(patch) == patchValues(before));
+        auto const number = TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(7)};
+        CHECK_FALSE(tryWriteTrackFieldPatch(patch, definition.field, number));
+        CHECK(patchValues(patch) == patchValues(before));
+      }
+    }
   }
 
-  TEST_CASE("TrackAuthoring - protects aggregate sentinel values", "[uimodel][unit][track-authoring][inline-edit]")
+  TEST_CASE("TrackAuthoring - protects aggregate sentinel values", "[uimodel][unit][track-authoring]")
   {
     constexpr auto kLocalizedMixedText = "Mehrere Werte";
     auto snap = rt::TrackDetailSnapshot{};
@@ -187,5 +264,14 @@ namespace ao::uimodel::test
       isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, true));
     CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "edit", kCompositeMixedTrackText, true));
     CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "", kCompositeMixedTrackText, true));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = true;
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Artist).mixed = false;
+    CHECK_FALSE(isProtectedInlineEditText(
+      rt::TrackField::Artist, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, true));
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = false;
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Artist).mixed = true;
+    CHECK(isProtectedInlineEditText(
+      rt::TrackField::Artist, snap, kCompositeMixedTrackText, kCompositeMixedTrackText, true));
   }
 } // namespace ao::uimodel::test

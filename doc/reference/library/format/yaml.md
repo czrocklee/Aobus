@@ -125,9 +125,9 @@ These names come from `rt::trackFieldId()` and use hyphens rather than underscor
 
 ### Technical properties
 
-**Current duration limitation:** the importer parses `duration` as unsigned 32-bit milliseconds, but [`TrackBuilder`](../../../../lib/library/TrackBuilder.cpp) narrows it to signed 32-bit `TrackDuration` without an explicit range rejection on that conversion.
-The full unsigned YAML range therefore does not have a faithful end-to-end Track representation. Values above `2147483647` ms must not be assumed to round-trip correctly.
-This is an implementation/format-domain discrepancy, not a change to the version-5 scalar grammar below.
+The version-5 `duration` scalar remains an unsigned 32-bit millisecond value.
+Library storage uses signed 32-bit `TrackDuration`, so import rejects values above `2147483647` ms with `FormatRejected` rather than narrowing or clamping them.
+This is a core-storage representability check, not a change to the scalar grammar or database layout; `0` (unknown) and `2147483647` ms round-trip exactly.
 
 | Field | Type | Units or accepted values |
 |---|---|---|
@@ -319,7 +319,7 @@ library:
 - [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) covers list-only shape, references, parents, dangling references, and ordering.
 - [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) covers the resource table's shape, ordering, determinism, closure rules, digest and length rejection, and each mode's cover terminal state.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) covers closed-schema, scope, enum, and URI rejection.
-- [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation and transactional rollback.
+- [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation, duration boundary round trips, and transactional rollback for unrepresentable durations.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
 
 ## Related documents

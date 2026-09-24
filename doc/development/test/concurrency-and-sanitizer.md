@@ -42,9 +42,25 @@ Timer-like components additionally cover expiry winning, cancellation winning,
 their collision, and obsolete reschedule generations.
 
 Prefer controlled executors, barriers, latches, and captured callbacks. A
-timeout may guard against hangs, but elapsed time is not proof. Tag applicable
-tests `[concurrency]`; reserve `[stress]` for additional repetition or schedule
-exploration. See [test naming and assertions](naming-and-assertion.md) for the permitted tag forms.
+timeout may guard against hangs, but elapsed time is not proof.
+
+Tag a case `[concurrency]` when any section asserts one of these boundaries
+and, in production, that boundary crosses threads or processes: the component
+is reached from another thread, it hands the work to a worker, audio, or
+monitor thread and back through an executor, or another live process contends
+for the same resource. The test may still drive the interleaving from
+one thread; a controlled schedule that rejects a stale worker completion
+qualifies. A thread that only toolkit internals use, such as GIO's, does not
+count when Aobus code sees just owner-thread callbacks.
+
+Tag a case `[async]` instead when the component is confined to one owner
+thread and the case asserts ordering or lifetime across later executor or
+main-loop turns: a queued, idle, or timer callback, a stale owner-thread
+completion, deferred teardown, or a retained handle after retirement.
+Synchronous reentrancy and notification, an incidental worker, a coroutine
+that merely returns a value, and destruction with nothing outstanding take
+neither tag. Reserve `[stress]` for added repetition. The `--concurrency` gate
+skips hidden `[.manual]` probes.
 
 ## Validation
 

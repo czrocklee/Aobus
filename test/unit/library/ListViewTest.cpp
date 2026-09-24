@@ -20,13 +20,6 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("ListView - constructs from serialized data", "[library][unit][list]")
-  {
-    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
-    auto const view = ListView{payload};
-    CHECK(view.orderTrackIds().empty());
-  }
-
   TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
   {
     auto const payload =
@@ -50,7 +43,7 @@ namespace ao::library::test
     auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
-    CHECK(view.orderTrackIds().size() == 3);
+    REQUIRE(view.orderTrackIds().size() == 3);
     CHECK_FALSE(view.orderTrackIds().empty());
     CHECK(view.name() == "My List");
     CHECK(view.description() == "Description");
@@ -79,6 +72,7 @@ namespace ao::library::test
     CHECK(view.name().empty());
     CHECK(view.description().empty());
     CHECK(view.filter().empty());
+    CHECK(view.orderTrackIds().empty());
     CHECK(view.isRootParent() == true);
   }
 
@@ -94,11 +88,16 @@ namespace ao::library::test
       CHECK(view.parentId() == kInvalidListId);
     };
 
-    auto const nullSpan = std::span<std::byte const>{static_cast<std::byte*>(nullptr), 100};
-    checkPoisoned(ListView{nullSpan});
+    SECTION("empty input")
+    {
+      checkPoisoned(ListView{std::span<std::byte const>{}});
+    }
 
-    auto const smallData = std::vector<std::byte>(10);
-    checkPoisoned(ListView{smallData});
+    SECTION("short header")
+    {
+      auto const smallData = std::vector<std::byte>(10);
+      checkPoisoned(ListView{smallData});
+    }
 
     SECTION("track-id array overruns the record")
     {
@@ -136,7 +135,7 @@ namespace ao::library::test
     CHECK_FALSE(ListView{nonzeroPaddingPayload}.isValid());
   }
 
-  TEST_CASE("ListView - rejects an unaligned record base", "[library][regression][list]")
+  TEST_CASE("ListView - rejects an unaligned record base", "[library][unit][list]")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
     auto backing = std::vector<std::byte>(payload.size() + 1);
@@ -146,15 +145,21 @@ namespace ao::library::test
     CHECK_FALSE(ListView{unaligned}.isValid());
   }
 
-  TEST_CASE("ListView - rejects a track count that overflows a 32-bit host", "[library][regression][list]")
+  TEST_CASE("ListView - rejects a track count that overflows a 32-bit host", "[library][unit][list]")
   {
     if constexpr (sizeof(std::size_t) == 4)
     {
       auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
       auto header = ListHeader{};
+      std::memcpy(data.data(), &header, sizeof(header));
+      REQUIRE(ListView{data}.isValid());
       header.orderTrackIdCount = std::numeric_limits<std::uint32_t>::max();
       std::memcpy(data.data(), &header, sizeof(header));
       CHECK_FALSE(ListView{data}.isValid());
+    }
+    else
+    {
+      SKIP("The serialized track-count overflow requires a 32-bit size_t host.");
     }
   }
 } // namespace ao::library::test

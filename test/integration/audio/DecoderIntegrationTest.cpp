@@ -15,6 +15,7 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -29,6 +30,7 @@
 #include <iterator>
 #include <optional>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -37,16 +39,14 @@ namespace ao::audio::test
   namespace
   {
     /**
-     * @brief Requires an integration audio fixture, or marks the section skipped.
+     * @brief Requires a repository-owned integration audio fixture.
      */
     std::filesystem::path requireAudioFixture(char const* fileName)
     {
       auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / fileName;
 
-      if (!std::filesystem::exists(path))
-      {
-        SKIP("Required audio fixture missing: " << path);
-      }
+      INFO("Required audio fixture: " << path);
+      REQUIRE(std::filesystem::is_regular_file(path));
 
       return path;
     }
@@ -113,15 +113,19 @@ namespace ao::audio::test
     template<typename TSource, typename TTarget>
     void checkBitPerfectShift(std::span<TSource const> source, std::span<TTarget const> target, std::uint8_t shift)
     {
+      REQUIRE_FALSE(source.empty());
       REQUIRE(source.size() == target.size());
+      REQUIRE(std::ranges::any_of(source, [](TSource sample) { return sample != 0; }));
+      CHECK(std::ranges::any_of(source, [](TSource sample) { return sample < 0; }));
+
+      // C++26 defines signed left shift of negative values, but comparing the
+      // unsigned PCM bit patterns makes the padding contract explicit.
+      using UnsignedTarget = std::make_unsigned_t<TTarget>;
 
       for (std::size_t i = 0; i < source.size(); ++i)
       {
-        if (source[i] != 0)
-        {
-          auto const expected = static_cast<TTarget>(source[i]) << shift;
-          CHECK(target[i] == expected);
-        }
+        auto const expected = static_cast<UnsignedTarget>(source[i]) << shift;
+        CHECK(static_cast<UnsignedTarget>(target[i]) == expected);
       }
     }
 
@@ -197,7 +201,7 @@ namespace ao::audio::test
         REQUIRE(decoderRes);
         auto& decoder = **decoderRes;
         CHECK(decoder.streamInfo().codec == AudioCodec::Flac);
-        samples16 = extractSamples<std::int16_t>(decoder, 100);
+        samples16 = extractSamples<std::int16_t>(decoder, 200);
       }
 
       // 2. Acquire target 32-bit padded samples
@@ -206,7 +210,7 @@ namespace ao::audio::test
         auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed32Le);
         REQUIRE(decoderRes);
         auto& decoder = **decoderRes;
-        samples32 = extractSamples<std::int32_t>(decoder, 100);
+        samples32 = extractSamples<std::int32_t>(decoder, 200);
       }
 
       // 3. Verify shift (16 -> 32 should be 16-bit shift)
@@ -299,6 +303,14 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.sampleRate == 96000);
       CHECK(info.sourceFormat.channels == 2);
       CHECK(info.sourceFormat.precisionBits == 24);
+
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      REQUIRE_FALSE(blockRes->endOfStream);
+      REQUIRE(blockRes->frames > 0);
+      REQUIRE_FALSE(blockRes->bytes.empty());
+      checkPcmBlockLayout(*blockRes, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 
@@ -316,6 +328,14 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.sampleRate == 48000);
       CHECK(info.sourceFormat.channels == 2);
       CHECK(info.isLossy == true);
+
+      auto const blockRes = decoder.readNextBlock();
+      REQUIRE(blockRes);
+      REQUIRE_FALSE(blockRes->endOfStream);
+      REQUIRE(blockRes->frames > 0);
+      REQUIRE_FALSE(blockRes->bytes.empty());
+      checkPcmBlockLayout(*blockRes, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 
@@ -495,84 +515,75 @@ namespace ao::audio::test
     CHECK(attenuatedRms / plainRms < 0.56);
   }
 
-  TEST_CASE("Decoder - malformed and unsupported inputs fail without crashing", "[audio][integration][decoder]")
+  TEST_CASE("FlacDecoder - a non-FLAC file fails to open", "[audio][integration][flac]")
   {
-    SECTION("Corrupt: Opening a non-FLAC file as FLAC")
-    {
-      auto const testFile = ao::test::TempFile{".flac"};
-      auto const res = FlacDecoderSession::open(testFile.path, SampleEncoding::Signed16Le);
+    auto const testFile = ao::test::TempFile{".flac"};
+    auto const res = FlacDecoderSession::open(testFile.path, SampleEncoding::Signed16Le);
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::DecodeFailed);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::DecodeFailed);
+  }
+
+  TEST_CASE("Mp3Decoder - a seek near the end returns a block bounded by the stream", "[audio][integration][mp3]")
+  {
+    auto const testFile = requireAudioFixture("hires.mp3");
+    auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
+    REQUIRE(decoderRes);
+    auto& decoder = **decoderRes;
+
+    auto const info = decoder.streamInfo();
+
+    REQUIRE(info.duration > std::chrono::milliseconds{10});
+
+    auto const seekOffset = info.duration - std::chrono::milliseconds{10};
+    auto const expectedFrame = frameIndexAt(info, seekOffset);
+
+    REQUIRE(decoder.seek(seekOffset));
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+
+    if (blockRes->endOfStream)
+    {
+      CHECK(blockRes->frames == 0);
+      CHECK(blockRes->bytes.empty());
     }
-
-    SECTION("MP3: Seek near EOF")
+    else
     {
-      auto const testFile = requireAudioFixture("hires.mp3");
-      auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
-      REQUIRE(decoderRes);
-      auto& decoder = **decoderRes;
-
-      auto const info = decoder.streamInfo();
-
-      if (info.duration <= std::chrono::milliseconds{10})
-      {
-        SKIP("MP3 fixture duration is too short for near-EOF seek");
-      }
-
-      auto const seekOffset = info.duration - std::chrono::milliseconds{10};
-      auto const expectedFrame = frameIndexAt(info, seekOffset);
-
-      REQUIRE(decoder.seek(seekOffset));
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-
-      if (blockRes->endOfStream)
-      {
-        CHECK(blockRes->frames == 0);
-        CHECK(blockRes->bytes.empty());
-      }
-      else
-      {
-        REQUIRE(blockRes->frames > 0);
-        checkNearSeekFrame(*blockRes, expectedFrame, info.sourceFormat.sampleRate);
-        checkPcmBlockLayout(*blockRes, info.outputFormat);
-        checkBlockDoesNotRunPastStream(*blockRes, info);
-      }
+      REQUIRE(blockRes->frames > 0);
+      checkNearSeekFrame(*blockRes, expectedFrame, info.sourceFormat.sampleRate);
+      checkPcmBlockLayout(*blockRes, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
+  }
 
-    SECTION("Seek near EOF")
+  TEST_CASE("FlacDecoder - a seek near the end returns the target frame or end of stream", "[audio][integration][flac]")
+  {
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
+    auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
+    REQUIRE(decoderRes);
+    auto& decoder = **decoderRes;
+
+    auto const info = decoder.streamInfo();
+
+    REQUIRE(info.duration > std::chrono::milliseconds{10});
+
+    auto const seekOffset = info.duration - std::chrono::milliseconds{10};
+    auto const expectedFrame = frameIndexAt(info, seekOffset);
+
+    REQUIRE(decoder.seek(seekOffset));
+    auto const blockRes = decoder.readNextBlock();
+    REQUIRE(blockRes);
+
+    if (blockRes->endOfStream && blockRes->frames == 0)
     {
-      auto const testFile = requireAudioFixture("basic_metadata.flac");
-      auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);
-      REQUIRE(decoderRes);
-      auto& decoder = **decoderRes;
-
-      auto const info = decoder.streamInfo();
-
-      if (info.duration <= std::chrono::milliseconds{10})
-      {
-        SKIP("FLAC fixture duration is too short for near-EOF seek");
-      }
-
-      auto const seekOffset = info.duration - std::chrono::milliseconds{10};
-      auto const expectedFrame = frameIndexAt(info, seekOffset);
-
-      REQUIRE(decoder.seek(seekOffset));
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-
-      if (blockRes->endOfStream && blockRes->frames == 0)
-      {
-        CHECK(blockRes->bytes.empty());
-      }
-      else
-      {
-        REQUIRE(blockRes->frames > 0);
-        CHECK(blockRes->firstFrameIndex == expectedFrame);
-        checkPcmBlockLayout(*blockRes, info.outputFormat);
-        checkBlockDoesNotRunPastStream(*blockRes, info);
-      }
+      CHECK(blockRes->bytes.empty());
+    }
+    else
+    {
+      REQUIRE(blockRes->frames > 0);
+      CHECK(blockRes->firstFrameIndex == expectedFrame);
+      checkPcmBlockLayout(*blockRes, info.outputFormat);
+      checkBlockDoesNotRunPastStream(*blockRes, info);
     }
   }
 } // namespace ao::audio::test

@@ -9,20 +9,20 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("WasapiStrings - empty strings remain empty", "[audio][unit][wasapi][strings]")
+  TEST_CASE("WasapiStrings - empty strings remain empty", "[audio][unit][wasapi][string]")
   {
     CHECK(utf8ToWide({}).empty());
     CHECK(wideToUtf8({}).empty());
   }
 
-  TEST_CASE("WasapiStrings - UTF-8 text round trips through UTF-16", "[audio][unit][wasapi][strings]")
+  TEST_CASE("WasapiStrings - UTF-8 text round trips through UTF-16", "[audio][unit][wasapi][string]")
   {
     auto const text = std::string{"Aobus \xE6\x97\xA5\xE6\x9C\xAC \xF0\x9F\x8E\xB5"};
 
     CHECK(wideToUtf8(utf8ToWide(text)) == text);
   }
 
-  TEST_CASE("WasapiStrings - explicit lengths preserve embedded nulls", "[audio][unit][wasapi][strings]")
+  TEST_CASE("WasapiStrings - explicit lengths preserve embedded nulls", "[audio][unit][wasapi][string]")
   {
     auto const text = std::string{"left\0right", 10};
 

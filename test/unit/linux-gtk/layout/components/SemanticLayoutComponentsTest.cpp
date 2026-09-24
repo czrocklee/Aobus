@@ -204,57 +204,48 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - renders the ready status message", "[gtk][unit][layout-component][semantic]")
   {
-    auto undoTrackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test",
-                                        [&undoTrackId](library::MusicLibrary& musicLibrary)
-                                        {
-                                          undoTrackId = library::test::addTrackWithUniqueFixtureUri(
-                                            musicLibrary, {.title = "Undo notification target"});
-                                        }};
-    auto& ctx = fixture.context();
+    auto fixture = LayoutRuntimeFixture{};
+    auto const node = LayoutNode{.type = "status.message"};
+    auto const compPtr = fixture.create(node);
 
-    int const cacheSize = 10;
-    auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
-    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
-      fixture.runtime().resourceBytes(), *imageCachePtr, fixture.runtime().async());
+    REQUIRE(compPtr != nullptr);
+
+    auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
+    REQUIRE(label != nullptr);
+    CHECK(label->get_text() == "Aobus Ready");
+  }
+
+  TEST_CASE("SemanticLayoutComponents - open library button invokes its action service",
+            "[gtk][unit][layout-component][semantic]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto actions = RecordingImportExportActions{};
+    registerOpenLibraryButtonComponent(fixture.components(), &actions, ao::test::englishMessageCatalog());
+    auto const node = LayoutNode{.type = "library.openLibraryButton"};
+    auto const compPtr = fixture.create(node);
+
+    REQUIRE(compPtr != nullptr);
+
+    auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+    REQUIRE(btn != nullptr);
+    CHECK(btn->get_icon_name() == "folder-open-symbolic");
+    CHECK(btn->get_tooltip_text() == "Open Library...");
+    CHECK(ao::gtk::test::hasAccessibleLabel(*btn, "Open Library..."));
+    CHECK(btn->get_sensitive());
+
+    emitClicked(*btn);
+    CHECK(actions.openLibraryCount() == 1);
+  }
+
+  TEST_CASE("SemanticLayoutComponents - configures native menu widgets", "[gtk][unit][layout-component][semantic]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
-    registerTrackCoverArtComponent(fixture.components(), imageLoaderPtr.get(), ao::test::englishMessageCatalog());
     registerMenuBarComponent(fixture.components(), menuModelPtr);
     registerMenuButtonComponent(fixture.components(), menuModelPtr, ao::test::englishMessageCatalog());
-
-    {
-      auto const node = LayoutNode{.type = "status.message"};
-      auto const compPtr = fixture.create(node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_text() == "Aobus Ready");
-    }
-
-    SECTION("library.openLibraryButton creates Gtk::Button")
-    {
-      auto actions = RecordingImportExportActions{};
-      registerOpenLibraryButtonComponent(fixture.components(), &actions, ao::test::englishMessageCatalog());
-      auto const node = LayoutNode{.type = "library.openLibraryButton"};
-      auto const compPtr = fixture.create(node);
-
-      REQUIRE(compPtr != nullptr);
-
-      auto* const btn = dynamic_cast<Gtk::Button*>(&compPtr->widget());
-      REQUIRE(btn != nullptr);
-      CHECK(btn->get_icon_name() == "folder-open-symbolic");
-      CHECK(btn->get_tooltip_text() == "Open Library...");
-      CHECK(ao::gtk::test::hasAccessibleLabel(*btn, "Open Library..."));
-      CHECK(btn->get_sensitive());
-
-      emitClicked(*btn);
-      CHECK(actions.openLibraryCount() == 1);
-    }
 
     SECTION("app.menuBar creates Gtk::PopoverMenuBar")
     {
@@ -293,6 +284,12 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
       CHECK(dynamic_cast<Gtk::PopoverMenuBar*>(&compPtr->widget()) != nullptr);
     }
+  }
+
+  TEST_CASE("SemanticLayoutComponents - builds detail and selection scopes", "[gtk][unit][layout-component][semantic]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
 
     SECTION("track.detailScope creates box and acts as scope provider")
     {
@@ -335,6 +332,21 @@ namespace ao::gtk::layout::test
       CHECK(widget.get_visible());
       CHECK(widget.get_sensitive());
     }
+  }
+
+  TEST_CASE("SemanticLayoutComponents - configures cover art geometry and placeholder",
+            "[gtk][unit][layout-component][semantic]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.layout_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.title = "No cover target"}); }};
+    int const cacheSize = 10;
+    auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
+      fixture.runtime().resourceBytes(), *imageCachePtr, fixture.runtime().async());
+    registerTrackCoverArtComponent(fixture.components(), imageLoaderPtr.get(), ao::test::englishMessageCatalog());
 
     SECTION("track.coverArt creates a stable responsive square slot")
     {
@@ -394,7 +406,7 @@ namespace ao::gtk::layout::test
 
       auto selected = rt::TrackDetailSnapshot{};
       selected.selectionKind = rt::SelectionKind::Single;
-      selected.trackIds = {undoTrackId};
+      selected.trackIds = {trackId};
       scope.setSnapshot(std::move(selected));
       drainGtkEvents();
 
@@ -402,61 +414,78 @@ namespace ao::gtk::layout::test
       CHECK(coverArt->isShowingPlaceholder());
       CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Soul);
     }
+  }
 
-    SECTION("track.fieldGrid creates grid and acts as scope subscriber")
-    {
-      auto const node = LayoutNode{.type = "track.fieldGrid"};
-      auto const compPtr = fixture.create(node);
+  TEST_CASE("SemanticLayoutComponents - field grid leaves scrolling to its layout parent",
+            "[gtk][unit][layout-component][semantic]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto const node = LayoutNode{.type = "track.fieldGrid"};
+    auto const compPtr = fixture.create(node);
 
-      REQUIRE(compPtr != nullptr);
-      auto& root = compPtr->widget();
-      auto* const grid = findWidget<Gtk::Grid>(root);
-      CHECK(grid != nullptr);
-      CHECK(dynamic_cast<Gtk::ScrolledWindow*>(&root) == nullptr);
-      CHECK(dynamic_cast<Gtk::ScrolledWindow*>(grid != nullptr ? grid->get_parent() : nullptr) == nullptr);
-    }
+    REQUIRE(compPtr != nullptr);
+    auto& root = compPtr->widget();
+    auto* const grid = findWidget<Gtk::Grid>(root);
+    CHECK(grid != nullptr);
+    CHECK(dynamic_cast<Gtk::ScrolledWindow*>(&root) == nullptr);
+    CHECK(dynamic_cast<Gtk::ScrolledWindow*>(grid != nullptr ? grid->get_parent() : nullptr) == nullptr);
+  }
 
-    SECTION("track.detailUndoBar reflects pending custom metadata undo")
-    {
-      auto undoController = TrackDetailUndoController{};
-      ctx.detailUndo = &undoController;
+  TEST_CASE("SemanticLayoutComponents - detail undo bar reflects pending undo and rejection",
+            "[gtk][integration][layout-component][semantic]")
+  {
+    auto undoTrackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test",
+                                        [&undoTrackId](library::MusicLibrary& musicLibrary)
+                                        {
+                                          undoTrackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.title = "Undo notification target"});
+                                        }};
+    auto& ctx = fixture.context();
+    auto undoController = TrackDetailUndoController{};
+    ctx.detailUndo = &undoController;
 
-      auto const node = LayoutNode{.type = "track.detailUndoBar"};
-      auto const compPtr = fixture.create(node);
+    auto const node = LayoutNode{.type = "track.detailUndoBar"};
+    auto const compPtr = fixture.create(node);
 
-      REQUIRE(compPtr != nullptr);
-      auto& bar = compPtr->widget();
-      CHECK_FALSE(bar.get_visible());
+    REQUIRE(compPtr != nullptr);
+    auto& bar = compPtr->widget();
+    CHECK_FALSE(bar.get_visible());
 
-      auto sessionPtr =
-        ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
-      undoController.presentCustomMetadataDeletedUndo("Mood", "Energetic", std::move(sessionPtr));
-      drainGtkEvents();
+    auto sessionPtr =
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+    undoController.presentCustomMetadataDeletedUndo("Mood", "Energetic", std::move(sessionPtr));
+    drainGtkEvents();
 
-      CHECK(bar.get_visible());
-      auto* const label = findWidget<Gtk::Label>(bar);
-      REQUIRE(label != nullptr);
-      CHECK(label->get_text() == "Custom metadata 'Mood' removed");
+    CHECK(bar.get_visible());
+    auto* const label = findWidget<Gtk::Label>(bar);
+    REQUIRE(label != nullptr);
+    CHECK(label->get_text() == "Custom metadata 'Mood' removed");
 
-      undoController.clear();
-      drainGtkEvents();
+    undoController.clear();
+    drainGtkEvents();
 
-      CHECK_FALSE(bar.get_visible());
+    CHECK_FALSE(bar.get_visible());
 
-      auto rejectedSessionPtr =
-        ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
-      undoController.presentCustomMetadataDeletedUndo(
-        "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(rejectedSessionPtr));
-      auto* const undoButton = findWidgetByClass<Gtk::Button>(bar, "ao-undo-button");
-      REQUIRE(undoButton != nullptr);
-      emitClicked(*undoButton);
-      REQUIRE(tryPumpGtkEventsUntil([&fixture] { return !fixture.runtime().notifications().feed().entries.empty(); }));
+    auto rejectedSessionPtr =
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+    undoController.presentCustomMetadataDeletedUndo(
+      "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(rejectedSessionPtr));
+    auto* const undoButton = findWidgetByClass<Gtk::Button>(bar, "ao-undo-button");
+    REQUIRE(undoButton != nullptr);
+    emitClicked(*undoButton);
+    REQUIRE(tryPumpGtkEventsUntil([&fixture] { return !fixture.runtime().notifications().feed().entries.empty(); }));
 
-      auto const feed = fixture.runtime().notifications().feed();
-      REQUIRE_FALSE(feed.entries.empty());
-      CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
-      CHECK_FALSE(bar.get_visible());
-    }
+    auto const feed = fixture.runtime().notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
+    CHECK_FALSE(bar.get_visible());
+  }
+
+  TEST_CASE("SemanticLayoutComponents - tag editor retains its empty selection footprint",
+            "[gtk][unit][layout-component][semantic]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
 
     SECTION("track.tagEditor creates tag editor container")
     {
@@ -480,19 +509,30 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackTagEditorComponent - snapshot callbacks outlive the transient build context",
-            "[gtk][regression][layout-component]")
+            "[gtk][unit][layout-component]")
   {
-    auto fixture = LayoutRuntimeFixture{};
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.tag_editor_transient_context_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        {
+                                          trackId = library::test::addTrackWithUniqueFixtureUri(
+                                            musicLibrary, {.title = "Tag target", .tags = {"after-context"}});
+                                        }};
     auto& scope = fixture.attachTrackDetailScope();
     auto const componentPtr = fixture.createWithTransientContext(LayoutNode{.type = "track.tagEditor"});
     REQUIRE(componentPtr != nullptr);
+    auto* const editor = dynamic_cast<TagEditor*>(&componentPtr->widget());
+    REQUIRE(editor != nullptr);
+    CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-current").empty());
 
     auto snapshot = rt::TrackDetailSnapshot{};
-    snapshot.trackIds = {TrackId{123}};
+    snapshot.selectionKind = rt::SelectionKind::Single;
+    snapshot.trackIds = {trackId};
     scope.setSnapshot(snapshot);
 
     CHECK(scope.snapshot().trackIds == snapshot.trackIds);
     CHECK(componentPtr->widget().get_visible());
+    CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-current") == std::vector<std::string>{"after-context"});
   }
 
   TEST_CASE("TrackTagEditorComponent - forwards runtime text order to tag suggestions",
@@ -525,7 +565,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackTagEditorComponent - stale completion preserves a replacement selection session",
-            "[gtk][regression][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring][concurrency]")
   {
     auto firstTrackId = kInvalidTrackId;
     auto secondTrackId = kInvalidTrackId;
@@ -596,7 +636,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackTagEditorComponent - fallback reports a concurrent retry as busy",
-            "[gtk][regression][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring][concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -629,7 +669,8 @@ namespace ao::gtk::layout::test
     REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).tags.size() == 1; }));
   }
 
-  TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("TrackDetailUndoController - restores deleted custom metadata",
+            "[gtk][integration][layout-component][semantic]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -650,7 +691,8 @@ namespace ao::gtk::layout::test
     CHECK(spec.customMetadata[0].second == "Bright");
   }
 
-  TEST_CASE("TrackDetailUndoController - clears pending undo after timeout", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("TrackDetailUndoController - clears pending undo after timeout",
+            "[gtk][unit][layout-component][semantic][async]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -677,7 +719,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackDetailUndoController - an intervening commit makes undo stale",
-            "[gtk][unit][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_undo_test",
@@ -709,7 +751,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action",
-            "[gtk][regression][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -735,7 +777,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackDetailUndoController - publication may destroy the controller before undo settles",
-            "[gtk][regression][track-detail-undo][concurrency]")
+            "[gtk][integration][layout-component][semantic][concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -801,7 +843,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackFieldGrid - an intervening revision cancels custom metadata editing without changing storage",
-            "[gtk][regression][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_custom_metadata_test",
@@ -846,7 +888,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackFieldGrid - built-in edit failures restore display and notify",
-            "[gtk][regression][layout-component][library-authoring]")
+            "[gtk][integration][layout-component][library-authoring][concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -954,7 +996,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackDetailUndoBar - restores deleted custom metadata from button",
-            "[gtk][unit][layout-component][semantic]")
+            "[gtk][integration][layout-component][semantic][concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture =
@@ -1011,7 +1053,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackFieldGrid - add custom metadata writes metadata and clears stale delete undo",
-            "[gtk][unit][layout-component][semantic]")
+            "[gtk][integration][layout-component][semantic]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture =

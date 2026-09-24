@@ -37,6 +37,12 @@ namespace ao::audio::backend::detail::test
             "[audio][integration][coreaudio]")
   {
     auto const devices = enumerateCoreAudioOutputDevices();
+
+    if (devices.empty())
+    {
+      SKIP("macOS host has no live Core Audio output device");
+    }
+
     std::size_t defaultCount = 0;
 
     for (auto const& device : devices)

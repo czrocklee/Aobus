@@ -30,7 +30,7 @@ namespace ao::desktop::test
 #ifndef _WIN32
 
   TEST_CASE("LibrarySwitch - symlink alias reuses the active filesystem directory",
-            "[runtime][regression][desktop-lifecycle]")
+            "[runtime][unit][desktop-lifecycle]")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "music";
@@ -62,8 +62,7 @@ namespace ao::desktop::test
     CHECK_FALSE(planRes->request.scanAfterOpen);
   }
 
-  TEST_CASE("LibrarySwitch - unavailable request fails before destructive retirement",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySwitch - rejects a missing requested directory", "[runtime][unit][desktop-lifecycle]")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "active";
@@ -76,7 +75,7 @@ namespace ao::desktop::test
   }
 
   TEST_CASE("LibrarySwitch - unavailable active root does not block a different valid request",
-            "[runtime][regression][desktop-lifecycle]")
+            "[runtime][unit][desktop-lifecycle]")
   {
     auto const fixture = ao::test::TempDir{};
     auto const active = fixture.path() / "removed-active";

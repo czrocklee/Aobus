@@ -10,6 +10,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -27,6 +28,7 @@
 #include <cstddef>
 #include <expected>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <tuple>
 
@@ -58,6 +60,32 @@ namespace ao::library::test
     CHECK(after.createdTime == before.createdTime);
   }
 
+  TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision",
+            "[library][unit][write-transaction][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    {
+      auto transaction = library.readTransaction();
+      CHECK(library.libraryRevision(transaction) == 0);
+    }
+    {
+      auto transaction = writeTransaction(library);
+      CHECK(library.libraryRevision(transaction) == 1);
+    }
+    {
+      auto transaction = library.readTransaction();
+      CHECK(library.libraryRevision(transaction) == 0);
+    }
+    {
+      auto transaction = writeTransaction(library);
+      CHECK(library.libraryRevision(transaction) == 1);
+      REQUIRE(transaction.commit());
+    }
+    auto transaction = library.readTransaction();
+    CHECK(library.libraryRevision(transaction) == 1);
+  }
+
   TEST_CASE("WriteTransaction - successful root operation remains committable", "[library][unit][write-transaction]")
   {
     auto const temp = ao::test::TempDir{};
@@ -81,7 +109,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("WriteTransaction - operation error aborts staged writes and releases the writer gate",
-            "[library][unit][write-transaction][concurrency]")
+            "[library][unit][write-transaction]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -116,7 +144,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("WriteTransaction - native mutation failure becomes a terminal Result error",
-            "[library][regression][write-transaction][concurrency]")
+            "[library][unit][write-transaction]")
   {
     constexpr std::size_t kMapSize = std::size_t{256} * 1024;
     auto const temp = ao::test::TempDir{};
@@ -143,12 +171,14 @@ namespace ao::library::test
 
     REQUIRE_FALSE(failureRes);
     CHECK(failureRes.error().code == Error::Code::StorageFull);
+    CHECK_FALSE(library.dictionary().findId(oversizedText));
+    CHECK(library.dictionary().size() == 0);
     auto retryTransaction = writable.writeTransaction();
     retryTransaction.abort();
   }
 
   TEST_CASE("WriteTransaction - native writer read fault aborts the root operation",
-            "[library][regression][write-transaction]")
+            "[library][unit][write-transaction]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -183,7 +213,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("WriteTransaction - private library failure becomes a terminal Result error",
-            "[library][regression][write-transaction]")
+            "[library][unit][write-transaction]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -202,7 +232,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("WriteTransaction - unexpected exception aborts before it is rethrown",
-            "[library][unit][write-transaction][concurrency]")
+            "[library][unit][write-transaction]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

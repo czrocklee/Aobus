@@ -5,6 +5,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include "test/unit/runtime/library/ScanApplyTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -22,27 +23,8 @@
 
 namespace ao::rt::test
 {
-  namespace
-  {
-    void replaceFile(std::filesystem::path const& target, std::filesystem::path const& source)
-    {
-      auto const previousTime = std::filesystem::last_write_time(target);
-      std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing);
-      std::filesystem::last_write_time(target, previousTime + std::chrono::seconds{10});
-    }
-
-    TrackId importOne(library::MusicLibrary& library)
-    {
-      auto plan = LibraryScan{library}.buildPlan().value();
-      auto res = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
-      REQUIRE(res);
-      REQUIRE(res->insertedIds.size() == 1);
-      return res->insertedIds.front();
-    }
-  } // namespace
-
   TEST_CASE("ScanApplyOperation - a new file changed after preparation is left for the next scan",
-            "[runtime][regression][scan-revalidation]")
+            "[runtime][unit][library-scan][revalidation][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -52,9 +34,11 @@ namespace ao::rt::test
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     auto plan = LibraryScan{library}.buildPlan().value();
     auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     replaceFile(target, audio::test::requireAudioFixture("hires.flac"));
+    requireRevalidation(operation, 1, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -68,7 +52,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a changed file changed again after preparation keeps live track data",
-            "[runtime][regression][scan-revalidation]")
+            "[runtime][unit][library-scan][revalidation][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -88,9 +72,11 @@ namespace ao::rt::test
     auto plan = LibraryScan{library}.buildPlan().value();
     REQUIRE(plan.items().front().classification == ScanClassification::Changed);
     auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     replaceFile(target, audio::test::requireAudioFixture("with_cover.flac"));
+    requireRevalidation(operation, 1, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -104,7 +90,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a moved file restamped after preparation is not relinked",
-            "[runtime][regression][scan-revalidation]")
+            "[runtime][unit][library-scan][revalidation][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -118,10 +104,12 @@ namespace ao::rt::test
     auto plan = LibraryScan{library}.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::Moved) == 1);
     auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     auto const preparedTime = std::filesystem::last_write_time(moved);
     std::filesystem::last_write_time(moved, preparedTime + std::chrono::seconds{10});
+    requireRevalidation(operation, 0, 1);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -137,7 +125,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a missing path that reappears before mutation stays available",
-            "[runtime][regression][scan-revalidation]")
+            "[runtime][unit][library-scan][revalidation][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -151,9 +139,11 @@ namespace ao::rt::test
     auto plan = LibraryScan{library}.buildPlan().value();
     REQUIRE(plan.items().front().classification == ScanClassification::Missing);
     auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     std::filesystem::copy_file(source, target);
+    requireRevalidation(operation, 1, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);

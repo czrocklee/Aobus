@@ -113,6 +113,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
     auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(insertion.start == 0);
     CHECK(insertion.trackIds == std::vector{trackId});
@@ -123,6 +124,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
     auto const& update = std::get<delta::UpdateRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(update.start == 0);
     CHECK(update.trackIds == std::vector{trackId});
@@ -133,6 +135,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
     auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(removal.start == 0);
     CHECK(removal.trackIds == std::vector{trackId});
@@ -173,6 +176,7 @@ namespace ao::rt::test
     source.insert(fresh, 2);
 
     REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
     auto const& childInsert = std::get<delta::InsertRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(childInsert.start == 1);
     CHECK(childInsert.trackIds == std::vector{fresh});
@@ -185,6 +189,7 @@ namespace ao::rt::test
     source.update(modern);
 
     REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
     auto const& childRemoval = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(childRemoval.start == 0);
     CHECK(childRemoval.trackIds == std::vector{modern});
@@ -209,18 +214,18 @@ namespace ao::rt::test
 
     // Single Insert
     source.insert(t2, source.size());
-    CHECK(list.size() == 1);
+    CHECK(sourceTrackIds(list) == std::vector{t2});
 
     source.insert(t1, source.size());
-    CHECK(list.size() == 1);
+    CHECK(sourceTrackIds(list) == std::vector{t2});
 
     // Single Update
     libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2022; });
     source.update(t1);
-    CHECK(list.size() == 2);
+    CHECK(sourceTrackIds(list) == std::vector{t2, t1});
 
     // Single Remove
     source.remove(t2);
-    CHECK(list.size() == 1);
+    CHECK(sourceTrackIds(list) == std::vector{t1});
   }
 } // namespace ao::rt::test

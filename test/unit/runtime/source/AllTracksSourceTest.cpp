@@ -154,7 +154,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AllTracksSource - mixed changes update surviving identities at final coordinates",
-            "[runtime][regression][source][all-tracks]")
+            "[runtime][unit][source][all-tracks]")
   {
     auto fixture = MusicLibraryFixture{};
     auto source = AllTracksSource{fixture.library().tracks()};

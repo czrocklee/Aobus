@@ -3,8 +3,10 @@
 
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 
+#include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
@@ -43,6 +45,12 @@ namespace ao::uimodel::test
     CHECK(validateCustomMetadataAddition(snap, "ReplayGain") == CustomMetadataAddValidation::Accepted);
     CHECK(validateCustomMetadataAddition(snap, "Mood") == CustomMetadataAddValidation::DuplicateCustomMetadata);
     CHECK(validateCustomMetadataAddition(snap, "title") == CustomMetadataAddValidation::ReservedTrackField);
+
+    for (auto const& definition : rt::trackFieldDefinitions())
+    {
+      CAPTURE(definition.id);
+      CHECK(validateCustomMetadataAddition(snap, definition.id) == CustomMetadataAddValidation::ReservedTrackField);
+    }
   }
 
   TEST_CASE("undoValueForDeletedTrackCustomMetadata returns safe restore values", "[uimodel][unit][library][detail]")
@@ -64,7 +72,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(undoValueForDeletedTrackCustomMetadata(snap, "Missing").has_value());
   }
 
-  TEST_CASE("custom - metadata patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
+  TEST_CASE("TrackCustomMetadata - patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
   {
     auto const updatePatch = makeCustomMetadataUpdatePatch("Mood", "Bright");
     REQUIRE(updatePatch.customUpdates.size() == 1);

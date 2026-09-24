@@ -12,10 +12,12 @@
 #include <boost/asio/error.hpp>
 #include <boost/system/system_error.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <barrier>
 #include <cstddef>
 #include <exception>
+#include <memory>
 #include <stdexcept>
 #include <stop_token>
 #include <string_view>
@@ -99,21 +101,23 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][lifetime]")
+  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][concurrency]")
   {
+    auto barrier = AsyncBarrier{};
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
-    auto barrier = AsyncBarrier{};
     auto reachedBarrierWait = AsyncTestState<bool>::create(false);
     auto reachedCallbackHop = AsyncTestState<bool>::create(false);
     auto completed = AsyncTestState<bool>::create(false);
     auto taskExited = AsyncTestState<bool>::create(false);
+    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
 
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
         scope,
-        [&](std::stop_token const stopToken)
+        [&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited](
+          std::stop_token const stopToken)
         {
           return longRunningTaskAsync(
             &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
@@ -137,21 +141,23 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
-            "[runtime][unit][lifetime][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
+    auto barrier = AsyncBarrier{};
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
-    auto barrier = AsyncBarrier{};
     auto reachedBarrierWait = AsyncTestState<bool>::create(false);
     auto reachedCallbackHop = AsyncTestState<bool>::create(false);
     auto completed = AsyncTestState<bool>::create(false);
     auto taskExited = AsyncTestState<bool>::create(false);
+    auto releaseBarrier = gsl_lite::finally([&barrier] { barrier.release(); });
 
     {
       auto scope = LifetimeScope{};
       runtime.spawnWithLifetime(
         scope,
-        [&](std::stop_token const stopToken)
+        [&runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited](
+          std::stop_token const stopToken)
         {
           return longRunningTaskAsync(
             &runtime, &barrier, reachedBarrierWait, reachedCallbackHop, completed, taskExited, stopToken);
@@ -171,7 +177,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion",
-            "[runtime][unit][lifetime][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -279,15 +285,16 @@ namespace ao::rt::test
     CHECK(cancellationNormalized);
   }
 
-  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][lifetime]")
+  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][concurrency]")
   {
+    auto ownerPtr = std::unique_ptr<MemberTaskOwner>{};
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
     auto completed = AsyncTestState<int>::create(0);
 
     {
       auto scope = LifetimeScope{};
-      auto owner = MemberTaskOwner{runtime, scope, completed};
+      ownerPtr = std::make_unique<MemberTaskOwner>(runtime, scope, completed);
 
       // Coroutine finishes while owner and scope are alive
       REQUIRE(completed.tryWaitUntil(1));
@@ -296,10 +303,11 @@ namespace ao::rt::test
     CHECK(completed.load() == 1);
     runtime.requestStop();
     runtime.join();
+    ownerPtr.reset();
   }
 
   TEST_CASE("LifetimeScope - cancellation races safely with concurrent completion",
-            "[runtime][regression][lifetime][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
     constexpr std::size_t kIterations = 64;
     auto executor = ManualExecutor{};

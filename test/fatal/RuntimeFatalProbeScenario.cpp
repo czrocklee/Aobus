@@ -9,6 +9,7 @@
 #include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/runtime/library/LibraryChangesTestAccess.h"
+#include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -38,6 +39,7 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -50,6 +52,8 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -467,6 +471,52 @@ namespace ao::rt::test
       }
 
       std::ignore = LibraryYamlExporter{musicLibrary}.exportToYaml(scratchPath / "probe.yaml", ExportMode::Full);
+      return 3;
+    }
+
+    std::int32_t runProjectionSourceOrderMismatch(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto libraryRes =
+        library::MusicLibrary::open(scratchPath,
+                                    scratchPath / "db",
+                                    library::MusicLibrary::Options{.pinnedMapBytes = std::size_t{16} * 1024U * 1024U});
+
+      if (!libraryRes)
+      {
+        return 3;
+      }
+
+      auto writableRes = library::WritableMusicLibrary::acquire(*libraryRes);
+
+      if (!writableRes)
+      {
+        return 3;
+      }
+
+      auto transaction = writableRes->writeTransaction();
+      auto track = library::TrackBuilder::makeEmpty();
+      track.property().uri("projection-probe.flac");
+      auto trackRes =
+        transaction.apply([&track](library::LibraryWrite& write)
+                          { return write.tracks().create(track, library::FileManifestBuilder::makeEmpty()); });
+
+      if (!trackRes || !transaction.commit())
+      {
+        return 3;
+      }
+
+      auto sourcePtr = makeMutableTrackSource({*trackRes});
+      auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, *libraryRes};
+      // The update is valid against the old one-row view but cannot explain the
+      // now-empty source. A consumer must not silently replace it with a reset.
+      sourcePtr->replaceWithBatch(
+        {}, delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = 0, .trackIds = {*trackRes}}}});
       return 3;
     }
 
@@ -1269,6 +1319,11 @@ namespace ao::rt::test
     if (name == "yaml-export-missing-cover-resource")
     {
       return runYamlExportMissingCoverResource(scratchName);
+    }
+
+    if (name == "projection-source-order-mismatch")
+    {
+      return runProjectionSourceOrderMismatch(scratchName);
     }
 
     if (name == "library-publication-admission-exception")

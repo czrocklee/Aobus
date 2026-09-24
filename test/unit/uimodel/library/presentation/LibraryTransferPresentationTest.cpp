@@ -62,6 +62,31 @@ namespace ao::uimodel::test
           "only if this matches the selected backup.");
   }
 
+  TEST_CASE("Library restore presentation - list-only payload names the narrower destructive scope",
+            "[uimodel][unit][library-transfer]")
+  {
+    // Deliberately distinct report fields exercise projection, not the importer's valid list-only counts.
+    auto const presentation = libraryRestorePresentation(ao::test::englishMessageCatalog(),
+                                                         rt::ImportReport{
+                                                           .payloadVersion = 5,
+                                                           .payloadMode = rt::ExportMode::ListOnly,
+                                                           .targetScope = rt::ImportTargetScope::Lists,
+                                                           .tracksCreated = 2,
+                                                           .tracksUpdated = 3,
+                                                           .tracksDeleted = 4,
+                                                           .listsCreated = 5,
+                                                           .listsDeleted = 6,
+                                                           .danglingReferencesIgnored = 7,
+                                                         });
+
+    CHECK(presentation.title == "Confirm Restore");
+    CHECK(presentation.action == "Restore Lists");
+    CHECK(presentation.message ==
+          "This restore will replace the current Lists.\n\nPayload: YAML v5, mode 'listOnly'.\nPreview: "
+          "2 created, 3 updated, 4 deleted; 5 Lists created, 6 deleted; 7 dangling references ignored.\n\nContinue "
+          "only if this matches the selected backup.");
+  }
+
   TEST_CASE("Library restore presentation - every mode preserves its token and explicit zero counts",
             "[uimodel][unit][library-transfer]")
   {
@@ -83,10 +108,11 @@ namespace ao::uimodel::test
 
       CHECK(presentation.title == "Confirm Restore");
       CHECK(presentation.action == "Restore Lists");
-      CHECK(presentation.message.starts_with("This restore will replace the current Lists."));
-      CHECK(presentation.message.contains(std::string{"mode '"} + std::string{token} + "'"));
-      CHECK(presentation.message.contains(
-        "Preview: 0 created, 0 updated, 0 deleted; 0 Lists created, 0 deleted; 0 dangling references ignored."));
+      CHECK(presentation.message ==
+            std::string{"This restore will replace the current Lists.\n\nPayload: YAML v5, mode '"} +
+              std::string{token} +
+              "'.\nPreview: 0 created, 0 updated, 0 deleted; 0 Lists created, 0 deleted; 0 dangling references "
+              "ignored.\n\nContinue only if this matches the selected backup.");
     }
   }
 } // namespace ao::uimodel::test

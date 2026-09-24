@@ -6,10 +6,15 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/KeymapTestSupport.h"
 #include "tui/Keymap.h"
+#include <ao/rt/completion/CompletionItem.h>
+#include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <ftxui/component/event.hpp>
 
+#include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace ao::tui::test
@@ -71,10 +76,34 @@ namespace ao::tui::test
     auto model = ShellInteractionModel{};
 
     CHECK(model.overlay() == Overlay::None);
+    CHECK_FALSE(isModalOverlay(Overlay::None));
+
+    for (auto const overlay : {Overlay::QualityPanel,
+                               Overlay::OutputDevices,
+                               Overlay::PresentationPanel,
+                               Overlay::Notifications,
+                               Overlay::Help,
+                               Overlay::GoTo,
+                               Overlay::ListChooser})
+    {
+      CHECK(isModalOverlay(overlay));
+    }
+
     model.openOverlay(Overlay::Help);
     CHECK(model.overlay() == Overlay::Help);
     model.closeOverlay();
     CHECK(model.overlay() == Overlay::None);
+  }
+
+  TEST_CASE("ShellInteractionModel - replacing an overlay resets its scroll position", "[tui][unit][shell]")
+  {
+    auto model = ShellInteractionModel{};
+    model.openOverlay(Overlay::Help);
+    model.scrollOverlay(4, 10);
+    CHECK(model.overlayScroll() == 4);
+    model.openOverlay(Overlay::OutputDevices);
+    CHECK(model.overlay() == Overlay::OutputDevices);
+    CHECK(model.overlayScroll() == 0);
   }
 
   TEST_CASE("ShellInteractionModel - overlay labels are stable", "[tui][unit][shell]")
@@ -104,7 +133,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("ShellInteractionModel - overlay hints omit access bindings and retain local actions",
-            "[tui][unit][keymap]")
+            "[tui][unit][shell][keymap]")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
@@ -122,5 +151,120 @@ namespace ao::tui::test
     auto const outputPlan = KeymapPlan{outputModel};
     CHECK(outputPlan.shortcutFor(KeyAction::ToggleOutputDevices) == "Enter");
     CHECK(overlayHint(textCatalog, outputPlan, Overlay::OutputDevices) == "Enter select  Esc close");
+
+    auto distinctModel = uimodel::KeymapModel{defaultKeymap()};
+    distinctModel.applyOverrides({{"tui.shell.toggleListChooser", {"F2"}}, {"tui.shell.toggleOutputDevices", {"F3"}}});
+    auto const distinctPlan = KeymapPlan{distinctModel};
+    CHECK(distinctPlan.shortcutFor(KeyAction::ToggleLists) == "F2");
+    CHECK(distinctPlan.shortcutFor(KeyAction::ToggleOutputDevices) == "F3");
+    CHECK_FALSE(overlayHint(textCatalog, distinctPlan, Overlay::ListChooser).contains("F2"));
+    CHECK(overlayHint(textCatalog, distinctPlan, Overlay::ListChooser).contains("Enter open"));
+    CHECK(overlayHint(textCatalog, distinctPlan, Overlay::OutputDevices) == "Enter select  Esc close");
+  }
+
+  TEST_CASE("ShellInteractionModel - deleting an empty line does not mark an untouched filter as edited",
+            "[tui][unit][shell][input]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::QuickFilter);
+    CHECK_FALSE(shell.tryEditInput(ftxui::Event::CtrlU));
+    CHECK_FALSE(shell.tryEditInput(ftxui::Event::CtrlK));
+    CHECK_FALSE(shell.isInputTouched());
+    REQUIRE(shell.tryEditInput(ftxui::Event::Character("one two")));
+    CHECK_FALSE(shell.tryEditInput(ftxui::Event::ArrowLeft));
+    CHECK(shell.inputDraft() == "one two");
+    CHECK(shell.inputField().cursor() == 6);
+    REQUIRE(shell.tryEditInput(ftxui::Event::CtrlU));
+    CHECK(shell.inputDraft() == "o");
+    REQUIRE(shell.tryEditInput(ftxui::Event::CtrlK));
+    CHECK(shell.inputDraft().empty());
+  }
+
+  TEST_CASE("ShellInteractionModel - history is mode-local and restores the unfinished draft",
+            "[tui][unit][shell][input]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command, "detail");
+    shell.rememberInput();
+    shell.beginInput(ShellInputMode::Command, "settings");
+    shell.rememberInput();
+    shell.beginInput(ShellInputMode::QuickFilter, "artist");
+    shell.rememberInput();
+    shell.beginInput(ShellInputMode::Command, "unsent");
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "settings");
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "detail");
+    CHECK_FALSE(shell.tryMoveInputHistory(-1));
+    REQUIRE(shell.tryMoveInputHistory(1));
+    REQUIRE(shell.tryMoveInputHistory(1));
+    CHECK(shell.inputDraft() == "unsent");
+    shell.beginInput(ShellInputMode::QuickFilter);
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "artist");
+  }
+
+  TEST_CASE("ShellInteractionModel - history discards empty drafts, deduplicates and retains newest fifty",
+            "[tui][unit][shell][input]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command);
+    shell.rememberInput();
+    CHECK_FALSE(shell.tryMoveInputHistory(-1));
+
+    for (std::size_t index = 0; index < 51; ++index)
+    {
+      shell.beginInput(ShellInputMode::Command, "entry " + std::to_string(index));
+      shell.rememberInput();
+    }
+
+    shell.beginInput(ShellInputMode::Command, "entry 12");
+    shell.rememberInput();
+    shell.beginInput(ShellInputMode::Command, "draft");
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "entry 12");
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "entry 50");
+
+    for (std::size_t index = 0; index < 48; ++index)
+    {
+      REQUIRE(shell.tryMoveInputHistory(-1));
+    }
+
+    CHECK(shell.inputDraft() == "entry 1");
+    CHECK_FALSE(shell.tryMoveInputHistory(-1));
+    REQUIRE(shell.tryMoveInputHistory(50));
+    CHECK(shell.inputDraft() == "draft");
+  }
+
+  TEST_CASE("ShellInteractionModel - editing a history entry creates a new scratch draft", "[tui][unit][shell][input]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command, "filter A");
+    shell.rememberInput();
+    shell.beginInput(ShellInputMode::Command);
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    REQUIRE(shell.tryEditInput(ftxui::Event::Character("B")));
+    CHECK_FALSE(shell.tryMoveInputHistory(1));
+    REQUIRE(shell.tryMoveInputHistory(-1));
+    CHECK(shell.inputDraft() == "filter A");
+    REQUIRE(shell.tryMoveInputHistory(1));
+    CHECK(shell.inputDraft() == "filter AB");
+  }
+
+  TEST_CASE("ShellInteractionModel - completion applies only its interior range and retires the result",
+            "[tui][unit][shell][input]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.beginInput(ShellInputMode::Command, "filter $ar = Aimer");
+    shell.setCommandCompletion(rt::CompletionResult{
+      .replaceBegin = 7,
+      .replaceEnd = 10,
+      .items = {rt::CompletionItem{.displayText = "$artist", .insertText = "$artist"}},
+    });
+    REQUIRE(shell.tryApplyCommandCompletion());
+    CHECK(shell.inputDraft() == "filter $artist = Aimer");
+    CHECK(shell.inputField().cursor() == 14);
+    CHECK_FALSE(shell.commandCompletion());
   }
 } // namespace ao::tui::test

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
+#include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
@@ -79,9 +80,60 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("track.flac");
     auto const [hotData, coldData] = serializeTestTrack(builder);
+    auto const view = TrackView{hotData, coldData};
 
     CHECK(hotData.size() >= sizeof(TrackHotHeader));
     CHECK(!hotData.empty());
+    REQUIRE(view.isHotValid());
+    REQUIRE(view.isColdValid());
+    CHECK(view.property().uri() == "track.flac");
+    CHECK(view.metadata().title().empty());
+    CHECK(view.metadata().artistId() == kInvalidDictionaryId);
+    CHECK(view.metadata().albumId() == kInvalidDictionaryId);
+    CHECK(view.metadata().genreId() == kInvalidDictionaryId);
+    CHECK(view.metadata().albumArtistId() == kInvalidDictionaryId);
+    CHECK(view.metadata().composerId() == kInvalidDictionaryId);
+    CHECK(view.metadata().year() == 0);
+    CHECK(view.property().codec() == AudioCodec::Unknown);
+    CHECK(view.property().bitDepth() == BitDepth{});
+    CHECK(view.property().sampleRate() == SampleRate{});
+    CHECK(view.property().duration() == std::chrono::milliseconds{0});
+    CHECK(view.property().bitrate() == Bitrate{});
+    CHECK(view.property().channels() == Channels{});
+    CHECK(view.metadata().trackNumber() == 0);
+    CHECK(view.metadata().trackTotal() == 0);
+    CHECK(view.metadata().discNumber() == 0);
+    CHECK(view.metadata().discTotal() == 0);
+    CHECK(view.tags().count() == 0);
+    CHECK(view.tags().bloom() == 0);
+    CHECK(view.classical().empty());
+    CHECK(view.coverArt().count() == 0);
+    CHECK(view.customMetadata().count() == 0);
+  }
+
+  TEST_CASE("TrackBuilder - serializes duration boundaries without changing their values",
+            "[library][unit][track-builder][serialization]")
+  {
+    auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("duration.flac");
+    auto duration = std::chrono::milliseconds{0};
+
+    SECTION("Unknown duration")
+    {
+      duration = std::chrono::milliseconds{0};
+    }
+
+    SECTION("Maximum stored duration")
+    {
+      duration = std::chrono::milliseconds{2147483647};
+    }
+
+    builder.property().duration(duration);
+    auto const [hotData, coldData] = serializeTestTrack(builder);
+    auto const view = TrackView{hotData, coldData};
+
+    REQUIRE(view.isColdValid());
+    CHECK(view.property().duration() == duration);
   }
 
   TEST_CASE("TrackBuilder - serializes cold records without extension blocks",
@@ -157,7 +209,9 @@ namespace ao::library::test
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
+    auto const view = TrackView{hotData, coldData};
     CHECK(header->titleLength == std::strlen(title));
+    CHECK(view.metadata().title() == title);
   }
 
   TEST_CASE("TrackBuilder - admits metadata as valid UTF-8 NFC", "[library][unit][track-builder][unicode]")
@@ -237,6 +291,8 @@ namespace ao::library::test
 
     CHECK(hotData1.size() == hotData2.size());
     CHECK(hotData1 == hotData2);
+    CHECK(coldData1.size() == coldData2.size());
+    CHECK(coldData1 == coldData2);
   }
 
   TEST_CASE("TrackBuilder - serialize writes cold header fields", "[library][unit][track-builder][serialization]")
@@ -400,6 +456,19 @@ namespace ao::library::test
     auto view = TrackView{std::span<std::byte const>{}, coldData};
     CHECK(view.property().duration() == std::chrono::minutes{4});
     CHECK(view.metadata().trackNumber() == 3);
+    CHECK(view.property().uri() == "path/to/file.flac");
+    auto const customMetadata = view.customMetadata();
+    REQUIRE(customMetadata.count() == 2);
+    auto entry = customMetadata.begin();
+    CHECK(entry->first == DictionaryId{1});
+    CHECK(entry->second == "value1");
+    ++entry;
+    CHECK(entry->first == DictionaryId{2});
+    CHECK(entry->second == "value2");
+    ++entry;
+    CHECK(entry == customMetadata.end());
+    CHECK(context.dictionary().get(DictionaryId{1}) == "key1");
+    CHECK(context.dictionary().get(DictionaryId{2}) == "key2");
   }
 
   TEST_CASE("TrackBuilder - fromCompleteView reconstructs builder fields",
@@ -470,6 +539,11 @@ namespace ao::library::test
     CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Conductor"));
     CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Ensemble"));
     CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Soloist"));
+    REQUIRE(view.tags().count() == 2);
+    CHECK(view.tags().id(0) == DictionaryId{1});
+    CHECK(view.tags().id(1) == DictionaryId{2});
+    CHECK(context.dictionary().get(view.tags().id(0)) == "tag1");
+    CHECK(context.dictionary().get(view.tags().id(1)) == "tag2");
   }
 
   TEST_CASE("TrackBuilder - canonical tag identity is serialized as a set", "[library][unit][track-builder][unicode]")

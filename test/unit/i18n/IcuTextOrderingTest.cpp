@@ -165,17 +165,28 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("IcuTextOrdering - malformed locale and text are recoverable", "[runtime][unit][collation]")
+  TEST_CASE("IcuTextOrdering - malformed locale is rejected during construction", "[runtime][unit][collation]")
   {
     auto invalidLocaleRes = createIcuTextOrderingPolicy("en_US!");
     REQUIRE_FALSE(invalidLocaleRes);
     CHECK(invalidLocaleRes.error().code == Error::Code::InvalidInput);
+  }
 
+  TEST_CASE("IcuTextOrdering - a policy remains usable after malformed text", "[runtime][unit][collation]")
+  {
     auto const policyPtr = policyFor("en-US");
-    auto key = std::string{};
+    auto key = std::string{"stale"};
+    REQUIRE(policyPtr->makeSortKeyInto(key, "Dvořák"));
+    REQUIRE_FALSE(key.empty());
+    auto const before = key;
+
     auto invalidTextRes = policyPtr->makeSortKeyInto(key, "bad\xFFtext");
     REQUIRE_FALSE(invalidTextRes);
     CHECK(invalidTextRes.error().code == Error::Code::InvalidInput);
+
+    key = "stale after failure";
+    REQUIRE(policyPtr->makeSortKeyInto(key, "Dvořák"));
+    CHECK(key == before);
   }
 
   TEST_CASE("IcuTextOrdering - ICU warnings retain the caller error class", "[runtime][unit][collation]")

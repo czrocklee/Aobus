@@ -171,6 +171,7 @@ namespace ao::gtk::layout
                                        i18n::MessageCatalog const& textCatalog);
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,
+                                      rt::WorkspaceService& workspace,
                                       i18n::MessageCatalog const& textCatalog);
   void registerLibraryTrackCountComponent(ComponentRegistry& registry,
                                           rt::TrackSourceCache& sources,

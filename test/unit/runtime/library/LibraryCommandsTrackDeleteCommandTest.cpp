@@ -13,6 +13,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 
@@ -28,11 +29,6 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Test Track", .uri = "test.flac"});
-
-    auto mutated = std::vector<TrackId>{};
-    auto deletedTracks = std::vector<TrackId>{};
-    auto upsertedLists = std::vector<ListId>{};
-
     auto listIds = std::vector<ListId>{};
     {
       auto transaction = library::test::writeTransaction(libraryFixture.library());
@@ -60,22 +56,48 @@ namespace ao::rt::test
 
       REQUIRE(transaction.commit());
     }
+    REQUIRE(listIds.size() == 2);
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
-    auto collectionSub =
-      changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deletedTracks = ev.tracksDeleted; });
-    auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upsertedLists = ev.listsUpserted; });
+    auto events = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
+    auto const revisionBefore = libraryFixture.library().libraryRevision(libraryFixture.library().readTransaction());
+
     auto const deletedRes = commandsFixture.runTask(commands.deleteTrackAsync(trackId));
+
     REQUIRE(deletedRes);
     CHECK(deletedRes->trackId == trackId);
-    CHECK(mutated.empty());
-    REQUIRE(deletedTracks.size() == 1);
-    CHECK(deletedTracks[0] == trackId);
+    CHECK(deletedRes->uri == "test.flac");
+    CHECK(deletedRes->title == "Test Track");
+    CHECK(deletedRes->removedFromListIds == listIds);
+    REQUIRE(events.size() == 1);
+    CHECK(events.front() == LibraryChangeSet{
+                              .libraryRevision = revisionBefore + 1,
+                              .tracksDeleted = {trackId},
+                              .listsUpserted = listIds,
+                              .listOrderChanges =
+                                {
+                                  ListOrderChange{
+                                    .listId = listIds[0],
+                                    .operation =
+                                      delta::RegularTrackEditScript{
+                                        .edits = {delta::RemoveRange{.start = 0, .trackIds = {trackId}}},
+                                      },
+                                  },
+                                  ListOrderChange{
+                                    .listId = listIds[1],
+                                    .operation =
+                                      delta::RegularTrackEditScript{
+                                        .edits = {delta::RemoveRange{.start = 0, .trackIds = {trackId}}},
+                                      },
+                                  },
+                                },
+                            });
 
     auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore + 1);
     auto const optTrackView =
       libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     CHECK_FALSE(optTrackView);
@@ -89,24 +111,32 @@ namespace ao::rt::test
       REQUIRE(optList);
       CHECK(optList->orderTrackIds().empty());
     }
-
-    CHECK(upsertedLists == listIds);
   }
 
   TEST_CASE("LibraryCommands - deleteTrack rejects missing tracks", "[runtime][unit][library][track-delete]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
-
+    auto const trackId = libraryFixture.addTrack("Test Track");
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
-
-    auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
+    auto const revisionBefore = libraryFixture.library().libraryRevision(libraryFixture.library().readTransaction());
+    auto events = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
 
     auto const deletedRes = commandsFixture.runTask(commands.deleteTrackAsync(TrackId{99999}));
-    CHECK_FALSE(deletedRes);
-    CHECK(mutated.empty());
+
+    REQUIRE_FALSE(deletedRes);
+    CHECK(deletedRes.error().code == Error::Code::NotFound);
+    CHECK(events.empty());
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
+    auto const reader = libraryFixture.library().tracks().reader(transaction);
+    CHECK(reader.entryCount() == 1);
+    auto const optTrack = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().title() == "Test Track");
+    CHECK(optTrack->property().uri() == "test.flac");
+    CHECK(libraryFixture.library().manifest().reader(transaction).get("test.flac"));
   }
 } // namespace ao::rt::test

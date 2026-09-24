@@ -7,6 +7,7 @@
 #include <ao/winui/layout/ShellState.h>
 #include <ao/yaml/Serialization.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -40,6 +41,16 @@ namespace ao::winui
       return makeError(Error::Code::FormatRejected, std::format("Unknown Windows shell mode '{}'", id));
     }
 
+    Result<> validateWindow(WindowPlacement const& window)
+    {
+      if (window.width < kMinimumWindowWidth || window.height < kMinimumWindowHeight)
+      {
+        return makeError(Error::Code::FormatRejected, "Windows window size must be at least 640x480");
+      }
+
+      return {};
+    }
+
     Result<> writeWindow(ryml::NodeRef node, WindowPlacement const& window)
     {
       auto writer = yaml::MapWriter{node};
@@ -68,9 +79,9 @@ namespace ao::winui
         return res;
       }
 
-      if (res->width < kMinimumWindowWidth || res->height < kMinimumWindowHeight)
+      if (auto const validRes = validateWindow(*res); !validRes)
       {
-        return makeError(Error::Code::FormatRejected, "Windows window size must be at least 640x480");
+        return std::unexpected{validRes.error()};
       }
 
       return res;
@@ -132,11 +143,23 @@ namespace ao::winui
     }
   } // namespace
 
+  void rememberDesktopWindowPlacement(DesktopSettings& settings, WindowPlacement placement) noexcept
+  {
+    placement.width = std::max(placement.width, kMinimumWindowWidth);
+    placement.height = std::max(placement.height, kMinimumWindowHeight);
+    settings.window = placement;
+  }
+
   Result<> DesktopSettingsYamlSchema::serialize(ryml::NodeRef node, DesktopSettings const& state) const
   {
     if (auto const versionRes = requireCurrentVersion(state.version); !versionRes)
     {
       return versionRes;
+    }
+
+    if (auto const validRes = validateWindow(state.window); !validRes)
+    {
+      return validRes;
     }
 
     if (auto const validRes = validateSettingsValues(state); !validRes)

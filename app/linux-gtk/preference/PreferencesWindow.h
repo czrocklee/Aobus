@@ -22,6 +22,7 @@
 #include <sigc++/connection.h>
 #include <sigc++/scoped_connection.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -123,6 +124,8 @@ namespace ao::gtk
     std::unique_ptr<uimodel::OutputDeviceViewModel> _outputDeviceViewModelPtr;
     /// The live pending-shortcut close prompt, so a second close reuses it and dismiss() retires it.
     AppDialog* _pendingClosePrompt = nullptr;
+    /// Invalidates responses retained by a prompt that has been retired or replaced.
+    std::uint64_t _pendingClosePromptGeneration = 0;
     MainContextCallbackScope _callbackScope;
   };
 } // namespace ao::gtk

@@ -323,10 +323,11 @@ namespace ao::gtk
   void PreferencesWindow::retirePendingClosePrompt()
   {
     // Hiding rather than close(): close() re-enters the dialog's own response protocol, which would
-    // deliver a synthetic response back into the handler below. Clearing the pointer is what makes
-    // the retired prompt inert.
+    // deliver a synthetic response back into the handler below. Clearing the pointer and advancing
+    // the generation make the retired prompt inert even after a replacement prompt is created.
     if (auto* const prompt = std::exchange(_pendingClosePrompt, nullptr); prompt != nullptr)
     {
+      ++_pendingClosePromptGeneration;
       prompt->set_visible(false);
     }
   }
@@ -343,49 +344,51 @@ namespace ao::gtk
     // The failure banner lives on the Keyboard page; a retry that fails again has to be visible.
     _stack.set_visible_child("keyboard");
 
-    _pendingClosePrompt =
-      AppDialog::presentMessage(*this,
-                                gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseTitle),
-                                gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseMessage),
-                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonCancel),
-                                                 .responseId = Gtk::ResponseType::CANCEL,
-                                                 .role = AppDialogActionRole::Cancel},
-                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutDiscard),
-                                                 .responseId = Gtk::ResponseType::REJECT,
-                                                 .role = AppDialogActionRole::Cancel},
-                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutRetry),
-                                                 .responseId = Gtk::ResponseType::OK,
-                                                 .role = AppDialogActionRole::Primary}},
-                                Gtk::ResponseType::CANCEL,
-                                _callbackScope.guard(
-                                  [this](std::int32_t const responseId)
-                                  {
-                                    // A retired prompt (dismiss() already ran) must never steer the
-                                    // session that replaced it. Only the live prompt owns this handler.
-                                    if (_pendingClosePrompt == nullptr)
-                                    {
-                                      return;
-                                    }
+    auto const promptGeneration = ++_pendingClosePromptGeneration;
+    _pendingClosePrompt = AppDialog::presentMessage(
+      *this,
+      gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseTitle),
+      gtkText(_textCatalog, MessageId::GtkShortcutPendingCloseMessage),
+      {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkCommonCancel),
+                       .responseId = Gtk::ResponseType::CANCEL,
+                       .role = AppDialogActionRole::Cancel},
+       AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutDiscard),
+                       .responseId = Gtk::ResponseType::REJECT,
+                       .role = AppDialogActionRole::Cancel},
+       AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkShortcutRetry),
+                       .responseId = Gtk::ResponseType::OK,
+                       .role = AppDialogActionRole::Primary}},
+      Gtk::ResponseType::CANCEL,
+      _callbackScope.guard(
+        [this, promptGeneration](std::int32_t const responseId)
+        {
+          // A retired prompt (dismiss() already ran) must never clear or
+          // steer a replacement prompt and its editing session.
+          if (_pendingClosePrompt == nullptr || promptGeneration != _pendingClosePromptGeneration)
+          {
+            return;
+          }
 
-                                    _pendingClosePrompt = nullptr;
+          _pendingClosePrompt = nullptr;
+          ++_pendingClosePromptGeneration;
 
-                                    if (_shortcutEditorPtr == nullptr)
-                                    {
-                                      return;
-                                    }
+          if (_shortcutEditorPtr == nullptr)
+          {
+            return;
+          }
 
-                                    if (responseId == Gtk::ResponseType::REJECT)
-                                    {
-                                      _shortcutEditorPtr->discardPending();
-                                      dismiss();
-                                      return;
-                                    }
+          if (responseId == Gtk::ResponseType::REJECT)
+          {
+            _shortcutEditorPtr->discardPending();
+            dismiss();
+            return;
+          }
 
-                                    if (responseId == Gtk::ResponseType::OK && _shortcutEditorPtr->retryPending())
-                                    {
-                                      dismiss();
-                                    }
-                                  }));
+          if (responseId == Gtk::ResponseType::OK && _shortcutEditorPtr->retryPending())
+          {
+            dismiss();
+          }
+        }));
   }
 
   void PreferencesWindow::clearWindowScopedState()

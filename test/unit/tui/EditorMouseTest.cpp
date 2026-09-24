@@ -56,8 +56,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().metadata.optAlbumArtist == patch.metadata.optAlbumArtist);
   }
 
-  TEST_CASE("TrackPropertiesEditor - pointer motion and release preserve the next click",
-            "[tui][regression][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - pointer motion and release preserve the next click", "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -72,7 +71,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isDirty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - clicking the active tab preserves its query", "[tui][regression][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - clicking the active tab preserves its query", "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}}, {}, {}, {"Jazz", "Rock"});
     selectTab(editor, TrackEditorTab::Tags);
@@ -84,7 +83,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - wheel navigation survives pointer motion without changing tag intent",
-            "[tui][regression][mouse][editor]")
+            "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}}, {}, {{"Jazz", 1}}, {"Rock"});
     selectTab(editor, TrackEditorTab::Tags);
@@ -117,8 +116,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackPropertiesEditor - clickable discard prompt preserves cancellation",
-            "[tui][regression][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - clickable discard prompt preserves cancellation", "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     typeText(editor, "x");
@@ -137,8 +135,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Close);
   }
 
-  TEST_CASE("TrackPropertiesEditor - keyboard page changes invalidate old mouse regions",
-            "[tui][regression][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - keyboard page changes invalidate old mouse regions", "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -150,7 +147,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - clicking an inline completion accepts that candidate",
-            "[tui][regression][mouse][editor]")
+            "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor(
       {{"Blue", ""}},
@@ -171,7 +168,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - pointer placement follows a horizontally scrolled field",
-            "[tui][regression][mouse][editor]")
+            "[tui][unit][mouse][editor]")
   {
     auto const prefix = std::string(80, 'x');
     auto editor = makeEditor({{prefix + "pointer", "Album"}});
@@ -183,7 +180,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - tag query pointer placement follows the rendered text origin",
-            "[tui][regression][mouse][editor]")
+            "[tui][unit][mouse][editor]")
   {
     for (auto const& prefix : {std::string{"place "}, std::string(80, 'x')})
     {
@@ -200,7 +197,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackPropertiesEditor - a submitting write ignores a previously painted close button",
-            "[tui][regression][mouse][editor]")
+            "[tui][unit][mouse][editor]")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(48, 18), 48, 18);

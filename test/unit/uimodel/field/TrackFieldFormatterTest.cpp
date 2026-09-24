@@ -113,13 +113,16 @@ namespace ao::uimodel::test
     CHECK(formatCodec(AudioCodec::Aac) == "AAC");
   }
 
-  TEST_CASE("TrackFieldFormatter - synthetic row text formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - display track number formatting", "[uimodel][unit][field][formatter]")
   {
     CHECK(formatDisplayTrackNumber(0, 0, 0).empty());
     CHECK(formatDisplayTrackNumber(0, 1, 7) == "7");
     CHECK(formatDisplayTrackNumber(2, 3, 7) == "2-7");
     CHECK(formatDisplayTrackNumber(0, 3, 7) == "7");
+  }
 
+  TEST_CASE("TrackFieldFormatter - technical summary formatting", "[uimodel][unit][field][formatter]")
+  {
     CHECK(formatTechnicalSummary(AudioCodec::Flac, 44100, 16, 0) == "FLAC \u00b7 44.1 kHz \u00b7 16-bit");
     CHECK(formatTechnicalSummary(AudioCodec::Wav, 96000, 24, 4608000) ==
           "WAV \u00b7 96 kHz \u00b7 24-bit \u00b7 4608 kbps");

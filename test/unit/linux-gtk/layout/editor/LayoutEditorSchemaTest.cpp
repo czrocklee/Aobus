@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "app/ShellLayoutCollaborators.h"
+#include "app/linux-gtk/layout/editor/LayoutEditorText.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/MessageCatalogTestSupport.h"
@@ -28,7 +29,7 @@ namespace ao::gtk::layout::editor::test
   using namespace uimodel;
 
   TEST_CASE("LayoutEditorSchema - schema entry validation covers all standard layout components",
-            "[gtk][unit][layout][editor]")
+            "[gtk][unit][layout-editor]")
   {
     auto const tempDir = ao::test::TempDir{};
     std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
@@ -41,9 +42,68 @@ namespace ao::gtk::layout::editor::test
 
     auto const& schemas = registry.schema().components();
 
-    SECTION("all 26 component types have schema entries")
+    SECTION("all 44 component types have schema entries")
     {
-      CHECK(schemas.size() >= 26);
+      auto const expected = std::set<std::string>{"absoluteCanvas",
+                                                  "actionButton",
+                                                  "app.menuBar",
+                                                  "box",
+                                                  "centerBox",
+                                                  "collapsibleSplit",
+                                                  "label",
+                                                  "library.listTree",
+                                                  "library.openLibraryButton",
+                                                  "menuButton",
+                                                  "playback.audioPipelinePanel",
+                                                  "playback.currentArtistLabel",
+                                                  "playback.currentTitleLabel",
+                                                  "playback.image",
+                                                  "playback.outputDeviceSelector",
+                                                  "playback.qualityIndicator",
+                                                  "playback.seekSlider",
+                                                  "playback.soulButton",
+                                                  "playback.soulPlayPauseButton",
+                                                  "playback.timeLabel",
+                                                  "playback.transportButton",
+                                                  "playback.volumeControl",
+                                                  "responsiveClass",
+                                                  "scroll",
+                                                  "separator",
+                                                  "spacer",
+                                                  "split",
+                                                  "status.activity",
+                                                  "status.message",
+                                                  "status.nowPlaying",
+                                                  "status.playbackDetails",
+                                                  "status.selectionInfo",
+                                                  "status.trackCount",
+                                                  "tabs",
+                                                  "track.coverArt",
+                                                  "track.detailScope",
+                                                  "track.detailUndoBar",
+                                                  "track.fieldGrid",
+                                                  "track.presentationButton",
+                                                  "track.quickFilter",
+                                                  "track.selectionRegion",
+                                                  "track.table",
+                                                  "track.tagEditor",
+                                                  "workspace.withDetailPane"};
+      auto actual = std::set<std::string>{};
+
+      for (auto const& schema : schemas)
+      {
+        actual.insert(schema.id);
+      }
+
+      CHECK(actual == expected);
+      CHECK(schemas.size() == expected.size());
+
+      for (auto const& type : expected)
+      {
+        auto const optComponentSchema = registry.schema().component(type);
+        REQUIRE(optComponentSchema);
+        CHECK(optComponentSchema->id == type);
+      }
     }
 
     SECTION("all schema entries have non-empty type")
@@ -155,6 +215,7 @@ namespace ao::gtk::layout::editor::test
         return std::ranges::any_of(optComponentSchema->properties, [&](auto const& prop) { return prop.name == name; });
       };
 
+      CHECK(hasProp("command"));
       CHECK(hasProp("showLabel"));
       CHECK(hasProp("size"));
     }
@@ -220,41 +281,6 @@ namespace ao::gtk::layout::editor::test
       CHECK(categories.contains("Tracks"));
     }
 
-    SECTION("representative component types are individually retrievable")
-    {
-      auto const types = std::to_array<std::string_view>({"box",
-                                                          "split",
-                                                          "scroll",
-                                                          "spacer",
-                                                          "separator",
-                                                          "tabs",
-                                                          "playback.transportButton",
-                                                          "playback.volumeControl",
-                                                          "playback.currentTitleLabel",
-                                                          "playback.currentArtistLabel",
-                                                          "playback.seekSlider",
-                                                          "playback.timeLabel",
-                                                          "playback.qualityIndicator",
-                                                          "playback.qualityIndicator",
-                                                          "status.message",
-                                                          "library.listTree",
-                                                          "track.table",
-                                                          "library.openLibraryButton",
-                                                          "app.menuBar",
-                                                          "track.detailScope",
-                                                          "track.selectionRegion",
-                                                          "track.coverArt",
-                                                          "track.fieldGrid",
-                                                          "track.detailUndoBar",
-                                                          "track.tagEditor"});
-
-      for (auto const& type : types)
-      {
-        auto const optComponentSchema = registry.schema().component(std::string{type});
-        CHECK(optComponentSchema);
-      }
-    }
-
     SECTION("cover-art placeholder choices are exposed as enum properties")
     {
       auto const cases = std::to_array<std::pair<std::string_view, std::string_view>>({
@@ -275,5 +301,31 @@ namespace ao::gtk::layout::editor::test
         CHECK(found->enumValues == expected);
       }
     }
+  }
+
+  TEST_CASE("LayoutEditorSchema - registered property labels resolve through editor vocabulary",
+            "[gtk][unit][layout-editor][localization]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{.textCatalog = ao::test::englishMessageCatalog(),
+                               .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+
+    auto const optCanvasSchema = registry.schema().component("absoluteCanvas");
+    REQUIRE(optCanvasSchema);
+    auto const zIndexProperty = std::ranges::find_if(
+      optCanvasSchema->layoutProperties, [](PropertySchema const& property) { return property.name == "zIndex"; });
+    REQUIRE(zIndexProperty != optCanvasSchema->layoutProperties.end());
+
+    auto const german = ao::test::messageCatalog("de-DE");
+    CHECK(layoutEditorVocabularyText(german, zIndexProperty->label) == "Z-Index");
+    auto const pseudo = ao::test::messageCatalog("qps-ploc");
+    auto const expanded = layoutEditorVocabularyText(pseudo, zIndexProperty->label);
+    CHECK(expanded.starts_with("[!! "));
+    CHECK(expanded.ends_with(" !!]"));
   }
 } // namespace ao::gtk::layout::editor::test

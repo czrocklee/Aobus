@@ -103,7 +103,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("PlaybackSession - external ALSA mute is not saved or restored as application intent",
-            "[runtime][regression][playback-session]")
+            "[runtime][integration][playback-session]")
   {
     auto tempDir = ao::test::TempDir{};
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
@@ -162,7 +162,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSession - ALSA hardware volume survives stop checkpoint shutdown and restore exactly",
-            "[runtime][regression][playback-session]")
+            "[runtime][integration][playback-session]")
   {
     auto tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "application.yaml";

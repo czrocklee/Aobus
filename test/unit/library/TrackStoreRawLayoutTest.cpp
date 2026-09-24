@@ -3,6 +3,7 @@
 
 #include "lib/library/TrackWrite.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -14,9 +15,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <format>
 #include <ranges>
 #include <string>
@@ -61,31 +60,6 @@ namespace ao::library::test
     {
       return std::string{library.dictionary().getOrDefault(id)};
     }
-
-    void seedTrackRows(std::filesystem::path const& path,
-                       bool includeFirstHot,
-                       bool includeFirstCold,
-                       bool includeSecond)
-    {
-      // The sweep needs a real metadata header, or it rejects the library before
-      // it ever reaches a Track record.
-      initializeLibraryStorage(path);
-
-      auto const emptyPayload = std::vector<std::byte>{};
-      auto const firstHot = includeFirstHot ? makeHotData() : emptyPayload;
-      auto const firstCold =
-        includeFirstCold ? makeColdData(TrackColdHeader{.duration = std::chrono::minutes{1}}) : emptyPayload;
-
-      if (includeFirstHot || includeFirstCold)
-      {
-        seedRawTrackRow(path, 1, firstHot, firstCold);
-      }
-
-      if (includeSecond)
-      {
-        seedRawTrackRow(path, 2, makeHotData(), makeColdData(TrackColdHeader{.duration = std::chrono::minutes{2}}));
-      }
-    }
   } // namespace
 
   TEST_CASE("TrackStore - stores hot and cold record sides", "[library][unit][track-store][raw-layout]")
@@ -102,32 +76,6 @@ namespace ao::library::test
     CHECK(optView->property().duration() == std::chrono::minutes{3});
     CHECK(optView->metadata().trackNumber() == 1);
     CHECK(optView->metadata().trackTotal() == 10);
-  }
-
-  TEST_CASE("TrackStore - prepared update replaces the hot side alone", "[library][unit][track-store][raw-layout]")
-  {
-    auto fixture = TrackStoreFixture{};
-    auto const id = addCommittedTrack(
-      fixture.library, TrackSpec{.title = "Before", .artist = "First Artist", .duration = std::chrono::minutes{3}});
-
-    {
-      auto transaction = writeTransaction(fixture.library);
-      auto const replacement = TrackSpec{.title = "After", .artist = "Second Artist"};
-      auto builder = makeBuilder(replacement);
-      auto preparedRes = physicalPrepareHotTrack(builder, transaction);
-      REQUIRE(preparedRes);
-      auto writer = physicalWriter(fixture.store, transaction);
-      REQUIRE(updatePreparedHotTrackRecord(writer, id, *preparedRes));
-      REQUIRE(transaction.commit());
-    }
-
-    auto rtxn = fixture.library.readTransaction();
-    auto optView = fixture.store.reader(rtxn).get(id);
-    REQUIRE(optView);
-    CHECK(optView->metadata().title() == "After");
-    CHECK(dictionaryText(fixture.library, optView->metadata().artistId()) == "Second Artist");
-    // The cold side is untouched, so its duration survives a hot-only update.
-    CHECK(optView->property().duration() == std::chrono::minutes{3});
   }
 
   TEST_CASE("TrackStore - prepared update replaces the cold side alone", "[library][unit][track-store][raw-layout]")
@@ -362,70 +310,55 @@ namespace ao::library::test
     CHECK(rows.begin() == rows.end());
   }
 
-  TEST_CASE("MusicLibrary - open rejects a missing cold Track record", "[library][regression][track-store][raw-layout]")
-  {
-    auto const temp = ao::test::TempDir{};
-    seedTrackRows(temp.path(), true, false, false);
-    requireCorruptOpen(temp.path());
-  }
-
   TEST_CASE("MusicLibrary - open rejects either kind of orphan Track record",
-            "[library][regression][track-store][raw-layout]")
+            "[library][unit][track-store][raw-layout]")
   {
     auto const temp = ao::test::TempDir{};
+    initializeLibraryStorage(temp.path());
 
     SECTION("hot row with missing cold side")
     {
-      seedTrackRows(temp.path(), true, false, false);
-      requireCorruptOpen(temp.path());
+      seedRawTrackRow(temp.path(), 1, "track.flac", makeHotData(), {});
     }
 
     SECTION("cold row with missing hot side")
     {
-      seedTrackRows(temp.path(), false, true, false);
-      requireCorruptOpen(temp.path());
-    }
-  }
-
-  TEST_CASE("MusicLibrary - open rejects a physical orphan instead of normalizing it",
-            "[library][regression][track-store][raw-layout]")
-  {
-    auto const temp = ao::test::TempDir{};
-    bool includeHot = false;
-    bool includeCold = false;
-
-    SECTION("hot orphan")
-    {
-      includeHot = true;
+      seedRawTrackRow(temp.path(), 1, "track.flac", {}, makeColdData());
     }
 
-    SECTION("cold orphan")
-    {
-      includeCold = true;
-    }
-
-    seedTrackRows(temp.path(), includeHot, includeCold, false);
-    requireCorruptOpen(temp.path());
+    requireCorruptOpen(temp.path(), "Hot and cold Track databases contain different key sets");
   }
 
   TEST_CASE("MusicLibrary - open rejects an orphan before exposing later valid Track pairs",
-            "[library][regression][track-store][raw-layout]")
+            "[library][unit][track-store][raw-layout]")
   {
     auto const temp = ao::test::TempDir{};
-    bool includeFirstHot = true;
-    bool includeFirstCold = true;
+    initializeLibraryStorage(temp.path());
+    seedRawTrackRow(temp.path(),
+                    2,
+                    "second.flac",
+                    makeHotData(),
+                    makeColdData(TrackColdHeader{.duration = std::chrono::minutes{2}}, "second.flac"));
+
+    {
+      auto const validRes = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE(validRes);
+    }
 
     SECTION("hot row lacks its cold pair")
     {
-      includeFirstCold = false;
+      seedRawTrackRow(temp.path(), 1, "first.flac", makeHotData(), {});
+      requireCorruptOpen(temp.path(), "Hot and cold Track keys do not form matching nonzero pairs: 1 and 2");
     }
 
     SECTION("cold row lacks its hot pair")
     {
-      includeFirstHot = false;
+      seedRawTrackRow(temp.path(),
+                      1,
+                      "first.flac",
+                      {},
+                      makeColdData(TrackColdHeader{.duration = std::chrono::minutes{1}}, "first.flac"));
+      requireCorruptOpen(temp.path(), "Hot and cold Track keys do not form matching nonzero pairs: 2 and 1");
     }
-
-    seedTrackRows(temp.path(), includeFirstHot, includeFirstCold, true);
-    requireCorruptOpen(temp.path());
   }
 } // namespace ao::library::test

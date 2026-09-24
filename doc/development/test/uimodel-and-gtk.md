@@ -149,12 +149,29 @@ seek-control regressions. It uses public widget/surface coordinate transforms
 and bounded event-delivery waits. X11, XTest, and XInput development dependencies
 come from the pinned Linux shell and are linked only to the GTK test target.
 
-The portal starts a private Xvfb for every GTK test process and marks that child
-with `AOBUS_OWNED_GTK_DISPLAY=1`. Native-input tests skip without that marker;
-never set it for an inherited desktop display. The printed direct shard command
-omits both the display and its ownership marker, so rerun these cases through
-`./ao test --gtk "SeekControlWidget*"` rather than injecting into a user session.
 The native mouse tests do not establish Wayland, touch, or grab-transfer behavior.
+
+### Process isolation and diagnostics
+
+The portal gives every GTK test process, including each shard, a private Xvfb
+and a private session bus without service activation, so tests never touch the
+desktop session or compete for MPRIS names. It marks them with
+`AOBUS_OWNED_GTK_DISPLAY` and `AOBUS_OWNED_GTK_BUS` and keeps both daemons alive
+until the process exits.
+
+- Native-input tests skip unless the display marker is present. Never set it for
+  an inherited desktop display.
+- The GTK test main disables any session bus that does not match the bus marker,
+  including for IDE and CTest launches. Tests that use the bus call
+  `requireOwnedGtkSessionBus()` first and skip otherwise. They must not tear down
+  that bus while GTK's process-global clients still hold its connection.
+- GLib warnings and criticals are fatal. Fix the diagnostic's owner rather than
+  filtering logs; a fatal teardown diagnostic fails the run even after Catch2
+  reports success.
+- Tests that construct application windows call `ensureRegisteredGtkApplication()`.
+
+Rerun native-input or bus-dependent cases through `./ao test --gtk`; printed shard
+commands deliberately disable both endpoints.
 
 ## Show and present
 
@@ -226,11 +243,9 @@ Do not grow a test framework.
 
 ## Heavy coordinator tests
 
-Heavy coordinator tests that exercise real files, scanning, import/export,
-dialogs, permissions, and notification feeds are workflow or integration tests.
-Prefer fakeable seams for coordinator control flow, keep only a few end-to-end
-smoke/regression cases, and tag heavy cases as `[workflow]`, `[integration]`, or
-`[regression]` as appropriate.
+Keep only a few end-to-end scan or import/export scenarios, tagged
+`[integration]`. Test coordinator control flow and lifecycle through controlled
+seams as `[unit]`; see [scope selection](layer-selection.md#scope-and-independent-metadata).
 
 ## Writing testable GTK code
 

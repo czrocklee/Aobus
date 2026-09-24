@@ -3,7 +3,6 @@
 
 #include <ao/library/AudioIdentity.h>
 
-#include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,7 +39,7 @@ namespace ao::library::test
 
     REQUIRE(optResult);
     CHECK(optResult->payloadLength == payload.size());
-    CHECK(optResult->signature != utility::Hash128{});
+    CHECK(optResult->signature == utility::xxh3Hash128(payload));
     REQUIRE(progressEvents.size() == 2);
     CHECK(progressEvents.front() == 0.0);
     CHECK(progressEvents.back() == 1.0);
@@ -58,7 +57,8 @@ namespace ao::library::test
     CHECK(optResult->payloadLength == payload.size());
   }
 
-  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity", "[library][unit][audio-identity]")
+  TEST_CASE("readAudioIdentity - cancellation after one chunk returns no identity",
+            "[library][unit][audio-identity][concurrency]")
   {
     auto const payload = makePayload(kHashChunkSize + 17U);
     auto stopSource = std::stop_source{};
@@ -80,6 +80,8 @@ namespace ao::library::test
     CHECK_FALSE(optResult);
     REQUIRE(progressEvents.size() == 2);
     CHECK(progressEvents.front() == 0.0);
+    auto const expectedFraction = static_cast<double>(kHashChunkSize) / static_cast<double>(payload.size());
+    CHECK(progressEvents.back() == expectedFraction);
     CHECK(progressEvents.back() > 0.0);
     CHECK(progressEvents.back() < 1.0);
   }

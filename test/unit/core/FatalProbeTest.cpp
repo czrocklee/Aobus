@@ -17,7 +17,7 @@ namespace ao::test
     constexpr auto kProbeTimeout = std::chrono::seconds{15};
   } // namespace
 
-  TEST_CASE("Fatal - subprocess probes preserve diagnostics and abort", "[utility][integration][fatal][concurrency]")
+  TEST_CASE("Fatal - subprocess probes preserve diagnostics and abort", "[utility][integration][fatal]")
   {
     auto const probeExecutablePath = fatalProbeExecutablePath();
     REQUIRE_FALSE(probeExecutablePath.empty());

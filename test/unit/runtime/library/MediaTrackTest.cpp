@@ -6,12 +6,16 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/PictureType.h>
+#include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstddef>
+#include <span>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace ao::rt::test
 {
@@ -46,7 +50,7 @@ namespace ao::rt::test
     CHECK(movedAgain.file().audioPayload());
   }
 
-  TEST_CASE("MediaTrack - maps classical visitor fields into TrackBuilder", "[runtime][unit][media-track]")
+  TEST_CASE("MediaTrack - maps classical visitor fields into TrackBuilder", "[runtime][integration][media-track]")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("classical_metadata.mp3"));
     REQUIRE(res);
@@ -61,7 +65,7 @@ namespace ao::rt::test
     CHECK(metadata.trackTotal() == 9);
   }
 
-  TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries", "[runtime][unit][media-track]")
+  TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries", "[runtime][integration][media-track]")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("with_cover.mp3"));
     REQUIRE(res);
@@ -69,5 +73,11 @@ namespace ao::rt::test
     auto const& covers = res->builder().coverArt().entries();
     REQUIRE(covers.size() == 1);
     CHECK(covers.front().type == PictureType::Other);
+    auto const* const bytes = std::get_if<std::span<std::byte const>>(&covers.front().source);
+    REQUIRE(bytes);
+    // Pin the checked-in MP3's APIC payload independently of the runtime adapter.
+    CHECK(bytes->size() == 90);
+    CHECK(utility::sha256Hex(utility::computeSha256(*bytes)) ==
+          "d5fb6495697da5911365ff4dcda27b627fa3dbfdad162e9db3ab280f97274331");
   }
 } // namespace ao::rt::test

@@ -420,8 +420,8 @@ The notification center can be opened explicitly even when compact status is not
 ## Test map
 
 - [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) protects expression compilation, metadata invalidation, title ownership, Soul composition, and control-safe output. [`SoulButtonTest.cpp`](../../../test/unit/tui/SoulButtonTest.cpp) protects shared playback-state glyphs.
-- [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, and overlay state.
-- [`ShellInputTest.cpp`](../../../test/unit/tui/ShellInputTest.cpp) protects caret editing, history, cursor-aware replacement, and localized action discovery. [`ListSearchTest.cpp`](../../../test/unit/tui/ListSearchTest.cpp) protects local query ownership and filtered selection.
+- [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects input modes, touched state, mode-local history, completion-range application, and overlay state.
+- [`TextFieldModelTest.cpp`](../../../test/unit/tui/TextFieldModelTest.cpp) protects grapheme-aware caret and Unicode word editing. [`ListSearchTest.cpp`](../../../test/unit/tui/ListSearchTest.cpp) protects local query ownership and filtered selection.
 - [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects command parsing and key-action mappings.
 - [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects shared action identities, independent terminal defaults, terminal aliases and omissions, collision order, unbinding, and coupled dispatch/hint selection.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects input routing, live-filter debounce/cancellation, completion acceptance, key/mouse modality, seek, teardown stabilization, overlays, resizing, scan commands, selection commands, and exit without early playback stop.
@@ -443,8 +443,8 @@ The notification center can be opened explicitly even when compact status is not
 - [`ListNavigationModelTest.cpp`](../../../test/unit/tui/ListNavigationModelTest.cpp) protects shared-tree preorder adaptation, expansion, cursor identity, and local search.
 - [`NavigationPanelTest.cpp`](../../../test/unit/tui/NavigationPanelTest.cpp) protects docking budgets, workspace focus, and painted navigation targets.
 - [`WorkspaceUsabilityTest.cpp`](../../../test/unit/tui/WorkspaceUsabilityTest.cpp) protects narrow workspace guidance, filter recovery controls, and playback text.
-- [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`HitRegionsTest.cpp`](../../../test/unit/tui/HitRegionsTest.cpp) protect rendering and hit geometry.
-- Command completion tests under [`test/unit/tui/`](../../../test/unit/tui) protect prefix, alias, presentation, Quick-filter, and expression completion.
+- [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`HitRegionsTest.cpp`](../../../test/unit/tui/HitRegionsTest.cpp) protect rendering and hit geometry. [`QualityPanelTest.cpp`](../../../test/unit/tui/QualityPanelTest.cpp) and [`OutputDevicePanelTest.cpp`](../../../test/unit/tui/OutputDevicePanelTest.cpp) protect panel content, localization, and terminal bounds.
+- [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects prefix, alias, localized action discovery, presentation, Quick-filter, and expression completion, including interior filter ranges.
 
 ## Related documents
 

@@ -174,16 +174,16 @@ namespace
     }
   }
 
-  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
+  void configureOpenLibraryCallback(std::unique_ptr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
+                                    std::unique_ptr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::optional<LibraryRestartRequest>& optRestartRequest);
 
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& appPtr,
-                            Glib::RefPtr<MainWindow>& mainWindowPtr,
+                            std::unique_ptr<MainWindow>& mainWindowPtr,
                             std::optional<LibraryRestartRequest>& optRestartRequest,
                             bool const scanAfterOpen)
   {
@@ -222,9 +222,9 @@ namespace
     appPtr->quit();
   }
 
-  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
+  void configureOpenLibraryCallback(std::unique_ptr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
+                                    std::unique_ptr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::optional<LibraryRestartRequest>& optRestartRequest)
@@ -248,7 +248,7 @@ namespace
       });
   }
 
-  void releaseMainWindow(Gtk::Application& app, Glib::RefPtr<MainWindow>& mainWindowPtr)
+  void releaseMainWindow(Gtk::Application& app, std::unique_ptr<MainWindow>& mainWindowPtr)
   {
     if (!mainWindowPtr)
     {
@@ -509,7 +509,7 @@ namespace
   }
 
   void handleAppActivate(Glib::RefPtr<Gtk::Application>& appPtr,
-                         Glib::RefPtr<MainWindow>& mainWindowPtr,
+                         std::unique_ptr<MainWindow>& mainWindowPtr,
                          MainContextCallbackScope const& callbackScope,
                          utility::ScopedRegistration& openLibraryIdleRegistration,
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
@@ -685,7 +685,7 @@ namespace
     // them at the slot boundary; the project fatal root adds owned context.
     Glib::add_exception_handler([] { handleSignalException(); });
 
-    auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
+    auto mainWindowPtr = std::unique_ptr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
     auto optRestartRequest = std::optional<LibraryRestartRequest>{};
     auto optDiagnosticMessage = std::optional<std::string>{};

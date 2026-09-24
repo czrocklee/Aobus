@@ -105,8 +105,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - time and volume changes preserve adjacent button positions",
-            "[tui][regression][playback-mode]")
+  TEST_CASE("PlaybackMode - time and volume changes preserve adjacent button positions", "[tui][unit][playback-mode]")
   {
     auto state = rt::PlaybackTransportSnapshot{.duration = std::chrono::minutes{20}};
     state.volume.level = 0.99F;
@@ -155,6 +154,23 @@ namespace ao::tui::test
         auto const after = renderElement(playbackBar(catalog, view), width, 1);
         INFO(before.text);
         INFO(after.text);
+        CHECK(before.text.contains("9:59"));
+        CHECK(before.text.contains("99%"));
+        CHECK(after.text != before.text);
+
+        if (nextElapsed != elapsed)
+        {
+          CHECK(after.text.contains("10:00"));
+        }
+        else if (nextState.volume.muted)
+        {
+          CHECK_FALSE(after.text.contains("99%"));
+        }
+        else
+        {
+          CHECK(after.text.contains("100%"));
+        }
+
         CHECK(modeBox.x_min == beforeMode.x_min);
         CHECK(modeBox.x_max == beforeMode.x_max);
         CHECK(outputBox.x_min == beforeOutput.x_min);
@@ -165,7 +181,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PlaybackPanel - narrow volume slots shorten mute wording without losing the title or numeric value",
-            "[tui][regression][playback][playback-mode]")
+            "[tui][unit][playback]")
   {
     auto const catalog = ao::test::messageCatalog("de");
 
@@ -308,7 +324,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackMode - narrow activity slots retain content or disappear", "[tui][regression][playback-mode]")
+  TEST_CASE("PlaybackMode - narrow activity slots retain content or disappear", "[tui][unit][playback-mode]")
   {
     auto const catalog = ao::test::messageCatalog("ja");
     auto mode = rt::PlaybackSuccessionSnapshot{.shuffle = rt::ShuffleMode::On, .repeat = rt::RepeatMode::All};
@@ -368,11 +384,15 @@ namespace ao::tui::test
     shell.beginInput(ShellInputMode::QuickFilter, "artist");
     CHECK_FALSE(render().contains("Click for"));
     shell.closeInput();
+    CHECK(render().contains("Click for"));
     shell.openOverlay(Overlay::GoTo);
     CHECK_FALSE(render().contains("Click for"));
+    shell.closeOverlay();
+    CHECK(render().contains("Click for"));
     shell.openOverlay(Overlay::Help);
     CHECK_FALSE(render().contains("Click for"));
     shell.closeOverlay();
+    CHECK(render().contains("Click for"));
     shell.focusTracks();
     state.optResizingDivider = PanelDivider::Navigation;
     CHECK_FALSE(render().contains("Click for"));
@@ -385,7 +405,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PlaybackMode - hover yields to navigation search and resumes when search ends",
-            "[tui][regression][playback-mode]")
+            "[tui][unit][playback-mode]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto shell = ShellInteractionModel{};
@@ -405,7 +425,7 @@ namespace ao::tui::test
     CHECK_FALSE(browsing.contains("/ search · Esc clear"));
   }
 
-  TEST_CASE("PlaybackMode - hover preserves visual selection controls", "[tui][regression][playback-mode]")
+  TEST_CASE("PlaybackMode - hover preserves visual selection controls", "[tui][unit][playback-mode]")
   {
     auto mode = rt::PlaybackSuccessionSnapshot{};
     auto cancelBox = kEmptyMouseBox;
@@ -426,7 +446,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("PlaybackMode - invalid closed enum values retire the button and retain ordinary status hints",
-            "[tui][regression][playback-mode]")
+            "[tui][unit][playback-mode]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const invalidShuffle = rt::PlaybackSuccessionSnapshot{.shuffle = static_cast<rt::ShuffleMode>(2)};

@@ -20,6 +20,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
@@ -499,25 +500,32 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("ResourceByteMemoryCache - GTK derivatives share one owner-affine raw resource flight",
-            "[gtk][regression][resource-byte][concurrency]")
+            "[gtk][integration][resource-byte][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+    auto release = rt::test::AsyncBarrier{};
     auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 4};
     auto const ownerThread = std::this_thread::get_id();
-    auto release = rt::test::AsyncBarrier{};
     auto readCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto const pngBytes = encodePng(makePixbuf(256));
     auto byteCache = rt::ResourceByteMemoryCache{
       runtime, std::bind_front(readResourceAfterReleaseAsync, readCount, &release, pngBytes)};
     auto imageCache = ImageCache{200};
     auto imageLoader = ResourceImageLoader{byteCache, imageCache, runtime};
-    auto tempDir = ao::test::TempDir{};
     auto artUrlCache = platform::MprisArtUrlCache{byteCache, runtime, tempDir.path() / "shared-resource-bytes"};
     constexpr auto kResourceId = ResourceId{8181};
     auto urlCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto nonEmptyUrlCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto callbacksOnOwner = rt::test::AsyncTestState<bool>::create(true);
+    auto retireWork = utility::ScopedRegistration{[&]
+                                                  {
+                                                    release.release();
+                                                    runtime.requestStop();
+                                                    runtime.join();
+                                                    executor.drain();
+                                                  }};
     auto urlRequest =
       artUrlCache.requestUrl(kResourceId,
                              [ownerThread, callbacksOnOwner, urlCallbackCount, nonEmptyUrlCount](std::string result)
@@ -570,9 +578,7 @@ namespace ao::gtk::test
     CHECK(imageLoader.getThumbnail(kResourceId, 48));
     CHECK(imageLoader.getThumbnail(kResourceId, 96));
 
-    runtime.requestStop();
-    runtime.join();
-    executor.drain();
+    retireWork.reset();
 
     CHECK(callbacksOnOwner.load());
     CHECK(urlCallbackCount.load() == 1);

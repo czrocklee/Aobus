@@ -264,7 +264,7 @@ namespace ao::rt::test
     CHECK_FALSE(target.enabled);
   }
 
-  TEST_CASE("ConfigStore - failed deserialization leaves the target unchanged", "[runtime][regression][config]")
+  TEST_CASE("ConfigStore - failed deserialization leaves the target unchanged", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -313,7 +313,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - batch saves are atomic across schemas", "[runtime][regression][config]")
+  TEST_CASE("ConfigStore - batch saves are atomic across schemas", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -377,7 +377,7 @@ namespace ao::rt::test
     CHECK_FALSE(second.enabled);
   }
 
-  TEST_CASE("ConfigStore - failed replacement preserves the live document", "[runtime][regression][config]")
+  TEST_CASE("ConfigStore - failed replacement preserves the live document", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -412,28 +412,44 @@ namespace ao::rt::test
     CHECK_FALSE(*reloaded.contains("staged"));
   }
 
-  TEST_CASE("ConfigStore - saves preserve rejected backing documents", "[runtime][regression][config]")
+  TEST_CASE("ConfigStore - saves preserve rejected backing documents", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
 
-    for (auto const original : {std::string_view{},
-                                std::string_view{"owned: [unterminated"},
-                                std::string_view{"- first\n- second\n"},
-                                std::string_view{"owned: {}\nowned: {}\n"}})
-    {
-      CAPTURE(original);
-      writeFile(configPath, original);
-      auto store = ConfigStore{configPath};
-      auto const res = store.save("replacement", State{.count = 7}, StateYamlSchema{});
+    auto original = std::string_view{};
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::FormatRejected);
-      CHECK(ao::test::readFile(configPath) == original);
+    SECTION("empty document")
+    {
+      original = "";
     }
+
+    SECTION("unterminated YAML")
+    {
+      original = "owned: [unterminated";
+    }
+
+    SECTION("top-level sequence")
+    {
+      original = "- first\n- second\n";
+    }
+
+    SECTION("duplicate group keys")
+    {
+      original = "owned: {}\nowned: {}\n";
+    }
+
+    CAPTURE(original);
+    writeFile(configPath, original);
+    auto store = ConfigStore{configPath};
+    auto const res = store.save("replacement", State{.count = 7}, StateYamlSchema{});
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(ao::test::readFile(configPath) == original);
   }
 
-  TEST_CASE("ConfigStore - later saves preserve owned serialized strings", "[runtime][regression][config]")
+  TEST_CASE("ConfigStore - later saves preserve owned serialized strings", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -458,7 +474,7 @@ namespace ao::rt::test
     CHECK(first.name == "temporary value");
   }
 
-  TEST_CASE("ConfigStore - removes groups and enforces read-only mode", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - removes groups durably and treats absence as a no-op", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

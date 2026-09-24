@@ -31,7 +31,7 @@ namespace ao::winui::test
   } // namespace
 
   TEST_CASE("MemoryRandomAccessStream - prepared storage wraps exact bytes without another payload write",
-            "[runtime][unit][resource-byte]")
+            "[winui][unit][memory-random-access-stream]")
   {
     auto apartment = Apartment{};
     auto const expected = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};

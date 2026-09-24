@@ -117,7 +117,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("SmartListEvaluator - existing plan binds dictionary symbols introduced by a later commit",
-            "[runtime][unit][smart-list][regression]")
+            "[runtime][unit][smart-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(makeSmartListSpec("future metadata", 2026));

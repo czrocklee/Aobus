@@ -22,13 +22,12 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("AlsaExclusiveBackend - non-hardware PCM is rejected", "[audio][regression][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - non-hardware PCM is rejected", "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     auto const device = Device{
@@ -43,7 +42,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - unsupported signal is rejected before native device inspection",
-            "[audio][regression][alsa]")
+            "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     auto const device = Device{
@@ -58,7 +57,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - a missing device is reported as such, never as a format problem",
-            "[audio][regression][alsa]")
+            "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     // A failed native open must surface its own cause. Translating it into a
@@ -75,7 +74,7 @@ namespace ao::audio::backend::test
     CHECK(openedRes.error().message.contains("Failed to open ALSA device"));
   }
 
-  TEST_CASE("AlsaExclusiveBackend - a hint is never treated as an opened mode", "[audio][regression][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - failed open leaves prewarm hint on immutable policy", "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     // Nothing is cached before a successful open, so a device that was never
@@ -85,15 +84,18 @@ namespace ao::audio::backend::test
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24};
 
-    std::ignore = backend.open(sourceFormat, target);
+    auto const openedRes = backend.open(sourceFormat, target);
+    REQUIRE_FALSE(openedRes);
 
     auto const optHint = backend.prewarmFormatHint(sourceFormat);
 
     REQUIRE(optHint);
+    CHECK(optHint->sampleRate == 48000);
+    CHECK(optHint->channels == 2);
     CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
   }
 
-  TEST_CASE("AlsaExclusiveBackend - NaN volume does not observe or publish mixer state", "[audio][regression][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - NaN volume does not observe or publish mixer state", "[audio][unit][alsa]")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {50L}});
@@ -121,7 +123,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - property observation publishes effective mixer state and fallback",
-            "[audio][regression][alsa]")
+            "[audio][unit][alsa]")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->optHardwareMuted = true;
@@ -203,7 +205,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - software fallback survives close and reopen after a mixer write failure",
-            "[audio][regression][alsa-mixer]")
+            "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
@@ -216,8 +218,20 @@ namespace ao::audio::backend::test
     auto backend = detail::test::AlsaControlBackend{device, registry.publisher(), mixerStatePtr};
     mixerStatePtr->writeSucceeds = false;
 
-    REQUIRE_FALSE(backend.set(props::kVolume, 0.25F));
+    auto const failedWriteRes = backend.set(props::kVolume, 0.25F);
+    REQUIRE_FALSE(failedWriteRes);
+    CHECK(failedWriteRes.error().code == Error::Code::IoError);
+    CHECK(failedWriteRes.error().message.contains("hardware state may have changed partially"));
+    CHECK_FALSE(backend.isMixerInitialized());
+    REQUIRE(graph.nodes.size() == 2U);
+    CHECK_FALSE(graph.nodes.back().softwareVolumeNotUnity);
+    CHECK(graph.nodes.back().minSoftwareGain == 1.0F);
+    CHECK(graph.nodes.back().maxSoftwareGain == 1.0F);
+
     REQUIRE(backend.set(props::kVolume, 0.3F));
+    auto const fallbackRes = backend.property(PropertyId::Volume);
+    REQUIRE(fallbackRes);
+    CHECK(std::get<float>(*fallbackRes) == 0.3F);
     backend.close();
     REQUIRE(graph.nodes.empty());
     mixerStatePtr->writeSucceeds = true;
@@ -241,8 +255,7 @@ namespace ao::audio::backend::test
     CHECK(mixerStatePtr->writeCount == 1U);
   }
 
-  TEST_CASE("AlsaExclusiveBackend - every graph callback reads volume without nested delivery",
-            "[audio][regression][alsa][concurrency]")
+  TEST_CASE("AlsaExclusiveBackend - every graph callback reads volume without nested delivery", "[audio][unit][alsa]")
   {
     bool const hardware = GENERATE(false, true);
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
@@ -349,7 +362,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - initial callback volume read delivers discovered fallback after unwinding",
-            "[audio][regression][alsa][concurrency]")
+            "[audio][unit][alsa]")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {80L}});
@@ -397,7 +410,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("AlsaExclusiveBackend - retained publisher is inert after graph retirement",
-            "[audio][regression][alsa][concurrency]")
+            "[audio][unit][alsa][concurrency]")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {80L}});

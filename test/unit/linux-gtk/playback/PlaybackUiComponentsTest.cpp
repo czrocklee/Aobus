@@ -3,7 +3,6 @@
 
 #include "playback/SeekControlWidget.h"
 #include "playback/TimeLabel.h"
-#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -28,6 +27,7 @@
 #include <gdk/gdk.h>
 #include <gdk/x11/gdkx.h>
 #include <glib-object.h>
+#include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <graphene.h>
 #include <gtk/gtk.h>
@@ -38,13 +38,13 @@
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <memory>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -54,17 +54,6 @@ namespace ao::gtk::test
 {
   namespace
   {
-    struct PlaybackUiComponentsFixture final
-    {
-      ao::test::TempDir tempDir{};
-      std::unique_ptr<rt::AppRuntime> runtimePtr;
-
-      PlaybackUiComponentsFixture()
-        : runtimePtr{makeRuntime(tempDir)}
-      {
-      }
-    };
-
     void startPlayback(rt::AppRuntime& runtime)
     {
       auto const trackId = addRuntimeTrack(
@@ -313,132 +302,171 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackUiComponents - render initial GTK bindings", "[gtk][unit][playback]")
+  TEST_CASE("SeekControlWidget - idle state has a disabled zeroed styled scale", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    SECTION("SeekControlWidget renders a disabled seek scale before playback starts")
-    {
-      auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback};
 
-      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
-      REQUIRE(scale != nullptr);
-      CHECK(scale->has_css_class("ao-seekbar"));
-    }
+    auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+    REQUIRE(scale != nullptr);
+    CHECK(scale->has_css_class("ao-seekbar"));
+    CHECK(scale->get_value() == 0.0);
+    CHECK_FALSE(scale->get_sensitive());
+  }
 
-    SECTION("TimeLabel renders the playback time template before playback starts")
-    {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
+  TEST_CASE("TimeLabel - idle state has template text and style", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->has_css_class("ao-time-label"));
+    auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
 
-      std::int32_t widthRequest = 0;
-      std::int32_t heightRequest = 0;
-      label->get_size_request(widthRequest, heightRequest);
-      CHECK(widthRequest > 0);
-    }
+    auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+    REQUIRE(label != nullptr);
+    CHECK(label->has_css_class("ao-time-label"));
 
-    SECTION("TimeLabel tick follows mapped playing state")
-    {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
-      CHECK_FALSE(timeLabel.isTickActive());
+    CHECK(label->get_text() == uimodel::describeTimeTemplate(uimodel::PlaybackTimeMode::Combined));
 
-      startPlayback(*env.runtimePtr);
-      CHECK_FALSE(timeLabel.isTickActive());
+    std::int32_t widthRequest = 0;
+    std::int32_t heightRequest = 0;
+    label->get_size_request(widthRequest, heightRequest);
+    CHECK(widthRequest > 0);
+  }
 
-      auto windowFixture = GtkWindowFixture{};
-      windowFixture.mount(timeLabel.widget());
-      windowFixture.present();
-      CHECK(timeLabel.isTickActive());
+  TEST_CASE("TimeLabel - ticks only while mapped and playing", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
 
-      playback.commands().pause();
-      drainGtkEvents();
-      CHECK_FALSE(timeLabel.isTickActive());
-    }
+    auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
+    CHECK_FALSE(timeLabel.isTickActive());
 
-    SECTION("SeekControlWidget tick follows mapped playing state")
-    {
-      auto seekControl = SeekControlWidget{playback};
-      CHECK_FALSE(seekControl.isTickActive());
+    startPlayback(env.runtime());
+    CHECK_FALSE(timeLabel.isTickActive());
 
-      startPlayback(*env.runtimePtr);
-      CHECK_FALSE(seekControl.isTickActive());
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(timeLabel.widget());
+    windowFixture.present();
+    CHECK(timeLabel.isTickActive());
 
-      auto windowFixture = GtkWindowFixture{};
-      windowFixture.mount(seekControl.widget());
-      windowFixture.present();
-      CHECK(seekControl.isTickActive());
+    windowFixture.unmount();
+    CHECK_FALSE(timeLabel.isTickActive());
+    windowFixture.mount(timeLabel.widget());
+    windowFixture.present();
+    CHECK(timeLabel.isTickActive());
 
-      playback.commands().pause();
-      drainGtkEvents();
-      CHECK_FALSE(seekControl.isTickActive());
-    }
+    playback.commands().pause();
+    drainGtkEvents();
+    CHECK_FALSE(timeLabel.isTickActive());
+  }
+
+  TEST_CASE("SeekControlWidget - ticks only while mapped and playing", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
+
+    auto seekControl = SeekControlWidget{playback};
+    CHECK_FALSE(seekControl.isTickActive());
+
+    startPlayback(env.runtime());
+    CHECK_FALSE(seekControl.isTickActive());
+
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(seekControl.widget());
+    windowFixture.present();
+    CHECK(seekControl.isTickActive());
+
+    windowFixture.unmount();
+    CHECK_FALSE(seekControl.isTickActive());
+    windowFixture.mount(seekControl.widget());
+    windowFixture.present();
+    CHECK(seekControl.isTickActive());
+
+    playback.commands().pause();
+    drainGtkEvents();
+    CHECK_FALSE(seekControl.isTickActive());
   }
 
   // Construction delivers the current playback state synchronously through the
   // view model. The constructor body must not overwrite it with template/reset
   // values, or a layout rebuilt during playback stays blank until the next
   // transport change.
-  TEST_CASE("PlaybackUiComponents - construction during playback keeps live state", "[gtk][unit][playback]")
+  TEST_CASE("TimeLabel - construction during playback keeps live state", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    startPlayback(*env.runtimePtr);
+    startPlayback(env.runtime());
 
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.duration > std::chrono::milliseconds{0});
 
-    SECTION("TimeLabel shows live time instead of the template")
-    {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
+    auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
 
-      auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_text() ==
-            uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Combined, transport.elapsed, transport.duration));
+    auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+    REQUIRE(label != nullptr);
+    CHECK(label->get_text() ==
+          uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Combined, transport.elapsed, transport.duration));
 
-      auto windowFixture = GtkWindowFixture{};
-      windowFixture.mount(timeLabel.widget());
-      windowFixture.present();
-      CHECK(timeLabel.isTickActive());
-    }
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(timeLabel.widget());
+    windowFixture.present();
+    CHECK(timeLabel.isTickActive());
+  }
 
-    SECTION("SeekControlWidget shows the live range instead of a zeroed scale")
-    {
-      auto seekControl = SeekControlWidget{playback};
+  TEST_CASE("SeekControlWidget - construction during playback keeps live state", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
 
-      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
-      REQUIRE(scale != nullptr);
-      Glib::RefPtr<Gtk::Adjustment> const adjustmentPtr = scale->get_adjustment();
-      CHECK(adjustmentPtr->get_upper() == static_cast<double>(transport.duration.count()));
-      CHECK(scale->get_sensitive());
+    startPlayback(env.runtime());
 
-      auto windowFixture = GtkWindowFixture{};
-      windowFixture.mount(seekControl.widget());
-      windowFixture.present();
-      CHECK(seekControl.isTickActive());
-    }
+    auto const transport = playback.snapshot().transport;
+    REQUIRE(transport.duration > std::chrono::milliseconds{0});
+
+    auto seekControl = SeekControlWidget{playback};
+
+    auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+    REQUIRE(scale != nullptr);
+    Glib::RefPtr<Gtk::Adjustment> const adjustmentPtr = scale->get_adjustment();
+    CHECK(adjustmentPtr->get_upper() == static_cast<double>(transport.duration.count()));
+    CHECK(scale->get_sensitive());
+
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(seekControl.widget());
+    windowFixture.present();
+    CHECK(seekControl.isTickActive());
   }
 
   TEST_CASE("SeekControlWidget - debounce commits the captured value instead of the live scale",
-            "[gtk][regression][playback]")
+            "[gtk][integration][playback][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
-    startPlayback(*env.runtimePtr);
+    startPlayback(env.runtime());
     playback.commands().pause();
     auto seekControl = SeekControlWidget{playback};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
@@ -453,20 +481,58 @@ namespace ao::gtk::test
     playback.commands().seek(laterElapsed);
     REQUIRE(scale->get_value() == static_cast<double>(requestedElapsed.count()));
 
-    drainGtkEventsFor(std::chrono::milliseconds{75});
+    auto const competingRevision = playback.snapshot().transport.finalSeekRevision;
+    REQUIRE(
+      tryPumpGtkEventsUntil([&] { return playback.snapshot().transport.finalSeekRevision != competingRevision; }));
     CHECK(playback.snapshot().transport.elapsed == requestedElapsed);
   }
 
+  TEST_CASE("SeekControlWidget - destruction retires a pending final seek", "[gtk][integration][playback][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
+    startPlayback(env.runtime());
+    playback.commands().pause();
+    auto const before = playback.snapshot().transport;
+    auto const requestedElapsed = before.duration / 4;
+    REQUIRE(requestedElapsed > std::chrono::milliseconds{0});
+
+    {
+      auto seekControl = SeekControlWidget{playback};
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+      REQUIRE(scale != nullptr);
+      scale->set_value(static_cast<double>(requestedElapsed.count()));
+      REQUIRE(scale->get_value() == static_cast<double>(requestedElapsed.count()));
+      REQUIRE(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
+    }
+
+    // A later timeout proves the main context dispatches beyond the debounce window.
+    bool controlExpired = false;
+    auto controlConnection = sigc::scoped_connection{Glib::signal_timeout().connect(
+      [&]
+      {
+        controlExpired = true;
+        return false;
+      },
+      75)};
+    REQUIRE(tryPumpGtkEventsUntil([&] { return controlExpired; }));
+    CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
+    CHECK(playback.snapshot().transport.elapsed == before.elapsed);
+  }
+
   TEST_CASE("SeekControlWidget - pending final keeps the playing thumb stable without a frame tick",
-            "[gtk][regression][playback]")
+            "[gtk][unit][playback][async]")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
-    startPlayback(*env.runtimePtr);
+    startPlayback(env.runtime());
     auto seekControl = SeekControlWidget{playback};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -493,13 +559,13 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SeekControlWidget - replacing a pending seek leaves a fresh native gesture usable",
-            "[gtk][regression][playback][concurrency]")
+            "[gtk][integration][playback][async]")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    preparePausedLoopingPlayback(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    preparePausedLoopingPlayback(env.runtime());
     auto seekControl = SeekControlWidget{playback};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -534,13 +600,13 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SeekControlWidget - native range arbitration does not retarget a held seek",
-            "[gtk][regression][playback][concurrency]")
+            "[gtk][integration][playback][async]")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    preparePausedLoopingPlayback(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    preparePausedLoopingPlayback(env.runtime());
     auto seekControl = SeekControlWidget{playback};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -581,13 +647,13 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SeekControlWidget - native interruption permits a fresh gesture without release",
-            "[gtk][regression][playback][concurrency]")
+            "[gtk][integration][playback][async]")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    preparePausedLoopingPlayback(*env.runtimePtr);
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    preparePausedLoopingPlayback(env.runtime());
     auto seekControl = SeekControlWidget{playback};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -639,33 +705,5 @@ namespace ao::gtk::test
     CHECK(playback.snapshot().transport.finalSeekRevision.value == replacement.finalSeekRevision.value + 1);
     CHECK(playback.snapshot().transport.occurrenceId == replacement.occurrenceId);
     checkFrameAlignedElapsed(playback.snapshot().transport.elapsed, targetElapsed);
-  }
-
-  TEST_CASE("PlaybackUiComponents - construction without a track renders idle state", "[gtk][unit][playback]")
-  {
-    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtimePtr->playback();
-    rt::test::addReadyAudioProvider(*env.runtimePtr);
-    drainGtkEvents();
-
-    SECTION("TimeLabel renders the template")
-    {
-      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Combined};
-
-      auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
-      REQUIRE(label != nullptr);
-      CHECK(label->get_text() == uimodel::describeTimeTemplate(uimodel::PlaybackTimeMode::Combined));
-    }
-
-    SECTION("SeekControlWidget renders a disabled zeroed scale")
-    {
-      auto seekControl = SeekControlWidget{playback};
-
-      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
-      REQUIRE(scale != nullptr);
-      CHECK(scale->get_value() == 0.0);
-      CHECK_FALSE(scale->get_sensitive());
-    }
   }
 } // namespace ao::gtk::test

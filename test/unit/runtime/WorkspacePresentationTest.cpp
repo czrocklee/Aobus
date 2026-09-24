@@ -195,7 +195,9 @@ namespace ao::rt::test
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
+    REQUIRE_FALSE(runtime.workspace().canGoBack());
     REQUIRE(runtime.workspace().setActivePresentation(albumsPreset->spec, {.recordHistory = false}));
+    CHECK_FALSE(runtime.workspace().canGoBack());
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.presentation.id == "albums");
@@ -287,7 +289,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("WorkspaceService - custom preset identity is its spec id rather than its label",
-            "[runtime][unit][workspace][regression]")
+            "[runtime][unit][workspace]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime().workspace();

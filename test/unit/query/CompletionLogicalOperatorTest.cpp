@@ -47,24 +47,60 @@ namespace ao::query::test
 
     SECTION("Completes keyword logical operators after a typed prefix")
     {
-      auto const text = std::string{R"($artist = "Miles" a)"};
-      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
+      struct Case final
+      {
+        std::string_view text;
+        std::string_view prefix;
+        std::string_view candidate;
+      };
 
-      CHECK(context.replacement.replaceBegin == text.find_last_of('"') + 1);
-      CHECK(context.replacement.replaceEnd == text.size());
-      CHECK(context.replacement.prefix == "a");
-      CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"and"});
+      constexpr auto kCases = std::array{
+        Case{.text = R"($artist = "Miles" a)", .prefix = "a", .candidate = "and"},
+        Case{.text = R"($artist = "Miles" O)", .prefix = "O", .candidate = "or"},
+      };
+
+      for (auto const& testCase : kCases)
+      {
+        DYNAMIC_SECTION("Prefix: " << testCase.prefix)
+        {
+          auto const context = logicalOperatorContext(analyzeQueryCompletion(testCase.text, testCase.text.size()));
+
+          CHECK(context.replacement.replaceBegin == 17);
+          CHECK(context.replacement.replaceEnd == 19);
+          CHECK(context.replacement.prefix == testCase.prefix);
+          CHECK(completeQueryLogicalOperator(context.replacement.prefix) ==
+                std::vector<std::string_view>{testCase.candidate});
+        }
+      }
     }
 
     SECTION("Completes symbolic logical operators after a typed prefix")
     {
-      auto const text = std::string{R"($year >= 1999 &)"};
-      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
+      struct Case final
+      {
+        std::string_view text;
+        std::string_view prefix;
+        std::string_view candidate;
+      };
 
-      CHECK(context.replacement.replaceBegin == text.find("1999") + 4);
-      CHECK(context.replacement.replaceEnd == text.size());
-      CHECK(context.replacement.prefix == "&");
-      CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"&&"});
+      constexpr auto kCases = std::array{
+        Case{.text = "$year >= 1999 &", .prefix = "&", .candidate = "&&"},
+        Case{.text = "$year >= 1999 |", .prefix = "|", .candidate = "||"},
+      };
+
+      for (auto const& testCase : kCases)
+      {
+        DYNAMIC_SECTION("Prefix: " << testCase.prefix)
+        {
+          auto const context = logicalOperatorContext(analyzeQueryCompletion(testCase.text, testCase.text.size()));
+
+          CHECK(context.replacement.replaceBegin == 13);
+          CHECK(context.replacement.replaceEnd == 15);
+          CHECK(context.replacement.prefix == testCase.prefix);
+          CHECK(completeQueryLogicalOperator(context.replacement.prefix) ==
+                std::vector<std::string_view>{testCase.candidate});
+        }
+      }
     }
 
     SECTION("Treats postfix exists as a complete expression")
@@ -111,17 +147,6 @@ namespace ao::query::test
     SECTION("Does not offer logical operators after an incomplete comparison")
     {
       CHECK_FALSE(analyzeQueryCompletion("$artist = a", 10));
-    }
-
-    SECTION("Completes symbolic logical operator from an Unknown ampersand tail")
-    {
-      auto const text = std::string{"$year >= 1999 &"};
-      auto const context = logicalOperatorContext(analyzeQueryCompletion(text, text.size()));
-
-      CHECK(context.replacement.replaceBegin == text.find_last_of(' '));
-      CHECK(context.replacement.replaceEnd == text.size());
-      CHECK(context.replacement.prefix == "&");
-      CHECK(completeQueryLogicalOperator(context.replacement.prefix) == std::vector<std::string_view>{"&&"});
     }
   }
 

@@ -41,14 +41,7 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
     fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool preparingFired = false;
     auto subPrep = fixture.playbackTransport.onPreparing([&] noexcept { preparingFired = true; });
@@ -99,6 +92,8 @@ namespace ao::rt::test
     CHECK(startedFired);
 
     fixture.playbackTransport.seek(std::chrono::milliseconds{50});
+    CHECK(fixture.playbackTransport.state().elapsed == std::chrono::milliseconds{50});
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
 
     bool stoppedFired = false;
     auto subStop = fixture.playbackTransport.onStopped([&] noexcept { stoppedFired = true; });
@@ -172,14 +167,7 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
     fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool mutedChangedFired = false;
     bool lastMutedState = false;
@@ -210,7 +198,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport control - backend fallback capability is projected without notifications",
-            "[runtime][regression][playback][control]")
+            "[runtime][unit][playback][control]")
   {
     bool muteControl = false;
     bool controlFails = false;
@@ -305,7 +293,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport control - backend volume is normalized before publication",
-            "[runtime][regression][playback][control]")
+            "[runtime][unit][playback][control]")
   {
     bool muted = false;
 

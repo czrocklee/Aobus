@@ -29,7 +29,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle", "[tui][regression][detail]")
+  TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle", "[tui][unit][detail]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -77,7 +77,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("DetailSections - playback remains available while section keys leave track selection alone",
-            "[tui][regression][detail]")
+            "[tui][integration][detail]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -93,8 +93,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.detailSections().selected == 1);
   }
 
-  TEST_CASE("DetailSections - input and modals own keys before detail and focus can be rebound",
-            "[tui][regression][detail]")
+  TEST_CASE("DetailSections - input and modals own keys before detail and focus can be rebound", "[tui][unit][detail]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -118,7 +117,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("DetailSections - visible header clicks fold without taking focus and reject stale tracks",
-            "[tui][regression][detail][mouse]")
+            "[tui][unit][detail][mouse]")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -153,7 +152,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("DetailSections - focused status preserves live activity and replaces stale hit regions",
-            "[tui][regression][detail][mouse]")
+            "[tui][unit][detail][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -203,7 +202,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("DetailSections - full hints reserve the standard activity width at the boundary",
-            "[tui][regression][detail][render]")
+            "[tui][unit][detail][render]")
   {
     auto fixture = EventControllerFixture{};
     fixture.runtimePtr->notifications().post(
@@ -242,8 +241,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailSections - tags belong to Metadata independently of Audio Properties",
-            "[tui][regression][detail][render]")
+  TEST_CASE("DetailSections - tags belong to Metadata independently of Audio Properties", "[tui][unit][detail][render]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const track =
@@ -278,7 +276,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("DetailSections - selecting an offscreen header reveals it and folding preserves identity",
-            "[tui][regression][detail][render]")
+            "[tui][unit][detail][render]")
   {
     auto row = rt::TrackRow{.title = "Title",
                             .artist = "Artist",

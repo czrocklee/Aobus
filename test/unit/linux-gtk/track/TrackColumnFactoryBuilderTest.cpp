@@ -11,6 +11,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
+#include "track/TrackRowBinding.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
@@ -25,6 +26,7 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glib-object.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/entry.h>
@@ -41,6 +43,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -71,10 +75,12 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnFactoryBuilder - binds column factories to track row widgets", "[gtk][unit][track][column]")
+  TEST_CASE("TrackColumnFactoryBuilder - binds column factories to track row widgets",
+            "[gtk][unit][track-column][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
+    auto secondTrackId = kInvalidTrackId;
     auto fixture =
       GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
                         {
@@ -82,6 +88,10 @@ namespace ao::gtk::test
                             musicLibrary,
                             library::test::TrackSpec{
                               .title = "Test Title", .artist = "Test Artist", .duration = std::chrono::minutes{2}});
+                          secondTrackId = library::test::addTrackWithUniqueFixtureUri(
+                            musicLibrary,
+                            library::test::TrackSpec{
+                              .title = "Second Title", .artist = "Second Artist", .duration = std::chrono::minutes{3}});
                         }};
     auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
 
@@ -102,11 +112,26 @@ namespace ao::gtk::test
 
       auto const beginEditSession = [&fixture](Glib::RefPtr<TrackRowObject> const& rowPtr)
       { return uimodel::TrackAuthoringSession::begin(fixture.runtime().library(), std::array{rowPtr->trackId()}); };
-      std::int32_t committedEditCount = 0;
-      auto const commitEdit = [&committedEditCount](Glib::RefPtr<TrackRowObject> const&,
-                                                    rt::TrackField,
-                                                    std::string,
-                                                    uimodel::TrackAuthoringSession&) { ++committedEditCount; };
+      struct CommitObservation final
+      {
+        TrackId rowId{kInvalidTrackId};
+        rt::TrackField field = rt::TrackField::Title;
+        std::string text;
+        std::vector<TrackId> sessionTargets;
+      };
+      auto commits = std::vector<CommitObservation>{};
+      auto const commitEdit = [&commits](Glib::RefPtr<TrackRowObject> const& rowPtr,
+                                         rt::TrackField field,
+                                         std::string text,
+                                         uimodel::TrackAuthoringSession& session)
+      {
+        commits.push_back(CommitObservation{
+          .rowId = rowPtr->trackId(),
+          .field = field,
+          .text = std::move(text),
+          .sessionTargets = std::vector<TrackId>{session.targetIds().begin(), session.targetIds().end()},
+        });
+      };
 
       SECTION("static column (e.g. Duration)")
       {
@@ -229,7 +254,81 @@ namespace ao::gtk::test
         // again, even if an activation is delivered to its hidden entry.
         entry->set_text("Must not commit");
         emitActivate(*entry);
-        CHECK(committedEditCount == 0);
+        CHECK(commits.empty());
+
+        columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+        drainGtkEvents();
+      }
+
+      SECTION("editable column routes the exact bound row field text and session identity")
+      {
+        auto factoryPtr = buildColumnFactory(rt::TrackField::Title, beginEditSession, commitEdit, *modelPtr);
+        auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
+        columnView.append_column(columnPtr);
+        realizeColumnView(window, columnView);
+
+        auto* const entry = findWidget<Gtk::Entry>(columnView);
+        auto* const stack = findWidget<Gtk::Stack>(columnView);
+        REQUIRE(entry != nullptr);
+        REQUIRE(stack != nullptr);
+        REQUIRE(GPOINTER_TO_UINT(::g_object_get_data(G_OBJECT(stack->gobj()), kBoundTrackIdDataKey)) == trackId.raw());
+
+        stack->set_visible_child("edit");
+        REQUIRE(tryEmitFocusEnter(*entry));
+        entry->set_text("Committed Title");
+        emitActivate(*entry);
+
+        REQUIRE(commits.size() == 1);
+        CHECK(commits[0].rowId == trackId);
+        CHECK(commits[0].field == rt::TrackField::Title);
+        CHECK(commits[0].text == "Committed Title");
+        CHECK(commits[0].sessionTargets == std::vector<TrackId>{trackId});
+        CHECK(stack->get_visible_child_name() == "display");
+
+        columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+        drainGtkEvents();
+      }
+
+      SECTION("model replacement retires the old edit and starts a session for the new row")
+      {
+        auto factoryPtr = buildColumnFactory(rt::TrackField::Title, beginEditSession, commitEdit, *modelPtr);
+        auto columnPtr = Gtk::ColumnViewColumn::create("Title", factoryPtr);
+        columnView.append_column(columnPtr);
+        realizeColumnView(window, columnView);
+
+        auto* const entry = findWidget<Gtk::Entry>(columnView);
+        auto* const stack = findWidget<Gtk::Stack>(columnView);
+        REQUIRE(entry != nullptr);
+        REQUIRE(stack != nullptr);
+        REQUIRE(GPOINTER_TO_UINT(::g_object_get_data(G_OBJECT(stack->gobj()), kBoundTrackIdDataKey)) == trackId.raw());
+
+        stack->set_visible_child("edit");
+        REQUIRE(tryEmitFocusEnter(*entry));
+        sourcePtr->reset(std::array{secondTrackId});
+        drainGtkEvents();
+        // GTK may replace the cell rather than recycle the same wrapper. Observe
+        // the current binding without dereferencing an obsolete widget pointer.
+        auto* const replacementStack = findWidget<Gtk::Stack>(columnView);
+        REQUIRE(replacementStack != nullptr);
+        auto* const replacementEntry = findWidget<Gtk::Entry>(*replacementStack);
+        REQUIRE(replacementEntry != nullptr);
+        REQUIRE(GPOINTER_TO_UINT(::g_object_get_data(G_OBJECT(replacementStack->gobj()), kBoundTrackIdDataKey)) ==
+                secondTrackId.raw());
+
+        replacementEntry->set_text("Must not cross row identity");
+        emitActivate(*replacementEntry);
+        CHECK(commits.empty());
+        CHECK(replacementStack->get_visible_child_name() == "display");
+
+        replacementStack->set_visible_child("edit");
+        REQUIRE(tryEmitFocusEnter(*replacementEntry));
+        replacementEntry->set_text("Second committed title");
+        emitActivate(*replacementEntry);
+        REQUIRE(commits.size() == 1);
+        CHECK(commits[0].rowId == secondTrackId);
+        CHECK(commits[0].field == rt::TrackField::Title);
+        CHECK(commits[0].text == "Second committed title");
+        CHECK(commits[0].sessionTargets == std::vector<TrackId>{secondTrackId});
 
         columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
         drainGtkEvents();

@@ -40,6 +40,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <span>
 #include <string>
@@ -56,13 +57,13 @@ namespace ao::rt::test
   {
     std::string readFileText(std::filesystem::path const& path)
     {
-      auto stream = std::ifstream{path};
+      auto stream = std::ifstream{path, std::ios::binary};
       return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
     }
 
     void writeFileText(std::filesystem::path const& path, std::string_view const text)
     {
-      auto stream = std::ofstream{path};
+      auto stream = std::ofstream{path, std::ios::binary};
       stream << text;
     }
 
@@ -98,8 +99,17 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    /// The content each of @p uri's cover references names, in record order.
-    std::vector<utility::Sha256Digest> coverDigests(MusicLibrary& ml, std::string_view const uri)
+    struct CoverSnapshot final
+    {
+      PictureType type{};
+      utility::Sha256Digest digest{};
+      std::uint32_t byteLength = 0;
+
+      bool operator==(CoverSnapshot const&) const = default;
+    };
+
+    /// The descriptor each of @p uri's cover references names, in record order.
+    std::vector<CoverSnapshot> coverSnapshots(MusicLibrary& ml, std::string_view const uri)
     {
       auto transaction = ml.readTransaction();
       auto const tracks = tracksByUri(ml, transaction);
@@ -108,16 +118,45 @@ namespace ao::rt::test
 
       auto const covers = iterator->second.coverArt();
       auto const resourceReader = ml.resources().reader(transaction);
-      auto digests = std::vector<utility::Sha256Digest>{};
+      auto snapshots = std::vector<CoverSnapshot>{};
 
       for (std::uint16_t index = 0; index < covers.count(); ++index)
       {
         auto const optDescriptor = resourceReader.get(covers.at(index).resourceId);
         REQUIRE(optDescriptor);
-        digests.push_back(optDescriptor->digest);
+        snapshots.push_back({covers.at(index).type, optDescriptor->digest, optDescriptor->byteLength});
       }
 
-      return digests;
+      return snapshots;
+    }
+
+    void seedSharedCovers(MusicLibrary& library,
+                          std::span<std::byte const> frontBytes,
+                          std::span<std::byte const> backBytes)
+    {
+      auto transaction = library::test::writeTransaction(library);
+      auto writer = library::test::physicalWriter(library.resources(), transaction);
+      auto const frontRes = writer.create(frontBytes);
+      auto const backRes = writer.create(backBytes);
+      REQUIRE(frontRes);
+      REQUIRE(backRes);
+      auto first = TrackBuilder::makeEmpty();
+      first.property().uri("song1.flac");
+      first.metadata().title("Song 1");
+      first.coverArt().add(PictureType::BackCover, *backRes).add(PictureType::FrontCover, *frontRes);
+      auto second = TrackBuilder::makeEmpty();
+      second.property().uri("song2.flac");
+      second.metadata().title("Song 2");
+      second.coverArt().add(PictureType::FrontCover, *frontRes);
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write) -> Result<>
+        {
+          auto tracks = write.tracks();
+          REQUIRE(tracks.create(first, FileManifestBuilder::makeEmpty()));
+          REQUIRE(tracks.create(second, FileManifestBuilder::makeEmpty()));
+          return {};
+        }));
+      REQUIRE(transaction.commit());
     }
 
     void requireRejected(MusicLibrary& ml, std::filesystem::path const& path, ImportMode const mode)
@@ -132,7 +171,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("LibraryYaml - a full document names each distinct cover once, by digest",
-            "[runtime][workflow][import-export][cover]")
+            "[runtime][integration][import-export][cover-art]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -141,40 +180,7 @@ namespace ao::rt::test
     auto const backCoverData = lmdb::test::createTestData(257);
     auto const coverDigest = utility::computeSha256(coverData);
     auto const backCoverDigest = utility::computeSha256(backCoverData);
-    auto resId = kInvalidResourceId;
-    auto backResId = kInvalidResourceId;
-
-    {
-      auto transaction = library::test::writeTransaction(ml1);
-      auto resIdRes = library::test::physicalWriter(ml1.resources(), transaction).create(coverData);
-      REQUIRE(resIdRes);
-      resId = *resIdRes;
-      auto backResIdRes = library::test::physicalWriter(ml1.resources(), transaction).create(backCoverData);
-      REQUIRE(backResIdRes);
-      backResId = *backResIdRes;
-
-      auto trackBuilder1 = TrackBuilder::makeEmpty();
-      trackBuilder1.property().uri("song1.flac");
-      trackBuilder1.metadata().title("Song 1");
-      trackBuilder1.coverArt().add(PictureType::BackCover, backResId);
-      trackBuilder1.coverArt().add(PictureType::FrontCover, resId);
-
-      auto trackBuilder2 = TrackBuilder::makeEmpty();
-      trackBuilder2.property().uri("song2.flac");
-      trackBuilder2.metadata().title("Song 2");
-      trackBuilder2.coverArt().add(PictureType::FrontCover, resId);
-
-      REQUIRE(transaction.apply(
-        [&](LibraryWrite& write) -> Result<>
-        {
-          auto trackWriter = write.tracks();
-          REQUIRE(trackWriter.create(trackBuilder1, FileManifestBuilder::makeEmpty()));
-          REQUIRE(trackWriter.create(trackBuilder2, FileManifestBuilder::makeEmpty()));
-          return {};
-        }));
-
-      REQUIRE(transaction.commit());
-    }
+    seedSharedCovers(ml1, coverData, backCoverData);
 
     auto const yamlPath = std::filesystem::path{temp1.path()} / "covers.yaml";
     auto exporter = LibraryYamlExporter{ml1};
@@ -207,6 +213,15 @@ namespace ao::rt::test
 
       // Once in the table, then once for each of the two tracks that name it.
       CHECK(occurrences == 3);
+      std::size_t backOccurrences = 0;
+
+      for (auto position = content.find(backCoverText); position != std::string::npos;
+           position = content.find(backCoverText, position + 1))
+      {
+        ++backOccurrences;
+      }
+
+      CHECK(backOccurrences == 2);
     }
 
     SECTION("resources are emitted in ascending digest order")
@@ -225,48 +240,55 @@ namespace ao::rt::test
       REQUIRE(exporter.exportToYaml(repeatPath, ExportMode::Full));
       CHECK(readFileText(repeatPath) == content);
     }
+  }
 
-    SECTION("a restore rebuilds the whole reference graph, including sharing")
-    {
-      auto const temp2 = ao::test::TempDir{};
-      auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
-      auto importer = LibraryYamlImporter{ml2};
-      REQUIRE(importer.importFromYamlOffline(yamlPath));
+  TEST_CASE("LibraryYaml - full restore rebuilds the cover reference graph and sharing",
+            "[runtime][integration][import-export][cover-art]")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+    auto const coverData = lmdb::test::createTestData(1024);
+    auto const backCoverData = lmdb::test::createTestData(257);
+    auto const coverDigest = utility::computeSha256(coverData);
+    auto const backCoverDigest = utility::computeSha256(backCoverData);
+    seedSharedCovers(source, coverData, backCoverData);
+    auto const yamlPath = sourceTemp.path() / "covers.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
 
-      auto transaction = ml2.readTransaction();
-      auto const tracks = tracksByUri(ml2, transaction);
-      REQUIRE(tracks.size() == 2);
-      auto const& track1 = tracks.at("song1.flac");
-      auto const& track2 = tracks.at("song2.flac");
-      auto const optPrimary1 = track1.coverArt().primary();
-      auto const optPrimary2 = track2.coverArt().primary();
+    auto const targetTemp = ao::test::TempDir{};
+    auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+    REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(yamlPath));
 
-      REQUIRE(optPrimary1);
-      REQUIRE(optPrimary2);
-      CHECK(optPrimary1->resourceId == optPrimary2->resourceId);
-      REQUIRE(track1.coverArt().count() == 2);
-      CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
-      CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
+    auto transaction = target.readTransaction();
+    auto const tracks = tracksByUri(target, transaction);
+    REQUIRE(tracks.size() == 2);
+    auto const& track1 = tracks.at("song1.flac");
+    auto const& track2 = tracks.at("song2.flac");
+    auto const optPrimary1 = track1.coverArt().primary();
+    auto const optPrimary2 = track2.coverArt().primary();
+    REQUIRE(optPrimary1);
+    REQUIRE(optPrimary2);
+    CHECK(optPrimary1->resourceId == optPrimary2->resourceId);
+    REQUIRE(track1.coverArt().count() == 2);
+    CHECK(track1.coverArt().at(0).type == PictureType::BackCover);
+    CHECK(track1.coverArt().at(1).type == PictureType::FrontCover);
+    REQUIRE(track2.coverArt().count() == 1);
+    CHECK(track2.coverArt().at(0).type == PictureType::FrontCover);
 
-      auto const resourceReader = ml2.resources().reader(transaction);
-      auto const optFront = resourceReader.get(optPrimary1->resourceId);
-      REQUIRE(optFront);
-      CHECK(optFront->digest == coverDigest);
-      CHECK(optFront->byteLength == coverData.size());
-
-      auto const optBack = resourceReader.get(track1.coverArt().at(0).resourceId);
-      REQUIRE(optBack);
-      CHECK(optBack->digest == backCoverDigest);
-      CHECK(optBack->byteLength == backCoverData.size());
-
-      // The handle is derived from the digest rather than read from the document,
-      // because a handle is local to the library that minted it.
-      CHECK(deriveResourceId(coverDigest) == optPrimary1->resourceId);
-    }
+    auto const reader = target.resources().reader(transaction);
+    auto const optFront = reader.get(optPrimary1->resourceId);
+    REQUIRE(optFront);
+    CHECK(optFront->digest == coverDigest);
+    CHECK(optFront->byteLength == coverData.size());
+    auto const optBack = reader.get(track1.coverArt().at(0).resourceId);
+    REQUIRE(optBack);
+    CHECK(optBack->digest == backCoverDigest);
+    CHECK(optBack->byteLength == backCoverData.size());
+    CHECK(deriveResourceId(coverDigest) == optPrimary1->resourceId);
   }
 
   TEST_CASE("LibraryYaml - a full merge leaves the document's reference graph",
-            "[runtime][workflow][import-export][cover]")
+            "[runtime][integration][import-export][cover-art]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -331,7 +353,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - a declared length never overwrites a counted one",
-            "[runtime][workflow][import-export][cover]")
+            "[runtime][integration][import-export][cover-art]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -375,13 +397,20 @@ library:
     REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
     auto transaction = ml.readTransaction();
-    auto const optDescriptor = ml.resources().reader(transaction).get(resId);
+    auto const tracks = tracksByUri(ml, transaction);
+    REQUIRE(tracks.contains("song.flac"));
+    auto const covers = tracks.at("song.flac").coverArt();
+    REQUIRE(covers.count() == 1);
+    CHECK(covers.at(0).type == PictureType::FrontCover);
+    CHECK(covers.at(0).resourceId == resId);
+    auto const optDescriptor = ml.resources().reader(transaction).get(covers.at(0).resourceId);
     REQUIRE(optDescriptor);
+    CHECK(utility::sha256Hex(optDescriptor->digest) == coverText);
     CHECK(optDescriptor->byteLength == coverData.size());
   }
 
   TEST_CASE("LibraryYaml - the resource table's shape and closure are exact",
-            "[runtime][workflow][import-export][cover]")
+            "[runtime][unit][import-export][cover-art]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -582,6 +611,7 @@ library:
 )");
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
+      CHECK(coverSnapshots(ml, "song.flac").empty());
     }
 
     SECTION("a table in a metadata payload rejects")
@@ -634,7 +664,8 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - a metadata document records no embedded cover", "[runtime][workflow][import-export][cover]")
+  TEST_CASE("LibraryYaml - a metadata document records no embedded cover",
+            "[runtime][integration][import-export][cover-art]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -665,7 +696,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - each import mode leaves the covers its contract names",
-            "[runtime][workflow][import-export][cover]")
+            "[runtime][integration][import-export][cover-art]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -676,11 +707,15 @@ library:
     // Three distinct identities: what the file carries, what the target track
     // already references, and what a document might name. A mode's contract is
     // only visible when they cannot be confused.
-    auto const fileDigest = utility::computeSha256(media::file::test::requireSoleEmbeddedPicture(carrierPath));
+    auto const fileBytes = media::file::test::requireSoleEmbeddedPicture(carrierPath);
+    auto const fileCover = CoverSnapshot{
+      PictureType::Other, utility::computeSha256(fileBytes), static_cast<std::uint32_t>(fileBytes.size())};
     auto const curatedBytes = lmdb::test::createTestData(48);
-    auto const curatedDigest = utility::computeSha256(curatedBytes);
+    auto const curatedCover = CoverSnapshot{
+      PictureType::FrontCover, utility::computeSha256(curatedBytes), static_cast<std::uint32_t>(curatedBytes.size())};
     auto const documentBytes = lmdb::test::createTestData(64);
-    auto const documentDigest = utility::computeSha256(documentBytes);
+    auto const documentCover = CoverSnapshot{
+      PictureType::FrontCover, utility::computeSha256(documentBytes), static_cast<std::uint32_t>(documentBytes.size())};
 
     SECTION("a metadata restore leaves the file's current art, whatever the database held")
     {
@@ -696,7 +731,7 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
-      CHECK(coverDigests(ml, "song.flac") == std::vector{fileDigest});
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{fileCover});
     }
 
     SECTION("a metadata restore of an unreadable file yields no cover and no properties")
@@ -712,7 +747,7 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
-      CHECK(coverDigests(ml, "gone.flac").empty());
+      CHECK(coverSnapshots(ml, "gone.flac").empty());
       auto transaction = ml.readTransaction();
       auto const tracks = tracksByUri(ml, transaction);
       REQUIRE(tracks.contains("gone.flac"));
@@ -733,7 +768,7 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
-      CHECK(coverDigests(ml, "song.flac") == std::vector{curatedDigest});
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{curatedCover});
       auto transaction = ml.readTransaction();
       CHECK(tracksByUri(ml, transaction).at("song.flac").metadata().title() == "Merged");
     }
@@ -753,8 +788,8 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
-      CHECK(coverDigests(ml, "song.flac") == std::vector{fileDigest});
-      CHECK(coverDigests(ml, "gone.flac").empty());
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{fileCover});
+      CHECK(coverSnapshots(ml, "gone.flac").empty());
     }
 
     SECTION("a delta merge keeps the target's covers and fills only an empty set from the file")
@@ -775,8 +810,8 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
-      CHECK(coverDigests(ml, "song.flac") == std::vector{curatedDigest});
-      CHECK(coverDigests(ml, "bare.flac") == std::vector{fileDigest});
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{curatedCover});
+      CHECK(coverSnapshots(ml, "bare.flac") == std::vector{fileCover});
     }
 
     SECTION("a listOnly import leaves every track's covers untouched")
@@ -796,7 +831,7 @@ library:
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, mode));
 
-      CHECK(coverDigests(ml, "song.flac") == std::vector{curatedDigest});
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{curatedCover});
     }
 
     SECTION("a full restore takes the document's art without opening the file")
@@ -817,14 +852,14 @@ library:
           resource: {}
   lists: []
 )",
-                                utility::sha256Hex(documentDigest),
-                                utility::sha256Hex(documentDigest)));
+                                utility::sha256Hex(documentCover.digest),
+                                utility::sha256Hex(documentCover.digest)));
       auto importer = LibraryYamlImporter{ml};
       REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
       // The file at that URI carries a different picture, and a full document is
       // self-contained: the reference graph is the document's alone.
-      CHECK(coverDigests(ml, "song.flac") == std::vector{documentDigest});
+      CHECK(coverSnapshots(ml, "song.flac") == std::vector{documentCover});
       auto transaction = ml.readTransaction();
       CHECK(tracksByUri(ml, transaction).at("song.flac").property().duration() == std::chrono::milliseconds{0});
     }

@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -35,14 +36,24 @@ namespace ao::tui::test
     /// The bytes a cover request resolves to, standing in for the runtime walk.
     using ResourceByteMap = std::unordered_map<ResourceId, std::vector<std::byte>>;
 
+    struct ResourceReadLog final
+    {
+      mutable std::mutex mutex;
+      std::vector<ResourceId> ids;
+    };
+
     async::Task<Result<std::optional<std::vector<std::byte>>>> readStoredResourceAsync(
       ResourceByteMap const* const source,
-      std::size_t* const readCount,
+      ResourceReadLog* const readLog,
       ResourceId const resourceId,
       std::stop_token const stopToken)
     {
       async::throwIfStopRequested(stopToken);
-      ++*readCount;
+      {
+        auto const lock = std::scoped_lock{readLog->mutex};
+        readLog->ids.push_back(resourceId);
+      }
+
       auto const found = source->find(resourceId);
 
       if (found == source->end())
@@ -58,7 +69,7 @@ namespace ao::tui::test
       CoverArtLoaderFixture()
       {
         _byteCachePtr = std::make_unique<rt::ResourceByteMemoryCache>(
-          _runtime, std::bind_front(readStoredResourceAsync, &_bytesById, &_readCount));
+          _runtime, std::bind_front(readStoredResourceAsync, &_bytesById, &_readLog));
       }
 
       ~CoverArtLoaderFixture()
@@ -88,7 +99,17 @@ namespace ao::tui::test
       rt::ResourceByteMemoryCache& byteCache() const noexcept { return *_byteCachePtr; }
       rt::test::ControlledSleeper& sleeper() noexcept { return _sleeper; }
       /// How many resource reads the walk actually started.
-      std::size_t readCount() const noexcept { return _readCount; }
+      std::size_t readCount() const
+      {
+        auto const lock = std::scoped_lock{_readLog.mutex};
+        return _readLog.ids.size();
+      }
+
+      std::vector<ResourceId> readResourceIds() const
+      {
+        auto const lock = std::scoped_lock{_readLog.mutex};
+        return _readLog.ids;
+      }
 
       /**
        * @brief Lets the current selection's settle window elapse.
@@ -100,7 +121,7 @@ namespace ao::tui::test
 
     private:
       ResourceByteMap _bytesById{};
-      std::size_t _readCount = 0;
+      ResourceReadLog _readLog;
       rt::test::QueuedExecutor _executor{};
       rt::test::ControlledSleeper _sleeper{};
       async::Runtime _runtime{_executor, 1, &_sleeper};
@@ -176,7 +197,7 @@ namespace ao::tui::test
     CHECK(loader.columns() == 0);
   }
 
-  TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output", "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output", "[tui][unit][cover-art]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -193,6 +214,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.kittyPng().has_value(); }));
     CHECK(refreshCount == 2);
     REQUIRE(loader.kittyPng()->size() >= 24);
+    CHECK(loader.kittyPng()->size() <= kMaximumGeneratedCoverArtBytes);
     CHECK(loader.kittyPng()->front() == std::byte{0x89});
   }
 
@@ -221,7 +243,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("CoverArtLoader - replacement prevents a stale cover from publishing",
-            "[tui][regression][cover-art][concurrency]")
+            "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const oldResourceId = fixture.addResource(support::onePixelRedPng());
@@ -243,11 +265,11 @@ namespace ao::tui::test
     CHECK_FALSE(loader.preview());
     CHECK_FALSE(loader.kittyPng());
     // The replaced selection never became a read at all.
-    CHECK(fixture.readCount() == 1);
+    CHECK(fixture.readResourceIds() == std::vector{missingResourceId});
   }
 
   TEST_CASE("CoverArtLoader - a navigation burst publishes only what is still selected",
-            "[tui][regression][cover-art][concurrency]")
+            "[tui][unit][cover-art][concurrency]")
   {
     // Detail follows the track table now, so holding an arrow key replaces the
     // requested cover many times before anything settles.
@@ -290,11 +312,11 @@ namespace ao::tui::test
     CHECK(loader.preview()->size() == static_cast<std::size_t>(kCoverArtRows));
     // The point of the settle window: a fifty-step burst costs one read, not
     // fifty cover extractions the user never sees.
-    CHECK(fixture.readCount() == 1);
+    CHECK(fixture.readResourceIds() == std::vector{resourceIds.back()});
   }
 
-  TEST_CASE("CoverArtLoader - a settle window that expires after replacement reads nothing",
-            "[tui][regression][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - an expired stale settle window reads nothing after replacement",
+            "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const firstResourceId = fixture.addResource(support::distinctPng(1));
@@ -315,7 +337,7 @@ namespace ao::tui::test
 
     REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     CHECK(loader.resourceId() == secondResourceId);
-    CHECK(fixture.readCount() == 1);
+    CHECK(fixture.readResourceIds() == std::vector{secondResourceId});
   }
 
   TEST_CASE("CoverArtLoader - repeated cancellation and clearing are idempotent", "[tui][unit][cover-art][concurrency]")
@@ -332,12 +354,18 @@ namespace ao::tui::test
     loader.request(resourceId);
     REQUIRE(refreshCount == 1);
 
-    loader.clear();
-    loader.clear();
+    REQUIRE(fixture.sleeper().tryWaitForCallCount(1));
     loader.cancel();
     loader.cancel();
+    REQUIRE(fixture.sleeper().tryWaitForCancellation(0));
     fixture.executor().drain();
+    CHECK(refreshCount == 1);
+    CHECK(loader.resourceId() == resourceId);
+    CHECK_FALSE(loader.preview());
+    CHECK(fixture.readCount() == 0);
 
+    loader.clear();
+    loader.clear();
     CHECK(refreshCount == 2);
     CHECK(loader.resourceId() == kInvalidResourceId);
     CHECK_FALSE(loader.preview());
@@ -364,9 +392,51 @@ namespace ao::tui::test
     REQUIRE(fixture.trySettleSelection());
     REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
     CHECK(loader.resourceId() == resourceId);
+    CHECK(fixture.readResourceIds() == std::vector{resourceId});
   }
 
-  TEST_CASE("CoverArtLoader - cancellation suppresses decode completion", "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - cached cover republishes after a missing selection", "[tui][unit][cover-art]")
+  {
+    auto fixture = CoverArtLoaderFixture{};
+    auto const resourceId = fixture.addResource(support::onePixelRedPng());
+    auto const missingId = ResourceId{987654};
+    std::size_t refreshCount = 0;
+    auto loader = CoverArtLoader{fixture.byteCache(),
+                                 fixture.runtimeAsync(),
+                                 CoverArtDeliveryMode::Blocks,
+                                 [&] { ++refreshCount; },
+                                 kCoverArtDefaultColumns};
+    loader.request(resourceId);
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
+    REQUIRE_FALSE(loader.preview()->empty());
+    REQUIRE_FALSE(loader.preview()->front().empty());
+    CHECK(loader.preview()->front().front().topRed > 200);
+    CHECK(fixture.readResourceIds() == std::vector{resourceId});
+
+    loader.request(missingId);
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return refreshCount == 4; }));
+    CHECK(loader.resourceId() == missingId);
+    CHECK_FALSE(loader.preview());
+    CHECK(fixture.readResourceIds() == std::vector{resourceId, missingId});
+
+    loader.request(resourceId);
+    REQUIRE(fixture.trySettleSelection());
+    REQUIRE(fixture.executor().tryDrainUntil([&] { return loader.preview().has_value(); }));
+    CHECK(loader.resourceId() == resourceId);
+    CHECK(refreshCount == 6);
+    REQUIRE_FALSE(loader.preview()->empty());
+    REQUIRE_FALSE(loader.preview()->front().empty());
+    auto const& pixel = loader.preview()->front().front();
+    CHECK(pixel.topRed > 200);
+    CHECK(pixel.topGreen < 50);
+    CHECK(pixel.topBlue < 50);
+    CHECK(fixture.readResourceIds() == std::vector{resourceId, missingId});
+  }
+
+  TEST_CASE("CoverArtLoader - destruction during settling cancels the window without reading or refreshing",
+            "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -389,8 +459,7 @@ namespace ao::tui::test
     CHECK(fixture.sleeper().tryWaitForCancellation(0));
   }
 
-  TEST_CASE("CoverArtLoader - destruction after the settle window suppresses decode completion",
-            "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - destruction suppresses a queued settle resumption", "[tui][unit][cover-art][concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -410,5 +479,6 @@ namespace ao::tui::test
     loaderPtr.reset();
     fixture.executor().drain();
     CHECK(refreshCount == 1);
+    CHECK(fixture.readCount() == 0);
   }
 } // namespace ao::tui::test

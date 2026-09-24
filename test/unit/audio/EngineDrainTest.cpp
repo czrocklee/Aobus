@@ -17,8 +17,10 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <atomic>
@@ -31,7 +33,6 @@
 #include <memory>
 #include <optional>
 #include <semaphore>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -96,7 +97,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Engine - drain transitions idle and notifies track end", "[audio][unit][engine][drain]")
+  TEST_CASE("Engine - drain completion requires a pending render drain", "[audio][unit][engine][drain][concurrency]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -121,53 +122,38 @@ namespace ao::audio::test
       return decPtr;
     };
 
+    auto endedLatch = CallbackLatch{};
+    auto settledLatch = CallbackLatch{};
     auto engine = Engine{std::move(backendPtr), device, factory};
-    auto const desc = PlaybackInput{.filePath = "song.flac"};
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
+    engine.play(makePlaybackItem("song.flac"));
+    REQUIRE(engine.status().transport == Transport::Playing);
+    REQUIRE(backendRaw->target() != nullptr);
 
-    auto trackEnded = std::atomic{false};
-    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { trackEnded.store(true, std::memory_order_release); });
+    if (auto const signalBeforeDrain = GENERATE(false, true); signalBeforeDrain)
+    {
+      backendRaw->emitDrainComplete();
+      // A control command settles RT signals ahead of the deferred barrier.
+      REQUIRE(engine.setVolume(0.5F));
+      engine.defer([&] { settledLatch.notify(); });
+      REQUIRE(settledLatch.tryWaitForCount(1));
+      CHECK(endedLatch.count() == 0);
+      REQUIRE(engine.status().transport == Transport::Playing);
+    }
 
-    engine.play(makePlaybackItem(desc));
-
-    // Simulate playback loop via backend callbacks
     auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
     auto buffer = std::array<std::byte, 100>{};
-
-    std::ignore = target->renderPcm(buffer).bytesWritten; // Read all 20 bytes
-    CHECK(target->renderPcm(buffer).drained);
-
-    SECTION("handleDrainComplete resets to idle and fires track ended")
-    {
-      auto trackEndedLatch = CallbackLatch{};
-      engine.setOnTrackEnded([&](Engine::TrackEnded const&) { trackEndedLatch.notify(); });
-
-      backendRaw->emitDrainComplete();
-      CHECK(trackEndedLatch.tryWaitForCount(1));
-      CHECK(engine.status().transport == Transport::Idle);
-    }
-
-    SECTION("handleDrainComplete without pending drain is ignored")
-    {
-      engine.stop(); // resets everything
-      trackEnded.store(false, std::memory_order_release);
-      backendRaw->emitDrainComplete();
-      CHECK_FALSE(trackEnded.load(std::memory_order_acquire));
-    }
-
-    SECTION("handleBackendError stops playback")
-    {
-      auto stateChanged = CallbackLatch{};
-      engine.setOnStateChanged([&] { stateChanged.notify(); });
-
-      backendRaw->emitBackendError("lost device");
-      CHECK(stateChanged.tryWaitForCount(1));
-      CHECK(engine.status().transport == Transport::Error);
-      CHECK(engine.status().statusText == "lost device");
-    }
+    REQUIRE(target->renderPcm(buffer).bytesWritten == 20);
+    REQUIRE(target->renderPcm(buffer).drained);
+    backendRaw->emitDrainComplete();
+    REQUIRE(endedLatch.tryWaitForCount(1));
+    CHECK(endedLatch.count() == 1);
+    CHECK(engine.status().transport == Transport::Idle);
   }
 
   TEST_CASE("Engine - an already drained prepared source completes without starting the backend",
-            "[audio][regression][engine][drain]")
+            "[audio][unit][engine][drain]")
   {
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const factory = [format](auto const&, std::optional<SampleEncoding> optOutputEncoding)
@@ -181,9 +167,9 @@ namespace ao::audio::test
     };
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), factory};
     auto endedLatch = CallbackLatch{};
     auto endedGeneration = std::atomic<std::uint64_t>{0};
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), factory};
     engine.setOnTrackEnded(
       [&](Engine::TrackEnded const& event)
       {
@@ -207,7 +193,8 @@ namespace ao::audio::test
     CHECK(events[2].name == "close");
   }
 
-  TEST_CASE("Engine - play ignores stale pending drain from retired session", "[audio][unit][engine-drain][window]")
+  TEST_CASE("Engine - play ignores stale pending drain from retired session",
+            "[audio][unit][engine][drain][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -217,10 +204,10 @@ namespace ao::audio::test
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
 
     auto endedLatch = CallbackLatch{};
-    auto routeEntered = CallbackLatch{};
+    auto firstRouteLatch = CallbackLatch{};
     auto secondRouteLatch = CallbackLatch{};
-    auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic{true};
+    auto workerEntered = CallbackLatch{};
+    auto releaseWorker = std::binary_semaphore{0};
 
     auto engine = Engine{std::move(backendPtr),
                          device,
@@ -228,18 +215,17 @@ namespace ao::audio::test
                            {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
                            {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
                          })};
+    auto releaseGuard = utility::ScopedRegistration{[&] { releaseWorker.release(); }};
 
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
     engine.setOnRouteChanged(
       [&](Engine::RouteStatus const& route)
       {
-        if (parkOnce.exchange(false))
+        if (route.optAnchor && route.optAnchor->id == "first-anchor")
         {
-          routeEntered.notify();
-          std::ignore = releaseRoute.try_acquire_for(std::chrono::seconds{2});
+          firstRouteLatch.notify();
         }
-
-        if (route.optAnchor && route.optAnchor->id == "second-anchor")
+        else if (route.optAnchor && route.optAnchor->id == "second-anchor")
         {
           secondRouteLatch.notify();
         }
@@ -250,7 +236,17 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     backendRaw->emitRouteReady("first-anchor");
-    REQUIRE(routeEntered.tryWaitForCount(1));
+    REQUIRE(firstRouteLatch.tryWaitForCount(1));
+
+    // A deferred task parks event delivery without holding the route callback
+    // barrier that play() must cross before returning.
+    engine.defer(
+      [&]
+      {
+        workerEntered.notify();
+        releaseWorker.acquire();
+      });
+    REQUIRE(workerEntered.tryWaitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
@@ -267,13 +263,14 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == secondData);
 
     backendRaw->emitRouteReady("second-anchor");
-    releaseRoute.release();
+    releaseGuard.reset();
     REQUIRE(secondRouteLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Playing);
   }
 
-  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing", "[audio][unit][engine-seek][drain]")
+  TEST_CASE("Engine - seek ignores stale pending drain and keeps session playing",
+            "[audio][unit][engine][seek][drain][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -283,10 +280,10 @@ namespace ao::audio::test
     auto const seekData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
 
     auto endedLatch = CallbackLatch{};
-    auto routeEntered = CallbackLatch{};
+    auto beforeSeekRouteLatch = CallbackLatch{};
     auto afterSeekRouteLatch = CallbackLatch{};
-    auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic{true};
+    auto workerEntered = CallbackLatch{};
+    auto releaseWorker = std::binary_semaphore{0};
 
     auto engine =
       Engine{std::move(backendPtr),
@@ -299,18 +296,17 @@ namespace ao::audio::test
                       {.data = seekData, .endOfStream = false}, {.endOfStream = true}}},
                },
                std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>())};
+    auto releaseGuard = utility::ScopedRegistration{[&] { releaseWorker.release(); }};
 
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedLatch.notify(); });
     engine.setOnRouteChanged(
       [&](Engine::RouteStatus const& route)
       {
-        if (parkOnce.exchange(false))
+        if (route.optAnchor && route.optAnchor->id == "before-seek")
         {
-          routeEntered.notify();
-          std::ignore = releaseRoute.try_acquire_for(std::chrono::seconds{2});
+          beforeSeekRouteLatch.notify();
         }
-
-        if (route.optAnchor && route.optAnchor->id == "after-seek")
+        else if (route.optAnchor && route.optAnchor->id == "after-seek")
         {
           afterSeekRouteLatch.notify();
         }
@@ -321,7 +317,14 @@ namespace ao::audio::test
     REQUIRE(target != nullptr);
 
     backendRaw->emitRouteReady("before-seek");
-    REQUIRE(routeEntered.tryWaitForCount(1));
+    REQUIRE(beforeSeekRouteLatch.tryWaitForCount(1));
+    engine.defer(
+      [&]
+      {
+        workerEntered.notify();
+        releaseWorker.acquire();
+      });
+    REQUIRE(workerEntered.tryWaitForCount(1));
 
     auto out = std::array<std::byte, 4>{};
     REQUIRE(target->renderPcm(out).bytesWritten == out.size());
@@ -337,14 +340,14 @@ namespace ao::audio::test
     CHECK(std::vector<std::byte>{out.begin(), out.end()} == seekData);
 
     backendRaw->emitRouteReady("after-seek");
-    releaseRoute.release();
+    releaseGuard.reset();
     REQUIRE(afterSeekRouteLatch.tryWaitForCount(1));
     CHECK(endedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Playing);
   }
 
   TEST_CASE("Engine - seek landing at end of stream completes the track and retires the render session",
-            "[audio][unit][engine-seek][drain]")
+            "[audio][unit][engine][seek][drain][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<DrainOnStopBackend>();

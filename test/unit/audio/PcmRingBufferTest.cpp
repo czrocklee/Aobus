@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -128,41 +129,35 @@ namespace ao::audio::test
   TEST_CASE("PcmRingBuffer - capacity limit causes short write instead of overflow", "[audio][unit][ring-buffer]")
   {
     auto buffer = PcmRingBuffer{};
-    std::size_t const cap = buffer.capacity();
+    auto const capacity = buffer.capacity();
+    REQUIRE(capacity > 0);
+    auto const largeData = std::vector(capacity + 64, std::byte{0xCC});
 
-    SECTION("Capacity limit causes short write instead of overflow")
-    {
-      // Note: boost::lockfree::spsc_queue capacity is fixed at compile time.
-      // PcmRingBuffer uses kRingBufferCapacity.
-      auto largeData = std::vector(cap + 64, std::byte{0xCC});
-      auto written = buffer.write(largeData);
+    REQUIRE(buffer.write(largeData) == capacity);
+    CHECK(buffer.size() == capacity);
+    CHECK(buffer.availableToWrite() == 0);
 
-      CHECK(written <= cap);
-      CHECK(buffer.size() == written);
+    auto extra = std::byte{0xDD};
+    CHECK(buffer.write(std::span{&extra, 1}) == 0);
+    CHECK(buffer.size() == capacity);
 
-      // Fill remaining if any
-      auto b = std::byte{0xDD};
-      bool reachedCapacity = false;
+    auto output = std::vector(capacity + 64, std::byte{0xEE});
+    REQUIRE(buffer.read(output) == capacity);
+    CHECK(
+      std::ranges::all_of(std::span{output}.first(capacity), [](std::byte value) { return value == std::byte{0xCC}; }));
+    CHECK(std::ranges::all_of(
+      std::span{output}.subspan(capacity), [](std::byte value) { return value == std::byte{0xEE}; }));
+    CHECK(buffer.size() == 0);
+    CHECK(buffer.availableToWrite() == capacity);
 
-      for (std::size_t attempts = 0; attempts <= cap; ++attempts)
-      {
-        auto const extraWritten = buffer.write(std::span<std::byte const>{&b, 1});
-
-        if (extraWritten == 0)
-        {
-          reachedCapacity = true;
-          break;
-        }
-
-        CHECK(extraWritten == 1);
-      }
-
-      CHECK(reachedCapacity);
-      CHECK(buffer.write(std::span<std::byte const>{&b, 1}) == 0);
-    }
+    REQUIRE(buffer.write(std::span{&extra, 1}) == 1);
+    auto recovered = std::byte{};
+    REQUIRE(buffer.read(std::span{&recovered, 1}) == 1);
+    CHECK(recovered == extra);
   }
 
-  TEST_CASE("PcmRingBuffer - single producer and consumer preserve byte order", "[audio][unit][ring-buffer]")
+  TEST_CASE("PcmRingBuffer - single producer and consumer preserve byte order",
+            "[audio][unit][ring-buffer][concurrency][stress]")
   {
     auto buffer = PcmRingBuffer{};
     std::int32_t const iterations = 10000;
