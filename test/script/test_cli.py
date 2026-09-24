@@ -29,6 +29,22 @@ from ao.command import tidy as tidy_command
 from ao.command.build import BuildResult
 from ao.core import builddir, buildenv
 
+# Tests that stub native builds use this cache to represent an enabled graph.
+_ENABLED_SUITE_CACHE = {
+    option: "ON"
+    for option in (
+        "AOBUS_BUILD_TESTS",
+        "AOBUS_BUILD_GTK",
+        "AOBUS_BUILD_TUI",
+        "AOBUS_BUILD_CLI",
+        "AOBUS_BUILD_LINT_PLUGIN",
+    )
+}
+
+
+def _enabled_suite_cache(_path):
+    return _ENABLED_SUITE_CACHE
+
 
 class NativePortalTest(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "linux", "Linux Nix portal boundary")
@@ -1016,6 +1032,7 @@ class CliParseTest(unittest.TestCase):
             self.assertNotIn("appkit", test_command.suites_for("concurrency"))
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="clang")
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_appkit_dispatch_reuses_selected_tree_and_sanitizer_options(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             library = Path(temp_dir) / "music"
@@ -1288,6 +1305,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_test_all_runs_every_suite(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build"])
 
@@ -1307,6 +1325,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_test_all_with_filter_excludes_non_catch2_suites_before_dispatch(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build", "[focused]"])
 
@@ -1456,6 +1475,7 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_not_called()
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_release_check_builds_the_default_graph_and_performance_target(self):
         args = self.parse(["check", "release"])
         result = BuildResult(
@@ -1493,6 +1513,7 @@ class CliParseTest(unittest.TestCase):
         self.assertIsNot(profile_args, args)
         self.assertEqual(profile_args.target, ["all", "aobus_guardrails"])
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_tsan_check_builds_and_runs_only_baselined_suites(self):
         args = self.parse(["check", "--tsan"])
         result = BuildResult(
@@ -1517,6 +1538,7 @@ class CliParseTest(unittest.TestCase):
             log=result.log,
         )
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_macos_check_runs_only_supported_native_suites(self):
         args = self.parse(["check"])
         result = BuildResult(
@@ -1544,6 +1566,7 @@ class CliParseTest(unittest.TestCase):
         )
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_windows_test_reuses_the_shared_debug_tree(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["test", "-p", temp_dir])
@@ -1575,6 +1598,7 @@ class CliParseTest(unittest.TestCase):
             tsan=False,
         )
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_windows_check_runs_only_native_suites(self):
         args = self.parse(["check"])
         result = BuildResult(
@@ -1616,6 +1640,7 @@ class CliParseTest(unittest.TestCase):
             log=result.log,
         )
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_windows_check_derives_winui_sibling_from_build_dir_override(self):
         primary_dir = Path("C:/local/aobus-native")
         result = BuildResult(
@@ -1643,6 +1668,7 @@ class CliParseTest(unittest.TestCase):
         winui_args = do_build.call_args_list[1].args[0]
         self.assertEqual(Path(winui_args.path), Path("C:/local/aobus-native-winui"))
 
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_windows_check_derives_winui_sibling_from_explicit_path(self):
         primary_dir = Path("C:/local/explicit-native")
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
@@ -1670,6 +1696,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_tsan_defaults_to_the_baselined_suite_group(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
 
@@ -1716,6 +1743,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_concurrency_group_runs_tagged_tests_across_native_catch2_suites(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--concurrency", "--repeat", "3", "-n", "-p", "/tmp/aobus-test-build"])
 
@@ -1737,6 +1765,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_tsan_concurrency_group_intersects_with_baselined_suites(self, _is_dir, _validate_build_tree):
         args = self.parse(["test", "--concurrency", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])
 
@@ -1758,6 +1787,7 @@ class CliParseTest(unittest.TestCase):
 
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     @mock.patch.object(Path, "is_dir", return_value=True)
+    @mock.patch.object(test_command.compiler_cache, "read_cmake_cache", new=_enabled_suite_cache)
     def test_concurrency_listing_excludes_hidden_but_explicit_filters_can_opt_in(self, _is_dir, _validate_build_tree):
         for selection, expected in (
             (["--concurrency"], "[concurrency]~[.]"),

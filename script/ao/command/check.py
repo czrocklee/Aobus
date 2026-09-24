@@ -72,6 +72,7 @@ def run_command(args: argparse.Namespace) -> int:
     elif profile.name == "windows" and args.asan:
         print("WinUI build skipped for the MSVC AddressSanitizer profile.")
 
+    suites = test.configured_suites_for("all", result.build_dir, tsan=args.tsan)
     print("Running tests...")
     if (status := test.run_suites(suites, result.build_dir, asan=args.asan, tsan=args.tsan, log=result.log)) != 0:
         return status

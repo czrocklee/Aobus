@@ -31,6 +31,11 @@ class BuildIdentityTest(unittest.TestCase):
             "CMAKE_CACHE_PATCH_VERSION:INTERNAL=2\n"
             f"AOBUS_ENABLE_ASAN:BOOL={'ON' if asan else 'OFF'}\n"
             f"AOBUS_ENABLE_TSAN:BOOL={'ON' if tsan else 'OFF'}\n"
+            "AOBUS_BUILD_TESTS:BOOL=ON\n"
+            "AOBUS_BUILD_GTK:BOOL=ON\n"
+            "AOBUS_BUILD_TUI:BOOL=ON\n"
+            "AOBUS_BUILD_CLI:BOOL=ON\n"
+            "AOBUS_BUILD_LINT_PLUGIN:BOOL=ON\n"
             f"CMAKE_BUILD_TYPE:STRING={build_type}\n",
             encoding="utf-8",
         )
