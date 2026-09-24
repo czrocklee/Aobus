@@ -34,7 +34,7 @@ The main persistence classes have different authority and recovery expectations:
 | Authored documents | Customized shell layouts | The [layout document model](../../reference/shell/layout-document.md) and [shell workflow](../shell/layout-lifecycle.md) |
 | Transient component state | Per-layout split and collapsible-panel state | The [component-state model and specialized store](../../reference/shell/layout-state.md) |
 | Interchange | User-selected library YAML imports and exports | The [library format](../../reference/library/format/yaml.md) and [transfer workflow](../library/yaml-transfer.md), not `ConfigStore` |
-| Regenerable output | [Cover caches](../resource/cover-art-delivery.md), [MPRIS artwork](../frontend/gtk/mpris.md), and [logs](../../reference/persistence/location.md) | The producing subsystem; these are not application truth |
+| Regenerable output | [Cover caches](../resource/cover-art-delivery.md), [MPRIS artwork](../frontend/mpris.md), and [logs](../../reference/persistence/location.md) | The producing subsystem; these are not application truth |
 
 Deleting a cache must not change library or managed-state facts.
 It can still change what is immediately displayable: cached cover bytes may be the only remaining copy after every carrying audio file is gone.

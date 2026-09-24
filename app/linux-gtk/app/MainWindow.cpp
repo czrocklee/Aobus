@@ -19,17 +19,20 @@
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "list/ListNavigationController.h"
-#include "platform/MprisArtUrlCache.h"
-#include "platform/MprisBridge.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinator.h"
 #include "tag/TagEditController.h"
 #include "track/TrackOrderActions.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackRowCache.h"
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+#include <ao/systemmedia/linux/MprisArtUrlCache.h>
+#include <ao/systemmedia/linux/MprisBridge.h>
+#endif
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
@@ -214,6 +217,9 @@ namespace ao::gtk
     ImageCache imageCache;
     ResourceImageLoader resourceImageLoader;
     uimodel::PlaybackActions playbackActions;
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    std::unique_ptr<systemmedia::MprisBridge> mprisBridgePtr;
+#endif
     i18n::MessageCatalog textCatalog;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentations listPresentations;
@@ -271,11 +277,14 @@ namespace ao::gtk
     _listNavigationActionsRegistration = _implPtr->listNavigationController.addActionsTo(*this);
     _shellLayout.attachToWindow();
 
-    auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.resourceBytes(), _runtime.async());
-    _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    auto mprisArtUrlCachePtr =
+      std::make_shared<systemmedia::MprisArtUrlCache>(_runtime.resourceBytes(), _runtime.async());
+    _implPtr->mprisBridgePtr = std::make_unique<systemmedia::MprisBridge>(
+      _runtime.async().callbackExecutor(),
       _runtime.playback(),
       _implPtr->playbackActions,
-      platform::MprisBridge::Callbacks{
+      systemmedia::MprisBridge::Callbacks{
         .raise =
           [this]
         {
@@ -288,15 +297,17 @@ namespace ao::gtk
           if (auto const appPtr = get_application(); appPtr)
           {
             appPtr->quit();
-            return true;
           }
-
-          return false;
+          else
+          {
+            APP_LOG_WARN("Cannot route MPRIS Quit: the window has no application");
+          }
         },
         .requestArtUrl = [cachePtr = std::move(mprisArtUrlCachePtr)](
-                           ResourceId const resourceId, platform::MprisBridge::OnArtUrlReady onReady)
+                           ResourceId const resourceId, systemmedia::MprisBridge::OnArtUrlReady onReady)
         { return cachePtr->requestUrl(resourceId, std::move(onReady)); },
       });
+#endif
     _shellLayout.setConfirmPromotionCallback(
       [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)
       {
@@ -351,6 +362,10 @@ namespace ao::gtk
     {
       AO_FATAL_EXCEPTION(std::current_exception(), "GTK MainWindow session save during destruction");
     }
+
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    _implPtr->mprisBridgePtr.reset();
+#endif
 
     // Close window action callbacks before either their producers or the
     // inherited action map can retire. Member order provides the same fallback
@@ -411,6 +426,9 @@ namespace ao::gtk
     }
 
     _sessionPhase = SessionPhase::Retired;
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    _implPtr->mprisBridgePtr->retire();
+#endif
     return {};
   }
 
@@ -424,9 +442,9 @@ namespace ao::gtk
     return _sessionPhase;
   }
 
-  bool MainWindow::isMprisStarted() const noexcept
+  bool MainWindow::hasRequestedMprisStart() const noexcept
   {
-    return _mprisStarted;
+    return _mprisStartRequested;
   }
 
   void MainWindow::on_hide()
@@ -479,15 +497,16 @@ namespace ao::gtk
       restorePlaybackSession();
     }
 
-    try
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    // Quit routes through the application lifecycle. Directly activated,
+    // application-less windows must not advertise that host capability.
+    if (get_application())
     {
-      _mprisBridgePtr->start();
-      _mprisStarted = true;
+      _implPtr->mprisBridgePtr->start();
+      _mprisStartRequested = true;
     }
-    catch (Glib::Error const& e)
-    {
-      APP_LOG_WARN("Failed to activate MPRIS for GTK session: {}", e.what());
-    }
+
+#endif
 
     return {};
   }

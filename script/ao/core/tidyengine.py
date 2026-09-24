@@ -403,8 +403,11 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     )
     owned_by_linux = (
         parts[:2] == ("app", "linux-gtk")
+        or parts[:5] == ("app", "include", "ao", "systemmedia", "linux")
+        or parts[:3] == ("app", "systemmedia", "linux")
         or parts[:3] == ("test", "unit", "linux-gtk")
         or parts[:3] == ("test", "integration", "linux-gtk")
+        or parts[:4] == ("test", "integration", "linux", "systemmedia")
         or "alsa" in joined
         or "pipewire" in joined
         or stem.endswith("linux")

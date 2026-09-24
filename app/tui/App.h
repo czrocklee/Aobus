@@ -22,7 +22,8 @@ namespace ao::tui
     std::filesystem::path libraryRoot{"."};
     std::filesystem::path databasePath{};
     std::filesystem::path configPath{};
-    std::string coverArtMode{}; // Empty means use the persisted preference.
+    std::string coverArtMode{};     // Empty means use the persisted preference.
+    bool systemMediaEnabled = true; // Best-effort auto; no effect on unsupported builds.
     rt::LogLevel logLevel = rt::LogLevel::Info;
   };
 

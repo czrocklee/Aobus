@@ -100,6 +100,24 @@ Detail stays beside the track table while you browse. Escape closes temporary ov
 
 The playback bar's four-character mode combines sequential or shuffled order with repeat state. Clicking it advances through presets; `S` changes shuffle and `r` cycles repeat independently. The [TUI command reference](../reference/tui/command.md#playback-mode-codes) defines the codes.
 
+## Use Linux system media controls
+
+A Linux TUI built with system-media support joins the current session bus by default and appears as **Aobus TUI**. Each running TUI gets a distinct MPRIS name, so several libraries can remain controllable independently. The TUI has no desktop entry and does not offer the MPRIS Raise action.
+
+Use `--system-media=off` when the session must not create the MPRIS adapter, its private native thread, or artwork interests:
+
+```bash
+aobus-tui --library /music --system-media=off
+```
+
+When launching through the repository portal, put the runtime option after `--`:
+
+```bash
+./ao run tui -- --library /music --system-media=off
+```
+
+The default `auto` mode is best effort. It remains inert when the binary lacks Linux system-media support or no usable session bus exists; Aobus does not autolaunch or reconnect to a bus. The option is accepted on Windows and macOS, but those TUI builds currently provide no native system-media integration. An external Quit request follows the normal safe-exit path described below.
+
 ## Resize and restore the workspace
 
 When Lists or Detail has focus, Shift+Left/Right resizes that sidebar. Press Ctrl+W for resize mode across visible dividers: Tab chooses a divider, Left/Right moves it, Enter commits, and Escape cancels.
@@ -133,7 +151,7 @@ On Keyboard, Left/Right selects a chord, `a` or Insert adds one, Enter replaces 
 
 ## Quit safely
 
-Press uppercase `Q`, run `:quit`, or press Ctrl+C. Normal exit retires an active scan and editor presentation, saves committed workspace and layout state, and stops playback. If a metadata write has already been submitted, the TUI waits for it; Ctrl+C stops waiting.
+Press uppercase `Q`, run `:quit`, or press Ctrl+C. Normal exit—including an accepted Linux MPRIS Quit—retires an active scan, editor presentation, and system-media command admission, saves committed workspace and layout state, and stops playback. If a metadata write has already been submitted, the TUI waits for it; Ctrl+C stops waiting.
 
 ## Verify the result
 
@@ -148,6 +166,7 @@ Press uppercase `Q`, run `:quit`, or press Ctrl+C. Normal exit retires an active
 - [TUI command reference](../reference/tui/command.md)
 - [Keyboard map reference](../reference/shell/keymap.md)
 - [TUI interaction specification](../system/frontend/tui.md)
+- [Linux MPRIS behavior](../system/frontend/mpris.md)
 - [TUI track authoring](../system/frontend/tui-track-authoring.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Track preset reference](../reference/presentation/track-preset.md)

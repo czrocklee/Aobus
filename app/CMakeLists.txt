@@ -22,6 +22,10 @@ endif()
 
 add_subdirectory(uimodel)
 
+if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+  add_subdirectory(systemmedia)
+endif()
+
 if(APPLE)
   add_subdirectory(macos-appkit)
 endif()

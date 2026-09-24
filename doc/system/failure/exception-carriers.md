@@ -28,13 +28,12 @@ to the [error value reference](error.md).
 | `ao::lmdb::detail::TransactionFailure` | Failed native mutation. | The root `library::WriteTransaction` owner aborts and terminalizes first, then returns the carried `Error`. |
 | Private RapidYAML callback carrier | One `parseInPlace()`, `parseInArena()`, or `resolve()` call in `RymlAdapter.cpp`. | The same adapter operation returns `FormatRejected`; partial parse state is discarded. |
 | GTK layout-build carrier (`std::logic_error`) | `SharedWidgetHandoff` validation while `LayoutHost::prepare()` builds a candidate. | The handoff guard restores transferred widgets during unwind; `prepare()` returns `InitFailed`. The same audited adapter also contains standard exceptions from component construction. |
-| `Gio::Error` raised by the MPRIS property adapter | One MPRIS property callback requiring GLib's exception protocol. | The owning GLib callback boundary consumes the exact framework exception. |
 
 The project-specific error carriers derive directly from `std::exception`, own
 an `Error`, and expose its message through `what()`. They are caught as their
 exact leaf type; an unrelated exception is not reclassified as their error.
-The GTK layout and MPRIS rows are adapter transports rather than project Error
-carriers and follow the explicitly stated adapter boundary instead.
+The GTK layout row is an adapter transport rather than a project Error carrier
+and follows the explicitly stated adapter boundary instead.
 
 No general `ao::Exception` hierarchy or public catch-all project vocabulary
 exists.
@@ -58,7 +57,6 @@ statement shape rather than maintaining a site-name allowlist.
 | `ao::lmdb::throwOnMutationError` | `PrivateErrorTransport` | Converts a native LMDB mutation code. |
 | `throwBasicParseFailure`, `throwDetailedParseFailure`, and `throwVisitFailure` in `RymlAdapter.cpp` | `ForeignCallbackAdapter` | Adapt RapidYAML callbacks to the private parser carrier. |
 | `throwLayoutBuildError` in `LayoutHost.cpp` | `PrivateErrorTransport` | Unwinds a rejected GTK layout candidate through the handoff rollback guard. |
-| `throwGioError` in `MprisBridge.cpp` | `ForeignCallbackAdapter` | Raises the exact `Gio::Error` required by MPRIS. |
 
 A bare `throw;` is used only to preserve the active exception after making owned
 state safe. Tests may inject arbitrary exceptions to prove transport and fatal
@@ -133,8 +131,7 @@ is explicitly approved.
 
 Carrier declarations live with their owning subsystem; cancellation is in
 `include/ao/async/`, CLI transport in `app/cli/`, and private Error carriers in
-the corresponding `detail/` directories. `RymlAdapter.cpp`, `LayoutHost.cpp`,
-and `MprisBridge.cpp` own the adapter-only rows.
+the corresponding `detail/` directories. `RymlAdapter.cpp` and `LayoutHost.cpp` own the adapter-only rows.
 
 `ForbidRawThrowCheck.cpp` and its integration fixture enforce the marker shapes.
 Subsystem tests protect public translation. `AsyncRuntimeTest.cpp`,

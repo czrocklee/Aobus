@@ -59,6 +59,8 @@ A native chooser completion cannot request a switch after its owning
 coordinator has been destroyed, and it must return before retirement starts.
 Frontend observers and GTK objects release before the window-owned runtime;
 callback producers stop before their targets and dependencies.
+The prepared-window shared handle aliases a C++ owner that retains the window wrapper, runtime, and borrowed application configuration store.
+It destroys them in that order; native GObject finalization alone is not proof that C++ observers or native media producers have been destroyed.
 
 ## Registration and argument adaptation
 
@@ -101,12 +103,13 @@ startup failure without substituting the durable or empty root.
 
 GTK creates a main-context executor, per-library workspace store, and
 `AppRuntime`, injects the process-global playback store, registers audio
-providers, and only then constructs `MainWindow`. Runtime ownership is attached
-to the window after its final placement.
+providers, and only then constructs `MainWindow`. A shared C++ owner retains the
+window and runtime together rather than attaching runtime ownership to native GObject data.
 
 Preparation rebuilds library pages, restores workspace, creates an All Tracks
 view when needed, refreshes actions, and loads shell layout. It does not restore playback, start MPRIS, join the application, present the window, or write a lifecycle checkpoint.
-GTK adds the prepared window to the application before activation. Ordinary startup starts playback observation and restores intent; successor startup reads no prior playback payload. Both start MPRIS best effort and present the window.
+Preparation may run before `Gtk::Application` registration; adding the prepared window and activating it require the registered application.
+GTK adds the prepared window to the application before activation. Ordinary startup starts playback observation and restores intent; successor startup reads no prior playback payload. Both start the shared Linux MPRIS adapter best effort when system-media support is built, then present the window.
 The successor then saves its selected-root candidate before another main-loop turn can expose user or deferred playback work. Commit success begins observation; failure is logged, permanently seals playback, and keeps root/playback out of later checkpoints while ordinary GTK and workspace state remains writable. GTK then requests any carried bootstrap scan.
 
 ## Open Library and native handoff

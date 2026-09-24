@@ -68,11 +68,16 @@ class ArchitectureAuditTest(unittest.TestCase):
             source_root = Path(temp_dir)
             for relative_dir in (
                 "app/include/ao/desktop",
+                "app/include/ao/i18n",
+                "app/include/ao/rt",
+                "app/include/ao/systemmedia",
                 "app/include/ao/uimodel",
                 "app/uimodel",
                 "app/desktop",
+                "app/i18n",
                 "app/runtime",
                 "app/linux-gtk",
+                "app/systemmedia",
                 "app/macos-appkit",
                 "app/windows-winui",
                 "app/tui",
@@ -96,6 +101,40 @@ class ArchitectureAuditTest(unittest.TestCase):
             violation = source_root / "app/tui/Violation.cpp"
             violation.write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
             violation.with_suffix(".mm").write_text("#include <ao/rt/CoreRuntime.h>\n", encoding="utf-8")
+            (source_root / "app/systemmedia/Gui.cpp").write_text("#include <gtkmm/widget.h>\n", encoding="utf-8")
+            (source_root / "app/systemmedia/Native.cpp").write_text("#include <giomm/file.h>\n", encoding="utf-8")
+            (source_root / "app/systemmedia/Umbrella.cpp").write_text("#include <gtkmm.h>\n", encoding="utf-8")
+            (source_root / "app/systemmedia/GdkUmbrella.mm").write_text('#import "gdkmm.h"\n', encoding="utf-8")
+            (source_root / "app/systemmedia/TuiComponent.cpp").write_text(
+                "#include <ftxui/component/component.hpp>\n", encoding="utf-8"
+            )
+            (source_root / "app/systemmedia/TuiDom.mm").write_text(
+                '#import "ftxui/dom/elements.hpp"\n', encoding="utf-8"
+            )
+            (source_root / "app/systemmedia/Documented.h").write_text(
+                "// #include <gtkmm.h>\n// #include <ftxui/component/component.hpp>\n"
+                '/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n#import "ftxui/dom/elements.hpp"\n*/\n'
+                "#include <giomm.h>\n#include <glibmm.h>\n",
+                encoding="utf-8",
+            )
+            (source_root / "app/systemmedia/WinUi.cpp").write_text(
+                "#include <winrt/Microsoft.UI.Dispatching.h>\n", encoding="utf-8"
+            )
+            (source_root / "app/include/ao/systemmedia/Frontend.h").write_text(
+                '#include "tui/App.h"\n', encoding="utf-8"
+            )
+            (source_root / "app/systemmedia/Os.cpp").write_text(
+                "#include <winrt/Windows.Media.h>\n#import <MediaPlayer/MediaPlayer.h>\n", encoding="utf-8"
+            )
+            (source_root / "app/runtime/Reverse.cpp").write_text(
+                '#include "systemmedia/linux/MprisBusSession.h"\n', encoding="utf-8"
+            )
+            (source_root / "app/cli/Reverse.cpp").write_text(
+                '#include "ao/systemmedia/linux/MprisBridge.h"\n', encoding="utf-8"
+            )
+            (source_root / "app/include/ao/uimodel/Reverse.h").write_text(
+                "#include <ao/systemmedia/macos/MediaPlayerAdapter.h>\n", encoding="utf-8"
+            )
             managed_state_violation = source_root / "app/tui/ManagedState.def"
             managed_state_violation.write_text("#include <ao/yaml/Reflect.h>\n", encoding="utf-8")
             suffix_violation = source_root / "app/tui/Unsupported.cc"
@@ -128,7 +167,19 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 11 violation", output)
+        self.assertIn("Application architecture audit found 21 violation", output)
+        self.assertIn("system_media_frontend: app/systemmedia/Gui.cpp", output)
+        self.assertIn("system_media_frontend: app/systemmedia/Umbrella.cpp", output)
+        self.assertIn("system_media_frontend: app/systemmedia/GdkUmbrella.mm", output)
+        self.assertIn("system_media_frontend: app/systemmedia/TuiComponent.cpp", output)
+        self.assertIn("system_media_frontend: app/systemmedia/TuiDom.mm", output)
+        self.assertNotIn("system_media_frontend: app/systemmedia/Native.cpp", output)
+        self.assertNotIn("system_media_frontend: app/systemmedia/Documented.h", output)
+        self.assertIn("system_media_frontend: app/systemmedia/WinUi.cpp", output)
+        self.assertIn("system_media_frontend: app/include/ao/systemmedia/Frontend.h", output)
+        self.assertNotIn("app/systemmedia/Os.cpp", output)
+        for reverse in ("app/runtime/Reverse.cpp", "app/cli/Reverse.cpp", "app/include/ao/uimodel/Reverse.h"):
+            self.assertIn(f"system_media_reverse: {reverse}", output)
         self.assertIn("frontend_core: app/tui/Violation.cpp", output)
         self.assertIn("frontend_core: app/tui/Violation.mm", output)
         self.assertIn("managed_state_mechanism: app/tui/ManagedState.def", output)

@@ -21,6 +21,7 @@ KNOWN_LAYERS = frozenset(
         "lmdb",
         "media",
         "perf",
+        "platform",
         "query",
         "runtime",
         "tag",

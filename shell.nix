@@ -123,6 +123,7 @@ let
 
     aobus-gtk4
     gtkmm4
+    glibmm_2_68
     librsvg
     glib.dev
     gobject-introspection

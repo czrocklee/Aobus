@@ -42,7 +42,8 @@ Every case starts with `[layer][scope][component]`:
 - **Layer** is the testing layer from [layer selection](layer-selection.md):
   the owning module for `lib` tests (`[core]`, `[library]`, `[query]`, `[audio]`,
   `[media]`, `[lmdb]`, or `[utility]`), otherwise `[runtime]`, `[uimodel]`,
-  `[gtk]`, `[winui]`, `[tui]`, `[cli]`, or `[perf]`.
+  `[platform]` for application-platform adapters, `[gtk]`, `[winui]`, `[tui]`,
+  `[cli]`, or `[perf]`.
 - **Scope** is exactly one of `[unit]` or `[integration]`; see
   [scope and metadata](layer-selection.md#scope-and-independent-metadata).
 - **Component** names the domain, such as `[track-store]`, `[serializer]`, or

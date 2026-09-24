@@ -136,19 +136,6 @@ def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
     return suites
 
 
-def cmake_option_enabled(cache: Mapping[str, str], option: str, build_dir: Path) -> bool:
-    """Read a configured CMake BOOL; unknown or missing values cannot authorize a suite."""
-    value = cache.get(option)
-    if value is None:
-        raise die(f"Cannot determine {option} in {build_dir / 'CMakeCache.txt'}.")
-    normalized = value.upper()
-    if normalized in {"ON", "YES", "TRUE", "Y", "1"}:
-        return True
-    if normalized in {"OFF", "NO", "FALSE", "N", "0", "IGNORE", "NOTFOUND", ""} or normalized.endswith("-NOTFOUND"):
-        return False
-    raise die(f"Invalid {option}={value!r} in {build_dir / 'CMakeCache.txt'}.")
-
-
 def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False) -> tuple[str, ...]:
     """Plan selected suites against the configured targets, not old executables."""
     suites = suites_for(selection, tsan=tsan)
@@ -156,7 +143,7 @@ def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False
         return suites
 
     cache = compiler_cache.read_cmake_cache(build_dir / "CMakeCache.txt")
-    if not cmake_option_enabled(cache, "AOBUS_BUILD_TESTS", build_dir):
+    if not build.cmake_option_enabled(cache, "AOBUS_BUILD_TESTS", build_dir):
         raise die(f"Test targets are not enabled in {build_dir} (AOBUS_BUILD_TESTS=ON is required).")
 
     options = {
@@ -166,7 +153,7 @@ def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False
         "lint": "AOBUS_BUILD_LINT_PLUGIN",
     }
     disabled = tuple(
-        name for name in suites if name in options and not cmake_option_enabled(cache, options[name], build_dir)
+        name for name in suites if name in options and not build.cmake_option_enabled(cache, options[name], build_dir)
     )
     if selection in SUITES and disabled:
         option = options[disabled[0]]

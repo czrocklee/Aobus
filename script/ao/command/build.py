@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,7 @@ examples:
   ./ao build                     # incremental debug build
   ./ao build release --clean     # clean Release build with IPO/LTO
   ./ao build --target aobus-gtk  # build a single target
+  ./ao build --gtk off --system-media on -p /path/to/tree
   ./ao build debug --clang       # clang build in its own build tree
 """
 
@@ -56,6 +58,10 @@ def add_build_arguments(parser: argparse.ArgumentParser, *, default_flavor: str 
     )
     sanitizers.add_argument("--tsan", action="store_true", help="enable thread sanitizer (debug only)")
     parser.add_argument("--verbose", action="store_true", help="show full build command lines")
+    parser.add_argument("--gtk", choices=("on", "off"), help="configure the Linux GTK frontend")
+    parser.add_argument(
+        "--system-media", choices=("on", "off"), help="configure Linux native system-media integration (Linux only)"
+    )
     parser.add_argument("-p", "--path", metavar="<dir>", help="override the build directory")
 
 
@@ -108,6 +114,10 @@ def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile
         )
     if args.tsan and not profile.tsan_suites:
         raise die("ThreadSanitizer is unavailable on the Windows MSVC toolchain.")
+    if profile.name != "linux" and getattr(args, "gtk", None) == "on":
+        raise die("--gtk on is supported only on Linux.")
+    if profile.name != "linux" and getattr(args, "system_media", None) is not None:
+        raise die("--system-media is currently configurable only on Linux.")
     return profile
 
 
@@ -147,6 +157,19 @@ def _workspace_cache(build_dir: Path, *, unsupported_reason: str | None = None) 
         return workspace_cache.prepare(build_dir, project_root=PROJECT_ROOT, unsupported_reason=unsupported_reason)
     except workspace_cache.WorkspaceCacheError as exc:
         raise die(str(exc)) from exc
+
+
+def cmake_option_enabled(cache: Mapping[str, str], option: str, build_dir: Path) -> bool:
+    """Read a configured CMake BOOL; unknown or missing values cannot authorize a suite."""
+    value = cache.get(option)
+    if value is None:
+        raise die(f"Cannot determine {option} in {build_dir / 'CMakeCache.txt'}.")
+    normalized = value.upper()
+    if normalized in {"ON", "YES", "TRUE", "Y", "1"}:
+        return True
+    if normalized in {"OFF", "NO", "FALSE", "N", "0", "IGNORE", "NOTFOUND", ""} or normalized.endswith("-NOTFOUND"):
+        return False
+    raise die(f"Invalid {option}={value!r} in {build_dir / 'CMakeCache.txt'}.")
 
 
 def sync_compiler_cache(build_dir: Path, *, unsupported_reason: str | None = None) -> None:
@@ -215,12 +238,24 @@ def validate_build_tree(
 
     if not compiler_only:
         for option, enabled in (("ASAN", args.asan), ("TSAN", args.tsan)):
+            key = f"AOBUS_ENABLE_{option}"
             expected = "ON" if enabled else "OFF"
-            actual = cache.get(f"AOBUS_ENABLE_{option}", "<missing>")
-            if actual != expected:
+            actual = cache.get(key, "<missing>")
+            if cmake_option_enabled(cache, key, build_dir) != bool(enabled):
                 raise die(
-                    f"Sanitizer mismatch in {build_dir}: requested AOBUS_ENABLE_{option}={expected}, "
+                    f"Sanitizer mismatch in {build_dir}: requested {key}={expected}, "
                     f"configured {actual}. Run {portal} build -p {build_dir} with the intended options first."
+                )
+        for argument, option in (("gtk", "AOBUS_BUILD_GTK"), ("system_media", "AOBUS_BUILD_SYSTEM_MEDIA")):
+            requested = getattr(args, argument, None)
+            if requested is None:
+                continue
+            expected = requested.upper()
+            actual = cache.get(option, "<missing>")
+            if cmake_option_enabled(cache, option, build_dir) != (expected == "ON"):
+                raise die(
+                    f"Feature mismatch in {build_dir}: requested {option}={expected}, configured {actual}. "
+                    f"Run {portal} build -p {build_dir} with the intended options first."
                 )
     if expected_build_type is not None and cache.get("CMAKE_BUILD_TYPE") != expected_build_type:
         raise die(
@@ -285,6 +320,10 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_ASAN={'ON' if args.asan else 'OFF'}")
         configure.append(f"-DAOBUS_ENABLE_TSAN={'ON' if args.tsan else 'OFF'}")
+        if (gtk := getattr(args, "gtk", None)) is not None:
+            configure.append(f"-DAOBUS_BUILD_GTK={gtk.upper()}")
+        if (system_media := getattr(args, "system_media", None)) is not None:
+            configure.append(f"-DAOBUS_BUILD_SYSTEM_MEDIA={system_media.upper()}")
         configure.extend(compiler_cache.cmake_launcher_arguments(build_dir=build_dir))
         configure.extend(workspace.cmake_arguments)
         if args.asan:

@@ -735,10 +735,18 @@ else()
     pkg_check_modules(GTKMM REQUIRED IMPORTED_TARGET gtkmm-4.0)
     add_library(PkgGTKMM INTERFACE)
     target_link_libraries(PkgGTKMM INTERFACE PkgConfig::GTKMM)
+  endif()
 
+  if(AOBUS_BUILD_GTK OR (LINUX AND AOBUS_BUILD_SYSTEM_MEDIA))
     pkg_check_modules(GLIBMM REQUIRED IMPORTED_TARGET glibmm-2.68)
     add_library(PkgGLIBMM INTERFACE)
     target_link_libraries(PkgGLIBMM INTERFACE PkgConfig::GLIBMM)
+  endif()
+
+  if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
+    pkg_check_modules(GIOMM REQUIRED IMPORTED_TARGET giomm-2.68)
+    add_library(PkgGIOMM INTERFACE)
+    target_link_libraries(PkgGIOMM INTERFACE PkgConfig::GIOMM)
   endif()
 
   pkg_check_modules(FLAC REQUIRED IMPORTED_TARGET flac)

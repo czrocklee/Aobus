@@ -27,10 +27,18 @@ endif()
 
 option(AOBUS_BUILD_CLI "Build the command-line frontend" ON)
 option(AOBUS_BUILD_GTK "Build the GTK frontend" ${AOBUS_DEFAULT_BUILD_GTK})
+include(cmake/SystemMedia.cmake)
 option(AOBUS_BUILD_TESTS "Build test targets" ON)
 option(AOBUS_BUILD_LINT_PLUGIN "Build the Aobus clang-tidy plugin" ${AOBUS_DEFAULT_BUILD_LINT_PLUGIN})
 option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
 option(AOBUS_BUILD_WINUI "Build the Windows WinUI 3 frontend" OFF)
+
+if(AOBUS_BUILD_GTK AND NOT LINUX)
+  message(FATAL_ERROR "AOBUS_BUILD_GTK is supported only on Linux")
+endif()
+message(STATUS
+  "Aobus features: AOBUS_BUILD_GTK=${AOBUS_BUILD_GTK}; "
+  "AOBUS_BUILD_SYSTEM_MEDIA=${AOBUS_BUILD_SYSTEM_MEDIA}")
 
 include(cmake/CompilerOptions.cmake)
 include(cmake/WindowsUtf8Manifest.cmake)
