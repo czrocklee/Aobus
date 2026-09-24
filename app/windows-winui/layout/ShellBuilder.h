@@ -15,6 +15,7 @@
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/input/KeymapAcceleratorPlan.h>
+#include <ao/winui/layout/ShellCommands.h>
 #include <ao/winui/layout/ShellDocument.h>
 #include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
@@ -42,33 +43,6 @@ namespace ao::rt
 
 namespace ao::winui::layout
 {
-  /**
-   * @brief The window-frame capabilities a document's actions and menus invoke.
-   *
-   * A preset names commands; only the frame can run them, because they open
-   * pickers, raise system menus, or change what the frame itself presents. They
-   * are supplied once and outlive every generation, which is what lets a
-   * generation be replaced without re-registering behavior.
-   */
-  struct ShellCommands final
-  {
-    std::function<void()> openLibrary;
-    std::function<void()> rescanLibrary;
-    std::function<void()> importLibrary;
-    std::function<void()> exportLibrary;
-    std::function<void()> toggleInspector;
-    std::function<void()> toggleShellMode;
-    std::function<void()> chooseColumns;
-    std::function<void()> reloadTheme;
-    std::function<void()> playPause;
-    std::function<void()> stop;
-    std::function<void()> revealCurrentTrack;
-    std::function<void()> presentTrackProperties;
-    std::function<void()> showSoul;
-    std::function<void()> showSystemMenu;
-    std::function<void(winrt::Microsoft::UI::Xaml::FrameworkElement const&)> showOutputDeviceSelector;
-  };
-
   /// Window-owned List workflows exposed to generation components as narrow callbacks.
   struct ShellListCommands final
   {
@@ -102,6 +76,10 @@ namespace ao::winui::layout
     std::function<void()> saveSettings;
 
     ShellCommands commands;
+
+    /// Present the frame-owned selector at the invoking component's native anchor.
+    std::function<void(winrt::Microsoft::UI::Xaml::FrameworkElement const&)> showOutputDeviceSelector;
+
     ShellListCommands listCommands;
   };
 

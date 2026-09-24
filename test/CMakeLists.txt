@@ -662,6 +662,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutSchema.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellCommands.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellState.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/StyleLookup.cpp
@@ -688,6 +689,8 @@ add_executable(ao_core_test
     unit/winui/layout/LayoutSchemaTest.cpp
     unit/winui/layout/LayoutDialectTest.cpp
     unit/winui/layout/PlacementPlanTest.cpp
+    unit/winui/layout/ShellCommandsTest.cpp
+    unit/winui/layout/ShellCommandWiringTest.cpp
     unit/winui/layout/ShellDocumentTest.cpp
     unit/winui/layout/ShellStateTest.cpp
     unit/winui/layout/StyleLookupTest.cpp
