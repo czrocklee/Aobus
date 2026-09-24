@@ -14,7 +14,7 @@ The portal re-enters the pinned `nix-shell` automatically.
 ./ao hygiene
 ```
 
-`build` performs an incremental debug build. `check` builds and runs every suite in the native `all` group; `hygiene` separately checks the selected source scope.
+`build` performs an incremental debug build. `check` builds and runs the enabled suites in the native `all` group; `hygiene` separately checks the selected source scope.
 Choose completion checks from [validation and review](test/validation-and-review.md), not from a second gate list here.
 Use `./ao build release` for an optimized build; [optimized builds](optimized-builds.md) explains Release, IPO/LTO, and profiling.
 `./ao build debug --clean` requests a clean rebuild; preserve a failing tree and its `build.log` when diagnosing a problem.
